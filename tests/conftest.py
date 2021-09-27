@@ -2,11 +2,11 @@ import pytest
 from time import time
 from os import urandom
 from random import choice
-from argus.test_run import TestRunInfo, TestDetails, TestResourcesSetup, TestLogs, TestResults, TestResources
-from argus.db import ArgusDatabase
-from argus.config import Config
-from argus.helpers import PackageVersion, NemesisRunInfo, EventsBySeverity, NodeDescription, TestStatus, NemesisStatus
-from argus.cloud_details import AWSSetupDetails, CloudNodesInfo, CloudInstanceDetails, CloudResource, ResourceState
+from db.testrun import TestRunInfo, TestDetails, TestResourcesSetup, TestLogs, TestResults, TestResources
+from db.interface import ArgusDatabase
+from db.config import Config
+from db.types import PackageVersion, NemesisRunInfo, EventsBySeverity, NodeDescription, TestStatus, NemesisStatus
+from db.cloud_types import AWSSetupDetails, CloudNodesInfo, CloudInstanceDetails, CloudResource, ResourceState
 from subprocess import run
 from time import sleep
 import docker

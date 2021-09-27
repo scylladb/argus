@@ -3,8 +3,8 @@ from types import GenericAlias
 from cassandra.cluster import Cluster
 from cassandra.auth import PlainTextAuthProvider
 from cassandra.cqltypes import UUIDType, IntegerType, VarcharType
-from argus.config import BaseConfig, FileConfig
-from argus.helpers import ColumnInfo, CollectionHint, ArgusUDTBase
+from db.config import BaseConfig, FileConfig
+from db.types import ColumnInfo, CollectionHint, ArgusUDTBase
 from uuid import UUID
 from hashlib import sha1
 from dataclasses import fields as dataclass_fields
@@ -99,7 +99,7 @@ class ArgusDatabase:
         key_string = ".".join(keys).encode(encoding="utf-8")
         return sha1(key_string).hexdigest()
 
-    def init_keyspace(self, name="argus_testrun", prefix="", suffix=""):
+    def init_keyspace(self, name="argus", prefix="", suffix=""):
         keyspace_name = self._verify_keyspace_name(f"{prefix}{name}_{suffix}")
         query = f"CREATE KEYSPACE IF NOT EXISTS {keyspace_name} " \
                 "WITH replication={'class': 'SimpleStrategy', 'replication_factor' : 3}"

@@ -1,10 +1,10 @@
 from random import choice
 
-from argus.test_run import TestResourcesSetup, TestRun, TestRunInfo
-from argus.db import ArgusDatabase
-from argus.config import Config
+from db.testrun import TestResourcesSetup, TestRun, TestRunInfo
+from db.interface import ArgusDatabase
+from db.config import Config
 
-from argus.helpers import ColumnInfo
+from db.types import ColumnInfo
 from uuid import uuid4
 
 import pytest
@@ -43,7 +43,7 @@ def test_serialize_deserialize(completed_testrun: TestRunInfo, argus_database: A
 
     test_run.save()
 
-    res = argus_database.fetch(table_name=f"test_run_{test_run.release_name}", run_id=test_id)
+    res = argus_database.fetch(table_name=f"test_runs", run_id=test_id)
     LOGGER.debug("Fetched: %s", res)
     LOGGER.info("Rebuilding object...")
 
@@ -63,7 +63,7 @@ def test_update(completed_testrun: TestRunInfo, argus_database: ArgusDatabase):
     test_run.resources.detach_resource(resource)
     test_run.save()
 
-    row = argus_database.fetch(table_name=f"test_run_{test_run.release_name}", run_id=test_id)
+    row = argus_database.fetch(table_name=f"test_runs", run_id=test_id)
 
     rebuilt_testrun = TestRun.from_db_row(row)
 

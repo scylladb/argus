@@ -3,10 +3,10 @@ from uuid import uuid4, UUID
 import logging
 from collections import OrderedDict
 
-from argus.utils import is_list_homogeneous
-from argus.cloud_details import *
-from argus.db import ArgusDatabase
-from argus.helpers import *
+from db.utils import is_list_homogeneous
+from db.cloud_types import *
+from db.interface import ArgusDatabase
+from db.types import *
 
 T = TypeVar("T")
 
