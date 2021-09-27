@@ -49,6 +49,7 @@ class ArgusDatabase:
         self._keyspace_initialized = False
         self.prepared_statements = dict()
         self.initialized_tables = dict()
+        self._table_keys = dict()
         self.init_keyspace(name=self.config.get("keyspace_name"))
 
     @classmethod
@@ -118,7 +119,15 @@ class ArgusDatabase:
         if self.initialized_tables.get(table_name):
             return True, f"Table {table_name} already initialized"
 
-        query = "CREATE TABLE IF NOT EXISTS {table_name}({columns})"
+        primary_keys_info: dict = column_info.pop("$tablekeys$")
+        partition_keys = [key for key, (cls, pk_type) in primary_keys_info.items() if pk_type == "partition"]
+        partition_key_def = partition_keys[0] if len(partition_keys) == 1 else "(%s)" % (", ".join(partition_keys))
+        clustering_columns = [key for key, (cls, pk_type) in primary_keys_info.items() if pk_type == "clustering"]
+        clustering_column_def = ", ".join(clustering_columns)
+
+        self._table_keys[table_name] = primary_keys_info
+
+        query = "CREATE TABLE IF NOT EXISTS {table_name}({columns}, PRIMARY KEY ({partition_key}, {clustering_cols}))"
         columns_query = []
         for column in column_info.values():
             if mapped_type := self.is_native_type(column.type):
@@ -134,7 +143,8 @@ class ArgusDatabase:
             columns_query.append(column_query)
 
         columns_query = ", ".join(columns_query)
-        completed_query = query.format(table_name=table_name, columns=columns_query)
+        completed_query = query.format(table_name=table_name, columns=columns_query, partition_key=partition_key_def,
+                                       clustering_cols=clustering_column_def)
         self.log.debug("About to execute: \"%s\"", completed_query)
         self.session.execute(query=completed_query)
         self.initialized_tables[table_name] = True
@@ -222,20 +232,33 @@ class ArgusDatabase:
                     data_list[idx] = [_convert_data_to_sequence(d) for d in value]
             return data_list
 
-        test_id = UUID(run_data.pop("id"))
+        primary_keys: dict = self._table_keys[table_name]
+        self.log.debug("Primary keys for table %s: %s", table_name, primary_keys)
+        where_clause = []
+        where_params = []
+        for key, (ctor, key_type) in primary_keys.items():
+            self.log.debug("Ejecting %s from update set as it is a part of the primary key", key)
+            try:
+                data_value = run_data.pop(key)
+            except KeyError:
+                raise ArgusInterfaceSchemaError("Missing key from update set", key)
+            field = f"{key} = ?"
+            where_clause.append(field)
+            where_params.append(ctor(data_value))
+
+        where_clause_joined = " AND ".join(where_clause)
 
         if not (prepared_statement := self.prepared_statements.get(f"update_{table_name}")):
-
             field_parameters = [f"\"{field_name}\" = ?" for field_name in run_data.keys()]
             fields_joined = ", ".join(field_parameters)
 
-            query = f"UPDATE {table_name} SET {fields_joined} WHERE id = ?"
-
+            query = f"UPDATE {table_name} SET {fields_joined} WHERE {where_clause_joined}"
+            self.log.debug("Formatted query: %s", query)
             prepared_statement = self.session.prepare(query=query)
             self.prepared_statements[f"update_{table_name}"] = prepared_statement
 
-        self.log.debug("Resulting query for update: %s", prepared_statement.query_string)
-        parameters = _convert_data_to_sequence(run_data)
-        parameters.append(test_id)
+        self.log.debug("Bound query for update: %s", prepared_statement.query_string)
+        query_parameters = _convert_data_to_sequence(run_data)
+        parameters = [*query_parameters, *where_params]
         self.log.debug("Parameters: %s", parameters)
         self.session.execute(prepared_statement, parameters=parameters)

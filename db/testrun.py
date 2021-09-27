@@ -279,11 +279,12 @@ class TestRunInfo:
 class TestRun:
     EXPOSED_ATTRIBUTES = ("id", "group", "release_name", "assignee")
     ATTRIBUTE_CONSTRAINTS = {
-        "id": ["primary key"],
     }
-    PRIMARY_KEYS = [
-        "id",
-    ]
+    PRIMARY_KEYS = {  # TODO: Implement
+        "id": (UUID, "partition"),
+        "release_name": (str, "clustering"),  # release version, e.g. 4.5rc5
+        "name": (str, "clustering"),   # test case name, e.g longevity-test-500gb-4h
+    }
 
     def __init__(self, test_id: UUID, group: str, release_name: str, assignee: str,
                  run_info: TestRunInfo, argus_interface: ArgusDatabase = None):
@@ -372,6 +373,7 @@ class TestRun:
             data[attr] = column_info
 
         full_schema = dict(
+            **{"$tablekeys$": self.PRIMARY_KEYS},
             **data,
             **self._details.schema(),
             **self._setup.schema(),
