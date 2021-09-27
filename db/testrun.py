@@ -283,8 +283,9 @@ class TestRun:
     PRIMARY_KEYS = {  # TODO: Implement
         "id": (UUID, "partition"),
         "release_name": (str, "clustering"),  # release version, e.g. 4.5rc5
-        "name": (str, "clustering"),   # test case name, e.g longevity-test-500gb-4h
+        "name": (str, "clustering"),  # test case name, e.g longevity-test-500gb-4h
     }
+    _TABLE_NAME = "test_runs"
 
     def __init__(self, test_id: UUID, group: str, release_name: str, assignee: str,
                  run_info: TestRunInfo, argus_interface: ArgusDatabase = None):
@@ -300,7 +301,6 @@ class TestRun:
         self._logs = run_info.logs
         self._results = run_info.results
         self._log = logging.getLogger(self.__class__.__name__)
-        self._table_name = f"test_runs"
 
         if not argus_interface:
             argus_interface = ArgusDatabase.get()
@@ -320,6 +320,14 @@ class TestRun:
 
         return cls(test_id=row.id, group=row.group, release_name=row.release_name,
                    assignee=row.assignee, run_info=run_info)
+
+    @classmethod
+    def from_id(cls, test_id: UUID):
+        db = ArgusDatabase.get()
+        if row := db.fetch(cls._TABLE_NAME, test_id):
+            return cls.from_db_row(row)
+
+        return None
 
     @classmethod
     def create_skeleton_run(cls):
@@ -359,7 +367,7 @@ class TestRun:
 
     def init_own_table(self):
         self._log.info("Initializing TestRun table...")
-        self._argus.init_table(table_name=self._table_name, column_info=self.schema())
+        self._argus.init_table(table_name=self._TABLE_NAME, column_info=self.schema())
         self._is_table_initialized = True
 
     def schema(self) -> dict[str, ColumnInfo]:
@@ -389,16 +397,16 @@ class TestRun:
             self.init_own_table()
         if not self.exists():
             self._log.info("Inserting data for test run: %s", self.id)
-            self._argus.insert(table_name=self._table_name, run_data=self.serialize())
+            self._argus.insert(table_name=self._TABLE_NAME, run_data=self.serialize())
         else:
             self._log.info("Updating data for test run: %s", self.id)
-            self._argus.update(table_name=self._table_name, run_data=self.serialize())
+            self._argus.update(table_name=self._TABLE_NAME, run_data=self.serialize())
 
     def exists(self):
         if not self._is_table_initialized:
             self.init_own_table()
 
-        if self._argus.fetch(table_name=self._table_name, run_id=self.id):
+        if self._argus.fetch(table_name=self._TABLE_NAME, run_id=self.id):
             return True
         return False
 

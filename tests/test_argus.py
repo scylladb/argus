@@ -53,6 +53,19 @@ def test_serialize_deserialize(completed_testrun: TestRunInfo, argus_database: A
 
 
 @pytest.mark.docker_required
+def test_recreate_from_id(completed_testrun: TestRunInfo, argus_database: ArgusDatabase):
+    test_id = uuid4()
+    test_run = TestRun(test_id=test_id, group="longevity-test", release_name="4_5rc5", assignee="k0machi",
+                       run_info=completed_testrun)
+
+    test_run.save()
+
+    rebuilt_test_run = TestRun.from_id(test_id)
+
+    assert rebuilt_test_run.serialize() == test_run.serialize()
+
+
+@pytest.mark.docker_required
 def test_update(completed_testrun: TestRunInfo, argus_database: ArgusDatabase):
     test_id = uuid4()
     test_run = TestRun(test_id=test_id, group="longevity-test", release_name="4_5rc5", assignee="k0machi",

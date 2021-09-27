@@ -101,7 +101,7 @@ class ArgusDatabase:
         return sha1(key_string).hexdigest()
 
     def init_keyspace(self, name="argus", prefix="", suffix=""):
-        keyspace_name = self._verify_keyspace_name(f"{prefix}{name}_{suffix}")
+        keyspace_name = self._verify_keyspace_name(f"{prefix}{name}{suffix}")
         query = f"CREATE KEYSPACE IF NOT EXISTS {keyspace_name} " \
                 "WITH replication={'class': 'SimpleStrategy', 'replication_factor' : 3}"
         self.log.debug("Running query: %s", query)
