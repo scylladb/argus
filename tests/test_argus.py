@@ -4,7 +4,7 @@ from argus.db.testrun import TestResourcesSetup, TestRun, TestRunInfo
 from argus.db.interface import ArgusDatabase
 from argus.db.config import Config
 
-from argus.db.types import ColumnInfo
+from argus.db.db_types import ColumnInfo
 from uuid import uuid4
 
 import pytest

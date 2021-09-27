@@ -4,7 +4,7 @@ from cassandra.cluster import Cluster
 from cassandra.auth import PlainTextAuthProvider
 from cassandra.cqltypes import UUIDType, IntegerType, VarcharType
 from argus.db.config import BaseConfig, FileConfig
-from argus.db.types import ColumnInfo, CollectionHint, ArgusUDTBase
+from argus.db.db_types import ColumnInfo, CollectionHint, ArgusUDTBase
 from uuid import UUID
 from hashlib import sha1
 from dataclasses import fields as dataclass_fields

@@ -5,7 +5,7 @@ from random import choice
 from argus.db.testrun import TestRunInfo, TestDetails, TestResourcesSetup, TestLogs, TestResults, TestResources
 from argus.db.interface import ArgusDatabase
 from argus.db.config import Config
-from argus.db.types import PackageVersion, NemesisRunInfo, EventsBySeverity, NodeDescription, TestStatus, NemesisStatus
+from argus.db.db_types import PackageVersion, NemesisRunInfo, EventsBySeverity, NodeDescription, TestStatus, NemesisStatus
 from argus.db.cloud_types import AWSSetupDetails, CloudNodesInfo, CloudInstanceDetails, CloudResource, ResourceState
 from subprocess import run
 from time import sleep

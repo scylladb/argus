@@ -6,7 +6,7 @@ from collections import OrderedDict
 from argus.db.utils import is_list_homogeneous
 from argus.db.cloud_types import *
 from argus.db.interface import ArgusDatabase
-from argus.db.types import *
+from argus.db.db_types import *
 
 T = TypeVar("T")
 
