@@ -222,7 +222,7 @@ class ArgusDatabase:
                     data_list[idx] = [_convert_data_to_sequence(d) for d in value]
             return data_list
 
-        test_id = run_data.pop("id")
+        test_id = UUID(run_data.pop("id"))
 
         if not (prepared_statement := self.prepared_statements.get(f"update_{table_name}")):
 
@@ -235,6 +235,7 @@ class ArgusDatabase:
             self.prepared_statements[f"update_{table_name}"] = prepared_statement
 
         self.log.debug("Resulting query for update: %s", prepared_statement.query_string)
-        parameters = _convert_data_to_sequence(run_data).append(test_id)
+        parameters = _convert_data_to_sequence(run_data)
+        parameters.append(test_id)
         self.log.debug("Parameters: %s", parameters)
         self.session.execute(prepared_statement, parameters=parameters)
