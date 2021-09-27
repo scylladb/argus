@@ -1,6 +1,6 @@
 from enum import Enum
 from dataclasses import dataclass
-from db.types import ArgusUDTBase
+from argus.db.types import ArgusUDTBase
 
 
 @dataclass(init=True, repr=True)

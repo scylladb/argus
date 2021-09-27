@@ -1,10 +1,10 @@
 from random import choice
 
-from db.testrun import TestResourcesSetup, TestRun, TestRunInfo
-from db.interface import ArgusDatabase
-from db.config import Config
+from argus.db.testrun import TestResourcesSetup, TestRun, TestRunInfo
+from argus.db.interface import ArgusDatabase
+from argus.db.config import Config
 
-from db.types import ColumnInfo
+from argus.db.types import ColumnInfo
 from uuid import uuid4
 
 import pytest
