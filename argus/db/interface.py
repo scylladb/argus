@@ -192,12 +192,14 @@ class ArgusDatabase:
 
         joined_fields = ", ".join(fields)
 
-        completed_query = query.format(name=cls.__name__, fields=joined_fields)
+        udt_name = cls.__name__ if not cls._typename else cls._typename
+
+        completed_query = query.format(name=udt_name, fields=joined_fields)
 
         self.log.debug("About to execute: \"%s\"", completed_query)
         self.session.execute(query=completed_query)
 
-        return cls.__name__
+        return udt_name
 
     def fetch(self, table_name: str, run_id: UUID):
         if not self._keyspace_initialized:

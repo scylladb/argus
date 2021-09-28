@@ -1,7 +1,7 @@
 from dataclasses import asdict, is_dataclass
+from pydantic.fields import ModelField
 from uuid import uuid4, UUID
 import logging
-from collections import OrderedDict
 
 from argus.db.utils import is_list_homogeneous
 from argus.db.cloud_types import *
@@ -83,6 +83,14 @@ class BaseTestInfo:
             return [asdict(dc) for dc in list_to_check]
 
         return list_to_check
+
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
+
+    @classmethod
+    def validate(cls, v, field: ModelField):
+        return v
 
 
 class TestDetails(BaseTestInfo):

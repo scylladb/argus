@@ -1,5 +1,7 @@
+import re
 from enum import Enum
-from dataclasses import dataclass
+from pydantic.dataclasses import dataclass
+from pydantic import ValidationError, validator
 from argus.db.db_types import ArgusUDTBase
 
 
@@ -12,6 +14,18 @@ class CloudInstanceDetails(ArgusUDTBase):
     @classmethod
     def from_db_udt(cls, udt):
         return cls(provider=udt.provider, region=udt.region, ip=udt.ip)
+
+    @validator("ip")
+    def valid_ip_address(cls, v):
+        ip_addr_re = r"(\d{1,3}\.){3}\d{1,3}"
+        if not re.match(ip_addr_re, v):
+            raise ValidationError(f"Not a valid ip address: {v}")
+
+        ip_by_octets = [int(octet) for octet in v.split(".") if int(octet) <= 255]
+        if len(ip_by_octets) != 4:
+            raise ValidationError(f"Octets out of range (0, 255): {v}")
+
+        return v
 
 
 @dataclass(init=True, repr=True)
@@ -33,6 +47,9 @@ class BaseCloudSetupDetails(ArgusUDTBase):
     loader_node: CloudNodesInfo
     monitor_node: CloudNodesInfo
 
+    def __post_init_post_parse__(self):
+        self.__class__._typename = "CloudSetupDetails"
+
     @classmethod
     def from_db_udt(cls, udt):
         db_node = CloudNodesInfo(*udt.db_node)
@@ -51,7 +68,7 @@ class GCESetupDetails(BaseCloudSetupDetails):
     backend: str = "gce"
 
 
-class ResourceState(Enum):
+class ResourceState(str, Enum):
     RUNNING = "running"
     STOPPED = "stopped"
     TERMINATED = "terminated"

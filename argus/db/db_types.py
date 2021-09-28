@@ -1,13 +1,17 @@
 from enum import Enum
-from typing import Any, Union, Type, Tuple, TypeVar
-from dataclasses import dataclass, fields, Field
+from typing import Any, Union, Type, TypeVar
+from pydantic.dataclasses import dataclass
+from pydantic import validator, ValidationError
+import re
 
 T = TypeVar("T")
 
 
 @dataclass
 class ArgusUDTBase:
-    pass
+
+    def __post_init_post_parse__(self):
+        self.__class__._typename = None
 
 
 @dataclass(init=True, repr=True)
@@ -19,6 +23,18 @@ class NodeDescription(ArgusUDTBase):
     @classmethod
     def from_db_udt(cls, udt):
         return cls(name=udt.name, ip=udt.ip, shards=udt.shards)
+
+    @validator("ip")
+    def valid_ip_address(cls, v):
+        ip_addr_re = r"(\d{1,3}\.){3}\d{1,3}"
+        if not re.match(ip_addr_re, v):
+            raise ValidationError(f"Not a valid ip address: {v}")
+
+        ip_by_octets = [int(octet) for octet in v.split(".") if int(octet) <= 255]
+        if len(ip_by_octets) != 4:
+            raise ValidationError(f"Octets out of range (0, 255): {v}")
+
+        return v
 
 
 @dataclass(init=True, repr=True)
@@ -33,14 +49,14 @@ class PackageVersion(ArgusUDTBase):
         return cls(name=udt.name, version=udt.version, date=udt.date, revision_id=udt.revision_id)
 
 
-class NemesisStatus(Enum):
+class NemesisStatus(str, Enum):
     Started = "started"
     Running = "running"
     Failed = "failed"
     Succeeded = "succeeded"
 
 
-class TestStatus(Enum):
+class TestStatus(str, Enum):
     Created = "created"
     Failed = "failed"
     Passed = "passed"
@@ -76,9 +92,12 @@ class EventsBySeverity(ArgusUDTBase):
         return cls(severity=udt.severity, event_amount=udt.event_amount, last_events=udt.last_events)
 
 
+TypeHint = TypeVar("TypeHint")
+
+
 @dataclass(init=True, repr=True)
 class CollectionHint:
-    stored_type: Type
+    stored_type: TypeHint
 
 
 @dataclass(init=True, repr=True)
