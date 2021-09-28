@@ -13,28 +13,6 @@ import logging
 LOGGER = logging.getLogger(__name__)
 
 
-def test_serialization(preset_details: TestResourcesSetup):
-    serialized_setup = preset_details.serialize()
-    assert serialized_setup["cloud_setup"]["db_node"]["image_id"] == "ami-abcdef99"
-
-
-def test_schema_dump(preset_details: TestResourcesSetup):
-    schema_dump = preset_details.schema()
-    assert schema_dump["cloud_setup"].value.db_node.image_id == "ami-abcdef99"
-
-
-@pytest.mark.skip("Not needed if test_full_run isn't skipped")
-@pytest.mark.docker_required
-def test_db_setupinfo(preset_details: TestResourcesSetup, argus_database: ArgusDatabase):
-    column_info = ColumnInfo(name="id", type=str, value=str(uuid4()), constraints=[])
-    schema = preset_details.schema()
-    schema["id"] = column_info
-    argus_database.init_keyspace(prefix="test", suffix="4_5rc5")
-    argus_database.init_table(column_info=schema, table_name="setup_schema_test")
-    argus_database.insert(table_name="setup_schema_test",
-                          run_data={"id": str(uuid4()), **preset_details.serialize()})
-
-
 @pytest.mark.docker_required
 def test_serialize_deserialize(completed_testrun: TestRunInfo, argus_database: ArgusDatabase):
     test_id = uuid4()

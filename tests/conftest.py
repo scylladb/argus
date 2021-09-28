@@ -5,15 +5,13 @@ from random import choice
 from argus.db.testrun import TestRunInfo, TestDetails, TestResourcesSetup, TestLogs, TestResults, TestResources
 from argus.db.interface import ArgusDatabase
 from argus.db.config import Config
-from argus.db.db_types import PackageVersion, NemesisRunInfo, EventsBySeverity, NodeDescription, TestStatus, NemesisStatus
+from argus.db.db_types import PackageVersion, NemesisRunInfo, EventsBySeverity, NodeDescription, TestStatus, \
+    NemesisStatus
 from argus.db.cloud_types import AWSSetupDetails, CloudNodesInfo, CloudInstanceDetails, CloudResource, ResourceState
 from subprocess import run
 from time import sleep
 import docker
 import logging
-
-logging.basicConfig()
-logging.getLogger().setLevel(logging.DEBUG)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -40,13 +38,15 @@ def preset_details():
 def scylla_cluster():
     docker_session = docker.from_env()
     prefix = "pytest_scylla_cluster"
-    run(args=[
+    LOGGER.info("Starting docker cluster...")
+    cluster_start = run(args=[
         "docker-compose",
         "-p", prefix,
         "-f", "tests/scylladb-cluster/docker-compose.yml",
         "up",
         "-d"
-    ], check=True)
+    ], check=True, capture_output=True)
+    LOGGER.info("Started docker cluster.")
     LOGGER.info("Sleeping for 90 seconds to let cluster catch up")
     sleep(90)
     all_containers = docker_session.containers.list(all=True)
@@ -55,12 +55,14 @@ def scylla_cluster():
                       cluster]
     LOGGER.debug("Contact points: %s", contact_points)
     yield contact_points
-    run(args=[
+    LOGGER.info("Stopping docker cluster...")
+    cluster_stop = run(args=[
         "docker-compose",
         "-p", prefix,
         "-f", "tests/scylladb-cluster/docker-compose.yml",
         "down"
-    ])
+    ], check=True, capture_output=True)
+    LOGGER.info("Stopped docker cluster.")
 
 
 @pytest.fixture(scope="function")
