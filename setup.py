@@ -9,6 +9,9 @@ setup(
     zip_safe=False,
     install_requires=[
         'pytest',
+        'pydantic',
+        'docker',
+        'coverage',
         'scylla-driver',
         'pyyaml'
     ],
