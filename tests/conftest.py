@@ -34,7 +34,7 @@ def preset_details():
     return setup
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="class")
 def scylla_cluster():
     docker_session = docker.from_env()
     prefix = "pytest_scylla_cluster"
@@ -65,7 +65,7 @@ def scylla_cluster():
     LOGGER.info("Stopped docker cluster.")
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="class")
 def argus_database(scylla_cluster: list[str]):
     config = Config(username="scylla", password="scylla", contact_points=scylla_cluster, keyspace_name="argus_testruns")
     db = ArgusDatabase.from_config(config)

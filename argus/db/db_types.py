@@ -85,6 +85,13 @@ class NemesisRunInfo(ArgusUDTBase):
                    target_node=target_node, status=udt.status, start_time=udt.start_time, end_time=udt.end_time,
                    stack_trace=udt.stack_trace)
 
+    def complete(self, stack_trace=None):
+        if stack_trace:
+            self.nemesis_status = NemesisStatus.Failed
+            self.stack_trace = stack_trace
+        else:
+            self.nemesis_status = NemesisStatus.Succeeded
+
 
 @dataclass(init=True, repr=True)
 class EventsBySeverity(ArgusUDTBase):

@@ -1,10 +1,8 @@
 from random import choice
 
-from argus.db.testrun import TestResourcesSetup, TestRun, TestRunInfo
+from argus.db.testrun import TestRun, TestRunInfo
 from argus.db.interface import ArgusDatabase
-from argus.db.config import Config
 
-from argus.db.db_types import ColumnInfo
 from uuid import uuid4
 
 import pytest
@@ -49,8 +47,8 @@ class TestEndToEnd:
                            run_info=completed_testrun)
         test_run.save()
 
-        resource = choice(test_run.resources.leftover_resources)
-        test_run.resources.detach_resource(resource)
+        resource = choice(test_run.run_info.resources.leftover_resources)
+        test_run.run_info.resources.detach_resource(resource)
         test_run.save()
 
         row = argus_database.fetch(table_name=f"test_runs", run_id=test_id)
