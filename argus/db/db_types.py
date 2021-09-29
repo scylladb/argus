@@ -7,11 +7,8 @@ import re
 T = TypeVar("T")
 
 
-@dataclass
 class ArgusUDTBase:
-
-    def __post_init_post_parse__(self):
-        self.__class__._typename = None
+    _typename = None
 
 
 @dataclass(init=True, repr=True)
@@ -72,6 +69,14 @@ class NemesisRunInfo(ArgusUDTBase):
     start_time: int
     end_time: int = 0
     stack_trace: str = ""
+
+    @property
+    def nemesis_status(self):
+        return NemesisStatus(self.status)
+
+    @nemesis_status.setter
+    def nemesis_status(self, value: NemesisStatus):
+        self.status = NemesisStatus(value).value
 
     @classmethod
     def from_db_udt(cls, udt):

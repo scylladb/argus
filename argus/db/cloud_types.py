@@ -46,9 +46,8 @@ class BaseCloudSetupDetails(ArgusUDTBase):
     db_node: CloudNodesInfo
     loader_node: CloudNodesInfo
     monitor_node: CloudNodesInfo
-
-    def __post_init_post_parse__(self):
-        self.__class__._typename = "CloudSetupDetails"
+    backend: str = None
+    _typename = "CloudSetupDetails"
 
     @classmethod
     def from_db_udt(cls, udt):
@@ -82,14 +81,11 @@ class CloudResource(ArgusUDTBase):
 
     @property
     def state(self):
-        return self.resource_state
+        return ResourceState(self.resource_state)
 
     @state.setter
     def state(self, value: ResourceState):
-        if type(value) is not ResourceState:
-            raise TypeError("supplied value is not ResourceState")
-
-        self.resource_state = value.value
+        self.resource_state = ResourceState(value).value
 
     @classmethod
     def from_db_udt(cls, udt):

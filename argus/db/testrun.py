@@ -1,12 +1,15 @@
-from dataclasses import asdict, is_dataclass
-from pydantic.fields import ModelField
-from uuid import uuid4, UUID
-import logging
-
 from argus.db.utils import is_list_homogeneous
 from argus.db.cloud_types import *
 from argus.db.interface import ArgusDatabase
 from argus.db.db_types import *
+
+from dataclasses import asdict, is_dataclass, fields, Field, dataclass
+from typing import Optional
+
+from pydantic.fields import ModelField
+from uuid import uuid4, UUID
+import logging
+
 
 T = TypeVar("T")
 
@@ -24,7 +27,7 @@ class TestInfoValueError(Exception):
 
 
 class BaseTestInfo:
-    EXPOSED_ATTRIBUTES = tuple()
+    EXPOSED_ATTRIBUTES = dict()
     ATTRIBUTE_CONSTRAINTS = dict()
     COLLECTION_HINTS = dict()
 
@@ -35,22 +38,23 @@ class BaseTestInfo:
     def create_skeleton(cls):
         pass
 
-    def schema(self):
+    @classmethod
+    def schema(cls):
         data = {}
-        for attr in self.EXPOSED_ATTRIBUTES:
-            value = getattr(self, attr)
-            column_type = type(value)
+        for attr, column_type in cls.EXPOSED_ATTRIBUTES.items():
+            value = None
             if column_type is list or column_type is tuple:
-                value = self.schema_process_collection(attr)
+                value = cls.schema_process_collection(attr)
                 column_type = CollectionHint
-            constraints = self.ATTRIBUTE_CONSTRAINTS.get(attr, [])
+            constraints = cls.ATTRIBUTE_CONSTRAINTS.get(attr, [])
             column_info = ColumnInfo(name=attr, type=column_type, value=value, constraints=constraints)
             data[attr] = column_info
 
         return data
 
-    def schema_process_collection(self, attr_name: str):
-        hint = self.COLLECTION_HINTS.get(attr_name)
+    @classmethod
+    def schema_process_collection(cls, attr_name: str):
+        hint = cls.COLLECTION_HINTS.get(attr_name)
         if not hint:
             raise TestInfoSchemaError("Encountered a collection and no collection hint was found")
 
@@ -94,9 +98,10 @@ class BaseTestInfo:
 
 
 class TestDetails(BaseTestInfo):
-    EXPOSED_ATTRIBUTES = ("name", "scm_revision_id", "started_by",
-                          "build_job_name", "build_job_url", "start_time", "yaml_test_duration", "config_files",
-                          "packages")
+    EXPOSED_ATTRIBUTES = {"name": str, "scm_revision_id": str, "started_by": str,
+                          "build_job_name": str, "build_job_url": str, "start_time": int, "yaml_test_duration": int,
+                          "config_files": list,
+                          "packages": list}
     COLLECTION_HINTS = {
         "packages": CollectionHint(list[PackageVersion]),
         "config_files": CollectionHint(list[str]),
@@ -127,7 +132,11 @@ class TestDetails(BaseTestInfo):
 
 
 class TestResourcesSetup(BaseTestInfo):
-    EXPOSED_ATTRIBUTES = ("sct_runner_host", "region_name", "cloud_setup")
+    EXPOSED_ATTRIBUTES = {
+        "sct_runner_host": CloudInstanceDetails,
+        "region_name": list,
+        "cloud_setup": BaseCloudSetupDetails
+    }
     COLLECTION_HINTS = {
         "region_name": CollectionHint(list[str]),
     }
@@ -154,7 +163,7 @@ class TestResourcesSetup(BaseTestInfo):
 
 
 class TestLogs(BaseTestInfo):
-    EXPOSED_ATTRIBUTES = ("logs",)
+    EXPOSED_ATTRIBUTES = {"logs": list}
     COLLECTION_HINTS = {
         "logs": CollectionHint(list[tuple[str, str]])
     }
@@ -180,7 +189,7 @@ class TestLogs(BaseTestInfo):
 
 
 class TestResources(BaseTestInfo):
-    EXPOSED_ATTRIBUTES = ("allocated_resources", "terminated_resources", "leftover_resources")
+    EXPOSED_ATTRIBUTES = {"allocated_resources": list, "terminated_resources": list, "leftover_resources": list}
     COLLECTION_HINTS = {
         "allocated_resources": CollectionHint(list[CloudResource]),
         "terminated_resources": CollectionHint(list[CloudResource]),
@@ -228,16 +237,19 @@ class TestResources(BaseTestInfo):
 
 
 class TestResults(BaseTestInfo):
-    EXPOSED_ATTRIBUTES = ("status", "events", "nemesis_data")
+    EXPOSED_ATTRIBUTES = {"status": str, "events": list, "nemesis_data": list}
     COLLECTION_HINTS = {
         "events": CollectionHint(list[EventsBySeverity]),
         "nemesis_data": CollectionHint(list[NemesisRunInfo]),
     }
 
-    def __init__(self, status: str, events: list[EventsBySeverity] = None,
+    def __init__(self, status: TestStatus, events: list[EventsBySeverity] = None,
                  nemesis_data: list[NemesisRunInfo] = None, max_stored_events=25):
         super().__init__()
-        self.status = status
+        if type(status) is TestStatus:
+            self._status = status.value
+        else:
+            self._status = TestStatus(status).value
         self.events = events if events else list()
         self.nemesis_data = nemesis_data if nemesis_data else list()
         self.max_stored_events = max_stored_events
@@ -274,26 +286,38 @@ class TestResults(BaseTestInfo):
 
         self._collect_event_message(event, event_message)
 
+    @property
+    def status(self) -> TestStatus:
+        return TestStatus(self._status)
 
-@dataclass(init=True, repr=True)
+    @status.setter
+    def status(self, value: TestStatus):
+        self._status = TestStatus(value).value
+
+
+@dataclass
 class TestRunInfo:
     details: TestDetails
-    logs: TestLogs
     setup: TestResourcesSetup
     resources: TestResources
+    logs: TestLogs
     results: TestResults
 
 
 class TestRun:
-    EXPOSED_ATTRIBUTES = ("id", "group", "release_name", "assignee")
+    EXPOSED_ATTRIBUTES = {"id": UUID, "group": str, "release_name": str, "assignee": str}
     ATTRIBUTE_CONSTRAINTS = {
     }
-    PRIMARY_KEYS = {  # TODO: Implement
+    PRIMARY_KEYS = {
         "id": (UUID, "partition"),
         "release_name": (str, "clustering"),  # release version, e.g. 4.5rc5
         "name": (str, "clustering"),  # test case name, e.g longevity-test-500gb-4h
     }
+    _USING_RUNINFO = TestRunInfo
     _TABLE_NAME = "test_runs"
+    _IS_TABLE_INITIALIZED = False
+    _ARGUS_DB_INTERFACE = None
+    _log = logging.getLogger('TestRun')
 
     def __init__(self, test_id: UUID, group: str, release_name: str, assignee: str,
                  run_info: TestRunInfo, argus_interface: ArgusDatabase = None):
@@ -303,35 +327,33 @@ class TestRun:
         self._group = group
         self._release_name = release_name
         self._assignee = assignee
-        self._details = run_info.details
-        self._setup = run_info.setup
-        self._resources = run_info.resources
-        self._logs = run_info.logs
-        self._results = run_info.results
-        self._log = logging.getLogger(self.__class__.__name__)
+        self._run_info = run_info
+        for field in fields(run_info):
+            setattr(self, field.name, getattr(run_info, field.name))
 
-        if not argus_interface:
-            argus_interface = ArgusDatabase.get()
-        self._argus = argus_interface
-        self._is_table_initialized = False
+        if argus_interface:
+            self.argus = argus_interface
+            self._IS_TABLE_INITIALIZED = False
 
     @classmethod
     def from_db_row(cls, row):
+        if not cls._IS_TABLE_INITIALIZED:
+            cls.init_own_table()
         # TODO: Use UDT Object mapping from scylla-driver
-        details = TestDetails.from_db_row(row)
-        setup = TestResourcesSetup.from_db_row(row)
-        logs = TestLogs.from_db_row(row)
-        results = TestResults.from_db_row(row)
-        resources = TestResources.from_db_row(row)
+        nested_fields = {}
+        for field in fields(cls._USING_RUNINFO):
+            nested_fields[field.name] = field.type.from_db_row(row)
 
-        run_info = TestRunInfo(details=details, setup=setup, logs=logs, results=results, resources=resources)
+        run_info = cls._USING_RUNINFO(**nested_fields)
 
         return cls(test_id=row.id, group=row.group, release_name=row.release_name,
                    assignee=row.assignee, run_info=run_info)
 
     @classmethod
     def from_id(cls, test_id: UUID):
-        db = ArgusDatabase.get()
+        if not cls._IS_TABLE_INITIALIZED:
+            cls.init_own_table()
+        db = cls.get_argus()
         if row := db.fetch(cls._TABLE_NAME, test_id):
             return cls.from_db_row(row)
 
@@ -340,6 +362,22 @@ class TestRun:
     @classmethod
     def create_skeleton_run(cls):
         pass
+
+    @classmethod
+    def get_argus(cls):
+        if not cls._ARGUS_DB_INTERFACE:
+            cls._ARGUS_DB_INTERFACE = ArgusDatabase.get()
+        return cls._ARGUS_DB_INTERFACE
+
+    @property
+    def argus(self):
+        if not self._ARGUS_DB_INTERFACE:
+            self.get_argus()
+        return self._ARGUS_DB_INTERFACE
+
+    @argus.setter
+    def argus(self, interface: Optional[ArgusDatabase]):
+        self._ARGUS_DB_INTERFACE = interface
 
     @property
     def id(self) -> UUID:
@@ -359,81 +397,74 @@ class TestRun:
 
     def serialize(self) -> dict[str, Any]:
         self._log.info("Serializing test run...")
+        nested_data = {}
+        for field in fields(self._USING_RUNINFO):
+            field: Field
+            value: BaseTestInfo = getattr(self, field.name)
+            nested_data = {
+                **nested_data,
+                **value.serialize()
+            }
+
         data = {
             "id": str(self._id),
             "group": self._group,
             "release_name": self._release_name,
             "assignee": self._assignee,
-            **self._details.serialize(),
-            **self._setup.serialize(),
-            **self._resources.serialize(),
-            **self._logs.serialize(),
-            **self._results.serialize(),
+            **nested_data
         }
         logging.debug("Serialized Data: %s", data)
         return data
 
-    def init_own_table(self):
-        self._log.info("Initializing TestRun table...")
-        self._argus.init_table(table_name=self._TABLE_NAME, column_info=self.schema())
-        self._is_table_initialized = True
+    @classmethod
+    def init_own_table(cls):
+        cls._log.info("Initializing TestRun table...")
+        cls.get_argus().init_table(table_name=cls._TABLE_NAME, column_info=cls.schema())
+        cls._IS_TABLE_INITIALIZED = True
 
-    def schema(self) -> dict[str, ColumnInfo]:
+    @classmethod
+    def schema(cls) -> dict[str, ColumnInfo]:
         data = {}
-        self._log.info("Dumping full schema...")
-        for attr in self.EXPOSED_ATTRIBUTES:
-            value = getattr(self, attr)
-            column_type = type(value)
-            constraints = self.ATTRIBUTE_CONSTRAINTS.get(attr, [])
+        cls._log.info("Dumping full schema...")
+        for attr, column_type in cls.EXPOSED_ATTRIBUTES.items():
+            value = None
+            constraints = cls.ATTRIBUTE_CONSTRAINTS.get(attr, [])
             column_info = ColumnInfo(name=attr, type=column_type, value=value, constraints=constraints)
             data[attr] = column_info
 
+        schema_dump = {}
+        for field in fields(cls._USING_RUNINFO):
+            schema_dump = {
+                **schema_dump,
+                **field.type.schema(),
+            }
+
         full_schema = dict(
-            **{"$tablekeys$": self.PRIMARY_KEYS},
+            **{"$tablekeys$": cls.PRIMARY_KEYS},
             **data,
-            **self._details.schema(),
-            **self._setup.schema(),
-            **self._resources.schema(),
-            **self._logs.schema(),
-            **self._results.schema()
+            **schema_dump
         )
-        self._log.debug("Full Schema: %s", full_schema)
+        cls._log.debug("Full Schema: %s", full_schema)
         return full_schema
 
     def save(self):
-        if not self._is_table_initialized:
+        if not self._IS_TABLE_INITIALIZED:
             self.init_own_table()
         if not self.exists():
             self._log.info("Inserting data for test run: %s", self.id)
-            self._argus.insert(table_name=self._TABLE_NAME, run_data=self.serialize())
+            self.argus.insert(table_name=self._TABLE_NAME, run_data=self.serialize())
         else:
             self._log.info("Updating data for test run: %s", self.id)
-            self._argus.update(table_name=self._TABLE_NAME, run_data=self.serialize())
+            self.argus.update(table_name=self._TABLE_NAME, run_data=self.serialize())
 
-    def exists(self):
-        if not self._is_table_initialized:
+    def exists(self) -> bool:
+        if not self._IS_TABLE_INITIALIZED:
             self.init_own_table()
 
-        if self._argus.fetch(table_name=self._TABLE_NAME, run_id=self.id):
+        if self.argus.fetch(table_name=self._TABLE_NAME, run_id=self.id):
             return True
         return False
 
     @property
-    def details(self):
-        return self._details
-
-    @property
-    def setup(self):
-        return self._setup
-
-    @property
-    def resources(self):
-        return self._resources
-
-    @property
-    def logs(self):
-        return self._logs
-
-    @property
-    def results(self):
-        return self._results
+    def run_info(self) -> TestRunInfo:
+        return self._run_info

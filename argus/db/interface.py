@@ -39,7 +39,9 @@ class ArgusDatabase:
     log = logging.getLogger(__name__)
     _INSTANCE: Union['ArgusDatabase', Any] = None
 
-    def __init__(self, config: BaseConfig = FileConfig()):
+    def __init__(self, config: BaseConfig = None):
+        if not config:
+            config = FileConfig()
         self.config = config.get_config()
         self.cluster = Cluster(contact_points=self.config.get("contact_points", []),
                                auth_provider=PlainTextAuthProvider(username=self.config.get("username"),
@@ -75,7 +77,9 @@ class ArgusDatabase:
         return True
 
     @classmethod
-    def from_config(cls, config: BaseConfig = FileConfig()):
+    def from_config(cls, config: BaseConfig = None):
+        if not config:
+            config = FileConfig()
         if cls._INSTANCE:
             raise ArgusInterfaceSingletonError("Attempt to call ArgusDatabase::from_config twice")
 
