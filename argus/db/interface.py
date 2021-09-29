@@ -50,7 +50,8 @@ class ArgusDatabase:
         self.prepared_statements = dict()
         self.initialized_tables = dict()
         self._table_keys = dict()
-        self.init_keyspace(name=self.config.get("keyspace_name"))
+        self._mapped_udts = dict()
+        self._current_keyspace = self.init_keyspace(name=self.config.get("keyspace_name"))
 
     @classmethod
     def get(cls):
@@ -108,6 +109,7 @@ class ArgusDatabase:
         self.session.execute(query=query)
         self.session.set_keyspace(keyspace_name)
         self._keyspace_initialized = True
+        return keyspace_name
 
     def is_native_type(self, object_type):
         return self.PYTHON_SCYLLA_TYPE_MAPPING.get(object_type, False)
@@ -177,6 +179,11 @@ class ArgusDatabase:
         if not self._keyspace_initialized:
             raise ArgusInterfaceDatabaseConnectionError("Uninitialized keyspace, cannot continue")
 
+        udt_name = cls.__name__ if not cls._typename else cls._typename
+
+        if cls in self._mapped_udts.get(self._current_keyspace, []):
+            return udt_name
+
         query = "CREATE TYPE IF NOT EXISTS {name} ({fields})"
         fields = []
         for field in dataclass_fields(cls):
@@ -192,12 +199,13 @@ class ArgusDatabase:
 
         joined_fields = ", ".join(fields)
 
-        udt_name = cls.__name__ if not cls._typename else cls._typename
-
         completed_query = query.format(name=udt_name, fields=joined_fields)
-
         self.log.debug("About to execute: \"%s\"", completed_query)
         self.session.execute(query=completed_query)
+
+        existing_udts = self._mapped_udts.get(self._current_keyspace, [])
+        existing_udts.append(cls)
+        self._mapped_udts[self._current_keyspace] = existing_udts
 
         return udt_name
 
