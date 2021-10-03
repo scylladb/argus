@@ -1,4 +1,8 @@
+from uuid import UUID
+
 import pytest
+import cassandra.cluster
+from mocks.mock_cluster import MockCluster
 from time import time
 from os import urandom
 from random import choice
@@ -15,6 +19,11 @@ import docker
 import logging
 
 LOGGER = logging.getLogger(__name__)
+
+
+@pytest.fixture(scope="function")
+def mock_cluster(monkeypatch):
+    monkeypatch.setattr(cassandra.cluster, "Cluster", MockCluster)
 
 
 @pytest.fixture(scope="function")
@@ -255,6 +264,15 @@ def preset_test_results_serialized():
                 "stack_trace": "Something went wrong..."
             }
         ]
+    }
+
+
+@pytest.fixture(scope="function")
+def simple_primary_key():
+    return {
+        "$tablekeys$": {
+            "id": (UUID, "partition")
+        }
     }
 
 

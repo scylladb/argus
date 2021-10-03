@@ -1,8 +1,8 @@
 from typing import KeysView, Union, Any, get_args as get_type_args, get_origin as get_type_origin
 from types import GenericAlias
-from cassandra.cluster import Cluster as ClusterDriver
+import cassandra.cluster
 from cassandra.auth import PlainTextAuthProvider
-from cassandra.cqltypes import UUIDType, IntegerType, VarcharType
+from cassandra.cqltypes import UUIDType, IntegerType, VarcharType, FloatType
 from argus.db.config import BaseConfig, FileConfig
 from argus.db.db_types import ColumnInfo, CollectionHint, ArgusUDTBase
 from uuid import UUID
@@ -32,6 +32,7 @@ class ArgusInterfaceNameError(Exception):
 class ArgusDatabase:
     PYTHON_SCYLLA_TYPE_MAPPING = {
         int: IntegerType.typename,
+        float: FloatType.typename,
         str: VarcharType.typename,
         UUID: UUIDType.typename,
     }
@@ -43,9 +44,10 @@ class ArgusDatabase:
         if not config:
             config = FileConfig()
         self.config = config.get_config()
-        self.cluster = ClusterDriver(contact_points=self.config.get("contact_points", []),
-                               auth_provider=PlainTextAuthProvider(username=self.config.get("username"),
-                                                                   password=self.config.get("password")))
+        self.cluster = cassandra.cluster.Cluster(contact_points=self.config.get("contact_points", []),
+                                                 auth_provider=PlainTextAuthProvider(
+                                                     username=self.config.get("username"),
+                                                     password=self.config.get("password")))
 
         self.session = self.cluster.connect()
         self._keyspace_initialized = False
