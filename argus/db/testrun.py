@@ -1,3 +1,5 @@
+from time import time
+
 from argus.db.utils import is_list_homogeneous
 from argus.db.cloud_types import *
 from argus.db.interface import ArgusDatabase
@@ -9,7 +11,6 @@ from typing import Optional
 from pydantic.fields import ModelField
 from uuid import uuid4, UUID
 import logging
-
 
 T = TypeVar("T")
 
@@ -101,7 +102,7 @@ class TestDetails(BaseTestInfo):
     EXPOSED_ATTRIBUTES = {"name": str, "scm_revision_id": str, "started_by": str,
                           "build_job_name": str, "build_job_url": str, "start_time": int, "yaml_test_duration": int,
                           "config_files": list,
-                          "packages": list}
+                          "packages": list, "end_time": int}
     COLLECTION_HINTS = {
         "packages": CollectionHint(list[PackageVersion]),
         "config_files": CollectionHint(list[str]),
@@ -110,7 +111,7 @@ class TestDetails(BaseTestInfo):
     def __init__(self, name: str, scm_revision_id: str,
                  started_by: str, build_job_name: str, build_job_url: str,
                  yaml_test_duration: int, start_time: int,
-                 config_files: list[str], packages: list[PackageVersion]):
+                 config_files: list[str], packages: list[PackageVersion], end_time: int = -1):
         super().__init__()
         self.name = name
         self.scm_revision_id = scm_revision_id
@@ -119,8 +120,11 @@ class TestDetails(BaseTestInfo):
         self.build_job_url = build_job_url
         self.start_time = start_time
         self.yaml_test_duration = yaml_test_duration
+        if not (is_list_homogeneous(packages) or (len(packages) > 0 and type(next(iter(packages))) is PackageVersion)):
+            raise TestInfoValueError("Package list contains incorrect values", packages)
         self.packages = packages
         self.config_files = config_files
+        self.end_time = end_time
 
     @classmethod
     def from_db_row(cls, row):
@@ -129,6 +133,9 @@ class TestDetails(BaseTestInfo):
                    build_job_name=row.build_job_name, build_job_url=row.build_job_url,
                    start_time=row.start_time, yaml_test_duration=row.yaml_test_duration, config_files=row.config_files,
                    packages=packages)
+
+    def complete(self):
+        self.end_time = int(time())
 
 
 class TestResourcesSetup(BaseTestInfo):

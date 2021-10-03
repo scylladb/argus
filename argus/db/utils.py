@@ -4,6 +4,9 @@ T = TypeVar("T")
 
 
 def is_list_homogeneous(list_to_check: list[T]) -> bool:
+    if not len(list_to_check):
+        return True
+
     first, *_ = list_to_check
     first_type = type(first)
 

@@ -1,6 +1,6 @@
 from typing import KeysView, Union, Any, get_args as get_type_args, get_origin as get_type_origin
 from types import GenericAlias
-from cassandra.cluster import Cluster
+from cassandra.cluster import Cluster as ClusterDriver
 from cassandra.auth import PlainTextAuthProvider
 from cassandra.cqltypes import UUIDType, IntegerType, VarcharType
 from argus.db.config import BaseConfig, FileConfig
@@ -43,7 +43,7 @@ class ArgusDatabase:
         if not config:
             config = FileConfig()
         self.config = config.get_config()
-        self.cluster = Cluster(contact_points=self.config.get("contact_points", []),
+        self.cluster = ClusterDriver(contact_points=self.config.get("contact_points", []),
                                auth_provider=PlainTextAuthProvider(username=self.config.get("username"),
                                                                    password=self.config.get("password")))
 

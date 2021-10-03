@@ -53,14 +53,13 @@ class FileConfig(BaseConfig):
 
 
 class Config(BaseConfig):
-    def __init__(self, username: str, password: str, contact_points: list[str], keyspace_name: str, **kwargs):
+    def __init__(self, username: str, password: str, contact_points: list[str], keyspace_name: str):
         super().__init__()
         self.config = {
             "username": username,
             "password": password,
             "contact_points": contact_points,
             "keyspace_name": keyspace_name,
-            **kwargs
         }
 
     def get_config(self) -> dict[Hashable, Any]:

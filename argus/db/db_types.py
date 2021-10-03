@@ -1,4 +1,5 @@
 from enum import Enum
+import time
 from typing import Any, Union, Type, TypeVar
 from pydantic.dataclasses import dataclass
 from pydantic import validator, ValidationError
@@ -47,16 +48,17 @@ class PackageVersion(ArgusUDTBase):
 
 
 class NemesisStatus(str, Enum):
-    Started = "started"
-    Running = "running"
-    Failed = "failed"
-    Succeeded = "succeeded"
+    STARTED = "started"
+    RUNNING = "running"
+    FAILED = "failed"
+    SUCCEEDED = "succeeded"
 
 
 class TestStatus(str, Enum):
-    Created = "created"
-    Failed = "failed"
-    Passed = "passed"
+    CREATED = "created"
+    RUNNING = "running"
+    FAILED = "failed"
+    PASSED = "passed"
 
 
 @dataclass(init=True, repr=True)
@@ -86,11 +88,12 @@ class NemesisRunInfo(ArgusUDTBase):
                    stack_trace=udt.stack_trace)
 
     def complete(self, stack_trace=None):
+        self.end_time = int(time.time())
         if stack_trace:
-            self.nemesis_status = NemesisStatus.Failed
+            self.nemesis_status = NemesisStatus.FAILED
             self.stack_trace = stack_trace
         else:
-            self.nemesis_status = NemesisStatus.Succeeded
+            self.nemesis_status = NemesisStatus.SUCCEEDED
 
 
 @dataclass(init=True, repr=True)
