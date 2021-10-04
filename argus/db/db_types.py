@@ -1,15 +1,17 @@
-from enum import Enum
+import re
 import time
+from enum import Enum
 from typing import Any, Union, Type, TypeVar
 from pydantic.dataclasses import dataclass
 from pydantic import validator, ValidationError
-import re
-
-T = TypeVar("T")
 
 
 class ArgusUDTBase:
     _typename = None
+
+    @classmethod
+    def basename(cls):
+        return cls._typename if cls._typename else cls.__name__
 
 
 @dataclass(init=True, repr=True)
@@ -23,16 +25,16 @@ class NodeDescription(ArgusUDTBase):
         return cls(name=udt.name, ip=udt.ip, shards=udt.shards)
 
     @validator("ip")
-    def valid_ip_address(cls, v):
+    def valid_ip_address(cls, value):
         ip_addr_re = r"(\d{1,3}\.){3}\d{1,3}"
-        if not re.match(ip_addr_re, v):
-            raise ValidationError(f"Not a valid ip address: {v}")
+        if not re.match(ip_addr_re, value):
+            raise ValidationError(f"Not a valid ip address: {value}")
 
-        ip_by_octets = [int(octet) for octet in v.split(".") if int(octet) <= 255]
+        ip_by_octets = [int(octet) for octet in value.split(".") if int(octet) <= 255]
         if len(ip_by_octets) != 4:
-            raise ValidationError(f"Octets out of range (0, 255): {v}")
+            raise ValidationError(f"Octets out of range (0, 255): {value}")
 
-        return v
+        return value
 
 
 @dataclass(init=True, repr=True)
@@ -118,6 +120,6 @@ class CollectionHint:
 @dataclass(init=True, repr=True)
 class ColumnInfo:
     name: str
-    type: Type[Union[CollectionHint, int, str, T]]
+    type: Type[Union[CollectionHint, int, str, TypeHint]]
     value: Any
     constraints: list[str]

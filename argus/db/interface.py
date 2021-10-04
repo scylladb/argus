@@ -1,16 +1,17 @@
+import re
+import logging
+import json
+from uuid import UUID
+from hashlib import sha1
+from dataclasses import fields as dataclass_fields
 from typing import KeysView, Union, Any, get_args as get_type_args, get_origin as get_type_origin
 from types import GenericAlias
+
 import cassandra.cluster
 from cassandra.auth import PlainTextAuthProvider
 from cassandra.cqltypes import UUIDType, IntegerType, VarcharType, FloatType
 from argus.db.config import BaseConfig, FileConfig
 from argus.db.db_types import ColumnInfo, CollectionHint, ArgusUDTBase
-from uuid import UUID
-from hashlib import sha1
-from dataclasses import fields as dataclass_fields
-import re
-import logging
-import json
 
 
 class ArgusInterfaceSingletonError(Exception):
@@ -51,10 +52,10 @@ class ArgusDatabase:
 
         self.session = self.cluster.connect()
         self._keyspace_initialized = False
-        self.prepared_statements = dict()
-        self.initialized_tables = dict()
-        self._table_keys = dict()
-        self._mapped_udts = dict()
+        self.prepared_statements = {}
+        self.initialized_tables = {}
+        self._table_keys = {}
+        self._mapped_udts = {}
         self._current_keyspace = self.init_keyspace(name=self.config.get("keyspace_name"))
 
     @classmethod
@@ -166,7 +167,7 @@ class ArgusDatabase:
 
         declared_types = []
         for inner_hint in collection_types:
-            type_class = get_type_origin(inner_hint) if type(inner_hint) is GenericAlias else inner_hint
+            type_class = get_type_origin(inner_hint) if isinstance(inner_hint, GenericAlias) else inner_hint
 
             if type_class is tuple or type_class is list:
                 declaration = "frozen<%s>" % (self.create_collection_declaration(inner_hint),)
@@ -185,7 +186,7 @@ class ArgusDatabase:
         if not self._keyspace_initialized:
             raise ArgusInterfaceDatabaseConnectionError("Uninitialized keyspace, cannot continue")
 
-        udt_name = cls.__name__ if not cls._typename else cls._typename
+        udt_name = cls.basename()
 
         if cls in self._mapped_udts.get(self._current_keyspace, []):
             return udt_name
@@ -194,7 +195,7 @@ class ArgusDatabase:
         fields = []
         for field in dataclass_fields(cls):
             name = field.name
-            field_type = get_type_origin(field.type) if type(field.type) is GenericAlias else field.type
+            field_type = get_type_origin(field.type) if isinstance(field.type, GenericAlias) else field.type
             if field_type is list or field_type is tuple:
                 field_declaration = self.create_collection_declaration(field.type)
             elif matched_type := self.PYTHON_SCYLLA_TYPE_MAPPING.get(field_type):
@@ -242,9 +243,9 @@ class ArgusDatabase:
         def _convert_data_to_sequence(data: dict) -> list:
             data_list = list(data.values())
             for idx, value in enumerate(data_list):
-                if type(value) is dict:
+                if isinstance(value, dict):
                     data_list[idx] = _convert_data_to_sequence(value)
-                elif type(value) is list and len(value) > 0 and type(value[0]) is dict:
+                elif isinstance(value, list) and len(value) > 0 and isinstance(value[0], dict):
                     data_list[idx] = [_convert_data_to_sequence(d) for d in value]
             return data_list
 
@@ -255,7 +256,7 @@ class ArgusDatabase:
         self.log.debug("Primary keys for table %s: %s", table_name, primary_keys)
         where_clause = []
         where_params = []
-        for key, (ctor, key_type) in primary_keys.items():
+        for key, (ctor, _) in primary_keys.items():
             self.log.debug("Ejecting %s from update set as it is a part of the primary key", key)
             try:
                 data_value = run_data.pop(key)

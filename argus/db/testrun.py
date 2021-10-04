@@ -1,18 +1,14 @@
+import logging
 from time import time
+from dataclasses import asdict, is_dataclass, fields, Field, dataclass
+from typing import Optional, Any
+from uuid import uuid4, UUID
 
 from argus.db.utils import is_list_homogeneous
-from argus.db.cloud_types import *
+from argus.db.cloud_types import CloudResource, CloudInstanceDetails, BaseCloudSetupDetails, \
+    GCESetupDetails, AWSSetupDetails
 from argus.db.interface import ArgusDatabase
-from argus.db.db_types import *
-
-from dataclasses import asdict, is_dataclass, fields, Field, dataclass
-from typing import Optional
-
-from pydantic.fields import ModelField
-from uuid import uuid4, UUID
-import logging
-
-T = TypeVar("T")
+from argus.db.db_types import ColumnInfo, CollectionHint, NemesisRunInfo, TestStatus, EventsBySeverity, PackageVersion
 
 
 class TestInfoSerializationError(Exception):
@@ -28,9 +24,9 @@ class TestInfoValueError(Exception):
 
 
 class BaseTestInfo:
-    EXPOSED_ATTRIBUTES = dict()
-    ATTRIBUTE_CONSTRAINTS = dict()
-    COLLECTION_HINTS = dict()
+    EXPOSED_ATTRIBUTES = {}
+    ATTRIBUTE_CONSTRAINTS = {}
+    COLLECTION_HINTS = {}
 
     def __init__(self, *args, **kwargs):
         pass
@@ -65,7 +61,7 @@ class BaseTestInfo:
         data = {}
         for attr in self.EXPOSED_ATTRIBUTES:
             attribute_value = getattr(self, attr)
-            if type(attribute_value) is list:
+            if isinstance(attribute_value, list):
                 attribute_value = self._process_list(attribute_value)
             elif is_dataclass(attribute_value):
                 attribute_value = asdict(attribute_value)
@@ -75,8 +71,8 @@ class BaseTestInfo:
         return data
 
     @staticmethod
-    def _process_list(list_to_check: list[T]):
-        if not len(list_to_check):
+    def _process_list(list_to_check: list[Any]):
+        if len(list_to_check) == 0:
             return list_to_check
 
         if not is_list_homogeneous(list_to_check):
@@ -94,8 +90,8 @@ class BaseTestInfo:
         yield cls.validate
 
     @classmethod
-    def validate(cls, v, field: ModelField):
-        return v
+    def validate(cls, value, field):
+        return value
 
 
 class TestDetails(BaseTestInfo):
@@ -120,7 +116,8 @@ class TestDetails(BaseTestInfo):
         self.build_job_url = build_job_url
         self.start_time = start_time
         self.yaml_test_duration = yaml_test_duration
-        if not (is_list_homogeneous(packages) or (len(packages) > 0 and type(next(iter(packages))) is PackageVersion)):
+        if not (is_list_homogeneous(packages) or (
+                len(packages) > 0 and isinstance(next(iter(packages)), PackageVersion))):
             raise TestInfoValueError("Package list contains incorrect values", packages)
         self.packages = packages
         self.config_files = config_files
@@ -177,7 +174,7 @@ class TestLogs(BaseTestInfo):
 
     def __init__(self):
         super().__init__()
-        self._log_collection = list()
+        self._log_collection = []
 
     def add_log(self, log_type: str, log_url: str) -> None:
         self._log_collection.append((log_type, log_url))
@@ -253,12 +250,12 @@ class TestResults(BaseTestInfo):
     def __init__(self, status: TestStatus, events: list[EventsBySeverity] = None,
                  nemesis_data: list[NemesisRunInfo] = None, max_stored_events=25):
         super().__init__()
-        if type(status) is TestStatus:
+        if isinstance(status, TestStatus):
             self._status = status.value
         else:
             self._status = TestStatus(status).value
-        self.events = events if events else list()
-        self.nemesis_data = nemesis_data if nemesis_data else list()
+        self.events = events if events else []
+        self.nemesis_data = nemesis_data if nemesis_data else []
         self.max_stored_events = max_stored_events
 
     @classmethod
@@ -269,7 +266,7 @@ class TestResults(BaseTestInfo):
         return cls(status=row.status, events=events, nemesis_data=nemesis_data)
 
     def _add_new_event_type(self, event: EventsBySeverity):
-        if len([v for v in self.events if v.severity == event.severity]):
+        if len([v for v in self.events if v.severity == event.severity]) > 0:
             raise TestInfoValueError(f"Severity event collection {event.severity} already exists in TestResults")
 
         self.events.append(event)
@@ -360,8 +357,8 @@ class TestRun:
     def from_id(cls, test_id: UUID):
         if not cls._IS_TABLE_INITIALIZED:
             cls.init_own_table()
-        db = cls.get_argus()
-        if row := db.fetch(cls._TABLE_NAME, test_id):
+        database = cls.get_argus()
+        if row := database.fetch(cls._TABLE_NAME, test_id):
             return cls.from_db_row(row)
 
         return None
