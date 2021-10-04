@@ -9,3 +9,4 @@ contact_points:
   - 172.20.0.7
 username: scylla
 password: scylla
+keyspace_name: argus
