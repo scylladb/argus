@@ -2,7 +2,7 @@ version: "3.7"
 services:
   node_a:
     image: "scylladb/scylla:4.4.4"
-    networks: 
+    networks:
       scylla_bridge:
         aliases:
           - initialnode
@@ -10,37 +10,37 @@ services:
 
   node_b:
     image: "scylladb/scylla:4.4.4"
-    networks: 
+    networks:
       scylla_bridge:
-    depends_on: 
+    depends_on:
       - node_a
     command: --smp 1 --overprovisioned 1 --seeds="initialnode"
-  node_c: 
+  node_c:
     image: "scylladb/scylla:4.4.4"
-    networks: 
+    networks:
       scylla_bridge:
-    depends_on: 
+    depends_on:
       - node_a
     command: --smp 1 --overprovisioned 1 --seeds="initialnode"
   node_e:
     image: "scylladb/scylla:4.4.4"
-    networks: 
+    networks:
       scylla_bridge:
-    depends_on: 
+    depends_on:
       - node_a
     command: --smp 1 --overprovisioned 1 --seeds="initialnode"
   node_d:
     image: "scylladb/scylla:4.4.4"
-    networks: 
+    networks:
       scylla_bridge:
-    depends_on: 
+    depends_on:
       - node_a
     command: --smp 1 --overprovisioned 1 --seeds="initialnode"
   node_f:
     image: "scylladb/scylla:4.4.4"
-    networks: 
+    networks:
       scylla_bridge:
-    depends_on: 
+    depends_on:
       - node_a
     command: --smp 1 --overprovisioned 1 --seeds="initialnode"
 networks:
