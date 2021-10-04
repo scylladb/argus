@@ -27,6 +27,13 @@ def mock_cluster(monkeypatch):
 
 
 @pytest.fixture(scope="function")
+def argus_interface_default():
+    db = ArgusDatabase.get()
+    yield db
+    db.destroy()
+
+
+@pytest.fixture(scope="function")
 def preset_test_resource_setup():
     sct_runner_info = CloudInstanceDetails(ip="1.1.1.1", region="us-east-1", provider="aws")
     db_node = CloudNodesInfo(image_id="ami-abcdef99", instance_type="spot",
