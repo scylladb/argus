@@ -97,7 +97,7 @@ class ArgusDatabase:
     @staticmethod
     def _verify_keyspace_name(name: str):
         incorrect_keyspace_name_re = r"\."
-        if match := re.match(incorrect_keyspace_name_re, name):
+        if match := re.search(incorrect_keyspace_name_re, name):
             raise ArgusInterfaceNameError("Keyspace name does not conform to the "
                                           "keyspace naming rules: %s (pos: %s)" % (name, match.pos))
         return name
@@ -248,7 +248,10 @@ class ArgusDatabase:
                     data_list[idx] = [_convert_data_to_sequence(d) for d in value]
             return data_list
 
-        primary_keys: dict = self._table_keys[table_name]
+        primary_keys: dict = self._table_keys.get(table_name)
+        if not primary_keys:
+            raise ArgusInterfaceSchemaError(f"Table \"{table_name}\" is not initialized!")
+
         self.log.debug("Primary keys for table %s: %s", table_name, primary_keys)
         where_clause = []
         where_params = []

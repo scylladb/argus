@@ -8,7 +8,7 @@ LOGGER = logging.getLogger(__name__)
 class MockPreparedStatement:
     def __init__(self, query: str):
         self.log = logging.getLogger(self.__class__.__name__)
-        self.query = query
+        self.query_string = query
         self.parameters = None
 
     def bind(self, parameters: Union[tuple, list]):
