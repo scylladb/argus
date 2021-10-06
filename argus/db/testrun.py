@@ -1,5 +1,5 @@
 import logging
-from time import time
+import time
 from dataclasses import asdict, is_dataclass, fields, Field, dataclass
 from typing import Optional, Any
 from uuid import uuid4, UUID
@@ -132,7 +132,7 @@ class TestDetails(BaseTestInfo):
                    packages=packages)
 
     def complete(self):
-        self.end_time = int(time())
+        self.end_time = int(time.time())
 
 
 class TestResourcesSetup(BaseTestInfo):
