@@ -35,7 +35,7 @@ def argus_interface_default():
 
 @pytest.fixture(scope="function")
 def preset_test_resource_setup():
-    sct_runner_info = CloudInstanceDetails(ip="1.1.1.1", region="us-east-1", provider="aws")
+    sct_runner_info = CloudInstanceDetails(ip="1.1.1.1", region="us-east-1", provider="aws", private_ip="10.10.10.1")
     db_node = CloudNodesInfo(image_id="ami-abcdef99", instance_type="spot",
                              node_amount=6, post_behaviour="keep-on-failure")
     loader_node = CloudNodesInfo(image_id="ami-deadbeef", instance_type="spot",
@@ -68,6 +68,7 @@ def preset_test_resources_setup_serialized():
             "ip": "1.1.1.1",
             "region": "us-east-1",
             "provider": "aws",
+            "private_ip": "10.10.10.1",
         },
         "region_name": ["us-east-1"],
         "cloud_setup": {
@@ -171,7 +172,7 @@ def preset_test_logs_serialized():
 def preset_test_resources():
     resources = TestResources()
 
-    instance_info = CloudInstanceDetails(ip="1.1.1.1", region="us-east-1", provider="aws")
+    instance_info = CloudInstanceDetails(ip="1.1.1.1", region="us-east-1", provider="aws", private_ip="10.10.10.1")
     resource = CloudResource(name="example_resource", resource_state=ResourceState.RUNNING, instance_info=instance_info)
 
     resources.attach_resource(resource)
@@ -201,6 +202,7 @@ def preset_test_resources_serialized():
                 "ip": "1.1.1.1",
                 "region": "us-east-1",
                 "provider": "aws",
+                "private_ip": "10.10.10.1",
             }
         }],
         "leftover_resources": [{
@@ -208,6 +210,7 @@ def preset_test_resources_serialized():
             "resource_state": "running",
             "instance_info": {
                 "ip": "1.1.1.1",
+                "private_ip": "10.10.10.1",
                 "region": "us-east-1",
                 "provider": "aws",
             }
@@ -302,7 +305,8 @@ def completed_testrun(preset_test_resource_setup: TestResourcesSetup):
         for node_number in range(1, requested_node.node_amount + 1):
             entropy = urandom(4).hex(sep=":", bytes_per_sep=1).split(":")
             random_ip = ".".join([str(int(byte, 16)) for byte in entropy])
-            instance_details = CloudInstanceDetails(ip=random_ip, provider="aws", region="us-east-1")
+            instance_details = CloudInstanceDetails(ip=random_ip, provider="aws", region="us-east-1",
+                                                    private_ip="10.10.10.1")
             resource = CloudResource(name=f"{details.name}_{requested_node.instance_type}_{node_number}",
                                      resource_state=ResourceState.RUNNING.value, instance_info=instance_details)
             resources.attach_resource(resource)

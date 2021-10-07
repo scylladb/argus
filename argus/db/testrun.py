@@ -131,7 +131,7 @@ class TestDetails(BaseTestInfo):
                    start_time=row.start_time, yaml_test_duration=row.yaml_test_duration, config_files=row.config_files,
                    packages=packages)
 
-    def complete(self):
+    def set_test_end_time(self):
         self.end_time = int(time.time())
 
 
@@ -316,6 +316,8 @@ class TestRun:
         "id": (UUID, "partition"),
         "release_name": (str, "clustering"),  # release version, e.g. 4.5rc5
         "name": (str, "clustering"),  # test case name, e.g longevity-test-500gb-4h
+        "group": (str, "clustering"),  # test group, e.g longevity_test
+        "assignee": (str, "clustering"),  # who is assigned to this test, e.g. bentsi
     }
     _USING_RUNINFO = TestRunInfo
     _TABLE_NAME = "test_runs"
@@ -327,6 +329,7 @@ class TestRun:
                  run_info: TestRunInfo, argus_interface: ArgusDatabase = None):
         if not test_id:
             test_id = uuid4()
+        self._save_lock = None  # TODO: implement re-entrant lock
         self._id = test_id
         self._group = group
         self._release_name = release_name

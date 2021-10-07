@@ -65,7 +65,7 @@ def test_resources_setup_serialization(preset_test_resource_setup,
 def test_resources_setup_ctor_from_named_tuple(preset_test_resource_setup: TestResourcesSetup):
     CloudNodeMapped = namedtuple("CloudNodeMapped", ["image_id", "instance_type", "node_amount", "post_behaviour"])
     CloudSetupMapped = namedtuple("CloudSetupMapped", ["backend", "db_node", "loader_node", "monitor_node"])
-    CloudInstanceDetailsMapped = namedtuple("CloudInstanceDetailsMapped", ["ip", "region", "provider"])
+    CloudInstanceDetailsMapped = namedtuple("CloudInstanceDetailsMapped", ["ip", "region", "provider", "private_ip"])
     ResourceSetupRow = namedtuple("ResourceSetupRow", ["sct_runner_host", "region_name", "cloud_setup"])
 
     db_node = CloudNodeMapped(image_id="ami-abcdef99", instance_type="spot",
@@ -77,7 +77,8 @@ def test_resources_setup_ctor_from_named_tuple(preset_test_resource_setup: TestR
 
     cloud_setup = CloudSetupMapped(backend="aws", db_node=db_node, loader_node=loader_node, monitor_node=monitor_node)
 
-    sct_runner_info = CloudInstanceDetailsMapped(ip="1.1.1.1", region="us-east-1", provider="aws")
+    sct_runner_info = CloudInstanceDetailsMapped(ip="1.1.1.1", region="us-east-1", provider="aws",
+                                                 private_ip="10.10.10.1")
 
     mapped_setup = ResourceSetupRow(sct_runner_host=sct_runner_info, region_name=["us-east-1"], cloud_setup=cloud_setup)
 
@@ -118,7 +119,7 @@ def test_resources_serialization(preset_test_resources: TestResources, preset_te
 
 
 def test_resources_attach(preset_test_resources: TestResources):
-    instance_info = CloudInstanceDetails(ip="1.1.1.2", region="us-east-1", provider="aws")
+    instance_info = CloudInstanceDetails(ip="1.1.1.2", region="us-east-1", provider="aws", private_ip="10.10.10.1")
     resource = CloudResource(name="example_resource_2", resource_state=ResourceState.RUNNING,
                              instance_info=instance_info)
 
@@ -129,7 +130,7 @@ def test_resources_attach(preset_test_resources: TestResources):
 
 
 def test_resources_attach_detach(preset_test_resources: TestResources):
-    instance_info = CloudInstanceDetails(ip="1.1.1.2", region="us-east-1", provider="aws")
+    instance_info = CloudInstanceDetails(ip="1.1.1.2", region="us-east-1", provider="aws", private_ip="10.10.10.1")
     resource = CloudResource(name="example_resource_2", resource_state=ResourceState.RUNNING,
                              instance_info=instance_info)
 
@@ -146,9 +147,10 @@ def test_resources_attach_detach(preset_test_resources: TestResources):
 
 
 def test_resources_ctor_from_named_tuple(preset_test_resources):
-    CloudInstanceDetailsMapped = namedtuple("CloudInstanceDetailsMapped", ["provider", "region", "ip"])
+    CloudInstanceDetailsMapped = namedtuple("CloudInstanceDetailsMapped", ["provider", "region", "ip", "private_ip"])
     CloudResourceMapped = namedtuple("CloudResourceMapped", ["name", "resource_state", "instance_info"])
-    instance_info = CloudInstanceDetailsMapped(ip="1.1.1.1", region="us-east-1", provider="aws")
+    instance_info = CloudInstanceDetailsMapped(ip="1.1.1.1", region="us-east-1", provider="aws",
+                                               private_ip="10.10.10.1")
     resource = CloudResourceMapped(name="example_resource", resource_state=ResourceState.RUNNING.value,
                                    instance_info=instance_info)
 

@@ -1,4 +1,5 @@
 import re
+import ipaddress
 from enum import Enum
 from pydantic.dataclasses import dataclass
 from pydantic import ValidationError, validator
@@ -10,20 +11,27 @@ class CloudInstanceDetails(ArgusUDTBase):
     provider: str = ""
     region: str = ""
     ip: str = ""
+    private_ip: str = ""
 
     @classmethod
     def from_db_udt(cls, udt):
-        return cls(provider=udt.provider, region=udt.region, ip=udt.ip)
+        return cls(provider=udt.provider, region=udt.region, ip=udt.ip, private_ip=udt.private_ip)
 
     @validator("ip")
-    def valid_ip_address(cls, v):
-        ip_addr_re = r"(\d{1,3}\.){3}\d{1,3}"
-        if not re.match(ip_addr_re, v):
-            raise ValidationError(f"Not a valid ip address: {v}")
+    def valid_ipv4_address(cls, v):
+        try:
+            ipaddress.ip_address(v)
+        except ValueError:
+            raise ValidationError(f"Not a valid IPv4(v6) address: {v}")
 
-        ip_by_octets = [int(octet) for octet in v.split(".") if int(octet) <= 255]
-        if len(ip_by_octets) != 4:
-            raise ValidationError(f"Octets out of range (0, 255): {v}")
+        return v
+
+    @validator("private_ip")
+    def valid_private_ipv4_address(cls, v):
+        try:
+            ipaddress.ip_address(v)
+        except ValueError:
+            raise ValidationError(f"Not a valid IPv4(v6) address: {v}")
 
         return v
 
@@ -89,5 +97,5 @@ class CloudResource(ArgusUDTBase):
 
     @classmethod
     def from_db_udt(cls, udt):
-        instance_info = CloudInstanceDetails(*udt.instance_info)
+        instance_info = CloudInstanceDetails.from_db_udt(udt.instance_info)
         return cls(name=udt.name, resource_state=udt.resource_state, instance_info=instance_info)
