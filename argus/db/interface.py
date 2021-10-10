@@ -10,6 +10,8 @@ from types import GenericAlias
 import cassandra.cluster
 from cassandra.auth import PlainTextAuthProvider
 from cassandra.cqltypes import UUIDType, IntegerType, VarcharType, FloatType
+from cassandra.policies import WhiteListRoundRobinPolicy
+
 from argus.db.config import BaseConfig, FileConfig
 from argus.db.db_types import ColumnInfo, CollectionHint, ArgusUDTBase
 
@@ -48,7 +50,9 @@ class ArgusDatabase:
         self.cluster = cassandra.cluster.Cluster(contact_points=self.config.get("contact_points", []),
                                                  auth_provider=PlainTextAuthProvider(
                                                      username=self.config.get("username"),
-                                                     password=self.config.get("password")))
+                                                     password=self.config.get("password")),
+                                                 load_balancing_policy=WhiteListRoundRobinPolicy(
+                                                     hosts=self.config.get("contact_points", [])))
 
         self.session = self.cluster.connect()
         self._keyspace_initialized = False

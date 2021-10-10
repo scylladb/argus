@@ -18,10 +18,11 @@ class MockPreparedStatement:
 class MockCluster:
     MOCK_NO_CONNECTION = False
 
-    def __init__(self, contact_points: tuple[str], auth_provider: AuthProvider):
+    def __init__(self, contact_points: tuple[str], auth_provider: AuthProvider, load_balancing_policy=None):
         self.contact_points = contact_points
         self.log = logging.getLogger(self.__class__.__name__)
         self.sessions = list()
+        self.load_balancing_policy = load_balancing_policy
         self.auth_provider = auth_provider
 
     def connect(self):
