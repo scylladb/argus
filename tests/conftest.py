@@ -35,7 +35,8 @@ def argus_interface_default():
 
 @pytest.fixture(scope="function")
 def preset_test_resource_setup():
-    sct_runner_info = CloudInstanceDetails(public_ip="1.1.1.1", region="us-east-1", provider="aws", private_ip="10.10.10.1")
+    sct_runner_info = CloudInstanceDetails(public_ip="1.1.1.1", region="us-east-1",
+                                           provider="aws", private_ip="10.10.10.1")
     db_node = CloudNodesInfo(image_id="ami-abcdef99", instance_type="spot",
                              node_amount=6, post_behaviour="keep-on-failure")
     loader_node = CloudNodesInfo(image_id="ami-deadbeef", instance_type="spot",
@@ -172,7 +173,8 @@ def preset_test_logs_serialized():
 def preset_test_resources():
     resources = TestResources()
 
-    instance_info = CloudInstanceDetails(public_ip="1.1.1.1", region="us-east-1", provider="aws", private_ip="10.10.10.1")
+    instance_info = CloudInstanceDetails(public_ip="1.1.1.1", region="us-east-1",
+                                         provider="aws", private_ip="10.10.10.1")
     resource = CloudResource(name="example_resource", state=ResourceState.RUNNING, instance_info=instance_info)
 
     resources.attach_resource(resource)

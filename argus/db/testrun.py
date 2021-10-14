@@ -186,8 +186,9 @@ class TestLogs(BaseTestInfo):
     @classmethod
     def from_db_row(cls, row):
         logs = cls()
-        for log_type, log_url in row.logs:
-            logs.add_log(log_type, log_url)
+        if row.logs:
+            for log_type, log_url in row.logs:
+                logs.add_log(log_type, log_url)
 
         return logs
 
@@ -212,8 +213,9 @@ class TestResources(BaseTestInfo):
 
     def detach_resource(self, resource: CloudResource):
         idx = self._leftover_resources.index(resource)
-        resource = self._leftover_resources.pop(idx)
-        self._terminated_resources.append(resource)
+        detached_resource = self.leftover_resources.pop(idx)
+        detached_resource.terminate()
+        self._terminated_resources.append(detached_resource)
 
     @property
     def allocated_resources(self) -> list[CloudResource]:
@@ -232,10 +234,12 @@ class TestResources(BaseTestInfo):
         resources = cls()
 
         for resource_type in ["leftover", "allocated", "terminated"]:
-            for resources_of_type in getattr(row, f"{resource_type}_resources"):
-                cloud_resource = CloudResource.from_db_udt(resources_of_type)
-                list_ref: list[CloudResource] = getattr(resources, f"_{resource_type}_resources")
-                list_ref.append(cloud_resource)
+            resource_column = getattr(row, f"{resource_type}_resources")
+            if resource_column:
+                for resources_of_type in resource_column:
+                    cloud_resource = CloudResource.from_db_udt(resources_of_type)
+                    list_ref: list[CloudResource] = getattr(resources, f"_{resource_type}_resources")
+                    list_ref.append(cloud_resource)
 
         return resources
 
