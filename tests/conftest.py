@@ -35,7 +35,7 @@ def argus_interface_default():
 
 @pytest.fixture(scope="function")
 def preset_test_resource_setup():
-    sct_runner_info = CloudInstanceDetails(ip="1.1.1.1", region="us-east-1", provider="aws", private_ip="10.10.10.1")
+    sct_runner_info = CloudInstanceDetails(public_ip="1.1.1.1", region="us-east-1", provider="aws", private_ip="10.10.10.1")
     db_node = CloudNodesInfo(image_id="ami-abcdef99", instance_type="spot",
                              node_amount=6, post_behaviour="keep-on-failure")
     loader_node = CloudNodesInfo(image_id="ami-deadbeef", instance_type="spot",
@@ -65,7 +65,7 @@ def preset_test_resources_setup_schema():
 def preset_test_resources_setup_serialized():
     return {
         "sct_runner_host": {
-            "ip": "1.1.1.1",
+            "public_ip": "1.1.1.1",
             "region": "us-east-1",
             "provider": "aws",
             "private_ip": "10.10.10.1",
@@ -172,8 +172,8 @@ def preset_test_logs_serialized():
 def preset_test_resources():
     resources = TestResources()
 
-    instance_info = CloudInstanceDetails(ip="1.1.1.1", region="us-east-1", provider="aws", private_ip="10.10.10.1")
-    resource = CloudResource(name="example_resource", resource_state=ResourceState.RUNNING, instance_info=instance_info)
+    instance_info = CloudInstanceDetails(public_ip="1.1.1.1", region="us-east-1", provider="aws", private_ip="10.10.10.1")
+    resource = CloudResource(name="example_resource", state=ResourceState.RUNNING, instance_info=instance_info)
 
     resources.attach_resource(resource)
 
@@ -197,9 +197,9 @@ def preset_test_resources_serialized():
     return {
         "allocated_resources": [{
             "name": "example_resource",
-            "resource_state": "running",
+            "state": "running",
             "instance_info": {
-                "ip": "1.1.1.1",
+                "public_ip": "1.1.1.1",
                 "region": "us-east-1",
                 "provider": "aws",
                 "private_ip": "10.10.10.1",
@@ -207,9 +207,9 @@ def preset_test_resources_serialized():
         }],
         "leftover_resources": [{
             "name": "example_resource",
-            "resource_state": "running",
+            "state": "running",
             "instance_info": {
-                "ip": "1.1.1.1",
+                "public_ip": "1.1.1.1",
                 "private_ip": "10.10.10.1",
                 "region": "us-east-1",
                 "provider": "aws",
@@ -261,7 +261,7 @@ def preset_test_results_serialized():
         "nemesis_data": [
             {
                 "class_name": "Nemesis",
-                "nemesis_name": "disrupt_everything",
+                "name": "disrupt_everything",
                 "duration": 100,
                 "target_node": {
                     "ip": "1.1.1.1",
@@ -305,10 +305,10 @@ def completed_testrun(preset_test_resource_setup: TestResourcesSetup):
         for node_number in range(1, requested_node.node_amount + 1):
             entropy = urandom(4).hex(sep=":", bytes_per_sep=1).split(":")
             random_ip = ".".join([str(int(byte, 16)) for byte in entropy])
-            instance_details = CloudInstanceDetails(ip=random_ip, provider="aws", region="us-east-1",
+            instance_details = CloudInstanceDetails(public_ip=random_ip, provider="aws", region="us-east-1",
                                                     private_ip="10.10.10.1")
             resource = CloudResource(name=f"{details.name}_{requested_node.instance_type}_{node_number}",
-                                     resource_state=ResourceState.RUNNING.value, instance_info=instance_details)
+                                     state=ResourceState.RUNNING.value, instance_info=instance_details)
             resources.attach_resource(resource)
             created_resources.append(resource)
 
@@ -320,10 +320,10 @@ def completed_testrun(preset_test_resource_setup: TestResourcesSetup):
 
     for _ in range(6):
         node = choice(resources.leftover_resources)
-        node_description = NodeDescription(name=node.name, ip=node.instance_info.ip, shards=10)
+        node_description = NodeDescription(name=node.name, ip=node.instance_info.public_ip, shards=10)
         nemesis = NemesisRunInfo(
             class_name=choice(nemeses_names),
-            nemesis_name="disrupt_something",
+            name="disrupt_something",
             duration=42,
             target_node=node_description,
             status=NemesisStatus.SUCCEEDED.value,

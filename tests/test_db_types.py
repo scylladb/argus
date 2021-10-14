@@ -32,7 +32,7 @@ def test_nemesis_run_info():
     start_time = int(time())
     nem_dict = {
         "class_name": "SisyphusMonkey",
-        "nemesis_name": "disrupt_me",
+        "name": "disrupt_me",
         "duration": 400,
         "target_node": {
             "name": "test",

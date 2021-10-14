@@ -10,15 +10,15 @@ from argus.db.db_types import ArgusUDTBase
 class CloudInstanceDetails(ArgusUDTBase):
     provider: str = ""
     region: str = ""
-    ip: str = ""
+    public_ip: str = ""
     private_ip: str = ""
 
     @classmethod
     def from_db_udt(cls, udt):
-        return cls(provider=udt.provider, region=udt.region, ip=udt.ip, private_ip=udt.private_ip)
+        return cls(provider=udt.provider, region=udt.region, public_ip=udt.public_ip, private_ip=udt.private_ip)
 
-    @validator("ip")
-    def valid_ipv4_address(cls, v):
+    @validator("public_ip")
+    def valid_public_ip_address(cls, v):
         try:
             ipaddress.ip_address(v)
         except ValueError:
@@ -27,7 +27,7 @@ class CloudInstanceDetails(ArgusUDTBase):
         return v
 
     @validator("private_ip")
-    def valid_private_ipv4_address(cls, v):
+    def valid_private_ip_address(cls, v):
         try:
             ipaddress.ip_address(v)
         except ValueError:
@@ -84,18 +84,25 @@ class ResourceState(str, Enum):
 @dataclass(init=True, repr=True)
 class CloudResource(ArgusUDTBase):
     name: str
-    resource_state: str
+    state: str
     instance_info: CloudInstanceDetails
-
-    @property
-    def state(self):
-        return ResourceState(self.resource_state)
-
-    @state.setter
-    def state(self, value: ResourceState):
-        self.resource_state = ResourceState(value).value
 
     @classmethod
     def from_db_udt(cls, udt):
         instance_info = CloudInstanceDetails.from_db_udt(udt.instance_info)
-        return cls(name=udt.name, resource_state=udt.resource_state, instance_info=instance_info)
+        return cls(name=udt.name, state=udt.state, instance_info=instance_info)
+
+    @validator("state")
+    def valid_state(cls, v):
+        try:
+            ResourceState(v)
+        except ValueError:
+            raise ValidationError(f"Not a valid resource state: {v}")
+
+        return v
+
+    def terminate(self):
+        self.state = ResourceState.TERMINATED
+
+    def stop(self):
+        self.state = ResourceState.STOPPED

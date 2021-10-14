@@ -53,6 +53,7 @@ class NemesisStatus(str, Enum):
     STARTED = "started"
     RUNNING = "running"
     FAILED = "failed"
+    SKIPPED = "skipped"
     SUCCEEDED = "succeeded"
 
 
@@ -66,7 +67,7 @@ class TestStatus(str, Enum):
 @dataclass(init=True, repr=True)
 class NemesisRunInfo(ArgusUDTBase):
     class_name: str
-    nemesis_name: str
+    name: str
     duration: int
     target_node: NodeDescription
     status: str
@@ -85,7 +86,7 @@ class NemesisRunInfo(ArgusUDTBase):
     @classmethod
     def from_db_udt(cls, udt):
         target_node = NodeDescription.from_db_udt(udt.target_node)
-        return cls(class_name=udt.class_name, nemesis_name=udt.nemesis_name, duration=udt.duration,
+        return cls(class_name=udt.class_name, name=udt.name, duration=udt.duration,
                    target_node=target_node, status=udt.status, start_time=udt.start_time, end_time=udt.end_time,
                    stack_trace=udt.stack_trace)
 

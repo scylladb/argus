@@ -346,7 +346,6 @@ class TestRun:
     def from_db_row(cls, row):
         if not cls._IS_TABLE_INITIALIZED:
             cls.init_own_table()
-        # TODO: Use UDT Object mapping from scylla-driver
         nested_fields = {}
         for field in fields(cls._USING_RUNINFO):
             nested_fields[field.name] = field.type.from_db_row(row)
