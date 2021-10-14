@@ -313,7 +313,7 @@ class TestRunInfo:
 
 
 class TestRun:
-    EXPOSED_ATTRIBUTES = {"id": UUID, "group": str, "release_name": str, "assignee": str}
+    EXPOSED_ATTRIBUTES = {"id": UUID, "group": str, "release_name": str, "assignee": str, "heartbeat": int}
     ATTRIBUTE_CONSTRAINTS = {
     }
     PRIMARY_KEYS = {
@@ -322,6 +322,7 @@ class TestRun:
         "name": (str, "clustering"),  # test case name, e.g longevity-test-500gb-4h
         "group": (str, "clustering"),  # test group, e.g longevity_test
         "assignee": (str, "clustering"),  # who is assigned to this test, e.g. bentsi
+        "start_time": (int, "clustering"),  # start time of the test, unix timestamp
     }
     _USING_RUNINFO = TestRunInfo
     _TABLE_NAME = "test_runs"
@@ -330,7 +331,7 @@ class TestRun:
     _log = logging.getLogger('TestRun')
 
     def __init__(self, test_id: UUID, group: str, release_name: str, assignee: str,
-                 run_info: TestRunInfo, argus_interface: ArgusDatabase = None):
+                 run_info: TestRunInfo, heartbeat: int = int(time.time()), argus_interface: ArgusDatabase = None):
         if not test_id:
             test_id = uuid4()
         self._save_lock = None  # TODO: implement re-entrant lock
@@ -339,6 +340,7 @@ class TestRun:
         self._release_name = release_name
         self._assignee = assignee
         self._run_info = run_info
+        self._heartbeat = heartbeat
         for field in fields(run_info):
             setattr(self, field.name, getattr(run_info, field.name))
 
@@ -357,7 +359,7 @@ class TestRun:
         run_info = cls._USING_RUNINFO(**nested_fields)
 
         return cls(test_id=row.id, group=row.group, release_name=row.release_name,
-                   assignee=row.assignee, run_info=run_info)
+                   assignee=row.assignee, run_info=run_info, heartbeat=row.heartbeat)
 
     @classmethod
     def from_id(cls, test_id: UUID):
@@ -421,6 +423,7 @@ class TestRun:
             "group": self._group,
             "release_name": self._release_name,
             "assignee": self._assignee,
+            "heartbeat": self._heartbeat,
             **nested_data
         }
         logging.debug("Serialized Data: %s", data)
@@ -431,6 +434,11 @@ class TestRun:
         cls._log.info("Initializing TestRun table...")
         cls.get_argus().init_table(table_name=cls._TABLE_NAME, column_info=cls.schema())
         cls._IS_TABLE_INITIALIZED = True
+
+    @classmethod
+    def set_table_name(cls, new_table_name):
+        cls._TABLE_NAME = new_table_name
+        cls._IS_TABLE_INITIALIZED = False
 
     @classmethod
     def schema(cls) -> dict[str, ColumnInfo]:
