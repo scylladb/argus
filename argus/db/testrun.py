@@ -125,10 +125,16 @@ class TestDetails(BaseTestInfo):
 
     @classmethod
     def from_db_row(cls, row):
-        packages = [PackageVersion.from_db_udt(udt) for udt in row.packages]
+        if row.packages:
+            packages = [PackageVersion.from_db_udt(udt) for udt in row.packages]
+        else:
+            packages = []
+
+        config_files = row.config_files if row.config_files else []
+
         return cls(name=row.name, scm_revision_id=row.scm_revision_id, started_by=row.started_by,
                    build_job_name=row.build_job_name, build_job_url=row.build_job_url,
-                   start_time=row.start_time, yaml_test_duration=row.yaml_test_duration, config_files=row.config_files,
+                   start_time=row.start_time, yaml_test_duration=row.yaml_test_duration, config_files=config_files,
                    packages=packages)
 
     def set_test_end_time(self):
@@ -162,7 +168,9 @@ class TestResourcesSetup(BaseTestInfo):
         else:
             raise NotImplementedError()
 
-        return cls(sct_runner_host=runner, region_name=row.region_name,
+        regions = row.region_name if row.region_name else []
+
+        return cls(sct_runner_host=runner, region_name=regions,
                    cloud_setup=cloud_setup)
 
 
@@ -264,8 +272,15 @@ class TestResults(BaseTestInfo):
 
     @classmethod
     def from_db_row(cls, row):
-        events = [EventsBySeverity.from_db_udt(event) for event in row.events]
-        nemesis_data = [NemesisRunInfo.from_db_udt(nemesis) for nemesis in row.nemesis_data]
+        if row.events:
+            events = [EventsBySeverity.from_db_udt(event) for event in row.events]
+        else:
+            events = []
+
+        if row.nemesis_data:
+            nemesis_data = [NemesisRunInfo.from_db_udt(nemesis) for nemesis in row.nemesis_data]
+        else:
+            nemesis_data = []
 
         return cls(status=row.status, events=events, nemesis_data=nemesis_data)
 
