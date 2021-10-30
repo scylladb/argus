@@ -1,11 +1,12 @@
 from uuid import UUID
-
+import logging
+from time import sleep, time
+from os import urandom
+from random import choice
+from subprocess import run
 import pytest
 import cassandra.cluster
 from mocks.mock_cluster import MockCluster
-from time import time
-from os import urandom
-from random import choice
 from argus.db.testrun import TestRunInfo, TestDetails, TestResourcesSetup, TestLogs, TestResults, TestResources
 from argus.db.interface import ArgusDatabase
 from argus.db.config import Config
@@ -13,10 +14,7 @@ from argus.db.db_types import PackageVersion, NemesisRunInfo, EventsBySeverity, 
     NemesisStatus, ColumnInfo, CollectionHint
 from argus.db.cloud_types import AWSSetupDetails, CloudNodesInfo, CloudInstanceDetails, CloudResource, ResourceState, \
     BaseCloudSetupDetails
-from subprocess import run
-from time import sleep
 import docker
-import logging
 
 LOGGER = logging.getLogger(__name__)
 
@@ -36,7 +34,7 @@ def argus_interface_default():
 @pytest.fixture(scope="function")
 def preset_test_resource_setup():
     sct_runner_info = CloudInstanceDetails(public_ip="1.1.1.1", region="us-east-1",
-                                           provider="aws", private_ip="10.10.10.1")
+                                           provider="aws", private_ip="10.10.10.1", creation_time=7734)
     db_node = CloudNodesInfo(image_id="ami-abcdef99", instance_type="spot",
                              node_amount=6, post_behaviour="keep-on-failure")
     loader_node = CloudNodesInfo(image_id="ami-deadbeef", instance_type="spot",
@@ -70,6 +68,10 @@ def preset_test_resources_setup_serialized():
             "region": "us-east-1",
             "provider": "aws",
             "private_ip": "10.10.10.1",
+            "creation_time": 7734,
+            "termination_time": 0,
+            "termination_reason": "",
+
         },
         "region_name": ["us-east-1"],
         "cloud_setup": {
@@ -174,7 +176,7 @@ def preset_test_resources():
     resources = TestResources()
 
     instance_info = CloudInstanceDetails(public_ip="1.1.1.1", region="us-east-1",
-                                         provider="aws", private_ip="10.10.10.1")
+                                         provider="aws", private_ip="10.10.10.1", creation_time=7734)
     resource = CloudResource(name="example_resource", state=ResourceState.RUNNING, instance_info=instance_info)
 
     resources.attach_resource(resource)
@@ -205,6 +207,9 @@ def preset_test_resources_serialized():
                 "region": "us-east-1",
                 "provider": "aws",
                 "private_ip": "10.10.10.1",
+                "creation_time": 7734,
+                "termination_time": 0,
+                "termination_reason": "",
             }
         }],
         "leftover_resources": [{
@@ -215,6 +220,9 @@ def preset_test_resources_serialized():
                 "private_ip": "10.10.10.1",
                 "region": "us-east-1",
                 "provider": "aws",
+                "creation_time": 7734,
+                "termination_time": 0,
+                "termination_reason": "",
             }
         }],
         "terminated_resources": [],

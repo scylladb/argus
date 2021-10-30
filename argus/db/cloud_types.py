@@ -1,4 +1,3 @@
-import re
 import ipaddress
 from enum import Enum
 from pydantic.dataclasses import dataclass
@@ -12,10 +11,15 @@ class CloudInstanceDetails(ArgusUDTBase):
     region: str = ""
     public_ip: str = ""
     private_ip: str = ""
+    creation_time: int = 0
+    termination_time: int = 0
+    termination_reason: str = ""
 
     @classmethod
     def from_db_udt(cls, udt):
-        return cls(provider=udt.provider, region=udt.region, public_ip=udt.public_ip, private_ip=udt.private_ip)
+        return cls(provider=udt.provider, region=udt.region, public_ip=udt.public_ip, private_ip=udt.private_ip,
+                   creation_time=udt.creation_time, termination_time=udt.termination_time,
+                   termination_reason=udt.termination_reason)
 
     @validator("public_ip")
     def valid_public_ip_address(cls, v):
