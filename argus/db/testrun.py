@@ -1,5 +1,6 @@
 import logging
 import time
+import threading
 from dataclasses import asdict, is_dataclass, fields, Field, dataclass
 from typing import Optional, Any
 from uuid import uuid4, UUID
@@ -422,6 +423,10 @@ class TestRun:
     def assignee(self) -> str:
         return self._assignee
 
+    @property
+    def heartbeat(self) -> int:
+        return self._heartbeat
+
     def serialize(self) -> dict[str, Any]:
         self._log.info("Serializing test run...")
         nested_data = {}
@@ -501,3 +506,32 @@ class TestRun:
     @property
     def run_info(self) -> TestRunInfo:
         return self._run_info
+
+
+class TestRunWithHeartbeat(TestRun):
+    def __init__(self, test_id: UUID, group: str, release_name: str, assignee: str,
+                 run_info: TestRunInfo, heartbeat: int = int(time.time()), argus_interface: ArgusDatabase = None,
+                 heartbeat_interval=30):
+        self._heartbeat_interval = heartbeat_interval
+        self._shutdown_event = threading.Event()
+        super().__init__(test_id=test_id, group=group, release_name=release_name, assignee=assignee, run_info=run_info,
+                         heartbeat=heartbeat, argus_interface=argus_interface)
+        self._thread = threading.Thread(target=self._heartbeat_entry,
+                                        name=f"{self.__class__.__name__}-{self.id}-heartbeat")
+        self._thread.start()
+
+    @property
+    def thread(self):
+        return self._thread
+
+    def _heartbeat_entry(self):
+        while True:
+            time.sleep(self._heartbeat_interval)
+            if self._shutdown_event.is_set():
+                break
+            self._log.info("Sending heartbeat...")
+            self._heartbeat = int(time.time())
+            self.save()
+
+    def shutdown(self):
+        self._shutdown_event.set()
