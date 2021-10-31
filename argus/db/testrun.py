@@ -185,8 +185,14 @@ class TestLogs(BaseTestInfo):
         super().__init__()
         self._log_collection = []
 
-    def add_log(self, log_type: str, log_url: str) -> None:
-        self._log_collection.append((log_type, log_url))
+    def add_log(self, log_type: str, log_url: str | list[str]) -> None:
+        if isinstance(log_url, str):
+            self._log_collection.append((log_type, log_url))
+        elif isinstance(log_url, list):
+            for log in log_url:
+                self._log_collection.append((log_type, log))
+        else:
+            logging.getLogger(self.__class__.__name__).warning("Unknown log type encountered: %s", log_url)
 
     @property
     def logs(self) -> list[tuple[str, str]]:
