@@ -350,7 +350,7 @@ class TestRun:
                  run_info: TestRunInfo, heartbeat: int = int(time.time()), argus_interface: ArgusDatabase = None):
         if not test_id:
             test_id = uuid4()
-        self._save_lock = None  # TODO: implement re-entrant lock
+        self._save_lock = threading.Lock()
         self._id = test_id
         self._group = group
         self._release_name = release_name
@@ -486,14 +486,15 @@ class TestRun:
         return full_schema
 
     def save(self):
-        if not self._IS_TABLE_INITIALIZED:
-            self.init_own_table()
-        if not self.exists():
-            self._log.info("Inserting data for test run: %s", self.id)
-            self.argus.insert(table_name=self._TABLE_NAME, run_data=self.serialize())
-        else:
-            self._log.info("Updating data for test run: %s", self.id)
-            self.argus.update(table_name=self._TABLE_NAME, run_data=self.serialize())
+        with self._save_lock:
+            if not self._IS_TABLE_INITIALIZED:
+                self.init_own_table()
+            if not self.exists():
+                self._log.info("Inserting data for test run: %s", self.id)
+                self.argus.insert(table_name=self._TABLE_NAME, run_data=self.serialize())
+            else:
+                self._log.info("Updating data for test run: %s", self.id)
+                self.argus.update(table_name=self._TABLE_NAME, run_data=self.serialize())
 
     def exists(self) -> bool:
         if not self._IS_TABLE_INITIALIZED:
