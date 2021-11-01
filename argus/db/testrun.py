@@ -135,7 +135,7 @@ class TestDetails(BaseTestInfo):
 
         return cls(name=row.name, scm_revision_id=row.scm_revision_id, started_by=row.started_by,
                    build_job_name=row.build_job_name, build_job_url=row.build_job_url,
-                   start_time=row.start_time, yaml_test_duration=row.yaml_test_duration, config_files=config_files,
+                   start_time=row.start_time, end_time=row.end_time, yaml_test_duration=row.yaml_test_duration, config_files=config_files,
                    packages=packages)
 
     def set_test_end_time(self):
