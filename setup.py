@@ -8,8 +8,8 @@ setup(
     include_package_data=True,
     zip_safe=False,
     install_requires=[
-        'pydantic',
-        'scylla-driver',
-        'pyyaml'
+        'pydantic==1.8.2',
+        'scylla-driver==3.24.7',
+        'pyyaml==5.4.1'
     ],
 )
