@@ -8,8 +8,9 @@ from typing import KeysView, Union, Any, get_args as get_type_args, get_origin a
 from types import GenericAlias
 
 import cassandra.cluster
+from cassandra import ConsistencyLevel
 from cassandra.auth import PlainTextAuthProvider
-from cassandra.cqltypes import UUIDType, IntegerType, VarcharType, FloatType
+import cassandra.cqltypes
 from cassandra.policies import WhiteListRoundRobinPolicy
 
 from argus.db.config import BaseConfig, FileConfig
@@ -33,11 +34,12 @@ class ArgusInterfaceNameError(Exception):
 
 
 class ArgusDatabase:
+    # pylint: disable=too-many-instance-attributes
     PYTHON_SCYLLA_TYPE_MAPPING = {
-        int: IntegerType.typename,
-        float: FloatType.typename,
-        str: VarcharType.typename,
-        UUID: UUIDType.typename,
+        int: cassandra.cqltypes.IntegerType.typename,
+        float: cassandra.cqltypes.FloatType.typename,
+        str: cassandra.cqltypes.VarcharType.typename,
+        UUID: cassandra.cqltypes.UUIDType.typename,
     }
 
     log = logging.getLogger(__name__)
@@ -46,21 +48,22 @@ class ArgusDatabase:
     def __init__(self, config: BaseConfig = None):
         if not config:
             config = FileConfig()
-        self.config = config.get_config()
-        self.cluster = cassandra.cluster.Cluster(contact_points=self.config.get("contact_points", []),
+        self.config = config
+        self.cluster = cassandra.cluster.Cluster(contact_points=self.config.contact_points,
                                                  auth_provider=PlainTextAuthProvider(
-                                                     username=self.config.get("username"),
-                                                     password=self.config.get("password")),
+                                                     username=self.config.username,
+                                                     password=self.config.password),
                                                  load_balancing_policy=WhiteListRoundRobinPolicy(
-                                                     hosts=self.config.get("contact_points", [])))
+                                                     hosts=self.config.contact_points))
 
         self.session = self.cluster.connect()
+        self.session.default_consistency_level = ConsistencyLevel.QUORUM
         self._keyspace_initialized = False
         self.prepared_statements = {}
         self.initialized_tables = {}
         self._table_keys = {}
         self._mapped_udts = {}
-        self._current_keyspace = self.init_keyspace(name=self.config.get("keyspace_name"))
+        self._current_keyspace = self.init_keyspace(name=self.config.keyspace_name)
 
     @classmethod
     def get(cls):
@@ -104,7 +107,7 @@ class ArgusDatabase:
         incorrect_keyspace_name_re = r"\."
         if match := re.search(incorrect_keyspace_name_re, name):
             raise ArgusInterfaceNameError("Keyspace name does not conform to the "
-                                          "keyspace naming rules: %s (pos: %s)" % (name, match.pos))
+                                          f"keyspace naming rules: {name} (pos: {match.pos})")
         return name
 
     @staticmethod
@@ -126,6 +129,7 @@ class ArgusDatabase:
         return self.PYTHON_SCYLLA_TYPE_MAPPING.get(object_type, False)
 
     def init_table(self, table_name: str, column_info: dict[str, ColumnInfo]):
+        # pylint: disable=too-many-locals
         if not self._keyspace_initialized:
             raise ArgusInterfaceDatabaseConnectionError("Uninitialized keyspace, cannot continue")
 
@@ -134,7 +138,7 @@ class ArgusDatabase:
 
         primary_keys_info: dict = column_info.pop("$tablekeys$")
         partition_keys = [key for key, (cls, pk_type) in primary_keys_info.items() if pk_type == "partition"]
-        partition_key_def = partition_keys[0] if len(partition_keys) == 1 else "(%s)" % (", ".join(partition_keys))
+        partition_key_def = partition_keys[0] if len(partition_keys) == 1 else f"({', '.join(partition_keys)})"
         clustering_columns = [key for key, (cls, pk_type) in primary_keys_info.items() if pk_type == "clustering"]
         clustering_column_def = ", ".join(clustering_columns)
 
@@ -149,7 +153,7 @@ class ArgusDatabase:
                 column_type = self.create_collection_declaration(column.value.stored_type)
             else:
                 # UDT
-                column_type = "frozen<%s>" % (self._init_user_data_type(column.type),)
+                column_type = f"frozen<{self._init_user_data_type(column.type)}>"
 
             constraints = " ".join(column.constraints)
             column_query = f"{column.name} {column_type} {constraints}"
@@ -174,11 +178,11 @@ class ArgusDatabase:
             type_class = get_type_origin(inner_hint) if isinstance(inner_hint, GenericAlias) else inner_hint
 
             if type_class is tuple or type_class is list:
-                declaration = "frozen<%s>" % (self.create_collection_declaration(inner_hint),)
+                declaration = f"frozen<{self.create_collection_declaration(inner_hint)}>"
             elif matched_type := self.PYTHON_SCYLLA_TYPE_MAPPING.get(type_class):
                 declaration = matched_type
             else:
-                declaration = "frozen<%s>" % (self._init_user_data_type(type_class),)
+                declaration = f"frozen<{self._init_user_data_type(type_class)}>"
 
             declared_types.append(declaration)
 
@@ -205,7 +209,7 @@ class ArgusDatabase:
             elif matched_type := self.PYTHON_SCYLLA_TYPE_MAPPING.get(field_type):
                 field_declaration = matched_type
             else:
-                field_declaration = "frozen<%s>" % (self._init_user_data_type(field.type),)
+                field_declaration = f"frozen<{self._init_user_data_type(field.type)}>"
             fields.append(f"{name} {field_declaration}")
 
         joined_fields = ", ".join(fields)
@@ -244,6 +248,7 @@ class ArgusDatabase:
         self.session.execute(query=query, parameters=(json.dumps(run_data),))
 
     def update(self, table_name: str, run_data: dict):
+        # pylint: disable=too-many-locals
         def _convert_data_to_sequence(data: dict) -> list:
             data_list = list(data.values())
             for idx, value in enumerate(data_list):
@@ -264,8 +269,8 @@ class ArgusDatabase:
             self.log.debug("Ejecting %s from update set as it is a part of the primary key", key)
             try:
                 data_value = run_data.pop(key)
-            except KeyError:
-                raise ArgusInterfaceSchemaError("Missing key from update set", key)
+            except KeyError as exc:
+                raise ArgusInterfaceSchemaError("Missing key from update set", key) from exc
             field = f"{key} = ?"
             where_clause.append(field)
             where_params.append(ctor(data_value))
