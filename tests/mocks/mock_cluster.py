@@ -1,5 +1,5 @@
 import logging
-from typing import Union
+from typing import Union, Any
 from cassandra.auth import AuthProvider
 
 LOGGER = logging.getLogger(__name__)
@@ -14,6 +14,9 @@ class MockPreparedStatement:
     def bind(self, parameters: Union[tuple, list]):
         self.parameters = parameters
 
+    def query(self):
+        return self.query_string
+
 
 class MockCluster:
     MOCK_NO_CONNECTION = False
@@ -21,7 +24,7 @@ class MockCluster:
     def __init__(self, contact_points: tuple[str], auth_provider: AuthProvider, load_balancing_policy=None):
         self.contact_points = contact_points
         self.log = logging.getLogger(self.__class__.__name__)
-        self.sessions = list()
+        self.sessions = []
         self.load_balancing_policy = load_balancing_policy
         self.auth_provider = auth_provider
 
@@ -42,12 +45,12 @@ class MockCluster:
 class MockSession:
     MOCK_RESULT_SET = None
     MOCK_CURRENT_KEYSPACE = None
-    MOCK_LAST_QUERY = None
+    MOCK_LAST_QUERY: Any = None
 
     def __init__(self):
         self.log = logging.getLogger(self.__class__.__name__)
-        self.executed_queries = list()
-        self.prepared_statements = list()
+        self.executed_queries = []
+        self.prepared_statements = []
         self.keyspace = None
         self.is_shutdown = False
 

@@ -66,13 +66,16 @@ class ArgusDatabase:
         self._current_keyspace = self.init_keyspace(name=self.config.keyspace_name)
 
     @classmethod
-    def get(cls):
+    def get(cls, config: BaseConfig = None):
         if cls._INSTANCE:
             cls.log.debug("Found valid db session.")
             return cls._INSTANCE
 
+        if not config:
+            config = FileConfig()
+
         cls.log.debug("Initializing db session from default config")
-        cls._INSTANCE = cls.from_config()
+        cls._INSTANCE = cls(config=config)
         return cls._INSTANCE
 
     @classmethod
@@ -88,13 +91,7 @@ class ArgusDatabase:
 
     @classmethod
     def from_config(cls, config: BaseConfig = None):
-        if not config:
-            config = FileConfig()
-        if cls._INSTANCE:
-            raise ArgusInterfaceSingletonError("Attempt to call ArgusDatabase::from_config twice")
-
-        cls._INSTANCE = cls(config=config)
-        return cls._INSTANCE
+        return cls.get(config)
 
     def prepare_query_for_table(self, table_name, query_type, query):
         prepared_statement = self.session.prepare(query=query)

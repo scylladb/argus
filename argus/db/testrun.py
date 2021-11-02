@@ -2,9 +2,10 @@ import logging
 import time
 import threading
 from dataclasses import asdict, is_dataclass, fields, Field, dataclass
-from typing import Optional, Any
+from typing import Any
 from uuid import uuid4, UUID
 
+from argus.db.config import BaseConfig
 from argus.db.utils import is_list_homogeneous
 from argus.db.cloud_types import CloudResource, CloudInstanceDetails, BaseCloudSetupDetails, \
     GCESetupDetails, AWSSetupDetails
@@ -91,11 +92,12 @@ class BaseTestInfo:
         yield cls.validate
 
     @classmethod
-    def validate(cls, value, field):
+    def validate(cls, value, field):  # pylint: disable=unused-argument
         return value
 
 
 class TestDetails(BaseTestInfo):
+    # pylint: disable=too-many-instance-attributes
     EXPOSED_ATTRIBUTES = {"name": str, "scm_revision_id": str, "started_by": str,
                           "build_job_name": str, "build_job_url": str, "start_time": int, "yaml_test_duration": int,
                           "config_files": list,
@@ -109,6 +111,7 @@ class TestDetails(BaseTestInfo):
                  started_by: str, build_job_name: str, build_job_url: str,
                  yaml_test_duration: int, start_time: int,
                  config_files: list[str], packages: list[PackageVersion], end_time: int = -1):
+        # pylint: disable=too-many-arguments
         super().__init__()
         self.name = name
         self.scm_revision_id = scm_revision_id
@@ -135,7 +138,8 @@ class TestDetails(BaseTestInfo):
 
         return cls(name=row.name, scm_revision_id=row.scm_revision_id, started_by=row.started_by,
                    build_job_name=row.build_job_name, build_job_url=row.build_job_url,
-                   start_time=row.start_time, end_time=row.end_time, yaml_test_duration=row.yaml_test_duration, config_files=config_files,
+                   start_time=row.start_time, end_time=row.end_time, yaml_test_duration=row.yaml_test_duration,
+                   config_files=config_files,
                    packages=packages)
 
     def set_test_end_time(self):
@@ -335,6 +339,7 @@ class TestRunInfo:
 
 
 class TestRun:
+    # pylint: disable=too-many-instance-attributes
     EXPOSED_ATTRIBUTES = {"id": UUID, "group": str, "release_name": str, "assignee": str, "heartbeat": int}
     ATTRIBUTE_CONSTRAINTS = {
     }
@@ -353,7 +358,8 @@ class TestRun:
     _log = logging.getLogger('TestRun')
 
     def __init__(self, test_id: UUID, group: str, release_name: str, assignee: str,
-                 run_info: TestRunInfo, heartbeat: int = int(time.time()), argus_interface: ArgusDatabase = None):
+                 run_info: TestRunInfo, config: BaseConfig = None, argus_interface: ArgusDatabase = None):
+        # pylint: disable=too-many-arguments
         if not test_id:
             test_id = uuid4()
         self._save_lock = threading.Lock()
@@ -362,31 +368,32 @@ class TestRun:
         self._release_name = release_name
         self._assignee = assignee
         self._run_info = run_info
-        self._heartbeat = heartbeat
+        self._heartbeat = int(time.time())
+        self._config = config
         for field in fields(run_info):
             setattr(self, field.name, getattr(run_info, field.name))
 
         if argus_interface:
             self.argus = argus_interface
-            self._IS_TABLE_INITIALIZED = False
 
     @classmethod
-    def from_db_row(cls, row):
+    def from_db_row(cls, row, config: BaseConfig = None):
         if not cls._IS_TABLE_INITIALIZED:
-            cls.init_own_table()
+            cls.init_own_table(config)
         nested_fields = {}
         for field in fields(cls._USING_RUNINFO):
             nested_fields[field.name] = field.type.from_db_row(row)
 
         run_info = cls._USING_RUNINFO(**nested_fields)
-
-        return cls(test_id=row.id, group=row.group, release_name=row.release_name,
-                   assignee=row.assignee, run_info=run_info, heartbeat=row.heartbeat)
+        run = cls(test_id=row.id, group=row.group, release_name=row.release_name,
+                  assignee=row.assignee, run_info=run_info)
+        run.heartbeat = row.heartbeat
+        return run
 
     @classmethod
-    def from_id(cls, test_id: UUID):
+    def from_id(cls, test_id: UUID, config: BaseConfig = None):
         if not cls._IS_TABLE_INITIALIZED:
-            cls.init_own_table()
+            cls.init_own_table(config)
         database = cls.get_argus()
         if row := database.fetch(cls._TABLE_NAME, test_id):
             return cls.from_db_row(row)
@@ -394,27 +401,37 @@ class TestRun:
         return None
 
     @classmethod
-    def create_skeleton_run(cls):
-        pass
-
-    @classmethod
-    def get_argus(cls):
+    def get_argus(cls, config: BaseConfig = None) -> ArgusDatabase:
         if not cls._ARGUS_DB_INTERFACE:
-            cls._ARGUS_DB_INTERFACE = ArgusDatabase.get()
+            cls._ARGUS_DB_INTERFACE = ArgusDatabase(config=config)
         return cls._ARGUS_DB_INTERFACE
 
+    @classmethod
+    def set_argus(cls, argus_interface: ArgusDatabase):
+        cls._ARGUS_DB_INTERFACE = argus_interface
+        cls._IS_TABLE_INITIALIZED = False
+
     @property
-    def argus(self):
+    def argus(self) -> ArgusDatabase:
         if not self._ARGUS_DB_INTERFACE:
-            self.get_argus()
+            self.get_argus(self._config)
         return self._ARGUS_DB_INTERFACE
 
     @argus.setter
-    def argus(self, interface: Optional[ArgusDatabase]):
-        self._ARGUS_DB_INTERFACE = interface
+    def argus(self, interface: ArgusDatabase | None):
+        self._ARGUS_DB_INTERFACE = interface  # pylint: disable=invalid-name
+        self._IS_TABLE_INITIALIZED = False  # pylint: disable=invalid-name
 
     @property
-    def id(self) -> UUID:
+    def heartbeat(self) -> int:
+        return self._heartbeat
+
+    @heartbeat.setter
+    def heartbeat(self, value: int | float):
+        self._heartbeat = int(value)
+
+    @property
+    def id(self) -> UUID:  # pylint: disable=invalid-name
         return self._id
 
     @property
@@ -428,10 +445,6 @@ class TestRun:
     @property
     def assignee(self) -> str:
         return self._assignee
-
-    @property
-    def heartbeat(self) -> int:
-        return self._heartbeat
 
     def serialize(self) -> dict[str, Any]:
         self._log.info("Serializing test run...")
@@ -456,13 +469,13 @@ class TestRun:
         return data
 
     @classmethod
-    def init_own_table(cls):
+    def init_own_table(cls, config: BaseConfig = None):
         cls._log.info("Initializing TestRun table...")
-        cls.get_argus().init_table(table_name=cls._TABLE_NAME, column_info=cls.schema())
+        cls.get_argus(config).init_table(table_name=cls._TABLE_NAME, column_info=cls.schema())
         cls._IS_TABLE_INITIALIZED = True
 
     @classmethod
-    def set_table_name(cls, new_table_name):
+    def set_table_name(cls, new_table_name: str):
         cls._TABLE_NAME = new_table_name
         cls._IS_TABLE_INITIALIZED = False
 
@@ -494,7 +507,7 @@ class TestRun:
     def save(self):
         with self._save_lock:
             if not self._IS_TABLE_INITIALIZED:
-                self.init_own_table()
+                self.init_own_table(self._config)
             if not self.exists():
                 self._log.info("Inserting data for test run: %s", self.id)
                 self.argus.insert(table_name=self._TABLE_NAME, run_data=self.serialize())
@@ -504,11 +517,14 @@ class TestRun:
 
     def exists(self) -> bool:
         if not self._IS_TABLE_INITIALIZED:
-            self.init_own_table()
+            self.init_own_table(self._config)
 
         if self.argus.fetch(table_name=self._TABLE_NAME, run_id=self.id):
             return True
         return False
+
+    def shutdown(self):
+        self.argus.destroy()
 
     @property
     def run_info(self) -> TestRunInfo:
@@ -517,15 +533,24 @@ class TestRun:
 
 class TestRunWithHeartbeat(TestRun):
     def __init__(self, test_id: UUID, group: str, release_name: str, assignee: str,
-                 run_info: TestRunInfo, heartbeat: int = int(time.time()), argus_interface: ArgusDatabase = None,
-                 heartbeat_interval=30):
+                 run_info: TestRunInfo, heartbeat_interval=30, config: BaseConfig = None,
+                 argus_interface: ArgusDatabase = None):
+        # pylint: disable=too-many-arguments
         self._heartbeat_interval = heartbeat_interval
         self._shutdown_event = threading.Event()
-        super().__init__(test_id=test_id, group=group, release_name=release_name, assignee=assignee, run_info=run_info,
-                         heartbeat=heartbeat, argus_interface=argus_interface)
+        super().__init__(test_id=test_id, group=group, release_name=release_name, assignee=assignee,
+                         run_info=run_info, config=config, argus_interface=argus_interface)
         self._thread = threading.Thread(target=self._heartbeat_entry,
-                                        name=f"{self.__class__.__name__}-{self.id}-heartbeat")
+                                        name=f"{self.__class__.__name__}-{self.id}-heartbeat", daemon=True)
         self._thread.start()
+
+    @property
+    def heartbeat_interval(self) -> int:
+        return self._heartbeat_interval
+
+    @heartbeat_interval.setter
+    def heartbeat_interval(self, value: float | int):
+        self._heartbeat_interval = value
 
     @property
     def thread(self):
@@ -533,12 +558,13 @@ class TestRunWithHeartbeat(TestRun):
 
     def _heartbeat_entry(self):
         while True:
-            time.sleep(self._heartbeat_interval)
+            time.sleep(self.heartbeat_interval)
             if self._shutdown_event.is_set():
                 break
             self._log.info("Sending heartbeat...")
-            self._heartbeat = int(time.time())
+            self.heartbeat = time.time()
             self.save()
 
     def shutdown(self):
         self._shutdown_event.set()
+        super().shutdown()

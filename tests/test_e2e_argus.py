@@ -1,26 +1,25 @@
 from random import choice
-
+import logging
+from uuid import uuid4
+import pytest
 from argus.db.testrun import TestRun, TestRunInfo
 from argus.db.interface import ArgusDatabase
-
-from uuid import uuid4
-
-import pytest
-import logging
 
 LOGGER = logging.getLogger(__name__)
 
 
 class TestEndToEnd:
+    @staticmethod
     @pytest.mark.docker_required
-    def test_serialize_deserialize(self, completed_testrun: TestRunInfo, argus_database: ArgusDatabase):
+    def test_serialize_deserialize(completed_testrun: TestRunInfo, argus_database: ArgusDatabase):
+        TestRun.set_argus(argus_database)
         test_id = uuid4()
         test_run = TestRun(test_id=test_id, group="longevity-test", release_name="4_5rc5", assignee="k0machi",
                            run_info=completed_testrun)
 
         test_run.save()
 
-        res = argus_database.fetch(table_name=f"test_runs", run_id=test_id)
+        res = argus_database.fetch(table_name="test_runs", run_id=test_id)
         LOGGER.debug("Fetched: %s", res)
         LOGGER.info("Rebuilding object...")
 
@@ -28,8 +27,10 @@ class TestEndToEnd:
 
         assert rebuilt_test_run.serialize() == test_run.serialize()
 
+    @staticmethod
     @pytest.mark.docker_required
-    def test_recreate_from_id(self, completed_testrun: TestRunInfo, argus_database: ArgusDatabase):
+    def test_recreate_from_id(completed_testrun: TestRunInfo, argus_database: ArgusDatabase):
+        TestRun.set_argus(argus_database)
         test_id = uuid4()
         test_run = TestRun(test_id=test_id, group="longevity-test", release_name="4_5rc5", assignee="k0machi",
                            run_info=completed_testrun)
@@ -40,8 +41,10 @@ class TestEndToEnd:
 
         assert rebuilt_test_run.serialize() == test_run.serialize()
 
+    @staticmethod
     @pytest.mark.docker_required
-    def test_update(self, completed_testrun: TestRunInfo, argus_database: ArgusDatabase):
+    def test_update(completed_testrun: TestRunInfo, argus_database: ArgusDatabase):
+        TestRun.set_argus(argus_database)
         test_id = uuid4()
         test_run = TestRun(test_id=test_id, group="longevity-test", release_name="4_5rc5", assignee="k0machi",
                            run_info=completed_testrun)
@@ -51,7 +54,7 @@ class TestEndToEnd:
         test_run.run_info.resources.detach_resource(resource)
         test_run.save()
 
-        row = argus_database.fetch(table_name=f"test_runs", run_id=test_id)
+        row = argus_database.fetch(table_name="test_runs", run_id=test_id)
 
         rebuilt_testrun = TestRun.from_db_row(row)
 

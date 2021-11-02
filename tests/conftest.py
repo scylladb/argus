@@ -5,6 +5,7 @@ from os import urandom
 from random import choice
 from subprocess import run
 import pytest
+import docker
 import cassandra.cluster
 from mocks.mock_cluster import MockCluster
 from argus.db.testrun import TestRunInfo, TestDetails, TestResourcesSetup, TestLogs, TestResults, TestResources
@@ -14,7 +15,6 @@ from argus.db.db_types import PackageVersion, NemesisRunInfo, EventsBySeverity, 
     NemesisStatus, ColumnInfo, CollectionHint
 from argus.db.cloud_types import AWSSetupDetails, CloudNodesInfo, CloudInstanceDetails, CloudResource, ResourceState, \
     BaseCloudSetupDetails
-import docker
 
 LOGGER = logging.getLogger(__name__)
 
@@ -26,9 +26,9 @@ def mock_cluster(monkeypatch):
 
 @pytest.fixture(scope="function")
 def argus_interface_default():
-    db = ArgusDatabase.get()
-    yield db
-    db.destroy()
+    database = ArgusDatabase.get()
+    yield database
+    database.destroy()
 
 
 @pytest.fixture(scope="function")
@@ -297,7 +297,8 @@ def simple_primary_key():
 
 
 @pytest.fixture(scope="function")
-def completed_testrun(preset_test_resource_setup: TestResourcesSetup):
+def completed_testrun(preset_test_resource_setup: TestResourcesSetup):  # pylint: disable=redefined-outer-name
+    # pylint: disable=too-many-locals
     scylla_package = PackageVersion("scylla-db", "4.4", "20210901", "deadbeef")
     details = TestDetails(name="longevity-test-100gb-4h", scm_revision_id="773413dead", started_by="komachi",
                           build_job_name="komachi-longevity-test-100gb-4h",
@@ -351,7 +352,7 @@ def completed_testrun(preset_test_resource_setup: TestResourcesSetup):
 
 
 @pytest.fixture(scope="class")
-def scylla_cluster():
+def scylla_cluster() -> list[str]:
     docker_session = docker.from_env()
     prefix = "pytest_scylla_cluster"
     LOGGER.info("Starting docker cluster...")
@@ -362,9 +363,10 @@ def scylla_cluster():
         "up",
         "-d"
     ], check=True, capture_output=True)
-    LOGGER.info("Started docker cluster.")
-    LOGGER.info("Sleeping for 90 seconds to let cluster catch up")
-    sleep(90)
+    LOGGER.info("Started docker cluster.\nSTDOUT:\n%s", cluster_start.stdout.decode(encoding="utf-8"))
+    interval = 180
+    LOGGER.info("Sleeping for %s seconds to let cluster catch up", interval)
+    sleep(interval)
     all_containers = docker_session.containers.list(all=True)
     cluster = [container for container in all_containers if container.name.startswith("pytest_scylla_cluster")]
     contact_points = [node.attrs["NetworkSettings"]["Networks"][f"{prefix}_scylla_bridge"]["IPAddress"] for node in
@@ -378,12 +380,12 @@ def scylla_cluster():
         "-f", "tests/scylladb-cluster/docker-compose.yml",
         "down"
     ], check=True, capture_output=True)
-    LOGGER.info("Stopped docker cluster.")
+    LOGGER.info("Stopped docker cluster.\nSTDOUT:\n%s", cluster_stop.stdout.decode(encoding="utf-8"))
 
 
 @pytest.fixture(scope="class")
-def argus_database(scylla_cluster: list[str]):
+def argus_database(scylla_cluster: list[str]):  # pylint: disable=redefined-outer-name
     config = Config(username="scylla", password="scylla", contact_points=scylla_cluster, keyspace_name="argus_testruns")
-    db = ArgusDatabase.from_config(config)
-    yield db
+    database = ArgusDatabase.from_config(config)
+    yield database
     ArgusDatabase.destroy()
