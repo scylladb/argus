@@ -524,7 +524,7 @@ class TestRun:
         return False
 
     def shutdown(self):
-        self.argus.destroy()
+        self.argus.cluster.shutdown()
 
     @property
     def run_info(self) -> TestRunInfo:
