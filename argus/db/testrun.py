@@ -524,6 +524,7 @@ class TestRun:
         return False
 
     def shutdown(self):
+        self._log.info("Shutting down cluster connection...")
         self.argus.cluster.shutdown()
 
     @property
@@ -564,7 +565,10 @@ class TestRunWithHeartbeat(TestRun):
             self._log.info("Sending heartbeat...")
             self.heartbeat = time.time()
             self.save()
+        self._log.info("Heartbeat exit")
 
     def shutdown(self):
         self._shutdown_event.set()
+        self._log.info("Waiting for the heartbeat thread to exit...")
+        self._thread.join()
         super().shutdown()
