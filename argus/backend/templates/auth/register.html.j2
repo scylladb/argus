@@ -1,0 +1,29 @@
+{% extends 'base.html.j2' %}
+
+{% block title %}
+  Register
+{% endblock %}
+
+{% block user_header %}
+<a href="{{ url_for('main.home') }}">Home</a>
+{% endblock user_header %}
+
+{% block body %}
+  <div class="row justify-content-center">
+    <div class="col-4">
+      <form method="post">
+        <div class="mb-3">
+          <label class="form-label" for="username">Username</label>
+          <input class="form-control" name="username" id="username" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="password">Password</label>
+          <input class="form-control" type="password" name="password" id="password" required>
+        </div>
+        <div class="mb-3">
+          <input class="btn btn-primary" type="submit" value="Register">
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}

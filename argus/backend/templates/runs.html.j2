@@ -1,0 +1,33 @@
+{% extends "base.html.j2" %}
+
+{% block title %}
+Releases
+{% endblock %}
+
+{% block body %}
+<a href="{{url_for('main.tests', name=runs[0].release_name, group=runs[0].group)}}">Back</a>
+<div class="container-fluid">
+    {% for run in runs %}
+        <div class="row border p-2 mb-2 text-center">
+            <div class="col"><a href="{{url_for('main.test_run', id=run.id)}}">{{ run.name }}</a></div>
+            <div class="col">
+            {% if run.end_time != -1 %}
+                <span title="{{ run.end_time | from_timestamp }}">Ended {{ run.natural_end_time }}</span>
+            {% elif run.end_time == -1 %}
+                <span title="{{ run.start_time | from_timestamp }}">Started {{ run.natural_start_time }}</span>
+            {% endif %}
+            </div>
+            <div class="col"><a href="{{ run.build_job_url }}">{{ run.build_job_name }}</a></div>
+            <div class="col">
+            <p class="status-{{run.status}}">{{ run.status | upper }}</p>
+            {% if run.status == 'running' %}
+            <p><span title="{{ run.heartbeat | from_timestamp }}">Last update {{ run.natural_heartbeat }}</p>
+            {% endif %}
+            </div>
+        </div>
+    {% endfor %}
+    <div class="row">
+    <p>You can also <a href="{{url_for('main.runs_by_name', name=runs[0].release_name, group=runs[0].group, test=runs[0].name, show_all=1)}}">request</a> every run for this release group</p>
+    </div>
+</div>
+{% endblock %}

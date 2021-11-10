@@ -1,0 +1,23 @@
+{% extends "base.html.j2" %}
+
+{% block title %}
+Releases
+{% endblock %}
+
+{% block body %}
+<div class="row">
+    {% for release in releases %}
+    <div class="col card m-1">
+        <div class="card-body">
+            <a href="{{ url_for('main.release', name=release.name)}}">
+                <h3 class="card-title">{{ release.name if not release.pretty_name else release.pretty_name }}</h3>
+                <p class="card-subtitle text-muted">{{ release.description if release.description else "No description provided" }}</p>
+            </a>
+        </div>
+    </div>
+    {% if loop.index % 3 == 0 %}
+    <div class="w-100"></div>
+    {% endif %}
+    {% endfor %}
+</div>
+{% endblock %}
