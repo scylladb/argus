@@ -1,0 +1,31 @@
+{% block user_header %}
+<nav id="argus-header" class="navbar navbar-dark bg-dark navbar-expand-md">
+    <div class="container">
+        <a class="navbar-brand" href="{{ url_for('main.run_dashboard')}}">
+            <img src="/static/argus.png" alt="" width="64" height="64" class="d-inline-block align-text-middle">  Argus
+        </a>
+        <div class="navbar-nav">
+            <a class="nav-link" aria-current="page" href="{{ url_for('main.run_dashboard')}}"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+            <a class="nav-link" href="{{ url_for('main.test_runs')}}"><i class="fas fa-tasks"></i> Runs</a>
+            <a class="nav-link disabled"><i class="fas fa-spider"></i> Nemesis Stats</a>
+            {% if g.user %}
+            <a class="nav-link disabled"><i class="fas fa-user"></i> {{g.user.username}}</a>
+            {% endif %}
+        </div>
+    </div>
+</nav>
+<div class="bg-light">
+    <div class="container">
+        <div class="row">
+            <div class="col text-end p-2">
+                {% if not g.user %}
+                <a href="{{ url_for('auth.login')}}" class="btn btn-success">Login</a>
+                <a href="{{ url_for('auth.register')}}" class="btn btn-secondary">Register</a>
+                {% else %}
+                <a href="{{ url_for('auth.logout')}}" class="btn btn-danger">Logout</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock user_header %}

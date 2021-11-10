@@ -1,0 +1,49 @@
+@import 'bootstrap';
+@import '@fortawesome/fontawesome-free';
+
+.status-passed {
+    color: #198819;
+}
+
+
+.status-running {
+    color: #d3c938;
+}
+
+
+.status-failed {
+    color: #d33c22;
+}
+
+.text-monospaced {
+    font-size: 12pt;
+    font-family: monospace;
+    margin: 0 0 8px 0;
+    border-bottom: 1px solid black;
+}
+
+.nav-image {
+    height: 64px;
+    padding: 4px;
+}
+
+.link-btn, .link-btn:visited {
+    color:white;
+    text-decoration: none;
+    padding: 8px;
+}
+
+.link-btn:hover {
+    background-color: #ffffff2d;
+    border-radius: 8px;
+}
+
+div#argusApp {
+    position: relative;
+}
+
+div#argusErrors {
+    position: absolute;
+    top: 20px;
+    left: 10px;
+}

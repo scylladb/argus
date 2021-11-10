@@ -128,3 +128,8 @@ dmypy.json
 # Pyre type checker
 .pyre/
 .idea
+
+# Project stuff
+argus.local.yaml
+argus_web.yaml
+/node_modules/

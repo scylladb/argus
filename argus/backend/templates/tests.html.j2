@@ -1,0 +1,25 @@
+{% extends "base.html.j2" %}
+
+{% block title %}
+Releases
+{% endblock %}
+
+{% block body %}
+<a href="{{url_for('main.release', name=release_name)}}">Back</a>
+<div class="row">
+    {% for test in tests %}
+
+    <div class="col card m-1">
+        <div class="card-body">
+            <a href="{{url_for('main.runs_by_name', name=release_name, group=group_name, test=test.name)}}">
+                <h3 class="card-title">{{ test.name }}</h3>
+                <p class="card-subtitle text-muted">{{ test.group }} / {{ test.release_name }}</p>
+            </a>
+        </div>
+    </div>
+    {% if loop.index % 3 == 0 %}
+    <div class="w-100"></div>
+    {% endif %}
+    {% endfor %}
+</div>
+{% endblock %}

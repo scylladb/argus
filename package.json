@@ -1,0 +1,19 @@
+{
+  "dependencies": {
+    "@fortawesome/fontawesome-free": "^5.15.4",
+    "@popperjs/core": "^2.9.2",
+    "bootstrap": "^5.0.1",
+    "css-loader": "^5.2.6",
+    "humanize-duration": "^3.27.0",
+    "jquery": "^3.6.0",
+    "marked": "^4.0.3",
+    "mini-css-extract-plugin": "^1.6.0",
+    "style-loader": "^2.0.0",
+    "svelte": "^3.38.3",
+    "svelte-loader": "^3.1.2",
+    "webpack": "^5.39.1"
+  },
+  "devDependencies": {
+    "webpack-cli": "^4.7.2"
+  }
+}

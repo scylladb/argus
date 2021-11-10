@@ -1,0 +1,25 @@
+{% extends "base.html.j2" %}
+
+{% block title %}
+Releases
+{% endblock %}
+
+{% block body %}
+<a href="{{url_for('main.releases')}}">Back</a>
+<div class="row">
+    {% for group in groups %}
+
+    <div class="col card m-1">
+        <div class="card-body">
+            <a href="{{url_for('main.tests', name=release_name, group=group.name)}}">
+                <h3 class="card-title">{{ group.name if not group.pretty_name else group.pretty_name }}</h3>
+                <p class="card-subtitle text-muted">{{ group.description if group.description else "No description provided" }}</p>
+            </a>
+        </div>
+    </div>
+    {% if loop.index % 3 == 0 %}
+    <div class="w-100"></div>
+    {% endif %}
+    {% endfor %}
+</div>
+{% endblock %}
