@@ -66,7 +66,8 @@ class BaseCloudSetupDetails(ArgusUDTBase):
         db_node = CloudNodesInfo(*udt.db_node)
         loader_node = CloudNodesInfo(*udt.loader_node)
         monitor_node = CloudNodesInfo(*udt.monitor_node)
-        return cls(db_node=db_node, loader_node=loader_node, monitor_node=monitor_node)
+        backend = udt.backend
+        return cls(db_node=db_node, loader_node=loader_node, monitor_node=monitor_node, backend=backend)
 
 
 @dataclass(init=True, repr=True)
