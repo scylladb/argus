@@ -570,8 +570,8 @@ class TestRunWithHeartbeat(TestRun):
         if self._thread.is_alive():
             self._log.warning("Heartbeat thread was not able to shut down correctly. Stack trace:")
             # pylint: disable=protected-access
-            stack_trace = traceback.extract_stack(sys._current_frames(
-            )[self._thread.ident])
+            current_threads = sys._current_frames()
+            stack_trace = traceback.extract_stack(current_threads[self._thread.ident])
             self._log.warning(
                 "\n".join([f'#{lineno:3} : {line:50}: {fname}' for fname, lineno, _, line in stack_trace]))
         super().shutdown()
