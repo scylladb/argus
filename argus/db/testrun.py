@@ -1,5 +1,7 @@
 import logging
 import time
+import traceback
+import sys
 import threading
 from dataclasses import asdict, is_dataclass, fields, Field, dataclass
 from typing import Any
@@ -518,7 +520,7 @@ class TestRun:
         return False
 
     def shutdown(self):
-        self._log.info("Shutting down cluster connection...")
+        self._log.debug("Shutting down cluster connection...")
         self.argus.cluster.shutdown()
 
     @property
@@ -559,10 +561,17 @@ class TestRunWithHeartbeat(TestRun):
             self._log.debug("Sending heartbeat...")
             self.heartbeat = time.time()
             self.save()
-        self._log.info("Heartbeat exit")
+        self._log.debug("Heartbeat exit")
 
     def shutdown(self):
         self._shutdown_event.set()
-        self._log.info("Waiting for the heartbeat thread to exit...")
-        self._thread.join()
+        self._log.debug("Waiting for the heartbeat thread to exit...")
+        self._thread.join(timeout=self.heartbeat_interval + 10)
+        if self._thread.is_alive():
+            self._log.warning("Heartbeat thread was not able to shut down correctly. Stack trace:")
+            # pylint: disable=protected-access
+            stack_trace = traceback.extract_stack(sys._current_frames(
+            )[self._thread.ident])
+            self._log.warning(
+                "\n".join([f'#{lineno:3} : {line:50}: {fname}' for fname, lineno, _, line in stack_trace]))
         super().shutdown()
