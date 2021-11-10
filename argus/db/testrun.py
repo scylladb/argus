@@ -7,8 +7,7 @@ from uuid import uuid4, UUID
 
 from argus.db.config import BaseConfig
 from argus.db.utils import is_list_homogeneous
-from argus.db.cloud_types import CloudResource, CloudInstanceDetails, BaseCloudSetupDetails, \
-    GCESetupDetails, AWSSetupDetails
+from argus.db.cloud_types import CloudResource, CloudInstanceDetails, BaseCloudSetupDetails
 from argus.db.interface import ArgusDatabase
 from argus.db.db_types import ColumnInfo, CollectionHint, NemesisRunInfo, TestStatus, EventsBySeverity, PackageVersion
 
@@ -166,12 +165,7 @@ class TestResourcesSetup(BaseTestInfo):
     @classmethod
     def from_db_row(cls, row):
         runner = CloudInstanceDetails.from_db_udt(row.sct_runner_host)
-        if row.cloud_setup.backend == "aws":
-            cloud_setup = AWSSetupDetails.from_db_udt(row.cloud_setup)
-        elif row.cloud_setup.backend == "gce":
-            cloud_setup = GCESetupDetails.from_db_udt(row.cloud_setup)
-        else:
-            raise NotImplementedError()
+        cloud_setup = BaseCloudSetupDetails.from_db_udt(row.cloud_setup)
 
         regions = row.region_name if row.region_name else []
 
