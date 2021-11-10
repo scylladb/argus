@@ -441,7 +441,7 @@ class TestRun:
         return self._assignee
 
     def serialize(self) -> dict[str, Any]:
-        self._log.info("Serializing test run...")
+        self._log.debug("Serializing test run...")
         nested_data = {}
         for field in fields(self._USING_RUNINFO):
             field: Field
@@ -459,12 +459,12 @@ class TestRun:
             "heartbeat": self._heartbeat,
             **nested_data
         }
-        logging.debug("Serialized Data: %s", data)
+        self._log.debug("Serialized Data: %s", data)
         return data
 
     @classmethod
     def init_own_table(cls, config: BaseConfig = None):
-        cls._log.info("Initializing TestRun table...")
+        cls._log.debug("Initializing TestRun table...")
         cls.get_argus(config).init_table(table_name=cls._TABLE_NAME, column_info=cls.schema())
         cls._IS_TABLE_INITIALIZED = True
 
@@ -476,7 +476,7 @@ class TestRun:
     @classmethod
     def schema(cls) -> dict[str, ColumnInfo]:
         data = {}
-        cls._log.info("Dumping full schema...")
+        cls._log.debug("Dumping full schema...")
         for attr, column_type in cls.EXPOSED_ATTRIBUTES.items():
             value = None
             constraints = cls.ATTRIBUTE_CONSTRAINTS.get(attr, [])
@@ -503,10 +503,10 @@ class TestRun:
             if not self._IS_TABLE_INITIALIZED:
                 self.init_own_table(self._config)
             if not self.exists():
-                self._log.info("Inserting data for test run: %s", self.id)
+                self._log.debug("Inserting data for test run: %s", self.id)
                 self.argus.insert(table_name=self._TABLE_NAME, run_data=self.serialize())
             else:
-                self._log.info("Updating data for test run: %s", self.id)
+                self._log.debug("Updating data for test run: %s", self.id)
                 self.argus.update(table_name=self._TABLE_NAME, run_data=self.serialize())
 
     def exists(self) -> bool:
@@ -555,7 +555,7 @@ class TestRunWithHeartbeat(TestRun):
             time.sleep(self.heartbeat_interval)
             if self._shutdown_event.is_set():
                 break
-            self._log.info("Sending heartbeat...")
+            self._log.debug("Sending heartbeat...")
             self.heartbeat = time.time()
             self.save()
 
