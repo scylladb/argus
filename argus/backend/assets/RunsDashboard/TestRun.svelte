@@ -5,6 +5,7 @@
     import NemesisData from "./NemesisData.svelte";
     import TestRunComments from "./TestRunComments.svelte";
     import IssueTemplate from "./IssueTemplate.svelte";
+    import { polledTestRuns, testRunStore } from "./SingleTestRunSubscriber.js";
     export let id = "";
     export let build_number = -1;
     let test_run = undefined;
@@ -17,6 +18,13 @@
         currentTime - test_run?.heartbeat * 1000,
         { round: true }
     );
+    $: startedAtHuman = humanizeDuration(
+        currentTime - test_run?.start_time * 1000,
+        { round: true }
+    );
+    polledTestRuns.subscribe((data) => {
+        test_run = data[id] ?? test_run;
+    });
 
     const titleCase = function (string) {
         return string[0].toUpperCase() + string.slice(1).toLowerCase();
@@ -50,6 +58,7 @@
                             test_run.build_job_url.split("/").reverse()[1]
                         );
                     }
+                    testRunStore.update((store) => [...store, id]);
                     console.log(test_run);
                 } else {
                     console.log("Something went wrong...");
@@ -61,17 +70,12 @@
     onMount(() => {
         fetchTestRunData();
 
-        intervalId = setInterval(() => {
-            fetchTestRunData();
-        }, interval);
-
         clockInterval = setInterval(() => {
             currentTime = new Date();
         }, 1000);
     });
 
     onDestroy(() => {
-        if (intervalId) clearInterval(intervalId);
         if (clockInterval) clearInterval(clockInterval);
     });
 </script>
@@ -112,9 +116,15 @@
                     >
                 </div>
             </div>
+            {#if test_run.assignee}
+                <div class="row p-0 m-0">
+                    <div class="col p-2">Current assignee: {test_run.assignee}</div>
+                </div>
+            {/if}
             {#if ["running", "created"].includes(test_run.status)}
                 <div class="row text-sm text-muted p-0 m-0">
                     <div class="col p-2">Last heartbeat: {heartbeatHuman} ago</div>
+                    <div class="col p-2">Started: {startedAtHuman} ago</div>
                 </div>
             {/if}
         </div>

@@ -2,8 +2,24 @@
     import { onMount } from "svelte";
     import TestRuns from "./TestRuns.svelte";
     import RunRelease from "./RunRelease.svelte";
+    import { stats } from "./StatsSubscriber.js";
     let releases = [];
     let test_runs = {};
+    let releaseStats = {};
+    stats.subscribe(value => {
+        releaseStats = value.releases;
+        releases = releases.sort((a, b) => {
+            let leftOrder = releaseStats[a.name]?.total ?? 0;
+            let rightOrder = releaseStats[b.name]?.total ?? 0;
+            if (leftOrder > rightOrder) {
+                return -1;
+            } else if (rightOrder > leftOrder) {
+                return 1;
+            } else {
+                return 0;
+            }
+        })
+    });
 
     const fetchNewReleases = function () {
         fetch("/api/v1/releases")
