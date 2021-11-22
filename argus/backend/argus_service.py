@@ -31,7 +31,7 @@ class ArgusService:
         response = {}
         for release_name in payload:
             try:
-                ArgusRelease.get(name=release_name)  
+                ArgusRelease.get(name=release_name)
                 response[release_name] = {
                     "status": "error",
                     "message": f"Release {release_name} already exists"
@@ -146,12 +146,16 @@ class ArgusService:
 
     def get_test_last_run_status(self, payload: dict) -> dict:
         response = {}
-        statement = self.db.prepare("SELECT id, release_name, name, status, start_time FROM test_runs WHERE release_name = ?")
-        runs = self.session.execute(statement, parameters=(payload["release_name"],)).all()
+        statement = self.db.prepare(
+            "SELECT id, release_name, name, status, start_time FROM test_runs WHERE release_name = ?")
+        runs = self.session.execute(
+            statement, parameters=(payload["release_name"],)).all()
         runs = sorted(runs, key=lambda val: val["start_time"], reverse=True)
         for test in payload.get("tests", []):
-            runs_for_test = [run for run in runs if run["name"].startswith(test["name"])]
-            response[test["name"]] = runs_for_test[0]["status"] if len(runs_for_test) > 0 else "none"
+            runs_for_test = [
+                run for run in runs if run["name"].startswith(test["name"])]
+            response[test["name"]] = runs_for_test[0]["status"] if len(
+                runs_for_test) > 0 else "none"
 
         return response
 
@@ -220,7 +224,8 @@ class ArgusService:
                 stats = {e.value: len(
                     [run for run in release_runs if run["status"] == e.value]) for e in TestStatus}
                 stats["total"] = len(release_runs)
-                stats["lastStatus"] = release_runs[0]["status"] if len(release_runs) > 0 else "none"
+                stats["lastStatus"] = release_runs[0]["status"] if len(
+                    release_runs) > 0 else "none"
                 response["releases"][release] = stats
 
         groups = payload.get("groups")
@@ -229,13 +234,14 @@ class ArgusService:
                 release_group_runs = [
                     run
                     for run in test_runs
-                    if run["release_name"] == release and run["group"].startswith(group)
+                    if run["release_name"] == release and run["name"].startswith(group)
                 ][:groups["limit"]]
 
                 stats = {e.value: len(
                     [run for run in release_group_runs if run["status"] == e.value]) for e in TestStatus}
                 stats["total"] = len(release_group_runs)
-                stats["lastStatus"] = release_group_runs[0]["status"] if len(release_group_runs) > 0 else "none"
+                stats["lastStatus"] = release_group_runs[0]["status"] if len(
+                    release_group_runs) > 0 else "none"
                 release_res = response["groups"].get(release, {})
                 release_res[group] = stats
                 response["groups"][release] = release_res
@@ -246,13 +252,14 @@ class ArgusService:
                 tests_runs = [
                     run
                     for run in test_runs
-                    if run["release_name"] == release and run["group"].startswith(group) and run["name"].startswith(test)
+                    if run["release_name"] == release and run["name"].startswith(test)
                 ][:tests["limit"]]
 
                 stats = {e.value: len(
                     [run for run in tests_runs if run["status"] == e.value]) for e in TestStatus}
                 stats["total"] = len(tests_runs)
-                stats["lastStatus"] = tests_runs[0]["status"] if len(tests_runs) > 0 else "none"
+                stats["lastStatus"] = tests_runs[0]["status"] if len(
+                    tests_runs) > 0 else "none"
                 release_group_res = response["tests"].get(release, {})
                 tests_res = release_group_res.get(group, {})
                 tests_res[test] = stats
@@ -262,26 +269,18 @@ class ArgusService:
         return response
 
     def poll_test_runs(self, payload: dict):
-        ts_begin = time.time()
         limit = payload["limit"]
         runs: dict = payload["runs"]
-    
+
         statement = self.db.prepare("SELECT id, name, group, release_name, build_job_name, build_job_url, "
-                                     "status, start_time, end_time, heartbeat"
-                                     " FROM test_runs")
-        rows = self.session.execute(statement, execution_profile="read_fast").all()
-        ts_after_execute = time.time()
+                                    "status, start_time, end_time, heartbeat"
+                                    " FROM test_runs")
+        rows = self.session.execute(
+            statement, execution_profile="read_fast").all()
         rows = sorted(rows, key=lambda val: val["start_time"], reverse=True)
         for row in rows:
-            row["natural_heartbeat"] = humanize.naturaltime(
-                datetime.datetime.fromtimestamp(row["heartbeat"]))
-            row["natural_start_time"] = humanize.naturaltime(
-                datetime.datetime.fromtimestamp(row["start_time"]))
-            row["natural_end_time"] = humanize.naturaltime(
-                datetime.datetime.fromtimestamp(row["end_time"]))
             row["build_number"] = int(
                 row["build_job_url"].rstrip("/").split("/")[-1])
-        ts_after_additional_data = time.time()
         response = {}
         for uid, [release_name, test_name] in runs.items():
             result = [
@@ -289,8 +288,16 @@ class ArgusService:
                 if row["release_name"] == release_name and row["name"].startswith(test_name)
             ][:limit]
             response[uid] = result
-        ts_after_filter = time.time()
+        return response
 
-        print("Total: {}s\nAfter Execute: {}s\nAfter extra data: {}s\nAfter filter: {}s\n".format(ts_after_filter - ts_begin, ts_after_execute - ts_begin, ts_after_additional_data - ts_after_execute, ts_after_filter - ts_after_additional_data))
+    def poll_test_runs_single(self, payload: dict):
+        runs = [UUID(id) for id in payload["runs"]]
+
+        statement = self.db.prepare("SELECT * FROM test_runs WHERE id in ?")
+        rows = self.session.execute(statement, parameters=(
+            runs,), execution_profile="read_fast_named_tuple").all()
+
+        response = {str(row.id): TestRun.from_db_row(row).serialize()
+                    for row in rows}
 
         return response

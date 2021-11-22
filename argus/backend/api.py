@@ -272,6 +272,29 @@ def test_runs_poll():
     return jsonify(res)
 
 
+@bp.route("/test_run/poll", methods=["POST"])
+@login_required
+def test_run_poll_single():
+    res = {
+        "status": "ok"
+    }
+    try:
+        if not request.is_json:
+            raise Exception(
+                "Content-Type mismatch, expected application/json, got:", request.content_type)
+        request_payload = request.get_json()
+        service = ArgusService()
+        res["response"] = service.poll_test_runs_single(request_payload)
+    except Exception as exc:
+        LOGGER.error("Something happened during request %s", request)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    return jsonify(res)
+
+
 @bp.route("/release/create", methods=["POST"])
 @login_required
 def release_create():

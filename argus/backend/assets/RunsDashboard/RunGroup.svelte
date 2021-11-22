@@ -1,6 +1,7 @@
 <script>
     import Test from "./Test.svelte";
     import { groupRequests, stats } from "./StatsSubscriber";
+    import NumberStats from "./NumberStats.svelte";
     export let release = "";
     export let group = {
         name: "",
@@ -139,52 +140,7 @@
                     </div>
                     <div class="col-4 text-end">
                         {#if groupStats?.total > 0}
-                            <div
-                                class="progress cursor-question"
-                                style="height: 8px"
-                                title={`Passed: ${groupStats.passed} / Failed: ${groupStats.failed} / Created: ${groupStats.created} / Running: ${groupStats.running}`}
-                            >
-                                <div
-                                    class="progress-bar bg-success"
-                                    role="progressbar"
-                                    style="width: {normalize(
-                                        groupStats.passed,
-                                        0,
-                                        groupStats.total,
-                                        100
-                                    )}%"
-                                />
-                                <div
-                                    class="progress-bar bg-danger"
-                                    role="progressbar"
-                                    style="width: {normalize(
-                                        groupStats.failed,
-                                        0,
-                                        groupStats.total,
-                                        100
-                                    )}%"
-                                />
-                                <div
-                                    class="progress-bar bg-warning"
-                                    role="progressbar"
-                                    style="width: {normalize(
-                                        groupStats.running,
-                                        0,
-                                        groupStats.total,
-                                        100
-                                    )}%"
-                                />
-                                <div
-                                    class="progress-bar bg-info"
-                                    role="progressbar"
-                                    style="width: {normalize(
-                                        groupStats.created,
-                                        0,
-                                        groupStats.total,
-                                        100
-                                    )}%"
-                                />
-                            </div>
+                            <NumberStats stats={groupStats} />
                         {:else if groupStats?.total == -1}
                             <span class="spinner-border spinner-border-sm" />
                         {:else}

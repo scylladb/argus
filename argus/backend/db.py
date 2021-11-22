@@ -45,7 +45,12 @@ class ScyllaCluster:
             row_factory=dict_factory,
             load_balancing_policy=self.lb_policy
         )
+        self.read_named_tuple_exec_profile = ExecutionProfile(
+            consistency_level=ConsistencyLevel.ONE,
+            load_balancing_policy=self.lb_policy
+        )
         self.cluster.add_execution_profile("read_fast", self.read_exec_profile)
+        self.cluster.add_execution_profile("read_fast_named_tuple", self.read_named_tuple_exec_profile)
         TestRun.set_argus(self.argus_interface)
 
     @classmethod

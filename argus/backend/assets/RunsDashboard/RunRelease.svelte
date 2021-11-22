@@ -1,6 +1,8 @@
 <script>
     import RunGroup from "./RunGroup.svelte";
     import { releaseRequests, stats } from "./StatsSubscriber";
+    import ProgressBarStats from "./ProgressBarStats.svelte";
+    import NumberStats from "./NumberStats.svelte";
     let releaseGroups = [];
     export let release = {
         name: "undefined",
@@ -16,15 +18,25 @@
         total: -1,
     };
     let releaseStats = releaseStatsDefault;
+    let groupStats = {};
 
     releaseRequests.update(val => [...val, release.name]);
     stats.subscribe(val => {
         releaseStats = val["releases"]?.[release.name] ?? releaseStatsDefault;
+        groupStats = val["groups"]?.[release.name] ?? releaseStatsDefault;
+        releaseGroups = releaseGroups.sort((a, b) => {
+            let leftOrder = groupStats[a.name]?.total ?? 0;
+            let rightOrder = groupStats[b.name]?.total ?? 0;
+            if (leftOrder > rightOrder) {
+                return -1;
+            } else if (rightOrder > leftOrder) {
+                return 1;
+            } else {
+                return 0;
+            }enclosure
+        });
     })
 
-    const normalize = function (val, minVal, maxVal, total) {
-        return ((val - minVal) / (maxVal - minVal)) * total;
-    };
 
     const removeDots = function (str) {
         return str.replaceAll(".", "_");
@@ -76,49 +88,7 @@
                     </div>
                     <div class="col-4 text-end">
                         {#if releaseStats?.total > 0}
-                            <div class="progress cursor-question" style="height: 8px" title="{
-                                `Passed: ${releaseStats.passed} / Failed: ${releaseStats.failed} / Created: ${releaseStats.created} / Running: ${releaseStats.running}`}">
-                                <div
-                                    class="progress-bar bg-success"
-                                    role="progressbar"
-                                    style="width: {normalize(
-                                        releaseStats.passed,
-                                        0,
-                                        releaseStats.total,
-                                        100
-                                    )}%"
-                                />
-                                <div
-                                    class="progress-bar bg-danger"
-                                    role="progressbar"
-                                    style="width: {normalize(
-                                        releaseStats.failed,
-                                        0,
-                                        releaseStats.total,
-                                        100
-                                    )}%"
-                                />
-                                <div
-                                    class="progress-bar bg-warning"
-                                    role="progressbar"
-                                    style="width: {normalize(
-                                        releaseStats.running,
-                                        0,
-                                        releaseStats.total,
-                                        100
-                                    )}%"
-                                />
-                                <div
-                                    class="progress-bar bg-info"
-                                    role="progressbar"
-                                    style="width: {normalize(
-                                        releaseStats.created,
-                                        0,
-                                        releaseStats.total,
-                                        100
-                                    )}%"
-                                />
-                            </div>
+                            <NumberStats stats={releaseStats} />
                         {:else if releaseStats?.total == -1}
                             <span class="spinner-border spinner-border-sm"></span>
                         {:else}
@@ -137,7 +107,7 @@
             class="accordion accordion-flush accordion-release-groups border-start"
             id="accordionGroups{removeDots(release.name)}"
         >
-            {#each releaseGroups ?? [] as group}
+            {#each releaseGroups ?? [] as group (group.id)}
                 <RunGroup
                     release={release.name}
                     {group}
@@ -167,7 +137,4 @@
         margin-left: 2rem;
     }
 
-    .cursor-question {
-        cursor: help;
-    }
 </style>

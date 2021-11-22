@@ -54,7 +54,7 @@
             </p>
             {#each runs as run}
                 <div class="collapse mb-2" id="collapse{run.id}">
-                    <div class="card card-body shadow">
+                    <div class="card card-body shadow-sm">
                         {#if clickedTestRuns[run.id]}
                             <TestRun
                                 id={run.id}

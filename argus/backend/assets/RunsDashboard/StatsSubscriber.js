@@ -2,14 +2,36 @@ import { writable, readable } from "svelte/store";
 let releaseRequestsBody = [];
 let releaseGroupRequestsBody = [];
 let testRequestsBody = [];
+let releaseBurst = 0;
+let groupBurst = 0;
+let fetching = false;
+
+const checkBurst = function() {
+    if (groupBurst > 7) {
+        setTimeout(() => {
+            fetchStats((new_stats) => {
+                stats.update((val) => new_stats);
+            });
+        }, 200);
+        groupBurst = 0;
+        return;
+    }
+
+    if (releaseBurst > 5) {
+        setTimeout(() => {
+            fetchStats((new_stats) => {
+                stats.update((val) => new_stats);
+            });
+        }, 200);
+        releaseBurst = 0;
+        return;
+    }
+}
 
 export const releaseRequests = writable([]);
 export const groupRequests = writable([]);
 export const testRequests = writable([]);
-export const stats = readable({}, set => {
-    setTimeout(() => {
-        fetchStats(set);
-    }, 10000);
+export const stats = writable({}, set => {
     const interval = setInterval(() => {
         fetchStats(set)
     }, 20 * 1000);
@@ -19,10 +41,14 @@ export const stats = readable({}, set => {
 
 releaseRequests.subscribe(val => {
     releaseRequestsBody = val;
+    releaseBurst++;
+    checkBurst();
 })
 
 groupRequests.subscribe(val => {
     releaseGroupRequestsBody = val;
+    groupBurst++;
+    checkBurst();
 })
 
 testRequests.subscribe(val => {
@@ -30,6 +56,8 @@ testRequests.subscribe(val => {
 })
 
 const fetchStats = function (set) {
+    if (fetching) return;
+    fetching = true;
     fetch("/api/v1/stats", {
         method: "POST",
         headers: {
@@ -37,11 +65,11 @@ const fetchStats = function (set) {
         },
         body: JSON.stringify({
             releases: {
-                limit: 20,
+                limit: 100,
                 items: releaseRequestsBody,
             },
             groups: {
-                limit: 10,
+                limit: 100,
                 items: releaseGroupRequestsBody
             },
             tests: {
@@ -61,6 +89,7 @@ const fetchStats = function (set) {
             console.log(res);
             if (res.status === "ok") {
                 set(res.response);
+                fetching = false;
             }
         });
 };
