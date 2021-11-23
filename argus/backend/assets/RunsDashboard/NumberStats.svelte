@@ -37,6 +37,12 @@
     >
         {stats.created}
     </div>
+    <div
+        class:d-none={stats.aborted == 0}
+        class="flex-fill m-0 p-1 bg-dark"
+    >
+        {stats.aborted}
+    </div>
 </div>
 
 <style>

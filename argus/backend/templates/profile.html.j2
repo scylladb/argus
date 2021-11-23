@@ -1,0 +1,39 @@
+{% extends "base.html.j2" %}
+
+{% block title %}
+Profile
+{% endblock %}
+
+{% block body %}
+{% if g.user %}
+<div class="container">
+    <div class="row border rounded">
+        <div class="col-2 border-end p-2">
+            {% if g.user.picture_id %}
+                <img class="img-fluid" src="/storage/picture/{{g.user.picture_id}}" alt="">
+            {% else %}
+                <img class="img-profile img-thumbnail" src="/static/no-user-picture.png" alt="">
+            {% endif %}
+        </div>
+        <div class="col-10">
+            <h1>Profile</h1>
+            <h4>{{g.user.username}}</h2>
+            <h6>Details</h6>
+            <ul>
+                <li>Name: {{g.user.full_name}}</li>
+                <li>Email: {{g.user.email}}</li>
+            </ul>
+            <h6>Change profile picture</h6>
+            <form class="form mb-3" action="/profile/update/picture" method="post" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="formPictureData" class="form-label">Profile Image</label>
+                    <input class="form-control form-control-sm" id="formPictureData" name="filedata" type="file">
+                </div>
+                <button type="submit" class="btn btn-primary">Upload new image</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% else %}
+{% endif %}
+{% endblock %}

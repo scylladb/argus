@@ -1,6 +1,7 @@
 <script>
     import TestRun from "./TestRun.svelte";
     import { runStore, polledRuns } from "./TestRunsSubscriber.js";
+    import { StatusButtonCSSClassMap } from "./TestStatus.js";
     export let data = {};
     export let id = "";
     console.log(data);
@@ -40,7 +41,7 @@
                 {#each runs as run}
                     <div class="me-2 d-inline-block">
                         <button
-                            class="btn btn-primary bg-{run.status}"
+                            class="btn {StatusButtonCSSClassMap[run.status]}"
                             type="button"
                             data-bs-toggle="collapse"
                             data-bs-target="#collapse{run.id}"
@@ -69,18 +70,5 @@
 </div>
 
 <style>
-    .bg-passed {
-        background-color: rgb(37, 143, 37);
-        border-color: rgb(37, 143, 37);
-    }
 
-    .bg-running {
-        background-color: rgb(221, 221, 50);
-        border-color: rgb(221, 221, 50);
-    }
-
-    .bg-failed {
-        background-color: rgb(185, 23, 23);
-        border-color: rgb(185, 23, 23);
-    }
 </style>

@@ -4,16 +4,25 @@
     import ResourcesInfo from "./ResourcesInfo.svelte";
     import NemesisData from "./NemesisData.svelte";
     import TestRunComments from "./TestRunComments.svelte";
+    import {
+        TestStatus,
+        StatusButtonCSSClassMap,
+        InProgressStatuses,
+    } from "./TestStatus.js";
     import IssueTemplate from "./IssueTemplate.svelte";
     import { polledTestRuns, testRunStore } from "./SingleTestRunSubscriber.js";
+    import { userList } from "./UserlistSubscriber.js";
     export let id = "";
     export let build_number = -1;
     let test_run = undefined;
-    let interval = 20 * 1000;
-    let intervalId;
     let heartbeatHuman = "";
+    let selectedUser = "";
+    let newStatus = "";
+    let disableButtons = false;
     let currentTime = new Date();
     let clockInterval;
+    let users = {};
+    $: users = $userList;
     $: heartbeatHuman = humanizeDuration(
         currentTime - test_run?.heartbeat * 1000,
         { round: true }
@@ -26,9 +35,6 @@
         test_run = data[id] ?? test_run;
     });
 
-    const titleCase = function (string) {
-        return string[0].toUpperCase() + string.slice(1).toLowerCase();
-    };
     let cmd_hydraInvestigateShowMonitor = `hydra investigate show-monitor ${id}`;
     let cmd_hydraInvestigateShowLogs = `hydra investigate show-logs ${id}`;
 
@@ -58,7 +64,14 @@
                             test_run.build_job_url.split("/").reverse()[1]
                         );
                     }
-                    testRunStore.update((store) => [...store, id]);
+                    testRunStore.update((store) => { 
+                        if (!store.find((val) => val == id)) {
+                            return [...store, id];
+                        } else {
+                            return store;
+                        }
+                    });
+                    disableButtons = false;
                     console.log(test_run);
                 } else {
                     console.log("Something went wrong...");
@@ -67,6 +80,66 @@
             });
     };
 
+    const handleAssign = function() {
+        fetch("/api/v1/test_run/change_assignee", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                test_run_id: id,
+                user_id: selectedUser
+            }),
+        })
+            .then((res) => {
+                if (res.status == 200) {
+                    return res.json();
+                } else {
+                    console.log("Error fetching test_run");
+                    console.log(res);
+                }
+            })
+            .then((res) => {
+                if (res.status === "ok") {
+                    fetchTestRunData();
+                    console.log(res.response);
+                } else {
+                    console.log("Something went wrong...");
+                    console.log(res);
+                }
+            });
+    }
+
+    const handleStatus = function() {
+        disableButtons = true;
+        fetch("/api/v1/test_run/change_status", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                test_run_id: id,
+                status: newStatus
+            }),
+        })
+            .then((res) => {
+                if (res.status == 200) {
+                    return res.json();
+                } else {
+                    console.log("Error updating status");
+                    console.log(res);
+                }
+            })
+            .then((res) => {
+                if (res.status === "ok") {
+                    fetchTestRunData();
+                    console.log(res.response);
+                } else {
+                    console.log("Something went wrong...");
+                    console.log(res);
+                }
+            });
+    }
     onMount(() => {
         fetchTestRunData();
 
@@ -84,28 +157,31 @@
     {#if test_run}
         <div class="container-fluid p-0 m-0">
             <div class="row p-0 m-0">
-                <div class="col-1 py-3">
-                    {#if test_run.status == "running"}
-                        <div
-                            class="p-2 m-0 border rounded test-status-bg-running d-flex justify-content-center cursor-question"
-                        >
+                <div class="col-2 py-2 dropdown">
+                    <button
+                        class="btn {StatusButtonCSSClassMap[
+                            test_run.status
+                        ]} text-light"
+                        type="button"
+                        title={new Date(
+                            test_run.end_time * 1000
+                        ).toLocaleString()}
+                        data-bs-toggle="dropdown"
+                    >
+                        {test_run.status.toUpperCase()}
+                        {#if InProgressStatuses.find(status => status == test_run.status)}
                             <span
                                 class="spinner-border spinner-border-sm d-inline-block"
                             />
-                        </div>
-                        
-                    {:else if test_run.status == "passed" || test_run.status == "failed"}
-                        <p
-                            class="p-2 m-0 border rounded test-status-bg-{test_run.status} d-inline-block cursor-question"
-                            title={new Date(
-                                test_run.end_time * 1000
-                            ).toLocaleString()}
-                        >
-                            {test_run.status.toUpperCase()}
-                        </p>
-                    {/if}
+                        {/if}
+                    </button>
+                    <ul class="dropdown-menu">
+                        {#each Object.keys(TestStatus) as status}
+                            <li><button class="dropdown-item" disabled={disableButtons} on:click={() => { newStatus = status.toLowerCase();handleStatus();}}>{status}</button></li>
+                        {/each}
+                    </ul>
                 </div>
-                <div class="col-11 text-end py-3">
+                <div class="col-10 text-end py-3">
                     <p class="p-0 d-inline-block pe-4">
                         {test_run.build_job_name}
                     </p>
@@ -116,14 +192,19 @@
                     >
                 </div>
             </div>
-            {#if test_run.assignee}
-                <div class="row p-0 m-0">
-                    <div class="col p-2">Current assignee: {test_run.assignee}</div>
+            {#if Object.keys(users).length > 0}
+                <div class="row p-2 m-0 justify-content-end">
+                    <div class="col-2 p-2 border rounded">
+                        <img src="" alt="" class="img-fluid">
+                        {users[test_run.assignee]?.username ?? "Nobody"}
+                    </div>
                 </div>
             {/if}
-            {#if ["running", "created"].includes(test_run.status)}
+            {#if InProgressStatuses.includes(test_run.status)}
                 <div class="row text-sm text-muted p-0 m-0">
-                    <div class="col p-2">Last heartbeat: {heartbeatHuman} ago</div>
+                    <div class="col p-2">
+                        Last heartbeat: {heartbeatHuman} ago
+                    </div>
                     <div class="col p-2">Started: {startedAtHuman} ago</div>
                 </div>
             {/if}
@@ -213,11 +294,11 @@
                                     ).toLocaleString()}
                                 </li>
                                 {#if test_run.end_time != -1}
-                                <li>
-                                    End Time: {new Date(
-                                        test_run.end_time * 1000
-                                    ).toLocaleString()}
-                                </li>
+                                    <li>
+                                        End Time: {new Date(
+                                            test_run.end_time * 1000
+                                        ).toLocaleString()}
+                                    </li>
                                 {/if}
                                 <li>
                                     Started by: {test_run.started_by ??
@@ -415,29 +496,6 @@
     .fg-nem-failed {
         color: rgb(163, 31, 31);
     }
-
-    .test-status-fg-running {
-        color: rgb(221, 221, 50);
-    }
-
-    .test-status-bg-passed {
-        color: white;
-        background-color: rgb(37, 143, 37);
-        border-color: rgb(37, 143, 37);
-    }
-
-    .test-status-bg-running {
-        color: white;
-        background-color: rgb(221, 221, 50);
-        border-color: rgb(221, 221, 50);
-    }
-
-    .test-status-bg-failed {
-        color: white;
-        background-color: rgb(185, 23, 23);
-        border-color: rgb(185, 23, 23);
-    }
-
     .cursor-question {
         cursor: help;
     }

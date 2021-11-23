@@ -1,4 +1,4 @@
-import { writable, readable } from "svelte/store";
+import { writable } from "svelte/store";
 let releaseRequestsBody = [];
 let releaseGroupRequestsBody = [];
 let testRequestsBody = [];
@@ -10,7 +10,7 @@ const checkBurst = function() {
     if (groupBurst > 7) {
         setTimeout(() => {
             fetchStats((new_stats) => {
-                stats.update((val) => new_stats);
+                stats.update(() => new_stats);
             });
         }, 200);
         groupBurst = 0;
@@ -20,20 +20,20 @@ const checkBurst = function() {
     if (releaseBurst > 5) {
         setTimeout(() => {
             fetchStats((new_stats) => {
-                stats.update((val) => new_stats);
+                stats.update(() => new_stats);
             });
         }, 200);
         releaseBurst = 0;
         return;
     }
-}
+};
 
 export const releaseRequests = writable([]);
 export const groupRequests = writable([]);
 export const testRequests = writable([]);
 export const stats = writable({}, set => {
     const interval = setInterval(() => {
-        fetchStats(set)
+        fetchStats(set);
     }, 20 * 1000);
     
     return () => clearInterval(interval);
@@ -43,17 +43,17 @@ releaseRequests.subscribe(val => {
     releaseRequestsBody = val;
     releaseBurst++;
     checkBurst();
-})
+});
 
 groupRequests.subscribe(val => {
     releaseGroupRequestsBody = val;
     groupBurst++;
     checkBurst();
-})
+});
 
 testRequests.subscribe(val => {
     testRequestsBody = val;
-})
+});
 
 const fetchStats = function (set) {
     if (fetching) return;

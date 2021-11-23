@@ -62,6 +62,7 @@ class TestStatus(str, Enum):
     RUNNING = "running"
     FAILED = "failed"
     PASSED = "passed"
+    ABORTED = "aborted"
 
 
 @dataclass(init=True, repr=True)
