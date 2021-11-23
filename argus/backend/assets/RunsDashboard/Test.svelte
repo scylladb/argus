@@ -1,6 +1,7 @@
 <script>
     import { createEventDispatcher } from "svelte";
     import { testRequests, stats } from "./StatsSubscriber";
+    import { StatusCSSClassMap } from "./TestStatus.js";
 
     export let release = "";
     export let group = "";
@@ -87,7 +88,7 @@
                 {#if lastStatus}
                     <span
                         title={titleCase(lastStatus)}
-                        class="cursor-question test-{lastStatus}"
+                        class="cursor-question {StatusCSSClassMap[lastStatus] ?? StatusCSSClassMap["unknown"]}"
                         ><i class="fas fa-circle" /></span
                     >
                 {/if}

@@ -10,8 +10,9 @@
 
 {% block body %}
   <div class="row justify-content-center">
-    <div class="col-4">
-      <form method="post">
+    <div class="col text-center">
+    <p>Unauthorized, please log in using Github.</p>
+      {# <form method="post">
         <div class="mb-3">
           <label class="form-label" for="username">Username</label>
           <input class="form-control" name="username" id="username" required>
@@ -22,9 +23,14 @@
         </div>
         <div class="mb-3">
           <input class="btn btn-primary" type="submit" value="Log In">
-          <button class="btn btn-dark btn-disabled" type="button" disabled="true"><i class="fab fa-github"></i> Sign In with GitHub</button>
         </div>
-      </form>
+      </form> #}
+      {# <form action="https://github.com/login/oauth/authorize" method="get">
+        <input type="hidden" name="scope" value="{{ github_scopes }}">
+        <input type="hidden" name="client_id" value="{{ github_cid }}">
+        <input type="hidden" name="state" value="{{ csrf_token }}">
+        <button class="btn btn-dark" type="submit"><i class="fab fa-github"></i> Sign In with GitHub</button>
+      </form> #}
     </div>
   </div>
 {% endblock %}

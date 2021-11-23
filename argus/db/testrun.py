@@ -441,6 +441,10 @@ class TestRun:
     def assignee(self) -> str:
         return self._assignee
 
+    @assignee.setter
+    def assignee(self, value):
+        self._assignee = str(value)
+
     def serialize(self) -> dict[str, Any]:
         self._log.debug("Serializing test run...")
         nested_data = {}

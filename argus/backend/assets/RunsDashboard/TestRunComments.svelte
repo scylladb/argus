@@ -1,39 +1,23 @@
 <script>
     import { onMount } from "svelte";
     import { parse } from "marked";
+    import { userList } from "./UserlistSubscriber.js";
 
     export let id;
-    let comments = {};
+    let comments = [];
     let user_info = {};
     let new_comment = "";
     let fetching = false;
 
-    const fetchUserInfo = function () {
-        fetch("/api/v1/users", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({}),
-        })
-            .then((res) => {
-                if (res.status == 200) {
-                    return res.json();
-                } else {
-                    console.log("Error fetching users");
-                    console.log(res);
-                }
-            })
-            .then((res) => {
-                if (res.status === "ok") {
-                    user_info = res.response;
-                    console.log(user_info);
-                } else {
-                    console.log("Something went wrong...");
-                    console.log(res);
-                }
-            });
-    };
+    userList.subscribe(val => {
+        user_info = val;
+    })
+
+    const getPictureForId = function(id) {
+        let picture_id = user_info[id]?.picture_id;
+        return picture_id ? `/storage/picture/${picture_id}` : "/static/no-user-picture.png"; 
+    }
+
     const fetchComments = function () {
         fetching = true;
         comments = {};
@@ -56,8 +40,8 @@
             })
             .then((res) => {
                 if (res.status === "ok") {
-                    fetching = false;
                     comments = res.response;
+                    fetching = false;
                     console.log(comments);
                 } else {
                     console.log("Something went wrong...");
@@ -67,6 +51,7 @@
     };
 
     const handleCommentSubmit = function () {
+        fetching = true;
         fetch("/api/v1/test_run/comments/submit", {
             method: "POST",
             headers: {
@@ -88,6 +73,7 @@
             .then((res) => {
                 if (res.status === "ok") {
                     comments = res.response;
+                    fetching = false;
                     console.log(comments);
                 } else {
                     console.log("Something went wrong...");
@@ -98,28 +84,34 @@
     };
     onMount(() => {
         fetchComments();
-        fetchUserInfo();
     });
 </script>
 
 <div class="container-fluid py-1 m-0">
-    {#each comments?.comments ?? [] as comment}
-        <div class="row p-0 m-0">
-            <div class="col-12 p-0 mb-1">
-                <div class="card-body border-bottom">
-                    <h5 class="card-title">{user_info[comment.user_id]?.username ?? "Ghost"}</h5>
-                    <p class="card-text">{@html parse(comment.message)}</p>
-                    <p class="card-text"><small class="text-muted">{new Date(comment.timestamp * 1000).toLocaleString()}</small></p>
-                  </div>
+    {#if Object.keys(user_info).length > 0}
+            {#each comments as comment (comment.id)}
+            <div class="row p-0 m-0">
+                <div class="col-1 p-1 mb-1 text-center">
+                    <img class="img-profile" src="{getPictureForId(comment.user_id)}" alt="">
+                </div>
+                <div class="col-11 p-0 mb-1">
+                    <div class="card-body border-bottom">
+                        <h5 class="card-title" title="{user_info[comment.user_id]?.username ?? "ghost"}">{user_info[comment.user_id]?.full_name ?? "Ghost"}</h5>
+                        <p class="card-text">{@html parse(comment.message)}</p>
+                        <p class="card-text"><small class="text-muted">{new Date(comment.posted_at * 1000).toLocaleString()}</small></p>
+                    </div>
+                </div>
             </div>
-        </div>
+        {:else}
+            <div class="row">
+                <div class="col text-center p-1 text-muted">
+                    No comments yet.
+                </div>
+            </div>
+        {/each}
     {:else}
-        <div class="row">
-            <div class="col text-center p-1 text-muted">
-                No comments yet.
-            </div>
-        </div>
-    {/each}
+        loading...
+    {/if}
     <div class="row">
         <div class="col mb-3">
             <div class="mb-3">
@@ -130,3 +122,11 @@
         </div>
     </div>
 </div>
+
+<style>
+    .img-profile {
+        height: 72px;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+</style>

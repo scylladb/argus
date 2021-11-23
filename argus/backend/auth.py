@@ -1,8 +1,10 @@
 import functools
+import os
+import hashlib
 from datetime import datetime
 from uuid import UUID
 from flask import (
-    Blueprint, flash, g, redirect, render_template, request, session, url_for
+    Blueprint, flash, g, redirect, render_template, request, session, url_for, current_app
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 from argus.backend.models import User
@@ -43,6 +45,10 @@ def register():
 
 @bp.route('/login', methods=('GET', 'POST'))
 def login():
+
+    token = hashlib.sha256((os.urandom(64))).hexdigest()
+    session["csrf_token"] = token
+
     if request.method == 'POST':
         username = request.form["username"]
         password = request.form["password"]
@@ -56,11 +62,15 @@ def login():
         if not error:
             session.clear()
             session["user_id"] = str(user.id)
-
+            session["csrf_token"] = token
         flash(error)
         return redirect(url_for('main.home'))
 
-    return render_template('auth/login.html.j2')
+    return render_template('auth/login.html.j2', 
+                            csrf_token=token, 
+                            github_cid=current_app.config.get("GITHUB_CLIENT_ID", "NO_CLIENT_ID"),
+                            github_scopes="user:email read:user"
+                        )
 
 
 @bp.before_app_request

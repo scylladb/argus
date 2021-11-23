@@ -1,6 +1,7 @@
 <script>
     import Test from "./Test.svelte";
     import { groupRequests, stats } from "./StatsSubscriber";
+    import { StatusSortPriority } from "./TestStatus.js";
     import NumberStats from "./NumberStats.svelte";
     export let release = "";
     export let group = {
@@ -33,15 +34,8 @@
             console.log("Not all tests have their status");
         }
         tests = tests.sort((a, b) => {
-            const statusOrder = {
-                failed: 0,
-                passed: 1,
-                running: 2,
-                created: 3,
-                none: 4,
-            };
-            let leftStatus = statusOrder[testStatus[a.name]];
-            let rightStatus = statusOrder[testStatus[b.name]];
+            let leftStatus = StatusSortPriority[testStatus[a.name]] ?? StatusSortPriority["none"];
+            let rightStatus = StatusSortPriority[testStatus[b.name]] ?? StatusSortPriority["none"];
             if (leftStatus > rightStatus) {
                 return 1;
             } else if (leftStatus < rightStatus) {
@@ -159,7 +153,7 @@
             <ul
                 class="list-group list-group-flush list-group-tests border-start"
             >
-                {#each tests as test}
+                {#each tests as test (test.id)}
                     <Test
                         {release}
                         {test}
@@ -188,9 +182,5 @@
 <style>
     .accordion-tests {
         margin-left: 2rem;
-    }
-
-    .cursor-question {
-        cursor: help;
     }
 </style>

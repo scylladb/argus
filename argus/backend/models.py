@@ -3,7 +3,7 @@ from cassandra.cqlengine.models import Model
 from cassandra.cqlengine.usertype import UserType
 from cassandra.cqlengine import columns
 from cassandra.cqlengine.columns import UserDefinedType
-
+from enum import Enum
 
 class WebRunComment(UserType):
     user_id = columns.UUID(required=True)
@@ -23,6 +23,7 @@ class WebRunComment(UserType):
 class User(Model):
     id = columns.UUID(primary_key=True, default=uuid4)
     username = columns.Text(index=True)
+    full_name = columns.Text()
     password = columns.Text()
     email = columns.Text(index=True)
     registration_date = columns.DateTime()
@@ -48,8 +49,15 @@ class User(Model):
         return {
             "id": str(self.id),
             "username": self.username,
+            "full_name": self.full_name,
             "picture_id": self.picture_id
         }
+
+class UserOauthToken(Model):
+    id = columns.UUID(primary_key=True, default=uuid4)
+    user_id = columns.UUID(index=True, required=True)
+    kind = columns.Text(required=True, index=True)
+    token = columns.Text(required=True)
 
 
 class ArgusRelease(Model):
@@ -88,9 +96,28 @@ class ArgusPlannedTestsForRelease(Model):
 class ArgusTestRunComment(Model):
     id = columns.UUID(primary_key=True, default=uuid4, partition_key=True)
     test_run_id = columns.UUID(required=True, index=True)
-    posted_at = columns.Integer(required=True)
+    user_id = columns.UUID(required=True, index=True)
+    release_id = columns.UUID(required=True, index=True)
+    posted_at = columns.Integer(required=True, clustering_order="desc", primary_key=True)
     message = columns.Text(min_length=1)
     mentions = columns.List(value_type=columns.UUID, default=[])
+
+
+class ArgusEventTypes(str, Enum):
+    AssigneeChanged = "ARGUS_ASSIGNEE_CHANGE"
+    TestRunStatusChanged = "ARGUS_TEST_RUN_STATUS_CHANGE"
+
+class ArgusEvent(Model):
+    id = columns.UUID(primary_key=True, default=uuid4, partition_key=True)
+    release_id = columns.UUID(index=True)
+    group_id = columns.UUID(index=True)
+    test_id = columns.UUID(index=True)
+    run_id = columns.UUID(index=True)
+    user_id = columns.UUID(index=True)
+    kind = columns.Text(required=True, index=True)
+    body = columns.Text(required=True)
+    created_at = columns.DateTime(required=True)
+
 
 class WebRunComments(Model):
     test_id = columns.UUID(primary_key=True, default=uuid4)
@@ -134,5 +161,6 @@ class WebNemesis(Model):
     description = columns.Text()
 
 
-USED_MODELS = [User, WebRunComments, WebRelease, WebCategoryGroup, WebNemesis, ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, ArgusPlannedTestsForRelease, ArgusTestRunComment]
+USED_MODELS = [User, WebRunComments, WebRelease, WebCategoryGroup, WebNemesis, 
+                ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, ArgusPlannedTestsForRelease, ArgusTestRunComment, ArgusEvent, UserOauthToken, WebFileStorage]
 USED_TYPES = [WebRunComment]

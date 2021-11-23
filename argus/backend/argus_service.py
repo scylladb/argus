@@ -1,11 +1,10 @@
 import time
-from uuid import UUID
+import json
+from uuid import UUID, uuid4
 import datetime
 import humanize
 from flask import g
 
-from cassandra.cluster import ExecutionProfile
-from cassandra import ConsistencyLevel
 from cassandra.cqlengine.models import _DoesNotExist
 from argus.backend.db import ScyllaCluster
 from argus.db.testrun import TestRun, TestStatus
@@ -13,9 +12,10 @@ from argus.backend.models import (
     ArgusRelease,
     ArgusReleaseGroup,
     ArgusReleaseGroupTest,
+    ArgusTestRunComment,
+    ArgusEvent,
+    ArgusEventTypes,
     User,
-    WebRunComment,
-    WebRunComments
 )
 
 
@@ -104,33 +104,32 @@ class ArgusService:
         comments = None
         return run, comments
 
-    def get_comments(self, test_id: UUID) -> WebRunComments:
-        try:
-            comments = WebRunComments.get(test_id=test_id)
-        except _DoesNotExist:
-            comments = WebRunComments()
-            comments.test_id = test_id
-            comments.save()
-        return comments
+    def get_comments(self, test_id: UUID) -> list[ArgusTestRunComment]:
+        return sorted(ArgusTestRunComment.filter(test_run_id=test_id).all(), key=lambda c: c.posted_at)
 
     def get_user_info(self, payload: dict) -> dict:
         users = User.all()
         return {str(user.id): user.to_json() for user in users}
 
-    def post_comment(self, payload: dict) -> WebRunComment:
+    def post_comment(self, payload: dict) -> list[ArgusTestRunComment]:
         test_id: str = payload["test_id"]
-        comments = self.get_comments(test_id=UUID(test_id))
         message: str = payload["message"]
         message_stripped = message.replace("<", "&lt;").replace(">", "&gt;")
-        comment = WebRunComment()
+        release_name_stmt = self.db.prepare(
+            "SELECT release_name FROM test_runs WHERE id = ?")
+        release_name = self.session.execute(
+            release_name_stmt, parameters=(UUID(test_id),)).one()["release_name"]
+        release = ArgusRelease.get(name=release_name)
+        comment = ArgusTestRunComment()
+        comment.test_run_id = test_id
+        comment.release_id = release.id
+        comment.user_id = g.user.id
         comment.mentions = []
         comment.message = message_stripped
-        comment.user_id = g.user.id
-        comment.timestamp = time.time()
-        comments.comments.append(comment)
-        comments.save()
+        comment.posted_at = time.time()
+        comment.save()
 
-        return comments
+        return self.get_comments(test_id=UUID(test_id))
 
     def get_releases(self):
         web_releases = list(ArgusRelease.all())
@@ -301,3 +300,83 @@ class ArgusService:
                     for row in rows}
 
         return response
+
+    def send_event(self, kind: str, body: dict, user_id=None, run_id=None, release_id=None, group_id=None, test_id=None):
+        statement = self.db.prepare(
+            'INSERT INTO argus.argus_event ("id", "release_id", "group_id", "test_id", "run_id", "user_id", "kind", "body", "created_at") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        params = (
+            uuid4(),
+            release_id,
+            group_id,
+            test_id,
+            run_id,
+            user_id,
+            ArgusEventTypes(kind),
+            json.dumps(body, ensure_ascii=True, separators=(',', ':')),
+            datetime.datetime.now()
+        )
+        self.session.execute(query=statement, parameters=params)
+        pass
+
+    def toggle_test_status(self, payload: dict):
+        new_status = payload.get("status")
+        test_run_id = payload.get("test_run_id")
+        if not test_run_id:
+            raise Exception("Test run id wasn't specified in the request")
+        if not new_status:
+            raise Exception("New Status wasn't specified in the request")
+
+        new_status = TestStatus(new_status)
+        test_run = TestRun.from_id(test_id=UUID(test_run_id))
+        release_name = test_run.release_name
+        release = ArgusRelease.get(name=release_name)
+        test_name = test_run.run_info.details.name.rstrip("-test")
+        test = [test for test in ArgusReleaseGroupTest.all() if test.release_id == release.id and test.name.startswith(test_name)]
+        test = test[0]
+        old_status = test_run.run_info.results.status
+        test_run.run_info.results.status = new_status
+        test_run.save()
+
+        self.send_event(kind=ArgusEventTypes.TestRunStatusChanged,
+                        body={
+                            "message": "Status was changed from {old_status} to {new_status} by {username}",
+                            "old_status": old_status.value,
+                            "new_status": new_status.value,
+                            "username": g.user.username
+                        }, user_id=g.user.id, run_id=test_run.id, release_id=test.release_id, group_id=test.group_id, test_id=test.id)
+        return {
+            "test_run_id": test_run_id,
+            "status": new_status
+        }
+    
+    def change_assignee(self, payload: dict):
+        new_assignee = payload.get("assignee")
+        test_run_id = payload.get("test_run_id")
+        if not test_run_id:
+            raise Exception("Test run id wasn't specified in the request")
+        if not new_assignee:
+            raise Exception("New assignee wasn't specified in the request")
+
+        new_assignee = User.get(id=new_assignee)
+        test_run = TestRun.from_id(test_id=UUID(test_run_id))
+        release_name = test_run.release_name
+        release = ArgusRelease.get(name=release_name)
+        test_name = test_run.run_info.details.name.rstrip("-test")
+        test = [test for test in ArgusReleaseGroupTest.filter(
+            name=test_name).all() if test.release_id == release.id][0]
+        old_assignee = test_run.assignee
+        old_assignee = User.get(id=old_assignee) if old_assignee else None
+        test_run.assignee = new_assignee.id
+        test_run.save()
+
+        self.send_event(kind=ArgusEventTypes.AssigneeChanged,
+                        body={
+                            "message": "Assignee was changed from {old_user} to {new_user} by {username}",
+                            "old_user": old_assignee.username if old_assignee else "None",
+                            "new_user": new_assignee.username,
+                            "username": g.user.username
+                        }, user_id=g.user.id, run_id=test_run.id, release_id=test.release_id, group_id=test.group_id, test_id=test.id)
+        return {
+            "test_run_id": test_run_id,
+            "assignee": new_assignee.id
+        }
