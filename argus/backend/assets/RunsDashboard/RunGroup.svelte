@@ -9,6 +9,7 @@
         pretty_name: "",
         id: "",
     };
+
     const groupStatsTemplate = {
         created: 0,
         running: 0,
@@ -18,24 +19,21 @@
         lastStatus: "unknown",
     };
     let groupStats = groupStatsTemplate;
-    groupRequests.update((val) => [...val, [release, group.name]]);
-    stats.subscribe((val) => {
-        groupStats =
-            val["groups"]?.[release]?.[group.name] ?? groupStatsTemplate;
-    });
     let tests = [];
     let testStatus = {};
-    $: testStatusKeys = Object.keys(testStatus);
     let clickedGroups = {};
     let testsReady = false;
+    groupRequests.update((val) => [...val, [release, group.name]]);
 
     const sortTestsByStatus = function () {
-        if (testStatusKeys.length != tests.length) {
-            console.log("Not all tests have their status");
-        }
+        if (tests.length == 0) return;
         tests = tests.sort((a, b) => {
-            let leftStatus = StatusSortPriority[testStatus[a.name]] ?? StatusSortPriority["none"];
-            let rightStatus = StatusSortPriority[testStatus[b.name]] ?? StatusSortPriority["none"];
+            let leftStatus =
+                StatusSortPriority[testStatus[a.name]] ??
+                StatusSortPriority["none"];
+            let rightStatus =
+                StatusSortPriority[testStatus[b.name]] ??
+                StatusSortPriority["none"];
             if (leftStatus > rightStatus) {
                 return 1;
             } else if (leftStatus < rightStatus) {
@@ -45,6 +43,14 @@
             }
         });
     };
+
+    stats.subscribe((val) => {
+        groupStats =
+            val["releases"]?.[release]?.["groups"]?.[group.name] ??
+            groupStatsTemplate;
+        testStatus = val["releases"]?.[release]?.["tests"];
+        sortTestsByStatus();
+    });
 
     const normalize = function (val, minVal, maxVal, total) {
         return ((val - minVal) / (maxVal - minVal)) * total;
@@ -80,35 +86,6 @@
                     console.log(res);
                     tests = res.response["tests"];
                     clickedGroups[group.name] = true;
-                    return fetch("/api/v1/tests/last_status", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({
-                            release_name: release,
-                            tests: tests,
-                        }),
-                    });
-                } else {
-                    console.log("API Error after fetch");
-                    console.log(res.response);
-                }
-            })
-            .then((res) => {
-                if (res.status == 200) {
-                    return res.json();
-                } else {
-                    console.log(
-                        "Something went wrong during test status fetch"
-                    );
-                    console.log(res);
-                }
-            })
-            .then((res) => {
-                if (res.status === "ok") {
-                    console.log(res);
-                    testStatus = res.response;
                     sortTestsByStatus();
                     testsReady = true;
                 } else {
@@ -157,7 +134,6 @@
                     <Test
                         {release}
                         {test}
-                        lastStatus={testStatus[test.name] ?? "unknown"}
                         group={group.name}
                         on:testRunRequest
                     />

@@ -35,7 +35,7 @@ export const stats = writable({}, set => {
     const interval = setInterval(() => {
         fetchStats(set);
     }, 20 * 1000);
-    
+
     return () => clearInterval(interval);
 });
 
@@ -57,26 +57,31 @@ testRequests.subscribe(val => {
 
 const fetchStats = function (set) {
     if (fetching) return;
+    let body = {};
+    releaseRequestsBody.forEach(element => {
+        body[element] = {
+            tests: [],
+            groups: []
+        };
+    });
+
+    releaseGroupRequestsBody.forEach(element => {
+        let [release, group] = element;
+        body[release].groups.push(group);
+    });
+
+    testRequestsBody.forEach(element => {
+        let [release, _, test] = element;
+        body[release].tests.push(test);
+    });
+
     fetching = true;
     fetch("/api/v1/stats", {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-            releases: {
-                limit: 100,
-                items: releaseRequestsBody,
-            },
-            groups: {
-                limit: 100,
-                items: releaseGroupRequestsBody
-            },
-            tests: {
-                limit: 10,
-                items: testRequestsBody
-            }
-        }),
+        body: JSON.stringify(body),
     })
         .then((res) => {
             if (res.status == 200) {

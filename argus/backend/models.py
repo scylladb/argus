@@ -5,6 +5,7 @@ from cassandra.cqlengine import columns
 from cassandra.cqlengine.columns import UserDefinedType
 from enum import Enum
 
+
 class WebRunComment(UserType):
     user_id = columns.UUID(required=True)
     timestamp = columns.Integer(required=True)
@@ -53,6 +54,7 @@ class User(Model):
             "picture_id": self.picture_id
         }
 
+
 class UserOauthToken(Model):
     id = columns.UUID(primary_key=True, default=uuid4)
     user_id = columns.UUID(index=True, required=True)
@@ -67,6 +69,8 @@ class ArgusRelease(Model):
     description = columns.Text()
     assignee = columns.List(value_type=columns.UUID)
     picture_id = columns.UUID()
+    enabled = columns.Boolean(default=lambda: True)
+
 
 class ArgusReleaseGroup(Model):
     id = columns.UUID(primary_key=True, default=uuid4)
@@ -75,6 +79,7 @@ class ArgusReleaseGroup(Model):
     pretty_name = columns.Text()
     description = columns.Text()
     assignee = columns.List(value_type=columns.UUID)
+
 
 class ArgusReleaseGroupTest(Model):
     id = columns.UUID(primary_key=True, default=uuid4)
@@ -106,6 +111,8 @@ class ArgusTestRunComment(Model):
 class ArgusEventTypes(str, Enum):
     AssigneeChanged = "ARGUS_ASSIGNEE_CHANGE"
     TestRunStatusChanged = "ARGUS_TEST_RUN_STATUS_CHANGE"
+    TestRunCommentPosted = "ARGUS_TEST_RUN_COMMENT_POSTED"
+
 
 class ArgusEvent(Model):
     id = columns.UUID(primary_key=True, default=uuid4, partition_key=True)
@@ -161,6 +168,6 @@ class WebNemesis(Model):
     description = columns.Text()
 
 
-USED_MODELS = [User, WebRunComments, WebRelease, WebCategoryGroup, WebNemesis, 
-                ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, ArgusPlannedTestsForRelease, ArgusTestRunComment, ArgusEvent, UserOauthToken, WebFileStorage]
+USED_MODELS = [User, WebRunComments, WebRelease, WebCategoryGroup, WebNemesis,
+               ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, ArgusPlannedTestsForRelease, ArgusTestRunComment, ArgusEvent, UserOauthToken, WebFileStorage]
 USED_TYPES = [WebRunComment]

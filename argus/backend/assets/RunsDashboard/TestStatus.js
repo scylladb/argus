@@ -6,6 +6,12 @@ export const TestStatus = {
     ABORTED: "aborted",
 };
 
+export const TestStatusChangeable = {
+    FAILED: "failed",
+    PASSED: "passed",
+    ABORTED: "aborted",
+};
+
 export const StatusBackgroundCSSClassMap = {
     "created": "bg-info",
     "running": "bg-warning",
