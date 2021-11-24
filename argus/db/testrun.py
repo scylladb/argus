@@ -368,6 +368,10 @@ class TestRun:
             self.argus = argus_interface
 
     @classmethod
+    def table_name(cls) -> str:
+        return cls._TABLE_NAME
+
+    @classmethod
     def from_db_row(cls, row, config: BaseConfig = None):
         if not cls._IS_TABLE_INITIALIZED:
             cls.init_own_table(config)
