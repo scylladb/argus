@@ -1,7 +1,7 @@
 <script>
     import { createEventDispatcher } from "svelte";
     import { testRequests, stats } from "./StatsSubscriber";
-    import { StatusCSSClassMap } from "./TestStatus.js";
+    import { StatusBackgroundCSSClassMap } from "./TestStatus.js";
 
     export let release = "";
     export let group = "";
@@ -20,11 +20,8 @@
     let runs = [];
     let listItem;
     testRequests.update((val) => [...val, [release, group, test.name]]);
-    stats.subscribe((val) => {
-        lastStatus =
-            val["tests"]?.[release]?.[group]?.[test.name]["lastStatus"] ??
-            lastStatus;
-    });
+    $: lastStatus = $stats?.["releases"]?.[release]?.["tests"]?.[test.name] ?? lastStatus;
+
     const removeDots = function (str) {
         return str.replaceAll(".", "_");
     };
@@ -88,8 +85,8 @@
                 {#if lastStatus}
                     <span
                         title={titleCase(lastStatus)}
-                        class="cursor-question {StatusCSSClassMap[lastStatus] ?? StatusCSSClassMap["unknown"]}"
-                        ><i class="fas fa-circle" /></span
+                        class="cursor-question status-circle {StatusBackgroundCSSClassMap[lastStatus] ?? StatusBackgroundCSSClassMap["unknown"]}"
+                        ></span
                     >
                 {/if}
             </div>
@@ -108,6 +105,12 @@
 <style>
     .argus-test {
         cursor: pointer;
+    }
+
+    .status-circle {
+        display: inline-block;
+        padding: 8px;
+        border-radius: 50%;
     }
 
     .cursor-question {

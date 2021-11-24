@@ -14,16 +14,18 @@
         running: 0,
         passed: 0,
         failed: 0,
+        aborted: 0,
         lastStatus: "unknown",
+        disabled: true,
+        groups: {},
+        tests: {},
         total: -1,
     };
     let releaseStats = releaseStatsDefault;
     let groupStats = {};
 
-    releaseRequests.update(val => [...val, release.name]);
-    stats.subscribe(val => {
-        releaseStats = val["releases"]?.[release.name] ?? releaseStatsDefault;
-        groupStats = val["groups"]?.[release.name] ?? releaseStatsDefault;
+    const sortGroupsByStatus = function() {
+        if (releaseGroups.length == 0) return;
         releaseGroups = releaseGroups.sort((a, b) => {
             let leftOrder = groupStats[a.name]?.total ?? 0;
             let rightOrder = groupStats[b.name]?.total ?? 0;
@@ -33,8 +35,15 @@
                 return 1;
             } else {
                 return 0;
-            }enclosure
+            }
         });
+    };
+
+    releaseRequests.update(val => [...val, release.name]);
+    stats.subscribe(val => {
+        releaseStats = val["releases"]?.[release.name] ?? releaseStatsDefault;
+        groupStats = val["releases"]?.[release.name]?.["groups"] ?? releaseStatsDefault;
+        sortGroupsByStatus();
     })
 
 
@@ -64,6 +73,7 @@
             .then((res) => {
                 if (res.status === "ok") {
                     releaseGroups = res.response;
+                    sortGroupsByStatus();
                     fetched = true;
                 } else {
                     console.log("Response returned an error");
@@ -87,7 +97,7 @@
                         {release.pretty_name || release.name}
                     </div>
                     <div class="col-4 text-end">
-                        {#if releaseStats?.total > 0}
+                        {#if (releaseStats?.total) > 0}
                             <NumberStats stats={releaseStats} />
                         {:else if releaseStats?.total == -1}
                             <span class="spinner-border spinner-border-sm"></span>

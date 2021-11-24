@@ -1,11 +1,15 @@
 <script>
     import { onMount, onDestroy } from "svelte";
     import humanizeDuration from "humanize-duration";
+    import Select from "svelte-select";
+    import User from "./User.svelte";
     import ResourcesInfo from "./ResourcesInfo.svelte";
     import NemesisData from "./NemesisData.svelte";
+    import ActivityTab from "./ActivityTab.svelte";
     import TestRunComments from "./TestRunComments.svelte";
     import {
         TestStatus,
+        TestStatusChangeable,
         StatusButtonCSSClassMap,
         InProgressStatuses,
     } from "./TestStatus.js";
@@ -22,7 +26,29 @@
     let currentTime = new Date();
     let clockInterval;
     let users = {};
+    let activityOpen = false;
+    let userSelect = [];
+
+    const createUserSelectCollection = function(users) {
+        const dummyUser = {
+                value: "NONE",
+                label: "nobody",
+                picture_id: undefined,
+                full_name: "Nobody"
+        };
+        userSelect = Object.keys(users).map(user => {
+            return {
+                value: users[user].id,
+                label: users[user].username,
+                picture_id: users[user].picture_id,
+                full_name: users[user].full_name
+            };
+        });
+        return [dummyUser, ...userSelect];
+    };
+
     $: users = $userList;
+    $: userSelect = createUserSelectCollection(users);
     $: heartbeatHuman = humanizeDuration(
         currentTime - test_run?.heartbeat * 1000,
         { round: true }
@@ -64,7 +90,7 @@
                             test_run.build_job_url.split("/").reverse()[1]
                         );
                     }
-                    testRunStore.update((store) => { 
+                    testRunStore.update((store) => {
                         if (!store.find((val) => val == id)) {
                             return [...store, id];
                         } else {
@@ -74,13 +100,16 @@
                     disableButtons = false;
                     console.log(test_run);
                 } else {
-                    console.log("Something went wrong...");
+                    console.log("During fetchTestRunData a backend error was reported...");
                     console.log(res);
                 }
             });
     };
 
-    const handleAssign = function() {
+    const handleAssign = function(event) {
+        if (event.detail.value != "NONE" && !users[event.detail.value]) return;
+        let new_assignee = event.detail.value;
+        new_assignee = new_assignee != "NONE" ? new_assignee : "none-none-none";
         fetch("/api/v1/test_run/change_assignee", {
             method: "POST",
             headers: {
@@ -88,7 +117,7 @@
             },
             body: JSON.stringify({
                 test_run_id: id,
-                user_id: selectedUser
+                assignee: new_assignee
             }),
         })
             .then((res) => {
@@ -104,7 +133,7 @@
                     fetchTestRunData();
                     console.log(res.response);
                 } else {
-                    console.log("Something went wrong...");
+                    console.log("During handleAssign a backend error was reported...");
                     console.log(res);
                 }
             });
@@ -176,7 +205,7 @@
                         {/if}
                     </button>
                     <ul class="dropdown-menu">
-                        {#each Object.keys(TestStatus) as status}
+                        {#each Object.keys(TestStatusChangeable) as status}
                             <li><button class="dropdown-item" disabled={disableButtons} on:click={() => { newStatus = status.toLowerCase();handleStatus();}}>{status}</button></li>
                         {/each}
                     </ul>
@@ -195,8 +224,7 @@
             {#if Object.keys(users).length > 0}
                 <div class="row p-2 m-0 justify-content-end">
                     <div class="col-2 p-2 border rounded">
-                        <img src="" alt="" class="img-fluid">
-                        {users[test_run.assignee]?.username ?? "Nobody"}
+                        <Select Item={User} value={users[test_run.assignee]?.username ?? "NONE"} items={userSelect} on:select={handleAssign}/>
                     </div>
                 </div>
             {/if}
@@ -266,6 +294,15 @@
                     data-bs-target="#nav-issues-{id}"
                     type="button"
                     role="tab"><i class="fas fa-code-branch" /> Issues</button
+                >
+                <button
+                class="nav-link"
+                id="nav-activity-tab-{id}"
+                data-bs-toggle="tab"
+                data-bs-target="#nav-activity-{id}"
+                type="button"
+                on:click={() => activityOpen = true}
+                role="tab"><i class="fas fa-exclamation-triangle"></i> Activity</button
                 >
             </div>
         </nav>
@@ -475,6 +512,11 @@
             </div>
             <div class="tab-pane fade" id="nav-issues-{id}" role="tabpanel">
                 <IssueTemplate {test_run} />
+            </div>
+            <div class="tab-pane fade" id="nav-activity-{id}" role="tabpanel">
+                {#if activityOpen}
+                    <ActivityTab {id} />
+                {/if}
             </div>
         </div>
     {:else}

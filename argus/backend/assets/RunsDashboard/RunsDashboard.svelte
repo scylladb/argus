@@ -9,8 +9,8 @@
     stats.subscribe(value => {
         releaseStats = value.releases;
         releases = releases.sort((a, b) => {
-            let leftOrder = releaseStats[a.name]?.total ?? 0;
-            let rightOrder = releaseStats[b.name]?.total ?? 0;
+            let leftOrder = releaseStats[a.name]?.total - releaseStats[a.name]?.not_run ?? 0;
+            let rightOrder = releaseStats[b.name]?.total - releaseStats[b.name]?.not_run ?? 0;
             if (leftOrder > rightOrder) {
                 return -1;
             } else if (rightOrder > leftOrder) {
