@@ -52,7 +52,7 @@ def test_interface_schema_init(mock_cluster, preset_test_details_schema, simple_
                                              "build_job_name varchar , build_job_url varchar , start_time varint ," \
                                              " yaml_test_duration varint , config_files list<varchar> , " \
                                              "packages list<frozen<PackageVersion>> , end_time varint , " \
-                                             "PRIMARY KEY (id, ))"
+                                             "PRIMARY KEY (id))"
 
 
 def test_interface_init_table_twice(mock_cluster, preset_test_details_schema, simple_primary_key,
