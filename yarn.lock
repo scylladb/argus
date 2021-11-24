@@ -889,6 +889,11 @@ svelte-loader@^3.1.2:
     svelte-dev-helper "^1.1.9"
     svelte-hmr "^0.14.2"
 
+svelte-select@^4.4.5:
+  version "4.4.5"
+  resolved "https://registry.yarnpkg.com/svelte-select/-/svelte-select-4.4.5.tgz#ee6996e4ea54c613de3781c160546c378bb8592f"
+  integrity sha512-TvBA5ZHY8ULaiwCgXGpslf/3iSfGOsyGEFDjIUefSnwD6I+rKwoBKfMRAN34G1oaLD/vUHV1lhUWDhMlomTHjQ==
+
 svelte@^3.38.3:
   version "3.44.1"
   resolved "https://registry.yarnpkg.com/svelte/-/svelte-3.44.1.tgz#5cc772a8340f4519a4ecd1ac1a842325466b1a63"
