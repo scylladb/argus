@@ -19,7 +19,7 @@ class TestEndToEnd:
 
         test_run.save()
 
-        res = argus_database.fetch(table_name="test_runs", run_id=test_id)
+        res = argus_database.fetch(table_name=TestRun.table_name(), run_id=test_id)
         LOGGER.debug("Fetched: %s", res)
         LOGGER.info("Rebuilding object...")
 
@@ -54,7 +54,7 @@ class TestEndToEnd:
         test_run.run_info.resources.detach_resource(resource)
         test_run.save()
 
-        row = argus_database.fetch(table_name="test_runs", run_id=test_id)
+        row = argus_database.fetch(table_name=TestRun.table_name(), run_id=test_id)
 
         rebuilt_testrun = TestRun.from_db_row(row)
 
