@@ -341,14 +341,9 @@ class TestRun:
     }
     PRIMARY_KEYS = {
         "id": (UUID, "partition"),
-        "release_name": (str, "clustering"),  # release version, e.g. 4.5rc5
-        "name": (str, "clustering"),  # test case name, e.g longevity-test-500gb-4h
-        "group": (str, "clustering"),  # test group, e.g longevity_test
-        "assignee": (str, "clustering"),  # who is assigned to this test, e.g. bentsi
-        "start_time": (int, "clustering"),  # start time of the test, unix timestamp
     }
     _USING_RUNINFO = TestRunInfo
-    _TABLE_NAME = "test_runs"
+    _TABLE_NAME = "test_runs_v2"
     _IS_TABLE_INITIALIZED = False
     _ARGUS_DB_INTERFACE = None
     _log = logging.getLogger('TestRun')
