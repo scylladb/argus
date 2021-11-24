@@ -136,18 +136,11 @@ def profile_oauth_github_callback():
                                    }).json()
 
     try:
-        user = User.get(email=email_info[-1].get("email"))
-    except _DoesNotExist:
-        try:
-            User.get(username=user_info.get("login"))
-            flash(message=f"User {user_info.get('login')} already exists!", category="error")
-            return redirect(url_for("main.error", type=400))
-        except _DoesNotExist:
-            pass
-
+        user = User.get(username=user_info.get("login"))
+    except User.DoesNotExist:
         user = User()
         user.username = user_info.get("login")
-        user.email = email_info[0].get("email")
+        user.email = email_info[-1].get("email")
         user.full_name = user_info.get("name")
         user.registration_date = datetime.now()
         user.roles = ["ROLE_USER"]
