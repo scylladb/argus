@@ -140,8 +140,9 @@ class ArgusDatabase:
         clustering_column_def = ", ".join(clustering_columns)
 
         self._table_keys[table_name] = primary_keys_info
-
-        query = "CREATE TABLE IF NOT EXISTS {table_name}({columns}, PRIMARY KEY ({partition_key}, {clustering_cols}))"
+        primary_key_def = f"{partition_key_def}, {clustering_column_def}" if len(
+            clustering_column_def) > 0 else partition_key_def
+        query = "CREATE TABLE IF NOT EXISTS {table_name}({columns}, PRIMARY KEY ({primary_key}))"
         columns_query = []
         for column in column_info.values():
             if mapped_type := self.is_native_type(column.type):
@@ -157,8 +158,7 @@ class ArgusDatabase:
             columns_query.append(column_query)
 
         columns_query = ", ".join(columns_query)
-        completed_query = query.format(table_name=table_name, columns=columns_query, partition_key=partition_key_def,
-                                       clustering_cols=clustering_column_def)
+        completed_query = query.format(table_name=table_name, columns=columns_query, primary_key=primary_key_def)
         self.log.debug("About to execute: \"%s\"", completed_query)
         self.session.execute(query=completed_query)
         self.initialized_tables[table_name] = True
