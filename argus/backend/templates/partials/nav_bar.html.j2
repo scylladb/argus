@@ -7,7 +7,7 @@
         <div class="navbar-nav">
             <a class="nav-link" aria-current="page" href="{{ url_for('main.run_dashboard')}}"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
             <a class="nav-link" href="{{ url_for('main.test_runs')}}"><i class="fas fa-tasks"></i> Runs</a>
-            <a class="nav-link disabled"><i class="fas fa-spider"></i> Nemesis Stats</a>
+            <a class="nav-link" href="{{ url_for('main.releases')}}"><i class="fas fa-business-time"></i> Releases</a>
             {% if g.user %}
             <a class="nav-link" href="{{ url_for('main.profile')}}"><i class="fas fa-user"></i> {{g.user.username}}</a>
             {% endif %}

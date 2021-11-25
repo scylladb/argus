@@ -8,7 +8,9 @@ module.exports = {
     entry: {
         main: './argus/backend/assets/argus.js',
         runDashboard: './argus/backend/assets/RunsDashboard/runs-dashboard.js',
-        testRunDetails: './argus/backend/assets/RunsDashboard/test-run-details.js'
+        releasePage: './argus/backend/assets/RunsDashboard/release-page.js',
+        testRunDetails: './argus/backend/assets/RunsDashboard/test-run-details.js',
+        releaseDashboard: './argus/backend/assets/RunsDashboard/release-dashboard.js',
     },
     output: {
         path: path.resolve(__dirname, 'argus/backend/static/dist'),

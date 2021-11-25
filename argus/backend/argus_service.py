@@ -150,6 +150,13 @@ class ArgusService:
         tests = ArgusReleaseGroupTest.filter(group_id=group_id)
         return sorted(tests, key=lambda val: val.name)
 
+    def get_data_for_release_dashboard(self, release_name: str):
+        release = ArgusRelease.get(name=release_name)
+        release_groups = ArgusReleaseGroup.filter(release_id=release.id).all()
+        release_tests = ArgusReleaseGroupTest.filter(release_id=release.id).all()
+
+        return release, release_groups, release_tests
+
     def get_test_last_run_status(self, payload: dict) -> dict:
         response = {}
         statement = self.db.prepare(
@@ -186,10 +193,10 @@ class ArgusService:
         return sorted(rows, key=lambda x: x["start_time"], reverse=True)[:limit]
 
     def get_runs_by_name_for_release_group(self, test_name: str, release_name: str, limit=10):
-        query = self.session.execute("SELECT id, name, group, release_name, build_job_name, build_job_url, "
-                                     "status, start_time, end_time, heartbeat"
-                                     f" FROM {TestRun.table_name()}")
-        rows = query.all()
+        statement = self.db.prepare("SELECT id, name, group, release_name, build_job_name, build_job_url, "
+                                     "status, start_time, end_time, heartbeat "
+                                     f"FROM {TestRun.table_name()} WHERE release_name = ?")
+        rows = self.session.execute(statement, parameters=(release_name,)).all()
         rows = [row for row in rows if row["release_name"]
                 == release_name and row["name"].startswith(test_name)]
         for row in rows:
@@ -215,7 +222,6 @@ class ArgusService:
     }
     Both groups and tests are considered prefixes to test_run names
     """
-
     def collect_stats(self, payload: dict) -> dict:
         def first(iterable, value, key: Callable = None, predicate: Callable = None):
             for elem in iterable:
@@ -298,19 +304,19 @@ class ArgusService:
         runs: dict = payload["runs"]
 
         statement = self.db.prepare("SELECT id, name, group, release_name, build_job_name, build_job_url, "
-                                    "status, start_time, end_time, heartbeat"
-                                    f" FROM {TestRun.table_name()}")
-        rows = self.session.execute(
-            statement, execution_profile="read_fast").all()
-        rows = sorted(rows, key=lambda val: val["start_time"], reverse=True)
-        for row in rows:
-            row["build_number"] = int(
-                row["build_job_url"].rstrip("/").split("/")[-1])
+                                    "status, start_time, end_time, heartbeat "
+                                    f"FROM {TestRun.table_name()} WHERE release_name = ?")
         response = {}
         for uid, [release_name, test_name] in runs.items():
+            rows = self.session.execute(
+            statement, parameters=(release_name,), execution_profile="read_fast").all()
+            rows = sorted(rows, key=lambda val: val["start_time"], reverse=True)
+            for row in rows:
+                row["build_number"] = int(
+                    row["build_job_url"].rstrip("/").split("/")[-1])
             result = [
                 row for row in rows
-                if row["release_name"] == release_name and row["name"].startswith(test_name)
+                if row["name"].startswith(test_name)
             ][:limit]
             response[uid] = result
         return response
@@ -423,6 +429,20 @@ class ArgusService:
         all_events = ArgusEvent.filter(run_id=run_id).all()
         all_events = sorted(all_events, key=lambda ev: ev.created_at)
         response["run_id"] = run_id
+        response["raw_events"] = [dict(event.items()) for event in all_events]
+        response["events"] = {str(event.id): EVENT_PROCESSORS.get(
+            event.kind)(json.loads(event.body)) for event in all_events}
+        return response
+
+    def fetch_release_activity(self, payload: dict) -> dict:
+        response = {}
+        release_name = payload.get("release_name")
+        if not release_name:
+            raise Exception("Release Name wasn't specified in the request")
+        release = ArgusRelease.get(name=release_name)
+        all_events = ArgusEvent.filter(release_id=release.id).all()
+        all_events = sorted(all_events, key=lambda ev: ev.created_at)
+        response["release_id"] = release.id
         response["raw_events"] = [dict(event.items()) for event in all_events]
         response["events"] = {str(event.id): EVENT_PROCESSORS.get(
             event.kind)(json.loads(event.body)) for event in all_events}

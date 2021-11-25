@@ -4,6 +4,7 @@ import os
 import hashlib
 import datetime
 import time
+import json
 from uuid import UUID
 import requests
 from flask import (
@@ -47,9 +48,19 @@ def run_dashboard():
 def releases():
     service = ArgusService()
     releases = service.get_releases()
-    service.terminate_session()
     return render_template("releases.html.j2", releases=releases)
 
+@bp.route("/dashboard/<string:release_name>")
+@login_required
+def release_dashboard(release_name: str):
+    service = ArgusService()
+    release, release_groups, release_tests = service.get_data_for_release_dashboard(release_name=release_name)
+    data_json = {
+        "release": dict(release.items()),
+        "groups": [dict(group.items()) for group in release_groups],
+        "tests": [dict(test.items()) for test in release_tests],
+    }
+    return render_template("release_dashboard.html.j2", release_name=release_name, data=data_json)
 
 @bp.route("/release/<string:name>")
 @login_required
