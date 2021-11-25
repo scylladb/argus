@@ -32,6 +32,9 @@ export const releaseRequests = writable([]);
 export const groupRequests = writable([]);
 export const testRequests = writable([]);
 export const stats = writable({}, set => {
+    setTimeout(() => {
+        fetchStats(set);
+    }, 200);
     const interval = setInterval(() => {
         fetchStats(set);
     }, 20 * 1000);

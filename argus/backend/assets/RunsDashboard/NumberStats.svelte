@@ -39,7 +39,7 @@
     }
 
     .text-small {
-        font-size: 10pt;
+        font-size: 0.75em;
     }
 
     .text-outline {

@@ -18,7 +18,7 @@ export const StatusBackgroundCSSClassMap = {
     "failed": "bg-danger",
     "passed": "bg-success",
     "aborted": "bg-dark",
-    "unknown": "bg-muted"
+    "unknown": "bg-secondary"
 };
 
 export const StatusCSSClassMap = {
@@ -52,3 +52,12 @@ export const StatusSortPriority = {
 export const InProgressStatuses = [
     "created", "running"
 ];
+
+export const TestStatusColors = {
+    "created": "#0dcaf0",
+    "running": "#ffc107",
+    "failed": "#dc3545",
+    "passed": "#198754",
+    "aborted": "#212529",
+    "unknown": "#6c757d"
+}
