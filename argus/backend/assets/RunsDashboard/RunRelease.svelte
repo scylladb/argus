@@ -8,6 +8,7 @@
         name: "undefined",
         pretty_name: "undefined",
     };
+    export let filtered = false;
     let fetched = false;
     const releaseStatsDefault = {
         created: 0,
@@ -23,7 +24,7 @@
     };
     let releaseStats = releaseStatsDefault;
     let groupStats = {};
-
+    let filterString = "";
     const sortGroupsByStatus = function() {
         if (releaseGroups.length == 0) return;
         releaseGroups = releaseGroups.sort((a, b) => {
@@ -37,6 +38,13 @@
                 return 0;
             }
         });
+    };
+
+    const isFiltered = function(name = "") {
+        if (filterString == "") {
+            return false;
+        }
+        return !RegExp(filterString.toLowerCase()).test(name.toLowerCase());
     };
 
     releaseRequests.update(val => [...val, release.name]);
@@ -83,7 +91,7 @@
     };
 </script>
 
-<div class="accordion-item">
+<div class="accordion-item" class:d-none={filtered}>
     <h2 class="accordion-header" id="heading{removeDots(release.name)}">
         <button
             class="accordion-button collapsed"
@@ -113,6 +121,10 @@
         class="accordion-collapse collapse"
         id="collapse{removeDots(release.name)}"
     >
+        <div class="p-2"><a href="/dashboard/{release.name}" class="btn btn-sm btn-info" target="_blank">Dashboard</a></div>
+        <div class="p-2 border-bottom">
+            <input class="form-control" type="text" placeholder="Filter groups" bind:value={filterString} on:input={() => { releaseGroups = releaseGroups }}>
+        </div>
         <div
             class="accordion accordion-flush accordion-release-groups border-start"
             id="accordionGroups{removeDots(release.name)}"
@@ -121,6 +133,7 @@
                 <RunGroup
                     release={release.name}
                     {group}
+                    filtered={isFiltered(group.pretty_name ?? group.name)}
                     parent="#accordionGroups{release.name}"
                     on:testRunRequest
                 />

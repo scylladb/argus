@@ -5,6 +5,7 @@
 
     export let release = "";
     export let group = "";
+    export let filtered = false;
     export let test = {
         assignee: [],
         description: null,
@@ -76,6 +77,7 @@
 
 <li
     bind:this={listItem}
+    class:d-none={filtered}
     class="list-group-item argus-test"
     on:click={fetchTestRuns}
 >
