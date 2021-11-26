@@ -9,7 +9,7 @@
         pretty_name: "",
         id: "",
     };
-
+    export let filtered = false;
     const groupStatsTemplate = {
         created: 0,
         running: 0,
@@ -42,6 +42,14 @@
                 return 0;
             }
         });
+    };
+
+    let filterString = "";
+    const isFiltered = function(name = "") {
+        if (filterString == "") {
+            return false;
+        }
+        return !RegExp(filterString.toLowerCase()).test(name.toLowerCase());
     };
 
     stats.subscribe((val) => {
@@ -96,7 +104,7 @@
     };
 </script>
 
-<div class="accordion-item">
+<div class="accordion-item" class:d-none={filtered}>
     <h2 class="accordion-header" id="heading{removeDots(release)}{group.name}">
         <button
             class="accordion-button collapsed"
@@ -127,6 +135,9 @@
         id="collapse{removeDots(release)}{group.name}"
     >
         {#if testsReady}
+            <div class="p-2 border-bottom">
+                <input class="form-control" type="text" placeholder="Filter tests" bind:value={filterString} on:input={() => { tests = tests }}>
+            </div>
             <ul
                 class="list-group list-group-flush list-group-tests border-start"
             >
@@ -134,6 +145,7 @@
                     <Test
                         {release}
                         {test}
+                        filtered={isFiltered(test.name)}
                         group={group.name}
                         on:testRunRequest
                     />

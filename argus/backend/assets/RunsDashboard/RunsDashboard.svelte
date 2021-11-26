@@ -6,11 +6,16 @@
     let releases = [];
     let test_runs = {};
     let releaseStats = {};
-    stats.subscribe(value => {
+    let filterString = "";
+    stats.subscribe((value) => {
         releaseStats = value.releases;
         releases = releases.sort((a, b) => {
-            let leftOrder = releaseStats[a.name]?.total - releaseStats[a.name]?.not_run ?? 0;
-            let rightOrder = releaseStats[b.name]?.total - releaseStats[b.name]?.not_run ?? 0;
+            let leftOrder =
+                releaseStats[a.name]?.total - releaseStats[a.name]?.not_run ??
+                0;
+            let rightOrder =
+                releaseStats[b.name]?.total - releaseStats[b.name]?.not_run ??
+                0;
             if (leftOrder > rightOrder) {
                 return -1;
             } else if (rightOrder > leftOrder) {
@@ -18,8 +23,15 @@
             } else {
                 return 0;
             }
-        })
+        });
     });
+
+    const isFiltered = function(name = "") {
+        if (filterString == "") {
+            return false;
+        }
+        return !RegExp(filterString).test(name);
+    };
 
     const fetchNewReleases = function () {
         fetch("/api/v1/releases")
@@ -43,7 +55,7 @@
         test_runs[event.detail.uuid] = {
             runs: event.detail.runs,
             test: event.detail.test,
-            release: event.detail.release
+            release: event.detail.release,
         };
     };
 
@@ -52,16 +64,26 @@
     });
 </script>
 
-<div class="container-fluid p-0">
-    <div class="row" id="dashboard-main">
-        <div class="col-3 p-0 min-vh-100" id="run-sidebar">
-            <div class="accordion accordion-flush border" id="releaseAccordion">
+<div class="container-fluid">
+    <div class="row p-4" id="dashboard-main">
+        <div
+            class="col-3 p-0 py-4 min-vh-100 me-3 border rounded shadow-sm"
+            id="run-sidebar"
+        >
+            <div class="p-2">
+                <input class="form-control" type="text" placeholder="Filter releases" bind:value={filterString} on:input={() => { releases = releases }}>
+            </div>
+            <div class="accordion accordion-flush" id="releaseAccordion">
                 {#each releases as release (release.id)}
-                    <RunRelease {release} on:testRunRequest={onTestRunRequest}/>
+                    <RunRelease
+                        {release}
+                        on:testRunRequest={onTestRunRequest}
+                        filtered={isFiltered(release.name)}
+                    />
                 {/each}
             </div>
         </div>
-        <div class="col-9 p-0">
+        <div class="col-8 p-0 py-4 border rounded shadow-sm">
             {#if Object.keys(test_runs).length > 0}
                 <div class="accordion accordion-flush" id="accordionTestRuns">
                     {#each Object.keys(test_runs) as test_run_id}
@@ -78,8 +100,8 @@
                         <div
                             class="d-inline-block border rounded p-4 text-muted"
                         >
-                            Select a run on the left and it will appear in this
-                            area
+                            Select a test on the left and its runs will appear
+                            in this area
                         </div>
                     </div>
                 </div>
@@ -89,10 +111,4 @@
 </div>
 
 <style>
-    #dashboard-main {
-    }
-    #run-sidebar {
-        border-right: 1px solid gray;
-    }
-
 </style>
