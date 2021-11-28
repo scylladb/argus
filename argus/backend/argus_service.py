@@ -1,17 +1,20 @@
 import time
 import json
+import re
 from typing import Callable
 from collections import namedtuple
 from uuid import UUID, uuid4
 import datetime
 from cassandra.cqlengine import ValidationError
 import humanize
-from flask import g
+from flask import g, current_app
+import requests
 
 from cassandra.cqlengine.models import _DoesNotExist
 from argus.backend.db import ScyllaCluster
 from argus.db.testrun import TestRun, TestStatus
 from argus.backend.models import (
+    ArgusGithubIssue,
     ArgusRelease,
     ArgusReleaseGroup,
     ArgusReleaseGroupTest,
@@ -27,6 +30,10 @@ class ArgusService:
     def __init__(self, session=None):
         self.session = session if session else ScyllaCluster.get_session()
         self.db = ScyllaCluster.get()
+        self.github_headers = {
+            "Accept": "application/vnd.github.v3+json",
+            "Authorization": f"token {current_app.config['GITHUB_ACCESS_TOKEN']}"
+        }
 
     def terminate_session(self):
         pass  # TODO: Remove this
@@ -194,11 +201,11 @@ class ArgusService:
 
     def get_runs_by_name_for_release_group(self, test_name: str, release_name: str, limit=10):
         statement = self.db.prepare("SELECT id, name, group, release_name, build_job_name, build_job_url, "
-                                     "status, start_time, end_time, heartbeat "
-                                     f"FROM {TestRun.table_name()} WHERE release_name = ?")
+                                    "status, start_time, end_time, heartbeat "
+                                    f"FROM {TestRun.table_name()} WHERE release_name = ?")
         rows = self.session.execute(statement, parameters=(release_name,)).all()
         rows = [row for row in rows if row["release_name"]
-                == release_name and row["name"].startswith(test_name)]
+                == release_name and re.match(f"^{test_name}(-test)?$", row["name"])]
         for row in rows:
             row["natural_heartbeat"] = humanize.naturaltime(
                 datetime.datetime.fromtimestamp(row["heartbeat"]))
@@ -222,6 +229,7 @@ class ArgusService:
     }
     Both groups and tests are considered prefixes to test_run names
     """
+
     def collect_stats(self, payload: dict) -> dict:
         def first(iterable, value, key: Callable = None, predicate: Callable = None):
             for elem in iterable:
@@ -283,7 +291,7 @@ class ArgusService:
             for test in release_tests:
                 test_group = all_groups_by_id[test.group_id]
                 release_stats["total"] += 1
-                run = first(rows, test.name, predicate=lambda elem, val: elem["name"].startswith(val))
+                run = first(rows, test.name, predicate=lambda elem, val: re.match(f"^{val}(-test)?$", elem["name"]))
                 if not run:
                     release_stats["tests"][test.name] = "unknown"
                     release_stats["not_run"] += 1
@@ -309,14 +317,14 @@ class ArgusService:
         response = {}
         for uid, [release_name, test_name] in runs.items():
             rows = self.session.execute(
-            statement, parameters=(release_name,), execution_profile="read_fast").all()
+                statement, parameters=(release_name,), execution_profile="read_fast").all()
             rows = sorted(rows, key=lambda val: val["start_time"], reverse=True)
             for row in rows:
                 row["build_number"] = int(
                     row["build_job_url"].rstrip("/").split("/")[-1])
             result = [
                 row for row in rows
-                if row["name"].startswith(test_name)
+                if re.match(f"^{test_name}(-test)?$", row["name"])
             ][:limit]
             response[uid] = result
         return response
@@ -446,4 +454,100 @@ class ArgusService:
         response["raw_events"] = [dict(event.items()) for event in all_events]
         response["events"] = {str(event.id): EVENT_PROCESSORS.get(
             event.kind)(json.loads(event.body)) for event in all_events}
+        return response
+
+    def submit_github_issue(self, payload: dict) -> dict:
+        issue_url = payload.get("issue_url")
+        if not issue_url:
+            raise Exception("Missing or empty issue url")
+
+        match = re.match(
+            r"http(s)?://(www\.)?github\.com/(?P<owner>[\w\d]+)/(?P<repo>[\w\d\-_]+)/(?P<type>issues|pull)/(?P<issue_number>\d+)(/)?")
+        if not match:
+            raise Exception("URL doesn't match Github schema")
+
+        new_issue = ArgusGithubIssue()
+        new_issue.user_id = g.user.id
+        new_issue.group_id = payload.get("group_id")
+        new_issue.release_id = payload.get("release_id")
+        new_issue.test_id = payload.get("test_id")
+        new_issue.run_id = payload.get("run_id")
+        new_issue.type = match.group("type")
+        new_issue.owner = match.group("owner")
+        new_issue.repo = match.group("repo")
+        new_issue.issue_number = int(match.group("issue_number"))
+
+        issue_state = requests.get(f"https://api.github.com/repos/{new_issue.owner}/{new_issue.repo}/issues/{new_issue.issue_number}",
+                                   headers=self.github_headers).json()
+
+        new_issue.last_status = issue_state.get("state")
+        new_issue.save()
+
+        self.send_event(kind=ArgusEventTypes.TestRunIssueAdded,
+                        body={
+                            "message": "An issue titled \"{title}\" was added by {username}",
+                            "username": g.user.username,
+                            "url": issue_url,
+                            "title": issue_state.get("title"),
+                            "state": issue_state.get("state"),
+                        }, user_id=g.user.id, run_id=new_issue.run_id, release_id=new_issue.release_id, group_id=new_issue.group_id, test_id=new_issue.test_id)
+
+        response = {
+            **dict([o for o in new_issue.items()]),
+            "title": issue_state.get("title"),
+            "state": issue_state.get("state"),
+        }
+
+        return response
+    """
+    Example payload:
+    {
+        "filter_key": "release_id",
+        "id": "abcdef-bcdedf-00000",
+    }
+    """
+
+    def get_github_issues(self, payload: dict) -> dict:
+        filter_key = payload.get("filter_key")
+        if not filter_key:
+            raise Exception("A filter_key field is required")
+
+        if filter_key not in ["release_id", "group_id", "test_id", "run_id", "user_id"]:
+            raise Exception(
+                "filter_key can only be one of: \"release_id\", \"group_id\", \"test_id\", \"run_id\", \"user_id\"")
+
+        filter_id = payload.get("id")
+        if not filter_id:
+            raise Exception("A filter_id field is required")
+
+        filter_id = UUID(filter_id)
+        all_issues = ArgusGithubIssue.filter(**{filter_key: filter_id}).all()
+
+        response = {str(issue.id): dict([o for o in issue.items()]) for issue in all_issues}
+        return response
+
+    """
+    Example payload:
+    {
+        "issues": [
+            [1, 'example-repo', 'example-owner']
+        ]
+    }
+
+    Response:
+    {
+        "https://github.com/example-owner/example-repo/issues/1": "open"
+    }
+    """
+
+    def get_github_issue_state(self, payload: dict) -> dict:
+        issues = payload.get("issues")
+        if not issues:
+            raise Exception("Empty request")
+        response = {}
+        for num, repo, owner in issues:
+            issue_state = requests.get(f"https://api.github.com/repos/{owner}/{repo}/issues/{num}",
+                                       headers=self.github_headers).json()
+            response[issue_state.get("html_url")] = issue_state.get("state")
+
         return response

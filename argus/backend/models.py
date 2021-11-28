@@ -113,6 +113,7 @@ class ArgusEventTypes(str, Enum):
     AssigneeChanged = "ARGUS_ASSIGNEE_CHANGE"
     TestRunStatusChanged = "ARGUS_TEST_RUN_STATUS_CHANGE"
     TestRunCommentPosted = "ARGUS_TEST_RUN_COMMENT_POSTED"
+    TestRunIssueAdded = "ARGUS_TEST_RUN_ISSUE_ADDED"
 
 
 class ArgusEvent(Model):
@@ -125,6 +126,20 @@ class ArgusEvent(Model):
     kind = columns.Text(required=True, index=True)
     body = columns.Text(required=True)
     created_at = columns.DateTime(required=True)
+
+
+class ArgusGithubIssue(Model):
+    id = columns.UUID(primary_key=True, default=uuid4, partition_key=True)
+    release_id = columns.UUID(index=True)
+    group_id = columns.UUID(index=True)
+    test_id = columns.UUID(index=True)
+    run_id = columns.UUID(index=True)
+    user_id = columns.UUID(index=True)
+    type = columns.Text()
+    owner = columns.Text()
+    repo = columns.Text()
+    issue_number = columns.Integer()
+    last_status = columns.Text()
 
 
 class WebRunComments(Model):
@@ -170,5 +185,5 @@ class WebNemesis(Model):
 
 
 USED_MODELS = [User, WebRunComments, WebRelease, WebCategoryGroup, WebNemesis,
-               ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, ArgusPlannedTestsForRelease, ArgusTestRunComment, ArgusEvent, UserOauthToken, WebFileStorage]
+               ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, ArgusPlannedTestsForRelease, ArgusTestRunComment, ArgusEvent, UserOauthToken, WebFileStorage, ArgusGithubIssue]
 USED_TYPES = [WebRunComment]

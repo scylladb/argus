@@ -121,29 +121,31 @@
         class="accordion-collapse collapse"
         id="collapse{removeDots(release.name)}"
     >
-        <div class="p-2"><a href="/dashboard/{release.name}" class="btn btn-sm btn-info" target="_blank">Dashboard</a></div>
+        <div class="p-2"><a href="/dashboard/{release.name}" class="btn btn-sm btn-dark" target="_blank">Dashboard</a></div>
         <div class="p-2 border-bottom">
             <input class="form-control" type="text" placeholder="Filter groups" bind:value={filterString} on:input={() => { releaseGroups = releaseGroups }}>
         </div>
-        <div
-            class="accordion accordion-flush accordion-release-groups border-start"
-            id="accordionGroups{removeDots(release.name)}"
-        >
-            {#each releaseGroups ?? [] as group (group.id)}
-                <RunGroup
-                    release={release.name}
-                    {group}
-                    filtered={isFiltered(group.pretty_name ?? group.name)}
-                    parent="#accordionGroups{release.name}"
-                    on:testRunRequest
-                />
-            {:else}
-                <div class="row">
-                    <div class="col text-center p-1">
-                        <span class="spinner-border spinner-border-sm" /> Loading...
+        <div class="bg-light">
+            <div
+                class="accordion accordion-flush accordion-release-groups border-start bg-white"
+                id="accordionGroups{removeDots(release.name)}"
+            >
+                {#each releaseGroups ?? [] as group (group.id)}
+                    <RunGroup
+                        release={release.name}
+                        {group}
+                        filtered={isFiltered(group.pretty_name ?? group.name)}
+                        parent="#accordionGroups{release.name}"
+                        on:testRunRequest
+                    />
+                {:else}
+                    <div class="row">
+                        <div class="col text-center p-1">
+                            <span class="spinner-border spinner-border-sm" /> Loading...
+                        </div>
                     </div>
-                </div>
-            {/each}
+                {/each}
+            </div>
         </div>
     </div>
 </div>
@@ -160,4 +162,7 @@
         margin-left: 2rem;
     }
 
+    .bg-white {
+        background-color: #fff;
+    }
 </style>

@@ -9,28 +9,24 @@
             <a class="nav-link" href="{{ url_for('main.test_runs')}}"><i class="fas fa-tasks"></i> Runs</a>
             <a class="nav-link" href="{{ url_for('main.releases')}}"><i class="fas fa-business-time"></i> Releases</a>
             {% if g.user %}
-            <a class="nav-link" href="{{ url_for('main.profile')}}"><i class="fas fa-user"></i> {{g.user.username}}</a>
+            <a class="nav-link d-flex align-items-center" href="{{ url_for('main.profile')}}">
+            {% if g.user.picture_id %}
+            <img class="me-1" src="/storage/picture/{{ g.user.picture_id }}" style="height: 24px; border-radius: 50%" alt="">
+            {% else %}
+            <i class="fas fa-user"></i>
+            {% endif %}
+            {{g.user.username}}
+            </a>
+            <a href="{{ url_for('auth.logout')}}" class="nav-link text-danger"><i class="fas fa-sign-out-alt"></i> Logout</a>
+            {% else %}
+            <form action="https://github.com/login/oauth/authorize" method="get">
+                <input type="hidden" name="scope" value="{{ github_scopes }}">
+                <input type="hidden" name="client_id" value="{{ github_cid }}">
+                <input type="hidden" name="state" value="{{ csrf_token }}">
+                <button class="btn btn-dark" type="submit"><i class="fab fa-github"></i> Sign In with GitHub</button>
+            </form>
             {% endif %}
         </div>
     </div>
 </nav>
-<div class="bg-light">
-    <div class="container">
-        <div class="row">
-            <div class="col text-end p-2">
-                {% if not g.user %}
-                <form action="https://github.com/login/oauth/authorize" method="get">
-                    <input type="hidden" name="scope" value="{{ github_scopes }}">
-                    <input type="hidden" name="client_id" value="{{ github_cid }}">
-                    <input type="hidden" name="state" value="{{ csrf_token }}">
-                    <button class="btn btn-dark" type="submit"><i class="fab fa-github"></i> Sign In with GitHub</button>
-                </form>
-                {# <a href="{{ url_for('auth.register')}}" class="btn btn-secondary">Register</a> #}
-                {% else %}
-                <a href="{{ url_for('auth.logout')}}" class="btn btn-danger">Logout</a>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock user_header %}
