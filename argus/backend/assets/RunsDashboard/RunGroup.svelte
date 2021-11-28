@@ -131,32 +131,34 @@
         </button>
     </h2>
     <div
-        class="accordion-collapse collapse accordion-tests"
+        class="accordion-collapse collapse"
         id="collapse{removeDots(release)}{group.name}"
     >
         {#if testsReady}
             <div class="p-2 border-bottom">
                 <input class="form-control" type="text" placeholder="Filter tests" bind:value={filterString} on:input={() => { tests = tests }}>
             </div>
-            <ul
-                class="list-group list-group-flush list-group-tests border-start"
-            >
-                {#each tests as test (test.id)}
-                    <Test
-                        {release}
-                        {test}
-                        filtered={isFiltered(test.name)}
-                        group={group.name}
-                        on:testRunRequest
-                    />
-                {:else}
-                    <div class="row">
-                        <div class="col text-center text-muted p-1">
-                            No tests available.
+            <div class="bg-light">
+                <ul
+                    class="list-tests list-group list-group-flush list-group-tests border-start"
+                >
+                    {#each tests as test (test.id)}
+                        <Test
+                            {release}
+                            {test}
+                            filtered={isFiltered(test.name)}
+                            group={group.name}
+                            on:testRunRequest
+                        />
+                    {:else}
+                        <div class="row">
+                            <div class="col text-center text-muted p-1">
+                                No tests available.
+                            </div>
                         </div>
-                    </div>
-                {/each}
-            </ul>
+                    {/each}
+                </ul>
+            </div>
         {:else}
             <div class="row">
                 <div class="col text-center p-1">
@@ -168,7 +170,9 @@
 </div>
 
 <style>
-    .accordion-tests {
+    .list-tests {
         margin-left: 2rem;
+        background-color: #fff;
     }
+
 </style>

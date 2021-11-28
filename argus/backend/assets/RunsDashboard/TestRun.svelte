@@ -182,7 +182,7 @@
     });
 </script>
 
-<div class="border rounded">
+<div class="border rounded bg-white p-2">
     {#if test_run}
         <div class="container-fluid p-0 m-0">
             <div class="row p-0 m-0">
@@ -306,7 +306,7 @@
                 >
             </div>
         </nav>
-        <div class="tab-content" id="nav-tabContent-{id}">
+        <div class="tab-content border-start border-end border-bottom" id="nav-tabContent-{id}">
             <div
                 class="tab-pane fade show active"
                 id="nav-details-{id}"
@@ -527,6 +527,7 @@
 </div>
 
 <style>
+
     .fg-nem-succeeded {
         color: rgb(70, 187, 70);
     }

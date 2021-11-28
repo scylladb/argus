@@ -64,7 +64,7 @@
                         test: test,
                         release: release
                     });
-                    lastStatus = runs[0].status;
+                    lastStatus = runs[0]?.status ?? lastStatus;
                     console.log(res.response);
                 } else {
                     console.log("Error parsing test_run data");

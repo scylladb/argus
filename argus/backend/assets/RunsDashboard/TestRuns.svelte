@@ -1,9 +1,10 @@
 <script>
     import TestRun from "./TestRun.svelte";
     import { runStore, polledRuns } from "./TestRunsSubscriber.js";
-    import { StatusButtonCSSClassMap } from "./TestStatus.js";
+    import { StatusButtonCSSClassMap, StatusBackgroundCSSClassMap } from "./TestStatus.js";
     export let data = {};
     export let id = "";
+    export let filtered = false;
     console.log(data);
     let myId = crypto.randomUUID();
     let clickedTestRuns = {};
@@ -16,6 +17,10 @@
         return val;
     });
 
+    const titleCase = function (string) {
+        return string[0].toUpperCase() + string.slice(1).toLowerCase();
+    };
+
     polledRuns.subscribe((val) => {
         runs = val[myId] ?? runs;
     })
@@ -25,13 +30,20 @@
     };
 </script>
 
-<div class="accordion-item border">
+<div class:d-none={filtered} class="accordion-item border">
     <h4 class="accordion-header" id="heading{id}">
         <button
-            class="accordion-button"
+            class="accordion-button d-flex align-items-center"
             data-bs-toggle="collapse"
             data-bs-target="#collapse{id}"
         >
+            {#if runs.length > 0}
+            <span
+                title={titleCase(runs[0].status)}
+                class="me-2 cursor-question status-circle {StatusBackgroundCSSClassMap[runs[0].status] ?? StatusBackgroundCSSClassMap["unknown"]}"
+                ></span
+            >
+            {/if}
             {testInfo.name}
         </button>
     </h4>
@@ -55,7 +67,7 @@
             </p>
             {#each runs as run}
                 <div class="collapse mb-2" id="collapse{run.id}">
-                    <div class="card card-body shadow-sm">
+                    <div class="container-fluid p-0 bg-light">
                         {#if clickedTestRuns[run.id]}
                             <TestRun
                                 id={run.id}
@@ -64,11 +76,22 @@
                         {/if}
                     </div>
                 </div>
+            {:else}
+                <div class="text-muted text-center">No builds yet!</div>
             {/each}
         </div>
     </div>
 </div>
 
 <style>
+    .status-circle {
+        display: inline-block;
+        padding: 8px;
+        border-radius: 50%;
+    }
+
+    .cursor-question {
+        cursor: help;
+    }
 
 </style>

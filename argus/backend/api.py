@@ -48,6 +48,7 @@ def release_activity():
         }
     return jsonify(res)
 
+
 @bp.route("/release_groups", methods=["POST"])
 @login_required
 def release_groups():
@@ -138,7 +139,6 @@ def test_runs():
         test_runs = service.get_runs_by_name_for_release_group(
             release_name=request_payload["release"], test_name=request_payload["test_name"], limit=request_payload.get("limit", 10))
         res["response"] = test_runs
-        service.terminate_session()
     except Exception as exc:
         LOGGER.error("Something happened during request %s", request)
         res["status"] = "error"
@@ -399,6 +399,75 @@ def release_create():
         request_payload = request.get_json()
         service = ArgusService()
         res["response"] = service.create_release(request_payload)
+    except Exception as exc:
+        LOGGER.error("Something happened during request %s", request)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    return jsonify(res)
+
+
+@bp.route("/issues/submit", methods=["POST"])
+@login_required
+def issues_submit():
+    res = {
+        "status": "ok"
+    }
+    try:
+        if not request.is_json:
+            raise Exception(
+                "Content-Type mismatch, expected application/json, got:", request.content_type)
+        request_payload = request.get_json()
+        service = ArgusService()
+        res["response"] = service.submit_github_issue(request_payload)
+    except Exception as exc:
+        LOGGER.error("Something happened during request %s", request)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    return jsonify(res)
+
+
+@bp.route("/issues/get", methods=["POST"])
+@login_required
+def issues_get():
+    res = {
+        "status": "ok"
+    }
+    try:
+        if not request.is_json:
+            raise Exception(
+                "Content-Type mismatch, expected application/json, got:", request.content_type)
+        request_payload = request.get_json()
+        service = ArgusService()
+        res["response"] = service.get_github_issues(request_payload)
+    except Exception as exc:
+        LOGGER.error("Something happened during request %s", request)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    return jsonify(res)
+
+
+@bp.route("/issues/state", methods=["POST"])
+@login_required
+def issues_state():
+    res = {
+        "status": "ok"
+    }
+    try:
+        if not request.is_json:
+            raise Exception(
+                "Content-Type mismatch, expected application/json, got:", request.content_type)
+        request_payload = request.get_json()
+        service = ArgusService()
+        res["response"] = service.get_github_issue_state(request_payload)
     except Exception as exc:
         LOGGER.error("Something happened during request %s", request)
         res["status"] = "error"

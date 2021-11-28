@@ -37,6 +37,6 @@
 
 </script>
 <div>
-    <canvas width=512 height=512 bind:this={chartCanvas}></canvas>
+    <canvas width=128 height=128 bind:this={chartCanvas}></canvas>
 </div>
 <div class="text-center">Total: {stats.total}</div>

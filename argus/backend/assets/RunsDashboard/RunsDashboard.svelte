@@ -7,6 +7,7 @@
     let test_runs = {};
     let releaseStats = {};
     let filterString = "";
+    let filterStringRuns = "";
     stats.subscribe((value) => {
         releaseStats = value.releases;
         releases = releases.sort((a, b) => {
@@ -26,7 +27,7 @@
         });
     });
 
-    const isFiltered = function(name = "") {
+    const isFiltered = function(name = "", filterString = "") {
         if (filterString == "") {
             return false;
         }
@@ -64,10 +65,10 @@
     });
 </script>
 
-<div class="container-fluid">
+<div class="container-fluid bg-light">
     <div class="row p-4" id="dashboard-main">
         <div
-            class="col-3 p-0 py-4 min-vh-100 me-3 border rounded shadow-sm"
+            class="col-3 p-0 py-4 min-vh-100 me-3 border rounded shadow-sm bg-white"
             id="run-sidebar"
         >
             <div class="p-2">
@@ -78,19 +79,23 @@
                     <RunRelease
                         {release}
                         on:testRunRequest={onTestRunRequest}
-                        filtered={isFiltered(release.name)}
+                        filtered={isFiltered(release.name, filterString)}
                     />
                 {/each}
             </div>
         </div>
-        <div class="col-8 p-0 py-4 border rounded shadow-sm">
+        <div class="col-8 p-2 border rounded shadow-sm bg-white">
             {#if Object.keys(test_runs).length > 0}
-                <div class="accordion accordion-flush" id="accordionTestRuns">
+                <div class="p-2">
+                    <input class="form-control" type="text" placeholder="Filter runs" bind:value={filterStringRuns} on:input={() => { test_runs = test_runs }}>
+                </div>
+                <div class="accordion" id="accordionTestRuns">
                     {#each Object.keys(test_runs) as test_run_id}
                         <TestRuns
                             id={test_run_id}
                             data={test_runs[test_run_id]}
                             parent="#accordionTestRuns"
+                            filtered={isFiltered(test_runs[test_run_id].test.name, filterStringRuns)}
                         />
                     {/each}
                 </div>
@@ -111,4 +116,7 @@
 </div>
 
 <style>
+    .bg-white {
+        background-color: #fff;
+    }
 </style>
