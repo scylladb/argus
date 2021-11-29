@@ -10,6 +10,7 @@ module.exports = {
         runDashboard: './argus/backend/assets/RunsDashboard/runs-dashboard.js',
         releasePage: './argus/backend/assets/RunsDashboard/release-page.js',
         testRunDetails: './argus/backend/assets/RunsDashboard/test-run-details.js',
+        testRuns: './argus/backend/assets/RunsDashboard/test-runs-breakout.js',
         releaseDashboard: './argus/backend/assets/RunsDashboard/release-dashboard.js',
     },
     output: {

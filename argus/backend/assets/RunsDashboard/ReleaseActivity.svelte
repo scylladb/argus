@@ -26,6 +26,12 @@
             : "/static/no-user-picture.png";
     };
 
+    const reverseArray = function (array) {
+        let arrayCopy = array;
+        arrayCopy.reverse();
+        return arrayCopy;
+    };
+
     const fetchActivity = async function () {
         fetching = true;
         try {
@@ -54,45 +60,78 @@
     });
 </script>
 
-{#if Object.keys(users).length > 0}
-    <div class="row p-0 m-0 justify-content-end">
-        <div class="col-1 p-1 mb-2">
-            <input
-                class="btn btn-secondary"
-                type="button"
-                value="Refresh"
-                disabled={fetching}
-                on:click={fetchActivity}
-            />
+<div class="accordion" id="accordionReleaseActivity">
+    <div class="accordion-item">
+        <h2 class="accordion-header" id="headingReleaseActivity">
+            <button
+                class="accordion-button collapsed"
+                data-bs-toggle="collapse"
+                data-bs-target="#collapseReleaseActivity"
+                >Activity</button
+            >
+        </h2>
+        <div class="accordion-collapse collapse" id="collapseReleaseActivity">
+            {#if Object.keys(users).length > 0}
+                <div class="container-fluid">
+                    <div class="row justify-content-end">
+                        <div class="col-4 p-1 mb-2 text-end">
+                            <div class="btn-group">
+                                <input
+                                    class="btn btn-secondary"
+                                    type="button"
+                                    value="Refresh"
+                                    disabled={fetching}
+                                    on:click={fetchActivity}
+                                />
+                                <input
+                                    class="btn btn-secondary"
+                                    type="button"
+                                    value="More"
+                                    on:click={() => {
+                                        eventLimit += 10;
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                    {#each reverseArray(activity.raw_events).slice(0, eventLimit) as event}
+                        <div class="row border rounded m-2 p-2">
+                            <div class="col hstack">
+                                <div class="me-2">
+                                    <img
+                                        class="img-profile"
+                                        src={getPictureForId(event.user_id)}
+                                        alt=""
+                                    />
+                                    {activity.events[event.id]}
+                                </div>
+                                <div class="ms-auto text-muted">
+                                    {new Date(
+                                        event.created_at
+                                    ).toLocaleString()}
+                                </div>
+                                <div class="ms-2 text-muted">
+                                    <a
+                                        class="link-secondary"
+                                        href="/test_run/{event.run_id}">Run</a
+                                    >
+                                </div>
+                            </div>
+                        </div>
+                    {:else}
+                        <div class="row">
+                            <div class="col text-center p-1 text-muted">
+                                No events yet.
+                            </div>
+                        </div>
+                    {/each}
+                </div>
+            {:else}
+                loading...
+            {/if}
         </div>
     </div>
-    {#each activity.raw_events.slice(0, eventLimit) as event}
-        <div class="row p-0 m-0">
-            <div class="col p-0 m-0">
-                <div class="card-body border-bottom">
-                    <div class="card-subtitle text-muted"><a class="link-secondary" href="/test_run/{event.run_id}">[Test Run]</a></div>
-                    <p class="card-text"><img
-                        class="img-profile"
-                        src={getPictureForId(event.user_id)}
-                        alt=""
-                    /> {activity.events[event.id]}
-                    <small class="text-muted"
-                        >{new Date(
-                            event.created_at
-                        ).toLocaleString()}</small
-                    >
-                        </p>
-                </div>
-            </div>
-        </div>
-    {:else}
-        <div class="row">
-            <div class="col text-center p-1 text-muted">No events yet.</div>
-        </div>
-    {/each}
-{:else}
-    loading...
-{/if}
+</div>
 
 <style>
     .img-profile {

@@ -1,4 +1,5 @@
 from uuid import uuid4
+from datetime import datetime
 from cassandra.cqlengine.models import Model
 from cassandra.cqlengine.usertype import UserType
 from cassandra.cqlengine import columns
@@ -130,6 +131,7 @@ class ArgusEvent(Model):
 
 class ArgusGithubIssue(Model):
     id = columns.UUID(primary_key=True, default=uuid4, partition_key=True)
+    added_on = columns.DateTime(default=datetime.utcnow)
     release_id = columns.UUID(index=True)
     group_id = columns.UUID(index=True)
     test_id = columns.UUID(index=True)
@@ -140,6 +142,8 @@ class ArgusGithubIssue(Model):
     repo = columns.Text()
     issue_number = columns.Integer()
     last_status = columns.Text()
+    title = columns.Text()
+    url = columns.Text()
 
 
 class WebRunComments(Model):

@@ -32,7 +32,7 @@
     });
 </script>
 
-<div class="accordion" id="accordionIssueTemplate-{test_run.id}">
+<div class="accordion accordion-flush" id="accordionIssueTemplate-{test_run.id}">
     <div class="accordion-item">
         <h2 class="accordion-header" id="headingIssueTemplate-{test_run.id}">
             <button
