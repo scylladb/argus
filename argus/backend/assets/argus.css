@@ -47,3 +47,7 @@ div#argusErrors {
     top: 20px;
     left: 10px;
 }
+
+.bg-white {
+    background-color: #fff;
+}

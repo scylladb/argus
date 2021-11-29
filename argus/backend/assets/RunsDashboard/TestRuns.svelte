@@ -1,6 +1,6 @@
 <script>
     import TestRun from "./TestRun.svelte";
-    import { runStore, polledRuns } from "./TestRunsSubscriber.js";
+    import { runStore, polledRuns, TestRunsEventListener } from "./TestRunsSubscriber.js";
     import { StatusButtonCSSClassMap, StatusBackgroundCSSClassMap } from "./TestStatus.js";
     export let data = {};
     export let id = "";
@@ -13,7 +13,7 @@
     let releaseName = data.release
 
     runStore.update((val) => {
-        val[myId] = [releaseName, testInfo.name]
+        val[myId] = [releaseName, testInfo]
         return val;
     });
 
@@ -24,6 +24,13 @@
     polledRuns.subscribe((val) => {
         runs = val[myId] ?? runs;
     })
+
+    TestRunsEventListener.update(val => {
+        return {
+            type: "fetch",
+            args: []
+        };
+    });
 
     const handleTestRunClick = function (e) {
         clickedTestRuns[e.target.dataset.argusTestId] = true;
@@ -44,7 +51,7 @@
                 ></span
             >
             {/if}
-            {testInfo.name}
+            {testInfo}
         </button>
     </h4>
     <div class="accordion-collapse collapse show" id="collapse{id}">
@@ -77,7 +84,7 @@
                     </div>
                 </div>
             {:else}
-                <div class="text-muted text-center">No builds yet!</div>
+                <div class="text-muted text-center">Loading...</div>
             {/each}
         </div>
     </div>

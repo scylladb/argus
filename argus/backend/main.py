@@ -22,8 +22,7 @@ bp = Blueprint('main', __name__)
 @bp.route("/test_runs")
 @login_required
 def test_runs():
-    results = ArgusService().get_test_table()
-    return render_template("test_runs.html.j2", test_runs=results, timestamp=int(time.time()))
+    return render_template("test_runs.html.j2")
 
 
 @bp.route("/test_run/<string:id>")
@@ -50,6 +49,7 @@ def releases():
     releases = service.get_releases()
     return render_template("releases.html.j2", releases=releases)
 
+
 @bp.route("/dashboard/<string:release_name>")
 @login_required
 def release_dashboard(release_name: str):
@@ -61,6 +61,7 @@ def release_dashboard(release_name: str):
         "tests": [dict(test.items()) for test in release_tests],
     }
     return render_template("release_dashboard.html.j2", release_name=release_name, data=data_json)
+
 
 @bp.route("/release/<string:name>")
 @login_required
@@ -132,19 +133,19 @@ def profile_oauth_github_callback():
                                        "client_id": current_app.config.get("GITHUB_CLIENT_ID"),
                                        "client_secret": current_app.config.get("GITHUB_CLIENT_SECRET"),
                                    })
-    
+
     oauth_data = oauth_response.json()
 
-    user_info = requests.get("https://api.github.com/user", 
-                                   headers={
-                                       "Accept": "application/json",
-                                       "Authorization": f"token {oauth_data.get('access_token')}"
-                                   }).json()
-    email_info = requests.get("https://api.github.com/user/emails", 
-                                   headers={
-                                       "Accept": "application/json",
-                                       "Authorization": f"token {oauth_data.get('access_token')}"
-                                   }).json()
+    user_info = requests.get("https://api.github.com/user",
+                             headers={
+                                 "Accept": "application/json",
+                                 "Authorization": f"token {oauth_data.get('access_token')}"
+                             }).json()
+    email_info = requests.get("https://api.github.com/user/emails",
+                              headers={
+                                  "Accept": "application/json",
+                                  "Authorization": f"token {oauth_data.get('access_token')}"
+                              }).json()
 
     try:
         user = User.get(username=user_info.get("login"))
@@ -171,7 +172,6 @@ def profile_oauth_github_callback():
         github_token.user_id = user.id
         github_token.token = oauth_data.get('access_token')
         github_token.save()
-    
 
     session.clear()
     session["user_id"] = str(user.id)
@@ -194,7 +194,8 @@ def get_picture(id: str):
         res.content_type = "text/plain"
         res.set_data("404 NOT FOUND")
 
-    return res 
+    return res
+
 
 @bp.route("/profile/update/picture", methods=["POST"])
 @login_required
@@ -214,7 +215,7 @@ def upload_file():
     filepath = f"storage/profile_pictures/{filename}"
     with open(filepath, "wb") as file:
         file.write(picture_data)
-    
+
     web_file = WebFileStorage()
     web_file.filename = picture_name
     web_file.filepath = filepath

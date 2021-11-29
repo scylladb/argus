@@ -1,44 +1,20 @@
 {% extends "base.html.j2" %}
 
+{% block javascripts %}
+{{super()}}
+<script defer src="/static/dist/testRuns.bundle.js"></script>
+{% endblock javascripts %}
+
 {% block title %}
 Test Runs
 {% endblock %}
 
 {% block body %}
-<div class="container-fluid p-0 m-0">
-    <table class='table table-bordered text-center table-hover'>
-        <thead>
-            <th></th>
-            <th>Status</th>
-            <th>Name</th>
-            <th>Group</th>
-            <th>Release</th>
-            <th>Build URL</th>
-            <th>Start Time</th>
-            <th>End Time</th>
-            <th>Last Heartbeat</th>
-        </thead>
-        <tbody>
-        {% for test_run in test_runs %}
-        <tr>
-            <td><a class="btn btn-primary" href="{{ url_for('main.test_run', id=test_run.id)}}">Details</a></td>
-            <td class="status-{{test_run.status}}">{{ test_run.status | upper }}</td>
-            <td>{{ test_run.name }}</td>
-            <td>{{ test_run.group }}</td>
-            <td>{{ test_run.release_name }}</td>
-            <td> <a href="{{ test_run.build_job_url }}">{{ test_run.build_job_name }}</a></td>
-            <td title="{{ test_run.start_time | from_timestamp }}">{{ test_run.natural_start_time }}</td>
-            {% if test_run.end_time != -1 %}
-            <td title="{{ test_run.end_time | from_timestamp }}">{{ test_run.natural_end_time }}</td>
-            {% elif timestamp - test_run.heartbeat > 3600 and test_run.end_time == -1 %}
-            <td>Dead</td>
-            {% else %}
-            <td>In progress...</td>
-            {% endif %}
-            <td title="{{ test_run.heartbeat | from_timestamp }}">{{ test_run.natural_heartbeat }}</td>
-        </tr>
-        {% endfor %}
-        </tbody>
-    </table>
+<div class="container mt-3">
+<div class="row">
+    <div class="col border rounded shadow-sm bg-white" id="testRunsBreakout">
+
+    </div>
+</div>
 </div>
 {% endblock %}

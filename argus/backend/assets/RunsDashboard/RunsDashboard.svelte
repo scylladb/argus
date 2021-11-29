@@ -1,13 +1,13 @@
 <script>
     import { onMount } from "svelte";
-    import TestRuns from "./TestRuns.svelte";
+    import TestRunsPanel from "./TestRunsPanel.svelte";
     import RunRelease from "./RunRelease.svelte";
     import { stats } from "./StatsSubscriber.js";
     let releases = [];
     let test_runs = {};
     let releaseStats = {};
     let filterString = "";
-    let filterStringRuns = "";
+
     stats.subscribe((value) => {
         releaseStats = value.releases;
         releases = releases.sort((a, b) => {
@@ -85,32 +85,7 @@
             </div>
         </div>
         <div class="col-8 p-2 border rounded shadow-sm bg-white">
-            {#if Object.keys(test_runs).length > 0}
-                <div class="p-2">
-                    <input class="form-control" type="text" placeholder="Filter runs" bind:value={filterStringRuns} on:input={() => { test_runs = test_runs }}>
-                </div>
-                <div class="accordion" id="accordionTestRuns">
-                    {#each Object.keys(test_runs) as test_run_id}
-                        <TestRuns
-                            id={test_run_id}
-                            data={test_runs[test_run_id]}
-                            parent="#accordionTestRuns"
-                            filtered={isFiltered(test_runs[test_run_id].test.name, filterStringRuns)}
-                        />
-                    {/each}
-                </div>
-            {:else}
-                <div class="row h-100">
-                    <div class="col p-4 align-self-center text-center ">
-                        <div
-                            class="d-inline-block border rounded p-4 text-muted"
-                        >
-                            Select a test on the left and its runs will appear
-                            in this area
-                        </div>
-                    </div>
-                </div>
-            {/if}
+            <TestRunsPanel bind:test_runs={test_runs}/>
         </div>
     </div>
 </div>

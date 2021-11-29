@@ -26,6 +26,17 @@ from argus.backend.models import (
 from argus.backend.event_processors import EVENT_PROCESSORS
 
 
+def first(iterable, value, key: Callable = None, predicate: Callable = None):
+    for elem in iterable:
+        if predicate and predicate(elem, value):
+            return elem
+        elif key and key(elem) == value:
+            return elem
+        elif elem == value:
+            return elem
+    return None
+
+
 class ArgusService:
     def __init__(self, session=None):
         self.session = session if session else ScyllaCluster.get_session()
@@ -34,6 +45,7 @@ class ArgusService:
             "Accept": "application/vnd.github.v3+json",
             "Authorization": f"token {current_app.config['GITHUB_ACCESS_TOKEN']}"
         }
+        self.runs_by_id_stmt = self.db.prepare(f"SELECT * FROM {TestRun.table_name()} WHERE id in ?")
 
     def terminate_session(self):
         pass  # TODO: Remove this
@@ -231,15 +243,6 @@ class ArgusService:
     """
 
     def collect_stats(self, payload: dict) -> dict:
-        def first(iterable, value, key: Callable = None, predicate: Callable = None):
-            for elem in iterable:
-                if predicate and predicate(elem, value):
-                    return elem
-                elif key and key(elem) == value:
-                    return elem
-                elif elem == value:
-                    return elem
-            return None
 
         response = {
             "releases": {
@@ -332,7 +335,7 @@ class ArgusService:
     def poll_test_runs_single(self, payload: dict):
         runs = [UUID(id) for id in payload["runs"]]
 
-        statement = self.db.prepare(f"SELECT * FROM {TestRun.table_name()} WHERE id in ?")
+        statement = self.runs_by_id_stmt
         rows = self.session.execute(statement, parameters=(
             runs,), execution_profile="read_fast_named_tuple").all()
 
@@ -456,22 +459,41 @@ class ArgusService:
             event.kind)(json.loads(event.body)) for event in all_events}
         return response
 
+    """
+    Example payload:
+    {
+        "issue_url": "https://github.com/example/repo/issues/6"
+        "run_id": "abcdef-5354235-1232145-dd"
+    }
+    """
+
     def submit_github_issue(self, payload: dict) -> dict:
         issue_url = payload.get("issue_url")
+        run_id = payload.get("run_id")
+        if not run_id:
+            raise Exception("Run Id missing from request")
         if not issue_url:
             raise Exception("Missing or empty issue url")
 
         match = re.match(
-            r"http(s)?://(www\.)?github\.com/(?P<owner>[\w\d]+)/(?P<repo>[\w\d\-_]+)/(?P<type>issues|pull)/(?P<issue_number>\d+)(/)?")
+            r"http(s)?://(www\.)?github\.com/(?P<owner>[\w\d]+)/(?P<repo>[\w\d\-_]+)/(?P<type>issues|pull)/(?P<issue_number>\d+)(/)?",
+            issue_url)
         if not match:
             raise Exception("URL doesn't match Github schema")
 
+        run = self.session.execute(self.runs_by_id_stmt, parameters=([UUID(run_id)],)).one()
+        test_name = run["name"].rstrip("-test")
+        release = ArgusRelease.get(name=run["release_name"])
+        test = ArgusReleaseGroupTest.filter(name=test_name).all()
+        test = first(test, release.id, key=lambda val: val.release_id)
+        group = ArgusReleaseGroup.get(id=test.group_id)
+
         new_issue = ArgusGithubIssue()
         new_issue.user_id = g.user.id
-        new_issue.group_id = payload.get("group_id")
-        new_issue.release_id = payload.get("release_id")
-        new_issue.test_id = payload.get("test_id")
-        new_issue.run_id = payload.get("run_id")
+        new_issue.run_id = run_id
+        new_issue.group_id = group.id
+        new_issue.release_id = release.id
+        new_issue.test_id = test.id
         new_issue.type = match.group("type")
         new_issue.owner = match.group("owner")
         new_issue.repo = match.group("repo")
@@ -480,6 +502,8 @@ class ArgusService:
         issue_state = requests.get(f"https://api.github.com/repos/{new_issue.owner}/{new_issue.repo}/issues/{new_issue.issue_number}",
                                    headers=self.github_headers).json()
 
+        new_issue.title = issue_state.get("title")
+        new_issue.url = issue_state.get("html_url")
         new_issue.last_status = issue_state.get("state")
         new_issue.save()
 
@@ -523,7 +547,7 @@ class ArgusService:
         filter_id = UUID(filter_id)
         all_issues = ArgusGithubIssue.filter(**{filter_key: filter_id}).all()
 
-        response = {str(issue.id): dict([o for o in issue.items()]) for issue in all_issues}
+        response = [dict([o for o in issue.items()]) for issue in all_issues]
         return response
 
     """

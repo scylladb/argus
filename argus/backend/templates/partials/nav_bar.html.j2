@@ -5,8 +5,7 @@
             <img src="/static/argus.png" alt="" width="64" height="64" class="d-inline-block align-text-middle">  Argus
         </a>
         <div class="navbar-nav">
-            <a class="nav-link" aria-current="page" href="{{ url_for('main.run_dashboard')}}"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
-            <a class="nav-link" href="{{ url_for('main.test_runs')}}"><i class="fas fa-tasks"></i> Runs</a>
+            <a class="nav-link" aria-current="page" href="{{ url_for('main.run_dashboard')}}"><i class="fas fa-tasks"></i> Runs</a>
             <a class="nav-link" href="{{ url_for('main.releases')}}"><i class="fas fa-business-time"></i> Releases</a>
             {% if g.user %}
             <a class="nav-link d-flex align-items-center" href="{{ url_for('main.profile')}}">

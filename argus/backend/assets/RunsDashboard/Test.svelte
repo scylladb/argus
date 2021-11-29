@@ -37,41 +37,13 @@
         if (fetching) return;
         listItem.classList.add("active");
         fetching = true;
-        fetch("/api/v1/test_runs", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                release: release,
-                group: group,
-                test_name: test.name,
-            }),
-        })
-            .then((res) => {
-                if (res.status == 200) {
-                    return res.json();
-                } else {
-                    console.log("Error during test_run fetch");
-                }
-            })
-            .then((res) => {
-                if (res.status == "ok") {
-                    runs = res.response;
-                    dispatch("testRunRequest", {
-                        uuid: runs_uuid,
-                        runs: runs,
-                        test: test,
-                        release: release
-                    });
-                    lastStatus = runs[0]?.status ?? lastStatus;
-                    console.log(res.response);
-                } else {
-                    console.log("Error parsing test_run data");
-                    console.log(res.response);
-                }
-                fetching = false;
-            });
+        dispatch("testRunRequest", {
+            uuid: runs_uuid,
+            runs: [],
+            test: test.name,
+            release: release
+        });
+        fetching = false;
     };
 </script>
 

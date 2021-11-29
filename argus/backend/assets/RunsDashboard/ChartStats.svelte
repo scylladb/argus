@@ -31,12 +31,13 @@
         const chartContext = chartCanvas.getContext("2d");
         chart = new Chart(chartContext, {
             type: 'pie',
-            data: data
+            data: data,
+            options: {
+                responsive: true,
+                maintainAspectRatio: true
+            }
         });
     });
 
 </script>
-<div>
-    <canvas width=128 height=128 bind:this={chartCanvas}></canvas>
-</div>
-<div class="text-center">Total: {stats.total}</div>
+<canvas bind:this={chartCanvas} />

@@ -6,9 +6,10 @@
     import ResourcesInfo from "./ResourcesInfo.svelte";
     import NemesisData from "./NemesisData.svelte";
     import ActivityTab from "./ActivityTab.svelte";
+    import TestRunInfo from "./TestRunInfo.svelte";
     import TestRunComments from "./TestRunComments.svelte";
+    import GithubIssues from "./GithubIssues.svelte";
     import {
-        TestStatus,
         TestStatusChangeable,
         StatusButtonCSSClassMap,
         InProgressStatuses,
@@ -20,28 +21,28 @@
     export let build_number = -1;
     let test_run = undefined;
     let heartbeatHuman = "";
-    let selectedUser = "";
     let newStatus = "";
     let disableButtons = false;
     let currentTime = new Date();
     let clockInterval;
     let users = {};
     let activityOpen = false;
+    let issuesOpen = false;
     let userSelect = [];
 
-    const createUserSelectCollection = function(users) {
+    const createUserSelectCollection = function (users) {
         const dummyUser = {
-                value: "NONE",
-                label: "nobody",
-                picture_id: undefined,
-                full_name: "Nobody"
+            value: "NONE",
+            label: "nobody",
+            picture_id: undefined,
+            full_name: "Nobody",
         };
-        userSelect = Object.keys(users).map(user => {
+        userSelect = Object.keys(users).map((user) => {
             return {
                 value: users[user].id,
                 label: users[user].username,
                 picture_id: users[user].picture_id,
-                full_name: users[user].full_name
+                full_name: users[user].full_name,
             };
         });
         return [dummyUser, ...userSelect];
@@ -61,8 +62,6 @@
         test_run = data[id] ?? test_run;
     });
 
-    let cmd_hydraInvestigateShowMonitor = `hydra investigate show-monitor ${id}`;
-    let cmd_hydraInvestigateShowLogs = `hydra investigate show-logs ${id}`;
 
     const fetchTestRunData = function () {
         fetch("/api/v1/test_run", {
@@ -100,13 +99,15 @@
                     disableButtons = false;
                     console.log(test_run);
                 } else {
-                    console.log("During fetchTestRunData a backend error was reported...");
+                    console.log(
+                        "During fetchTestRunData a backend error was reported..."
+                    );
                     console.log(res);
                 }
             });
     };
 
-    const handleAssign = function(event) {
+    const handleAssign = function (event) {
         if (event.detail.value != "NONE" && !users[event.detail.value]) return;
         let new_assignee = event.detail.value;
         new_assignee = new_assignee != "NONE" ? new_assignee : "none-none-none";
@@ -117,7 +118,7 @@
             },
             body: JSON.stringify({
                 test_run_id: id,
-                assignee: new_assignee
+                assignee: new_assignee,
             }),
         })
             .then((res) => {
@@ -133,13 +134,15 @@
                     fetchTestRunData();
                     console.log(res.response);
                 } else {
-                    console.log("During handleAssign a backend error was reported...");
+                    console.log(
+                        "During handleAssign a backend error was reported..."
+                    );
                     console.log(res);
                 }
             });
-    }
+    };
 
-    const handleStatus = function() {
+    const handleStatus = function () {
         disableButtons = true;
         fetch("/api/v1/test_run/change_status", {
             method: "POST",
@@ -148,7 +151,7 @@
             },
             body: JSON.stringify({
                 test_run_id: id,
-                status: newStatus
+                status: newStatus,
             }),
         })
             .then((res) => {
@@ -168,7 +171,7 @@
                     console.log(res);
                 }
             });
-    }
+    };
     onMount(() => {
         fetchTestRunData();
 
@@ -198,7 +201,7 @@
                         data-bs-toggle="dropdown"
                     >
                         {test_run.status.toUpperCase()}
-                        {#if InProgressStatuses.find(status => status == test_run.status)}
+                        {#if InProgressStatuses.find((status) => status == test_run.status)}
                             <span
                                 class="spinner-border spinner-border-sm d-inline-block"
                             />
@@ -206,7 +209,16 @@
                     </button>
                     <ul class="dropdown-menu">
                         {#each Object.keys(TestStatusChangeable) as status}
-                            <li><button class="dropdown-item" disabled={disableButtons} on:click={() => { newStatus = status.toLowerCase();handleStatus();}}>{status}</button></li>
+                            <li>
+                                <button
+                                    class="dropdown-item"
+                                    disabled={disableButtons}
+                                    on:click={() => {
+                                        newStatus = status.toLowerCase();
+                                        handleStatus();
+                                    }}>{status}</button
+                                >
+                            </li>
                         {/each}
                     </ul>
                 </div>
@@ -224,7 +236,12 @@
             {#if Object.keys(users).length > 0}
                 <div class="row p-2 m-0 justify-content-end">
                     <div class="col-2 p-2 border rounded">
-                        <Select Item={User} value={users[test_run.assignee]?.username ?? "NONE"} items={userSelect} on:select={handleAssign}/>
+                        <Select
+                            Item={User}
+                            value={users[test_run.assignee]?.username ?? "NONE"}
+                            items={userSelect}
+                            on:select={handleAssign}
+                        />
                     </div>
                 </div>
             {/if}
@@ -293,125 +310,34 @@
                     data-bs-toggle="tab"
                     data-bs-target="#nav-issues-{id}"
                     type="button"
-                    role="tab"><i class="fas fa-code-branch" /> Issues</button
+                    role="tab"
+                    on:click={() => (issuesOpen = true)}
+                    ><i
+                        class="fas fa-code-branch"
+                    /> Issues</button
                 >
                 <button
-                class="nav-link"
-                id="nav-activity-tab-{id}"
-                data-bs-toggle="tab"
-                data-bs-target="#nav-activity-{id}"
-                type="button"
-                on:click={() => activityOpen = true}
-                role="tab"><i class="fas fa-exclamation-triangle"></i> Activity</button
+                    class="nav-link"
+                    id="nav-activity-tab-{id}"
+                    data-bs-toggle="tab"
+                    data-bs-target="#nav-activity-{id}"
+                    type="button"
+                    on:click={() => (activityOpen = true)}
+                    role="tab"
+                    ><i class="fas fa-exclamation-triangle" /> Activity</button
                 >
             </div>
         </nav>
-        <div class="tab-content border-start border-end border-bottom" id="nav-tabContent-{id}">
+        <div
+            class="tab-content border-start border-end border-bottom"
+            id="nav-tabContent-{id}"
+        >
             <div
                 class="tab-pane fade show active"
                 id="nav-details-{id}"
                 role="tabpanel"
             >
-                <div class="container-fluid">
-                    <div class="row">
-                        <div class="col-6 p-2">
-                            Details
-                            <ul>
-                                <li>
-                                    <span class="fw-bold">Test:</span>
-                                    {test_run.group}.{test_run.name}
-                                </li>
-                                <li>
-                                    <span class="fw-bold">Id:</span>
-                                    {test_run.id}
-                                </li>
-                                <li>
-                                    Start Time: {new Date(
-                                        test_run.start_time * 1000
-                                    ).toLocaleString()}
-                                </li>
-                                {#if test_run.end_time != -1}
-                                    <li>
-                                        End Time: {new Date(
-                                            test_run.end_time * 1000
-                                        ).toLocaleString()}
-                                    </li>
-                                {/if}
-                                <li>
-                                    Started by: {test_run.started_by ??
-                                        "Unknown, probably jenkins"}
-                                </li>
-                                <li>
-                                    Build Job: <a href={test_run.build_job_url}
-                                        >{test_run.build_job_name}</a
-                                    >
-                                </li>
-                            </ul>
-
-                            <div class="btn-group">
-                                <a
-                                    href="https://jenkins.scylladb.com/view/QA/job/QA-tools/job/hydra-show-monitor/parambuild/?test_id={test_run.id}"
-                                    class="btn btn-primary"
-                                    target="_blank"
-                                    aria-current="page"
-                                    ><i class="fas fa-search" />Restore
-                                    Monitoring Stack</a
-                                >
-                                <button
-                                    type="button"
-                                    class="btn btn-primary"
-                                    on:click={() => {
-                                        navigator.clipboard.writeText(
-                                            cmd_hydraInvestigateShowMonitor
-                                        );
-                                    }}
-                                    ><i class="far fa-copy" /> Hydra Monitor</button
-                                >
-                                <button
-                                    type="button"
-                                    class="btn btn-primary"
-                                    on:click={() => {
-                                        navigator.clipboard.writeText(
-                                            cmd_hydraInvestigateShowLogs
-                                        );
-                                    }}
-                                    ><i class="far fa-copy" /> Hydra Logs</button
-                                >
-                            </div>
-                        </div>
-                        <div class="col-6 p-2">
-                            System Information:
-                            <ul>
-                                <li>
-                                    <span class="fw-bold">Backend:</span>
-                                    {test_run.cloud_setup.backend}
-                                </li>
-                                <li>
-                                    <span class="fw-bold">Region:</span>
-                                    {test_run.region_name.join(", ")}
-                                </li>
-                                <li>
-                                    AMI ImageId: {test_run.cloud_setup.db_node
-                                        .image_id}
-                                </li>
-                                <li>
-                                    Scylla Version: {test_run.packages[0]
-                                        ?.version ?? "Unknown yet"}/{test_run
-                                        .packages[0]?.revision_id ??
-                                        "Unknown yet"}
-                                </li>
-                                <li>
-                                    Instance Type: {test_run.cloud_setup.db_node
-                                        .instance_type}
-                                </li>
-                                <li>
-                                    Node Amount: {test_run.cloud_setup.db_node
-                                        .node_amount}
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
+                <TestRunInfo {test_run}/>
             </div>
             <div class="tab-pane fade" id="nav-resources-{id}" role="tabpanel">
                 <div
@@ -512,6 +438,9 @@
             </div>
             <div class="tab-pane fade" id="nav-issues-{id}" role="tabpanel">
                 <IssueTemplate {test_run} />
+                {#if issuesOpen}
+                    <GithubIssues {id} />
+                {/if}
             </div>
             <div class="tab-pane fade" id="nav-activity-{id}" role="tabpanel">
                 {#if activityOpen}
@@ -527,7 +456,6 @@
 </div>
 
 <style>
-
     .fg-nem-succeeded {
         color: rgb(70, 187, 70);
     }
