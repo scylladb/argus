@@ -34,8 +34,7 @@
         <div
             class="d-inline-block border rounded p-4 text-muted"
         >
-            Select a test on the left and its runs will appear
-            in this area
+            No tests selected.
         </div>
     </div>
 </div>

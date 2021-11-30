@@ -1,8 +1,11 @@
 <script>
     import { releaseRequests, stats } from "./StatsSubscriber";
     import NumberStats from "./NumberStats.svelte";
+    import TestMapStats from "./TestMapStats.svelte";
     export let releaseName = "";
     export let DisplayItem = NumberStats;
+    export let TestMapItem = TestMapStats;
+    export let showTestMap = false;
     const releaseStatsDefault = {
         created: 0,
         running: 0,
@@ -25,6 +28,9 @@
 <div>
 {#if (releaseStats?.total) > 0}
     <svelte:component this={DisplayItem} stats={releaseStats} />
+    {#if showTestMap}
+    <svelte:component this={TestMapItem} stats={releaseStats} />
+    {/if}
 {:else if releaseStats?.total == -1}
     <span class="spinner-border spinner-border-sm"></span>
 {:else}
