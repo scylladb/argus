@@ -575,3 +575,33 @@ class ArgusService:
             response[issue_state.get("html_url")] = issue_state.get("state")
 
         return response
+
+    """
+    Example payload
+    {
+        "release_id": "abcadedf-efadd-24124",
+        "tests": [ArgusReleaseGroupTest <, ...>]
+    }
+    Response
+    [[ArgusReleaseGroupTest, GithubIssue[]], ...]
+    """
+
+    def fetch_release_issues(self, payload: dict) -> dict:
+        release_id = payload.get("release_id")
+        if not release_id:
+            raise Exception("ReleaseId wasn't specified in the request")
+
+        release_issues = self.get_github_issues({
+            "filter_key": "release_id",
+            "id": release_id
+        })
+
+        tests = payload.get("tests", [])
+
+        response = []
+        for test in tests:
+            issues_for_test = [issue for issue in release_issues if issue["test_id"] == UUID(test["id"])]
+            if len(issues_for_test) > 0:
+                response.append([test, issues_for_test])
+
+        return response

@@ -35,7 +35,7 @@
 
 <div class="row m-2 border rounded p-2">
     <div class="col hstack">
-        <div class="me-2"><Fa icon={faGithub}/> <a href="{issue.url}">{issue.title}</a></div>
+        <div class="me-2 text-truncate" style="width: 20em;" title="{issue.title}"><Fa icon={faGithub}/> <a href="{issue.url}">{issue.title}</a></div>
         <div class="text-muted me-auto">{issue.repo}#{issue.issue_number}</div>
         {#if Object.keys(users).length > 0}
             <div class="text-muted me-2" title={new Date(issue.added_on).toLocaleString()}>Added by {users[issue.user_id].username}</div>

@@ -7,9 +7,10 @@
     import ReleaseStats from "./ReleaseStats.svelte";
     import ReleaseActivity from "./ReleaseActivity.svelte";
     import GithubIssues from "./GithubIssues.svelte";
+    import ReleaseGithubIssues from "./ReleaseGithubIssues.svelte";
 </script>
 
-<div class="container-fluid border rounded mt-1">
+<div class="container-fluid border rounded mt-1 bg-white shadow-sm">
     <div class="row mb-2">
         <div class="col-8">
             <h1 class="display-1">{releaseData.release.name}</h1>
@@ -24,9 +25,14 @@
                 {releaseData.release.description ?? "No description provided."}
             </p>
         </div>
+    </div>
+    <div class="row mb-2">
         <div class="col-4">
-            <ReleaseStats releaseName={releaseData.release.name} DisplayItem={ChartStats}/>
+            <ReleaseStats releaseName={releaseData.release.name} DisplayItem={ChartStats} showTestMap={true}/>
         </div>
+    </div>
+    <div class="row mb-2">
+        <ReleaseGithubIssues release_id={releaseData.release.id} release_name={releaseData.release.name} tests={releaseData.tests}/>
     </div>
     <div class="row mb-2">
         <ReleaseActivity releaseName={releaseData.release.name} />
@@ -37,7 +43,7 @@
                 <div class="accordion-item">
                     <h2 class="accordion-header">
                       <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseIssues">
-                        Issues
+                        All Issues
                       </button>
                     </h2>
                     <div id="collapseIssues" class="accordion-collapse collapse">

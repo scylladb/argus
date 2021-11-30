@@ -1,65 +1,65 @@
 <script>
     export let test_run = {};
+    import Fa from "svelte-fa";
+    import { faCopy } from "@fortawesome/free-solid-svg-icons";
     import { parse } from "marked";
     import { onMount } from "svelte";
     let renderedElement;
     let templateElement;
     let issueTemplateText = "";
 
-    const findScyllaServerPackage = function() {
+    const findScyllaServerPackage = function () {
         let filtered_packages = test_run.packages.filter((val) => {
             if (val.name == "scylla-server") {
                 return val;
             }
         });
-        return filtered_packages.length > 0 ? filtered_packages[0] : {
-            "name": "scylla-server",
-            "date": "19700101",
-            "revision_id": "000000000000",
-            "version": "not found"
-        };
-    }
+        return filtered_packages.length > 0
+            ? filtered_packages[0]
+            : {
+                  name: "scylla-server",
+                  date: "19700101",
+                  revision_id: "000000000000",
+                  version: "not found",
+              };
+    };
 
-    const copyTemplateToClipboard = function() {
+    const copyTemplateToClipboard = function () {
         navigator.clipboard.writeText(issueTemplateText);
-    }
+    };
 
     let scyllaServerPackage = findScyllaServerPackage();
 
-    onMount(()=>{
+    onMount(() => {
         renderedElement.innerHTML = parse(templateElement.innerHTML);
         issueTemplateText = templateElement.innerHTML;
     });
 </script>
 
-<div class="accordion accordion-flush" id="accordionIssueTemplate-{test_run.id}">
-    <div class="accordion-item">
-        <h2 class="accordion-header" id="headingIssueTemplate-{test_run.id}">
-            <button
-                class="accordion-button collapsed"
-                type="button"
-                data-bs-toggle="collapse"
-                data-bs-target="#collapseIssueTemplate-{test_run.id}"
-            >
-                Issue template
-            </button>
-        </h2>
-        <div
-            id="collapseIssueTemplate-{test_run.id}"
-            class="accordion-collapse collapse"
-            aria-labelledby="headingOne"
-            data-bs-parent="#accordionIssueTemplate-{test_run.id}"
-        >
-            <div class="accordion-body">
-                <div class="text-end">
-                    <button type="button" class="btn btn-success" on:click={copyTemplateToClipboard}
-                        ><i class="far fa-copy" /></button
-                    >
-                </div>
-                <pre
-                    bind:this={templateElement}
-                    id="issueTemplateText-{test_run.id}"
-                    class="d-none">
+<div class="container-fluid mb-2"><div class="row">
+    <div class="col mt-2">
+
+            <div class="input-group">
+                <button
+                    class="btn btn-input-group btn-primary"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#collapseIssueTemplate-{test_run.id}"
+                >
+                    Scylla Issue Template
+                </button>
+                <button
+                    type="button"
+                    class="btn btn-input-group btn-primary"
+                    on:click={copyTemplateToClipboard}><Fa icon={faCopy} /></button
+                >
+            </div>
+            <div id="collapseIssueTemplate-{test_run.id}" class="collapse">
+                <div class="accordion-body">
+                    <pre
+                        bind:this={templateElement}
+                        id="issueTemplateText-{test_run.id}"
+                        class="d-none">
 ## Installation details
 
 
@@ -110,12 +110,13 @@ Test config file(s):
 {/each}
 
 [Jenkins job URL]({test_run.build_job_url})
-                </pre>
-                <div
-                    bind:this={renderedElement}
-                    id="issueTemplateRendered-{test_run.id}"
-                />
+                            </pre>
+                    <div
+                        bind:this={renderedElement}
+                        id="issueTemplateRendered-{test_run.id}"
+                    />
+                </div>
             </div>
-        </div>
     </div>
+</div>
 </div>

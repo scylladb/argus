@@ -7,7 +7,8 @@ releaseElements.forEach(el => {
     let app = new ReleaseStats({
         target: el.querySelector("div.release-stats"),
         props: {
-            releaseName: el.dataset.argusReleaseName
+            releaseName: el.dataset.argusReleaseName,
+            showTestMap: true
         }
     });
     registeredApps.push(app);

@@ -1,5 +1,6 @@
 <script>
     import { onMount } from "svelte";
+    import { Base64 } from "js-base64";
     import TestRunsPanel from "./TestRunsPanel.svelte";
     import RunRelease from "./RunRelease.svelte";
     import { stats } from "./StatsSubscriber.js";
@@ -7,6 +8,28 @@
     let test_runs = {};
     let releaseStats = {};
     let filterString = "";
+
+
+
+    const stateUpdater = function() {
+        let state = JSON.stringify(test_runs);
+        let encodedState = Base64.encode(state, true);
+        console.log("Encoded state length: %d", encodedState.length);
+        history.pushState({}, "", `?state=${encodedState}`);
+    };
+
+    const stateDecoder = function () {
+        let params = new URLSearchParams(document.location.search);
+        let state = params.get("state");
+        if (state) {
+            let decodedState = JSON.parse(Base64.decode(state));
+            console.log(decodedState);
+            test_runs = decodedState;
+            return;
+        }
+
+        test_runs = {};
+    }
 
     stats.subscribe((value) => {
         releaseStats = value.releases;
@@ -58,12 +81,20 @@
             test: event.detail.test,
             release: event.detail.release,
         };
+        test_runs = test_runs;
+        stateUpdater();
     };
 
     onMount(() => {
         fetchNewReleases();
+        stateDecoder();
+        window.onpopstate = stateDecoder();
     });
+
+
+
 </script>
+<svelte:window on:popstate={stateDecoder}/>
 
 <div class="container-fluid bg-light">
     <div class="row p-4" id="dashboard-main">
