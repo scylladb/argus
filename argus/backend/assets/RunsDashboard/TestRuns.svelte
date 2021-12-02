@@ -2,15 +2,16 @@
     import TestRun from "./TestRun.svelte";
     import { runStore, polledRuns, TestRunsEventListener } from "./TestRunsSubscriber.js";
     import { StatusButtonCSSClassMap, StatusBackgroundCSSClassMap } from "./TestStatus.js";
+    import { v4 as uuidv4 } from "uuid";
     export let data = {};
-    export let id = "";
+    export let listId = uuidv4();
     export let filtered = false;
     console.log(data);
-    let myId = crypto.randomUUID();
     let clickedTestRuns = {};
     let testInfo = data.test;
     let runs = data.runs;
     let releaseName = data.release
+    let myId = `${releaseName}/${testInfo}`;
 
     runStore.update((val) => {
         val[myId] = [releaseName, testInfo]
@@ -38,11 +39,11 @@
 </script>
 
 <div class:d-none={filtered} class="accordion-item border">
-    <h4 class="accordion-header" id="heading{id}">
+    <h4 class="accordion-header" id="heading{listId}">
         <button
             class="accordion-button d-flex align-items-center"
             data-bs-toggle="collapse"
-            data-bs-target="#collapse{id}"
+            data-bs-target="#collapse{listId}"
         >
             {#if runs.length > 0}
             <span
@@ -52,9 +53,13 @@
             >
             {/if}
             {testInfo}
+            {#if runs.length > 0}
+            <div class="mx-2 flex-fill text-end">Last run: {new Date(runs[0].start_time * 1000).toLocaleString()}</div>
+            {/if}
+
         </button>
     </h4>
-    <div class="accordion-collapse collapse show" id="collapse{id}">
+    <div class="accordion-collapse collapse show" id="collapse{listId}">
         <div class="p-2">
             <p class="p-2">
                 {#each runs as run}

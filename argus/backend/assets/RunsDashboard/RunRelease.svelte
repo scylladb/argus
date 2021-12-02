@@ -1,7 +1,7 @@
 <script>
     import RunGroup from "./RunGroup.svelte";
+    import { sendMessage } from "./AlertStore";
     import { releaseRequests, stats } from "./StatsSubscriber";
-    import ProgressBarStats from "./ProgressBarStats.svelte";
     import NumberStats from "./NumberStats.svelte";
     let releaseGroups = [];
     export let release = {
@@ -25,7 +25,7 @@
     let releaseStats = releaseStatsDefault;
     let groupStats = {};
     let filterString = "";
-    const sortGroupsByStatus = function() {
+    const sortGroupsByStatus = function () {
         if (releaseGroups.length == 0) return;
         releaseGroups = releaseGroups.sort((a, b) => {
             let leftOrder = groupStats[a.name]?.total ?? 0;
@@ -40,54 +40,58 @@
         });
     };
 
-    const isFiltered = function(name = "") {
+    const isFiltered = function (name = "") {
         if (filterString == "") {
             return false;
         }
         return !RegExp(filterString.toLowerCase()).test(name.toLowerCase());
     };
 
-    releaseRequests.update(val => [...val, release.name]);
-    stats.subscribe(val => {
+    releaseRequests.update((val) => [...val, release.name]);
+    stats.subscribe((val) => {
         releaseStats = val["releases"]?.[release.name] ?? releaseStatsDefault;
-        groupStats = val["releases"]?.[release.name]?.["groups"] ?? releaseStatsDefault;
+        groupStats =
+            val["releases"]?.[release.name]?.["groups"] ?? releaseStatsDefault;
         sortGroupsByStatus();
-    })
-
+    });
 
     const removeDots = function (str) {
         return str.replaceAll(".", "_");
     };
 
-    const fetchGroupsForRelease = function (e) {
+    const fetchGroupsForRelease = async function (e) {
         if (fetched) return;
-
-        fetch("/api/v1/release_groups", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                release: release,
-            }),
-        })
-            .then((res) => {
-                if (res.status == 200) {
-                    return res.json();
-                } else {
-                    console.log("Error fetching groups");
-                }
-            })
-            .then((res) => {
-                if (res.status === "ok") {
-                    releaseGroups = res.response;
-                    sortGroupsByStatus();
-                    fetched = true;
-                } else {
-                    console.log("Response returned an error");
-                    console.log(res.response);
-                }
+        try {
+            let apiResponse = await fetch("/api/v1/release_groups", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    release: release,
+                }),
             });
+            let apiJson = await apiResponse.json();
+            if (apiJson.status === "ok") {
+                releaseGroups = apiJson.response;
+                sortGroupsByStatus();
+                fetched = true;
+            } else {
+                throw apiJson;
+            }
+        } catch (error) {
+            if (error?.status === "error") {
+                sendMessage(
+                    "error",
+                    `API Error when fetching release groups.\nMessage: ${error.message}`
+                );
+            } else {
+                sendMessage(
+                    "error",
+                    "A backend error occurred during release groups fetch"
+                );
+            }
+        }
     };
 </script>
 
@@ -105,10 +109,10 @@
                         {release.pretty_name || release.name}
                     </div>
                     <div class="col-4 text-end">
-                        {#if (releaseStats?.total) > 0}
+                        {#if releaseStats?.total > 0}
                             <NumberStats stats={releaseStats} />
                         {:else if releaseStats?.total == -1}
-                            <span class="spinner-border spinner-border-sm"></span>
+                            <span class="spinner-border spinner-border-sm" />
                         {:else}
                             <!-- svelte-ignore empty-block -->
                         {/if}
@@ -121,9 +125,23 @@
         class="accordion-collapse collapse"
         id="collapse{removeDots(release.name)}"
     >
-        <div class="p-2"><a href="/dashboard/{release.name}" class="btn btn-sm btn-dark" target="_blank">Dashboard</a></div>
+        <div class="p-2">
+            <a
+                href="/dashboard/{release.name}"
+                class="btn btn-sm btn-dark"
+                target="_blank">Dashboard</a
+            >
+        </div>
         <div class="p-2 border-bottom">
-            <input class="form-control" type="text" placeholder="Filter groups" bind:value={filterString} on:input={() => { releaseGroups = releaseGroups }}>
+            <input
+                class="form-control"
+                type="text"
+                placeholder="Filter groups"
+                bind:value={filterString}
+                on:input={() => {
+                    releaseGroups = releaseGroups;
+                }}
+            />
         </div>
         <div class="bg-light">
             <div

@@ -7,11 +7,13 @@ module.exports = {
     mode: 'development',
     entry: {
         main: './argus/backend/assets/argus.js',
-        runDashboard: './argus/backend/assets/RunsDashboard/runs-dashboard.js',
-        releasePage: './argus/backend/assets/RunsDashboard/release-page.js',
-        testRunDetails: './argus/backend/assets/RunsDashboard/test-run-details.js',
-        testRuns: './argus/backend/assets/RunsDashboard/test-runs-breakout.js',
-        releaseDashboard: './argus/backend/assets/RunsDashboard/release-dashboard.js',
+        globalAlert: { import: './argus/backend/assets/RunsDashboard/Alert.js', dependOn: 'main'},
+        flashDebug: { import: './argus/backend/assets/RunsDashboard/flashDebug.js', dependOn: 'globalAlert'},
+        runDashboard: { import: './argus/backend/assets/RunsDashboard/runs-dashboard.js', dependOn: 'globalAlert'},
+        releasePage: { import: './argus/backend/assets/RunsDashboard/release-page.js', dependOn: 'globalAlert'},
+        testRunDetails: { import: './argus/backend/assets/RunsDashboard/test-run-details.js', dependOn: 'globalAlert'},
+        testRuns: { import: './argus/backend/assets/RunsDashboard/test-runs-breakout.js', dependOn: 'globalAlert'},
+        releaseDashboard: { import: './argus/backend/assets/RunsDashboard/release-dashboard.js', dependOn: 'globalAlert'},
     },
     output: {
         path: path.resolve(__dirname, 'argus/backend/static/dist'),
@@ -40,4 +42,5 @@ module.exports = {
             }
         }],
     },
+    devtool: "eval-source-map"
 };

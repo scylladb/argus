@@ -1,4 +1,5 @@
 <script>
+    import { v4 as uuidv4 } from 'uuid';
     import { onMount } from "svelte";
     import TestWithIssuesCard from "./TestWithIssuesCard.svelte";
     import { Base64 } from "js-base64";
@@ -13,7 +14,7 @@
 
     const prepareWorkAreaState = function() {
         let state = assortedIssues.reduce((acc, val) => {
-            acc[crypto.randomUUID()] = {
+            acc[`${release_name}/${val[0].name}`] = {
                 runs: [],
                 test: val[0].name,
                 release: release_name

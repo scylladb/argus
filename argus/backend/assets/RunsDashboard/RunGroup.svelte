@@ -2,6 +2,7 @@
     import Test from "./Test.svelte";
     import { groupRequests, stats } from "./StatsSubscriber";
     import { StatusSortPriority } from "./TestStatus.js";
+    import { sendMessage } from "./AlertStore";
     import NumberStats from "./NumberStats.svelte";
     export let release = "";
     export let group = {
@@ -29,10 +30,10 @@
         if (tests.length == 0) return;
         tests = tests.sort((a, b) => {
             let leftStatus =
-                StatusSortPriority[testStatus[a.name]] ??
+                StatusSortPriority[testStatus[a.name]?.status] ??
                 StatusSortPriority["none"];
             let rightStatus =
-                StatusSortPriority[testStatus[b.name]] ??
+                StatusSortPriority[testStatus[b.name]?.status] ??
                 StatusSortPriority["none"];
             if (leftStatus > rightStatus) {
                 return 1;
@@ -45,7 +46,7 @@
     };
 
     let filterString = "";
-    const isFiltered = function(name = "") {
+    const isFiltered = function (name = "") {
         if (filterString == "") {
             return false;
         }
@@ -68,39 +69,42 @@
         return str.replaceAll(".", "_");
     };
 
-    const fetchTestNamesForReleaseGroup = function (e) {
+    const fetchTestNamesForReleaseGroup = async function (e) {
         if (clickedGroups[group.name]) return;
         tests = [];
-        fetch("/api/v1/tests", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                release: release,
-                group: group,
-            }),
-        })
-            .then((res) => {
-                if (res.status == 200) {
-                    return res.json();
-                } else {
-                    console.log("Something went wrong during test fetch");
-                    console.log(res);
-                }
-            })
-            .then((res) => {
-                if (res.status === "ok") {
-                    console.log(res);
-                    tests = res.response["tests"];
-                    clickedGroups[group.name] = true;
-                    sortTestsByStatus();
-                    testsReady = true;
-                } else {
-                    console.log("API Error after fetch");
-                    console.log(res.response);
-                }
+        try {
+            let apiResponse = await fetch("/api/v1/tests", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    release: release,
+                    group: group,
+                }),
             });
+            let apiJson = await apiResponse.json();
+            if (apiJson.status === "ok") {
+                tests = apiJson.response["tests"];
+                clickedGroups[group.name] = true;
+                sortTestsByStatus();
+                testsReady = true;
+            } else {
+                throw apiJson;
+            }
+        } catch (error) {
+            if (error?.status === "error") {
+                sendMessage(
+                    "error",
+                    `API Error when fetching release groups.\nMessage: ${error.message}`
+                );
+            } else {
+                sendMessage(
+                    "error",
+                    "A backend error occurred during release groups fetch"
+                );
+            }
+        }
     };
 </script>
 
@@ -136,7 +140,15 @@
     >
         {#if testsReady}
             <div class="p-2 border-bottom">
-                <input class="form-control" type="text" placeholder="Filter tests" bind:value={filterString} on:input={() => { tests = tests }}>
+                <input
+                    class="form-control"
+                    type="text"
+                    placeholder="Filter tests"
+                    bind:value={filterString}
+                    on:input={() => {
+                        tests = tests;
+                    }}
+                />
             </div>
             <div class="bg-light">
                 <ul
@@ -174,5 +186,4 @@
         margin-left: 2rem;
         background-color: #fff;
     }
-
 </style>

@@ -6,6 +6,8 @@
     export let DisplayItem = NumberStats;
     export let TestMapItem = TestMapStats;
     export let showTestMap = false;
+    export let showReleaseStats = true;
+    export let horizontal = false;
     const releaseStatsDefault = {
         created: 0,
         running: 0,
@@ -20,20 +22,25 @@
     };
     let releaseStats = releaseStatsDefault;
 
-    releaseRequests.update(val => [...val, releaseName]);
+    releaseRequests.update((val) => [...val, releaseName]);
     $: releaseStats = $stats["releases"]?.[releaseName] ?? releaseStatsDefault;
-
 </script>
 
-<div>
-{#if (releaseStats?.total) > 0}
-    <svelte:component this={DisplayItem} stats={releaseStats} />
-    {#if showTestMap}
-    <svelte:component this={TestMapItem} stats={releaseStats} />
+<div class="d-flex justify-content-center align-items-center" class:flex-column={!horizontal}>
+    {#if releaseStats?.total > 0}
+        {#if showReleaseStats}
+            <div class="w-100">
+                <svelte:component this={DisplayItem} stats={releaseStats} />
+            </div>
+        {/if}
+        {#if showTestMap}
+            <div>
+                <svelte:component this={TestMapItem} stats={releaseStats} on:testClick />
+            </div>
+        {/if}
+    {:else if releaseStats?.total == -1}
+        <span class="spinner-border spinner-border-sm" />
+    {:else}
+        <!-- svelte-ignore empty-block -->
     {/if}
-{:else if releaseStats?.total == -1}
-    <span class="spinner-border spinner-border-sm"></span>
-{:else}
-    <!-- svelte-ignore empty-block -->
-{/if}
 </div>

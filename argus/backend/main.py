@@ -50,6 +50,15 @@ def releases():
     return render_template("releases.html.j2", releases=releases)
 
 
+@bp.route("/alert_debug")
+@login_required
+def alert_debug():
+    type = request.args.get("type", "success")
+    message = request.args.get("message", "No message provided")
+    flash(message=message, category=type)
+    return render_template("flash_debug.html.j2")
+
+
 @bp.route("/dashboard/<string:release_name>")
 @login_required
 def release_dashboard(release_name: str):

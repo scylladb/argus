@@ -2,6 +2,7 @@
     import { createEventDispatcher } from "svelte";
     import { testRequests, stats } from "./StatsSubscriber";
     import { StatusBackgroundCSSClassMap } from "./TestStatus.js";
+    import { v4 as uuidv4 } from 'uuid';
 
     export let release = "";
     export let group = "";
@@ -16,13 +17,14 @@
         release_id: null,
     };
     export let lastStatus = "unknown";
-    let runs_uuid = crypto.randomUUID();
+    let startTime = 0;
+    let runs_uuid = uuidv4();
     let fetching = false;
     let runs = [];
     let listItem;
     testRequests.update((val) => [...val, [release, group, test.name]]);
-    $: lastStatus = $stats?.["releases"]?.[release]?.["tests"]?.[test.name] ?? lastStatus;
-
+    $: lastStatus = $stats?.["releases"]?.[release]?.["tests"]?.[test.name]["status"] ?? lastStatus;
+    $: startTime = $stats?.["releases"]?.[release]?.["tests"]?.[test.name]["start_time"] ?? startTime;
     const removeDots = function (str) {
         return str.replaceAll(".", "_");
     };
@@ -38,7 +40,7 @@
         listItem.classList.add("active");
         fetching = true;
         dispatch("testRunRequest", {
-            uuid: runs_uuid,
+            uuid: `${release}/${test.name}`,
             runs: [],
             test: test.name,
             release: release
@@ -54,7 +56,7 @@
     on:click={fetchTestRuns}
 >
     <div class="container-fluid p-0 m-0">
-        <div class="row p-0 m-0">
+        <div class="row p-0 m-0 align-items-center">
             <div class="col-1 text-center">
                 {#if lastStatus}
                     <span
@@ -65,7 +67,8 @@
                 {/if}
             </div>
             <div class="col-10 overflow-hidden">
-                {test.pretty_name ?? test.name}
+                <div>{test.pretty_name ?? test.name}</div>
+                <div class="text-muted" style="font-size: 0.75em">{new Date(startTime * 1000).toLocaleString()}</div>
             </div>
             <div class="col-1 text-center">
                 {#if fetching}

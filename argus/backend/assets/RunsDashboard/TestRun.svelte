@@ -17,6 +17,7 @@
     import IssueTemplate from "./IssueTemplate.svelte";
     import { polledTestRuns, testRunStore } from "./SingleTestRunSubscriber.js";
     import { userList } from "./UserlistSubscriber.js";
+    import { sendMessage } from "./AlertStore";
     export let id = "";
     export let build_number = -1;
     let test_run = undefined;
@@ -27,6 +28,7 @@
     let clockInterval;
     let users = {};
     let activityOpen = false;
+    let commentsOpen = false;
     let issuesOpen = false;
     let userSelect = [];
 
@@ -54,123 +56,138 @@
         currentTime - test_run?.heartbeat * 1000,
         { round: true }
     );
+
     $: startedAtHuman = humanizeDuration(
         currentTime - test_run?.start_time * 1000,
         { round: true }
     );
+
     polledTestRuns.subscribe((data) => {
         test_run = data[id] ?? test_run;
     });
 
-
-    const fetchTestRunData = function () {
-        fetch("/api/v1/test_run", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                test_id: id,
-            }),
-        })
-            .then((res) => {
-                if (res.status == 200) {
-                    return res.json();
-                } else {
-                    console.log("Error fetching test_run");
-                    console.log(res);
-                }
-            })
-            .then((res) => {
-                if (res.status === "ok") {
-                    test_run = res.response;
-                    if (build_number == -1) {
-                        build_number = parseInt(
-                            test_run.build_job_url.split("/").reverse()[1]
-                        );
-                    }
-                    testRunStore.update((store) => {
-                        if (!store.find((val) => val == id)) {
-                            return [...store, id];
-                        } else {
-                            return store;
-                        }
-                    });
-                    disableButtons = false;
-                    console.log(test_run);
-                } else {
-                    console.log(
-                        "During fetchTestRunData a backend error was reported..."
-                    );
-                    console.log(res);
-                }
+    const fetchTestRunData = async function () {
+        try {
+            let apiResponse = await fetch("/api/v1/test_run", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    test_id: id,
+                }),
             });
+            let apiJson = await apiResponse.json();
+            console.log(apiJson);
+            if (apiJson.status === "ok") {
+                test_run = apiJson.response;
+                if (build_number == -1) {
+                    build_number = parseInt(
+                        test_run.build_job_url.split("/").reverse()[1]
+                    );
+                }
+                testRunStore.update((store) => {
+                    if (!store.find((val) => val == id)) {
+                        return [...store, id];
+                    } else {
+                        return store;
+                    }
+                });
+                disableButtons = false;
+            } else {
+                throw apiJson;
+            }
+        } catch (error) {
+            if (error?.status === "error") {
+                sendMessage(
+                    "error",
+                    `API Error when fetching test run data.\nMessage: ${error.message}`
+                );
+            } else {
+                sendMessage(
+                    "error",
+                    "A backend error occurred during test run data fetch"
+                );
+            }
+        }
     };
 
-    const handleAssign = function (event) {
+    const handleAssign = async function (event) {
         if (event.detail.value != "NONE" && !users[event.detail.value]) return;
         let new_assignee = event.detail.value;
         new_assignee = new_assignee != "NONE" ? new_assignee : "none-none-none";
-        fetch("/api/v1/test_run/change_assignee", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                test_run_id: id,
-                assignee: new_assignee,
-            }),
-        })
-            .then((res) => {
-                if (res.status == 200) {
-                    return res.json();
-                } else {
-                    console.log("Error fetching test_run");
-                    console.log(res);
-                }
-            })
-            .then((res) => {
-                if (res.status === "ok") {
-                    fetchTestRunData();
-                    console.log(res.response);
-                } else {
-                    console.log(
-                        "During handleAssign a backend error was reported..."
-                    );
-                    console.log(res);
-                }
+        try {
+            let apiResponse = await fetch("/api/v1/test_run/change_assignee", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    test_run_id: id,
+                    assignee: new_assignee,
+                }),
             });
+            let apiJson = await apiResponse.json();
+            console.log(apiJson);
+            if (apiJson.status === "ok") {
+                if (new_assignee != "none-none-none") {
+                    sendMessage("success", `Successfully changed assignee to "${users[new_assignee].username}"`);
+                } else {
+                    sendMessage("success", `Successfully cleared assignee from a run`);
+                }
+                fetchTestRunData();
+            } else {
+                throw apiJson;
+            }
+        } catch (error) {
+            if (error?.status === "error") {
+                sendMessage(
+                    "error",
+                    `API Error assigning person to the test run.\nMessage: ${error.message}`
+                );
+            } else {
+                sendMessage(
+                    "error",
+                    "A backend error occurred during assignment call"
+                );
+            }
+        }
     };
 
-    const handleStatus = function () {
+    const handleStatus = async function () {
         disableButtons = true;
-        fetch("/api/v1/test_run/change_status", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                test_run_id: id,
-                status: newStatus,
-            }),
-        })
-            .then((res) => {
-                if (res.status == 200) {
-                    return res.json();
-                } else {
-                    console.log("Error updating status");
-                    console.log(res);
-                }
-            })
-            .then((res) => {
-                if (res.status === "ok") {
-                    fetchTestRunData();
-                    console.log(res.response);
-                } else {
-                    console.log("Something went wrong...");
-                    console.log(res);
-                }
+        try {
+            let apiResponse = await fetch("/api/v1/test_run/change_status", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    test_run_id: id,
+                    status: newStatus,
+                }),
             });
+            let apiJson = await apiResponse.json();
+            console.log(apiJson);
+            if (apiJson.status === "ok") {
+                sendMessage("success", `Successfully changed status from "${test_run.status}" to "${newStatus}"`)
+                fetchTestRunData();
+            } else {
+                throw apiJson;
+            }
+        } catch (error) {
+            if (error?.status === "error") {
+                sendMessage(
+                    "error",
+                    `API Error updating test run status.\nMessage: ${error.message}`
+                );
+            } else {
+                sendMessage(
+                    "error",
+                    "A backend error occurred during test run status update"
+                );
+            }
+        }
     };
     onMount(() => {
         fetchTestRunData();
@@ -302,6 +319,7 @@
                     data-bs-toggle="tab"
                     data-bs-target="#nav-discuss-{id}"
                     type="button"
+                    on:click={() => (commentsOpen = true)}
                     role="tab"><i class="fas fa-comments" /> Discussion</button
                 >
                 <button
@@ -312,9 +330,7 @@
                     type="button"
                     role="tab"
                     on:click={() => (issuesOpen = true)}
-                    ><i
-                        class="fas fa-code-branch"
-                    /> Issues</button
+                    ><i class="fas fa-code-branch" /> Issues</button
                 >
                 <button
                     class="nav-link"
@@ -337,7 +353,7 @@
                 id="nav-details-{id}"
                 role="tabpanel"
             >
-                <TestRunInfo {test_run}/>
+                <TestRunInfo {test_run} />
             </div>
             <div class="tab-pane fade" id="nav-resources-{id}" role="tabpanel">
                 <div
@@ -434,7 +450,9 @@
                 {/if}
             </div>
             <div class="tab-pane fade" id="nav-discuss-{id}" role="tabpanel">
-                <TestRunComments {id} />
+                {#if commentsOpen}
+                    <TestRunComments {id} />
+                {/if}
             </div>
             <div class="tab-pane fade" id="nav-issues-{id}" role="tabpanel">
                 <IssueTemplate {test_run} />
@@ -449,8 +467,8 @@
             </div>
         </div>
     {:else}
-        <div class="text-center p-2 m-1">
-            <span class="spinner-border" /><span class="fs-4">Loading...</span>
+        <div class="text-center p-2 m-1 d-flex align-items-center justify-content-center">
+            <span class="spinner-border me-4" /><span class="fs-4">Loading...</span>
         </div>
     {/if}
 </div>
