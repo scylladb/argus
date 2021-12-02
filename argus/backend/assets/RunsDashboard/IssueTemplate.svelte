@@ -4,6 +4,7 @@
     import { faCopy } from "@fortawesome/free-solid-svg-icons";
     import { parse } from "marked";
     import { onMount } from "svelte";
+    import { sendMessage } from "./AlertStore";
     let renderedElement;
     let templateElement;
     let issueTemplateText = "";
@@ -26,6 +27,7 @@
 
     const copyTemplateToClipboard = function () {
         navigator.clipboard.writeText(issueTemplateText);
+        sendMessage("success", "Copied to clipboard.");
     };
 
     let scyllaServerPackage = findScyllaServerPackage();
@@ -36,9 +38,9 @@
     });
 </script>
 
-<div class="container-fluid mb-2"><div class="row">
-    <div class="col mt-2">
-
+<div class="container-fluid mb-2">
+    <div class="row">
+        <div class="col mt-2">
             <div class="input-group">
                 <button
                     class="btn btn-input-group btn-primary"
@@ -51,7 +53,8 @@
                 <button
                     type="button"
                     class="btn btn-input-group btn-primary"
-                    on:click={copyTemplateToClipboard}><Fa icon={faCopy} /></button
+                    on:click={copyTemplateToClipboard}
+                    ><Fa icon={faCopy} /></button
                 >
             </div>
             <div id="collapseIssueTemplate-{test_run.id}" class="collapse">
@@ -117,6 +120,6 @@ Test config file(s):
                     />
                 </div>
             </div>
+        </div>
     </div>
-</div>
 </div>

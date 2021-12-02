@@ -21,7 +21,6 @@
 <div class="accordion mb-2" id="accordionTestRuns">
     {#each Object.keys(test_runs) as test_run_id}
         <TestRuns
-            id={test_run_id}
             data={test_runs[test_run_id]}
             parent="#accordionTestRuns"
             filtered={isFiltered(test_runs[test_run_id].test, filterStringRuns)}

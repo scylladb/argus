@@ -1,5 +1,6 @@
 <script>
     import { onMount } from "svelte";
+    import { sendMessage } from "./AlertStore";
     import { Base64 } from "js-base64";
     import TestRunsPanel from "./TestRunsPanel.svelte";
     import RunRelease from "./RunRelease.svelte";
@@ -8,8 +9,6 @@
     let test_runs = {};
     let releaseStats = {};
     let filterString = "";
-
-
 
     const stateUpdater = function() {
         let state = JSON.stringify(test_runs);
@@ -57,21 +56,23 @@
         return !RegExp(filterString).test(name);
     };
 
-    const fetchNewReleases = function () {
-        fetch("/api/v1/releases")
-            .then((res) => {
-                if (res.status == 200) {
-                    return res.json();
-                } else {
-                    console.log(res);
-                }
-            })
-            .then((res) => {
-                console.log(res);
-                if (res.status === "ok") {
-                    releases = res.response;
-                }
-            });
+    const fetchNewReleases = async function () {
+        try {
+            let apiResponse = await fetch("/api/v1/releases");
+            let apiJson = await apiResponse.json();
+            console.log(apiJson);
+            if (apiJson.status === "ok") {
+                releases = apiJson.response;
+            } else {
+                throw apiJson;
+            }
+        } catch (error) {
+            if (error?.status === "error") {
+                sendMessage("error", `API Error when fetching releases.\nMessage: ${error.message}`);
+            } else {
+                sendMessage("error", "A backend error occurred during release fetch");
+            }
+        }
     };
 
     const onTestRunRequest = function (event) {
@@ -83,6 +84,7 @@
         };
         test_runs = test_runs;
         stateUpdater();
+        sendMessage("success", `Successfuly added ${event.detail.test} to the work area`)
     };
 
     onMount(() => {

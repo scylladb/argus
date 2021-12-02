@@ -2,6 +2,7 @@
     import { onMount } from "svelte";
     import { newIssueDestinations } from "./IssueDestinations";
     import GithubIssue from "./GithubIssue.svelte";
+    import { sendMessage } from "./AlertStore";
     export let id = "";
     export let filter_key = "run_id";
     export let submitDisabled = false;
@@ -45,12 +46,23 @@
             });
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
+                sendMessage("success", "Attached an issue successfully.");
                 fetchIssues();
             } else {
                 throw apiJson;
             }
         } catch (error) {
-            console.log(error);
+            if (error?.status === "error") {
+                sendMessage(
+                    "error",
+                    `API Error while submitting an issue on a test run.\nMessage: ${error.message}`
+                );
+            } else {
+                sendMessage(
+                    "error",
+                    "A backend error occurred during issue submission."
+                );
+            }
         }
     };
 
@@ -72,14 +84,19 @@
                         >
                             New Issue
                         </button>
-                        <ul
-                            class="dropdown-menu"
-                        >
-                            <li><h6 class="dropdown-header">Repositories</h6></li>
-                            {#each newIssueDestinations as destination}
+                        <ul class="dropdown-menu">
                             <li>
-                                <a target="_blank" class="dropdown-item" href="{destination.url}/issues/new/choose">{destination.name}</a>
+                                <h6 class="dropdown-header">Repositories</h6>
                             </li>
+                            {#each newIssueDestinations as destination}
+                                <li>
+                                    <a
+                                        target="_blank"
+                                        class="dropdown-item"
+                                        href="{destination.url}/issues/new/choose"
+                                        >{destination.name}</a
+                                    >
+                                </li>
                             {/each}
                         </ul>
                     </div>

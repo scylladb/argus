@@ -19,7 +19,6 @@ LOGGER = logging.getLogger(__name__)
 def releases():
     service = ArgusService()
     releases = service.get_releases()
-    service.terminate_session()
     return jsonify({
         "status": "ok",
         "response": [dict(d.items()) for d in releases]

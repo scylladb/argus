@@ -296,12 +296,18 @@ class ArgusService:
                 release_stats["total"] += 1
                 run = first(rows, test.name, predicate=lambda elem, val: re.match(f"^{val}(-test)?$", elem["name"]))
                 if not run:
-                    release_stats["tests"][test.name] = "unknown"
+                    release_stats["tests"][test.name] = {
+                        "status": "unknown",
+                        "start_time": 0
+                    }
                     release_stats["not_run"] += 1
                     release_stats["groups"][test_group.name]["not_run"] += 1
                     release_stats["groups"][test_group.name]["total"] += 1
                     continue
-                release_stats["tests"][test.name] = run["status"]
+                release_stats["tests"][test.name] = {
+                    "status": run["status"],
+                    "start_time": run["start_time"]
+                }
                 release_stats["groups"][test_group.name][run["status"]] += 1
                 release_stats["groups"][test_group.name]["total"] += 1
                 release_stats[run["status"]] += 1
@@ -323,8 +329,12 @@ class ArgusService:
                 statement, parameters=(release_name,), execution_profile="read_fast").all()
             rows = sorted(rows, key=lambda val: val["start_time"], reverse=True)
             for row in rows:
-                row["build_number"] = int(
-                    row["build_job_url"].rstrip("/").split("/")[-1])
+                try:
+                    row["build_number"] = int(
+                        row["build_job_url"].rstrip("/").split("/")[-1])
+                except ValueError:
+                    row["build_number"] = -1
+
             result = [
                 row for row in rows
                 if re.match(f"^{test_name}(-test)?$", row["name"])

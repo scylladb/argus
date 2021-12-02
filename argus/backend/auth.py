@@ -46,7 +46,6 @@ def register():
 
 @bp.route('/login', methods=('GET', 'POST'))
 def login():
-
     token = hashlib.sha256((os.urandom(64))).hexdigest()
     session["csrf_token"] = token
 
@@ -64,14 +63,14 @@ def login():
             session.clear()
             session["user_id"] = str(user.id)
             session["csrf_token"] = token
-        flash(error)
+        flash(error, category="error")
         return redirect(url_for('main.home'))
 
-    return render_template('auth/login.html.j2', 
-                            csrf_token=token, 
-                            github_cid=current_app.config.get("GITHUB_CLIENT_ID", "NO_CLIENT_ID"),
-                            github_scopes="user:email read:user"
-                        )
+    return render_template('auth/login.html.j2',
+                           csrf_token=token,
+                           github_cid=current_app.config.get("GITHUB_CLIENT_ID", "NO_CLIENT_ID"),
+                           github_scopes="user:email read:user"
+                           )
 
 
 @bp.before_app_request

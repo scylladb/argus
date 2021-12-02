@@ -7,15 +7,16 @@
     <link rel="shortcut icon" href="/static/argus.png" type="image/png">
     {% block javascripts %}
     <script src="/static/dist/main.bundle.js"></script>
+    <script>
+        var globalFlashes = JSON.parse('{{ get_flashed_messages(with_categories=true) | tojson | safe }}');
+    </script>
+    <script src="/static/dist/globalAlert.bundle.js"></script>
     {% endblock javascripts %}
 </head>
 <body class="bg-light">
     <div class="app d-flex flex-column min-vh-100">
         {% include "partials/nav_bar.html.j2" %}
         <div id="argusErrors">
-            {% for message in get_flashed_messages() %}
-            <div class="d-inline-block float-end flash border p-4 mb-2 text-light bg-danger">{{ message }}</div>
-            {% endfor %}
         </div>
         <div id="argusMain" class="container-fluid">
             {% block body %}
