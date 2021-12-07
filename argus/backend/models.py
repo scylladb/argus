@@ -1,4 +1,4 @@
-from uuid import uuid4
+from uuid import uuid1, uuid4
 from datetime import datetime
 from cassandra.cqlengine.models import Model
 from cassandra.cqlengine.usertype import UserType
@@ -105,7 +105,8 @@ class ArgusTestRunComment(Model):
     test_run_id = columns.UUID(required=True, index=True)
     user_id = columns.UUID(required=True, index=True)
     release_id = columns.UUID(required=True, index=True)
-    posted_at = columns.Integer(required=True, clustering_order="desc", primary_key=True)
+    posted_at = columns.Integer(
+        required=True, clustering_order="desc", primary_key=True)
     message = columns.Text(min_length=1)
     mentions = columns.List(value_type=columns.UUID, default=[])
 
@@ -146,9 +147,35 @@ class ArgusGithubIssue(Model):
     url = columns.Text()
 
 
+class ArgusReleaseSchedule(Model):
+    release = columns.Text(primary_key=True, required=True)
+    schedule_id = columns.TimeUUID(primary_key=True, default=uuid1, clustering_order="DESC")
+    period_start = columns.DateTime(required=True, default=datetime.utcnow())
+    period_end = columns.DateTime(required=True)
+
+
+class ArgusReleaseScheduleAssignee(Model):
+    assignee = columns.UUID(primary_key=True)
+    id = columns.TimeUUID(primary_key=True, default=uuid1, clustering_order="DESC")
+    schedule_id = columns.TimeUUID(required=True, default=uuid1, index=True)
+
+
+class ArgusReleaseScheduleTest(Model):
+    name = columns.Text(primary_key=True)
+    id = columns.TimeUUID(primary_key=True, default=uuid1, clustering_order="DESC")
+    schedule_id = columns.TimeUUID(required=True, default=uuid1, index=True)
+
+
+class ArgusReleaseScheduleGroup(Model):
+    name = columns.Text(primary_key=True)
+    id = columns.TimeUUID(primary_key=True, default=uuid1, clustering_order="DESC")
+    schedule_id = columns.TimeUUID(required=True, default=uuid1, index=True)
+
+
 class WebRunComments(Model):
     test_id = columns.UUID(primary_key=True, default=uuid4)
-    comments = columns.List(value_type=UserDefinedType(WebRunComment), default=list)
+    comments = columns.List(
+        value_type=UserDefinedType(WebRunComment), default=list)
 
     def get_comments_by_user(self, user: User):
         return [(idx, comment) for idx, comment in enumerate(self.comments) if comment.user_id == user.id]
@@ -188,6 +215,11 @@ class WebNemesis(Model):
     description = columns.Text()
 
 
-USED_MODELS = [User, WebRunComments, WebRelease, WebCategoryGroup, WebNemesis,
-               ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, ArgusPlannedTestsForRelease, ArgusTestRunComment, ArgusEvent, UserOauthToken, WebFileStorage, ArgusGithubIssue]
+USED_MODELS = [
+    User, WebRunComments, WebRelease, WebCategoryGroup, WebNemesis,
+    ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, ArgusPlannedTestsForRelease,
+    ArgusTestRunComment, ArgusEvent, UserOauthToken,
+    WebFileStorage, ArgusGithubIssue,
+    ArgusReleaseSchedule, ArgusReleaseScheduleAssignee, ArgusReleaseScheduleGroup, ArgusReleaseScheduleTest
+]
 USED_TYPES = [WebRunComment]

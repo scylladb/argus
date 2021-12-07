@@ -2,12 +2,14 @@
     import { releaseRequests, stats } from "./StatsSubscriber";
     import NumberStats from "./NumberStats.svelte";
     import TestMapStats from "./TestMapStats.svelte";
+    import { createEventDispatcher } from "svelte";
     export let releaseName = "";
     export let DisplayItem = NumberStats;
     export let TestMapItem = TestMapStats;
     export let showTestMap = false;
     export let showReleaseStats = true;
     export let horizontal = false;
+    const dispatch = createEventDispatcher();
     const releaseStatsDefault = {
         created: 0,
         running: 0,
@@ -21,9 +23,9 @@
         total: -1,
     };
     let releaseStats = releaseStatsDefault;
-
     releaseRequests.update((val) => [...val, releaseName]);
     $: releaseStats = $stats["releases"]?.[releaseName] ?? releaseStatsDefault;
+    $: dispatch("statsUpdate", { stats: releaseStats });
 </script>
 
 <div class="d-flex justify-content-center align-items-center" class:flex-column={!horizontal}>

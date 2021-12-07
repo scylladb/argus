@@ -83,7 +83,7 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error when fetching release groups.\nMessage: ${error.message}`
+                    `API Error when fetching release groups.\nMessage: ${error.response.arguments[0]}`
                 );
             } else {
                 sendMessage(

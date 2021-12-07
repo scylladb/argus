@@ -68,7 +68,7 @@
             }
         } catch (error) {
             if (error?.status === "error") {
-                sendMessage("error", `API Error when fetching releases.\nMessage: ${error.message}`);
+                sendMessage("error", `API Error when fetching releases.\nMessage: ${error.response.arguments[0]}`);
             } else {
                 sendMessage("error", "A backend error occurred during release fetch");
             }

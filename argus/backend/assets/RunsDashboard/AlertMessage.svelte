@@ -28,11 +28,11 @@
     onMount(() => {
         setTimeout(() => {
             handleClose();
-        }, 2500);
+        }, 8000);
     });
 </script>
 
-<div class="argus-message m-4 {classMap[message.type]} text-light" in:fly="{{x: -300, duration: 1000}}" out:fade>
+<div class="argus-message m-4 {classMap[message.type]} text-light" in:fly="{{x: -300, duration: 1000}}" out:fly="{{x: -300, duration: 1000}}">
     <div class="d-flex flex-column position-relative">
         <h4 class="d-flex align-items-center">
             <span class="me-4">{typeMap[message.type]}</span>

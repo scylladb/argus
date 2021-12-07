@@ -55,7 +55,7 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error while submitting an issue on a test run.\nMessage: ${error.message}`
+                    `API Error while submitting an issue on a test run.\nMessage: ${error.response.arguments[0]}`
                 );
             } else {
                 sendMessage(

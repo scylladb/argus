@@ -18,6 +18,10 @@ from argus.backend.models import (
     ArgusRelease,
     ArgusReleaseGroup,
     ArgusReleaseGroupTest,
+    ArgusReleaseSchedule,
+    ArgusReleaseScheduleAssignee,
+    ArgusReleaseScheduleGroup,
+    ArgusReleaseScheduleTest,
     ArgusTestRunComment,
     ArgusEvent,
     ArgusEventTypes,
@@ -265,7 +269,8 @@ class ArgusService:
         group_stats_body = {
             "total": 0,
             **{e.value: 0 for e in TestStatus},
-            "not_run": 0
+            "not_run": 0,
+            "lastStatus": "unknown"
         }
         run_by_release_stats_statement = self.db.prepare(
             f"SELECT id, name, group, release_name, status, start_time, end_time, heartbeat FROM {TestRun.table_name()} WHERE release_name = ?")
@@ -310,7 +315,9 @@ class ArgusService:
                 }
                 release_stats["groups"][test_group.name][run["status"]] += 1
                 release_stats["groups"][test_group.name]["total"] += 1
+                release_stats["groups"][test_group.name]["lastStatus"] = run["status"]
                 release_stats[run["status"]] += 1
+                release_stats["lastStatus"] += run["status"]
 
             response["releases"][release_name] = release_stats
 
@@ -615,3 +622,133 @@ class ArgusService:
                 response.append([test, issues_for_test])
 
         return response
+
+    """
+    Payload:
+    {
+        "release": "master",
+        "groups": ["longevity", ...],
+        "tests": ["longevity-10gb-3h", ...],
+        "start": 160000000,
+        "end": 1600000001,
+        "assignees": [uuid<, ...>]
+    }
+    """
+
+    def submit_new_schedule(self, payload: dict) -> dict:
+        release = payload.get("release")
+        if not release:
+            raise Exception("Release wasn't specified in the request")
+
+        start_time = payload.get("start", int(datetime.datetime.utcnow().timestamp()))
+        end_time = payload.get("end")
+        if not end_time:
+            raise Exception("End time wasn't specified by the schedule")
+
+        if not start_time:
+            raise Exception("Start time wasn't specified by the schedule")
+
+        assignees = payload.get("assignees", [])
+        tests = payload.get("tests", [])
+        groups = payload.get("groups", [])
+
+        if len(assignees) == 0:
+            raise Exception("Assignees must be specified for the schedule to be valid!")
+
+        if len(tests) == 0 and len(groups) == 0:
+            raise Exception("At least one group or test must be assigned for the schedule to be valid")
+
+        schedule = ArgusReleaseSchedule()
+        schedule.release = release
+        schedule.period_start = datetime.datetime.utcfromtimestamp(start_time / 1000)
+        schedule.period_end = datetime.datetime.utcfromtimestamp(end_time / 1000)
+        schedule.save()
+
+        response = dict(schedule.items())
+        response["assignees"] = []
+        response["tests"] = []
+        response["groups"] = []
+
+        for test in tests:
+            test_entity = ArgusReleaseScheduleTest()
+            test_entity.schedule_id = schedule.schedule_id
+            test_entity.name = test
+            test_entity.save()
+            response["tests"].append(test)
+
+        for group in groups:
+            assignee_entity = ArgusReleaseScheduleGroup()
+            assignee_entity.schedule_id = schedule.schedule_id
+            assignee_entity.name = group
+            assignee_entity.save()
+            response["groups"].append(group)
+
+        for assignee in assignees:
+            assignee_entity = ArgusReleaseScheduleAssignee()
+            assignee_entity.schedule_id = schedule.schedule_id
+            assignee_entity.assignee = assignee
+            assignee_entity.save()
+            response["assignees"].append(assignee)
+
+        return response
+
+    """
+    {
+        "release": "master"
+    }
+    """
+
+    def get_schedules_for_release(self, payload: dict) -> dict:
+        release = payload.get("release")
+        if not release:
+            raise Exception("Release name not specified in the request")
+
+        release = ArgusRelease.get(name=release)
+        schedules = ArgusReleaseSchedule.filter(release=release.name).all()
+        response = {
+            "schedules": []
+        }
+        for schedule in schedules:
+            serialized_schedule = dict(schedule.items())
+            tests = ArgusReleaseScheduleTest.filter(schedule_id=schedule.schedule_id).all()
+            serialized_schedule["tests"] = [test.name for test in tests]
+            groups = ArgusReleaseScheduleGroup.filter(schedule_id=schedule.schedule_id).all()
+            serialized_schedule["groups"] = [group.name for group in groups]
+            assignees = ArgusReleaseScheduleAssignee.filter(schedule_id=schedule.schedule_id).all()
+            serialized_schedule["assignees"] = [assignee.assignee for assignee in assignees]
+            response["schedules"].append(serialized_schedule)
+
+        return response
+
+    """
+    {
+        "release": "master",
+        "schedule_id": uuid1
+    }
+    """
+
+    def delete_schedule(self, payload: dict) -> dict:
+        release = payload.get("release")
+        if not release:
+            raise Exception("Release name not specified in the request")
+
+        schedule_id = payload.get("schedule_id")
+        if not schedule_id:
+            raise Exception("Schedule id not specified in the request")
+
+        release = ArgusRelease.get(name=release)
+        schedule = ArgusReleaseSchedule.get(release=release.name, schedule_id=schedule_id)
+        tests = ArgusReleaseScheduleTest.filter(schedule_id=schedule.schedule_id).all()
+        groups = ArgusReleaseScheduleGroup.filter(schedule_id=schedule.schedule_id).all()
+        assignees = ArgusReleaseScheduleAssignee.filter(schedule_id=schedule.schedule_id).all()
+
+        for entities in [tests, groups, assignees]:
+            for entity in entities:
+                entity.delete()
+
+        schedule.delete()
+        return {
+            "release": release.name,
+            "schedule": schedule_id,
+            "result": "deleted"
+        }
