@@ -72,13 +72,17 @@ def release_dashboard(release_name: str):
     return render_template("release_dashboard.html.j2", release_name=release_name, data=data_json)
 
 
-@bp.route("/release/<string:name>")
+@bp.route("/release/<string:name>/scheduler")
 @login_required
-def release(name: str):
+def release_scheduler(name: str):
     service = ArgusService()
-    groups = service.get_groups_for_release(release_name=name)
-    service.terminate_session()
-    return render_template("groups.html.j2", groups=groups, release_name=name)
+    release, release_groups, release_tests = service.get_data_for_release_dashboard(release_name=name)
+    data_json = {
+        "release": dict(release.items()),
+        "groups": [dict(group.items()) for group in release_groups],
+        "tests": [dict(test.items()) for test in release_tests],
+    }
+    return render_template("release_schedule.html.j2", release_name=name, data=data_json)
 
 
 @bp.route("/release/<string:name>/<string:group>")

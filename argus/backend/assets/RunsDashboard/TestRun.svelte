@@ -101,7 +101,7 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error when fetching test run data.\nMessage: ${error.message}`
+                    `API Error when fetching test run data.\nMessage: ${error.response.arguments[0]}`
                 );
             } else {
                 sendMessage(
@@ -143,7 +143,7 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error assigning person to the test run.\nMessage: ${error.message}`
+                    `API Error assigning person to the test run.\nMessage: ${error.response.arguments[0]}`
                 );
             } else {
                 sendMessage(
@@ -179,7 +179,7 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error updating test run status.\nMessage: ${error.message}`
+                    `API Error updating test run status.\nMessage: ${error.response.arguments[0]}`
                 );
             } else {
                 sendMessage(

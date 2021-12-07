@@ -46,7 +46,7 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `Unable to fetch comments.\nMessage: ${error.message}`
+                    `Unable to fetch comments.\nMessage: ${error.response.arguments[0]}`
                 );
             } else {
                 sendMessage(
@@ -83,7 +83,7 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error when fetching releases.\nMessage: ${error.message}`
+                    `API Error when fetching releases.\nMessage: ${error.response.arguments[0]}`
                 );
             } else {
                 sendMessage(

@@ -18,7 +18,8 @@ Releases
                         <h3 class="card-title">{{ release.name if not release.pretty_name else release.pretty_name }}</h3>
                         <p class="card-subtitle text-muted">{{ release.description if release.description else "No description provided" }}</p>
                         <div class="release-stats mb-1"></div>
-                        <a target="_blank" href="{{ url_for('main.release_dashboard', release_name=release.name) }}" class="btn btn-success">Go to dashboard</a>
+                        <a target="_blank" href="{{ url_for('main.release_dashboard', release_name=release.name) }}" class="btn btn-primary">Go to dashboard</a>
+                        <a target="_blank" href="{{ url_for('main.release_scheduler', name=release.name) }}" class="btn btn-primary">Go to scheduling</a>
                 </div>
             </div>
             {% if loop.index % 3 == 0 %}
