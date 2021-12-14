@@ -401,9 +401,9 @@
                             >
                                 <div class="accordion-body">
                                     {#each event_container.last_events as event}
-                                        <p class="mb-1 border font-monospace">
+                                        <pre class="mb-1 p-1 border font-monospace">
                                             {event}
-                                        </p>
+                                        </pre>
                                     {/each}
                                 </div>
                             </div>

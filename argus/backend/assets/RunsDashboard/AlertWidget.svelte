@@ -29,8 +29,14 @@
     onDestroy(unsubscribe);
 </script>
 
-<div class="position-absolute top-0 start-0">
+<div class="position-absolute top-0 start-0" id="alertWidget">
     {#each messages as message (message.id)}
         <AlertMessage {message} on:deleteMessage={handleCloseEvent}/>
     {/each}
 </div>
+
+<style>
+    #alertWidget {
+        width: 512px;
+    }
+</style>

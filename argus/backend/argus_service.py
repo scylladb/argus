@@ -1,16 +1,20 @@
+import base64
 import time
 import json
 import re
+import os
+import hashlib
 from typing import Callable
 from collections import namedtuple
 from uuid import UUID, uuid4
 import datetime
 from cassandra.cqlengine import ValidationError
 import humanize
-from flask import g, current_app
+from flask import g, current_app, session, flash
 import requests
 
 from cassandra.cqlengine.models import _DoesNotExist
+from werkzeug.security import check_password_hash, generate_password_hash
 from argus.backend.db import ScyllaCluster
 from argus.db.testrun import TestRun, TestStatus
 from argus.backend.models import (
@@ -26,6 +30,8 @@ from argus.backend.models import (
     ArgusEvent,
     ArgusEventTypes,
     User,
+    UserOauthToken,
+    WebFileStorage,
 )
 from argus.backend.event_processors import EVENT_PROCESSORS
 
@@ -50,6 +56,7 @@ class ArgusService:
             "Authorization": f"token {current_app.config['GITHUB_ACCESS_TOKEN']}"
         }
         self.runs_by_id_stmt = self.db.prepare(f"SELECT * FROM {TestRun.table_name()} WHERE id in ?")
+        self.jobs_by_assignee = self.db.prepare(f"SELECT * FROM {TestRun.table_name()} WHERE assignee = ?")
 
     def terminate_session(self):
         pass  # TODO: Remove this
@@ -660,8 +667,8 @@ class ArgusService:
 
         schedule = ArgusReleaseSchedule()
         schedule.release = release
-        schedule.period_start = datetime.datetime.utcfromtimestamp(start_time / 1000)
-        schedule.period_end = datetime.datetime.utcfromtimestamp(end_time / 1000)
+        schedule.period_start = datetime.datetime.fromisoformat(start_time)
+        schedule.period_end = datetime.datetime.fromisoformat(end_time)
         schedule.save()
 
         response = dict(schedule.items())
@@ -673,20 +680,23 @@ class ArgusService:
             test_entity = ArgusReleaseScheduleTest()
             test_entity.schedule_id = schedule.schedule_id
             test_entity.name = test
+            test_entity.release = release
             test_entity.save()
             response["tests"].append(test)
 
         for group in groups:
-            assignee_entity = ArgusReleaseScheduleGroup()
-            assignee_entity.schedule_id = schedule.schedule_id
-            assignee_entity.name = group
-            assignee_entity.save()
+            group_entity = ArgusReleaseScheduleGroup()
+            group_entity.schedule_id = schedule.schedule_id
+            group_entity.name = group
+            group_entity.release = release
+            group_entity.save()
             response["groups"].append(group)
 
         for assignee in assignees:
             assignee_entity = ArgusReleaseScheduleAssignee()
             assignee_entity.schedule_id = schedule.schedule_id
             assignee_entity.assignee = assignee
+            assignee_entity.release = release
             assignee_entity.save()
             response["assignees"].append(assignee)
 
@@ -752,3 +762,166 @@ class ArgusService:
             "schedule": schedule_id,
             "result": "deleted"
         }
+
+    """
+    {
+        "master": {
+            "groups": ["longevity", ...],
+            "tests": ["longevity-3gb-4h", ...]
+        },
+        <...>
+    }
+    """
+
+    def get_assignees(self, payload: dict) -> dict:
+        response = {}
+        for release, body in payload.items():
+            response[release] = {
+                "groups": {},
+                "tests": {}
+            }
+            scheduled_groups = ArgusReleaseScheduleGroup.filter(release=release, name__in=body["groups"]).all()
+            groups_by_schedule_id = {group.schedule_id: group for group in scheduled_groups}
+            schedules = ArgusReleaseSchedule.filter(
+                release=release, schedule_id__in=tuple(groups_by_schedule_id.keys())).all()
+            today = datetime.datetime.now()
+            this_monday = datetime.datetime(today.year, today.month, today.day - today.weekday())
+            next_week = datetime.datetime(this_monday.year, this_monday.month, this_monday.day + 8)
+            valid_schedules = [
+                schedule
+                for schedule in schedules
+                if schedule.period_start >= this_monday and schedule.period_end <= next_week
+            ]
+            for schedule in valid_schedules:
+                assignees = ArgusReleaseScheduleAssignee.filter(schedule_id=schedule.schedule_id).all()
+                assignees_uuids = [assignee.assignee for assignee in assignees]
+                assignees = response[release]["groups"].get(groups_by_schedule_id[schedule.schedule_id].name, [])
+                for assignee in assignees_uuids:
+                    assignees.append(assignee)
+                response[release]["groups"][groups_by_schedule_id[schedule.schedule_id].name] = assignees
+
+        return response
+
+    def update_email(self, user: User, new_email: str):
+        user.email = new_email
+        user.save()
+
+    def update_password(self, user: User, old_password: str, new_password: str):
+        if (check_password_hash(old_password) != user.password):
+            raise Exception("Incorrect old password")
+
+        user.password = generate_password_hash(new_password)
+        user.save()
+
+    def update_name(self, user: User, new_name: str):
+        user.full_name = new_name
+        user.save()
+
+    def update_profile_picture(self, filename, filepath):
+        web_file = WebFileStorage()
+        web_file.filename = filename
+        web_file.filepath = filepath
+        web_file.save()
+
+        try:
+            if old_picture_id := g.user.picture_id:
+                old_file = WebFileStorage.get(id=old_picture_id)
+                os.unlink(old_file.filepath)
+                old_file.delete()
+        except Exception as exc:
+            print(exc)
+
+        g.user.picture_id = web_file.id
+        g.user.save()
+
+    def save_profile_picture_to_disk(self, original_filename, filedata, suffix):
+        filename_fragment = hashlib.sha256(os.urandom(64)).hexdigest()[:10]
+        filename = f"profile_{suffix}_{filename_fragment}"
+        filepath = f"storage/profile_pictures/{filename}"
+        with open(filepath, "wb") as file:
+            file.write(filedata)
+
+        return original_filename, filepath
+
+    def github_callback(self, req_code):
+        oauth_response = requests.post("https://github.com/login/oauth/access_token",
+                                       headers={
+                                           "Accept": "application/json",
+                                       },
+                                       params={
+                                           "code": req_code,
+                                           "client_id": current_app.config.get("GITHUB_CLIENT_ID"),
+                                           "client_secret": current_app.config.get("GITHUB_CLIENT_SECRET"),
+                                       })
+
+        oauth_data = oauth_response.json()
+
+        user_info = requests.get("https://api.github.com/user",
+                                 headers={
+                                     "Accept": "application/json",
+                                     "Authorization": f"token {oauth_data.get('access_token')}"
+                                 }).json()
+        email_info = requests.get("https://api.github.com/user/emails",
+                                  headers={
+                                      "Accept": "application/json",
+                                      "Authorization": f"token {oauth_data.get('access_token')}"
+                                  }).json()
+
+        organizations = requests.get(user_info.get("organizations_url"), headers={
+            "Accept": "application/json",
+            "Authorization": f"token {oauth_data.get('access_token')}"
+        }).json()
+        temp_password = None
+
+        try:
+            user = User.get(username=user_info.get("login"))
+        except User.DoesNotExist:
+            user = User()
+            user.username = user_info.get("login")
+            user.email = email_info[-1].get("email")
+            user.full_name = user_info.get("name")
+            user.registration_date = datetime.datetime.now()
+            user.roles = ["ROLE_USER"]
+            temp_password = base64.encodebytes(
+                os.urandom(48)).decode("ascii").strip()
+            user.password = generate_password_hash(temp_password)
+
+            avatar_url: str = user_info.get("avatar_url")
+            avatar = requests.get(avatar_url).content
+            avatar_name = avatar_url.split("/")[-1]
+            filename, filepath = self.save_profile_picture_to_disk(avatar_name, avatar, user.username)
+
+            web_file = WebFileStorage()
+            web_file.filename = filename
+            web_file.filepath = filepath
+            web_file.save()
+            user.picture_id = web_file.id
+            user.save()
+
+        try:
+            tokens = list(UserOauthToken.filter(user_id=user.id).all())
+            github_token = [
+                token for token in tokens if token["kind"] == "github"][0]
+            github_token.token = oauth_data.get('access_token')
+            github_token.save()
+        except (_DoesNotExist, IndexError):
+            github_token = UserOauthToken()
+            github_token.kind = "github"
+            github_token.user_id = user.id
+            github_token.token = oauth_data.get('access_token')
+            github_token.save()
+
+        session.clear()
+        session["user_id"] = str(user.id)
+        if temp_password:
+            flash(f"Your temporary password is: {temp_password}", category="info")
+
+    def get_jobs_for_user(self, user: User):
+        runs = self.session.execute(self.jobs_by_assignee, parameters=(str(user.id),))
+
+        return runs
+
+    def get_schedules_for_user(self, user: User):
+        all_assigned_schedules = ArgusReleaseScheduleAssignee.filter(assignee=user.id).all()
+        all_schedule_ids = [schedule_assignee.schedule_id for schedule_assignee in all_assigned_schedules]
+        all_releases = [schedule_assignee.release for schedule_assignee in all_assigned_schedules]

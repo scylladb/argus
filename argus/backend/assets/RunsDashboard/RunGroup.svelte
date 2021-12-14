@@ -4,6 +4,7 @@
     import { StatusSortPriority } from "./TestStatus.js";
     import { sendMessage } from "./AlertStore";
     import NumberStats from "./NumberStats.svelte";
+    import AssigneeList from "./AssigneeList.svelte";
     export let release = "";
     export let group = {
         name: "",
@@ -11,6 +12,8 @@
         id: "",
     };
     export let filtered = false;
+    export let assigneeList = [];
+
     const groupStatsTemplate = {
         created: 0,
         running: 0,
@@ -130,6 +133,9 @@
                             <!-- svelte-ignore empty-block -->
                         {/if}
                     </div>
+                </div>
+                <div class="row p-0 m-0">
+                    <AssigneeList assignees={assigneeList}/>
                 </div>
             </div>
         </button>

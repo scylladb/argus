@@ -150,26 +150,29 @@ class ArgusGithubIssue(Model):
 class ArgusReleaseSchedule(Model):
     release = columns.Text(primary_key=True, required=True)
     schedule_id = columns.TimeUUID(primary_key=True, default=uuid1, clustering_order="DESC")
-    period_start = columns.DateTime(required=True, default=datetime.utcnow())
+    period_start = columns.DateTime(required=True, default=datetime.utcnow)
     period_end = columns.DateTime(required=True)
 
 
 class ArgusReleaseScheduleAssignee(Model):
     assignee = columns.UUID(primary_key=True)
     id = columns.TimeUUID(primary_key=True, default=uuid1, clustering_order="DESC")
-    schedule_id = columns.TimeUUID(required=True, default=uuid1, index=True)
+    schedule_id = columns.TimeUUID(required=True, index=True)
+    release = columns.Text(required=True)
 
 
 class ArgusReleaseScheduleTest(Model):
-    name = columns.Text(primary_key=True)
+    name = columns.Text(partition_key=True)
+    release = columns.Text(partition_key=True)
     id = columns.TimeUUID(primary_key=True, default=uuid1, clustering_order="DESC")
-    schedule_id = columns.TimeUUID(required=True, default=uuid1, index=True)
+    schedule_id = columns.TimeUUID(required=True, index=True)
 
 
 class ArgusReleaseScheduleGroup(Model):
-    name = columns.Text(primary_key=True)
+    name = columns.Text(partition_key=True)
+    release = columns.Text(partition_key=True)
     id = columns.TimeUUID(primary_key=True, default=uuid1, clustering_order="DESC")
-    schedule_id = columns.TimeUUID(required=True, default=uuid1, index=True)
+    schedule_id = columns.TimeUUID(required=True, index=True)
 
 
 class WebRunComments(Model):

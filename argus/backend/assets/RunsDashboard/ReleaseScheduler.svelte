@@ -1,27 +1,17 @@
 <script>
     import { onMount } from "svelte";
+    import * as chrono from "chrono-node";
     import Select from "svelte-select";
     import User from "./User.svelte";
-    import Schedule from "./Schedule.svelte";
-    import ReleaseStats from "./ReleaseStats.svelte";
+    import ScheduleTable from "./ScheduleTable.svelte";
     import { userList } from "./UserlistSubscriber";
     import { sendMessage } from "./AlertStore";
     export let releaseData = {};
     export let schedules = [];
     let users = {};
     $: users = $userList;
-    let releaseStats = {
-        created: 0,
-        running: 0,
-        passed: 0,
-        failed: 0,
-        aborted: 0,
-        lastStatus: "unknown",
-        disabled: true,
-        groups: {},
-        tests: {},
-        total: -1,
-    };
+    let selectedGroups = [];
+    let selectedTests = [];
 
     const PayloadTemplate = {
         release: releaseData.release.name,
@@ -32,7 +22,28 @@
         assignees: [],
     };
 
+    const generateNewScheduleDate = function(today = new Date()) {
+        let monday = chrono.parseDate("This Monday", new Date(today));
+        return monday.toISOString().split("T").shift();
+    }
+
+    const generateEndDate = function(startDate) {
+        let start = new Date(startDate);
+        let end = chrono.parseDate("Next Sunday at 23:59", start);
+        return end;
+    };
+
+    const handleDateChange = function(value) {
+        newScheduleDate = generateNewScheduleDate(value);
+        newScheduleEndDate = generateEndDate(newScheduleDate);
+
+        newSchedule.start = new Date(newScheduleDate).toISOString().split(".").shift();
+        newSchedule.end = newScheduleEndDate.toISOString().split(".").shift();
+    }
+
     let newSchedule = Object.assign(PayloadTemplate);
+    let newScheduleDate = generateNewScheduleDate();
+    let newScheduleEndDate = generateEndDate(newScheduleDate);
 
     const fetchSchedules = async function () {
         try {
@@ -77,6 +88,7 @@
             });
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
+                handleClearGroups();
                 fetchSchedules();
                 sendMessage("success", "Added new schedule!");
             } else {
@@ -108,12 +120,13 @@
                 },
                 body: JSON.stringify({
                     release: releaseData.release.name,
-                    schedule_id: scheduleId
+                    schedule_id: scheduleId,
                 }),
             });
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
                 fetchSchedules();
+                handleClearGroups();
                 sendMessage("success", "Schedule deleted, refreshing...");
             } else {
                 throw apiJson;
@@ -181,9 +194,31 @@
             });
     };
 
-    const handleStatsUpdate = function (e) {
-        releaseStats = e.detail.stats;
+    const handleCellClick = function(e) {
+        let data = e.detail;
+        if (data.schedule) return;
+        handleDateChange(data.date.dateKey);
+        if (!selectedGroups) {
+            selectedGroups = [];
+        }
+        if (selectedGroups.findIndex(val => val.value == data.group.name) == -1) {
+            selectedGroups.push({ label: data.group.pretty_name, value: data.group.name });
+            selectedGroups = selectedGroups;
+            handleGroupSelect({
+                detail: selectedGroups
+            });
+        }
     };
+
+    const handleClearGroups = function(e) {
+        let selected = e?.detail?.selected ?? [];
+        console.log(selected);
+        selectedGroups = selectedGroups?.filter(group => selected.includes(group.value)) ?? [];
+        handleGroupSelect({
+            detail: selectedGroups
+        });
+    }
+
     const handleTestSelect = function (e) {
         newSchedule.tests =
             e.detail?.map((val) => {
@@ -214,16 +249,16 @@
 <div class="container-fluid border rounded bg-white my-3 min-vh-100 shadow-sm">
     <div class="row">
         <div class="p-2 display-6">{releaseData.release.name}</div>
-        <ReleaseStats
-            releaseName={releaseData.release.name}
-            showTestMap={true}
-            on:statsUpdate={handleStatsUpdate}
-        />
     </div>
     <div class="row">
-        {#if Object.values(users).length > 0 && releaseStats.total > 0}
+        {#if schedules.length > 0 && Object.values(users).length > 0}
+            <ScheduleTable {releaseData} {users} {schedules} on:cellClick={handleCellClick} on:deleteSchedule={deleteSchedule} on:clearGroups={handleClearGroups}/>
+        {/if}
+    </div>
+    <div class="row">
+        {#if Object.values(users).length > 0}
             <div class="col border rounded m-3 p-3">
-                <h4 class="mb-3">New schedule</h4>
+                <h4 class="mb-3">New plan</h4>
                 <div class="d-flex align-items-start justify-content-center">
                     <div class="me-3 w-25">
                         <div class="mb-3">
@@ -248,14 +283,16 @@
                                 isMulti={true}
                                 placeholder="Select groups"
                                 on:select={handleGroupSelect}
+                                bind:value={selectedGroups}
                             />
                         </div>
-                        <div class="mb-3">
+                        <div class="mb-3 d-none">
                             <div class="form-label">Tests</div>
                             <Select
                                 items={extractTests(releaseData)}
                                 isMulti={true}
                                 placeholder="Select tests"
+                                bind:value={selectedTests}
                                 on:select={handleTestSelect}
                             />
                         </div>
@@ -267,31 +304,15 @@
                                 class="form-label">From</label
                             >
                             <input
-                                type="datetime-local"
+                                type="date"
                                 id="newScheduleTimestampStart"
-                                value={new Date()}
+                                bind:value={newScheduleDate}
                                 class="form-control"
-                                on:change={(e) =>
-                                    (newSchedule.start = new Date(
-                                        e.target.value
-                                    ).getTime())}
+                                on:change={(e) => handleDateChange(e.target.value)}
                             />
                         </div>
-                        <div class="mb-3">
-                            <label
-                                for="newScheduleTimestampEnd"
-                                class="form-label">To</label
-                            >
-                            <input
-                                type="datetime-local"
-                                id="newScheduleTimestampEnd"
-                                value={new Date()}
-                                class="form-control"
-                                on:change={(e) =>
-                                    (newSchedule.end = new Date(
-                                        e.target.value
-                                    ).getTime())}
-                            />
+                        <div class="mb-3 text-muted">
+                            Will end on {newScheduleEndDate.toLocaleDateString('en-CA', { timeZone: 'UTC' })}
                         </div>
                     </div>
                     <div class="me-3 w-25">
@@ -314,41 +335,15 @@
                     >
                 </div>
             </div>
-        {:else if releaseStats.total == 0}
-            <div class="col">No tests for the release found!</div>
         {:else}
             <div class="col d-flex align-items-center justify-content-center">
                 <div class="spinner-border me-3 text-muted" />
-                <div class="display-6 text-muted">Fetching release data...</div>
-            </div>
-        {/if}
-    </div>
-    <div class="row">
-        {#if schedules.length > 0 && Object.values(users).length > 0 && releaseStats.total > 0}
-            <h2>Schedules</h2>
-            <div id="scheduleContainer" class="container-fluid">
-                {#each schedules as schedule (schedule.schedule_id)}
-                    <Schedule
-                        scheduleData={schedule}
-                        {releaseStats}
-                        {releaseData}
-                        {users}
-                        on:deleteSchedule={deleteSchedule}
-                    />
-                {/each}
-            </div>
-        {:else}
-            <div class="col text-muted text-center my-4">
-                Nothing scheduled for this release
+                <div class="display-6 text-muted">Fetching users...</div>
             </div>
         {/if}
     </div>
 </div>
 
 <style>
-    #scheduleContainer {
-        height: 1536px;
-        overflow-x: visible;
-        overflow-y: scroll;
-    }
+
 </style>

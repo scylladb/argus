@@ -3,6 +3,7 @@
     import { sendMessage } from "./AlertStore";
     import { releaseRequests, stats } from "./StatsSubscriber";
     import NumberStats from "./NumberStats.svelte";
+    import { assigneeStore, requestAssigneesForReleaseGroups } from "./AssigneeSubscriber";
     let releaseGroups = [];
     export let release = {
         name: "undefined",
@@ -25,6 +26,11 @@
     let releaseStats = releaseStatsDefault;
     let groupStats = {};
     let filterString = "";
+    let assigneeList = [];
+    $: assigneeList = $assigneeStore?.[release.name] ?? {
+        groups: [],
+        tests: []
+    };
     const sortGroupsByStatus = function () {
         if (releaseGroups.length == 0) return;
         releaseGroups = releaseGroups.sort((a, b) => {
@@ -75,6 +81,7 @@
             if (apiJson.status === "ok") {
                 releaseGroups = apiJson.response;
                 sortGroupsByStatus();
+                requestAssigneesForReleaseGroups(release.name, releaseGroups.map(val => val.name));
                 fetched = true;
             } else {
                 throw apiJson;
@@ -90,6 +97,7 @@
                     "error",
                     "A backend error occurred during release groups fetch"
                 );
+                console.log(error);
             }
         }
     };
@@ -154,6 +162,7 @@
                         {group}
                         filtered={isFiltered(group.pretty_name ?? group.name)}
                         parent="#accordionGroups{release.name}"
+                        assigneeList={assigneeList?.groups[group.name] ?? []}
                         on:testRunRequest
                     />
                 {:else}

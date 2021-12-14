@@ -52,7 +52,7 @@
                 </button>
                 <button
                     type="button"
-                    class="btn btn-input-group btn-primary"
+                    class="btn btn-input-group btn-success"
                     on:click={copyTemplateToClipboard}
                     ><Fa icon={faCopy} /></button
                 >

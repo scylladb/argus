@@ -3,6 +3,7 @@
     import { testRequests, stats } from "./StatsSubscriber";
     import { StatusBackgroundCSSClassMap } from "./TestStatus.js";
     import { v4 as uuidv4 } from 'uuid';
+    export let assigneeList = [];
 
     export let release = "";
     export let group = "";

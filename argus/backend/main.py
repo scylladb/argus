@@ -63,7 +63,8 @@ def alert_debug():
 @login_required
 def release_dashboard(release_name: str):
     service = ArgusService()
-    release, release_groups, release_tests = service.get_data_for_release_dashboard(release_name=release_name)
+    release, release_groups, release_tests = service.get_data_for_release_dashboard(
+        release_name=release_name)
     data_json = {
         "release": dict(release.items()),
         "groups": [dict(group.items()) for group in release_groups],
@@ -76,7 +77,8 @@ def release_dashboard(release_name: str):
 @login_required
 def release_scheduler(name: str):
     service = ArgusService()
-    release, release_groups, release_tests = service.get_data_for_release_dashboard(release_name=name)
+    release, release_groups, release_tests = service.get_data_for_release_dashboard(
+        release_name=name)
     data_json = {
         "release": dict(release.items()),
         "groups": [dict(group.items()) for group in release_groups],
@@ -137,57 +139,8 @@ def profile_oauth_github_callback():
         return redirect(url_for("main.error", type=403))
 
     req_code = request.args.get("code", "WTF")
-    oauth_response = requests.post("https://github.com/login/oauth/access_token",
-                                   headers={
-                                       "Accept": "application/json",
-                                   },
-                                   params={
-                                       "code": req_code,
-                                       "client_id": current_app.config.get("GITHUB_CLIENT_ID"),
-                                       "client_secret": current_app.config.get("GITHUB_CLIENT_SECRET"),
-                                   })
-
-    oauth_data = oauth_response.json()
-
-    user_info = requests.get("https://api.github.com/user",
-                             headers={
-                                 "Accept": "application/json",
-                                 "Authorization": f"token {oauth_data.get('access_token')}"
-                             }).json()
-    email_info = requests.get("https://api.github.com/user/emails",
-                              headers={
-                                  "Accept": "application/json",
-                                  "Authorization": f"token {oauth_data.get('access_token')}"
-                              }).json()
-
-    try:
-        user = User.get(username=user_info.get("login"))
-    except User.DoesNotExist:
-        user = User()
-        user.username = user_info.get("login")
-        user.email = email_info[-1].get("email")
-        user.full_name = user_info.get("name")
-        user.registration_date = datetime.now()
-        user.roles = ["ROLE_USER"]
-        temp_password = base64.encodebytes(os.urandom(48)).decode("ascii").strip()
-        user.password = generate_password_hash(temp_password)
-        print(temp_password)
-        user.save()
-
-    try:
-        tokens = list(UserOauthToken.filter(user_id=user.id).all())
-        github_token = [token for token in tokens if token["kind"] == "github"][0]
-        github_token.token = oauth_data.get('access_token')
-        github_token.save()
-    except (_DoesNotExist, IndexError):
-        github_token = UserOauthToken()
-        github_token.kind = "github"
-        github_token.user_id = user.id
-        github_token.token = oauth_data.get('access_token')
-        github_token.save()
-
-    session.clear()
-    session["user_id"] = str(user.id)
+    service = ArgusService()
+    service.github_callback(req_code)
 
     return redirect(url_for("main.profile"))
 
@@ -217,32 +170,83 @@ def upload_file():
     picture_data = req_file.stream.read()
     picture_name = req_file.filename
     if not req_file.content_type.startswith("image/"):
-        flash(message=f"Expected image/*, got {req_file.content_type}", category="error")
+        flash(
+            message=f"Expected image/*, got {req_file.content_type}", category="error")
         return redirect(url_for("main.profile"))
     if not picture_data:
         flash(message="No picture provided", category="error")
         return redirect(url_for("main.profile"))
 
-    filename_fragment = hashlib.sha256(os.urandom(64)).hexdigest()[:10]
-    filename = f"profile_{g.user.username}_{filename_fragment}"
-    filepath = f"storage/profile_pictures/{filename}"
-    with open(filepath, "wb") as file:
-        file.write(picture_data)
+    service = ArgusService()
+    filename, filepath = service.save_profile_picture_to_disk(
+        picture_name, picture_data, g.user.username)
+    service.update_profile_picture(filename, filepath)
 
-    web_file = WebFileStorage()
-    web_file.filename = picture_name
-    web_file.filepath = filepath
-    web_file.save()
+    return redirect(url_for("main.profile"))
 
+
+@bp.route("/profile/update/name", methods=["POST"])
+@login_required
+def update_full_name():
+    new_name = request.values.get("new_name")
+    if not new_name:
+        flash(message="Incorrect new name", category="error")
+    else:
+        service = ArgusService()
+        service.update_name(g.user, new_name)
+        flash("Successfully changed name!", category="success")
+    return redirect(url_for("main.profile"))
+
+
+@bp.route("/profile/update/email", methods=["POST"])
+@login_required
+def update_email():
+    new_email = request.values.get("new_email")
+    if not new_email:
+        flash("Incorrect new email", category="error")
+    else:
+        service = ArgusService()
+        service.update_email(g.user, new_email)
+        flash("Successfully changed email!", category="success")
+    return redirect(url_for("main.profile"))
+
+
+@bp.route("/profile/update/password", methods=["POST"])
+@login_required
+def update_password():
+    old_password = request.values.get("old_password")
+    new_password = request.values.get("new_password")
+    new_password_confirm = request.values.get("new_password_confirm")
+    if not old_password:
+        flash("Old password wasn't provided", category="error")
+        return redirect(url_for("main.profile"))
+    if not new_password:
+        flash("New password wasn't provided", category="error")
+        return redirect(url_for("main.profile"))
+
+    if not (new_password == new_password_confirm):
+        flash("New password doesn't match confirmation!", category="error")
+        return redirect(url_for("main.profile"))
+
+    service = ArgusService()
     try:
-        if old_picture_id := g.user.picture_id:
-            old_file = WebFileStorage.get(id=old_picture_id)
-            os.unlink(old_file.filepath)
-            old_file.delete()
-    except Exception as exc:
-        print(exc)
+        service.update_password(
+            g.user, old_password=old_password, new_password=new_password)
+    except:
+        flash("Old password is incorrect", category="error")
+        return redirect(url_for("main.profile"))
 
-    g.user.picture_id = web_file.id
-    g.user.save()
+    flash("Successfully changed password!")
+    return redirect(url_for("main.profile"))
 
+
+@bp.route("/profile/jobs", methods=["GET"])
+@login_required
+def profile_jobs():
+    return redirect(url_for("main.profile"))
+
+
+@bp.route("/profile/schedules", methods=["GET"])
+@login_required
+def profile_schedules():
     return redirect(url_for("main.profile"))

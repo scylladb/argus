@@ -5,9 +5,11 @@
             <img src="/static/argus.png" alt="" width="64" height="64" class="d-inline-block align-text-middle">  Argus
         </a>
         <div class="navbar-nav">
-            <a class="nav-link" aria-current="page" href="{{ url_for('main.run_dashboard')}}"><i class="fas fa-tasks"></i> Runs</a>
+            <a class="nav-link" aria-current="page" href="{{ url_for('main.run_dashboard')}}"><i class="fas fa-tasks"></i> Work Area</a>
             <a class="nav-link" href="{{ url_for('main.releases')}}"><i class="fas fa-business-time"></i> Releases</a>
             {% if g.user %}
+            <a class="nav-link" href="{{ url_for('main.profile_jobs')}}"><i class="fas fa-archive"></i> My Jobs</a>
+            <a class="nav-link" href="{{ url_for('main.profile_schedules')}}"><i class="fas fa-calendar-week"></i> My Schedule</a>
             <a class="nav-link d-flex align-items-center" href="{{ url_for('main.profile')}}">
             {% if g.user.picture_id %}
             <img class="me-1" src="/storage/picture/{{ g.user.picture_id }}" style="height: 24px; border-radius: 50%" alt="">
