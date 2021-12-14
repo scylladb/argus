@@ -10,11 +10,9 @@
     import { Base64 } from "js-base64";
     export let scheduleData = {};
     export let releaseData = {};
-    export let releaseStats = {};
     export let users = {};
     const dispatch = createEventDispatcher();
     let state = "e30";
-    $: makeState();
     const getPicture = function (id) {
         return id ? `/storage/picture/${id}` : "/static/no-user-picture.png";
     };
@@ -24,74 +22,26 @@
             id: scheduleData.schedule_id,
         });
     };
-
-    const makeState = function () {
-        let tests = releaseStats.tests ?? [];
-        if (tests.length == 0) {
-            state = "e30";
-        }
-
-        let testsForGroups = scheduleData.groups
-            .map((group) => {
-                return Object.keys(tests).filter((test) =>
-                    new RegExp(group).test(test)
-                );
-            })
-            .reduce((acc, val) => {
-                return [acc, ...val];
-            }, []);
-        let combinedTests = [...scheduleData.tests, ...testsForGroups];
-        let uniqueTestsWithStatus = combinedTests
-            .reduce((acc, test) => {
-                if (
-                    (releaseStats?.tests[test]?.status ?? "unknown") !=
-                        "unknown" &&
-                    acc.findIndex((val) => val == test) == -1
-                ) {
-                    acc.push(test);
-                }
-                return acc;
-            }, [])
-            .sort();
-        let rawState = uniqueTestsWithStatus.reduce((acc, val) => {
-            acc[`${releaseData.release.name}/${val}`] = {
-                release: releaseData.release.name,
-                test: val,
-                runs: [],
-            };
-            return acc;
-        }, {});
-        state = Base64.encode(JSON.stringify(rawState), true);
-    };
 </script>
 
-<div class="row">
-    <div class="col">
-        <div
-            class="border rounded shadow-sm mb-3 p-3 d-flex align-items-start justify-content-center"
-        >
+<div class="card-schedule position-absolute card-popout">
+    <div
+        class="border rounded bg-white shadow-sm mb-3 p-3 d-flex flex-column align-items-start justify-content-center"
+    >
+        <div class="d-flex w-100 mb-3">
             <div
                 class="me-3"
                 class:w-25={scheduleData.tests.length > 0}
-                class:w-50={scheduleData.tests.length == 0}
+                class:w-75={scheduleData.tests.length == 0}
                 class:d-none={scheduleData.groups.length == 0}
             >
                 <h6>Groups</h6>
-                <ul class="list-group">
-                    {#each scheduleData.groups as group}
+                <ul class="list-group list-schedule">
+                    {#each scheduleData?.groups ?? [] as group}
                         <li class="list-group-item d-flex align-items-center">
-                            <div
-                                class="{StatusCSSClassMap[
-                                    releaseStats?.groups[group]?.lastStatus
-                                ]} cursor-question me-2"
-                                title={releaseStats?.groups[group]?.lastStatus}
-                            >
-                                <Fa icon={faCircle} />
-                            </div>
                             <div>
-                                {releaseData.groups.find(
-                                    (val) => val.name == group
-                                ).pretty_name}
+                                {releaseData.groups.find((val) => val.name == group)
+                                    .pretty_name}
                             </div>
                         </li>
                     {/each}
@@ -100,21 +50,13 @@
             <div
                 class="me-3"
                 class:w-25={scheduleData.groups.length > 0}
-                class:w-50={scheduleData.groups.length == 0}
+                class:w-75={scheduleData.groups.length == 0}
                 class:d-none={scheduleData.tests.length == 0}
             >
                 <h6>Tests</h6>
-                <ul class="list-group">
+                <ul class="list-group list-schedule">
                     {#each scheduleData.tests as test}
                         <li class="list-group-item d-flex align-items-center">
-                            <div
-                                class="{StatusCSSClassMap[
-                                    releaseStats?.tests[test]?.status
-                                ]} cursor-question me-2"
-                                title={releaseStats?.tests[test]?.status}
-                            >
-                                <Fa icon={faCircle} />
-                            </div>
                             <div>{test}</div>
                         </li>
                     {/each}
@@ -125,9 +67,7 @@
                 <div>
                     From:
                     <div class="text-muted font-small">
-                        {new Date(
-                            scheduleData.period_start
-                        ).toLocaleDateString()}
+                        {new Date(scheduleData.period_start).toLocaleDateString()}
                     </div>
                 </div>
                 <div>
@@ -137,39 +77,34 @@
                     </div>
                 </div>
             </div>
-            <div class="me-3 w-25">
-                <h6>Assignees</h6>
-                <ul class="list-group mb-3">
-                    {#each scheduleData.assignees as assignee}
-                        <li class="list-group-item d-flex align-items-center">
-                            <div class="me-2">
-                                <img
-                                    class="img-profile"
-                                    src={getPicture(
-                                        users[assignee]?.picture_id
-                                    )}
-                                    alt=""
-                                />
-                            </div>
-                            <div>{users[assignee]?.username}</div>
-                        </li>
-                    {/each}
-                </ul>
-                <div class="text-end">
-                    <a
-                        class="btn btn-primary"
-                        href="/run_dashboard?state={state}"
-                        target="_blank"
-                    >
-                        <Fa icon={faExternalLinkSquareAlt} />
-                    </a>
-                    <button
-                        class="btn btn-danger"
-                        on:click={handleScheduleDelete}
-                    >
-                        <Fa icon={faTrashAlt} />
-                    </button>
-                </div>
+        </div>
+        <div class="me-3 w-100">
+            <h6>Assignees</h6>
+            <ul class="list-group mb-3">
+                {#each scheduleData.assignees as assignee}
+                    <li class="list-group-item d-flex align-items-center">
+                        <div class="me-2">
+                            <img
+                                class="img-profile"
+                                src={getPicture(users[assignee]?.picture_id)}
+                                alt=""
+                            />
+                        </div>
+                        <div>{users[assignee]?.username}</div>
+                    </li>
+                {/each}
+            </ul>
+            <div class="text-end">
+                <a
+                    class="btn btn-primary"
+                    href="/run_dashboard?state={state}"
+                    target="_blank"
+                >
+                    <Fa icon={faExternalLinkSquareAlt} />
+                </a>
+                <button class="btn btn-danger" on:click={handleScheduleDelete}>
+                    <Fa icon={faTrashAlt} />
+                </button>
             </div>
         </div>
     </div>
@@ -187,5 +122,19 @@
 
     .cursor-question {
         cursor: help;
+    }
+
+    .card-schedule {
+        height: 576px;
+        width: 512px;
+        z-index: 9999;
+        top: 100%;
+        left: 0px;
+        cursor: default;
+    }
+
+    .list-schedule {
+        height: 256px;
+        overflow-y: scroll;
     }
 </style>

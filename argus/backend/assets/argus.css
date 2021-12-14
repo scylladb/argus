@@ -43,7 +43,7 @@ div#argusApp {
 }
 
 div#argusErrors {
-    position: relative;
+    position: fixed;
     z-index: 999999;
 }
 

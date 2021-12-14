@@ -1,0 +1,176 @@
+<script>
+    import { createEventDispatcher, onMount } from "svelte";
+    import * as chrono from "chrono-node";
+    import Schedule from "./Schedule.svelte";
+
+    export let schedules = [];
+    export let releaseData = {};
+    export let users = {};
+    const dispatch = createEventDispatcher();
+    let dates = [];
+    let groups = {};
+    let clickedCell = "";
+    let selectedGroups = {};
+    let today = new Date();
+    $: today.setHours(0, today.getTimezoneOffset() * -1, 0, 0);
+
+    const generateDates = function () {
+        const weekRange = Array.from({ length: 18 }, (v, k) => -4 + k);
+        const thisMonday = chrono.parseDate("This Monday", today);
+        dates = weekRange.map((week) => {
+            let thisWeek = new Date(thisMonday);
+            thisWeek.setHours(24 * 7 * week + thisMonday.getHours());
+            return {
+                date: thisWeek,
+                dateKey: thisWeek.toISOString().split("T").shift(),
+                highlight: week == 0,
+            };
+        });
+    };
+
+    const prepareGroups = function () {
+        selectedGroups = {};
+        groups = releaseData.groups.reduce((acc, group) => {
+            let groupWithSchedules = Object.assign(group);
+            groupWithSchedules.schedules = schedules
+                .filter(schedule => schedule.groups.includes(group.name))
+                .reduce((acc, schedule) => {
+                    let dateKey = new Date(schedule.period_start)
+                        .toISOString()
+                        .split("T")
+                        .shift();
+                    acc[dateKey] = schedule;
+                    return acc;
+                }, {});
+            acc.push(groupWithSchedules);
+            return acc;
+        }, []);
+    };
+
+    const onAssigneeCellClick = function(schedule, group, date) {
+        if (schedule) {
+            if (clickedCell == `${group.name}/${date.dateKey}`) {
+                clickedCell = "";
+                return;
+            }
+            clickedCell = `${group.name}/${date.dateKey}`;
+            return;
+        };
+        clickedCell = "";
+        if (Object.keys(selectedGroups).length == 1 && !selectedGroups[date.dateKey]) {
+            selectedGroups = {};
+            dispatch("clearGroups", {
+                selected: []
+            });
+        }
+        let groupsToHighlight = selectedGroups[date.dateKey] ?? [];
+        if (groupsToHighlight.findIndex(val => val == group.name) == -1) {
+            groupsToHighlight.push(group.name);
+        } else {
+            groupsToHighlight = groupsToHighlight.filter(value => value != group.name);
+            dispatch("clearGroups", {
+                selected: groupsToHighlight
+            });
+            selectedGroups[date.dateKey] = groupsToHighlight;
+            return;
+        }
+        selectedGroups[date.dateKey] = groupsToHighlight;
+
+        dispatch("cellClick", {
+            schedule: schedule,
+            group: group,
+            date: date
+        });
+    };
+
+    $: generateDates(today);
+    $: prepareGroups(schedules);
+</script>
+
+<div class="my-2 table-main">
+    <div class="mb-2 d-flex">
+        <div class="w-10">
+            <label class="form-label" for="dateTableSelection"
+                >Today</label
+            >
+            <input
+                class="form-control"
+                type="date"
+                id="dateTableSelection"
+                value={today.toISOString().split("T").shift()}
+                on:change={(e) => {
+                    today = new Date(e.target.value);
+                }}
+            />
+        </div>
+    </div>
+    <table class="table table-sm table-bordered m-0">
+        <thead>
+            <tr>
+                <th>Group</th>
+                {#each dates as date (date.dateKey)}
+                    <th
+                        class="header-sm"
+                        class:table-info={date.highlight}
+                        class:cursor-question={date.highlight}
+                        title={date.highlight ? "This week" : ""}
+                        >{date.date.toLocaleDateString('en-CA', { timeZone: 'UTC' })}</th
+                    >
+                {/each}
+            </tr>
+        </thead>
+        <tbody>
+            {#each groups as group (group.name)}
+                <tr>
+                    <td
+                        >{group.pretty_name}</td
+                    >
+                    {#each dates as date}
+                        <td
+                            class:table-success={group.schedules[date.dateKey]}
+                            class:table-warning={(selectedGroups[date.dateKey] ?? []).includes(group.name)}
+                            class="cell-sm cursor-pointer position-relative"
+                            on:click={() => {onAssigneeCellClick(group.schedules[date.dateKey], group, date)}}
+                        >
+                            {#if group.schedules[date.dateKey]}
+                                {users[group.schedules[date.dateKey].assignees[0]]?.full_name}
+                            {/if}
+                            {#if clickedCell == `${group.name}/${date.dateKey}`}
+                            <Schedule {releaseData} scheduleData={group.schedules[date.dateKey]} {users} on:deleteSchedule on:clearGroups/>
+                            {/if}
+                        </td>
+                    {/each}
+                </tr>
+            {/each}
+        </tbody>
+    </table>
+</div>
+
+<style>
+    .table-main {
+        overflow-x: none;
+    }
+
+    .header-sm {
+        padding: 2px;
+        font-size: 0.6em;
+        vertical-align: middle;
+        text-align: center;
+    }
+
+    .cell-sm {
+        padding: 2px;
+        font-size: 0.7em;
+        vertical-align: middle;
+        text-align: center;
+    }
+
+    .cursor-question {
+        cursor: help;
+    }
+
+    .cursor-pointer {
+        cursor: pointer;
+    }
+
+</style>
