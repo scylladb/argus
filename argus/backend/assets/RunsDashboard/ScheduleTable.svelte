@@ -23,6 +23,7 @@
             return {
                 date: thisWeek,
                 dateKey: thisWeek.toISOString().split("T").shift(),
+                dateIndex: week,
                 highlight: week == 0,
             };
         });
@@ -104,14 +105,15 @@
             />
         </div>
     </div>
-    <table class="table table-sm table-bordered m-0">
+    <table class="table table-sm table-bordered border-dark m-0">
         <thead>
             <tr>
                 <th>Group</th>
                 {#each dates as date (date.dateKey)}
                     <th
-                        class="header-sm"
+                        class="header-sm border-dark"
                         class:table-info={date.highlight}
+                        class:table-secondary={date.dateIndex < 0}
                         class:cursor-question={date.highlight}
                         title={date.highlight ? "This week" : ""}
                         >{date.date.toLocaleDateString('en-CA', { timeZone: 'UTC' })}</th
@@ -127,9 +129,11 @@
                     >
                     {#each dates as date}
                         <td
+                            class:table-info={date.highlight && !group.schedules[date.dateKey]}
                             class:table-success={group.schedules[date.dateKey]}
                             class:table-warning={(selectedGroups[date.dateKey] ?? []).includes(group.name)}
-                            class="cell-sm cursor-pointer position-relative"
+                            class:table-secondary={date.dateIndex < 0 && !group.schedules[date.dateKey]}
+                            class="cell-sm cursor-pointer position-relative border-dark"
                             on:click={() => {onAssigneeCellClick(group.schedules[date.dateKey], group, date)}}
                         >
                             {#if group.schedules[date.dateKey]}

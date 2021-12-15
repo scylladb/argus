@@ -11,6 +11,7 @@
     export let scheduleData = {};
     export let releaseData = {};
     export let users = {};
+    export let absolute = true;
     const dispatch = createEventDispatcher();
     let state = "e30";
     const getPicture = function (id) {
@@ -24,7 +25,7 @@
     };
 </script>
 
-<div class="card-schedule position-absolute card-popout">
+<div class="card-schedule card-popout" class:position-absolute={absolute}>
     <div
         class="border rounded bg-white shadow-sm mb-3 p-3 d-flex flex-column align-items-start justify-content-center"
     >
@@ -118,10 +119,6 @@
         height: 32px;
         border-radius: 50%;
         object-fit: cover;
-    }
-
-    .cursor-question {
-        cursor: help;
     }
 
     .card-schedule {
