@@ -77,7 +77,7 @@ Scylla running with shards number (live nodes):
     **No resources left at the end of the run**
 {/each}
 
-OS (RHEL/CentOS/Ubuntu/AWS AMI): `{test_run.cloud_setup.db_node.image_id}` ({test_run.sct_runner_host.provider}: {test_run.sct_runner_host.region})
+OS / Image: `{test_run.cloud_setup.db_node.image_id}` ({test_run.sct_runner_host.provider}: {test_run.sct_runner_host.region})
 
 
 Test: `{test_run.name}`

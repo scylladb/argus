@@ -52,7 +52,7 @@
                 ></span
             >
             {/if}
-            {testInfo}
+            {testInfo} ({releaseName})
             {#if runs.length > 0}
             <div class="mx-2 flex-fill text-end">Last run: {new Date(runs[0].start_time * 1000).toLocaleString()}</div>
             {/if}

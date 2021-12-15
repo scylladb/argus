@@ -53,7 +53,11 @@ def login():
         username = request.form["username"]
         password = request.form["password"]
         error = None
-        user = User.get(username=username)
+        try:
+            user = User.get(username=username)
+        except User.DoesNotExist:
+            user = None
+
         if not user:
             error = "User not found"
         elif not check_password_hash(user.password, password):
