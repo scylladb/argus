@@ -60,5 +60,5 @@ export const requestAssigneesForReleaseGroups = function (release, groups) {
 export const assigneeStore = writable({}, (set) => {
     setInterval(() => {
         fetchAssignees(set);
-    }, 10000);
+    }, 120 * 1000);
 });

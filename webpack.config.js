@@ -15,6 +15,8 @@ module.exports = {
         testRuns: { import: './argus/backend/assets/RunsDashboard/test-runs-breakout.js', dependOn: 'globalAlert'},
         releaseDashboard: { import: './argus/backend/assets/RunsDashboard/release-dashboard.js', dependOn: 'globalAlert'},
         releaseScheduler: { import: './argus/backend/assets/RunsDashboard/release-scheduler.js', dependOn: 'globalAlert'},
+        profileJobs: { import: './argus/backend/assets/RunsDashboard/profile-jobs.js', dependOn: 'globalAlert'},
+        profileSchedules: { import: './argus/backend/assets/RunsDashboard/profile-schedules.js', dependOn: 'globalAlert'},
     },
     output: {
         path: path.resolve(__dirname, 'argus/backend/static/dist'),

@@ -56,7 +56,8 @@ class ArgusService:
             "Authorization": f"token {current_app.config['GITHUB_ACCESS_TOKEN']}"
         }
         self.runs_by_id_stmt = self.db.prepare(f"SELECT * FROM {TestRun.table_name()} WHERE id in ?")
-        self.jobs_by_assignee = self.db.prepare(f"SELECT * FROM {TestRun.table_name()} WHERE assignee = ?")
+        self.jobs_by_assignee = self.db.prepare(
+            f"SELECT id, status, start_time, assignee, release_name, group, name, build_job_name, build_job_url FROM {TestRun.table_name()} WHERE assignee = ?")
 
     def terminate_session(self):
         pass  # TODO: Remove this
@@ -71,7 +72,7 @@ class ArgusService:
                     "message": f"Release {release_name} already exists"
                 }
                 continue
-            except _DoesNotExist:
+            except ArgusRelease.DoesNotExist:
                 pass
 
             new_release = ArgusRelease()
@@ -785,8 +786,8 @@ class ArgusService:
             schedules = ArgusReleaseSchedule.filter(
                 release=release, schedule_id__in=tuple(groups_by_schedule_id.keys())).all()
             today = datetime.datetime.now()
-            this_monday = datetime.datetime(today.year, today.month, today.day - today.weekday())
-            next_week = datetime.datetime(this_monday.year, this_monday.month, this_monday.day + 8)
+            this_monday = today - datetime.timedelta(today.weekday() + 1)
+            next_week = this_monday + datetime.timedelta(8)
             valid_schedules = [
                 schedule
                 for schedule in schedules
@@ -867,11 +868,17 @@ class ArgusService:
                                       "Authorization": f"token {oauth_data.get('access_token')}"
                                   }).json()
 
-        organizations = requests.get(user_info.get("organizations_url"), headers={
+        organizations = requests.get("https://api.github.com/user/orgs", headers={
             "Accept": "application/json",
             "Authorization": f"token {oauth_data.get('access_token')}"
         }).json()
         temp_password = None
+        required_organizations = current_app.config.get("GITHUB_REQUIRED_ORGANIZATIONS")
+        if required_organizations:
+            logins = set([org["login"] for org in organizations])
+            required_organizations = set(required_organizations)
+            if len(logins.intersection(required_organizations)) == 0:
+                raise Exception("Not a member of a required organization or missing organization scope")
 
         try:
             user = User.get(username=user_info.get("login"))
@@ -904,7 +911,7 @@ class ArgusService:
                 token for token in tokens if token["kind"] == "github"][0]
             github_token.token = oauth_data.get('access_token')
             github_token.save()
-        except (_DoesNotExist, IndexError):
+        except (UserOauthToken.DoesNotExist, IndexError):
             github_token = UserOauthToken()
             github_token.kind = "github"
             github_token.user_id = user.id
@@ -914,7 +921,11 @@ class ArgusService:
         session.clear()
         session["user_id"] = str(user.id)
         if temp_password:
-            flash(f"Your temporary password is: {temp_password}", category="info")
+            return {
+                "password": temp_password,
+                "first_login": True
+            }
+        return None
 
     def get_jobs_for_user(self, user: User):
         runs = self.session.execute(self.jobs_by_assignee, parameters=(str(user.id),))
@@ -923,5 +934,21 @@ class ArgusService:
 
     def get_schedules_for_user(self, user: User):
         all_assigned_schedules = ArgusReleaseScheduleAssignee.filter(assignee=user.id).all()
-        all_schedule_ids = [schedule_assignee.schedule_id for schedule_assignee in all_assigned_schedules]
-        all_releases = [schedule_assignee.release for schedule_assignee in all_assigned_schedules]
+        schedule_keys = [(schedule_assignee.release, schedule_assignee.schedule_id)
+                         for schedule_assignee in all_assigned_schedules]
+        schedules = []
+        today = datetime.datetime.utcnow()
+        last_week = today - datetime.timedelta(days=today.weekday() + 1)
+        for release, id in schedule_keys:
+            schedule = dict(ArgusReleaseSchedule.get(release=release, schedule_id=id).items())
+            if last_week > schedule["period_end"]:
+                continue
+            tests = ArgusReleaseScheduleTest.filter(schedule_id=id).all()
+            schedule["tests"] = [test.name for test in tests]
+            groups = ArgusReleaseScheduleGroup.filter(schedule_id=id).all()
+            schedule["groups"] = [group.name for group in groups]
+            assignees = ArgusReleaseScheduleAssignee.filter(schedule_id=id).all()
+            schedule["assignees"] = [assignee.assignee for assignee in assignees]
+            schedules.append(schedule)
+
+        return schedules

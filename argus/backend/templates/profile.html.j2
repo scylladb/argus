@@ -7,6 +7,13 @@ Profile
 {% block body %}
 {% if g.user %}
 <div class="container">
+    {% if first_run %}
+    <div class="row">
+        <div class="col my-3 border bg-warning rounded shadow-sm text-center p-4">
+        Welcome to Argus! Your temporary recovery password is: <span class="user-select-all bg-light text-danger rounded border border-warning">{{ first_run.password or "undefined"}}</span>. Make sure to save it if you want to use password login
+        </div>
+    </div>
+    {% endif %}
     <div class="row border rounded bg-white my-3 shadow-sm">
         <div class="col-2 border-end p-2">
             {% if g.user.picture_id %}
@@ -45,7 +52,7 @@ Profile
                     </form>
                 </div>
             </div>
-            <h6>Change profile picture</h6>
+            <h4>Change profile picture</h4>
             <form class="form mb-3" action="/profile/update/picture" method="post" enctype="multipart/form-data">
                 <div class="mb-3">
                     <label for="formPictureData" class="form-label">Profile Image</label>
@@ -53,7 +60,7 @@ Profile
                 </div>
                 <button type="submit" class="btn btn-primary">Upload new image</button>
             </form>
-            <h6>Change password</h6>
+            <h4>Change password</h4>
             <form class="form mb-3" action="/profile/update/password" method="post" enctype="multipart/form-data">
                 <div class="mb-3">
                     <label for="formCurrentPassword" class="form-label">Current Password</label>

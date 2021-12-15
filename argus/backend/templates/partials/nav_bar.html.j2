@@ -20,12 +20,7 @@
             </a>
             <a href="{{ url_for('auth.logout')}}" class="nav-link text-danger"><i class="fas fa-sign-out-alt"></i> Logout</a>
             {% else %}
-            <form action="https://github.com/login/oauth/authorize" method="get">
-                <input type="hidden" name="scope" value="{{ github_scopes }}">
-                <input type="hidden" name="client_id" value="{{ github_cid }}">
-                <input type="hidden" name="state" value="{{ csrf_token }}">
-                <button class="btn btn-dark" type="submit"><i class="fab fa-github"></i> Sign In with GitHub</button>
-            </form>
+            <a href="{{ url_for('auth.login')}}" class="nav-link"><i class="fas fa-sign-in-alt"></i> Login</a>
             {% endif %}
         </div>
     </div>

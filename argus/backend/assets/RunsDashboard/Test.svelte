@@ -3,7 +3,6 @@
     import { testRequests, stats } from "./StatsSubscriber";
     import { StatusBackgroundCSSClassMap } from "./TestStatus.js";
     import { v4 as uuidv4 } from 'uuid';
-    export let assigneeList = [];
 
     export let release = "";
     export let group = "";
@@ -69,7 +68,9 @@
             </div>
             <div class="col-10 overflow-hidden">
                 <div>{test.pretty_name ?? test.name}</div>
+                {#if startTime > 1}
                 <div class="text-muted" style="font-size: 0.75em">{new Date(startTime * 1000).toLocaleString()}</div>
+                {/if}
             </div>
             <div class="col-1 text-center">
                 {#if fetching}

@@ -1,19 +1,9 @@
-import base64
-from datetime import datetime
-import os
-import hashlib
-import datetime
-import time
-import json
 from uuid import UUID
-import requests
 from flask import (
     Blueprint, flash, g, redirect, render_template, request, session, url_for, current_app, make_response
 )
-from cassandra.cqlengine.models import _DoesNotExist
-from werkzeug.security import generate_password_hash
 from argus.backend.argus_service import ArgusService
-from argus.backend.models import UserOauthToken, User, WebFileStorage
+from argus.backend.models import WebFileStorage
 from argus.backend.auth import login_required
 
 bp = Blueprint('main', __name__)
@@ -129,7 +119,9 @@ def error():
 @bp.route("/profile/")
 @login_required
 def profile():
-    return render_template("profile.html.j2")
+    first_run = session.pop("first_run_info", None)
+
+    return render_template("profile.html.j2", first_run=first_run)
 
 
 @bp.route("/profile/oauth/github", methods=["GET"])
@@ -140,7 +132,13 @@ def profile_oauth_github_callback():
 
     req_code = request.args.get("code", "WTF")
     service = ArgusService()
-    service.github_callback(req_code)
+    try:
+        first_run_info = service.github_callback(req_code)
+    except Exception as exc:
+        flash(message=exc.args[0], category="error")
+        return redirect(url_for("main.error", type=403))
+    if first_run_info:
+        session["first_run_info"] = first_run_info
 
     return redirect(url_for("main.profile"))
 
@@ -243,10 +241,14 @@ def update_password():
 @bp.route("/profile/jobs", methods=["GET"])
 @login_required
 def profile_jobs():
-    return redirect(url_for("main.profile"))
+    service = ArgusService()
+    jobs = [dict(job.items()) for job in service.get_jobs_for_user(g.user)]
+    return render_template("profile_jobs.html.j2", runs=jobs)
 
 
 @bp.route("/profile/schedules", methods=["GET"])
 @login_required
 def profile_schedules():
-    return redirect(url_for("main.profile"))
+    service = ArgusService()
+    schedules = service.get_schedules_for_user(g.user)
+    return render_template("profile_schedules.html.j2", schedules=schedules)
