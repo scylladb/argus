@@ -164,7 +164,7 @@
 
     .cell-sm {
         padding: 2px;
-        font-size: 0.7em;
+        font-size: 1.2em;
         vertical-align: middle;
         text-align: center;
     }

@@ -434,7 +434,7 @@
                                     <td
                                         ><a
                                             class="btn btn-primary"
-                                            href={log[1]}>Link</a
+                                            href={log[1]}>Download</a
                                         ></td
                                     >
                                 </tr>
