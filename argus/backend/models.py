@@ -1,10 +1,12 @@
 from uuid import uuid1, uuid4
 from datetime import datetime
+from enum import Enum
 from cassandra.cqlengine.models import Model
 from cassandra.cqlengine.usertype import UserType
 from cassandra.cqlengine import columns
 from cassandra.cqlengine.columns import UserDefinedType
-from enum import Enum
+
+# pylint: disable=invalid-name
 
 
 class WebRunComment(UserType):
@@ -34,15 +36,6 @@ class User(Model):
 
     def get_id(self):
         return str(self.id)
-
-    def is_active(self):
-        return True
-
-    def is_anonymous(self):
-        return False
-
-    def is_authenticated(self):
-        return True
 
     def __str__(self):
         return f"User('{self.id}','{self.username}')"
@@ -131,6 +124,7 @@ class ArgusEvent(Model):
 
 
 class ArgusGithubIssue(Model):
+    # pylint: disable=too-many-instance-attributes
     id = columns.UUID(primary_key=True, default=uuid4, partition_key=True)
     added_on = columns.DateTime(default=datetime.utcnow)
     release_id = columns.UUID(index=True)
@@ -186,7 +180,7 @@ class WebRunComments(Model):
     def to_json(self):
         return {
             'test': self.test_id,
-            'comments': [comment.to_json() for comment in self.comments]
+            'comments': [comment.to_json() for comment in self.comments]  # pylint: disable=not-an-iterable
         }
 
 

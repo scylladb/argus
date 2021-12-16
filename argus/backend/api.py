@@ -1,14 +1,14 @@
-import time
-import json
 import logging
 from uuid import UUID
-
 from flask import (
-    Blueprint, flash, g, redirect, render_template, request, session, url_for
+    Blueprint,
+    request
 )
 from flask.json import jsonify
 from argus.backend.argus_service import ArgusService
 from argus.backend.auth import login_required
+
+# pylint: disable=broad-except
 
 bp = Blueprint('api', __name__, url_prefix='/api/v1')
 LOGGER = logging.getLogger(__name__)
@@ -18,10 +18,10 @@ LOGGER = logging.getLogger(__name__)
 @login_required
 def releases():
     service = ArgusService()
-    releases = service.get_releases()
+    all_releases = service.get_releases()
     return jsonify({
         "status": "ok",
-        "response": [dict(d.items()) for d in releases]
+        "response": [dict(d.items()) for d in all_releases]
     })
 
 
@@ -200,9 +200,9 @@ def tests():
                 "Content-Type mismatch, expected application/json, got:", request.content_type)
         request_payload = request.get_json()
         service = ArgusService()
-        tests = service.get_tests_for_release_group(
+        release_group_tests = service.get_tests_for_release_group(
             group_id=request_payload["group"]["id"])
-        res["response"] = {"tests": [dict(t.items()) for t in tests]}
+        res["response"] = {"tests": [dict(t.items()) for t in release_group_tests]}
     except Exception as exc:
         LOGGER.error("Something happened during request %s", request)
         res["status"] = "error"
@@ -248,9 +248,12 @@ def test_runs():
                 "Content-Type mismatch, expected application/json, got:", request.content_type)
         request_payload = request.get_json()
         service = ArgusService()
-        test_runs = service.get_runs_by_name_for_release_group(
-            release_name=request_payload["release"], test_name=request_payload["test_name"], limit=request_payload.get("limit", 10))
-        res["response"] = test_runs
+        release_group_runs = service.get_runs_by_name_for_release_group(
+            release_name=request_payload["release"],
+            test_name=request_payload["test_name"],
+            limit=request_payload.get("limit", 10)
+        )
+        res["response"] = release_group_runs
     except Exception as exc:
         LOGGER.error("Something happened during request %s", request)
         res["status"] = "error"
@@ -273,9 +276,9 @@ def test_run():
                 "Content-Type mismatch, expected application/json, got:", request.content_type)
         request_payload = request.get_json()
         service = ArgusService()
-        test_run, _ = service.load_test_run(
+        loaded_run = service.load_test_run(
             test_run_id=UUID(request_payload["test_id"]))
-        res["response"] = test_run.serialize()
+        res["response"] = loaded_run.serialize()
     except Exception as exc:
         LOGGER.error("Something happened during request %s", request)
         res["status"] = "error"
@@ -345,9 +348,8 @@ def user_info():
         if not request.is_json:
             raise Exception(
                 "Content-Type mismatch, expected application/json, got:", request.content_type)
-        request_payload = request.get_json()
         service = ArgusService()
-        result = service.get_user_info(payload=request_payload)
+        result = service.get_user_info()
         res["response"] = result
     except Exception as exc:
         LOGGER.error("Something happened during request %s", request)

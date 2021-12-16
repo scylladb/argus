@@ -1,6 +1,6 @@
 from uuid import UUID
 from flask import (
-    Blueprint, flash, g, redirect, render_template, request, session, url_for, current_app, make_response
+    Blueprint, flash, g, redirect, render_template, request, session, url_for, make_response
 )
 from argus.backend.argus_service import ArgusService
 from argus.backend.models import WebFileStorage
@@ -15,10 +15,10 @@ def test_runs():
     return render_template("test_runs.html.j2")
 
 
-@bp.route("/test_run/<string:id>")
+@bp.route("/test_run/<string:run_id>")
 @login_required
-def test_run(id: UUID):
-    return render_template("test_run.html.j2", id=id)
+def test_run(run_id: UUID):
+    return render_template("test_run.html.j2", id=run_id)
 
 
 @bp.route("/")
@@ -36,16 +36,16 @@ def run_dashboard():
 @login_required
 def releases():
     service = ArgusService()
-    releases = service.get_releases()
-    return render_template("releases.html.j2", releases=releases)
+    all_releases = service.get_releases()
+    return render_template("releases.html.j2", releases=all_releases)
 
 
 @bp.route("/alert_debug")
 @login_required
 def alert_debug():
-    type = request.args.get("type", "success")
+    alert_type = request.args.get("type", "success")
     message = request.args.get("message", "No message provided")
-    flash(message=message, category=type)
+    flash(message=message, category=alert_type)
     return render_template("flash_debug.html.j2")
 
 
@@ -77,37 +77,6 @@ def release_scheduler(name: str):
     return render_template("release_schedule.html.j2", release_name=name, data=data_json)
 
 
-@bp.route("/release/<string:name>/<string:group>")
-@login_required
-def runs(name: str, group: str):
-    service = ArgusService()
-    show_all = request.args.get("show_all")
-    limit = 9999 if bool(show_all) else 10
-    runs = service.get_runs_for_release_group(
-        release_name=name, group_name=group, limit=limit)
-    return render_template("runs.html.j2", runs=runs, requested_all=bool(all))
-
-
-@bp.route("/release/<string:name>/<string:group>/tests")
-@login_required
-def tests(name: str, group: str):
-    service = ArgusService()
-    tests, _ = service.get_tests_for_release_group(
-        release_name=name, group_name=group)
-    return render_template("tests.html.j2", tests=tests, release_name=name, group_name=group)
-
-
-@bp.route("/release/<string:name>/<string:group>/<string:test>")
-@login_required
-def runs_by_name(name: str, group: str, test: str):
-    service = ArgusService()
-    show_all = request.args.get("show_all")
-    limit = 9999 if bool(show_all) else 10
-    runs = service.get_runs_by_name_for_release_group(
-        test_name=test, release_name=name, group_name=group, limit=limit)
-    return render_template("runs.html.j2", runs=runs, requested_all=bool(all))
-
-
 @bp.route("/error/")
 def error():
     return render_template("error.html.j2", type=request.args.get("type", 400))
@@ -131,7 +100,7 @@ def profile_oauth_github_callback():
     service = ArgusService()
     try:
         first_run_info = service.github_callback(req_code)
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-except
         flash(message=exc.args[0], category="error")
         return redirect(url_for("main.error", type=403))
     if first_run_info:
@@ -140,17 +109,17 @@ def profile_oauth_github_callback():
     return redirect(url_for("main.profile"))
 
 
-@bp.route("/storage/picture/<string:id>")
+@bp.route("/storage/picture/<string:picture_id>")
 @login_required
-def get_picture(id: str):
+def get_picture(picture_id: str):
     res = make_response()
     try:
-        picture = WebFileStorage.get(id=id)
+        picture = WebFileStorage.get(id=picture_id)
         with open(picture.filepath, "rb") as file:
             res.set_data(file.read())
         res.content_type = "image/*"
         res.status = 200
-    except:
+    except FileNotFoundError:  # pylint: disable=broad-except
         res.status = 404
         res.content_type = "text/plain"
         res.set_data("404 NOT FOUND")
@@ -219,7 +188,7 @@ def update_password():
         flash("New password wasn't provided", category="error")
         return redirect(url_for("main.profile"))
 
-    if not (new_password == new_password_confirm):
+    if not new_password == new_password_confirm:
         flash("New password doesn't match confirmation!", category="error")
         return redirect(url_for("main.profile"))
 
@@ -227,7 +196,7 @@ def update_password():
     try:
         service.update_password(
             g.user, old_password=old_password, new_password=new_password)
-    except:
+    except Exception:  # pylint: disable=broad-except
         flash("Old password is incorrect", category="error")
         return redirect(url_for("main.profile"))
 
