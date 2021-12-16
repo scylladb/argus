@@ -4,16 +4,15 @@ import json
 import re
 import os
 import hashlib
+import datetime
 from typing import Callable
 from collections import namedtuple
 from uuid import UUID, uuid4
-import datetime
-from cassandra.cqlengine import ValidationError
-import humanize
-from flask import g, current_app, session, flash
-import requests
 
-from cassandra.cqlengine.models import _DoesNotExist
+import humanize
+import requests
+from cassandra.cqlengine import ValidationError
+from flask import g, current_app, session
 from werkzeug.security import check_password_hash, generate_password_hash
 from argus.backend.db import ScyllaCluster
 from argus.db.testrun import TestRun, TestStatus
@@ -47,17 +46,46 @@ def first(iterable, value, key: Callable = None, predicate: Callable = None):
     return None
 
 
+class GithubOrganizationMissingError(Exception):
+    pass
+
+
 class ArgusService:
-    def __init__(self, session=None):
-        self.session = session if session else ScyllaCluster.get_session()
-        self.db = ScyllaCluster.get()
+    # pylint: disable=no-self-use,too-many-arguments,too-many-instance-attributes,too-many-locals, too-many-public-methods
+    def __init__(self, database_session=None):
+        self.session = database_session if database_session else ScyllaCluster.get_session()
+        self.database = ScyllaCluster.get()
         self.github_headers = {
             "Accept": "application/vnd.github.v3+json",
             "Authorization": f"token {current_app.config['GITHUB_ACCESS_TOKEN']}"
         }
-        self.runs_by_id_stmt = self.db.prepare(f"SELECT * FROM {TestRun.table_name()} WHERE id in ?")
-        self.jobs_by_assignee = self.db.prepare(
-            f"SELECT id, status, start_time, assignee, release_name, group, name, build_job_name, build_job_url FROM {TestRun.table_name()} WHERE assignee = ?")
+        self.runs_by_id_stmt = self.database.prepare(
+            f"SELECT * FROM {TestRun.table_name()} WHERE id in ?"
+        )
+        self.run_by_release_name_stmt = self.database.prepare(
+            "SELECT id, name, group, release_name, build_job_name, build_job_url, "
+            "status, start_time, end_time, heartbeat "
+            f"FROM {TestRun.table_name()} WHERE release_name = ?"
+        )
+        self.jobs_by_assignee = self.database.prepare(
+            "SELECT id, status, start_time, assignee, release_name, "
+            "group, name, build_job_name, build_job_url FROM "
+            f"{TestRun.table_name()} WHERE assignee = ?"
+        )
+        self.test_table_statement = self.database.prepare(
+            "SELECT id, name, group, release_name, "
+            "build_job_url, build_job_name, status, "
+            f"start_time, end_time, heartbeat FROM {TestRun.table_name()}"
+        )
+        self.run_by_release_stats_statement = self.database.prepare(
+            "SELECT id, name, group, release_name, status, start_time, "
+            f"end_time, heartbeat FROM {TestRun.table_name()} WHERE release_name = ?"
+        )
+        self.event_insert_statement = self.database.prepare(
+            'INSERT INTO argus.argus_event '
+            '("id", "release_id", "group_id", "test_id", "run_id", "user_id", "kind", "body", "created_at") '
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        )
 
     def create_release(self, payload: dict) -> dict:
         response = {}
@@ -93,10 +121,11 @@ class ArgusService:
             new_group.save()
             response[group_name] = {}
             response[group_name]["status"] = "created"
-            response[group_name]["tests"] = self.create_tests(tests=group_definition.get("tests", []),
-                                                              parent_group_id=new_group.id,
-                                                              parent_release_id=parent_release_id
-                                                              )
+            response[group_name]["tests"] = self.create_tests(
+                tests=group_definition.get("tests", []),
+                parent_group_id=new_group.id,
+                parent_release_id=parent_release_id
+            )
         return response
 
     def create_tests(self, tests: dict, parent_group_id: UUID, parent_release_id: UUID) -> dict:
@@ -113,11 +142,7 @@ class ArgusService:
         return response
 
     def get_test_table(self):
-        ts_begin = time.time()
-        statement = self.db.prepare(
-            f"SELECT id, name, group, release_name, build_job_url, build_job_name, status, start_time, end_time, heartbeat FROM {TestRun.table_name()}")
-        rows = self.session.execute(statement).all()
-        ts_fetch = time.time()
+        rows = self.session.execute(self.test_table_statement).all()
         for row in rows:
             row["natural_heartbeat"] = humanize.naturaltime(
                 datetime.datetime.fromtimestamp(row["heartbeat"]))
@@ -125,21 +150,17 @@ class ArgusService:
                 datetime.datetime.fromtimestamp(row["start_time"]))
             row["natural_end_time"] = humanize.naturaltime(
                 datetime.datetime.fromtimestamp(row["end_time"]))
-        ts_human_time_iter = time.time()
 
-        print(
-            f"Fetch took: {ts_fetch - ts_begin}s\nProcessing Took: {ts_human_time_iter - ts_fetch}s\nTotal: {ts_human_time_iter - ts_begin}s")
         return sorted(rows, key=lambda x: x["start_time"], reverse=True)
 
     def load_test_run(self, test_run_id: UUID):
         run = TestRun.from_id(test_id=test_run_id)
-        comments = None
-        return run, comments
+        return run
 
     def get_comments(self, test_id: UUID) -> list[ArgusTestRunComment]:
         return sorted(ArgusTestRunComment.filter(test_run_id=test_id).all(), key=lambda c: c.posted_at)
 
-    def get_user_info(self, payload: dict) -> dict:
+    def get_user_info(self) -> dict:
         users = User.all()
         return {str(user.id): user.to_json() for user in users}
 
@@ -147,7 +168,7 @@ class ArgusService:
         test_id: str = payload["test_id"]
         message: str = payload["message"]
         message_stripped = message.replace("<", "&lt;").replace(">", "&gt;")
-        release_name_stmt = self.db.prepare(
+        release_name_stmt = self.database.prepare(
             f"SELECT release_name FROM {TestRun.table_name()} WHERE id = ?")
         release_name = self.session.execute(
             release_name_stmt, parameters=(UUID(test_id),)).one()["release_name"]
@@ -187,10 +208,10 @@ class ArgusService:
 
     def get_test_last_run_status(self, payload: dict) -> dict:
         response = {}
-        statement = self.db.prepare(
-            f"SELECT id, release_name, name, status, start_time FROM {TestRun.table_name()} WHERE release_name = ?")
         runs = self.session.execute(
-            statement, parameters=(payload["release_name"],)).all()
+            self.run_by_release_name_stmt,
+            parameters=(payload["release_name"],)
+        ).all()
         runs = sorted(runs, key=lambda val: val["start_time"], reverse=True)
         for test in payload.get("tests", []):
             runs_for_test = [
@@ -200,31 +221,8 @@ class ArgusService:
 
         return response
 
-    def get_runs_for_release_group(self, release_name: str, group_name: str, limit=10):
-        query = self.session.execute("SELECT id, name, group, release_name, build_job_name, build_job_url, "
-                                     "status, start_time, end_time, heartbeat"
-                                     f" FROM {TestRun.table_name()}")
-        rows = query.all()
-        rows = [row for row in rows if row["release_name"]
-                == release_name and row["group"] == group_name]
-        rows = rows
-        for row in rows:
-            row["natural_heartbeat"] = humanize.naturaltime(
-                datetime.datetime.fromtimestamp(row["heartbeat"]))
-            row["natural_start_time"] = humanize.naturaltime(
-                datetime.datetime.fromtimestamp(row["start_time"]))
-            row["natural_end_time"] = humanize.naturaltime(
-                datetime.datetime.fromtimestamp(row["end_time"]))
-            row["build_number"] = int(
-                row["build_job_url"].rstrip("/").split("/")[-1])
-
-        return sorted(rows, key=lambda x: x["start_time"], reverse=True)[:limit]
-
     def get_runs_by_name_for_release_group(self, test_name: str, release_name: str, limit=10):
-        statement = self.db.prepare("SELECT id, name, group, release_name, build_job_name, build_job_url, "
-                                    "status, start_time, end_time, heartbeat "
-                                    f"FROM {TestRun.table_name()} WHERE release_name = ?")
-        rows = self.session.execute(statement, parameters=(release_name,)).all()
+        rows = self.session.execute(self.run_by_release_name_stmt, parameters=(release_name,)).all()
         rows = [row for row in rows if row["release_name"]
                 == release_name and re.match(f"^{test_name}(-test)?$", row["name"])]
         for row in rows:
@@ -239,20 +237,18 @@ class ArgusService:
 
         return sorted(rows, key=lambda x: x["start_time"], reverse=True)[:limit]
 
-    """
-    Example body:
-    {
-        "master": {
-            "force": true, // Forcefully retrieve stats even if release is disabled
-            "groups": ["longevity", "artifacts"],
-            "tests": ["longevity-100gb", "artifacts-ami"]
-        }
-    }
-    Both groups and tests are considered prefixes to test_run names
-    """
-
     def collect_stats(self, payload: dict) -> dict:
-
+        """
+        Example body:
+        {
+            "master": {
+                "force": true, // Forcefully retrieve stats even if release is disabled
+                "groups": ["longevity", "artifacts"],
+                "tests": ["longevity-100gb", "artifacts-ami"]
+            }
+        }
+        Both groups and tests are considered prefixes to test_run names
+        """
         response = {
             "releases": {
 
@@ -277,8 +273,6 @@ class ArgusService:
             "not_run": 0,
             "lastStatus": "unknown"
         }
-        run_by_release_stats_statement = self.db.prepare(
-            f"SELECT id, name, group, release_name, status, start_time, end_time, heartbeat FROM {TestRun.table_name()} WHERE release_name = ?")
         for release_name, release_body in payload.items():
             release = all_releases[release_name]
             override = release_body.get("force", False)
@@ -298,9 +292,9 @@ class ArgusService:
                 response["releases"][release_name] = release_stats
                 continue
 
-            rows = self.session.execute(run_by_release_stats_statement, parameters=(release_name,))
+            rows = self.session.execute(self.run_by_release_stats_statement, parameters=(release_name,))
             rows = sorted(rows, key=lambda r: r["start_time"], reverse=True)
-            release_tests = [test for test in all_tests_by_release_id[release.id]]
+            release_tests = list(all_tests_by_release_id[release.id])
             for test in release_tests:
                 test_group = all_groups_by_id[test.group_id]
                 release_stats["total"] += 1
@@ -331,14 +325,14 @@ class ArgusService:
     def poll_test_runs(self, payload: dict):
         limit = payload["limit"]
         runs: dict = payload["runs"]
-
-        statement = self.db.prepare("SELECT id, name, group, release_name, build_job_name, build_job_url, "
-                                    "status, start_time, end_time, heartbeat "
-                                    f"FROM {TestRun.table_name()} WHERE release_name = ?")
         response = {}
+
         for uid, [release_name, test_name] in runs.items():
             rows = self.session.execute(
-                statement, parameters=(release_name,), execution_profile="read_fast").all()
+                self.run_by_release_name_stmt,
+                parameters=(release_name,),
+                execution_profile="read_fast"
+            ).all()
             rows = sorted(rows, key=lambda val: val["start_time"], reverse=True)
             for row in rows:
                 try:
@@ -367,8 +361,6 @@ class ArgusService:
         return response
 
     def send_event(self, kind: str, body: dict, user_id=None, run_id=None, release_id=None, group_id=None, test_id=None):
-        statement = self.db.prepare(
-            'INSERT INTO argus.argus_event ("id", "release_id", "group_id", "test_id", "run_id", "user_id", "kind", "body", "created_at") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
         params = (
             uuid4(),
             release_id,
@@ -380,8 +372,7 @@ class ArgusService:
             json.dumps(body, ensure_ascii=True, separators=(',', ':')),
             datetime.datetime.utcnow()
         )
-        self.session.execute(query=statement, parameters=params)
-        pass
+        self.session.execute(query=self.event_insert_statement, parameters=params)
 
     def toggle_test_status(self, payload: dict):
         new_status = payload.get("status")
@@ -403,13 +394,20 @@ class ArgusService:
         test_run.run_info.results.status = new_status
         test_run.save()
 
-        self.send_event(kind=ArgusEventTypes.TestRunStatusChanged,
-                        body={
-                            "message": "Status was changed from {old_status} to {new_status} by {username}",
-                            "old_status": old_status.value,
-                            "new_status": new_status.value,
-                            "username": g.user.username
-                        }, user_id=g.user.id, run_id=test_run.id, release_id=test.release_id, group_id=test.group_id, test_id=test.id)
+        self.send_event(
+            kind=ArgusEventTypes.TestRunStatusChanged,
+            body={
+                "message": "Status was changed from {old_status} to {new_status} by {username}",
+                "old_status": old_status.value,
+                "new_status": new_status.value,
+                "username": g.user.username
+            },
+            user_id=g.user.id,
+            run_id=test_run.id,
+            release_id=test.release_id,
+            group_id=test.group_id,
+            test_id=test.id
+        )
         return {
             "test_run_id": test_run_id,
             "status": new_status
@@ -441,13 +439,20 @@ class ArgusService:
         test_run.assignee = new_assignee.id
         test_run.save()
 
-        self.send_event(kind=ArgusEventTypes.AssigneeChanged,
-                        body={
-                            "message": "Assignee was changed from \"{old_user}\" to \"{new_user}\" by {username}",
-                            "old_user": old_assignee.username if old_assignee else "None",
-                            "new_user": new_assignee.username,
-                            "username": g.user.username
-                        }, user_id=g.user.id, run_id=test_run.id, release_id=test.release_id, group_id=test.group_id, test_id=test.id)
+        self.send_event(
+            kind=ArgusEventTypes.AssigneeChanged,
+            body={
+                "message": "Assignee was changed from \"{old_user}\" to \"{new_user}\" by {username}",
+                "old_user": old_assignee.username if old_assignee else "None",
+                "new_user": new_assignee.username,
+                "username": g.user.username
+            },
+            user_id=g.user.id,
+            run_id=test_run.id,
+            release_id=test.release_id,
+            group_id=test.group_id,
+            test_id=test.id
+        )
         return {
             "test_run_id": test_run_id,
             "assignee": str(new_assignee.id)
@@ -481,15 +486,14 @@ class ArgusService:
             event.kind)(json.loads(event.body)) for event in all_events}
         return response
 
-    """
-    Example payload:
-    {
-        "issue_url": "https://github.com/example/repo/issues/6"
-        "run_id": "abcdef-5354235-1232145-dd"
-    }
-    """
-
     def submit_github_issue(self, payload: dict) -> dict:
+        """
+        Example payload:
+        {
+            "issue_url": "https://github.com/example/repo/issues/6"
+            "run_id": "abcdef-5354235-1232145-dd"
+        }
+        """
         issue_url = payload.get("issue_url")
         run_id = payload.get("run_id")
         if not run_id:
@@ -498,7 +502,8 @@ class ArgusService:
             raise Exception("Missing or empty issue url")
 
         match = re.match(
-            r"http(s)?://(www\.)?github\.com/(?P<owner>[\w\d]+)/(?P<repo>[\w\d\-_]+)/(?P<type>issues|pull)/(?P<issue_number>\d+)(/)?",
+            r"http(s)?://(www\.)?github\.com/(?P<owner>[\w\d]+)/"
+            r"(?P<repo>[\w\d\-_]+)/(?P<type>issues|pull)/(?P<issue_number>\d+)(/)?",
             issue_url)
         if not match:
             raise Exception("URL doesn't match Github schema")
@@ -521,46 +526,57 @@ class ArgusService:
         new_issue.repo = match.group("repo")
         new_issue.issue_number = int(match.group("issue_number"))
 
-        issue_state = requests.get(f"https://api.github.com/repos/{new_issue.owner}/{new_issue.repo}/issues/{new_issue.issue_number}",
-                                   headers=self.github_headers).json()
+        issue_state = requests.get(
+            f"https://api.github.com/repos/{new_issue.owner}/{new_issue.repo}/issues/{new_issue.issue_number}",
+            headers=self.github_headers
+        ).json()
 
         new_issue.title = issue_state.get("title")
         new_issue.url = issue_state.get("html_url")
         new_issue.last_status = issue_state.get("state")
         new_issue.save()
 
-        self.send_event(kind=ArgusEventTypes.TestRunIssueAdded,
-                        body={
-                            "message": "An issue titled \"{title}\" was added by {username}",
-                            "username": g.user.username,
-                            "url": issue_url,
-                            "title": issue_state.get("title"),
-                            "state": issue_state.get("state"),
-                        }, user_id=g.user.id, run_id=new_issue.run_id, release_id=new_issue.release_id, group_id=new_issue.group_id, test_id=new_issue.test_id)
+        self.send_event(
+            kind=ArgusEventTypes.TestRunIssueAdded,
+            body={
+                "message": "An issue titled \"{title}\" was added by {username}",
+                "username": g.user.username,
+                "url": issue_url,
+                "title": issue_state.get("title"),
+                "state": issue_state.get("state"),
+            },
+            user_id=g.user.id,
+            run_id=new_issue.run_id,
+            release_id=new_issue.release_id,
+            group_id=new_issue.group_id,
+            test_id=new_issue.test_id
+        )
 
         response = {
-            **dict([o for o in new_issue.items()]),
+            **dict(list(new_issue.items())),
             "title": issue_state.get("title"),
             "state": issue_state.get("state"),
         }
 
         return response
-    """
-    Example payload:
-    {
-        "filter_key": "release_id",
-        "id": "abcdef-bcdedf-00000",
-    }
-    """
 
     def get_github_issues(self, payload: dict) -> dict:
+        """
+        Example payload:
+        {
+            "filter_key": "release_id",
+            "id": "abcdef-bcdedf-00000",
+        }
+        """
+
         filter_key = payload.get("filter_key")
         if not filter_key:
             raise Exception("A filter_key field is required")
 
         if filter_key not in ["release_id", "group_id", "test_id", "run_id", "user_id"]:
             raise Exception(
-                "filter_key can only be one of: \"release_id\", \"group_id\", \"test_id\", \"run_id\", \"user_id\"")
+                "filter_key can only be one of: \"release_id\", \"group_id\", \"test_id\", \"run_id\", \"user_id\""
+            )
 
         filter_id = payload.get("id")
         if not filter_id:
@@ -569,24 +585,23 @@ class ArgusService:
         filter_id = UUID(filter_id)
         all_issues = ArgusGithubIssue.filter(**{filter_key: filter_id}).all()
 
-        response = [dict([o for o in issue.items()]) for issue in all_issues]
+        response = [dict(list(issue.items())) for issue in all_issues]
         return response
 
-    """
-    Example payload:
-    {
-        "issues": [
-            [1, 'example-repo', 'example-owner']
-        ]
-    }
-
-    Response:
-    {
-        "https://github.com/example-owner/example-repo/issues/1": "open"
-    }
-    """
-
     def get_github_issue_state(self, payload: dict) -> dict:
+        """
+        Example payload:
+        {
+            "issues": [
+                [1, 'example-repo', 'example-owner']
+            ]
+        }
+
+        Response:
+        {
+            "https://github.com/example-owner/example-repo/issues/1": "open"
+        }
+        """
         issues = payload.get("issues")
         if not issues:
             raise Exception("Empty request")
@@ -598,17 +613,17 @@ class ArgusService:
 
         return response
 
-    """
-    Example payload
-    {
-        "release_id": "abcadedf-efadd-24124",
-        "tests": [ArgusReleaseGroupTest <, ...>]
-    }
-    Response
-    [[ArgusReleaseGroupTest, GithubIssue[]], ...]
-    """
-
     def fetch_release_issues(self, payload: dict) -> dict:
+        """
+        Example payload
+        {
+            "release_id": "abcadedf-efadd-24124",
+            "tests": [ArgusReleaseGroupTest <, ...>]
+        }
+        Response
+        [[ArgusReleaseGroupTest, GithubIssue[]], ...]
+        """
+
         release_id = payload.get("release_id")
         if not release_id:
             raise Exception("ReleaseId wasn't specified in the request")
@@ -628,19 +643,18 @@ class ArgusService:
 
         return response
 
-    """
-    Payload:
-    {
-        "release": "master",
-        "groups": ["longevity", ...],
-        "tests": ["longevity-10gb-3h", ...],
-        "start": 160000000,
-        "end": 1600000001,
-        "assignees": [uuid<, ...>]
-    }
-    """
-
     def submit_new_schedule(self, payload: dict) -> dict:
+        """
+        Payload:
+        {
+            "release": "master",
+            "groups": ["longevity", ...],
+            "tests": ["longevity-10gb-3h", ...],
+            "start": 160000000,
+            "end": 1600000001,
+            "assignees": [uuid<, ...>]
+        }
+        """
         release = payload.get("release")
         if not release:
             raise Exception("Release wasn't specified in the request")
@@ -700,13 +714,12 @@ class ArgusService:
 
         return response
 
-    """
-    {
-        "release": "master"
-    }
-    """
-
     def get_schedules_for_release(self, payload: dict) -> dict:
+        """
+        {
+            "release": "master"
+        }
+        """
         release = payload.get("release")
         if not release:
             raise Exception("Release name not specified in the request")
@@ -728,14 +741,13 @@ class ArgusService:
 
         return response
 
-    """
-    {
-        "release": "master",
-        "schedule_id": uuid1
-    }
-    """
-
     def delete_schedule(self, payload: dict) -> dict:
+        """
+        {
+            "release": "master",
+            "schedule_id": uuid1
+        }
+        """
         release = payload.get("release")
         if not release:
             raise Exception("Release name not specified in the request")
@@ -761,17 +773,16 @@ class ArgusService:
             "result": "deleted"
         }
 
-    """
-    {
-        "master": {
-            "groups": ["longevity", ...],
-            "tests": ["longevity-3gb-4h", ...]
-        },
-        <...>
-    }
-    """
-
     def get_assignees(self, payload: dict) -> dict:
+        """
+        {
+            "master": {
+                "groups": ["longevity", ...],
+                "tests": ["longevity-3gb-4h", ...]
+            },
+            <...>
+        }
+        """
         response = {}
         for release, body in payload.items():
             response[release] = {
@@ -805,7 +816,7 @@ class ArgusService:
         user.save()
 
     def update_password(self, user: User, old_password: str, new_password: str):
-        if (check_password_hash(old_password) != user.password):
+        if check_password_hash(user.password, old_password):
             raise Exception("Incorrect old password")
 
         user.password = generate_password_hash(new_password)
@@ -826,7 +837,7 @@ class ArgusService:
                 old_file = WebFileStorage.get(id=old_picture_id)
                 os.unlink(old_file.filepath)
                 old_file.delete()
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             print(exc)
 
         g.user.picture_id = web_file.id
@@ -872,10 +883,11 @@ class ArgusService:
         temp_password = None
         required_organizations = current_app.config.get("GITHUB_REQUIRED_ORGANIZATIONS")
         if required_organizations:
-            logins = set([org["login"] for org in organizations])
+            logins = set([org["login"] for org in organizations])  # pylint: disable=consider-using-set-comprehension
             required_organizations = set(required_organizations)
             if len(logins.intersection(required_organizations)) == 0:
-                raise Exception("Not a member of a required organization or missing organization scope")
+                raise GithubOrganizationMissingError(
+                    "Not a member of a required organization or missing organization scope")
 
         try:
             user = User.get(username=user_info.get("login"))
@@ -936,15 +948,15 @@ class ArgusService:
         schedules = []
         today = datetime.datetime.utcnow()
         last_week = today - datetime.timedelta(days=today.weekday() + 1)
-        for release, id in schedule_keys:
-            schedule = dict(ArgusReleaseSchedule.get(release=release, schedule_id=id).items())
+        for release, schedule_id in schedule_keys:
+            schedule = dict(ArgusReleaseSchedule.get(release=release, schedule_id=schedule_id).items())
             if last_week > schedule["period_end"]:
                 continue
-            tests = ArgusReleaseScheduleTest.filter(schedule_id=id).all()
+            tests = ArgusReleaseScheduleTest.filter(schedule_id=schedule_id).all()
             schedule["tests"] = [test.name for test in tests]
-            groups = ArgusReleaseScheduleGroup.filter(schedule_id=id).all()
+            groups = ArgusReleaseScheduleGroup.filter(schedule_id=schedule_id).all()
             schedule["groups"] = [group.name for group in groups]
-            assignees = ArgusReleaseScheduleAssignee.filter(schedule_id=id).all()
+            assignees = ArgusReleaseScheduleAssignee.filter(schedule_id=schedule_id).all()
             schedule["assignees"] = [assignee.assignee for assignee in assignees]
             schedules.append(schedule)
 

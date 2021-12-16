@@ -1,7 +1,8 @@
-import time
 from typing import Optional
 import click
-from flask import g, current_app, Flask
+from flask import g, Flask
+from flask.cli import with_appcontext
+# pylint: disable=no-name-in-module
 from cassandra.policies import WhiteListRoundRobinPolicy
 from cassandra.cluster import Session
 from cassandra import ConsistencyLevel
@@ -11,7 +12,6 @@ from cassandra.cqlengine.management import sync_table, sync_type
 from cassandra.cqlengine import connection
 from cassandra.query import dict_factory
 from cassandra.auth import PlainTextAuthProvider
-from flask.cli import with_appcontext
 
 from argus.db.config import FileConfig
 from argus.backend.models import USED_MODELS, USED_TYPES
@@ -23,6 +23,7 @@ CLUSTER: Cluster | None = None
 
 
 class ScyllaCluster:
+    # pylint: disable=too-many-instance-attributes
     APP_INSTANCE: Optional['ScyllaCluster'] = None
 
     def __init__(self, config=None):
@@ -68,7 +69,7 @@ class ScyllaCluster:
             cls.APP_INSTANCE = None
 
     def prepare(self, query: str) -> PreparedStatement:
-        if (not (statement := self.prepared_statements.get(query))):
+        if not (statement := self.prepared_statements.get(query)):
             print("unprepared statement, preparing...")
             statement = self.session.prepare(query=query)
             self.prepared_statements[query] = statement
@@ -90,11 +91,11 @@ class ScyllaCluster:
     def get_session(cls):
         cluster = cls.get()
         if 'scylla_session' not in g:
-            g.scylla_session = cluster.create_session()
+            g.scylla_session = cluster.create_session()  # pylint: disable=assigning-non-slot
         return g.scylla_session
 
     @classmethod
-    def close_session(cls, e=None):
+    def close_session(cls, error=None):  # pylint: disable=unused-argument
         cluster = cls.get()
         session: Session = g.pop("scylla_session", None)
         if session:

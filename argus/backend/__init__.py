@@ -1,19 +1,14 @@
-from flask import Flask, g, render_template
-from flask_login.login_manager import LoginManager
-from werkzeug.security import generate_password_hash
+from datetime import datetime
+from flask import Flask
+from yaml import safe_load
 from argus.backend.db import ScyllaCluster
 from argus.backend import auth, main, api
-from argus.backend.models import User
-from argus.backend.argus_service import ArgusService
-from yaml import safe_load
-from uuid import UUID
-from datetime import datetime
 
 
 def create_app(config=None) -> Flask:
     app = Flask(__name__)
-    with open("argus_web.yaml", "rt", encoding="utf-8") as f:
-        config_mapping = safe_load(f.read())
+    with open("argus_web.yaml", "rt", encoding="utf-8") as config_file:
+        config_mapping = safe_load(config_file.read())
     app.config.from_mapping(config_mapping)
     if config:
         app.config.from_mapping(config)
