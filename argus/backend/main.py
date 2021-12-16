@@ -85,7 +85,6 @@ def runs(name: str, group: str):
     limit = 9999 if bool(show_all) else 10
     runs = service.get_runs_for_release_group(
         release_name=name, group_name=group, limit=limit)
-    service.terminate_session()
     return render_template("runs.html.j2", runs=runs, requested_all=bool(all))
 
 
@@ -95,7 +94,6 @@ def tests(name: str, group: str):
     service = ArgusService()
     tests, _ = service.get_tests_for_release_group(
         release_name=name, group_name=group)
-    service.terminate_session()
     return render_template("tests.html.j2", tests=tests, release_name=name, group_name=group)
 
 
@@ -107,7 +105,6 @@ def runs_by_name(name: str, group: str, test: str):
     limit = 9999 if bool(show_all) else 10
     runs = service.get_runs_by_name_for_release_group(
         test_name=test, release_name=name, group_name=group, limit=limit)
-    service.terminate_session()
     return render_template("runs.html.j2", runs=runs, requested_all=bool(all))
 
 
