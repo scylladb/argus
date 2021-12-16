@@ -59,9 +59,6 @@ class ArgusService:
         self.jobs_by_assignee = self.db.prepare(
             f"SELECT id, status, start_time, assignee, release_name, group, name, build_job_name, build_job_url FROM {TestRun.table_name()} WHERE assignee = ?")
 
-    def terminate_session(self):
-        pass  # TODO: Remove this
-
     def create_release(self, payload: dict) -> dict:
         response = {}
         for release_name in payload:

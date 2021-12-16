@@ -178,7 +178,6 @@ def release_groups():
         groups = service.get_groups_for_release(
             UUID(request_payload["release"]["id"]))
         res["response"] = [dict(g.items()) for g in groups]
-        service.terminate_session()
     except Exception as exc:
         LOGGER.error("Something happened during request %s", request)
         res["status"] = "error"
@@ -204,7 +203,6 @@ def tests():
         tests = service.get_tests_for_release_group(
             group_id=request_payload["group"]["id"])
         res["response"] = {"tests": [dict(t.items()) for t in tests]}
-        service.terminate_session()
     except Exception as exc:
         LOGGER.error("Something happened during request %s", request)
         res["status"] = "error"
@@ -278,7 +276,6 @@ def test_run():
         test_run, _ = service.load_test_run(
             test_run_id=UUID(request_payload["test_id"]))
         res["response"] = test_run.serialize()
-        service.terminate_session()
     except Exception as exc:
         LOGGER.error("Something happened during request %s", request)
         res["status"] = "error"
