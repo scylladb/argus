@@ -9,7 +9,7 @@ Releases
 <div class="container-fluid">
     {% for run in runs %}
         <div class="row border p-2 mb-2 text-center">
-            <div class="col"><a href="{{url_for('main.test_run', id=run.id)}}">{{ run.name }}</a></div>
+            <div class="col"><a href="{{url_for('main.test_run', run_id=run.id)}}">{{ run.name }}</a></div>
             <div class="col">
             {% if run.end_time != -1 %}
                 <span title="{{ run.end_time | from_timestamp }}">Ended {{ run.natural_end_time }}</span>
