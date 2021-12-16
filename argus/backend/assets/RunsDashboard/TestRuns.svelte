@@ -52,9 +52,10 @@
                 ></span
             >
             {/if}
-            {testInfo} ({releaseName})
+            <div>{testInfo} ({releaseName})</div>
             {#if runs.length > 0}
-            <div class="mx-2 flex-fill text-end">Last run: {new Date(runs[0].start_time * 1000).toLocaleString()}</div>
+            <div class="ms-auto flex-fill text-end">Last run: #{runs[0].build_number}</div>
+            <div class="mx-2">Date: {new Date(runs[0].start_time * 1000).toLocaleString()}</div>
             {/if}
 
         </button>
