@@ -8,7 +8,7 @@ User=argus
 Group=argus
 Environment=FLASK_ENV=production
 WorkingDirectory=/home/argus/app
-ExecStart=/bin/bash /home/argus/app/start_argus.sh
+ExecStart=/bin/bash -l /home/argus/app/start_argus.sh
 
 [Install]
 WantedBy=multi-user.target
