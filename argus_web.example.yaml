@@ -1,8 +1,13 @@
+# Secret key used to match session data
 SECRET_KEY: MUSTBEUNIQUE
+# Client ID of a github oauth application
 GITHUB_CLIENT_ID: YOUR_GITHUB_CLIENT_ID
+# Client secret of a github oauth application
 GITHUB_CLIENT_SECRET: YOUR_GITHUB_CLIENT_SECRET
+# Github personal access token
 GITHUB_ACCESS_TOKEN: YOUR_GITHUB_PERSONAL_ACCESS_TOKEN
+# List of required organization names
 GITHUB_REQUIRED_ORGANIZATIONS:
-  # at least one is required
+  # at least one is required for user to successfully authenticate
   - myorg
   - otherorg
