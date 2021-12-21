@@ -14,6 +14,18 @@ bp = Blueprint('api', __name__, url_prefix='/api/v1')
 LOGGER = logging.getLogger(__name__)
 
 
+@bp.route("/version")
+def version():
+    service = ArgusService()
+    argus_version = service.get_version()
+    return jsonify({
+        "status": "ok",
+        "response": {
+            "commit_id": argus_version
+        }
+    })
+
+
 @bp.route("/releases")
 @login_required
 def releases():

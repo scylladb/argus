@@ -1,4 +1,5 @@
 import base64
+import subprocess
 import time
 import json
 import re
@@ -86,6 +87,21 @@ class ArgusService:
             '("id", "release_id", "group_id", "test_id", "run_id", "user_id", "kind", "body", "created_at") '
             'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
         )
+
+    def get_version(self) -> str:
+        try:
+            proc = subprocess.run(["git", "rev-parse", "HEAD"], check=True, capture_output=True)
+        except subprocess.CalledProcessError:
+            proc = None
+        if proc:
+            return proc.stdout.decode(encoding="utf-8").strip()
+        else:
+            try:
+                with open("./.argus_version", 'rt', encoding="utf-8") as version_file:
+                    version = version_file.read().strip()
+                return version
+            except FileNotFoundError:
+                return "version_unknown"
 
     def create_release(self, payload: dict) -> dict:
         response = {}
