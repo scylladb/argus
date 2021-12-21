@@ -45,7 +45,7 @@
                         <span class="text-muted" style="font-size: 0.75em"
                             >{new Date(
                                 test.start_time * 1000
-                            ).toLocaleString()}</span
+                            ).toISOString()}</span
                         >
                     </div>
                     <button

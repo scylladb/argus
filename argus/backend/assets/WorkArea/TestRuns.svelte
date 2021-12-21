@@ -55,7 +55,7 @@
             <div>{testInfo} ({releaseName})</div>
             {#if runs.length > 0}
             <div class="ms-auto flex-fill text-end">Last run: #{runs[0].build_number}</div>
-            <div class="mx-2">Date: {new Date(runs[0].start_time * 1000).toLocaleString()}</div>
+            <div class="mx-2">Date: {new Date(runs[0].start_time * 1000).toISOString()}</div>
             {/if}
 
         </button>

@@ -124,7 +124,7 @@
                             <small class="text-muted"
                                 >{new Date(
                                     comment.posted_at * 1000
-                                ).toLocaleString()}</small
+                                ).toISOString()}</small
                             >
                         </p>
                     </div>

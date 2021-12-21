@@ -57,7 +57,7 @@
                                                 Created at {new Date(
                                                     resource.instance_info
                                                         .creation_time * 1000
-                                                ).toLocaleString()}
+                                                ).toISOString()}
                                             </li>
                                             {#if resource.instance_info.termination_time != 0}
                                                 <li>
@@ -65,7 +65,7 @@
                                                         resource.instance_info
                                                             .termination_time *
                                                             1000
-                                                    ).toLocaleString()}
+                                                    ).toISOString()}
                                                 </li>
                                                 <li>
                                                     Termination reason: {resource.instance_info.termination_reason.split(

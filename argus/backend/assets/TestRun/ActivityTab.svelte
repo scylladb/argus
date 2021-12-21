@@ -71,7 +71,7 @@
                     <small class="text-muted"
                         >{new Date(
                             event.created_at
-                        ).toLocaleString()}</small
+                        ).toISOString()}</small
                     >
                         </p>
                 </div>

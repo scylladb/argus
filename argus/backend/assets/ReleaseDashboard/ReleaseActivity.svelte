@@ -108,7 +108,7 @@
                                 <div class="ms-auto text-muted">
                                     {new Date(
                                         event.created_at
-                                    ).toLocaleString()}
+                                    ).toISOString()}
                                 </div>
                                 <div class="ms-2 text-muted">
                                     <a
