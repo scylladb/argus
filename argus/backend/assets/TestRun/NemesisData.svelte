@@ -42,13 +42,13 @@
                             <li>
                                 Start Time: {new Date(
                                     nemesis.start_time * 1000
-                                ).toLocaleString()}
+                                ).toISOString()}
                             </li>
                             {#if nemesis.end_time != 0}
                                 <li>
                                     End Time: {new Date(
                                         nemesis.end_time * 1000
-                                    ).toLocaleString()}
+                                    ).toISOString()}
                                 </li>
                                 <li>
                                     Duration: {nemesis.duration}

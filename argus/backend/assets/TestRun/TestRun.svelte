@@ -214,7 +214,7 @@
                         type="button"
                         title={new Date(
                             test_run.end_time * 1000
-                        ).toLocaleString()}
+                        ).toISOString()}
                         data-bs-toggle="dropdown"
                     >
                         {test_run.status.toUpperCase()}

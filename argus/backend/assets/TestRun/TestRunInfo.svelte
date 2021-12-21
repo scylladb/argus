@@ -79,13 +79,13 @@
                 <li>
                     Start Time: {new Date(
                         test_run.start_time * 1000
-                    ).toLocaleString()}
+                    ).toISOString()}
                 </li>
                 {#if test_run.end_time != -1}
                     <li>
                         End Time: {new Date(
                             test_run.end_time * 1000
-                        ).toLocaleString()}
+                        ).toISOString()}
                     </li>
                 {/if}
                 <li>

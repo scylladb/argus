@@ -69,7 +69,7 @@
             <div class="col-10 overflow-hidden">
                 <div>{test.pretty_name ?? test.name}</div>
                 {#if startTime > 1}
-                <div class="text-muted" style="font-size: 0.75em">{new Date(startTime * 1000).toLocaleString()}</div>
+                <div class="text-muted" style="font-size: 0.75em">{new Date(startTime * 1000).toISOString()}</div>
                 {/if}
             </div>
             <div class="col-1 text-center">

@@ -793,7 +793,7 @@ class ArgusService:
             groups_by_schedule_id = {group.schedule_id: group for group in scheduled_groups}
             schedules = ArgusReleaseSchedule.filter(
                 release=release, schedule_id__in=tuple(groups_by_schedule_id.keys())).all()
-            today = datetime.datetime.now()
+            today = datetime.datetime.utcnow()
             this_monday = today - datetime.timedelta(today.weekday() + 1)
             next_week = this_monday + datetime.timedelta(8)
             valid_schedules = [
@@ -896,7 +896,7 @@ class ArgusService:
             user.username = user_info.get("login")
             user.email = email_info[-1].get("email")
             user.full_name = user_info.get("name")
-            user.registration_date = datetime.datetime.now()
+            user.registration_date = datetime.datetime.utcnow()
             user.roles = ["ROLE_USER"]
             temp_password = base64.encodebytes(
                 os.urandom(48)).decode("ascii").strip()
