@@ -34,6 +34,10 @@
     });
 
     const handleTestRunClick = function (e) {
+        if (clickedTestRuns[e.target.dataset.argusTestId]) {
+            clickedTestRuns[e.target.dataset.argusTestId] = false;
+            return;
+        }
         clickedTestRuns[e.target.dataset.argusTestId] = true;
     };
 </script>
@@ -66,6 +70,7 @@
                 {#each runs as run}
                     <div class="me-2 d-inline-block">
                         <button
+                            class:border-active={clickedTestRuns[run.id]}
                             class="btn {StatusButtonCSSClassMap[run.status]}"
                             type="button"
                             data-bs-toggle="collapse"
@@ -105,6 +110,10 @@
 
     .cursor-question {
         cursor: help;
+    }
+
+    .border-active {
+        border: 3px solid rgb(84, 192, 255);
     }
 
 </style>
