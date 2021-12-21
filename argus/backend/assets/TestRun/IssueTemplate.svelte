@@ -25,6 +25,10 @@
               };
     };
 
+    const filterDbNodes = function(resources) {
+        return resources.filter(val => new RegExp(/\-db\-node/).test(val.name));
+    }
+
     const copyTemplateToClipboard = function () {
         navigator.clipboard.writeText(issueTemplateText);
         sendMessage("success", "Copied to clipboard.");
@@ -71,7 +75,7 @@ Scylla version (or git commit hash): `{scyllaServerPackage.version} with build-i
 Cluster size: {test_run.cloud_setup.db_node.node_amount} nodes ({test_run.cloud_setup.db_node.instance_type})
 
 Scylla running with shards number (live nodes):
-{#each test_run.leftover_resources as resource}
+{#each filterDbNodes(test_run.leftover_resources) as resource}
     - {resource.name} ({resource.instance_info.public_ip} | {resource.instance_info.private_ip}){"\n"}
 {:else}
     **No resources left at the end of the run**
