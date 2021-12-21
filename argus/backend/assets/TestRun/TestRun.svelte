@@ -15,7 +15,10 @@
         InProgressStatuses,
     } from "../Common/TestStatus";
     import IssueTemplate from "./IssueTemplate.svelte";
-    import { polledTestRuns, testRunStore } from "../Stores/SingleTestRunSubscriber";
+    import {
+        polledTestRuns,
+        testRunStore,
+    } from "../Stores/SingleTestRunSubscriber";
     import { userList } from "../Stores/UserlistSubscriber";
     import { sendMessage } from "../Stores/AlertStore";
     export let id = "";
@@ -131,9 +134,15 @@
             console.log(apiJson);
             if (apiJson.status === "ok") {
                 if (new_assignee != "none-none-none") {
-                    sendMessage("success", `Successfully changed assignee to "${users[new_assignee].username}"`);
+                    sendMessage(
+                        "success",
+                        `Successfully changed assignee to "${users[new_assignee].username}"`
+                    );
                 } else {
-                    sendMessage("success", `Successfully cleared assignee from a run`);
+                    sendMessage(
+                        "success",
+                        `Successfully cleared assignee from a run`
+                    );
                 }
                 fetchTestRunData();
             } else {
@@ -170,7 +179,10 @@
             let apiJson = await apiResponse.json();
             console.log(apiJson);
             if (apiJson.status === "ok") {
-                sendMessage("success", `Successfully changed status from "${test_run.status}" to "${newStatus}"`)
+                sendMessage(
+                    "success",
+                    `Successfully changed status from "${test_run.status}" to "${newStatus}"`
+                );
                 fetchTestRunData();
             } else {
                 throw apiJson;
@@ -206,48 +218,53 @@
     {#if test_run}
         <div class="container-fluid p-0 m-0">
             <div class="row p-0 m-0">
-                <div class="col-2 py-2 dropdown">
-                    <button
-                        class="btn {StatusButtonCSSClassMap[
-                            test_run.status
-                        ]} text-light"
-                        type="button"
-                        title={new Date(
-                            test_run.end_time * 1000
-                        ).toISOString()}
-                        data-bs-toggle="dropdown"
-                    >
-                        {test_run.status.toUpperCase()}
-                        {#if InProgressStatuses.find((status) => status == test_run.status)}
-                            <span
-                                class="spinner-border spinner-border-sm d-inline-block"
-                            />
-                        {/if}
-                    </button>
-                    <ul class="dropdown-menu">
-                        {#each Object.keys(TestStatusChangeable) as status}
-                            <li>
-                                <button
-                                    class="dropdown-item"
-                                    disabled={disableButtons}
-                                    on:click={() => {
-                                        newStatus = status.toLowerCase();
-                                        handleStatus();
-                                    }}>{status}</button
-                                >
-                            </li>
-                        {/each}
-                    </ul>
+                <div class="col-2 py-2">
+                    <div class="d-flex">
+                        <a
+                            class="btn btn-dark me-2"
+                            href="/test_run/{id}"
+                            target="_blank">#{build_number}</a
+                        >
+                        <div class="dropdown">
+                            <button
+                                class="btn {StatusButtonCSSClassMap[
+                                    test_run.status
+                                ]} text-light"
+                                type="button"
+                                title={new Date(
+                                    test_run.end_time * 1000
+                                ).toISOString()}
+                                data-bs-toggle="dropdown"
+                            >
+                                {test_run.status.toUpperCase()}
+                                {#if InProgressStatuses.find((status) => status == test_run.status)}
+                                    <span
+                                        class="spinner-border spinner-border-sm d-inline-block"
+                                    />
+                                {/if}
+                            </button>
+                            <ul class="dropdown-menu">
+                                {#each Object.keys(TestStatusChangeable) as status}
+                                    <li>
+                                        <button
+                                            class="dropdown-item"
+                                            disabled={disableButtons}
+                                            on:click={() => {
+                                                newStatus =
+                                                    status.toLowerCase();
+                                                handleStatus();
+                                            }}>{status}</button
+                                        >
+                                    </li>
+                                {/each}
+                            </ul>
+                        </div>
+                    </div>
                 </div>
                 <div class="col-10 text-end py-3">
                     <p class="p-0 d-inline-block pe-4">
-                        {test_run.build_job_name}
+                        {test_run.build_job_name}#{build_number}
                     </p>
-                    <a
-                        class="d-inline-block btn btn-light"
-                        href="/test_run/{id}"
-                        target="_blank">#{build_number}</a
-                    >
                 </div>
             </div>
             {#if Object.keys(users).length > 0}
@@ -401,7 +418,8 @@
                             >
                                 <div class="accordion-body">
                                     {#each event_container.last_events as event}
-                                        <pre class="mb-1 p-1 border font-monospace">
+                                        <pre
+                                            class="mb-1 p-1 border font-monospace">
                                             {event}
                                         </pre>
                                     {/each}
@@ -467,8 +485,12 @@
             </div>
         </div>
     {:else}
-        <div class="text-center p-2 m-1 d-flex align-items-center justify-content-center">
-            <span class="spinner-border me-4" /><span class="fs-4">Loading...</span>
+        <div
+            class="text-center p-2 m-1 d-flex align-items-center justify-content-center"
+        >
+            <span class="spinner-border me-4" /><span class="fs-4"
+                >Loading...</span
+            >
         </div>
     {/if}
 </div>
