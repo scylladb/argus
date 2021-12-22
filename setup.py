@@ -1,9 +1,9 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 
 setup(
     name='argus',
-    version='0.4.0',
-    packages=find_packages(),
+    version='0.5.0',
+    packages=["argus.db", "argus.backend"],
     include_package_data=True,
     zip_safe=False,
     install_requires=[
