@@ -1,4 +1,7 @@
+import os
 from setuptools import setup
+
+base_dir = os.path.dirname(os.path.realpath(__file__))
 
 setup(
     name='argus',
@@ -6,14 +9,7 @@ setup(
     packages=["argus.db", "argus.backend"],
     include_package_data=True,
     zip_safe=False,
-    install_requires=[
-        'pydantic==1.8.2',
-        'scylla-driver==3.24.7',
-        'pyyaml==5.4.1'
-    ],
-    test_requires=[
-        "coverage==5.5",
-        "docker==4.4.4",
-        "pytest==6.2.5",
-    ]
+    install_requires=open(os.path.join(base_dir,'requirements.txt')).readlines(),
+    test_requires=open(os.path.join(base_dir,'requirements_test.txt')).readlines(),
+
 )
