@@ -16,6 +16,8 @@ from cassandra.policies import WhiteListRoundRobinPolicy
 from argus.db.config import BaseConfig, FileConfig
 from argus.db.db_types import ColumnInfo, CollectionHint, ArgusUDTBase
 
+LOGGER = logging.getLogger(__name__)
+
 
 class ArgusInterfaceSingletonError(Exception):
     pass
@@ -42,7 +44,6 @@ class ArgusDatabase:
         UUID: cassandra.cqltypes.UUIDType.typename,
     }
 
-    log = logging.getLogger(__name__)
     _INSTANCE: Union['ArgusDatabase', Any] = None
 
     def __init__(self, config: BaseConfig = None):
@@ -68,23 +69,23 @@ class ArgusDatabase:
     @classmethod
     def get(cls, config: BaseConfig = None):
         if cls._INSTANCE:
-            cls.log.debug("Found valid db session.")
+            LOGGER.debug("Found valid db session.")
             return cls._INSTANCE
 
         if not config:
             config = FileConfig()
 
-        cls.log.debug("Initializing db session from default config")
+        LOGGER.debug("Initializing db session from default config")
         cls._INSTANCE = cls(config=config)
         return cls._INSTANCE
 
     @classmethod
     def destroy(cls):
         if not cls._INSTANCE:
-            cls.log.warning("ArgusDatabase::destroy called with no valid session.")
+            LOGGER.warning("ArgusDatabase::destroy called with no valid session.")
             return False
 
-        cls.log.info("Shutting down the cluster connection.")
+        LOGGER.info("Shutting down the cluster connection.")
         cls._INSTANCE.cluster.shutdown()
         cls._INSTANCE = None
         return True
@@ -116,7 +117,7 @@ class ArgusDatabase:
         keyspace_name = self._verify_keyspace_name(f"{prefix}{name}{suffix}")
         query = f"CREATE KEYSPACE IF NOT EXISTS {keyspace_name} " \
                 "WITH replication={'class': 'SimpleStrategy', 'replication_factor' : 3}"
-        self.log.debug("Running query: %s", query)
+        LOGGER.debug("Running query: %s", query)
         self.session.execute(query=query)
         self.session.set_keyspace(keyspace_name)
         self._keyspace_initialized = True
@@ -159,7 +160,7 @@ class ArgusDatabase:
 
         columns_query = ", ".join(columns_query)
         completed_query = query.format(table_name=table_name, columns=columns_query, primary_key=primary_key_def)
-        self.log.debug("About to execute: \"%s\"", completed_query)
+        LOGGER.debug("About to execute: \"%s\"", completed_query)
         self.session.execute(query=completed_query)
         self.initialized_tables[table_name] = True
         return True, "Initialization complete"
@@ -212,7 +213,7 @@ class ArgusDatabase:
         joined_fields = ", ".join(fields)
 
         completed_query = query.format(name=udt_name, fields=joined_fields)
-        self.log.debug("About to execute: \"%s\"", completed_query)
+        LOGGER.debug("About to execute: \"%s\"", completed_query)
         self.session.execute(query=completed_query)
 
         existing_udts = self._mapped_udts.get(self._current_keyspace, [])
@@ -259,11 +260,11 @@ class ArgusDatabase:
         if not primary_keys:
             raise ArgusInterfaceSchemaError(f"Table \"{table_name}\" is not initialized!")
 
-        self.log.debug("Primary keys for table %s: %s", table_name, primary_keys)
+        LOGGER.debug("Primary keys for table %s: %s", table_name, primary_keys)
         where_clause = []
         where_params = []
         for key, (ctor, _) in primary_keys.items():
-            self.log.debug("Ejecting %s from update set as it is a part of the primary key", key)
+            LOGGER.debug("Ejecting %s from update set as it is a part of the primary key", key)
             try:
                 data_value = run_data.pop(key)
             except KeyError as exc:
@@ -279,12 +280,12 @@ class ArgusDatabase:
             fields_joined = ", ".join(field_parameters)
 
             query = f"UPDATE {table_name} SET {fields_joined} WHERE {where_clause_joined}"
-            self.log.debug("Formatted query: %s", query)
+            LOGGER.debug("Formatted query: %s", query)
             prepared_statement = self.session.prepare(query=query)
             self.prepared_statements[f"update_{table_name}"] = prepared_statement
 
-        self.log.debug("Bound query for update: %s", prepared_statement.query_string)
+        LOGGER.debug("Bound query for update: %s", prepared_statement.query_string)
         query_parameters = _convert_data_to_sequence(run_data)
         parameters = [*query_parameters, *where_params]
-        self.log.debug("Parameters: %s", parameters)
+        LOGGER.debug("Parameters: %s", parameters)
         self.session.execute(prepared_statement, parameters=parameters)
