@@ -5,6 +5,8 @@ from os import getenv
 import logging
 import yaml
 
+LOGGER = logging.getLogger(__name__)
+
 
 class ConfigLocationError(Exception):
     pass
@@ -12,7 +14,7 @@ class ConfigLocationError(Exception):
 
 class BaseConfig(ABC):
     def __init__(self):
-        self.log = logging.getLogger(self.__class__.__name__)
+        pass
 
     @property
     def as_dict(self) -> dict[Hashable, Any]:
@@ -62,13 +64,13 @@ class FileConfig(BaseConfig):
         super().__init__()
         if not filepath:
             for file in self.DEFAULT_CONFIG_PATHS:
-                self.log.info("Trying %s", file)
+                LOGGER.info("Trying %s", file)
                 if Path(file).exists():
                     filepath = file
                     break
 
         if not filepath:
-            self.log.error("All config locations were tried and no config file found")
+            LOGGER.error("All config locations were tried and no config file found")
             raise ConfigLocationError("No config file supplied and no config exists at default location")
 
         self.filepath = filepath

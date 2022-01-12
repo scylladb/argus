@@ -13,6 +13,8 @@ from argus.db.cloud_types import CloudResource, CloudInstanceDetails, BaseCloudS
 from argus.db.interface import ArgusDatabase
 from argus.db.db_types import ColumnInfo, CollectionHint, NemesisRunInfo, TestStatus, EventsBySeverity, PackageVersion
 
+LOGGER = logging.getLogger(__name__)
+
 
 class TestInfoSerializationError(Exception):
     pass
@@ -192,7 +194,7 @@ class TestLogs(BaseTestInfo):
             for log in log_url:
                 self._log_collection.append((log_type, log))
         else:
-            logging.getLogger(self.__class__.__name__).warning("Unknown log type encountered: %s", log_url)
+            LOGGER.warning("Unknown log type encountered: %s", log_url)
 
     @property
     def logs(self) -> list[tuple[str, str]]:
@@ -346,7 +348,6 @@ class TestRun:
     _TABLE_NAME = "test_runs_v2"
     _IS_TABLE_INITIALIZED = False
     _ARGUS_DB_INTERFACE = None
-    _log = logging.getLogger('TestRun')
 
     def __init__(self, test_id: UUID, group: str, release_name: str, assignee: str,
                  run_info: TestRunInfo, config: BaseConfig = None, argus_interface: ArgusDatabase = None):
@@ -446,7 +447,7 @@ class TestRun:
         self._assignee = str(value)
 
     def serialize(self) -> dict[str, Any]:
-        self._log.debug("Serializing test run...")
+        LOGGER.debug("Serializing test run...")
         nested_data = {}
         for field in fields(self._USING_RUNINFO):
             field: Field
@@ -464,12 +465,12 @@ class TestRun:
             "heartbeat": self._heartbeat,
             **nested_data
         }
-        self._log.debug("Serialized Data: %s", data)
+        LOGGER.debug("Serialized Data: %s", data)
         return data
 
     @classmethod
     def init_own_table(cls, config: BaseConfig = None):
-        cls._log.debug("Initializing TestRun table...")
+        LOGGER.debug("Initializing TestRun table...")
         cls.get_argus(config).init_table(table_name=cls._TABLE_NAME, column_info=cls.schema())
         cls._IS_TABLE_INITIALIZED = True
 
@@ -481,7 +482,7 @@ class TestRun:
     @classmethod
     def schema(cls) -> dict[str, ColumnInfo]:
         data = {}
-        cls._log.debug("Dumping full schema...")
+        LOGGER.debug("Dumping full schema...")
         for attr, column_type in cls.EXPOSED_ATTRIBUTES.items():
             value = None
             constraints = cls.ATTRIBUTE_CONSTRAINTS.get(attr, [])
@@ -500,7 +501,7 @@ class TestRun:
             **data,
             **schema_dump
         )
-        cls._log.debug("Full Schema: %s", full_schema)
+        LOGGER.debug("Full Schema: %s", full_schema)
         return full_schema
 
     def save(self):
@@ -508,10 +509,10 @@ class TestRun:
             if not self._IS_TABLE_INITIALIZED:
                 self.init_own_table(self._config)
             if not self.exists():
-                self._log.debug("Inserting data for test run: %s", self.id)
+                LOGGER.debug("Inserting data for test run: %s", self.id)
                 self.argus.insert(table_name=self._TABLE_NAME, run_data=self.serialize())
             else:
-                self._log.debug("Updating data for test run: %s", self.id)
+                LOGGER.debug("Updating data for test run: %s", self.id)
                 self.argus.update(table_name=self._TABLE_NAME, run_data=self.serialize())
 
     def exists(self) -> bool:
@@ -523,7 +524,7 @@ class TestRun:
         return False
 
     def shutdown(self):
-        self._log.debug("Shutting down cluster connection...")
+        LOGGER.debug("Shutting down cluster connection...")
         self.argus.cluster.shutdown()
 
     @property
@@ -561,20 +562,20 @@ class TestRunWithHeartbeat(TestRun):
             time.sleep(self.heartbeat_interval)
             if self._shutdown_event.is_set():
                 break
-            self._log.debug("Sending heartbeat...")
+            LOGGER.debug("Sending heartbeat...")
             self.heartbeat = time.time()
             self.save()
-        self._log.debug("Heartbeat exit")
+        LOGGER.debug("Heartbeat exit")
 
     def shutdown(self):
         self._shutdown_event.set()
-        self._log.debug("Waiting for the heartbeat thread to exit...")
+        LOGGER.debug("Waiting for the heartbeat thread to exit...")
         self._thread.join(timeout=self.heartbeat_interval + 10)
         if self._thread.is_alive():
-            self._log.warning("Heartbeat thread was not able to shut down correctly. Stack trace:")
+            LOGGER.warning("Heartbeat thread was not able to shut down correctly. Stack trace:")
             # pylint: disable=protected-access
             current_threads = sys._current_frames()
             stack_trace = traceback.extract_stack(current_threads[self._thread.ident])
-            self._log.warning(
+            LOGGER.warning(
                 "\n".join([f'#{lineno:3} : {line:50}: {fname}' for fname, lineno, _, line in stack_trace]))
         super().shutdown()
