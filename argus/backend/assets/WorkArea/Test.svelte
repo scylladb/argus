@@ -2,8 +2,6 @@
     import { createEventDispatcher } from "svelte";
     import { testRequests, stats } from "../Stores/StatsSubscriber";
     import { StatusBackgroundCSSClassMap } from "../Common/TestStatus.js";
-    import { v4 as uuidv4 } from 'uuid';
-
     export let release = "";
     export let group = "";
     export let filtered = false;
@@ -17,27 +15,26 @@
         release_id: null,
     };
     export let lastStatus = "unknown";
+    export let runs = {};
+    const dispatch = createEventDispatcher();
+
     let startTime = 0;
-    let runs_uuid = uuidv4();
     let fetching = false;
-    let runs = [];
-    let listItem;
     testRequests.update((val) => [...val, [release, group, test.name]]);
     $: lastStatus = $stats?.["releases"]?.[release]?.["tests"]?.[test.name]["status"] ?? lastStatus;
     $: startTime = $stats?.["releases"]?.[release]?.["tests"]?.[test.name]["start_time"] ?? startTime;
-    const removeDots = function (str) {
-        return str.replaceAll(".", "_");
-    };
 
     const titleCase = function (string) {
         return string[0].toUpperCase() + string.slice(1).toLowerCase();
     };
 
-    const dispatch = createEventDispatcher();
 
-    const fetchTestRuns = function (e) {
+    const handleTestClick = function (e) {
+        if (runs[`${release}/${test.name}`]) {
+            dispatch("testRunRemove", { runId: `${release}/${test.name}`});
+            return;
+        }
         if (fetching) return;
-        listItem.classList.add("active");
         fetching = true;
         dispatch("testRunRequest", {
             uuid: `${release}/${test.name}`,
@@ -50,10 +47,11 @@
 </script>
 
 <li
-    bind:this={listItem}
     class:d-none={filtered}
+    class:active={runs[`${release}/${test.name}`]}
+    class:active-test-text={runs[`${release}/${test.name}`]}
     class="list-group-item argus-test"
-    on:click={fetchTestRuns}
+    on:click={handleTestClick}
 >
     <div class="container-fluid p-0 m-0">
         <div class="row p-0 m-0 align-items-center">
@@ -69,7 +67,13 @@
             <div class="col-10 overflow-hidden">
                 <div>{test.pretty_name ?? test.name}</div>
                 {#if startTime > 1}
-                <div class="text-muted" style="font-size: 0.75em">{new Date(startTime * 1000).toISOString()}</div>
+                <div
+                    class:text-muted={!runs[`${release}/${test.name}`]}
+                    class:active-test-text-muted={runs[`${release}/${test.name}`]}
+                    style="font-size: 0.75em"
+                >
+                    {new Date(startTime * 1000).toISOString()}
+                </div>
                 {/if}
             </div>
             <div class="col-1 text-center">
@@ -82,6 +86,14 @@
 </li>
 
 <style>
+    .active-test-text {
+        color: black;
+    }
+
+    .active-test-text-muted {
+        color: rgb(54, 54, 54);
+    }
+
     .argus-test {
         cursor: pointer;
     }

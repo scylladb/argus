@@ -2,6 +2,7 @@
     import { Base64 } from "js-base64";
     import TestRuns from "./TestRuns.svelte";
     export let test_runs = {};
+    export let workAreaAttached = false;
     let serializedState = "";
     $: serializedState = Base64.encode(JSON.stringify(test_runs), true);
     let filterStringRuns = "";
@@ -19,11 +20,13 @@
     <input class="form-control" type="text" placeholder="Filter runs" bind:value={filterStringRuns} on:input={() => { test_runs = test_runs }}>
 </div>
 <div class="accordion mb-2" id="accordionTestRuns">
-    {#each Object.keys(test_runs) as test_run_id}
+    {#each Object.entries(test_runs) as [id, data] (id)}
         <TestRuns
-            data={test_runs[test_run_id]}
+            {data}
             parent="#accordionTestRuns"
-            filtered={isFiltered(test_runs[test_run_id].test, filterStringRuns)}
+            filtered={isFiltered(data.test, filterStringRuns)}
+            removableRuns={workAreaAttached}
+            on:testRunRemove
         />
     {/each}
 </div>
