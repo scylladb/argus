@@ -13,7 +13,6 @@
     const stateUpdater = function() {
         let state = JSON.stringify(test_runs);
         let encodedState = Base64.encode(state, true);
-        console.log("Encoded state length: %d", encodedState.length);
         history.pushState({}, "", `?state=${encodedState}`);
     };
 
@@ -60,7 +59,6 @@
         try {
             let apiResponse = await fetch("/api/v1/releases");
             let apiJson = await apiResponse.json();
-            console.log(apiJson);
             if (apiJson.status === "ok") {
                 releases = apiJson.response;
             } else {
@@ -76,7 +74,6 @@
     };
 
     const onTestRunRequest = function (event) {
-        console.log(event);
         test_runs[event.detail.uuid] = {
             runs: event.detail.runs,
             test: event.detail.test,
@@ -87,14 +84,17 @@
         sendMessage("success", `Successfuly added ${event.detail.test} to the work area`)
     };
 
+    const onTestRunRemove = function(event) {
+        let id = event.detail.runId;
+        delete test_runs[id];
+        test_runs = test_runs;
+        stateUpdater();
+    };
+
     onMount(() => {
         fetchNewReleases();
         stateDecoder();
-        window.onpopstate = stateDecoder();
     });
-
-
-
 </script>
 <svelte:window on:popstate={stateDecoder}/>
 
@@ -113,12 +113,14 @@
                         {release}
                         on:testRunRequest={onTestRunRequest}
                         filtered={isFiltered(release.name, filterString)}
+                        bind:runs={test_runs}
+                        on:testRunRemove={onTestRunRemove}
                     />
                 {/each}
             </div>
         </div>
         <div class="col-8 p-2 border rounded shadow-sm bg-white">
-            <TestRunsPanel bind:test_runs={test_runs}/>
+            <TestRunsPanel bind:test_runs={test_runs} on:testRunRemove={onTestRunRemove} workAreaAttached={true}/>
         </div>
     </div>
 </div>

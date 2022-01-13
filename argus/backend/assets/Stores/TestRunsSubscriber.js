@@ -32,6 +32,9 @@ TestRunsEventListener.subscribe(value => {
                 });
             }, 150);
             break;
+        case "unsubscribe":
+            delete runCollection[value.id];
+            break;
         default:
             break;
     }

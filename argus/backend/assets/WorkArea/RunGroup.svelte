@@ -13,6 +13,7 @@
     };
     export let filtered = false;
     export let assigneeList = [];
+    export let runs = {};
 
     const groupStatsTemplate = {
         created: 0,
@@ -166,7 +167,9 @@
                             {test}
                             filtered={isFiltered(test.name)}
                             group={group.name}
+                            bind:runs={runs}
                             on:testRunRequest
+                            on:testRunRemove
                         />
                     {:else}
                         <div class="row">

@@ -10,6 +10,7 @@
         pretty_name: "undefined",
     };
     export let filtered = false;
+    export let runs = {};
     let fetched = false;
     const releaseStatsDefault = {
         created: 0,
@@ -163,7 +164,9 @@
                         filtered={isFiltered(group.pretty_name ?? group.name)}
                         parent="#accordionGroups{release.name}"
                         assigneeList={assigneeList?.groups[group.name] ?? []}
+                        bind:runs={runs}
                         on:testRunRequest
+                        on:testRunRemove
                     />
                 {:else}
                     <div class="row">

@@ -65,7 +65,7 @@
         { round: true }
     );
 
-    polledTestRuns.subscribe((data) => {
+    const polledRunUnsub = polledTestRuns.subscribe((data) => {
         test_run = data[id] ?? test_run;
     });
 
@@ -211,6 +211,12 @@
 
     onDestroy(() => {
         if (clockInterval) clearInterval(clockInterval);
+        polledRunUnsub();
+        testRunStore.update((store) => {
+            return store.filter((run) => {
+                return run != test_run.id;
+            });
+        });
     });
 </script>
 

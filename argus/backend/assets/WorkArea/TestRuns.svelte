@@ -1,16 +1,22 @@
 <script>
+    import { createEventDispatcher, onDestroy } from "svelte";
     import { v4 as uuidv4 } from "uuid";
     import { runStore, polledRuns, TestRunsEventListener } from "../Stores/TestRunsSubscriber";
     import { StatusButtonCSSClassMap, StatusBackgroundCSSClassMap } from "../Common/TestStatus";
+    import Fa from "svelte-fa";
+    import { faTrash } from "@fortawesome/free-solid-svg-icons"
     import TestRun from "../TestRun/TestRun.svelte";
     export let data = {};
     export let listId = uuidv4();
     export let filtered = false;
-    console.log(data);
+    export let removableRuns = false;
+    const dispatch = createEventDispatcher();
     let clickedTestRuns = {};
     let testInfo = data.test;
     let runs = data.runs;
-    let releaseName = data.release
+    let noRuns = false;
+    let updateCounter = 0;
+    let releaseName = data.release;
     let myId = `${releaseName}/${testInfo}`;
 
     runStore.update((val) => {
@@ -22,8 +28,14 @@
         return string[0].toUpperCase() + string.slice(1).toLowerCase();
     };
 
-    polledRuns.subscribe((val) => {
+    const polledRunsUnsub = polledRuns.subscribe((val) => {
         runs = val[myId] ?? runs;
+        updateCounter++;
+        if (runs.length == 0 && updateCounter > 1) {
+            noRuns = true;
+        } else {
+            noRuns = false;
+        }
     })
 
     TestRunsEventListener.update(val => {
@@ -40,6 +52,16 @@
         }
         clickedTestRuns[e.target.dataset.argusTestId] = true;
     };
+
+    onDestroy(() => {
+        TestRunsEventListener.update(() => {
+            return {
+                type: "unsubscribe",
+                id: myId
+            };
+        });
+        polledRunsUnsub();
+    });
 </script>
 
 <div class:d-none={filtered} class="accordion-item border">
@@ -61,10 +83,25 @@
             <div class="ms-auto flex-fill text-end">Last run: #{runs[0].build_number}</div>
             <div class="mx-2">Date: {new Date(runs[0].start_time * 1000).toISOString()}</div>
             {/if}
+            {#if removableRuns}
+            <div class="mx-2 text-end" class:flex-fill={runs.length == 0}>
+                <div
+                    class="d-inline-block btn btn-danger"
+                    on:click={() => { dispatch("testRunRemove", { runId: myId })}}
+                >
+                    <Fa icon={faTrash}/>
+                </div>
+            </div>
+            {/if}
 
         </button>
     </h4>
     <div class="accordion-collapse collapse show" id="collapse{listId}">
+        {#if noRuns}
+        <div class="text-muted text-center m-3">No runs for this test!</div>
+        {:else if !noRuns && runs.length == 0}
+        <div class="text-muted text-center m-3"><span class="spinner-border spinner-border-sm"></span> Loading...</div>
+        {:else}
         <div class="p-2">
             <p class="p-2">
                 {#each runs as run}
@@ -94,10 +131,9 @@
                         {/if}
                     </div>
                 </div>
-            {:else}
-                <div class="text-muted text-center">Loading...</div>
             {/each}
         </div>
+        {/if}
     </div>
 </div>
 
