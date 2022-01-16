@@ -2,6 +2,7 @@
     export let resources;
     export let id;
     export let caption = "";
+    import { timestampToISODate } from "../Common/DateUtils";
     let shortCaption = caption.replaceAll(" ", "");
 
     const titleCase = function (string) {
@@ -54,18 +55,20 @@
                                                     .region}
                                             </li>
                                             <li>
-                                                Created at {new Date(
+                                                Created at {timestampToISODate(
                                                     resource.instance_info
-                                                        .creation_time * 1000
-                                                ).toISOString()}
+                                                        .creation_time * 1000,
+                                                    true
+                                                )}
                                             </li>
                                             {#if resource.instance_info.termination_time != 0}
                                                 <li>
-                                                    Terminated at {new Date(
+                                                    Terminated at {timestampToISODate(
                                                         resource.instance_info
                                                             .termination_time *
-                                                            1000
-                                                    ).toISOString()}
+                                                            1000,
+                                                        true
+                                                    )}
                                                 </li>
                                                 <li>
                                                     Termination reason: {resource.instance_info.termination_reason.split(
