@@ -46,7 +46,7 @@
             });
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
-                sendMessage("success", "Attached an issue successfully.");
+
                 fetchIssues();
             } else {
                 throw apiJson;

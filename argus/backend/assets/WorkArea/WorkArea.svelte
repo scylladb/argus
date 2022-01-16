@@ -81,7 +81,7 @@
         };
         test_runs = test_runs;
         stateUpdater();
-        sendMessage("success", `Successfuly added ${event.detail.test} to the work area`)
+
     };
 
     const onTestRunRemove = function(event) {

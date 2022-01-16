@@ -11,7 +11,7 @@
     id="storeSuccess"
     class="btn btn-success"
     on:click={() => {
-        sendMessage("success", "Wowe it works.");
+
     }}>Store Success</button
 >
 <button

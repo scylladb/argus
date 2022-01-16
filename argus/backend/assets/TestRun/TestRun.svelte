@@ -133,17 +133,6 @@
             let apiJson = await apiResponse.json();
             console.log(apiJson);
             if (apiJson.status === "ok") {
-                if (new_assignee != "none-none-none") {
-                    sendMessage(
-                        "success",
-                        `Successfully changed assignee to "${users[new_assignee].username}"`
-                    );
-                } else {
-                    sendMessage(
-                        "success",
-                        `Successfully cleared assignee from a run`
-                    );
-                }
                 fetchTestRunData();
             } else {
                 throw apiJson;
@@ -179,10 +168,6 @@
             let apiJson = await apiResponse.json();
             console.log(apiJson);
             if (apiJson.status === "ok") {
-                sendMessage(
-                    "success",
-                    `Successfully changed status from "${test_run.status}" to "${newStatus}"`
-                );
                 fetchTestRunData();
             } else {
                 throw apiJson;
