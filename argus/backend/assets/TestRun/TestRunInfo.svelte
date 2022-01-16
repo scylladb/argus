@@ -98,9 +98,13 @@
                         "Unknown, probably jenkins"}
                 </li>
                 <li>
-                    <span class="fw-bold">Build Job:</span> <a href={test_run.build_job_url}
-                        >{test_run.build_job_name}</a
+                    <span class="fw-bold">Build Job:</span>
+                    <a
+                        href={test_run.build_job_url}
+                        target="_blank"
                     >
+                        {test_run.build_job_name}
+                    </a>
                 </li>
             </ul>
         </div>
