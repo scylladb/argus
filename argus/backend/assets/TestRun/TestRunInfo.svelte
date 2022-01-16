@@ -21,51 +21,6 @@
 
 <div class="container-fluid">
     <div class="row">
-        <div class="col p-2">
-            <div class="btn-group">
-                {#if InProgressStatuses.includes(test_run.status) && locateGrafanaNode()}
-                    <a
-                        target="_blank"
-                        href="http://{locateGrafanaNode().instance_info
-                            .public_ip}:3000/"
-                        class="btn btn-warning">Open Grafana</a
-                    >
-                {:else}
-                    <a
-                        href="https://jenkins.scylladb.com/view/QA/job/QA-tools/job/hydra-show-monitor/parambuild/?test_id={test_run.id}"
-                        class="btn btn-primary"
-                        target="_blank"
-                        aria-current="page"
-                        ><Fa icon={faSearch} /> Restore Monitoring Stack</a
-                    >
-                    <button
-                        type="button"
-                        class="btn btn-success"
-                        on:click={() => {
-                            navigator.clipboard.writeText(
-                                cmd_hydraInvestigateShowMonitor
-                            );
-                        }}><Fa icon={faCopy} /> Hydra Show Monitor</button
-                    >
-                    <button
-                        type="button"
-                        class="btn btn-success"
-                        on:click={() => {
-                            navigator.clipboard.writeText(
-                                cmd_hydraInvestigateShowLogs
-                            );
-                        }}><Fa icon={faCopy} /> Hydra Show Logs</button
-                    >
-                {/if}
-                <a
-                    target="_blank"
-                    href="/dashboard/{test_run.release_name}"
-                    class="btn btn-info"><Fa icon={faBusinessTime} /> Release Dashboard</a
-                >
-            </div>
-        </div>
-    </div>
-    <div class="row">
         <div class="col-6 p-2">
             Run Details:
             <ul class="list-unstyled border-end">
@@ -134,6 +89,51 @@
                     <span class="fw-bold">Node Amount:</span> {test_run.cloud_setup.db_node.node_amount}
                 </li>
             </ul>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col p-2">
+            <div class="btn-group">
+                {#if InProgressStatuses.includes(test_run.status) && locateGrafanaNode()}
+                    <a
+                        target="_blank"
+                        href="http://{locateGrafanaNode().instance_info
+                            .public_ip}:3000/"
+                        class="btn btn-warning">Open Grafana</a
+                    >
+                {:else}
+                    <a
+                        href="https://jenkins.scylladb.com/view/QA/job/QA-tools/job/hydra-show-monitor/parambuild/?test_id={test_run.id}"
+                        class="btn btn-primary"
+                        target="_blank"
+                        aria-current="page"
+                        ><Fa icon={faSearch} /> Restore Monitoring Stack</a
+                    >
+                    <button
+                        type="button"
+                        class="btn btn-success"
+                        on:click={() => {
+                            navigator.clipboard.writeText(
+                                cmd_hydraInvestigateShowMonitor
+                            );
+                        }}><Fa icon={faCopy} /> Hydra Show Monitor</button
+                    >
+                    <button
+                        type="button"
+                        class="btn btn-success"
+                        on:click={() => {
+                            navigator.clipboard.writeText(
+                                cmd_hydraInvestigateShowLogs
+                            );
+                        }}><Fa icon={faCopy} /> Hydra Show Logs</button
+                    >
+                {/if}
+                <a
+                    target="_blank"
+                    href="/dashboard/{test_run.release_name}"
+                    class="btn btn-info"><Fa icon={faBusinessTime} /> Release Dashboard</a
+                >
+            </div>
         </div>
     </div>
 </div>
