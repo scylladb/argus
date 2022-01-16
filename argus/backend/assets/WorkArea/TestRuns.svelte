@@ -108,7 +108,7 @@
                 {#each runs as run}
                     <div class="me-2 d-inline-block">
                         <button
-                            class:border-active={clickedTestRuns[run.id]}
+                            class:active={clickedTestRuns[run.id]}
                             class="btn {StatusButtonCSSClassMap[run.status]}"
                             type="button"
                             data-bs-toggle="collapse"
@@ -149,8 +149,8 @@
         cursor: help;
     }
 
-    .border-active {
-        border: 3px solid rgb(84, 192, 255);
+    .active::before {
+        content: "🠶 ";
     }
 
 </style>
