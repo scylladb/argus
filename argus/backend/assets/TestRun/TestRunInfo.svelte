@@ -66,8 +66,8 @@
     </div>
     <div class="row">
         <div class="col-6 p-2">
-            Details
-            <ul>
+            Run Details:
+            <ul class="list-unstyled border-end">
                 <li>
                     <span class="fw-bold">Test:</span>
                     {test_run.group}.{test_run.name}
@@ -77,23 +77,23 @@
                     {test_run.id}
                 </li>
                 <li>
-                    Start Time: {new Date(
+                    <span class="fw-bold">Start Time:</span> {new Date(
                         test_run.start_time * 1000
                     ).toISOString()}
                 </li>
                 {#if test_run.end_time != -1}
                     <li>
-                        End Time: {new Date(
+                        <span class="fw-bold">End Time:</span> {new Date(
                             test_run.end_time * 1000
                         ).toISOString()}
                     </li>
                 {/if}
                 <li>
-                    Started by: {test_run.started_by ??
+                    <span class="fw-bold">Started by:</span> {test_run.started_by ??
                         "Unknown, probably jenkins"}
                 </li>
                 <li>
-                    Build Job: <a href={test_run.build_job_url}
+                    <span class="fw-bold">Build Job:</span> <a href={test_run.build_job_url}
                         >{test_run.build_job_name}</a
                     >
                 </li>
@@ -101,7 +101,7 @@
         </div>
         <div class="col-6 p-2">
             System Information:
-            <ul>
+            <ul class="list-unstyled">
                 <li>
                     <span class="fw-bold">Backend:</span>
                     {test_run.cloud_setup.backend}
@@ -111,18 +111,18 @@
                     {test_run.region_name.join(", ")}
                 </li>
                 <li>
-                    AMI ImageId: {test_run.cloud_setup.db_node.image_id}
+                    <span class="fw-bold">AMI ImageId:</span> {test_run.cloud_setup.db_node.image_id}
                 </li>
                 <li>
-                    Scylla Version: {test_run.packages[0]?.version ??
+                    <span class="fw-bold">Scylla Version:</span> {test_run.packages[0]?.version ??
                         "Unknown yet"}/{test_run.packages[0]?.revision_id ??
                         "Unknown yet"}
                 </li>
                 <li>
-                    Instance Type: {test_run.cloud_setup.db_node.instance_type}
+                    <span class="fw-bold">Instance Type:</span> {test_run.cloud_setup.db_node.instance_type}
                 </li>
                 <li>
-                    Node Amount: {test_run.cloud_setup.db_node.node_amount}
+                    <span class="fw-bold">Node Amount:</span> {test_run.cloud_setup.db_node.node_amount}
                 </li>
             </ul>
         </div>
