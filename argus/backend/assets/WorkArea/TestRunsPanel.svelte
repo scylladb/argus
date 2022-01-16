@@ -20,7 +20,7 @@
     <input class="form-control" type="text" placeholder="Filter runs" bind:value={filterStringRuns} on:input={() => { test_runs = test_runs }}>
 </div>
 <div class="accordion mb-2" id="accordionTestRuns">
-    {#each Object.entries(test_runs) as [id, data] (id)}
+    {#each Object.entries(test_runs).reverse() as [id, data] (id)}
         <TestRuns
             {data}
             parent="#accordionTestRuns"
