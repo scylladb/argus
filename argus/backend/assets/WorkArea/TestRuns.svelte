@@ -5,6 +5,7 @@
     import { StatusButtonCSSClassMap, StatusBackgroundCSSClassMap } from "../Common/TestStatus";
     import Fa from "svelte-fa";
     import { faTrash } from "@fortawesome/free-solid-svg-icons"
+    import { timestampToISODate } from "../Common/DateUtils";
     import TestRun from "../TestRun/TestRun.svelte";
     export let data = {};
     export let listId = uuidv4();
@@ -80,8 +81,8 @@
             {/if}
             <div>{testInfo} ({releaseName})</div>
             {#if runs.length > 0}
-            <div class="ms-auto flex-fill text-end">Last run: #{runs[0].build_number}</div>
-            <div class="mx-2">Date: {new Date(runs[0].start_time * 1000).toISOString()}</div>
+            <div class="ms-auto flex-fill text-end">{timestampToISODate(runs[0].start_time * 1000)}</div>
+            <div class="mx-2">#{runs[0].build_number}</div>
             {/if}
             {#if removableRuns}
             <div class="mx-2 text-end" class:flex-fill={runs.length == 0}>

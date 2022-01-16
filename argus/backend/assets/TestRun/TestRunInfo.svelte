@@ -6,6 +6,7 @@
     } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
     import { InProgressStatuses } from "../Common/TestStatus";
+    import { timestampToISODate } from "../Common/DateUtils";
     export let test_run = {};
 
     let cmd_hydraInvestigateShowMonitor = `hydra investigate show-monitor ${test_run.id}`;
@@ -77,15 +78,19 @@
                     {test_run.id}
                 </li>
                 <li>
-                    <span class="fw-bold">Start Time:</span> {new Date(
-                        test_run.start_time * 1000
-                    ).toISOString()}
+                    <span class="fw-bold">Start Time:</span> 
+                    {timestampToISODate(
+                        test_run.start_time * 1000,
+                        true
+                    )}
                 </li>
                 {#if test_run.end_time != -1}
                     <li>
-                        <span class="fw-bold">End Time:</span> {new Date(
-                            test_run.end_time * 1000
-                        ).toISOString()}
+                        <span class="fw-bold">End Time:</span> 
+                        {timestampToISODate(
+                            test_run.end_time * 1000,
+                            true
+                        )}
                     </li>
                 {/if}
                 <li>

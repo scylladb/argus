@@ -2,6 +2,7 @@
     import { createEventDispatcher } from "svelte";
     import { testRequests, stats } from "../Stores/StatsSubscriber";
     import { StatusBackgroundCSSClassMap } from "../Common/TestStatus.js";
+    import { timestampToISODate } from "../Common/DateUtils";
     export let release = "";
     export let group = "";
     export let filtered = false;
@@ -72,7 +73,7 @@
                     class:active-test-text-muted={runs[`${release}/${test.name}`]}
                     style="font-size: 0.75em"
                 >
-                    {new Date(startTime * 1000).toISOString()}
+                    {timestampToISODate(startTime * 1000)}
                 </div>
                 {/if}
             </div>

@@ -14,6 +14,7 @@
         StatusButtonCSSClassMap,
         InProgressStatuses,
     } from "../Common/TestStatus";
+    import { timestampToISODate } from "../Common/DateUtils";
     import IssueTemplate from "./IssueTemplate.svelte";
     import {
         polledTestRuns,
@@ -222,9 +223,10 @@
                                     test_run.status
                                 ]} text-light"
                                 type="button"
-                                title={new Date(
-                                    test_run.end_time * 1000
-                                ).toISOString()}
+                                title={timestampToISODate(
+                                    test_run.end_time * 1000,
+                                    true
+                                )}
                                 data-bs-toggle="dropdown"
                             >
                                 {test_run.status.toUpperCase()}
