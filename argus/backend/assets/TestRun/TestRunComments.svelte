@@ -74,7 +74,7 @@
             console.log(apiJson);
             if (apiJson.status === "ok") {
                 comments = apiJson.response;
-                sendMessage("success", "Successfully posted a comment!")
+
                 fetching = false;
             } else {
                 throw apiJson;

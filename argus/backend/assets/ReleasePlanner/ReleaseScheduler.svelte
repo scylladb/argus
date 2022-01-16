@@ -90,7 +90,7 @@
             if (apiJson.status === "ok") {
                 handleClearGroups();
                 fetchSchedules();
-                sendMessage("success", "Added new schedule!");
+
             } else {
                 throw apiJson;
             }
@@ -127,7 +127,7 @@
             if (apiJson.status === "ok") {
                 fetchSchedules();
                 handleClearGroups();
-                sendMessage("success", "Schedule deleted, refreshing...");
+
             } else {
                 throw apiJson;
             }

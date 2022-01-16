@@ -31,7 +31,7 @@
 
     const copyTemplateToClipboard = function () {
         navigator.clipboard.writeText(issueTemplateText);
-        sendMessage("success", "Copied to clipboard.");
+
     };
 
     let scyllaServerPackage = findScyllaServerPackage();
