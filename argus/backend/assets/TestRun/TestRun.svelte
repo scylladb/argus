@@ -5,6 +5,7 @@
     import User from "../Profile/User.svelte";
     import ResourcesInfo from "./ResourcesInfo.svelte";
     import NemesisData from "./NemesisData.svelte";
+    import NemesisTable from "./NemesisTable.svelte";
     import ActivityTab from "./ActivityTab.svelte";
     import TestRunInfo from "./TestRunInfo.svelte";
     import TestRunComments from "./TestRunComments.svelte";
@@ -429,7 +430,7 @@
                 </div>
             </div>
             <div class="tab-pane fade" id="nav-nemesis-{id}" role="tabpanel">
-                <NemesisData nemesis_data={test_run.nemesis_data} />
+                <NemesisTable nemesisCollection={test_run.nemesis_data} resources={test_run.allocated_resources}/>
             </div>
             <div class="tab-pane fade" id="nav-logs-{id}" role="tabpanel">
                 {#if test_run.logs.length > 0}

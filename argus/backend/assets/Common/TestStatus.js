@@ -61,3 +61,19 @@ export const TestStatusColors = {
     "aborted": "#212529",
     "unknown": "#6c757d"
 }
+
+export const NemesisStatuses = {
+    STARTED: "started",
+    RUNNING: "running",
+    FAILED: "failed",
+    SKIPPED: "skipped",
+    SUCCEEDED: "succeeded",
+}
+
+export const NemesisStatusBackgrounds = {
+    "started": "table-info",
+    "running": "table-warning",
+    "failed": "table-danger",
+    "skipped": "table-dark",
+    "succeeded": "table-success",
+};
