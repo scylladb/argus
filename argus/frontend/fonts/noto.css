@@ -1,0 +1,23 @@
+@font-face {
+    font-family: "Noto Sans Packaged";
+    src: url("NotoSans-Regular.ttf") format("ttf");
+}
+
+@font-face {
+    font-family: "Noto Sans Packaged";
+    src: url("NotoSans-Bold.ttf") format("ttf");
+    font-weight: bold;
+}
+
+@font-face {
+    font-family: "Noto Sans Packaged";
+    src: url("NotoSans-Italic.ttf") format("ttf");
+    font-style: italic, oblique;
+}
+
+@font-face {
+    font-family: "Noto Sans Packaged";
+    src: url("NotoSans-BoldItalic.ttf") format("ttf");
+    font-weight: bold;
+    font-style: italic, oblique;
+}
