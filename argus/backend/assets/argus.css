@@ -1,6 +1,10 @@
 @import 'bootstrap';
 @import '@fortawesome/fontawesome-free';
 
+body {
+    font-family: "Noto Sans Packaged", "Noto Sans", sans-serif;
+}
+
 .status-passed {
     color: #198819;
 }

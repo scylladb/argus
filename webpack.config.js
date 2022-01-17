@@ -7,6 +7,7 @@ module.exports = {
     mode: 'development',
     entry: {
         main: './argus/backend/assets/argus.js',
+        noto: './argus/frontend/fonts/noto.css',
         globalAlert: { import: './argus/backend/assets/Alert.js', dependOn: 'main'},
         flashDebug: { import: './argus/backend/assets/flashDebug.js', dependOn: 'globalAlert'},
         workArea: { import: './argus/backend/assets/work-area.js', dependOn: 'globalAlert'},
@@ -37,6 +38,10 @@ module.exports = {
         {
             test: /\.svelte$/,
             use: 'svelte-loader'
+        },
+        {
+            test: /\.(woff|woff2|eot|ttf|otf)$/i,
+            type: 'asset/resource',
         },
         {
             test: /node_modules\/svelte\/.*\.mjs$/,

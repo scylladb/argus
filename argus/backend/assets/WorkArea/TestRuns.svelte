@@ -150,7 +150,8 @@
     }
 
     .active::before {
-        content: "🠶 ";
+        font-family: "Noto Sans Packaged", "Noto Sans", sans-serif;
+        content: "● ";
     }
 
 </style>
