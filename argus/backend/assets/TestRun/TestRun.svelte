@@ -15,6 +15,7 @@
         StatusButtonCSSClassMap,
         InProgressStatuses,
     } from "../Common/TestStatus";
+    import { getPicture } from "../Common/UserUtils";
     import { timestampToISODate } from "../Common/DateUtils";
     import IssueTemplate from "./IssueTemplate.svelte";
     import {
@@ -263,13 +264,25 @@
             </div>
             {#if Object.keys(users).length > 0}
                 <div class="row p-2 m-0 justify-content-end">
-                    <div class="col-2 p-2 border rounded">
-                        <Select
-                            Item={User}
-                            value={users[test_run.assignee]?.username ?? "NONE"}
-                            items={userSelect}
-                            on:select={handleAssign}
-                        />
+                    <div class="col-3 p-2 border rounded">
+                        <h5>Assignee</h5>
+                        <div class="d-flex align-items-center">
+                            {#if users[test_run.assignee]}
+                            <img
+                                class="img-profile me-2"
+                                src={getPicture(users[test_run.assignee]?.picture_id)}
+                                alt={users[test_run.assignee]?.username}
+                            />
+                            {/if}
+                            <div class="flex-fill">
+                                <Select
+                                    Item={User}
+                                    value={users[test_run.assignee]?.full_name ?? "Unassigned"}
+                                    items={userSelect}
+                                    on:select={handleAssign}
+                                />
+                            </div>
+                        </div>
                     </div>
                 </div>
             {/if}
@@ -504,4 +517,11 @@
     .cursor-question {
         cursor: help;
     }
+
+    .img-profile {
+        height: 32px;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+
 </style>
