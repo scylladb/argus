@@ -51,7 +51,7 @@ def test_interface_schema_init(mock_cluster, preset_test_details_schema, simple_
                                              "(name varchar , scm_revision_id varchar , started_by varchar , " \
                                              "build_job_name varchar , build_job_url varchar , start_time varint ," \
                                              " yaml_test_duration varint , config_files list<varchar> , " \
-                                             "packages list<frozen<PackageVersion>> , end_time varint , " \
+                                             "packages list<frozen<PackageVersion_v2>> , end_time varint , " \
                                              "PRIMARY KEY (id))"
 
 

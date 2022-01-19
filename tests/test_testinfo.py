@@ -39,8 +39,8 @@ def test_details_ctor_from_named_tuple(preset_test_details):
     ResultSet = namedtuple("Row",
                            ["name", "scm_revision_id", "started_by", "build_job_name", "build_job_url", "start_time",
                             "yaml_test_duration", "config_files", "packages", "end_time"])
-    PackageMapped = namedtuple("PackageMapped", ["name", "version", "date", "revision_id"])
-    package = PackageMapped("package-server", "1.0", "2021-10-01", "dfcedb3")
+    PackageMapped = namedtuple("PackageMapped", ["name", "version", "date", "revision_id", "build_id"])
+    package = PackageMapped("package-server", "1.0", "2021-10-01", "dfcedb3", "dfeeeffffff330fddd")
     row = ResultSet(preset_test_details.name, preset_test_details.scm_revision_id, preset_test_details.started_by,
                     preset_test_details.build_job_name, preset_test_details.build_job_url,
                     preset_test_details.start_time,
