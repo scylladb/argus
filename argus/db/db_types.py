@@ -43,10 +43,13 @@ class PackageVersion(ArgusUDTBase):
     version: str
     date: str
     revision_id: str
+    build_id: str = ""
+    _typename = "PackageVersion_v2"
 
     @classmethod
     def from_db_udt(cls, udt):
-        return cls(name=udt.name, version=udt.version, date=udt.date, revision_id=udt.revision_id)
+        return cls(name=udt.name, version=udt.version,
+                   date=udt.date, revision_id=udt.revision_id, build_id=udt.build_id)
 
 
 class NemesisStatus(str, Enum):

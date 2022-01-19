@@ -105,7 +105,7 @@ def preset_test_details():
                           build_job_url="https://job.tld/1", start_time=1600000000, yaml_test_duration=120,
                           config_files=["some-test.yaml"],
                           packages=[PackageVersion(name="package-server", version="1.0", date="2021-10-01",
-                                                   revision_id="dfcedb3")])
+                                                   revision_id="dfcedb3", build_id="dfeeeffffff330fddd")])
     return details
 
 
@@ -143,6 +143,7 @@ def preset_test_details_serialized():
             "version": "1.0",
             "date": "2021-10-01",
             "revision_id": "dfcedb3",
+            "build_id": "dfeeeffffff330fddd",
         }],
         "end_time": -1,
     }
