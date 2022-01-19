@@ -1,7 +1,7 @@
 import re
 import time
 from enum import Enum
-from typing import Any, Union, Type, TypeVar
+from typing import Any, Union, Type, TypeVar, Optional
 from pydantic.dataclasses import dataclass
 from pydantic import validator, ValidationError
 
@@ -43,7 +43,7 @@ class PackageVersion(ArgusUDTBase):
     version: str
     date: str
     revision_id: str
-    build_id: str = ""
+    build_id: Optional[str] = ""
     _typename = "PackageVersion_v2"
 
     @classmethod
