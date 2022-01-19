@@ -33,7 +33,7 @@
                     {test_run.id}
                 </li>
                 <li>
-                    <span class="fw-bold">Start Time:</span> 
+                    <span class="fw-bold">Start Time:</span>
                     {timestampToISODate(
                         test_run.start_time * 1000,
                         true
@@ -41,7 +41,7 @@
                 </li>
                 {#if test_run.end_time != -1}
                     <li>
-                        <span class="fw-bold">End Time:</span> 
+                        <span class="fw-bold">End Time:</span>
                         {timestampToISODate(
                             test_run.end_time * 1000,
                             true
@@ -77,11 +77,19 @@
                 <li>
                     <span class="fw-bold">AMI ImageId:</span> {test_run.cloud_setup.db_node.image_id}
                 </li>
+                <!-- Scylla v4.5.3-0.20211223.c8f14886d (ami-0df0fbe3daf5ad63d) -->
+                {#if test_run.packages[0]}
                 <li>
-                    <span class="fw-bold">Scylla Version:</span> {test_run.packages[0]?.version ??
-                        "Unknown yet"}/{test_run.packages[0]?.revision_id ??
-                        "Unknown yet"}
+                    <span class="fw-bold">Scylla Version:</span>
+                    {test_run.packages[0]?.version}-{test_run.packages[0]?.date}.{test_run.packages[0]?.revision_id}
                 </li>
+                    {#if test_run.packages[0]?.build_id}
+                        <li>
+                            <span class="fw-bold">Build Id:</span>
+                            {test_run.packages[0]?.build_id}
+                        </li>
+                    {/if}
+                {/if}
                 <li>
                     <span class="fw-bold">Instance Type:</span> {test_run.cloud_setup.db_node.instance_type}
                 </li>

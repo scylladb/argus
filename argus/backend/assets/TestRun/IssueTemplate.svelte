@@ -70,7 +70,7 @@
 ## Installation details
 
 
-Scylla version (or git commit hash): `{scyllaServerPackage.version} with build-id {scyllaServerPackage.revision_id}`
+Scylla version (or git commit hash): `{scyllaServerPackage.version}-{scyllaServerPackage.date}.{scyllaServerPackage.revision_id} with build-id {scyllaServerPackage.build_id}`
 
 Cluster size: {test_run.cloud_setup.db_node.node_amount} nodes ({test_run.cloud_setup.db_node.instance_type})
 
