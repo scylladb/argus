@@ -214,7 +214,7 @@
                 <div class="col-2 py-2">
                     <div class="d-flex">
                         <a
-                            class="btn btn-dark me-2"
+                            class="btn btn-light me-2"
                             href="/test_run/{id}"
                             target="_blank">#{build_number}</a
                         >
