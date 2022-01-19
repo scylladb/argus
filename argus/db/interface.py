@@ -4,7 +4,7 @@ import json
 from uuid import UUID
 from hashlib import sha1
 from dataclasses import fields as dataclass_fields
-from typing import KeysView, Union, Any, get_args as get_type_args, get_origin as get_type_origin
+from typing import KeysView, Union, Optional, Any, get_args as get_type_args, get_origin as get_type_origin
 from types import GenericAlias
 
 import cassandra.cluster
@@ -42,6 +42,7 @@ class ArgusDatabase:
         float: cassandra.cqltypes.FloatType.typename,
         str: cassandra.cqltypes.VarcharType.typename,
         UUID: cassandra.cqltypes.UUIDType.typename,
+        Optional[str]: cassandra.cqltypes.VarcharType.typename,
     }
 
     _INSTANCE: Union['ArgusDatabase', Any] = None
