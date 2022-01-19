@@ -19,7 +19,7 @@
             <img
                 class="img-profile"
                 src={getPicture(item.picture_id)}
-                alt={item.username}
+                alt={item.label}
             />
         </div>
         <div class="d-inline-block">
