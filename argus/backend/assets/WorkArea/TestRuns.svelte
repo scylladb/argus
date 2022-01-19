@@ -3,8 +3,6 @@
     import { v4 as uuidv4 } from "uuid";
     import { runStore, polledRuns, TestRunsEventListener } from "../Stores/TestRunsSubscriber";
     import { StatusButtonCSSClassMap, StatusBackgroundCSSClassMap } from "../Common/TestStatus";
-    import Fa from "svelte-fa";
-    import { faTrash } from "@fortawesome/free-solid-svg-icons"
     import { timestampToISODate } from "../Common/DateUtils";
     import TestRun from "../TestRun/TestRun.svelte";
     export let data = {};
@@ -87,10 +85,10 @@
             {#if removableRuns}
             <div class="mx-2 text-end" class:flex-fill={runs.length == 0}>
                 <div
-                    class="d-inline-block btn btn-danger"
+                    class="d-inline-block btn btn-close"
+                    role="button"
                     on:click={() => { dispatch("testRunRemove", { runId: myId })}}
                 >
-                    <Fa icon={faTrash}/>
                 </div>
             </div>
             {/if}
