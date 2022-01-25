@@ -246,6 +246,7 @@ def preset_test_results():
 
     results.add_event(event_severity="ERROR", event_message="Something went wrong...")
     results.add_nemesis(nemesis=nemesis)
+    results.add_screenshot("https://example.com/screenshot.jpg")
     results.status = TestStatus.FAILED
     return results
 
@@ -258,6 +259,8 @@ def preset_test_results_schema():
                              constraints=[]),
         "nemesis_data": ColumnInfo(name="nemesis_data", type=CollectionHint,
                                    value=CollectionHint(list[NemesisRunInfo]), constraints=[]),
+        "screenshots": ColumnInfo(name="screenshots", type=CollectionHint,
+                                  value=CollectionHint(list[str]), constraints=[]),
     }
 
 
@@ -287,6 +290,9 @@ def preset_test_results_serialized():
                 "end_time": 16001,
                 "stack_trace": "Something went wrong..."
             }
+        ],
+        "screenshots": [
+            "https://example.com/screenshot.jpg",
         ]
     }
 
@@ -348,7 +354,9 @@ def completed_testrun(preset_test_resource_setup: TestResourcesSetup):  # pylint
         nemesis_runs.append(nemesis)
 
     events = EventsBySeverity(severity="INFO", event_amount=66000, last_events=["Nothing here after all"])
-    results = TestResults(status=TestStatus.PASSED.value, nemesis_data=nemesis_runs, events=[events])
+    screenshots = ["https://example.com/screenshot.jpg"]
+    results = TestResults(status=TestStatus.PASSED.value, nemesis_data=nemesis_runs,
+                          events=[events], screenshots=screenshots)
 
     run_info = TestRunInfo(details=details, setup=setup, logs=logs, resources=resources, results=results)
 

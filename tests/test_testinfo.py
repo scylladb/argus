@@ -1,10 +1,9 @@
-import pytest
-from time import time
-from argus.db.testrun import TestDetails, TestResourcesSetup, TestResources, TestLogs, TestResults, TestInfoValueError
-from argus.db.db_types import TestStatus, PackageVersion, CollectionHint, ColumnInfo, NodeDescription, NemesisRunInfo, \
-    NemesisStatus
-from argus.db.cloud_types import BaseCloudSetupDetails, CloudInstanceDetails, ResourceState, CloudResource
+
 from collections import namedtuple
+import pytest
+from argus.db.testrun import TestDetails, TestResourcesSetup, TestResources, TestLogs, TestResults, TestInfoValueError
+from argus.db.db_types import TestStatus, NodeDescription, NemesisRunInfo, NemesisStatus
+from argus.db.cloud_types import CloudInstanceDetails, ResourceState, CloudResource
 
 
 def test_details_schema_dump(preset_test_details_schema: dict):
@@ -229,7 +228,7 @@ def test_results_ctor_from_named_tuple(preset_test_results, monkeypatch):
     monkeypatch.setattr("time.time", lambda: 16001)
     preset_test_results.nemesis_data[0].complete("Something went wrong...")
 
-    ResultsMapped = namedtuple("ResultsMapped", ["status", "events", "nemesis_data"])
+    ResultsMapped = namedtuple("ResultsMapped", ["status", "events", "nemesis_data", "screenshots"])
     EventsMapped = namedtuple("EventsMapped", ["severity", "event_amount", "last_events"])
     NemesisRunMapped = namedtuple("NemesisRunMapped",
                                   ["class_name", "name", "duration", "target_node", "status",
@@ -241,8 +240,8 @@ def test_results_ctor_from_named_tuple(preset_test_results, monkeypatch):
                                status=NemesisStatus.FAILED.value, start_time=16000, end_time=16001,
                                stack_trace="Something went wrong...")
     event = EventsMapped(severity="ERROR", event_amount=1, last_events=["Something went wrong..."])
-
-    row = ResultsMapped(status=TestStatus.FAILED.value, events=[event], nemesis_data=[nemesis])
+    screeshots = ["https://example.com/screenshot.jpg"]
+    row = ResultsMapped(status=TestStatus.FAILED.value, events=[event], nemesis_data=[nemesis], screenshots=screeshots)
 
     new_test_result = TestResults.from_db_row(row)
 
