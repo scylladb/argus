@@ -112,7 +112,7 @@ Cluster size: {test_run.cloud_setup.db_node.node_amount} nodes ({test_run.cloud_
 
 Scylla running with shards number (live nodes):
 {#each filterDbNodes(test_run.leftover_resources) as resource}
-    - {resource.name} ({resource.instance_info.public_ip} | {resource.instance_info.private_ip}){"\n"}
+    - {resource.name} ({resource.instance_info.public_ip} | {resource.instance_info.private_ip}) (shards: {resource.instance_info.shards_amount}){"\n"}
 {:else}
     **No resources left at the end of the run**
 {/each}

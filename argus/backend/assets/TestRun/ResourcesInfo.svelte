@@ -54,6 +54,12 @@
                                                 Region: {resource.instance_info
                                                     .region}
                                             </li>
+                                            {#if resource.instance_info.shards_amount > 0}
+                                            <li>
+                                                Shards: {resource.instance_info
+                                                    .shards_amount}
+                                            </li>
+                                            {/if}
                                             <li>
                                                 Created at {timestampToISODate(
                                                     resource.instance_info
