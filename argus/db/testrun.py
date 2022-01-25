@@ -262,14 +262,17 @@ class TestResources(BaseTestInfo):
 
 
 class TestResults(BaseTestInfo):
-    EXPOSED_ATTRIBUTES = {"status": str, "events": list, "nemesis_data": list}
+    # pylint: disable=too-many-arguments
+    EXPOSED_ATTRIBUTES = {"status": str, "events": list, "nemesis_data": list, "screenshots": list}
     COLLECTION_HINTS = {
         "events": CollectionHint(list[EventsBySeverity]),
         "nemesis_data": CollectionHint(list[NemesisRunInfo]),
+        "screenshots": CollectionHint(list[str]),
     }
 
     def __init__(self, status: TestStatus, events: list[EventsBySeverity] = None,
-                 nemesis_data: list[NemesisRunInfo] = None, max_stored_events=25):
+                 nemesis_data: list[NemesisRunInfo] = None, screenshots: list[str] = None,
+                 max_stored_events=25):
         super().__init__()
         if isinstance(status, TestStatus):
             self._status = status.value
@@ -277,6 +280,7 @@ class TestResults(BaseTestInfo):
             self._status = TestStatus(status).value
         self.events = events if events else []
         self.nemesis_data = nemesis_data if nemesis_data else []
+        self.screenshots = screenshots if screenshots else []
         self.max_stored_events = max_stored_events
 
     @classmethod
@@ -291,7 +295,12 @@ class TestResults(BaseTestInfo):
         else:
             nemesis_data = []
 
-        return cls(status=row.status, events=events, nemesis_data=nemesis_data)
+        if row.screenshots:
+            screenshots = row.screenshots
+        else:
+            screenshots = []
+
+        return cls(status=row.status, events=events, nemesis_data=nemesis_data, screenshots=screenshots)
 
     def _add_new_event_type(self, event: EventsBySeverity):
         if len([v for v in self.events if v.severity == event.severity]) > 0:
@@ -317,6 +326,9 @@ class TestResults(BaseTestInfo):
             self._add_new_event_type(event)
 
         self._collect_event_message(event, event_message)
+
+    def add_screenshot(self, screenshot_link: str):
+        self.screenshots.append(screenshot_link)
 
     @property
     def status(self) -> TestStatus:
@@ -345,7 +357,7 @@ class TestRun:
         "id": (UUID, "partition"),
     }
     _USING_RUNINFO = TestRunInfo
-    _TABLE_NAME = "test_runs_v3_shards_amount"
+    _TABLE_NAME = "test_runs_v3_screenshots_support"
     _IS_TABLE_INITIALIZED = False
     _ARGUS_DB_INTERFACE = None
 
