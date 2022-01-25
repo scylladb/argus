@@ -4,7 +4,6 @@
     import { faCopy } from "@fortawesome/free-solid-svg-icons";
     import { parse } from "marked";
     import { onMount } from "svelte";
-    import { sendMessage } from "../Stores/AlertStore";
     let renderedElement;
     let templateElement;
     let issueTemplateText = "";
@@ -25,13 +24,14 @@
               };
     };
 
-    const filterDbNodes = function(resources) {
-        return resources.filter(val => new RegExp(/\-db\-node/).test(val.name));
-    }
+    const filterDbNodes = function (resources) {
+        return resources.filter((val) =>
+            new RegExp(/\-db\-node/).test(val.name)
+        );
+    };
 
     const copyTemplateToClipboard = function () {
         navigator.clipboard.writeText(issueTemplateText);
-
     };
 
     let scyllaServerPackage = findScyllaServerPackage();
@@ -63,10 +63,46 @@
             </div>
             <div id="collapseIssueTemplate-{test_run.id}" class="collapse">
                 <div class="accordion-body">
-                    <pre
-                        bind:this={templateElement}
-                        id="issueTemplateText-{test_run.id}"
-                        class="d-none">
+                    <ul
+                        class="nav nav-tabs"
+                        role="tablist"
+                        id="issuePreviewTabs-{test_run.id}"
+                    >
+                        <li class="nav-item" role="presentation">
+                            <button
+                                class="nav-link active"
+                                id="home-tab"
+                                data-bs-toggle="tab"
+                                data-bs-target="#issueTemplateRaw-{test_run.id}"
+                                type="button"
+                                role="tab"
+                            >
+                                Template
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button
+                                class="nav-link"
+                                id="profile-tab"
+                                data-bs-toggle="tab"
+                                data-bs-target="#issueTemplatePreview-{test_run.id}"
+                                type="button"
+                                role="tab"
+                            >
+                                Preview
+                            </button>
+                        </li>
+                    </ul>
+                    <div class="tab-content border-start border-end border-bottom p-1">
+                        <div
+                            class="tab-pane fade show active"
+                            id="issueTemplateRaw-{test_run.id}"
+                            role="tabpanel"
+                        >
+                            <pre
+                                class="code user-select-all"
+                                bind:this={templateElement}
+                                id="issueTemplateText-{test_run.id}">
 ## Installation details
 
 
@@ -96,11 +132,12 @@ Test config file(s):
 
 
 ## Issue description
-#### &gt;&gt;&gt;&gt;&gt;&gt;&gt;
+
+&gt;&gt;&gt;&gt;&gt;&gt;&gt;
 
 **Your description here...**
 
-#### &lt;&lt;&lt;&lt;&lt;&lt;&lt;
+&lt;&lt;&lt;&lt;&lt;&lt;&lt;
 
 - Restore Monitor Stack command: `$ hydra investigate show-monitor {test_run.id}`
 - Restore monitor on AWS instance using [Jenkins job](https://jenkins.scylladb.com/view/QA/job/QA-tools/job/hydra-show-monitor/parambuild/?test_id={test_run.id})
@@ -113,17 +150,29 @@ Test config file(s):
     - **{log[0]}** - [{log[1]}]({log[1]}){"\n"}
 {:else}
     *No logs captured during this run.*
-
 {/each}
 
 [Jenkins job URL]({test_run.build_job_url})
                             </pre>
-                    <div
-                        bind:this={renderedElement}
-                        id="issueTemplateRendered-{test_run.id}"
-                    />
+                        </div>
+                        <div class="tab-pane fade" id="issueTemplatePreview-{test_run.id}" role="tabpanel">
+                            <div
+                                class="p-2 markdown-body"
+                                bind:this={renderedElement}
+                                id="issueTemplateRendered-{test_run.id}"
+                            />
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<style>
+    .code {
+        font-size: 11pt;
+        padding: 1em;
+        background-color: #f0f0f0;
+    }
+</style>
