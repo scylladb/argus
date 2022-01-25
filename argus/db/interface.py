@@ -43,6 +43,7 @@ class ArgusDatabase:
         str: cassandra.cqltypes.VarcharType.typename,
         UUID: cassandra.cqltypes.UUIDType.typename,
         Optional[str]: cassandra.cqltypes.VarcharType.typename,
+        Optional[int]: cassandra.cqltypes.IntegerType.typename,
     }
 
     _INSTANCE: Union['ArgusDatabase', Any] = None
