@@ -8,6 +8,7 @@
     import NemesisTable from "./NemesisTable.svelte";
     import ActivityTab from "./ActivityTab.svelte";
     import TestRunInfo from "./TestRunInfo.svelte";
+    import Screenshots from "./Screenshots.svelte";
     import TestRunComments from "./TestRunComments.svelte";
     import GithubIssues from "../Github/GithubIssues.svelte";
     import {
@@ -307,6 +308,14 @@
                 >
                 <button
                     class="nav-link"
+                    id="nav-screenshots-tab-{id}"
+                    data-bs-toggle="tab"
+                    data-bs-target="#nav-screenshots-{id}"
+                    type="button"
+                    role="tab"><i class="fas fa-images" /> Screenshots</button
+                >
+                <button
+                    class="nav-link"
                     id="nav-resources-tab-{id}"
                     data-bs-toggle="tab"
                     data-bs-target="#nav-resources-{id}"
@@ -378,6 +387,13 @@
                 role="tabpanel"
             >
                 <TestRunInfo {test_run} />
+            </div>
+            <div
+                class="tab-pane fade"
+                id="nav-screenshots-{id}"
+                role="tabpanel"
+            >
+                <Screenshots screenshots={test_run.screenshots} />
             </div>
             <div class="tab-pane fade" id="nav-resources-{id}" role="tabpanel">
                 <div
