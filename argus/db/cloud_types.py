@@ -1,5 +1,6 @@
 import ipaddress
 from enum import Enum
+from typing import Optional
 from pydantic.dataclasses import dataclass
 from pydantic import ValidationError, validator
 from argus.db.db_types import ArgusUDTBase
@@ -14,12 +15,14 @@ class CloudInstanceDetails(ArgusUDTBase):
     creation_time: int = 0
     termination_time: int = 0
     termination_reason: str = ""
+    shards_amount: Optional[int] = 0
+    _typename = "CloudInstanceDetails_v2"
 
     @classmethod
     def from_db_udt(cls, udt):
         return cls(provider=udt.provider, region=udt.region, public_ip=udt.public_ip, private_ip=udt.private_ip,
                    creation_time=udt.creation_time, termination_time=udt.termination_time,
-                   termination_reason=udt.termination_reason)
+                   termination_reason=udt.termination_reason, shards_amount=udt.shards_amount)
 
     @validator("public_ip")
     def valid_public_ip_address(cls, v):
@@ -91,6 +94,7 @@ class CloudResource(ArgusUDTBase):
     name: str
     state: str
     instance_info: CloudInstanceDetails
+    _typename = "CloudResource_v2"
 
     @classmethod
     def from_db_udt(cls, udt):

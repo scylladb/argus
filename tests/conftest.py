@@ -71,6 +71,7 @@ def preset_test_resources_setup_serialized():
             "creation_time": 7734,
             "termination_time": 0,
             "termination_reason": "",
+            "shards_amount": 0,
 
         },
         "region_name": ["us-east-1"],
@@ -177,7 +178,7 @@ def preset_test_resources():
     resources = TestResources()
 
     instance_info = CloudInstanceDetails(public_ip="1.1.1.1", region="us-east-1",
-                                         provider="aws", private_ip="10.10.10.1", creation_time=7734)
+                                         provider="aws", private_ip="10.10.10.1", creation_time=7734, shards_amount=10)
     resource = CloudResource(name="example_resource", state=ResourceState.RUNNING, instance_info=instance_info)
 
     resources.attach_resource(resource)
@@ -211,6 +212,7 @@ def preset_test_resources_serialized():
                 "creation_time": 7734,
                 "termination_time": 0,
                 "termination_reason": "",
+                "shards_amount": 10,
             }
         }],
         "leftover_resources": [{
@@ -224,6 +226,7 @@ def preset_test_resources_serialized():
                 "creation_time": 7734,
                 "termination_time": 0,
                 "termination_reason": "",
+                "shards_amount": 10,
             }
         }],
         "terminated_resources": [],
@@ -318,7 +321,7 @@ def completed_testrun(preset_test_resource_setup: TestResourcesSetup):  # pylint
             entropy = urandom(4).hex(sep=":", bytes_per_sep=1).split(":")
             random_ip = ".".join([str(int(byte, 16)) for byte in entropy])
             instance_details = CloudInstanceDetails(public_ip=random_ip, provider="aws", region="us-east-1",
-                                                    private_ip="10.10.10.1")
+                                                    private_ip="10.10.10.1", shards_amount=8)
             resource = CloudResource(name=f"{details.name}_{requested_node.instance_type}_{node_number}",
                                      state=ResourceState.RUNNING.value, instance_info=instance_details)
             resources.attach_resource(resource)
