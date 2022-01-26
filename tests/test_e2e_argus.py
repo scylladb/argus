@@ -3,6 +3,7 @@ import logging
 from uuid import uuid4
 import pytest
 from argus.db.testrun import TestRun, TestRunInfo
+from argus.db.db_types import TestInvestigationStatus
 from argus.db.interface import ArgusDatabase
 
 LOGGER = logging.getLogger(__name__)
@@ -15,7 +16,7 @@ class TestEndToEnd:
         TestRun.set_argus(argus_database)
         test_id = uuid4()
         test_run = TestRun(test_id=test_id, group="longevity-test", release_name="4_5rc5", assignee="k0machi",
-                           run_info=completed_testrun)
+                           run_info=completed_testrun, investigation_status=TestInvestigationStatus.INVESTIGATED)
 
         test_run.save()
 
@@ -33,7 +34,7 @@ class TestEndToEnd:
         TestRun.set_argus(argus_database)
         test_id = uuid4()
         test_run = TestRun(test_id=test_id, group="longevity-test", release_name="4_5rc5", assignee="k0machi",
-                           run_info=completed_testrun)
+                           run_info=completed_testrun, investigation_status=TestInvestigationStatus.INVESTIGATED)
 
         test_run.save()
 
@@ -47,7 +48,7 @@ class TestEndToEnd:
         TestRun.set_argus(argus_database)
         test_id = uuid4()
         test_run = TestRun(test_id=test_id, group="longevity-test", release_name="4_5rc5", assignee="k0machi",
-                           run_info=completed_testrun)
+                           run_info=completed_testrun, investigation_status=TestInvestigationStatus.INVESTIGATED)
         test_run.save()
 
         resource = choice(test_run.run_info.resources.leftover_resources)

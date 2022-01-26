@@ -68,6 +68,12 @@ class TestStatus(str, Enum):
     ABORTED = "aborted"
 
 
+class TestInvestigationStatus(str, Enum):
+    NOT_INVESTIGATED = "not_investigated"
+    IN_PROGRESS = "in_progress"
+    INVESTIGATED = "investigated"
+
+
 @dataclass(init=True, repr=True)
 class NemesisRunInfo(ArgusUDTBase):
     class_name: str
