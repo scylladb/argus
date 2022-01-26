@@ -11,7 +11,8 @@ from argus.db.config import BaseConfig
 from argus.db.utils import is_list_homogeneous
 from argus.db.cloud_types import CloudResource, CloudInstanceDetails, BaseCloudSetupDetails
 from argus.db.interface import ArgusDatabase
-from argus.db.db_types import ColumnInfo, CollectionHint, NemesisRunInfo, TestStatus, EventsBySeverity, PackageVersion
+from argus.db.db_types import ColumnInfo, CollectionHint, NemesisRunInfo, TestStatus, TestInvestigationStatus, \
+    EventsBySeverity, PackageVersion
 
 LOGGER = logging.getLogger(__name__)
 
@@ -350,19 +351,21 @@ class TestRunInfo:
 
 class TestRun:
     # pylint: disable=too-many-instance-attributes
-    EXPOSED_ATTRIBUTES = {"id": UUID, "group": str, "release_name": str, "assignee": str, "heartbeat": int}
+    EXPOSED_ATTRIBUTES = {"id": UUID, "group": str, "release_name": str,
+                          "assignee": str, "heartbeat": int, "investigation_status": str}
     ATTRIBUTE_CONSTRAINTS = {
     }
     PRIMARY_KEYS = {
         "id": (UUID, "partition"),
     }
     _USING_RUNINFO = TestRunInfo
-    _TABLE_NAME = "test_runs_v3_screenshots_support"
+    _TABLE_NAME = "test_runs_v3_investigation_status"
     _IS_TABLE_INITIALIZED = False
     _ARGUS_DB_INTERFACE = None
 
     def __init__(self, test_id: UUID, group: str, release_name: str, assignee: str,
-                 run_info: TestRunInfo, config: BaseConfig = None, argus_interface: ArgusDatabase = None):
+                 run_info: TestRunInfo, config: BaseConfig = None, argus_interface: ArgusDatabase = None,
+                 investigation_status: str = TestInvestigationStatus.NOT_INVESTIGATED):
         # pylint: disable=too-many-arguments
         if not test_id:
             test_id = uuid4()
@@ -371,6 +374,7 @@ class TestRun:
         self._group = group
         self._release_name = release_name
         self._assignee = assignee
+        self._investigation_status = investigation_status
         self._run_info = run_info
         self._heartbeat = int(time.time())
         self._config = config
@@ -394,7 +398,7 @@ class TestRun:
 
         run_info = cls._USING_RUNINFO(**nested_fields)
         run = cls(test_id=row.id, group=row.group, release_name=row.release_name,
-                  assignee=row.assignee, run_info=run_info)
+                  assignee=row.assignee, run_info=run_info, investigation_status=row.investigation_status)
         run.heartbeat = row.heartbeat
         return run
 
@@ -458,6 +462,14 @@ class TestRun:
     def assignee(self, value):
         self._assignee = str(value)
 
+    @property
+    def investigation_status(self) -> str:
+        return self._investigation_status
+
+    @investigation_status.setter
+    def investigation_status(self, value: TestInvestigationStatus | str):
+        self._investigation_status = TestInvestigationStatus(value)
+
     def serialize(self) -> dict[str, Any]:
         LOGGER.debug("Serializing test run...")
         nested_data = {}
@@ -475,6 +487,7 @@ class TestRun:
             "release_name": self._release_name,
             "assignee": self._assignee,
             "heartbeat": self._heartbeat,
+            "investigation_status": self._investigation_status,
             **nested_data
         }
         LOGGER.debug("Serialized Data: %s", data)
@@ -547,12 +560,13 @@ class TestRun:
 class TestRunWithHeartbeat(TestRun):
     def __init__(self, test_id: UUID, group: str, release_name: str, assignee: str,
                  run_info: TestRunInfo, heartbeat_interval=30, config: BaseConfig = None,
-                 argus_interface: ArgusDatabase = None):
+                 argus_interface: ArgusDatabase = None, investigation_status: str = TestInvestigationStatus.NOT_INVESTIGATED,):
         # pylint: disable=too-many-arguments
         self._heartbeat_interval = heartbeat_interval
         self._shutdown_event = threading.Event()
         super().__init__(test_id=test_id, group=group, release_name=release_name, assignee=assignee,
-                         run_info=run_info, config=config, argus_interface=argus_interface)
+                         investigation_status=investigation_status, run_info=run_info,
+                         config=config, argus_interface=argus_interface)
         self._thread = threading.Thread(target=self._heartbeat_entry,
                                         name=f"{self.__class__.__name__}-{self.id}-heartbeat", daemon=True)
         self._thread.start()
