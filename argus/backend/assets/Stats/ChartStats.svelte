@@ -40,4 +40,4 @@
     });
 
 </script>
-<canvas bind:this={chartCanvas} />
+<canvas bind:this={chartCanvas} width="112px"/>

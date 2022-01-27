@@ -8,7 +8,7 @@ releaseElements.forEach(el => {
         target: el.querySelector("div.release-stats"),
         props: {
             releaseName: el.dataset.argusReleaseName,
-            showTestMap: true
+            showTestMap: false
         }
     });
     registeredApps.push(app);

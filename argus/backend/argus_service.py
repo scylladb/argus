@@ -16,6 +16,7 @@ from cassandra.cqlengine import ValidationError
 from flask import g, current_app, session
 from werkzeug.security import check_password_hash, generate_password_hash
 from argus.backend.db import ScyllaCluster
+from argus.db.db_types import TestInvestigationStatus
 from argus.db.testrun import TestRun, TestStatus
 from argus.backend.models import (
     ArgusGithubIssue,
@@ -79,8 +80,8 @@ class ArgusService:
             f"start_time, end_time, heartbeat FROM {TestRun.table_name()}"
         )
         self.run_by_release_stats_statement = self.database.prepare(
-            "SELECT id, name, group, release_name, status, start_time, "
-            f"end_time, heartbeat FROM {TestRun.table_name()} WHERE release_name = ?"
+            "SELECT id, name, group, release_name, status, start_time, build_job_url, "
+            f"end_time, investigation_status, heartbeat FROM {TestRun.table_name()} WHERE release_name = ?"
         )
         self.event_insert_statement = self.database.prepare(
             'INSERT INTO argus.argus_event '
@@ -259,6 +260,7 @@ class ArgusService:
         {
             "master": {
                 "force": true, // Forcefully retrieve stats even if release is disabled
+                "limited": false, // Do not retrieve extra information (last runs, bug reports)
                 "groups": ["longevity", "artifacts"],
                 "tests": ["longevity-100gb", "artifacts-ami"]
             }
@@ -272,33 +274,31 @@ class ArgusService:
         }
         all_releases = {release.name: release for release in ArgusRelease.all()}
 
-        all_groups = ArgusReleaseGroup.all()
-        all_groups_by_id = {group.id: group for group in all_groups}
-
-        all_groups_by_release_id = {}
-        for release in all_releases.values():
-            all_groups_by_release_id[release.id] = [group for group in all_groups if group.release_id == release.id]
-
-        all_tests = ArgusReleaseGroupTest.all()
-        all_tests_by_release_id = {}
-        for release in all_releases.values():
-            all_tests_by_release_id[release.id] = [test for test in all_tests if test.release_id == release.id]
         group_stats_body = {
             "total": 0,
             **{e.value: 0 for e in TestStatus},
             "not_run": 0,
-            "lastStatus": "unknown"
+            "lastStatus": "unknown",
+            "lastInvestigationStatus": "unknown",
+            "hasBugReport": False,
         }
+
         for release_name, release_body in payload.items():
             release = all_releases[release_name]
+            release_tests = ArgusReleaseGroupTest.filter(release_id=release.id).all()
+            release_groups = ArgusReleaseGroup.filter(release_id=release.id).all()
+            release_groups_by_id = {group.id: group for group in release_groups}
             override = release_body.get("force", False)
+            limited = release_body.get("limited", False)
             release_stats = {
                 "total": 0,
                 **{e.value: 0 for e in TestStatus},
                 "not_run": 0,
                 "lastStatus": "unknown",
+                "lastInvestigationStatus": "unknown",
+                "hasBugReport": False,
                 "groups": {
-                    group.name: dict(**group_stats_body) for group in all_groups_by_release_id[release.id]
+                    group.name: dict(**group_stats_body) for group in release_groups
                 },
                 "tests": {},
                 "disabled": False,
@@ -310,29 +310,58 @@ class ArgusService:
 
             rows = self.session.execute(self.run_by_release_stats_statement, parameters=(release_name,))
             rows = sorted(rows, key=lambda r: r["start_time"], reverse=True)
-            release_tests = list(all_tests_by_release_id[release.id])
+            release_issues = ArgusGithubIssue.filter(release_id=release.id).all()
             for test in release_tests:
-                test_group = all_groups_by_id[test.group_id]
+                test_group = release_groups_by_id[test.group_id]
                 release_stats["total"] += 1
                 run = first(rows, test.name, predicate=lambda elem, val: re.match(f"^{val}(-test)?$", elem["name"]))
+                if not limited and run:
+                    last_runs = list(filter(lambda run: re.match(f"^{test.name}(-test)?$", run["name"]), rows))[:4]
+                    last_runs = [
+                        {
+                            "status": run["status"],
+                            "build_number": run["build_job_url"].rstrip("/").split("/")[-1],
+                            "build_job_url": run["build_job_url"],
+                            "start_time": run["start_time"],
+                            "issues": [dict(i.items()) for i in release_issues if i.run_id == run["id"]],
+                        }
+                        for run in last_runs
+                    ]
+                    issues = last_runs[0]["issues"] if len(last_runs) > 0 else []
+
                 if not run:
                     release_stats["tests"][test.name] = {
+                        "name": test.name,
                         "status": "unknown",
+                        "group": test_group.name,
                         "start_time": 0
                     }
                     release_stats["not_run"] += 1
                     release_stats["groups"][test_group.name]["not_run"] += 1
                     release_stats["groups"][test_group.name]["total"] += 1
                     continue
+
                 release_stats["tests"][test.name] = {
+                    "name": test.name,
+                    "group": test_group.name,
                     "status": run["status"],
-                    "start_time": run["start_time"]
+                    "start_time": run["start_time"],
+                    "investigation_status": run["investigation_status"],
                 }
+
+                if not limited:
+                    release_stats["hasBugReport"] = len(issues) > 0
+                    release_stats["tests"][test.name]["last_runs"] = last_runs
+                    release_stats["tests"][test.name]["hasBugReport"] = len(issues) > 0
+                    release_stats["groups"][test_group.name]["hasBugReport"] = len(issues) > 0
+
                 release_stats["groups"][test_group.name][run["status"]] += 1
                 release_stats["groups"][test_group.name]["total"] += 1
                 release_stats["groups"][test_group.name]["lastStatus"] = run["status"]
+                release_stats["groups"][test_group.name]["lastInvestigationStatus"] = run["investigation_status"]
                 release_stats[run["status"]] += 1
-                release_stats["lastStatus"] += run["status"]
+                release_stats["lastStatus"] = run["status"]
+                release_stats["lastInvestigationStatus"] = run["investigation_status"]
 
             response["releases"][release_name] = release_stats
 
@@ -427,6 +456,45 @@ class ArgusService:
         return {
             "test_run_id": test_run_id,
             "status": new_status
+        }
+
+    def toggle_test_investigation_status(self, payload: dict):
+        new_status = payload.get("investigation_status")
+        test_run_id = payload.get("test_run_id")
+        if not test_run_id:
+            raise Exception("Test run id wasn't specified in the request")
+        if not new_status:
+            raise Exception("New investigation status wasn't specified in the request")
+
+        new_status = TestInvestigationStatus(new_status)
+        test_run = TestRun.from_id(test_id=UUID(test_run_id))
+        release_name = test_run.release_name
+        release = ArgusRelease.get(name=release_name)
+        test_name = re.sub(r"\-test$", "", test_run.run_info.details.name)
+        test = [test for test in ArgusReleaseGroupTest.all() if test.release_id ==
+                release.id and test.name.startswith(test_name)]
+        test = test[0]
+        old_status = test_run.investigation_status
+        test_run.investigation_status = new_status
+        test_run.save()
+
+        self.send_event(
+            kind=ArgusEventTypes.TestRunStatusChanged,
+            body={
+                "message": "Investigation status was changed from {old_status} to {new_status} by {username}",
+                "old_status": old_status,
+                "new_status": new_status.value,
+                "username": g.user.username
+            },
+            user_id=g.user.id,
+            run_id=test_run.id,
+            release_id=test.release_id,
+            group_id=test.group_id,
+            test_id=test.id
+        )
+        return {
+            "test_run_id": test_run_id,
+            "investigation_status": new_status
         }
 
     def change_assignee(self, payload: dict):

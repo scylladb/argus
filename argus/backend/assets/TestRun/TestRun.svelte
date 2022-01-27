@@ -1,5 +1,7 @@
 <script>
     import { onMount, onDestroy } from "svelte";
+    import Fa from "svelte-fa";
+    import { faTimes, faCheck, faSearch } from "@fortawesome/free-solid-svg-icons"
     import humanizeDuration from "humanize-duration";
     import Select from "svelte-select";
     import User from "../Profile/User.svelte";
@@ -15,6 +17,9 @@
         TestStatusChangeable,
         StatusButtonCSSClassMap,
         InProgressStatuses,
+        TestInvestigationStatus,
+        InvestigationButtonCSSClassMap,
+        TestInvestigationStatusStrings,
     } from "../Common/TestStatus";
     import { getPicture } from "../Common/UserUtils";
     import { timestampToISODate } from "../Common/DateUtils";
@@ -30,6 +35,7 @@
     let test_run = undefined;
     let heartbeatHuman = "";
     let newStatus = "";
+    let newInvestigationStatus = "";
     let disableButtons = false;
     let currentTime = new Date();
     let clockInterval;
@@ -38,6 +44,12 @@
     let commentsOpen = false;
     let issuesOpen = false;
     let userSelect = [];
+
+    const investigationStatusIcon = {
+        "in_progress": faSearch,
+        "not_investigated": faTimes,
+        "investigated": faCheck,
+    }
 
     const createUserSelectCollection = function (users) {
         const dummyUser = {
@@ -190,6 +202,42 @@
             }
         }
     };
+
+    const handleInvestigationStatus = async function () {
+        disableButtons = true;
+        try {
+            let apiResponse = await fetch("/api/v1/test_run/change_investigation_status", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    test_run_id: id,
+                    investigation_status: newInvestigationStatus,
+                }),
+            });
+            let apiJson = await apiResponse.json();
+            console.log(apiJson);
+            if (apiJson.status === "ok") {
+                fetchTestRunData();
+            } else {
+                throw apiJson;
+            }
+        } catch (error) {
+            if (error?.status === "error") {
+                sendMessage(
+                    "error",
+                    `API Error updating test run investigation status.\nMessage: ${error.response.arguments[0]}`
+                );
+            } else {
+                sendMessage(
+                    "error",
+                    "A backend error occurred during test run investigation status update"
+                );
+            }
+        }
+    };
+
     onMount(() => {
         fetchTestRunData();
 
@@ -213,7 +261,7 @@
     {#if test_run}
         <div class="container-fluid p-0 m-0">
             <div class="row p-0 m-0">
-                <div class="col-2 py-2">
+                <div class="col-6 py-2">
                     <div class="d-flex">
                         <a
                             class="btn btn-light me-2"
@@ -255,9 +303,35 @@
                                 {/each}
                             </ul>
                         </div>
+                        <div class="dropdown ms-2">
+                            <button
+                                class="btn {InvestigationButtonCSSClassMap[
+                                    test_run.investigation_status
+                                ]} text-light"
+                                type="button"
+                                data-bs-toggle="dropdown"
+                            >
+                                <Fa icon={investigationStatusIcon[test_run.investigation_status]} />
+                                {TestInvestigationStatusStrings[test_run.investigation_status]}
+                            </button>
+                            <ul class="dropdown-menu">
+                                {#each Object.entries(TestInvestigationStatus) as [key, status]}
+                                    <li>
+                                        <button
+                                            class="dropdown-item"
+                                            disabled={disableButtons}
+                                            on:click={() => {
+                                                newInvestigationStatus = status;
+                                                handleInvestigationStatus();
+                                            }}>{TestInvestigationStatusStrings[status]}</button
+                                        >
+                                    </li>
+                                {/each}
+                            </ul>
+                        </div>
                     </div>
                 </div>
-                <div class="col-10 text-end py-3">
+                <div class="col-6 text-end py-3">
                     <p class="p-0 d-inline-block pe-4">
                         {test_run.build_job_name}#{build_number}
                     </p>

@@ -12,6 +12,25 @@ export const TestStatusChangeable = {
     ABORTED: "aborted",
 };
 
+
+export const TestInvestigationStatus = {
+    INVESTIGATED: "investigated",
+    NOT_INVESTIGATED: "not_investigated",
+    IN_PROGRESS: "in_progress",
+};
+
+export const InvestigationButtonCSSClassMap = {
+    "in_progress": "btn-warning",
+    "not_investigated": "btn-danger",
+    "investigated": "btn-success",
+};
+
+export const TestInvestigationStatusStrings = {
+    "in_progress": "In progress",
+    "not_investigated": "Not Investigated",
+    "investigated": "Investigated",
+}
+
 export const StatusBackgroundCSSClassMap = {
     "created": "bg-info",
     "running": "bg-warning",
