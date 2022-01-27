@@ -107,6 +107,7 @@ class ArgusTestRunComment(Model):
 class ArgusEventTypes(str, Enum):
     AssigneeChanged = "ARGUS_ASSIGNEE_CHANGE"
     TestRunStatusChanged = "ARGUS_TEST_RUN_STATUS_CHANGE"
+    TestRunInvestigationStatusChanged = "ARGUS_TEST_RUN_INVESTIGATION_STATUS_CHANGE"
     TestRunCommentPosted = "ARGUS_TEST_RUN_COMMENT_POSTED"
     TestRunIssueAdded = "ARGUS_TEST_RUN_ISSUE_ADDED"
 

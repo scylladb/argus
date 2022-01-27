@@ -10,7 +10,7 @@
     import ReleaseGithubIssues from "./ReleaseGithubIssues.svelte";
     import TestPopoutSelector from "./TestPopoutSelector.svelte";
     import { sendMessage } from "../Stores/AlertStore";
-    let clickedTests = [];
+    let clickedTests = {};
 
     const handleTestClick = function (e) {
         if (e.detail.start_time == 0) {
@@ -18,14 +18,19 @@
             return;
         }
 
-        if (clickedTests.findIndex((val) => val.name == e.detail.name) == -1) {
-            clickedTests.push(e.detail);
+        if (!clickedTests[e.detail.name]) {
+            clickedTests[e.detail.name] = e.detail;
+        } else {
+            delete clickedTests[e.detail.name];
             clickedTests = clickedTests;
         }
     };
 
     const handleDeleteRequest = function(ev) {
-        clickedTests = clickedTests.filter(val => val.name != ev.detail.name);
+        if (clickedTests[ev.detail.name]) {
+            delete clickedTests[ev.detail.name];
+            clickedTests = clickedTests;
+        }
     };
 </script>
 
@@ -33,32 +38,6 @@
     <div class="row mb-2">
         <div class="col-8">
             <h1 class="display-1">{releaseData.release.name}</h1>
-            <h3 class="text-muted">
-                {releaseData.release.pretty_name ?? "No name"}
-            </h3>
-            <div class="input-group user-select-all">
-                <span class="input-group-text">Github</span>
-                <input
-                    class="form-control"
-                    type="text"
-                    disabled
-                    value={releaseData.release.github_repo_url}
-                />
-                <a
-                    href={releaseData.release.github_repo_url}
-                    target="_blank"
-                    class="btn btn-dark"><Fa icon={faGithub} /></a
-                >
-                <a
-                    href="{releaseData.release
-                        .github_repo_url}/issues/new/choose"
-                    target="_blank"
-                    class="btn btn-success"><Fa icon={faBug} /></a
-                >
-            </div>
-            <p class="text-muted">
-                {releaseData.release.description ?? "No description provided."}
-            </p>
         </div>
     </div>
     <div class="row mb-2">
@@ -68,6 +47,7 @@
                 DisplayItem={ChartStats}
                 showTestMap={true}
                 horizontal={true}
+                bind:clickedTests={clickedTests}
                 on:testClick={handleTestClick}
             />
         </div>
@@ -78,13 +58,6 @@
                 releaseName={releaseData.release.name}
             />
         </div>
-    </div>
-    <div class="row mb-2">
-        <ReleaseGithubIssues
-            release_id={releaseData.release.id}
-            release_name={releaseData.release.name}
-            tests={releaseData.tests}
-        />
     </div>
     <div class="row mb-2">
         <ReleaseActivity releaseName={releaseData.release.name} />

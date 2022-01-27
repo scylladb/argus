@@ -9,6 +9,7 @@
     export let showTestMap = false;
     export let showReleaseStats = true;
     export let horizontal = false;
+    export let clickedTests = {};
     const dispatch = createEventDispatcher();
     const releaseStatsDefault = {
         created: 0,
@@ -18,6 +19,7 @@
         aborted: 0,
         lastStatus: "unknown",
         disabled: true,
+        limited: !showTestMap,
         groups: {},
         tests: {},
         total: -1,
@@ -28,7 +30,7 @@
     $: dispatch("statsUpdate", { stats: releaseStats });
 </script>
 
-<div class="d-flex justify-content-center align-items-center" class:flex-column={!horizontal}>
+<div class="d-flex justify-content-center" class:flex-column={!horizontal} class:align-items-center={!horizontal}>
     {#if releaseStats?.total > 0}
         {#if showReleaseStats}
             <div class="w-100">
@@ -37,7 +39,7 @@
         {/if}
         {#if showTestMap}
             <div>
-                <svelte:component this={TestMapItem} stats={releaseStats} on:testClick />
+                <svelte:component this={TestMapItem} stats={releaseStats} bind:clickedTests={clickedTests} on:testClick />
             </div>
         {/if}
     {:else if releaseStats?.total == -1}
