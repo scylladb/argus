@@ -4,25 +4,10 @@
     import { faCopy } from "@fortawesome/free-solid-svg-icons";
     import { parse } from "marked";
     import { onMount } from "svelte";
+    import { getScyllaPackage, getKernelPackage } from "../Common/RunUtils";
     let renderedElement;
     let templateElement;
     let issueTemplateText = "";
-
-    const findScyllaServerPackage = function () {
-        let filtered_packages = test_run.packages.filter((val) => {
-            if (val.name == "scylla-server") {
-                return val;
-            }
-        });
-        return filtered_packages.length > 0
-            ? filtered_packages[0]
-            : {
-                  name: "scylla-server",
-                  date: "19700101",
-                  revision_id: "000000000000",
-                  version: "not found",
-              };
-    };
 
     const filterDbNodes = function (resources) {
         return resources.filter((val) =>
@@ -34,7 +19,10 @@
         navigator.clipboard.writeText(issueTemplateText);
     };
 
-    let scyllaServerPackage = findScyllaServerPackage();
+    let scyllaServerPackage = getScyllaPackage(test_run.packages);
+    let kernelPackage = getKernelPackage(test_run.packages);
+    $: scyllaServerPackage = getScyllaPackage(test_run.packages);
+    $: kernelPackage = getKernelPackage(test_run.packages);
 
     onMount(() => {
         renderedElement.innerHTML = parse(templateElement.innerHTML);
@@ -105,8 +93,13 @@
                                 id="issueTemplateText-{test_run.id}">
 ## Installation details
 
+{#if kernelPackage}
+Kernel Version: {kernelPackage.version}
+{/if}
 
-Scylla version (or git commit hash): `{scyllaServerPackage.version}-{scyllaServerPackage.date}.{scyllaServerPackage.revision_id} with build-id {scyllaServerPackage.build_id}`
+{#if scyllaServerPackage}
+Scylla version (or git commit hash): `{scyllaServerPackage.version}-{scyllaServerPackage.date}.{scyllaServerPackage.revision_id}` with build-id `{scyllaServerPackage.build_id}`
+{/if}
 
 Cluster size: {test_run.cloud_setup.db_node.node_amount} nodes ({test_run.cloud_setup.db_node.instance_type})
 
