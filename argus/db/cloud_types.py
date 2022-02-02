@@ -92,7 +92,7 @@ class ResourceState(str, Enum):
 @dataclass(init=True, repr=True)
 class CloudResource(ArgusUDTBase):
     name: str
-    state: str
+    state: ResourceState
     instance_info: CloudInstanceDetails
     _typename = "CloudResource_v2"
 

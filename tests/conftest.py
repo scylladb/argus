@@ -329,7 +329,7 @@ def completed_testrun(preset_test_resource_setup: TestResourcesSetup):  # pylint
             instance_details = CloudInstanceDetails(public_ip=random_ip, provider="aws", region="us-east-1",
                                                     private_ip="10.10.10.1", shards_amount=8)
             resource = CloudResource(name=f"{details.name}_{requested_node.instance_type}_{node_number}",
-                                     state=ResourceState.RUNNING.value, instance_info=instance_details)
+                                     state=ResourceState.RUNNING, instance_info=instance_details)
             resources.attach_resource(resource)
             created_resources.append(resource)
 
@@ -347,7 +347,7 @@ def completed_testrun(preset_test_resource_setup: TestResourcesSetup):  # pylint
             name="disrupt_something",
             duration=42,
             target_node=node_description,
-            status=NemesisStatus.SUCCEEDED.value,
+            status=NemesisStatus.SUCCEEDED,
             start_time=int(time()),
             end_time=int(time() + 30),
         )
@@ -355,7 +355,7 @@ def completed_testrun(preset_test_resource_setup: TestResourcesSetup):  # pylint
 
     events = EventsBySeverity(severity="INFO", event_amount=66000, last_events=["Nothing here after all"])
     screenshots = ["https://example.com/screenshot.jpg"]
-    results = TestResults(status=TestStatus.PASSED.value, nemesis_data=nemesis_runs,
+    results = TestResults(status=TestStatus.PASSED, nemesis_data=nemesis_runs,
                           events=[events], screenshots=screenshots)
 
     run_info = TestRunInfo(details=details, setup=setup, logs=logs, resources=resources, results=results)

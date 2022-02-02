@@ -15,6 +15,7 @@ from cassandra.policies import WhiteListRoundRobinPolicy
 
 from argus.db.config import BaseConfig, FileConfig
 from argus.db.db_types import ColumnInfo, CollectionHint, ArgusUDTBase
+from argus.db.cloud_types import ResourceState
 
 LOGGER = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ class ArgusDatabase:
         float: cassandra.cqltypes.FloatType.typename,
         str: cassandra.cqltypes.VarcharType.typename,
         UUID: cassandra.cqltypes.UUIDType.typename,
+        ResourceState: cassandra.cqltypes.VarcharType.typename,
         Optional[str]: cassandra.cqltypes.VarcharType.typename,
         Optional[int]: cassandra.cqltypes.IntegerType.typename,
     }
