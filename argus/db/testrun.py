@@ -9,7 +9,7 @@ from uuid import uuid4, UUID
 
 from argus.db.config import BaseConfig
 from argus.db.utils import is_list_homogeneous
-from argus.db.cloud_types import CloudResource, CloudInstanceDetails, BaseCloudSetupDetails
+from argus.db.cloud_types import CloudResource, CloudInstanceDetails, BaseCloudSetupDetails, ResourceState
 from argus.db.interface import ArgusDatabase
 from argus.db.db_types import ColumnInfo, CollectionHint, NemesisRunInfo, TestStatus, TestInvestigationStatus, \
     EventsBySeverity, PackageVersion
@@ -227,13 +227,16 @@ class TestResources(BaseTestInfo):
 
     def attach_resource(self, resource: CloudResource):
         self._leftover_resources.append(resource)
+        self._leftover_resources.sort(key=lambda v: v.name)
         self._allocated_resources.append(resource)
+        self._allocated_resources.sort(key=lambda v: v.name)
 
     def detach_resource(self, resource: CloudResource):
         idx = self._leftover_resources.index(resource)
         detached_resource = self.leftover_resources.pop(idx)
         detached_resource.terminate()
         self._terminated_resources.append(detached_resource)
+        self._terminated_resources.sort(key=lambda v: v.name)
 
     @property
     def allocated_resources(self) -> list[CloudResource]:
@@ -251,14 +254,16 @@ class TestResources(BaseTestInfo):
     def from_db_row(cls, row):
         resources = cls()
 
-        for resource_type in ["leftover", "allocated", "terminated"]:
-            resource_column = getattr(row, f"{resource_type}_resources")
-            if resource_column:
-                for resources_of_type in resource_column:
-                    cloud_resource = CloudResource.from_db_udt(resources_of_type)
-                    list_ref: list[CloudResource] = getattr(resources, f"_{resource_type}_resources")
-                    list_ref.append(cloud_resource)
-
+        for resource in row.allocated_resources:
+            cloud_resource = CloudResource.from_db_udt(resource)
+            resources.allocated_resources.append(cloud_resource)
+            if cloud_resource.state == ResourceState.TERMINATED:
+                resources.terminated_resources.append(cloud_resource)
+            else:
+                resources.leftover_resources.append(cloud_resource)
+        resources.allocated_resources.sort(key=lambda v: v.name)
+        resources.terminated_resources.sort(key=lambda v: v.name)
+        resources.leftover_resources.sort(key=lambda v: v.name)
         return resources
 
 
