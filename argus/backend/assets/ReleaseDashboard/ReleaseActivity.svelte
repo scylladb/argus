@@ -15,7 +15,7 @@
     export let releaseName = undefined;
     let activity = {
         events: {},
-        raw_events: {},
+        raw_events: [],
         release_name: "",
     };
 
