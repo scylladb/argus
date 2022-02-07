@@ -101,7 +101,7 @@
 <div class="container-fluid bg-light">
     <div class="row p-4" id="dashboard-main">
         <div
-            class="col-3 p-0 py-4 min-vh-100 me-3 border rounded shadow-sm bg-white"
+            class="col-3 p-0 py-4 me-3 border rounded shadow-sm bg-white"
             id="run-sidebar"
         >
             <div class="p-2">
@@ -128,5 +128,10 @@
 <style>
     .bg-white {
         background-color: #fff;
+    }
+
+    #run-sidebar {
+        height: 960px;
+        overflow-y: scroll;
     }
 </style>
