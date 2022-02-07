@@ -51,7 +51,7 @@ class TestEndToEnd:
                            run_info=completed_testrun, investigation_status=TestInvestigationStatus.INVESTIGATED)
         test_run.save()
 
-        resource = choice(test_run.run_info.resources.leftover_resources)
+        resource = choice(test_run.run_info.resources.allocated_resources)
         test_run.run_info.resources.detach_resource(resource)
         test_run.save()
 

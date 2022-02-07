@@ -1,4 +1,3 @@
-
 from collections import namedtuple
 import pytest
 from argus.db.testrun import TestDetails, TestResourcesSetup, TestResources, TestLogs, TestResults, TestInfoValueError
@@ -65,7 +64,9 @@ def test_resources_setup_ctor_from_named_tuple(preset_test_resource_setup: TestR
     CloudNodeMapped = namedtuple("CloudNodeMapped", ["image_id", "instance_type", "node_amount", "post_behaviour"])
     CloudSetupMapped = namedtuple("CloudSetupMapped", ["backend", "db_node", "loader_node", "monitor_node"])
     CloudInstanceDetailsMapped = namedtuple("CloudInstanceDetailsMapped", [
-        "public_ip", "region", "provider", "private_ip", "creation_time", "termination_time", "termination_reason", "shards_amount"])
+        "public_ip", "region", "provider", "private_ip", "creation_time",
+        "termination_time", "termination_reason", "shards_amount"
+    ])
     ResourceSetupRow = namedtuple("ResourceSetupRow", ["sct_runner_host", "region_name", "cloud_setup"])
 
     db_node = CloudNodeMapped(image_id="ami-abcdef99", instance_type="spot",
@@ -123,41 +124,37 @@ def test_resources_attach(preset_test_resources: TestResources):
     instance_info = CloudInstanceDetails(public_ip="1.1.1.2", region="us-east-1",
                                          provider="aws", private_ip="10.10.10.1")
     resource = CloudResource(name="example_resource_2", state=ResourceState.RUNNING,
-                             instance_info=instance_info)
+                             instance_info=instance_info, resource_type="example_type")
 
     preset_test_resources.attach_resource(resource)
 
     assert resource in preset_test_resources.allocated_resources
-    assert resource in preset_test_resources.leftover_resources
 
 
 def test_resources_attach_detach(preset_test_resources: TestResources):
     instance_info = CloudInstanceDetails(public_ip="1.1.1.2", region="us-east-1",
-                                         provider="aws", private_ip="10.10.10.1")
+                                         provider="aws", private_ip="10.10.10.1",)
     resource = CloudResource(name="example_resource_2", state=ResourceState.RUNNING,
-                             instance_info=instance_info)
+                             instance_info=instance_info, resource_type="example_type")
 
     preset_test_resources.attach_resource(resource)
 
     assert resource in preset_test_resources.allocated_resources
-    assert resource in preset_test_resources.leftover_resources
 
     preset_test_resources.detach_resource(resource)
-
-    assert resource not in preset_test_resources.leftover_resources
-    assert resource in preset_test_resources.allocated_resources
-    assert resource in preset_test_resources.terminated_resources
+    assert resource.state == ResourceState.TERMINATED
 
 
 def test_resources_ctor_from_named_tuple(preset_test_resources):
     CloudInstanceDetailsMapped = namedtuple("CloudInstanceDetailsMapped", [
-        "provider", "region", "public_ip", "private_ip", "creation_time", "termination_time", "termination_reason", "shards_amount"])
-    CloudResourceMapped = namedtuple("CloudResourceMapped", ["name", "state", "instance_info"])
+        "provider", "region", "public_ip", "private_ip", "creation_time", "termination_time",
+        "termination_reason", "shards_amount"])
+    CloudResourceMapped = namedtuple("CloudResourceMapped", ["name", "state", "instance_info", "resource_type"])
     instance_info = CloudInstanceDetailsMapped(public_ip="1.1.1.1", region="us-east-1", provider="aws",
                                                private_ip="10.10.10.1", creation_time=7734, termination_time=0,
                                                termination_reason="", shards_amount=10)
     resource = CloudResourceMapped(name="example_resource", state=ResourceState.RUNNING.value,
-                                   instance_info=instance_info)
+                                   instance_info=instance_info, resource_type="example_type")
 
     ResourceSetupRow = namedtuple("ResourcesRow", ["allocated_resources", "leftover_resources", "terminated_resources"])
 

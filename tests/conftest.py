@@ -178,8 +178,9 @@ def preset_test_resources():
     resources = TestResources()
 
     instance_info = CloudInstanceDetails(public_ip="1.1.1.1", region="us-east-1",
-                                         provider="aws", private_ip="10.10.10.1", creation_time=7734, shards_amount=10)
-    resource = CloudResource(name="example_resource", state=ResourceState.RUNNING, instance_info=instance_info)
+                                         provider="aws", private_ip="10.10.10.1", creation_time=7734, shards_amount=10,)
+    resource = CloudResource(name="example_resource", state=ResourceState.RUNNING,
+                             instance_info=instance_info, resource_type="example_type")
 
     resources.attach_resource(resource)
 
@@ -191,10 +192,6 @@ def preset_test_resources_schema():
     return {
         "allocated_resources": ColumnInfo(name="allocated_resources", type=CollectionHint,
                                           value=CollectionHint(list[CloudResource]), constraints=[]),
-        "leftover_resources": ColumnInfo(name="leftover_resources", type=CollectionHint,
-                                         value=CollectionHint(list[CloudResource]), constraints=[]),
-        "terminated_resources": ColumnInfo(name="terminated_resources", type=CollectionHint,
-                                           value=CollectionHint(list[CloudResource]), constraints=[]),
     }
 
 
@@ -204,6 +201,7 @@ def preset_test_resources_serialized():
         "allocated_resources": [{
             "name": "example_resource",
             "state": "running",
+            "resource_type": "example_type",
             "instance_info": {
                 "public_ip": "1.1.1.1",
                 "region": "us-east-1",
@@ -215,21 +213,6 @@ def preset_test_resources_serialized():
                 "shards_amount": 10,
             }
         }],
-        "leftover_resources": [{
-            "name": "example_resource",
-            "state": "running",
-            "instance_info": {
-                "public_ip": "1.1.1.1",
-                "private_ip": "10.10.10.1",
-                "region": "us-east-1",
-                "provider": "aws",
-                "creation_time": 7734,
-                "termination_time": 0,
-                "termination_reason": "",
-                "shards_amount": 10,
-            }
-        }],
-        "terminated_resources": [],
     }
 
 
@@ -329,18 +312,19 @@ def completed_testrun(preset_test_resource_setup: TestResourcesSetup):  # pylint
             instance_details = CloudInstanceDetails(public_ip=random_ip, provider="aws", region="us-east-1",
                                                     private_ip="10.10.10.1", shards_amount=8)
             resource = CloudResource(name=f"{details.name}_{requested_node.instance_type}_{node_number}",
-                                     state=ResourceState.RUNNING, instance_info=instance_details)
+                                     state=ResourceState.RUNNING, instance_info=instance_details,
+                                     resource_type="db-node")
             resources.attach_resource(resource)
             created_resources.append(resource)
 
     terminated = choice(created_resources)
-    resources.detach_resource(terminated)
+    resources.detach_resource(terminated, reason="Test reason")
 
     nemeses_names = ["SisyphusMonkey", "ChaosMonkey", "NotVeryCoolMonkey"]
     nemesis_runs = []
 
     for _ in range(6):
-        node = choice(resources.leftover_resources)
+        node = choice(resources.allocated_resources)
         node_description = NodeDescription(name=node.name, ip=node.instance_info.public_ip, shards=10)
         nemesis = NemesisRunInfo(
             class_name=choice(nemeses_names),

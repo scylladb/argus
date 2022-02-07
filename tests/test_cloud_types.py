@@ -25,12 +25,12 @@ def test_cloud_resource_enum_only_state():
     instance_info = CloudInstanceDetails(provider="aws", region="eu-west-1", public_ip="127.0.0.1",
                                          private_ip="10.10.10.1")
     with pytest.raises(ValidationError):
-        CloudResource(name="test", state="ASPARAGUS", instance_info=instance_info)
+        CloudResource(name="test", state="ASPARAGUS", instance_info=instance_info, resource_type="test type")
 
 
 def test_cloud_resource_state_coercion():
     instance_info = CloudInstanceDetails(provider="aws", region="eu-west-1", public_ip="127.0.0.1",
                                          private_ip="10.10.10.1")
-    resource = CloudResource(name="test", state="running", instance_info=instance_info)
+    resource = CloudResource(name="test", state="running", instance_info=instance_info, resource_type="test type")
 
     assert resource.state == ResourceState.RUNNING
