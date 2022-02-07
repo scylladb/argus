@@ -470,24 +470,9 @@
                 <Screenshots screenshots={test_run.screenshots} />
             </div>
             <div class="tab-pane fade" id="nav-resources-{id}" role="tabpanel">
-                <div
-                    class="accordion accordion-flush"
-                    id="accordionResources-{id}"
-                >
+                <div class="p-2">
                     <ResourcesInfo
-                        caption="Allocated Resources"
-                        {id}
                         resources={test_run.allocated_resources}
-                    />
-                    <ResourcesInfo
-                        caption="Terminated Resources"
-                        {id}
-                        resources={test_run.terminated_resources}
-                    />
-                    <ResourcesInfo
-                        caption="Leftover Resources"
-                        {id}
-                        resources={test_run.leftover_resources}
                     />
                 </div>
             </div>
