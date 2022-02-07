@@ -9,7 +9,7 @@ from uuid import uuid4, UUID
 
 from argus.db.config import BaseConfig
 from argus.db.utils import is_list_homogeneous
-from argus.db.cloud_types import CloudResource, CloudInstanceDetails, BaseCloudSetupDetails, ResourceState
+from argus.db.cloud_types import CloudResource, CloudInstanceDetails, BaseCloudSetupDetails
 from argus.db.interface import ArgusDatabase
 from argus.db.db_types import ColumnInfo, CollectionHint, NemesisRunInfo, TestStatus, TestInvestigationStatus, \
     EventsBySeverity, PackageVersion
@@ -212,58 +212,35 @@ class TestLogs(BaseTestInfo):
 
 
 class TestResources(BaseTestInfo):
-    EXPOSED_ATTRIBUTES = {"allocated_resources": list, "terminated_resources": list, "leftover_resources": list}
+    EXPOSED_ATTRIBUTES = {"allocated_resources": list}
     COLLECTION_HINTS = {
         "allocated_resources": CollectionHint(list[CloudResource]),
-        "terminated_resources": CollectionHint(list[CloudResource]),
-        "leftover_resources": CollectionHint(list[CloudResource]),
     }
 
     def __init__(self):
         super().__init__()
-        self._leftover_resources = []
-        self._terminated_resources = []
         self._allocated_resources = []
 
     def attach_resource(self, resource: CloudResource):
-        self._leftover_resources.append(resource)
-        self._leftover_resources.sort(key=lambda v: v.name)
         self._allocated_resources.append(resource)
         self._allocated_resources.sort(key=lambda v: v.name)
 
-    def detach_resource(self, resource: CloudResource):
-        idx = self._leftover_resources.index(resource)
-        detached_resource = self.leftover_resources.pop(idx)
-        detached_resource.terminate()
-        self._terminated_resources.append(detached_resource)
-        self._terminated_resources.sort(key=lambda v: v.name)
+    def detach_resource(self, resource: CloudResource, reason: str = "unspecified reason"):
+        resource_to_detach = next(r for r in self._allocated_resources if r == resource)
+        resource_to_detach.terminate(reason=reason)
 
     @property
     def allocated_resources(self) -> list[CloudResource]:
         return self._allocated_resources
 
-    @property
-    def terminated_resources(self) -> list[CloudResource]:
-        return self._terminated_resources
-
-    @property
-    def leftover_resources(self) -> list[CloudResource]:
-        return self._leftover_resources
-
     @classmethod
     def from_db_row(cls, row):
         resources = cls()
-
-        for resource in row.allocated_resources:
+        resource_row = row.allocated_resources if row.allocated_resources else []
+        for resource in resource_row:
             cloud_resource = CloudResource.from_db_udt(resource)
             resources.allocated_resources.append(cloud_resource)
-            if cloud_resource.state == ResourceState.TERMINATED:
-                resources.terminated_resources.append(cloud_resource)
-            else:
-                resources.leftover_resources.append(cloud_resource)
         resources.allocated_resources.sort(key=lambda v: v.name)
-        resources.terminated_resources.sort(key=lambda v: v.name)
-        resources.leftover_resources.sort(key=lambda v: v.name)
         return resources
 
 
@@ -364,7 +341,7 @@ class TestRun:
         "id": (UUID, "partition"),
     }
     _USING_RUNINFO = TestRunInfo
-    _TABLE_NAME = "test_runs_v4"
+    _TABLE_NAME = "test_runs_v4_resource_tracking"
     _IS_TABLE_INITIALIZED = False
     _ARGUS_DB_INTERFACE = None
 

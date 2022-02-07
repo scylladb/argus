@@ -1,4 +1,5 @@
 import ipaddress
+import time
 from enum import Enum
 from typing import Optional
 from pydantic.dataclasses import dataclass
@@ -16,7 +17,7 @@ class CloudInstanceDetails(ArgusUDTBase):
     termination_time: int = 0
     termination_reason: str = ""
     shards_amount: Optional[int] = 0
-    _typename = "CloudInstanceDetails_v2"
+    _typename = "CloudInstanceDetails_v3"
 
     @classmethod
     def from_db_udt(cls, udt):
@@ -93,13 +94,19 @@ class ResourceState(str, Enum):
 class CloudResource(ArgusUDTBase):
     name: str
     state: ResourceState
+    resource_type: str
     instance_info: CloudInstanceDetails
-    _typename = "CloudResource_v2"
+    _typename = "CloudResource_v3"
+
+    def __eq__(self, other) -> bool:
+        if (isinstance(other, CloudResource)):
+            return self.name == other.name
+        return False
 
     @classmethod
     def from_db_udt(cls, udt):
         instance_info = CloudInstanceDetails.from_db_udt(udt.instance_info)
-        return cls(name=udt.name, state=udt.state, instance_info=instance_info)
+        return cls(name=udt.name, state=udt.state, resource_type=udt.resource_type, instance_info=instance_info)
 
     @validator("state")
     def valid_state(cls, v):
@@ -107,11 +114,12 @@ class CloudResource(ArgusUDTBase):
             ResourceState(v)
         except ValueError:
             raise ValidationError(f"Not a valid resource state: {v}")
-
         return v
 
-    def terminate(self):
+    def terminate(self, reason):
         self.state = ResourceState.TERMINATED
+        self.instance_info.termination_time = int(time.time())
+        self.instance_info.termination_reason = reason
 
     def stop(self):
         self.state = ResourceState.STOPPED
