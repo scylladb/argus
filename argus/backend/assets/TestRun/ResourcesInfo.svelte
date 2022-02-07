@@ -1,95 +1,234 @@
 <script>
     export let resources;
-    export let id;
-    export let caption = "";
     import { timestampToISODate } from "../Common/DateUtils";
-    let shortCaption = caption.replaceAll(" ", "");
+    import { titleCase } from "../Common/TextUtils";
+    let sortHeaders = {
+        creationTime: ["instance_info", "creation_time"],
+        terminationTime: ["instance_info", "termination_time"],
+        terminationReason: ["instance_info", "termination_reason"],
+        state: "state",
+        name: "name",
+        shards: ["instance_info", "shards_amount"],
+    };
+    let sortHeader = "name";
+    let sortAscending = false;
+    let filterString = "";
 
-    const titleCase = function (string) {
-        return string[0].toUpperCase() + string.slice(1).toLowerCase();
+    const tableStates = {
+        running: "table-success",
+        stopped: "table-",
+        terminated: "table-danger",
+    };
+
+    const filterResource = function (resource) {
+        let resourceAsString = `${resource.name}${resource.state}${
+            resource.instance_info.shards_amount
+        }${timestampToISODate(
+            resource.instance_info.creation_time * 1000
+        )}${timestampToISODate(
+            resource.instance_info.termination_time * 1000
+        )}${resource.instance_info.termination_reason}`;
+        if (filterString == "") {
+            return false;
+        }
+        try {
+            return !RegExp(filterString.toLowerCase()).test(
+                resourceAsString.toLowerCase()
+            );
+        } catch (e) {
+            return true;
+        }
+    };
+
+    const sortResourcesByKey = function (resources, key, descending) {
+        const getValue = function (resource, key) {
+            let path = sortHeaders[key];
+            if (typeof path == 'string') {
+                let value = resource[sortHeaders[path]];
+                return value;
+            } else if (typeof path == 'object') {
+                let value = resource;
+                for (let idx = 0; idx < path.length; idx++) {
+                    value = value[path[idx]];
+                }
+                return value;
+            }
+        };
+
+        return resources.sort((a, b) => {
+            if (getValue(a, key) > getValue(b, key)) {
+                return descending ? 1 : -1;
+            } else if (getValue(b, key) > getValue(a, key)) {
+                return descending ? -1 : 1;
+            }
+            return 0;
+        });
     };
 </script>
 
-<div class="accordion-item">
-    <h5 class="accordion-header" id="header{shortCaption}-{id}">
-        <button
-            class="accordion-button collapsed"
-            data-bs-toggle="collapse"
-            data-bs-target="#collapse{shortCaption}-{id}">{caption}</button
-        >
-    </h5>
-    <div
-        id="collapse{shortCaption}-{id}"
-        class="accordion-collapse collapse"
-        data-bs-parent="#accordionResources-{id}"
-    >
-        <div class="accordion-body">
-            <div class="container-fluid p-0 m-0">
-                <div class="row align-items-center p-1 m-0">
-                    {#each resources as resource, idx}
-                        <div class="col-4 mb-1 p-1">
-                            <div class="card">
-                                <div class="card-body">
-                                    <h6 class="card-title">
-                                        {resource.name}
-                                    </h6>
-                                    <div class="card-text">
-                                        <div>
-                                            Status: {titleCase(resource.state)}
-                                        </div>
-                                        <ul>
-                                            <li>
-                                                Public IP: {resource
-                                                    .instance_info.public_ip}
-                                            </li>
-                                            <li>
-                                                Private IP: {resource
-                                                    .instance_info.private_ip}
-                                            </li>
-                                            <li>
-                                                Provider: {resource
-                                                    .instance_info.provider}
-                                            </li>
-                                            <li>
-                                                Region: {resource.instance_info
-                                                    .region}
-                                            </li>
-                                            {#if resource.instance_info.shards_amount > 0}
-                                            <li>
-                                                Shards: {resource.instance_info
-                                                    .shards_amount}
-                                            </li>
-                                            {/if}
-                                            <li>
-                                                Created at {timestampToISODate(
-                                                    resource.instance_info
-                                                        .creation_time * 1000,
-                                                    true
-                                                )}
-                                            </li>
-                                            {#if resource.instance_info.termination_time != 0}
-                                                <li>
-                                                    Terminated at {timestampToISODate(
-                                                        resource.instance_info
-                                                            .termination_time *
-                                                            1000,
-                                                        true
-                                                    )}
-                                                </li>
-                                                <li>
-                                                    Termination reason: {resource.instance_info.termination_reason.split(
-                                                        " "
-                                                    )[0]}
-                                                </li>
-                                            {/if}
-                                        </ul>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    {/each}
-                </div>
-            </div>
-        </div>
-    </div>
+
+<div class="form-group mb-2">
+    <input
+        class="form-control"
+        type="text"
+        placeholder="Filter resources"
+        on:keyup={(e) => {
+            filterString = e.target.value;
+            resources = resources;
+        }}
+    />
 </div>
+<table class="table table-bordered border">
+    <thead>
+        <th
+            role="button"
+            scope="col"
+            class="text-center align-middle"
+            on:click={() => {
+                sortHeader = "name";
+                sortAscending = !sortAscending;
+            }}
+        >
+            {#if sortHeader == "name"}
+                <span
+                    class="d-inline-block"
+                    class:invertArrow={sortAscending}
+                >
+                    &#x25B2;
+                </span>
+            {/if}
+            Resource name
+        </th>
+        <th
+            role="button"
+            scope="col"
+            class="text-center align-middle"
+            on:click={() => {
+                sortHeader = "shards";
+                sortAscending = !sortAscending;
+            }}
+        >
+            {#if sortHeader == "shards"}
+                <span
+                    class="d-inline-block"
+                    class:invertArrow={sortAscending}
+                >
+                    &#x25B2;
+                </span>
+            {/if}
+            Shards
+        </th>
+        <th
+            role="button"
+            scope="col"
+            class="text-center align-middle"
+            on:click={() => {
+                sortHeader = "state";
+                sortAscending = !sortAscending;
+            }}
+        >
+            {#if sortHeader == "state"}
+                <span
+                    class="d-inline-block"
+                    class:invertArrow={sortAscending}
+                >
+                    &#x25B2;
+                </span>
+            {/if}
+            State
+        </th>
+        <th
+            role="button"
+            scope="col"
+            class="text-center align-middle"
+            on:click={() => {
+                sortHeader = "creationTime";
+                sortAscending = !sortAscending;
+            }}
+        >
+            {#if sortHeader == "creationTime"}
+                <span
+                    class="d-inline-block"
+                    class:invertArrow={sortAscending}
+                >
+                    &#x25B2;
+                </span>
+            {/if}
+            Created at
+        </th>
+        <th
+            role="button"
+            scope="col"
+            class="text-center align-middle"
+            on:click={() => {
+                sortHeader = "terminationTime";
+                sortAscending = !sortAscending;
+            }}
+        >
+            {#if sortHeader == "terminationTime"}
+                <span
+                    class="d-inline-block"
+                    class:invertArrow={sortAscending}
+                >
+                    &#x25B2;
+                </span>
+            {/if}
+            Terminated at
+        </th>
+        <th
+            role="button"
+            scope="col"
+            class="text-center align-middle"
+            on:click={() => {
+                sortHeader = "terminationReason";
+                sortAscending = !sortAscending;
+            }}
+        >
+            {#if sortHeader == "terminationReason"}
+                <span
+                    class="d-inline-block"
+                    class:invertArrow={sortAscending}
+                >
+                    &#x25B2;
+                </span>
+            {/if}
+            Termination reason
+        </th>
+    </thead>
+    <tbody>
+        {#each sortResourcesByKey(resources, sortHeader, sortAscending) as resource (resource.name)}
+            <tr class:d-none={filterResource(resource)}>
+                <td>{resource.name}</td>
+                <td>{resource.instance_info.shards_amount}</td>
+                <td
+                    class="{tableStates[resource.state]}"
+                >
+                {titleCase(resource.state)}
+                </td>
+                <td>{timestampToISODate(resource.instance_info.creation_time * 1000, true)}</td>
+                <td>
+                    {#if resource.instance_info.termination_time > 0}
+                        {timestampToISODate(resource.instance_info.termination_time * 1000, true)}
+                    {:else}
+                        <!-- Still running -->
+                    {/if}
+                </td>
+                <td class="narrow-cell">{resource.instance_info.termination_reason}</td>
+            </tr>
+        {:else}
+            <tr>
+                <td colspan="6"> No resources </td>
+            </tr>
+        {/each}
+    </tbody>
+</table>
+
+<style>
+    .invertArrow {
+        transform: rotate(180deg);
+    }
+
+    .narrow-cell {
+        max-width: 384px;
+    }
+</style>
