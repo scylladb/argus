@@ -311,6 +311,7 @@ class ArgusService:
             rows = self.session.execute(self.run_by_release_stats_statement, parameters=(release_name,))
             rows = sorted(rows, key=lambda r: r["start_time"], reverse=True)
             release_issues = ArgusGithubIssue.filter(release_id=release.id).all()
+            release_comments = ArgusTestRunComment.filter(release_id=release.id)
             for test in release_tests:
                 test_group = release_groups_by_id[test.group_id]
                 release_stats["total"] += 1
@@ -324,10 +325,12 @@ class ArgusService:
                             "build_job_url": run["build_job_url"],
                             "start_time": run["start_time"],
                             "issues": [dict(i.items()) for i in release_issues if i.run_id == run["id"]],
+                            "comments": [dict(i.items()) for i in release_comments if i.test_run_id == run["id"]],
                         }
                         for run in last_runs
                     ]
                     issues = last_runs[0]["issues"] if len(last_runs) > 0 else []
+                    comments = last_runs[0]["comments"] if len(last_runs) > 0 else []
 
                 if not run:
                     release_stats["tests"][test.name] = {
@@ -354,6 +357,8 @@ class ArgusService:
                     release_stats["tests"][test.name]["last_runs"] = last_runs
                     release_stats["tests"][test.name]["hasBugReport"] = len(issues) > 0
                     release_stats["groups"][test_group.name]["hasBugReport"] = len(issues) > 0
+                    release_stats["tests"][test.name]["hasComments"] = len(comments) > 0
+                    release_stats["groups"][test_group.name]["hasComments"] = len(comments) > 0
 
                 release_stats["groups"][test_group.name][run["status"]] += 1
                 release_stats["groups"][test_group.name]["total"] += 1
