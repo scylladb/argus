@@ -7,6 +7,7 @@
         faEye,
         faBug,
         faAngleRight,
+        faComment,
     } from "@fortawesome/free-solid-svg-icons";
 
     import {
@@ -81,26 +82,37 @@
                                 icon={faAngleRight}
                             />
                         {/if}
-                        {#if test.investigation_status && (test.status != TestStatus.PASSED || test.investigation_status != TestInvestigationStatus.NOT_INVESTIGATED)}
-                            <div
-                                class="p-1"
-                                title="Investigation: {TestInvestigationStatusStrings[
-                                    test.investigation_status
-                                ]}"
-                            >
-                                <Fa
-                                    color="#fff"
-                                    icon={investigationStatusIcon[
-                                        test.investigation_status
-                                    ]}
-                                />
+                        <div class="text-center">
+                            <div class="d-flex justify-content-center">
+                                {#if test.investigation_status && (test.status != TestStatus.PASSED || test.investigation_status != TestInvestigationStatus.NOT_INVESTIGATED)}
+                                    <div
+                                        class="p-1 align-self-bottom"
+                                        title="Investigation: {TestInvestigationStatusStrings[
+                                            test.investigation_status
+                                        ]}"
+                                    >
+                                        <Fa
+                                            color="#fff"
+                                            icon={investigationStatusIcon[
+                                                test.investigation_status
+                                            ]}
+                                        />
+                                    </div>
+                                {/if}
+                                {#if test.hasBugReport}
+                                    <div class="p-1 align-self-bottom" title="Has a bug report">
+                                        <Fa color="#fff" icon={faBug} />
+                                    </div>
+                                {/if}
                             </div>
-                        {/if}
-                        {#if test.hasBugReport}
-                            <div class="p-1" title="Has a bug report">
-                                <Fa color="#fff" icon={faBug} />
+                            <div class="align-self-top">
+                                {#if test.hasComments}
+                                    <div class="p-1" title="Has a comment">
+                                        <Fa color="#fff" icon={faComment} />
+                                    </div>
+                                {/if}
                             </div>
-                        {/if}
+                        </div>
                     </div>
                 </div>
             {:else}
