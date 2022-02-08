@@ -58,6 +58,7 @@ class NemesisStatus(str, Enum):
     FAILED = "failed"
     SKIPPED = "skipped"
     SUCCEEDED = "succeeded"
+    TERMINATED = "terminated"
 
 
 class TestStatus(str, Enum):
