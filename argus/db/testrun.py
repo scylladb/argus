@@ -341,7 +341,7 @@ class TestRun:
         "id": (UUID, "partition"),
     }
     _USING_RUNINFO = TestRunInfo
-    _TABLE_NAME = "test_runs_v4_resource_tracking"
+    _TABLE_NAME = "test_runs_v5"
     _IS_TABLE_INITIALIZED = False
     _ARGUS_DB_INTERFACE = None
 
