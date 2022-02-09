@@ -39,7 +39,7 @@
         {/if}
         {#if showTestMap}
             <div>
-                <svelte:component this={TestMapItem} stats={releaseStats} bind:clickedTests={clickedTests} on:testClick />
+                <svelte:component this={TestMapItem} stats={releaseStats} {releaseName} bind:clickedTests={clickedTests} on:testClick />
             </div>
         {/if}
     {:else if releaseStats?.total == -1}

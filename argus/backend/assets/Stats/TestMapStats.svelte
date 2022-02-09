@@ -1,5 +1,5 @@
 <script>
-    import { createEventDispatcher } from "svelte";
+    import { createEventDispatcher, onMount } from "svelte";
     import Fa from "svelte-fa";
     import {
         faSearch,
@@ -15,6 +15,10 @@
         TestInvestigationStatusStrings,
         TestStatus,
     } from "../Common/TestStatus";
+    import { assigneeStore, requestAssigneesForReleaseGroups } from "../Stores/AssigneeSubscriber";
+    import { userList } from "../Stores/UserlistSubscriber";
+    import { getPicture } from "../Common/UserUtils";
+    export let releaseName = "";
     export let clickedTests = {};
     export let stats = {
         tests: {
@@ -23,6 +27,13 @@
                 start_time: 12654364536,
             },
         },
+    };
+    let users = {};
+    $: users = $userList;
+    let assigneeList = {};
+    $: assigneeList = $assigneeStore?.[releaseName] ?? {
+        groups: [],
+        tests: [],
     };
 
     const investigationStatusIcon = {
@@ -51,11 +62,29 @@
                 return tests;
             }, {});
     };
+
+    onMount(() =>  {
+        requestAssigneesForReleaseGroups(releaseName, Object.keys(stats.groups));
+    });
 </script>
 
 {#each Object.entries(stats.groups) as [groupName, group] (groupName)}
     <div>
-        <h5>{groupName}</h5>
+        <h5>
+            <div class="mb-2">{groupName}</div>
+            {#if Object.keys(assigneeList.groups).length > 0 && Object.keys(users).length > 0}
+                <div>
+                    <div class="d-flex align-items-center">
+                        <img
+                            class="img-thumb ms-2"
+                            src="{getPicture(users[assigneeList.groups[groupName]?.[0]]?.picture_id)}"
+                            alt=""
+                            >
+                        <span class="ms-2 fs-6">{users[assigneeList.groups[groupName]?.[0]]?.full_name ?? "unassigned"}</span>
+                    </div>
+                </div>
+            {/if}
+        </h5>
         <div class="my-2 d-flex flex-wrap">
             {#each Object.entries(filterTestsForGroup(groupName, stats.tests)) as [testName, test] (testName)}
                 <div
@@ -116,6 +145,11 @@
         width: 64px;
         height: 64px;
         position: relative;
+    }
+
+    .img-thumb {
+        border-radius: 50%;
+        width: 32px;
     }
 
     .status-block-active:hover {

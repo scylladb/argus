@@ -1,12 +1,15 @@
 <script>
     import { onMount, onDestroy } from "svelte";
     import Fa from "svelte-fa";
-    import { faTimes, faCheck, faSearch } from "@fortawesome/free-solid-svg-icons"
+    import {
+        faTimes,
+        faCheck,
+        faSearch,
+    } from "@fortawesome/free-solid-svg-icons";
     import humanizeDuration from "humanize-duration";
     import Select from "svelte-select";
     import User from "../Profile/User.svelte";
     import ResourcesInfo from "./ResourcesInfo.svelte";
-    import NemesisData from "./NemesisData.svelte";
     import NemesisTable from "./NemesisTable.svelte";
     import ActivityTab from "./ActivityTab.svelte";
     import TestRunInfo from "./TestRunInfo.svelte";
@@ -29,6 +32,10 @@
         testRunStore,
     } from "../Stores/SingleTestRunSubscriber";
     import { userList } from "../Stores/UserlistSubscriber";
+    import {
+        assigneeStore,
+        requestAssigneesForReleaseGroups,
+    } from "../Stores/AssigneeSubscriber";
     import { sendMessage } from "../Stores/AlertStore";
     export let id = "";
     export let build_number = -1;
@@ -43,39 +50,50 @@
     let activityOpen = false;
     let commentsOpen = false;
     let issuesOpen = false;
-    let userSelect = [];
+    let userSelect = {};
+    let assigneeList = [];
 
     const investigationStatusIcon = {
-        "in_progress": faSearch,
-        "not_investigated": faTimes,
-        "investigated": faCheck,
-    }
+        in_progress: faSearch,
+        not_investigated: faTimes,
+        investigated: faCheck,
+    };
 
     const createUserSelectCollection = function (users) {
         const dummyUser = {
-            value: "NONE",
-            label: "nobody",
+            value: "unassigned",
+            label: "unassigned",
             picture_id: undefined,
-            full_name: "Nobody",
+            full_name: "Unassigned",
+            user_id: "none-none-none",
         };
-        userSelect = Object.keys(users).map((user) => {
+
+        userSelect = Object.values(users).map((user) => {
             return {
-                value: users[user].id,
-                label: users[user].username,
-                picture_id: users[user].picture_id,
-                full_name: users[user].full_name,
+                value: user.username,
+                label: user.username,
+                picture_id: user.picture_id,
+                full_name: user.full_name,
+                user_id: user.id,
             };
         });
-        return [dummyUser, ...userSelect];
+
+        return [dummyUser, ...userSelect].reduce((acc, val) => {
+            acc[val.user_id] = val;
+            return acc;
+        }, {});
     };
 
+    $: assigneeList = $assigneeStore?.[test_run?.release_name] ?? {
+        groups: [],
+        tests: [],
+    };
     $: users = $userList;
     $: userSelect = createUserSelectCollection(users);
     $: heartbeatHuman = humanizeDuration(
         currentTime - test_run?.heartbeat * 1000,
         { round: true }
     );
-
     $: startedAtHuman = humanizeDuration(
         currentTime - test_run?.start_time * 1000,
         { round: true }
@@ -84,6 +102,39 @@
     const polledRunUnsub = polledTestRuns.subscribe((data) => {
         test_run = data[id] ?? test_run;
     });
+
+    const findAssignee = function (test_run, assigneeList, userSelect) {
+        const placeholder = {
+            value: "unassigned",
+            id: "none-none-none",
+        };
+        if (Object.values(userSelect).length < 2) return;
+        if (!test_run) {
+            return placeholder;
+        }
+        if (test_run.assignee) {
+            let user = userSelect[test_run.assignee];
+            return {
+                id: user.user_id,
+                value: user.value,
+            };
+        }
+        let key = Object.keys(assigneeList.groups).find((group) =>
+            new RegExp(group).test(test_run.group)
+        );
+        if (key) {
+            let assignees = assigneeList.groups[key];
+            let user = userSelect[assignees[0]];
+            return {
+                id: user.user_id,
+                value: user.value,
+            };
+        }
+        return placeholder;
+    };
+
+    let currentAssignee = "unassigned";
+    $: currentAssignee = findAssignee(test_run, assigneeList, userSelect);
 
     const fetchTestRunData = async function () {
         try {
@@ -100,6 +151,9 @@
             console.log(apiJson);
             if (apiJson.status === "ok") {
                 test_run = apiJson.response;
+                requestAssigneesForReleaseGroups(test_run.release_name, [
+                    test_run.group.split("_")[0],
+                ]);
                 if (build_number == -1) {
                     build_number = parseInt(
                         test_run.build_job_url.split("/").reverse()[1]
@@ -132,9 +186,12 @@
     };
 
     const handleAssign = async function (event) {
-        if (event.detail.value != "NONE" && !users[event.detail.value]) return;
         let new_assignee = event.detail.value;
-        new_assignee = new_assignee != "NONE" ? new_assignee : "none-none-none";
+        new_assignee = Object.values(userSelect).find(user => (user.value == new_assignee));
+        if (!new_assignee) {
+            return;
+        }
+        new_assignee = new_assignee.user_id;
         try {
             let apiResponse = await fetch("/api/v1/test_run/change_assignee", {
                 method: "POST",
@@ -206,16 +263,19 @@
     const handleInvestigationStatus = async function () {
         disableButtons = true;
         try {
-            let apiResponse = await fetch("/api/v1/test_run/change_investigation_status", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    test_run_id: id,
-                    investigation_status: newInvestigationStatus,
-                }),
-            });
+            let apiResponse = await fetch(
+                "/api/v1/test_run/change_investigation_status",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        test_run_id: id,
+                        investigation_status: newInvestigationStatus,
+                    }),
+                }
+            );
             let apiJson = await apiResponse.json();
             console.log(apiJson);
             if (apiJson.status === "ok") {
@@ -259,116 +319,132 @@
 
 <div class="border rounded bg-white p-2">
     {#if test_run}
-        <div class="container-fluid p-0 m-0">
-            <div class="row p-0 m-0">
-                <div class="col-6 py-2">
-                    <div class="d-flex">
-                        <a
-                            class="btn btn-light me-2"
-                            href="/test_run/{id}"
-                            target="_blank">#{build_number}</a
-                        >
-                        <div class="dropdown">
-                            <button
-                                class="btn {StatusButtonCSSClassMap[
-                                    test_run.status
-                                ]} text-light"
-                                type="button"
-                                title={timestampToISODate(
-                                    test_run.end_time * 1000,
-                                    true
-                                )}
-                                data-bs-toggle="dropdown"
-                            >
-                                {test_run.status.toUpperCase()}
-                                {#if InProgressStatuses.find((status) => status == test_run.status)}
-                                    <span
-                                        class="spinner-border spinner-border-sm d-inline-block"
-                                    />
-                                {/if}
-                            </button>
-                            <ul class="dropdown-menu">
-                                {#each Object.keys(TestStatusChangeable) as status}
-                                    <li>
-                                        <button
-                                            class="dropdown-item"
-                                            disabled={disableButtons}
-                                            on:click={() => {
-                                                newStatus =
-                                                    status.toLowerCase();
-                                                handleStatus();
-                                            }}>{status}</button
-                                        >
-                                    </li>
-                                {/each}
-                            </ul>
-                        </div>
-                        <div class="dropdown ms-2">
-                            <button
-                                class="btn {InvestigationButtonCSSClassMap[
-                                    test_run.investigation_status
-                                ]} text-light"
-                                type="button"
-                                data-bs-toggle="dropdown"
-                            >
-                                <Fa icon={investigationStatusIcon[test_run.investigation_status]} />
-                                {TestInvestigationStatusStrings[test_run.investigation_status]}
-                            </button>
-                            <ul class="dropdown-menu">
-                                {#each Object.entries(TestInvestigationStatus) as [key, status]}
-                                    <li>
-                                        <button
-                                            class="dropdown-item"
-                                            disabled={disableButtons}
-                                            on:click={() => {
-                                                newInvestigationStatus = status;
-                                                handleInvestigationStatus();
-                                            }}>{TestInvestigationStatusStrings[status]}</button
-                                        >
-                                    </li>
-                                {/each}
-                            </ul>
-                        </div>
-                    </div>
+        <div class="row p-2">
+            <div class="col-6">
+                <div class="mb-2">
+                <a
+                    class="link-dark"
+                    href="/test_run/{id}"
+                    target="_blank"
+                >
+                {test_run.build_job_name}#{build_number}
+                </a>
                 </div>
-                <div class="col-6 text-end py-3">
-                    <p class="p-0 d-inline-block pe-4">
-                        {test_run.build_job_name}#{build_number}
-                    </p>
+                <div class="d-flex align-items-center">
+                    <div class="dropdown">
+                        <button
+                            class="btn {StatusButtonCSSClassMap[
+                                test_run.status
+                            ]} text-light"
+                            type="button"
+                            title={timestampToISODate(
+                                test_run.end_time * 1000,
+                                true
+                            )}
+                            data-bs-toggle="dropdown"
+                        >
+                            {test_run.status.toUpperCase()}
+                            {#if InProgressStatuses.find((status) => status == test_run.status)}
+                                <span
+                                    class="spinner-border spinner-border-sm d-inline-block"
+                                />
+                            {/if}
+                        </button>
+                        <ul class="dropdown-menu">
+                            {#each Object.keys(TestStatusChangeable) as status}
+                                <li>
+                                    <button
+                                        class="dropdown-item"
+                                        disabled={disableButtons}
+                                        on:click={() => {
+                                            newStatus = status.toLowerCase();
+                                            handleStatus();
+                                        }}>{status}</button
+                                    >
+                                </li>
+                            {/each}
+                        </ul>
+                    </div>
+                    <div class="dropdown ms-2">
+                        <button
+                            class="btn {InvestigationButtonCSSClassMap[
+                                test_run.investigation_status
+                            ]} text-light"
+                            type="button"
+                            data-bs-toggle="dropdown"
+                        >
+                            <Fa
+                                icon={investigationStatusIcon[
+                                    test_run.investigation_status
+                                ]}
+                            />
+                            {TestInvestigationStatusStrings[
+                                test_run.investigation_status
+                            ]}
+                        </button>
+                        <ul class="dropdown-menu">
+                            {#each Object.entries(TestInvestigationStatus) as [key, status]}
+                                <li>
+                                    <button
+                                        class="dropdown-item"
+                                        disabled={disableButtons}
+                                        on:click={() => {
+                                            newInvestigationStatus = status;
+                                            handleInvestigationStatus();
+                                        }}
+                                        >{TestInvestigationStatusStrings[
+                                            status
+                                        ]}</button
+                                    >
+                                </li>
+                            {/each}
+                        </ul>
+                    </div>
                 </div>
             </div>
-            {#if Object.keys(users).length > 0}
-                <div class="row p-2 m-0 justify-content-end">
-                    <div class="col-3 p-2 border rounded">
-                        <h5>Assignee</h5>
-                        <div class="d-flex align-items-center">
-                            {#if users[test_run.assignee]}
-                            <img
-                                class="img-profile me-2"
-                                src={getPicture(users[test_run.assignee]?.picture_id)}
-                                alt={users[test_run.assignee]?.username}
-                            />
-                            {/if}
-                            <div class="flex-fill">
-                                <Select
-                                    Item={User}
-                                    value={users[test_run.assignee]?.full_name ?? "Unassigned"}
-                                    items={userSelect}
-                                    on:select={handleAssign}
-                                />
+            <div class="col-6">
+                <div class="row mb-2 text-sm justify-content-end">
+                    <div class="col-6">
+                        {#if Object.keys(userSelect).length > 1}
+                            <div class="text-muted text-sm text-end mb-2">Assignee</div>
+                            <div class="border rounded">
+                                <div class="d-flex align-items-center m-1">
+                                    {#if users[currentAssignee.id]}
+                                        <img
+                                            class="img-profile me-2"
+                                            src={getPicture(
+                                                users[currentAssignee.id]
+                                                    ?.picture_id
+                                            )}
+                                            alt={users[currentAssignee.id]
+                                                ?.username}
+                                        />
+                                    {/if}
+                                    <div class="flex-fill">
+                                        <Select
+                                            Item={User}
+                                            value={currentAssignee.value}
+                                            items={Object.values(userSelect)}
+                                            hideEmptyState={true}
+                                            isClearable={false}
+                                            isSearchable={true}
+                                            on:select={handleAssign}
+                                        />
+                                    </div>
+                                </div>
                             </div>
+                        {/if}
+                    </div>
+                </div>
+                {#if InProgressStatuses.includes(test_run.status)}
+                <div class="row text-end">
+                        <div class="col d-flex flex-column text-muted text-sm">
+                            <div>Last heartbeat: {heartbeatHuman} ago</div>
+                            <div>Started: {startedAtHuman} ago</div>
                         </div>
-                    </div>
                 </div>
-            {/if}
-            {#if InProgressStatuses.includes(test_run.status)}
-                <div class="row text-sm text-muted p-0 m-0">
-                    <div class="col p-2">
-                        Last heartbeat: {heartbeatHuman} ago
-                    </div>
-                    <div class="col p-2">Started: {startedAtHuman} ago</div>
-                </div>
-            {/if}
+                {/if}
+            </div>
         </div>
         <nav>
             <div class="nav nav-tabs" id="nav-tab-{id}" role="tablist">
@@ -533,7 +609,10 @@
                 </div>
             </div>
             <div class="tab-pane fade" id="nav-nemesis-{id}" role="tabpanel">
-                <NemesisTable nemesisCollection={test_run.nemesis_data} resources={test_run.allocated_resources}/>
+                <NemesisTable
+                    nemesisCollection={test_run.nemesis_data}
+                    resources={test_run.allocated_resources}
+                />
             </div>
             <div class="tab-pane fade" id="nav-logs-{id}" role="tabpanel">
                 {#if test_run.logs.length > 0}
@@ -613,5 +692,4 @@
         border-radius: 50%;
         object-fit: cover;
     }
-
 </style>

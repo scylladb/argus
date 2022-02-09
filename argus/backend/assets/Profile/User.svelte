@@ -14,38 +14,38 @@
     class:user-first={isFirst}
     class:user-hover={isHover}
 >
-    <div class="p-1">
-        <div class="d-inline-block">
+    <div class="d-flex align-items-center">
+        <div class="ms-2">
             <img
                 class="img-profile"
                 src={getPicture(item.picture_id)}
                 alt={item.label}
             />
         </div>
-        <div class="d-inline-block">
+        <div class="ms-2">
             {item.full_name}
+            <div class="text-muted">{item.label}</div>
         </div>
-        <div hidden>{item.label}</div>
     </div>
 </div>
 
 <style>
     .img-profile {
-        height: 32px;
+        width: 32px;
         border-radius: 50%;
         object-fit: cover;
     }
 
     .user-first {
-        background-color: #a0a0a0;
+        background-color: #ffffff;
     }
 
     .user-active {
-        background-color: #2058c0;
+        background-color: #6b9cf7;
     }
 
     .user-hover {
-        background-color: #414141;
+        background-color: #537cee;
         color: white;
         cursor: pointer;
     }

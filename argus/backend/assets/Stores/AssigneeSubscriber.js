@@ -1,6 +1,9 @@
 import {
     writable
 } from "svelte/store";
+import {
+    sendMessage
+} from "./AlertStore";
 
 
 const assigneeRequests = writable({});
@@ -47,7 +50,8 @@ const fetchAssignees = async function (set) {
 export const requestAssigneesForReleaseGroups = function (release, groups) {
     assigneeRequests.update((value) => {
         let releaseBody = value[release] ?? {};
-        releaseBody.groups = groups;
+        let groupSet = new Set([...(releaseBody.groups ?? []), ...groups]);
+        releaseBody.groups = Array.from(groupSet.values());
         value[release] = releaseBody;
         return value;
     });
