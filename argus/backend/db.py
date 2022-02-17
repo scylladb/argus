@@ -14,7 +14,7 @@ from cassandra.query import dict_factory
 from cassandra.auth import PlainTextAuthProvider
 
 from argus.db.config import FileConfig
-from argus.backend.models import USED_MODELS, USED_TYPES
+from argus.db.models import USED_MODELS, USED_TYPES
 from argus.db.interface import ArgusDatabase
 from argus.db.testrun import TestRun
 

@@ -16,7 +16,7 @@ class FakeCursor:
         return True
 
 
-def test_heartbeat_thread(completed_testrun: TestRunInfo, mock_cluster: ArgusDatabase, monkeypatch: pytest.MonkeyPatch):
+def test_heartbeat_thread(completed_testrun: TestRunInfo, mock_cluster: ArgusDatabase, monkeypatch: pytest.MonkeyPatch, mock_cql_engine):
     # pylint: disable=unused-argument
     monkeypatch.setattr(MockSession, "MOCK_RESULT_SET", FakeCursor())
     test_id = uuid4()
@@ -37,7 +37,7 @@ def test_heartbeat_thread(completed_testrun: TestRunInfo, mock_cluster: ArgusDat
 
 
 def test_heartbeat_thread_shutdown(completed_testrun: TestRunInfo, mock_cluster: ArgusDatabase,
-                                   monkeypatch: pytest.MonkeyPatch):
+                                   monkeypatch: pytest.MonkeyPatch, mock_cql_engine):
     # pylint: disable=unused-argument
     monkeypatch.setattr(MockSession, "MOCK_RESULT_SET", FakeCursor())
     test_id = uuid4()

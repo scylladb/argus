@@ -8,14 +8,21 @@ from typing import KeysView, Union, Optional, Any, get_args as get_type_args, ge
 from types import GenericAlias
 
 import cassandra.cluster
+import cassandra.cqltypes
 from cassandra import ConsistencyLevel
 from cassandra.auth import PlainTextAuthProvider
-import cassandra.cqltypes
+from cassandra.query import named_tuple_factory
 from cassandra.policies import WhiteListRoundRobinPolicy
+from cassandra.cluster import ExecutionProfile, EXEC_PROFILE_DEFAULT
+from cassandra.cqlengine import connection
+from cassandra.cqlengine import models
+from cassandra.cqlengine import management
 
 from argus.db.config import BaseConfig, FileConfig
 from argus.db.db_types import ColumnInfo, CollectionHint, ArgusUDTBase
 from argus.db.cloud_types import ResourceState
+from argus.db.models import ArgusReleaseSchedule, ArgusReleaseScheduleAssignee, \
+    ArgusReleaseScheduleGroup, ArgusReleaseScheduleTest
 
 LOGGER = logging.getLogger(__name__)
 
@@ -38,6 +45,14 @@ class ArgusInterfaceNameError(Exception):
 
 class ArgusDatabase:
     # pylint: disable=too-many-instance-attributes
+    CQL_ENGINE_CONNECTION_NAME = 'argus_cql_engine_conn'
+    ARGUS_EXECUTION_PROFILE = "argus_named_tuple"
+    REQUIRED_CQL_ENGINE_MODELS = [
+        ArgusReleaseSchedule,
+        ArgusReleaseScheduleGroup,
+        ArgusReleaseScheduleTest,
+        ArgusReleaseScheduleAssignee,
+    ]
     PYTHON_SCYLLA_TYPE_MAPPING = {
         int: cassandra.cqltypes.IntegerType.typename,
         float: cassandra.cqltypes.FloatType.typename,
@@ -54,21 +69,40 @@ class ArgusDatabase:
         if not config:
             config = FileConfig()
         self.config = config
+        self.execution_profile = ExecutionProfile(
+            load_balancing_policy=WhiteListRoundRobinPolicy(hosts=self.config.contact_points),
+            consistency_level=ConsistencyLevel.QUORUM,
+        )
+        self.exec_profile_named_tuple = ExecutionProfile(
+            load_balancing_policy=WhiteListRoundRobinPolicy(hosts=self.config.contact_points),
+            consistency_level=ConsistencyLevel.QUORUM,
+            row_factory=named_tuple_factory
+        )
         self.cluster = cassandra.cluster.Cluster(contact_points=self.config.contact_points,
                                                  auth_provider=PlainTextAuthProvider(
                                                      username=self.config.username,
                                                      password=self.config.password),
-                                                 load_balancing_policy=WhiteListRoundRobinPolicy(
-                                                     hosts=self.config.contact_points))
-
+                                                 execution_profiles={
+                                                     EXEC_PROFILE_DEFAULT: self.execution_profile,
+                                                     self.ARGUS_EXECUTION_PROFILE: self.exec_profile_named_tuple
+                                                 }
+                                                 )
         self.session = self.cluster.connect()
-        self.session.default_consistency_level = ConsistencyLevel.QUORUM
         self._keyspace_initialized = False
         self.prepared_statements = {}
         self.initialized_tables = {}
         self._table_keys = {}
         self._mapped_udts = {}
         self._current_keyspace = self.init_keyspace(name=self.config.keyspace_name)
+        connection.register_connection(self.CQL_ENGINE_CONNECTION_NAME, session=self.session)
+        for model in self.REQUIRED_CQL_ENGINE_MODELS:
+            management.sync_table(model, keyspaces=(self._current_keyspace,),
+                                  connections=(self.CQL_ENGINE_CONNECTION_NAME,))
+        if not models.DEFAULT_KEYSPACE:
+            models.DEFAULT_KEYSPACE = self._current_keyspace
+        elif models.DEFAULT_KEYSPACE != self._current_keyspace:
+            LOGGER.warning(
+                "CQL Engine DEFAULT_KEYSPACE has been set already and differs from interface keyspace, this could cause issues")
 
     @classmethod
     def get(cls, config: BaseConfig = None):
@@ -117,12 +151,12 @@ class ArgusDatabase:
         key_string = ".".join(keys).encode(encoding="utf-8")
         return sha1(key_string).hexdigest()
 
-    def init_keyspace(self, name="argus", prefix="", suffix=""):
+    def init_keyspace(self, name="argus", prefix="", suffix="") -> str:
         keyspace_name = self._verify_keyspace_name(f"{prefix}{name}{suffix}")
         query = f"CREATE KEYSPACE IF NOT EXISTS {keyspace_name} " \
                 "WITH replication={'class': 'SimpleStrategy', 'replication_factor' : 3}"
         LOGGER.debug("Running query: %s", query)
-        self.session.execute(query=query)
+        self.session.execute(query=query, execution_profile=self.ARGUS_EXECUTION_PROFILE)
         self.session.set_keyspace(keyspace_name)
         self._keyspace_initialized = True
         return keyspace_name
@@ -165,7 +199,7 @@ class ArgusDatabase:
         columns_query = ", ".join(columns_query)
         completed_query = query.format(table_name=table_name, columns=columns_query, primary_key=primary_key_def)
         LOGGER.debug("About to execute: \"%s\"", completed_query)
-        self.session.execute(query=completed_query)
+        self.session.execute(query=completed_query, execution_profile=self.ARGUS_EXECUTION_PROFILE)
         self.initialized_tables[table_name] = True
         return True, "Initialization complete"
 
@@ -218,7 +252,7 @@ class ArgusDatabase:
 
         completed_query = query.format(name=udt_name, fields=joined_fields)
         LOGGER.debug("About to execute: \"%s\"", completed_query)
-        self.session.execute(query=completed_query)
+        self.session.execute(query=completed_query, execution_profile=self.ARGUS_EXECUTION_PROFILE)
 
         existing_udts = self._mapped_udts.get(self._current_keyspace, [])
         existing_udts.append(cls)
@@ -235,7 +269,7 @@ class ArgusDatabase:
                                                                           query=f"SELECT * FROM {table_name} "
                                                                                 "WHERE id = ?"))
 
-        cursor = self.session.execute(query=query, parameters=(run_id,))
+        cursor = self.session.execute(query=query, parameters=(run_id,), execution_profile=self.ARGUS_EXECUTION_PROFILE)
 
         return cursor.one()
 
@@ -247,7 +281,8 @@ class ArgusDatabase:
                                              self.prepare_query_for_table(table_name=table_name, query_type="insert",
                                                                           query=f"INSERT INTO {table_name} JSON ?"))
 
-        self.session.execute(query=query, parameters=(json.dumps(run_data),))
+        self.session.execute(query=query, parameters=(json.dumps(run_data),),
+                             execution_profile=self.ARGUS_EXECUTION_PROFILE)
 
     def update(self, table_name: str, run_data: dict):
         # pylint: disable=too-many-locals
@@ -292,4 +327,4 @@ class ArgusDatabase:
         query_parameters = _convert_data_to_sequence(run_data)
         parameters = [*query_parameters, *where_params]
         LOGGER.debug("Parameters: %s", parameters)
-        self.session.execute(prepared_statement, parameters=parameters)
+        self.session.execute(prepared_statement, parameters=parameters, execution_profile=self.ARGUS_EXECUTION_PROFILE)

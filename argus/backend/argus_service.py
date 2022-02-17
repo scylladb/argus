@@ -18,7 +18,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from argus.backend.db import ScyllaCluster
 from argus.db.db_types import TestInvestigationStatus
 from argus.db.testrun import TestRun, TestStatus
-from argus.backend.models import (
+from argus.db.models import (
     ArgusGithubIssue,
     ArgusRelease,
     ArgusReleaseGroup,

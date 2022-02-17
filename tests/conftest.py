@@ -4,9 +4,13 @@ from time import sleep, time
 from os import urandom
 from random import choice
 from subprocess import run
+from unittest.mock import MagicMock
 import pytest
 import docker
 import cassandra.cluster
+import cassandra.cqlengine.management
+import cassandra.cqlengine.connection
+
 from mocks.mock_cluster import MockCluster
 from argus.db.testrun import TestRunInfo, TestDetails, TestResourcesSetup, TestLogs, TestResults, TestResources
 from argus.db.interface import ArgusDatabase
@@ -22,6 +26,12 @@ LOGGER = logging.getLogger(__name__)
 @pytest.fixture(scope="function")
 def mock_cluster(monkeypatch):
     monkeypatch.setattr(cassandra.cluster, "Cluster", MockCluster)
+
+
+@pytest.fixture(scope="function")
+def mock_cql_engine(monkeypatch):
+    monkeypatch.setattr(cassandra.cqlengine.connection, "register_connection", MagicMock())
+    monkeypatch.setattr(cassandra.cqlengine.management, "sync_table", MagicMock())
 
 
 @pytest.fixture(scope="function")
