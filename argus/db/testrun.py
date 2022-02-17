@@ -1,4 +1,5 @@
 import logging
+import datetime
 import time
 import traceback
 import sys
@@ -13,6 +14,8 @@ from argus.db.cloud_types import CloudResource, CloudInstanceDetails, BaseCloudS
 from argus.db.interface import ArgusDatabase
 from argus.db.db_types import ColumnInfo, CollectionHint, NemesisRunInfo, TestStatus, TestInvestigationStatus, \
     EventsBySeverity, PackageVersion
+from argus.db.models import ArgusReleaseSchedule, ArgusReleaseScheduleAssignee, ArgusReleaseScheduleGroup, \
+    ArgusReleaseScheduleTest
 
 LOGGER = logging.getLogger(__name__)
 
@@ -516,6 +519,13 @@ class TestRun:
             if not self._IS_TABLE_INITIALIZED:
                 self.init_own_table(self._config)
             if not self.exists():
+                if self.assignee == "":
+                    try:
+                        self.assignee = self._get_current_assignee_from_schedule()
+                    except Exception:  # pylint: disable=broad-except
+                        LOGGER.warning("Error getting assignee from database")
+                        LOGGER.debug("Details: ", exc_info=True)
+
                 LOGGER.debug("Inserting data for test run: %s", self.id)
                 self.argus.insert(table_name=self._TABLE_NAME, run_data=self.serialize())
             else:
@@ -529,6 +539,49 @@ class TestRun:
         if self.argus.fetch(table_name=self._TABLE_NAME, run_id=self.id):
             return True
         return False
+
+    def _get_current_assignee_from_schedule(self) -> str:
+        """
+            Iterate over all schedules (groups and tests) and return first available assignee
+        """
+
+        scheduled_groups = ArgusReleaseScheduleGroup.filter(
+            release=self.release_name, name=self.group
+        ).all().using(
+            connection=self.argus.CQL_ENGINE_CONNECTION_NAME
+        )
+
+        scheduled_tests = ArgusReleaseScheduleTest.filter(
+            release=self.release_name, name=self.run_info.details.name
+        ).all().using(
+            connection=self.argus.CQL_ENGINE_CONNECTION_NAME
+        )
+
+        unique_schedule_ids = {scheduled_obj.schedule_id for scheduled_obj in [*scheduled_tests, *scheduled_groups]}
+
+        schedules = ArgusReleaseSchedule.filter(
+            release=self.release_name, schedule_id__in=tuple(unique_schedule_ids)
+        ).all().using(
+            connection=self.argus.CQL_ENGINE_CONNECTION_NAME
+        )
+
+        today = datetime.datetime.utcnow()
+
+        valid_schedules = []
+        for schedule in schedules:
+            if schedule.period_start <= today <= schedule.period_end:
+                valid_schedules.append(schedule)
+
+        assignees_uuids = []
+        for schedule in valid_schedules:
+            assignees = ArgusReleaseScheduleAssignee.filter(
+                schedule_id=schedule.schedule_id
+            ).all().using(
+                connection=self.argus.CQL_ENGINE_CONNECTION_NAME
+            )
+            assignees_uuids.append(*[str(assignee.assignee) for assignee in assignees])
+
+        return assignees_uuids[0] if len(assignees_uuids) > 0 else ""
 
     def shutdown(self):
         LOGGER.debug("Shutting down cluster connection...")

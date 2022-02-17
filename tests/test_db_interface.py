@@ -11,14 +11,14 @@ from argus.db.interface import ArgusDatabase, ArgusInterfaceNameError, \
 LOGGER = logging.getLogger(__name__)
 
 
-def test_interface_connection(mock_cluster):  # pylint: disable=unused-argument
+def test_interface_connection(mock_cluster, mock_cql_engine):  # pylint: disable=unused-argument
     database = ArgusDatabase.get()
     assert not database.session.is_shutdown
     ArgusDatabase.destroy()
     assert database.session.is_shutdown
 
 
-def test_interface_from_config(mock_cluster):  # pylint: disable=unused-argument
+def test_interface_from_config(mock_cluster, mock_cql_engine):  # pylint: disable=unused-argument
     database = ArgusDatabase.from_config(
         config=Config(username="a", password="a", contact_points=["127.0.0.1", "127.0.0.2", "127.0.0.3"],
                       keyspace_name="example"))
@@ -27,18 +27,18 @@ def test_interface_from_config(mock_cluster):  # pylint: disable=unused-argument
     assert MockSession.MOCK_CURRENT_KEYSPACE == "example"
 
 
-def test_interface_is_singleton(mock_cluster, argus_interface_default):  # pylint: disable=unused-argument
+def test_interface_is_singleton(mock_cluster, mock_cql_engine, argus_interface_default):  # pylint: disable=unused-argument
     database = ArgusDatabase.get()
 
     assert id(argus_interface_default) == id(database)
 
 
-def test_inteface_supported_types(mock_cluster, argus_interface_default):  # pylint: disable=unused-argument
+def test_inteface_supported_types(mock_cluster, mock_cql_engine, argus_interface_default):  # pylint: disable=unused-argument
     for typecls in [int, float, str, UUID]:
         assert argus_interface_default.is_native_type(typecls)
 
 
-def test_interface_schema_init(mock_cluster, preset_test_details_schema, simple_primary_key, argus_interface_default):
+def test_interface_schema_init(mock_cluster, mock_cql_engine, preset_test_details_schema, simple_primary_key, argus_interface_default):
     # pylint: disable=unused-argument
     schema = {
         **simple_primary_key,
@@ -55,7 +55,7 @@ def test_interface_schema_init(mock_cluster, preset_test_details_schema, simple_
                                              "PRIMARY KEY (id))"
 
 
-def test_interface_init_table_twice(mock_cluster, preset_test_details_schema, simple_primary_key,
+def test_interface_init_table_twice(mock_cluster, mock_cql_engine, preset_test_details_schema, simple_primary_key,
                                     argus_interface_default):
     # pylint: disable=unused-argument
     schema = {
@@ -69,20 +69,20 @@ def test_interface_init_table_twice(mock_cluster, preset_test_details_schema, si
     assert second_result[1] == "Table test_table already initialized"
 
 
-def test_interface_prepare_cache(mock_cluster, argus_interface_default):  # pylint: disable=unused-argument
+def test_interface_prepare_cache(mock_cluster, mock_cql_engine, argus_interface_default):  # pylint: disable=unused-argument
     statement = argus_interface_default.prepare_query_for_table("example", "test", "SELECT * FROM example")
     cached_statement = argus_interface_default.prepared_statements.get("example_test")
 
     assert id(statement) == id(cached_statement)
 
 
-def test_interface_keyspace_naming(mock_cluster):  # pylint: disable=unused-argument
+def test_interface_keyspace_naming(mock_cluster, mock_cql_engine):  # pylint: disable=unused-argument
     with pytest.raises(ArgusInterfaceNameError):
         ArgusDatabase.from_config(
             Config(username="a", password="b", contact_points=["127.0.0.1"], keyspace_name="has.a.dot"))
 
 
-def test_interface_fetch(monkeypatch, mock_cluster, argus_interface_default):  # pylint: disable=unused-argument
+def test_interface_fetch(monkeypatch, mock_cluster, mock_cql_engine, argus_interface_default):  # pylint: disable=unused-argument
     class ResultSet:
         # pylint: disable=too-few-public-methods
         @staticmethod
@@ -95,7 +95,7 @@ def test_interface_fetch(monkeypatch, mock_cluster, argus_interface_default):  #
     assert result
 
 
-def test_interface_fetch_non_existing(monkeypatch, mock_cluster, argus_interface_default):
+def test_interface_fetch_non_existing(monkeypatch, mock_cluster, mock_cql_engine, argus_interface_default):
     # pylint: disable=unused-argument
     class ResultSet:
         # pylint: disable=too-few-public-methods
@@ -109,7 +109,7 @@ def test_interface_fetch_non_existing(monkeypatch, mock_cluster, argus_interface
     assert not result
 
 
-def test_interface_insert(mock_cluster, argus_interface_default):  # pylint: disable=unused-argument
+def test_interface_insert(mock_cluster, mock_cql_engine, argus_interface_default):  # pylint: disable=unused-argument
     data = {
         "id": str(uuid4()),
         "column": "value",
@@ -123,7 +123,7 @@ def test_interface_insert(mock_cluster, argus_interface_default):  # pylint: dis
     assert json.loads(parameters) == data
 
 
-def test_interface_update(mock_cluster, simple_primary_key, preset_test_details_schema, preset_test_details_serialized,
+def test_interface_update(mock_cluster, mock_cql_engine, simple_primary_key, preset_test_details_schema, preset_test_details_serialized,
                           argus_interface_default):
     # pylint: disable=unused-argument
     schema = {
@@ -142,14 +142,14 @@ def test_interface_update(mock_cluster, simple_primary_key, preset_test_details_
     assert str(MockSession.MOCK_LAST_QUERY[1][-1:][0]) == test_id  # pylint: disable=unsubscriptable-object
 
 
-def test_interface_update_uninitialized_table(mock_cluster, simple_primary_key, preset_test_details_schema,
+def test_interface_update_uninitialized_table(mock_cluster, mock_cql_engine, simple_primary_key, preset_test_details_schema,
                                               preset_test_details_serialized, argus_interface_default):
     # pylint: disable=unused-argument
     with pytest.raises(ArgusInterfaceSchemaError):
         argus_interface_default.update("test_table", {})
 
 
-def test_interface_update_missing_primary_keys(mock_cluster, simple_primary_key, preset_test_details_schema,
+def test_interface_update_missing_primary_keys(mock_cluster, mock_cql_engine, simple_primary_key, preset_test_details_schema,
                                                preset_test_details_serialized, argus_interface_default):
     # pylint: disable=unused-argument
     schema = {

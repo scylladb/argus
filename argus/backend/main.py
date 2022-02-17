@@ -3,7 +3,7 @@ from flask import (
     Blueprint, flash, g, redirect, render_template, request, session, url_for, make_response
 )
 from argus.backend.argus_service import ArgusService
-from argus.backend.models import WebFileStorage
+from argus.db.models import WebFileStorage
 from argus.backend.auth import login_required
 
 bp = Blueprint('main', __name__)
