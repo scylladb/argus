@@ -317,7 +317,7 @@
     });
 </script>
 
-<div class="border rounded bg-white p-2">
+<div class="border rounded p-2 shadow-sm testrun-card mb-4">
     {#if test_run}
         <div class="row p-2">
             <div class="col-6">
@@ -528,7 +528,7 @@
             </div>
         </nav>
         <div
-            class="tab-content border-start border-end border-bottom"
+            class="tab-content border-start border-end border-bottom bg-white"
             id="nav-tabContent-{id}"
         >
             <div
@@ -676,5 +676,9 @@
         height: 32px;
         border-radius: 50%;
         object-fit: cover;
+    }
+
+    .testrun-card {
+        background-color: #fafafa;
     }
 </style>
