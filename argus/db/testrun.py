@@ -624,8 +624,9 @@ class TestRunWithHeartbeat(TestRun):
             if self._shutdown_event.is_set():
                 break
             LOGGER.debug("Sending heartbeat...")
-            self.heartbeat = time.time()
-            self.save()
+            self.heartbeat = int(time.time())
+            self.argus.session.execute(f"UPDATE {TestRun.table_name()} SET heartbeat = ? WHERE id = ?",
+                                       parameters=(self.heartbeat, self.id,))
         LOGGER.debug("Heartbeat exit")
 
     def shutdown(self):
