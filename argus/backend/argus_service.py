@@ -71,6 +71,7 @@ class ArgusService:
         )
         self.jobs_by_assignee = self.database.prepare(
             "SELECT id, status, start_time, assignee, release_name, "
+            "investigation_status, "
             "group, name, build_job_name, build_job_url FROM "
             f"{TestRun.table_name()} WHERE assignee = ?"
         )
@@ -1027,8 +1028,27 @@ class ArgusService:
 
     def get_jobs_for_user(self, user: User):
         runs = self.session.execute(self.jobs_by_assignee, parameters=(str(user.id),))
-
-        return runs
+        schedules = self.get_schedules_for_user(user)
+        valid_runs = []
+        for run in runs:
+            run_date = datetime.datetime.fromtimestamp(run["start_time"])
+            for schedule in schedules:
+                if not run["release_name"] == schedule["release"]:
+                    continue
+                if not schedule["period_start"] < run_date < schedule["period_end"]:
+                    continue
+                if run["assignee"] in schedule["assignees"]:
+                    valid_runs.append(run)
+                    continue
+                group = run["group"].split("_")[0]
+                if group in schedule["groups"]:
+                    valid_runs.append(run)
+                    break
+                filtered_tests = [test for test in schedule["tests"] if re.match(f"^{test}(-test)?$", run["name"])]
+                if len(filtered_tests) > 0:
+                    valid_runs.append(run)
+                    break
+        return valid_runs
 
     def get_schedules_for_user(self, user: User):
         all_assigned_schedules = ArgusReleaseScheduleAssignee.filter(assignee=user.id).all()
