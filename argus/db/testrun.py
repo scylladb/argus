@@ -344,7 +344,7 @@ class TestRun:
         "id": (UUID, "partition"),
     }
     _USING_RUNINFO = TestRunInfo
-    _TABLE_NAME = "test_runs_v5"
+    _TABLE_NAME = "test_runs_v6"
     _IS_TABLE_INITIALIZED = False
     _ARGUS_DB_INTERFACE = None
 
