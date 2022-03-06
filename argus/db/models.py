@@ -57,6 +57,7 @@ class UserOauthToken(Model):
 
 
 class ArgusRelease(Model):
+    __table_name__ = "argus_release_v2"
     id = columns.UUID(primary_key=True, default=uuid4)
     name = columns.Text(index=True, required=True)
     pretty_name = columns.Text()
@@ -66,17 +67,26 @@ class ArgusRelease(Model):
     picture_id = columns.UUID()
     enabled = columns.Boolean(default=lambda: True)
 
+    def __eq__(self, other):
+        return self.name == other.name
+
 
 class ArgusReleaseGroup(Model):
+    __table_name__ = "argus_group_v2"
     id = columns.UUID(primary_key=True, default=uuid4)
     release_id = columns.UUID(required=True, index=True)
     name = columns.Text(required=True, index=True)
     pretty_name = columns.Text()
     description = columns.Text()
     assignee = columns.List(value_type=columns.UUID)
+    enabled = columns.Boolean(default=lambda: True)
+
+    def __eq__(self, other):
+        return self.name == other.name and self.release_id == other.release_id
 
 
 class ArgusReleaseGroupTest(Model):
+    __table_name__ = "argus_test_v2"
     id = columns.UUID(primary_key=True, default=uuid4)
     group_id = columns.UUID(required=True, index=True)
     release_id = columns.UUID(required=True, index=True)
@@ -84,6 +94,10 @@ class ArgusReleaseGroupTest(Model):
     pretty_name = columns.Text()
     description = columns.Text()
     assignee = columns.List(value_type=columns.UUID)
+    enabled = columns.Boolean(default=lambda: True)
+
+    def __eq__(self, other):
+        return self.name == other.name and self.group_id == other.group_id and self.release_id == other.release_id
 
 
 class ArgusPlannedTestsForRelease(Model):
@@ -144,14 +158,16 @@ class ArgusGithubIssue(Model):
 
 class ArgusReleaseSchedule(Model):
     release = columns.Text(primary_key=True, required=True)
-    schedule_id = columns.TimeUUID(primary_key=True, default=uuid1, clustering_order="DESC")
+    schedule_id = columns.TimeUUID(
+        primary_key=True, default=uuid1, clustering_order="DESC")
     period_start = columns.DateTime(required=True, default=datetime.utcnow)
     period_end = columns.DateTime(required=True)
 
 
 class ArgusReleaseScheduleAssignee(Model):
     assignee = columns.UUID(primary_key=True)
-    id = columns.TimeUUID(primary_key=True, default=uuid1, clustering_order="DESC")
+    id = columns.TimeUUID(primary_key=True, default=uuid1,
+                          clustering_order="DESC")
     schedule_id = columns.TimeUUID(required=True, index=True)
     release = columns.Text(required=True)
 
@@ -159,14 +175,16 @@ class ArgusReleaseScheduleAssignee(Model):
 class ArgusReleaseScheduleTest(Model):
     name = columns.Text(partition_key=True)
     release = columns.Text(partition_key=True)
-    id = columns.TimeUUID(primary_key=True, default=uuid1, clustering_order="DESC")
+    id = columns.TimeUUID(primary_key=True, default=uuid1,
+                          clustering_order="DESC")
     schedule_id = columns.TimeUUID(required=True, index=True)
 
 
 class ArgusReleaseScheduleGroup(Model):
     name = columns.Text(partition_key=True)
     release = columns.Text(partition_key=True)
-    id = columns.TimeUUID(primary_key=True, default=uuid1, clustering_order="DESC")
+    id = columns.TimeUUID(primary_key=True, default=uuid1,
+                          clustering_order="DESC")
     schedule_id = columns.TimeUUID(required=True, index=True)
 
 
