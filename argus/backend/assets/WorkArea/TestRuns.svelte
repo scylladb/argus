@@ -11,15 +11,16 @@
     export let removableRuns = false;
     const dispatch = createEventDispatcher();
     let clickedTestRuns = {};
-    let testInfo = data.test;
-    let runs = data.runs;
+    let testName = data.test;
+    let groupName = data.group
+    let runs = [];
     let noRuns = false;
     let updateCounter = 0;
     let releaseName = data.release;
-    let myId = `${releaseName}/${testInfo}`;
+    let myId = `${releaseName}/${groupName}/${testName}`;
 
     runStore.update((val) => {
-        val[myId] = [releaseName, testInfo]
+        val[myId] = [releaseName, testName, groupName]
         return val;
     });
 
@@ -77,7 +78,7 @@
                 ></span
             >
             {/if}
-            <div>{testInfo} ({releaseName})</div>
+            <div>{testName} ({releaseName}/{groupName})</div>
             {#if runs.length > 0}
             <div class="ms-auto flex-fill text-end">{timestampToISODate(runs[0].start_time * 1000)}</div>
             <div class="mx-2">#{runs[0].build_number}</div>

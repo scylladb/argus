@@ -22,6 +22,7 @@
         failed: 0,
         total: -1,
         lastStatus: "unknown",
+        tests: {},
     };
     let groupStats = groupStatsTemplate;
     let tests = [];
@@ -61,7 +62,7 @@
         groupStats =
             val["releases"]?.[release]?.["groups"]?.[group.name] ??
             groupStatsTemplate;
-        testStatus = val["releases"]?.[release]?.["tests"];
+        testStatus = groupStats["tests"];
         sortTestsByStatus();
     });
 

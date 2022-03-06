@@ -45,10 +45,11 @@
 
     const dispatch = createEventDispatcher();
 
-    const handleTestClick = function (name, test) {
+    const handleTestClick = function (name, test, group) {
         if (test.start_time == 0) return;
         dispatch("testClick", {
             name: name,
+            group: group,
             status: test.status,
             start_time: test.start_time,
             last_runs: test.last_runs,
@@ -87,10 +88,10 @@
             {/if}
         </h5>
         <div class="my-2 d-flex flex-wrap">
-            {#each Object.entries(filterTestsForGroup(groupName, stats.tests)) as [testName, test] (testName)}
+            {#each Object.entries(filterTestsForGroup(groupName, group.tests)) as [testName, test] (testName)}
                 <div
                     on:click={() => {
-                        handleTestClick(testName, test);
+                        handleTestClick(testName, test, groupName);
                     }}
                     class:status-block-active={test.start_time != 0}
                     class="d-inline-block border status-block {StatusBackgroundCSSClassMap[

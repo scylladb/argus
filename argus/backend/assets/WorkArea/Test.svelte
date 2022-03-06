@@ -22,8 +22,8 @@
     let startTime = 0;
     let fetching = false;
     testRequests.update((val) => [...val, [release, group, test.name]]);
-    $: lastStatus = $stats?.["releases"]?.[release]?.["tests"]?.[test.name]["status"] ?? lastStatus;
-    $: startTime = $stats?.["releases"]?.[release]?.["tests"]?.[test.name]["start_time"] ?? startTime;
+    $: lastStatus = $stats?.["releases"]?.[release]?.["groups"]?.[group]?.["tests"]?.[test.name]["status"] ?? lastStatus;
+    $: startTime = $stats?.["releases"]?.[release]?.["groups"]?.[group]?.["tests"]?.[test.name]["start_time"] ?? startTime;
 
     const titleCase = function (string) {
         return string[0].toUpperCase() + string.slice(1).toLowerCase();
@@ -31,16 +31,17 @@
 
 
     const handleTestClick = function (e) {
-        if (runs[`${release}/${test.name}`]) {
-            dispatch("testRunRemove", { runId: `${release}/${test.name}`});
+        if (runs[`${release}/${group}/${test.name}`]) {
+            dispatch("testRunRemove", { runId: `${release}/${group}/${test.name}`});
             return;
         }
         if (fetching) return;
         fetching = true;
         dispatch("testRunRequest", {
-            uuid: `${release}/${test.name}`,
+            uuid: `${release}/${group}/${test.name}`,
             runs: [],
             test: test.name,
+            group: group,
             release: release
         });
         fetching = false;
@@ -49,8 +50,8 @@
 
 <li
     class:d-none={filtered}
-    class:active={runs[`${release}/${test.name}`]}
-    class:active-test-text={runs[`${release}/${test.name}`]}
+    class:active={runs[`${release}/${group}/${test.name}`]}
+    class:active-test-text={runs[`${release}/${group}/${test.name}`]}
     class="list-group-item argus-test"
     on:click={handleTestClick}
 >
