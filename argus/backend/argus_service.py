@@ -281,6 +281,7 @@ class ArgusService:
             "lastStatus": "unknown",
             "lastInvestigationStatus": "unknown",
             "hasBugReport": False,
+            "tests": None,
         }
 
         for release_name, release_body in payload.items():
@@ -314,10 +315,15 @@ class ArgusService:
             release_comments = ArgusTestRunComment.filter(release_id=release.id)
             for test in release_tests:
                 test_group = release_groups_by_id[test.group_id]
+                if not release_stats["groups"][test_group.name]["tests"]:
+                    release_stats["groups"][test_group.name]["tests"] = dict()
                 release_stats["total"] += 1
-                run = first(rows, test.name, predicate=lambda elem, val: re.match(f"^{val}(-test)?$", elem["name"]))
+                rows_by_group = [row for row in rows if row["group"] == test_group.name]
+                run = first(rows_by_group, test.name, predicate=lambda elem,
+                            val: re.match(f"^{val}(-test)?$", elem["name"]))
                 if not limited and run:
-                    last_runs = list(filter(lambda run: re.match(f"^{test.name}(-test)?$", run["name"]), rows))[:4]
+                    last_runs = list(filter(lambda run: re.match(
+                        f"^{test.name}(-test)?$", run["name"]), rows_by_group))[:4]
                     last_runs = [
                         {
                             "status": run["status"],
@@ -333,7 +339,7 @@ class ArgusService:
                     comments = last_runs[0]["comments"] if len(last_runs) > 0 else []
 
                 if not run:
-                    release_stats["tests"][test.name] = {
+                    release_stats["groups"][test_group.name]["tests"][test.name] = {
                         "name": test.name,
                         "status": "unknown",
                         "group": test_group.name,
@@ -344,7 +350,7 @@ class ArgusService:
                     release_stats["groups"][test_group.name]["total"] += 1
                     continue
 
-                release_stats["tests"][test.name] = {
+                release_stats["groups"][test_group.name]["tests"][test.name] = {
                     "name": test.name,
                     "group": test_group.name,
                     "status": run["status"],
@@ -354,10 +360,10 @@ class ArgusService:
 
                 if not limited:
                     release_stats["hasBugReport"] = len(issues) > 0
-                    release_stats["tests"][test.name]["last_runs"] = last_runs
-                    release_stats["tests"][test.name]["hasBugReport"] = len(issues) > 0
+                    release_stats["groups"][test_group.name]["tests"][test.name]["last_runs"] = last_runs
+                    release_stats["groups"][test_group.name]["tests"][test.name]["hasBugReport"] = len(issues) > 0
                     release_stats["groups"][test_group.name]["hasBugReport"] = len(issues) > 0
-                    release_stats["tests"][test.name]["hasComments"] = len(comments) > 0
+                    release_stats["groups"][test_group.name]["tests"][test.name]["hasComments"] = len(comments) > 0
                     release_stats["groups"][test_group.name]["hasComments"] = len(comments) > 0
 
                 release_stats["groups"][test_group.name][run["status"]] += 1
@@ -377,7 +383,7 @@ class ArgusService:
         runs: dict = payload["runs"]
         response = {}
 
-        for uid, [release_name, test_name] in runs.items():
+        for uid, [release_name, test_name, group_name] in runs.items():
             rows = self.session.execute(
                 self.run_by_release_name_stmt,
                 parameters=(release_name,),
@@ -393,7 +399,7 @@ class ArgusService:
 
             result = [
                 row for row in rows
-                if re.match(f"^{test_name}(-test)?$", row["name"])
+                if re.match(f"^{test_name}(-test)?$", row["name"]) and row["group"] == group_name
             ][:limit]
             response[uid] = result
         return response

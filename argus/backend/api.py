@@ -388,6 +388,7 @@ def run_stats():
         res["response"] = service.collect_stats(request_payload)
     except Exception as exc:
         LOGGER.error("Something happened during request %s", request)
+        LOGGER.error("Details: ", exc_info=True)
         res["status"] = "error"
         res["response"] = {
             "exception": exc.__class__.__name__,

@@ -31,8 +31,16 @@
             <h5>Run Details</h5>
             <ul class="list-unstyled border-start ps-2">
                 <li>
+                    <span class="fw-bold">Release:</span>
+                    {test_run.release_name}
+                </li>
+                <li>
+                    <span class="fw-bold">Group:</span>
+                    {test_run.group}
+                </li>
+                <li>
                     <span class="fw-bold">Test:</span>
-                    {test_run.group}.{test_run.name}
+                    {test_run.name}
                 </li>
                 <li>
                     <span class="fw-bold">Id:</span>

@@ -1,10 +1,10 @@
 <script>
-    import { Base64 } from "js-base64";
+    import { stateEncoder } from "../Common/StateManagement";
     import TestRuns from "./TestRuns.svelte";
     export let test_runs = {};
     export let workAreaAttached = false;
     let serializedState = "";
-    $: serializedState = Base64.encode(JSON.stringify(test_runs), true);
+    $: serializedState = stateEncoder(test_runs);
     let filterStringRuns = "";
     const isFiltered = function(name = "", filterString = "") {
         if (filterString == "") {
@@ -15,7 +15,7 @@
 </script>
 
 {#if Object.keys(test_runs).length > 0}
-<div class="p-2 mb-1 text-end"><a href="/test_runs?state={serializedState}" class="btn btn-secondary btn-sm">Share</a></div>
+<div class="p-2 mb-1 text-end"><a href="/test_runs?{serializedState}" class="btn btn-secondary btn-sm">Share</a></div>
 <div class="p-2">
     <input class="form-control" type="text" placeholder="Filter runs" bind:value={filterStringRuns} on:input={() => { test_runs = test_runs }}>
 </div>

@@ -3,7 +3,7 @@
     import { StatusCSSClassMap } from "../Common/TestStatus";
     import { timestampToISODate } from "../Common/DateUtils";
     import { createEventDispatcher } from "svelte";
-    import { Base64 } from "js-base64";
+    import { stateEncoder } from "../Common/StateManagement";
     import {
         faCircle,
         faTimes,
@@ -12,22 +12,19 @@
         faHammer,
         faExternalLinkSquareAlt,
     } from "@fortawesome/free-solid-svg-icons";
-    import { faGithub } from "@fortawesome/free-brands-svg-icons"
+    import { faGithub } from "@fortawesome/free-brands-svg-icons";
     export let tests = [];
     export let releaseName = "";
-    let encodedState = "e30";
-    $: encodedState = Base64.encode(
-        JSON.stringify(
-            Object.values(tests).reduce((acc, val) => {
-                acc[`${releaseName}/${val.name}`] = {
-                    test: val.name,
-                    release: releaseName,
-                    runs: [],
-                };
-                return acc;
-            }, {})
-        ),
-        true
+    let encodedState = "state=e30";
+    $: encodedState = stateEncoder(
+        Object.values(tests).reduce((acc, val) => {
+            acc[`${releaseName}/${val.group}/${val.name}`] = {
+                test: val.name,
+                group: val.group,
+                release: releaseName,
+            };
+            return acc;
+        }, {})
     );
     const dispatch = createEventDispatcher();
     const handleTrashClick = function (name) {
@@ -75,35 +72,40 @@
                                         <div class="ms-2">
                                             <a
                                                 target="_blank"
-                                                href="{run.build_job_url}"
+                                                href={run.build_job_url}
                                                 class="link-dark"
                                             >
                                                 #{run.build_number}
                                             </a>
                                         </div>
-                                        <div class="ms-auto text-muted small-text">
+                                        <div
+                                            class="ms-auto text-muted small-text"
+                                        >
                                             {timestampToISODate(
                                                 run.start_time * 1000
                                             )}
                                         </div>
                                     </div>
-                                    <div
-                                    >
+                                    <div>
                                         <ul class="list-unstyled">
                                             {#each run.issues as issue}
-                                                <li class="ms-3 d-flex align-items-center">
+                                                <li
+                                                    class="ms-3 d-flex align-items-center"
+                                                >
                                                     <div class="ms-1">
                                                         <Fa icon={faGithub} />
                                                     </div>
                                                     <div class="ms-1">
                                                         <a
                                                             target="_blank"
-                                                            href="{issue.url}"
+                                                            href={issue.url}
                                                         >
                                                             {issue.title}
                                                         </a>
                                                     </div>
-                                                    <div class="ms-auto text-muted">
+                                                    <div
+                                                        class="ms-auto text-muted"
+                                                    >
                                                         {issue.owner}/{issue.repo}#{issue.issue_number}
                                                     </div>
                                                 </li>
@@ -118,7 +120,7 @@
             {/each}
         </ul>
         <a
-            href="/run_dashboard?state={encodedState}"
+            href="/run_dashboard?{encodedState}"
             class="btn btn-primary"
             target="_blank"
             >Investigate selected <Fa icon={faExternalLinkSquareAlt} /></a
