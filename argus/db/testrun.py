@@ -604,6 +604,8 @@ class TestRunWithHeartbeat(TestRun):
                          config=config, argus_interface=argus_interface)
         self._thread = threading.Thread(target=self._heartbeat_entry,
                                         name=f"{self.__class__.__name__}-{self.id}-heartbeat", daemon=True)
+        self._heartbeat_statement = self.argus.session.prepare(
+            f"UPDATE {TestRun.table_name()} SET heartbeat = ? WHERE id = ?")
         self._thread.start()
 
     @property
@@ -624,9 +626,9 @@ class TestRunWithHeartbeat(TestRun):
             if self._shutdown_event.is_set():
                 break
             LOGGER.debug("Sending heartbeat...")
-            self.heartbeat = int(time.time())
-            self.argus.session.execute(f"UPDATE {TestRun.table_name()} SET heartbeat = ? WHERE id = ?",
-                                       parameters=(self.heartbeat, self.id,))
+            self.heartbeat = time.time()
+            bound_statement = self._heartbeat_statement.bind((self.heartbeat, self.id))
+            self.argus.session.execute(bound_statement)
         LOGGER.debug("Heartbeat exit")
 
     def shutdown(self):
