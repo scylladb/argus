@@ -1,9 +1,10 @@
 from random import choice
 import datetime
 import logging
+from time import sleep
 from uuid import uuid4, UUID
 import pytest
-from argus.db.testrun import TestRun, TestRunInfo
+from argus.db.testrun import TestRun, TestRunInfo, TestRunWithHeartbeat
 from argus.db.db_types import TestInvestigationStatus
 from argus.db.interface import ArgusDatabase
 from argus.db.models import ArgusReleaseSchedule, ArgusReleaseScheduleAssignee, \
@@ -44,6 +45,25 @@ class TestEndToEnd:
         rebuilt_test_run = TestRun.from_id(test_id)
 
         assert rebuilt_test_run.serialize() == test_run.serialize()
+
+    @staticmethod
+    @pytest.mark.docker_required
+    def test_heartbeat_thread(completed_testrun: TestRunInfo, argus_database: ArgusDatabase):
+        TestRunWithHeartbeat.set_argus(argus_database)
+        test_id = uuid4()
+        test_run = TestRunWithHeartbeat(test_id=test_id, group="longevity-test", release_name="4_5rc5", assignee="",
+                                        run_info=completed_testrun, investigation_status=TestInvestigationStatus.INVESTIGATED,
+                                        heartbeat_interval=8)
+
+        test_run.save()
+        sleep(test_run.heartbeat_interval + test_run.heartbeat_interval // 2)
+        new_heartbeat = argus_database.session.execute(f"SELECT heartbeat FROM {TestRun.table_name()} WHERE id = %s",
+                                                       parameters=(test_run.id,)).one()["heartbeat"]
+        # pylint: disable=protected-access
+        test_run._shutdown_event.set()
+        LOGGER.info("Awaiting heartbeat thread exit")
+        test_run.thread.join(timeout=10)
+        assert new_heartbeat == test_run.heartbeat
 
     @staticmethod
     @pytest.mark.docker_required
