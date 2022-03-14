@@ -66,9 +66,13 @@ class ArgusRelease(Model):
     assignee = columns.List(value_type=columns.UUID)
     picture_id = columns.UUID()
     enabled = columns.Boolean(default=lambda: True)
+    perpetual = columns.Boolean(default=lambda: True)
 
     def __eq__(self, other):
-        return self.name == other.name
+        if isinstance(other, ArgusRelease):
+            return self.name == other.name
+        else:
+            return super().__eq__(other)
 
 
 class ArgusReleaseGroup(Model):
@@ -82,7 +86,10 @@ class ArgusReleaseGroup(Model):
     enabled = columns.Boolean(default=lambda: True)
 
     def __eq__(self, other):
-        return self.name == other.name and self.release_id == other.release_id
+        if isinstance(other, ArgusReleaseGroup):
+            return self.name == other.name and self.release_id == other.release_id
+        else:
+            return super().__eq__(other)
 
 
 class ArgusReleaseGroupTest(Model):
@@ -97,7 +104,10 @@ class ArgusReleaseGroupTest(Model):
     enabled = columns.Boolean(default=lambda: True)
 
     def __eq__(self, other):
-        return self.name == other.name and self.group_id == other.group_id and self.release_id == other.release_id
+        if isinstance(other, ArgusReleaseGroupTest):
+            return self.name == other.name and self.group_id == other.group_id and self.release_id == other.release_id
+        else:
+            return super().__eq__(other)
 
 
 class ArgusPlannedTestsForRelease(Model):
