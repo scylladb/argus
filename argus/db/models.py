@@ -172,6 +172,7 @@ class ArgusReleaseSchedule(Model):
         primary_key=True, default=uuid1, clustering_order="DESC")
     period_start = columns.DateTime(required=True, default=datetime.utcnow)
     period_end = columns.DateTime(required=True)
+    tag = columns.Text(default="")
 
 
 class ArgusReleaseScheduleAssignee(Model):

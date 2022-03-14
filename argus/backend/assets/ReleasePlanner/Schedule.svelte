@@ -3,10 +3,12 @@
     import {
         faCircle,
         faTrashAlt,
+        faTimes,
         faExternalLinkSquareAlt,
     } from "@fortawesome/free-solid-svg-icons";
     import { StatusCSSClassMap } from "../Common/TestStatus";
-    import { createEventDispatcher } from "svelte";
+    import { stateEncoder } from "../Common/StateManagement";
+    import { createEventDispatcher, onMount } from "svelte";
     import { Base64 } from "js-base64";
     export let scheduleData = {};
     export let releaseData = {};
@@ -18,11 +20,28 @@
         return id ? `/storage/picture/${id}` : "/static/no-user-picture.png";
     };
 
+    const prepareState = function() {
+        return scheduleData.tests.reduce((acc, scheduledTest) => {
+            let [group, test] = scheduledTest.split("/");
+            let release = releaseData.release.name;
+            acc[`${release}/${group}/${test}`] = {
+                release: release,
+                group: group,
+                test: test,
+            };
+            return acc;
+        }, {});
+    }
+
     const handleScheduleDelete = function () {
         dispatch("deleteSchedule", {
             id: scheduleData.schedule_id,
         });
     };
+
+    onMount(() => {
+        state = stateEncoder(prepareState());
+    });
 </script>
 
 <div class="card-schedule card-popout" class:position-absolute={absolute}>
@@ -63,6 +82,7 @@
                     {/each}
                 </ul>
             </div>
+            {#if releaseData.release.perpetual}
             <div class="me-3 w-25">
                 <h6>Date</h6>
                 <div>
@@ -78,7 +98,16 @@
                     </div>
                 </div>
             </div>
+            {/if}
         </div>
+        {#if scheduleData.tag}
+            <div class="me-3 w-100">
+                Comment
+                <p class="border rounded p-2 mb-3">
+                    {scheduleData.tag}
+                </p>
+            </div>
+        {/if}
         <div class="me-3 w-100">
             <h6>Assignees</h6>
             <ul class="list-group mb-3">
@@ -98,7 +127,7 @@
             <div class="text-end">
                 <a
                     class="btn btn-primary"
-                    href="/run_dashboard?state={state}"
+                    href="/run_dashboard?{state}"
                     target="_blank"
                 >
                     <Fa icon={faExternalLinkSquareAlt} />
@@ -122,7 +151,6 @@
     }
 
     .card-schedule {
-        height: 576px;
         width: 512px;
         z-index: 9999;
         top: 100%;

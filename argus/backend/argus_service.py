@@ -773,10 +773,13 @@ class ArgusService:
         if len(tests) == 0 and len(groups) == 0:
             raise Exception("At least one group or test must be assigned for the schedule to be valid")
 
+        tag = payload.get("tag", "")
+
         schedule = ArgusReleaseSchedule()
         schedule.release = release
         schedule.period_start = datetime.datetime.fromisoformat(start_time)
         schedule.period_end = datetime.datetime.fromisoformat(end_time)
+        schedule.tag = tag
         schedule.save()
 
         response = dict(schedule.items())
@@ -868,6 +871,32 @@ class ArgusService:
             "schedule": schedule_id,
             "result": "deleted"
         }
+
+    def get_planner_data(self, payload: dict) -> dict:
+        release_name = payload.get("release", None)
+        if not release_name:
+            raise Exception("Release wasn't specified in the payload")
+
+        release = ArgusRelease.get(name=release_name)
+        groups = ArgusReleaseGroup.filter(release_id=release.id).all()
+        groups_by_group_id = {str(group.id): dict(group.items()) for group in groups}
+        tests = ArgusReleaseGroupTest.filter(release_id=release.id).all()
+        tests = [dict(t.items()) for t in tests]
+        tests_by_group = {}
+        for test in tests:
+            test["group_name"] = groups_by_group_id[str(test["group_id"])]["name"]
+            group_tests = tests_by_group.get(test["group_name"], [])
+            group_tests.append(test)
+            tests_by_group[test["group_name"]] = group_tests
+
+        response = {
+            "release": dict(release.items()),
+            "groups": groups_by_group_id,
+            "tests": tests,
+            "tests_by_group": tests_by_group,
+        }
+
+        return response
 
     def get_assignees(self, payload: dict) -> dict:
         """
