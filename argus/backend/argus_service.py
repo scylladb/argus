@@ -527,7 +527,7 @@ class ArgusService:
         test_run = TestRun.from_id(test_id=UUID(test_run_id))
         release_name = test_run.release_name
         release = ArgusRelease.get(name=release_name)
-        test_name = re.sub(r"\-test$", "", test_run.run_info.details.name)
+        test_name = test_run.run_info.details.name
         test = [test for test in ArgusReleaseGroupTest.filter(
             name=test_name).all() if test.release_id == release.id][0]
         old_assignee = test_run.assignee
