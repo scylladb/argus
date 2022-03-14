@@ -77,6 +77,20 @@ def release_scheduler(name: str):
     return render_template("release_schedule.html.j2", release_name=name, data=data_json)
 
 
+@bp.route("/release/<string:name>/duty")
+@login_required
+def duty_planner(name: str):
+    service = ArgusService()
+    release, release_groups, release_tests = service.get_data_for_release_dashboard(
+        release_name=name)
+    data_json = {
+        "release": dict(release.items()),
+        "groups": [dict(group.items()) for group in release_groups],
+        "tests": [dict(test.items()) for test in release_tests],
+    }
+    return render_template("duty_planner.html.j2", release_name=name, data=data_json)
+
+
 @bp.route("/error/")
 def error():
     return render_template("error.html.j2", type=request.args.get("type", 400))

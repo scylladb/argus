@@ -20,7 +20,11 @@ Releases
                         <div class="release-stats mb-1"></div>
                         <div class="btn-group">
                             <a target="_blank" href="{{ url_for('main.release_dashboard', release_name=release.name) }}" class="btn btn-primary"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+                            {% if release.perpetual %}
+                            <a target="_blank" href="{{ url_for('main.duty_planner', name=release.name) }}" class="btn btn-primary"><i class="fas fa-calendar-alt"></i> Duty Planning</a>
+                            {% else %}
                             <a target="_blank" href="{{ url_for('main.release_scheduler', name=release.name) }}" class="btn btn-primary"><i class="fas fa-calendar-alt"></i> Duty Planning</a>
+                            {% endif %}
                         </div>
                 </div>
             </div>

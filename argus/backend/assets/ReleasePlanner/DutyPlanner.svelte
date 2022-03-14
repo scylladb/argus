@@ -1,78 +1,49 @@
 <script>
     import { onMount } from "svelte";
+    import * as chrono from "chrono-node";
     import Select from "svelte-select";
-    import Fa from "svelte-fa";
-    import { faArrowDown } from "@fortawesome/free-solid-svg-icons";
     import User from "../Profile/User.svelte";
-    import ReleasePlanTable from "./ReleasePlanTable.svelte";
+    import ScheduleTable from "./ScheduleTable.svelte";
     import { userList } from "../Stores/UserlistSubscriber";
     import { sendMessage } from "../Stores/AlertStore";
-    import { timestampToISODate } from "../Common/DateUtils";
     export let releaseData = {};
     export let schedules = [];
     let users = {};
     $: users = $userList;
+    let selectedGroups = [];
     let selectedTests = [];
-    let selectedAssignees = [];
-    let clickedTests = {};
-    let plannerData = {};
-
-    const generateNewScheduleDate = function () {
-        let startOfMonth = new Date();
-        startOfMonth.setUTCDate(1);
-        return startOfMonth.toISOString().split("T").shift();
-    };
-
-    const generateEndDate = function () {
-        let endDate = new Date();
-        let endMonth = endDate.getMonth() + 8;
-        endDate.setMonth(endMonth);
-        return timestampToISODate(endDate);
-    };
 
     const PayloadTemplate = {
         release: releaseData.release.name,
         groups: [],
         tests: [],
-        start: generateNewScheduleDate(),
-        end: generateEndDate(),
+        start: undefined,
+        end: undefined,
         assignees: [],
-        tag: "",
     };
+
+    const generateNewScheduleDate = function(today = new Date()) {
+        let monday = chrono.parseDate("This Monday", new Date(today));
+        return monday.toISOString().split("T").shift();
+    }
+
+    const generateEndDate = function(startDate) {
+        let start = new Date(startDate);
+        let end = chrono.parseDate("Next Sunday at 23:59", start);
+        return end;
+    };
+
+    const handleDateChange = function(value) {
+        newScheduleDate = generateNewScheduleDate(value);
+        newScheduleEndDate = generateEndDate(newScheduleDate);
+
+        newSchedule.start = new Date(newScheduleDate).toISOString().split(".").shift();
+        newSchedule.end = newScheduleEndDate.toISOString().split(".").shift();
+    }
 
     let newSchedule = Object.assign(PayloadTemplate);
-
-    const fetchPlannerData = async function () {
-        try {
-            let apiResponse = await fetch("/api/v1/release/planner/data", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    release: releaseData.release.name,
-                }),
-            });
-            let apiJson = await apiResponse.json();
-            if (apiJson.status === "ok") {
-                plannerData = apiJson.response ?? {};
-            } else {
-                throw apiJson;
-            }
-        } catch (error) {
-            if (error?.status === "error") {
-                sendMessage(
-                    "error",
-                    `Unable to fetch planner data.\nMessage: ${error.response.arguments[0]}`
-                );
-            } else {
-                sendMessage(
-                    "error",
-                    "A backend error occurred during planner data fetch"
-                );
-            }
-        }
-    };
+    let newScheduleDate = generateNewScheduleDate();
+    let newScheduleEndDate = generateEndDate(newScheduleDate);
 
     const fetchSchedules = async function () {
         try {
@@ -117,9 +88,9 @@
             });
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
+                handleClearGroups();
                 fetchSchedules();
-                handleTestsClear();
-                selectedAssignees = undefined;
+
             } else {
                 throw apiJson;
             }
@@ -155,6 +126,8 @@
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
                 fetchSchedules();
+                handleClearGroups();
+
             } else {
                 throw apiJson;
             }
@@ -172,6 +145,15 @@
                 );
             }
         }
+    };
+
+    const extractGroups = function (releaseData) {
+        return Object.values(releaseData.groups).map((val) => {
+            return {
+                label: val.pretty_name ?? val.name,
+                value: val.name,
+            };
+        });
     };
 
     const prepareUsers = function (users) {
@@ -194,73 +176,63 @@
             });
     };
 
-    const extractTests = function (plannerData) {
-        if (!plannerData.release) return;
-        return Object.values(plannerData.tests)
+    const extractTests = function (releaseData) {
+        return Object.values(releaseData.tests)
             .map((val) => {
                 return {
-                    label: `${val.group_name}/${val.name}`,
+                    label: val.name,
                     value: val.name,
-                    test: val,
                 };
             })
             .sort((a, b) => {
-                if (a.label > b.label) {
+                if (a.value > b.value) {
                     return 1;
-                } else if (b.label > a.label) {
+                } else if (b.value > a.value) {
                     return -1;
                 }
                 return 0;
             });
     };
 
-    const handleCellClick = function (e) {
+    const handleCellClick = function(e) {
         let data = e.detail;
-        let testLabel = `${data.group}/${data.test.name}`;
-        if (!selectedTests) {
-            selectedTests = [];
+        if (data.schedule) return;
+        handleDateChange(data.date.dateKey);
+        if (!selectedGroups) {
+            selectedGroups = [];
         }
-
-        if (selectedTests.findIndex((test) => test.label == testLabel) == -1) {
-            selectedTests.push({
-                label: testLabel,
-                value: data.test.name,
-            });
-            selectedTests = selectedTests;
-            clickedTests[testLabel] = true;
-            clickedTests = clickedTests;
-            console.log(clickedTests);
-            handleTestSelect({
-                detail: selectedTests,
-            });
-        } else {
-            clickedTests[testLabel] = false;
-            clickedTests = clickedTests;
-            selectedTests = selectedTests.filter(
-                (test) => test.label != testLabel
-            );
-            handleTestSelect({
-                detail: selectedTests,
+        if (selectedGroups.findIndex(val => val.value == data.group.name) == -1) {
+            selectedGroups.push({ label: data.group.pretty_name, value: data.group.name });
+            selectedGroups = selectedGroups;
+            handleGroupSelect({
+                detail: selectedGroups
             });
         }
     };
 
-    const handleTestsClear = function (e) {
-        clickedTests = {};
-        selectedTests = [];
-        handleTestSelect({
-            detail: [],
+    const handleClearGroups = function(e) {
+        let selected = e?.detail?.selected ?? [];
+        console.log(selected);
+        selectedGroups = selectedGroups?.filter(group => selected.includes(group.value)) ?? [];
+        handleGroupSelect({
+            detail: selectedGroups
         });
-    };
+    }
 
     const handleTestSelect = function (e) {
         newSchedule.tests =
             e.detail?.map((val) => {
-                return val.label;
+                return val.value;
             }) ?? [];
         newSchedule = newSchedule;
     };
-
+    const handleGroupSelect = function (e) {
+        newSchedule.groups =
+            e.detail?.map((val) => {
+                return val.value;
+            }) ?? [];
+        newSchedule = newSchedule;
+    };
     const handleAssigneeSelect = function (e) {
         newSchedule.assignees =
             e.detail?.map((val) => {
@@ -271,33 +243,23 @@
 
     onMount(() => {
         fetchSchedules();
-        fetchPlannerData();
     });
 </script>
 
-<div class="container border rounded bg-white my-3 min-vh-100 shadow-sm">
+<div class="container-fluid border rounded bg-white my-3 min-vh-100 shadow-sm">
     <div class="row">
         <div class="p-2 display-6">{releaseData.release.name}</div>
     </div>
     <div class="row">
-        {#if schedules.length > 0 && Object.values(users).length > 0 && plannerData.release}
-            <ReleasePlanTable
-                {releaseData}
-                {users}
-                {schedules}
-                {plannerData}
-                bind:clickedTests
-                on:cellClick={handleCellClick}
-                on:deleteSchedule={deleteSchedule}
-            />
+        {#if schedules.length > 0 && Object.values(users).length > 0}
+            <ScheduleTable {releaseData} {users} {schedules} on:cellClick={handleCellClick} on:deleteSchedule={deleteSchedule} on:clearGroups={handleClearGroups}/>
         {/if}
     </div>
-
     <div class="row">
         {#if Object.values(users).length > 0}
             <div class="col border rounded m-3 p-3">
                 <h4 class="mb-3">New plan</h4>
-                <div class="d-flex align-items-start justify-content-start">
+                <div class="d-flex align-items-start justify-content-center">
                     <div class="me-3 w-25">
                         <div class="mb-3">
                             <label
@@ -312,28 +274,45 @@
                                 disabled
                             />
                         </div>
-                        <div class="mb-3">
-                            <label for="newScheduleComment" class="form-label">Comment</label>
-                            <textarea
-                                id="newScheduleComment"
-                                cols="30"
-                                rows="5"
-                                style="resize: none;"
-                                on:keyup={(e) => {newSchedule.tag = e.target.value; newSchedule = newSchedule;}}
-                            ></textarea>
-                        </div>
                     </div>
-                    <div class="me-3 w-50">
+                    <div class="me-3 w-25">
                         <div class="mb-3">
+                            <div class="form-label">Groups</div>
+                            <Select
+                                items={extractGroups(releaseData)}
+                                isMulti={true}
+                                placeholder="Select groups"
+                                on:select={handleGroupSelect}
+                                bind:value={selectedGroups}
+                            />
+                        </div>
+                        <div class="mb-3 d-none">
                             <div class="form-label">Tests</div>
                             <Select
-                                items={extractTests(plannerData)}
+                                items={extractTests(releaseData)}
                                 isMulti={true}
                                 placeholder="Select tests"
                                 bind:value={selectedTests}
                                 on:select={handleTestSelect}
-                                on:clear={handleTestsClear}
                             />
+                        </div>
+                    </div>
+                    <div class="me-3 w-25">
+                        <div class="mb-3">
+                            <label
+                                for="newScheduleTimestampStart"
+                                class="form-label">From</label
+                            >
+                            <input
+                                type="date"
+                                id="newScheduleTimestampStart"
+                                bind:value={newScheduleDate}
+                                class="form-control"
+                                on:change={(e) => handleDateChange(e.target.value)}
+                            />
+                        </div>
+                        <div class="mb-3 text-muted">
+                            Will end on {newScheduleEndDate.toLocaleDateString('en-CA', { timeZone: 'UTC' })}
                         </div>
                     </div>
                     <div class="me-3 w-25">
@@ -344,7 +323,6 @@
                                 items={prepareUsers(users)}
                                 isMulti={true}
                                 placeholder="Select assignees"
-                                bind:value={selectedAssignees}
                                 on:select={handleAssigneeSelect}
                             />
                         </div>
@@ -366,28 +344,6 @@
     </div>
 </div>
 
-<div
-    class:d-none={Object.keys(clickedTests).length == 0}
-    class="anchor-down"
->
-    <button
-        class="btn btn-success"
-        on:click={() => {window.scrollTo({behavior: "smooth", top: document.body.clientHeight })}}
-    >
-        <Fa icon={faArrowDown}/>
-    </button>
-</div>
-
 <style>
-    .anchor-down {
-        position: fixed;
-        left: 90%;
-        top: 90%;
 
-    }
-    .anchor-down>button {
-        border-radius: 50%;
-        width: 64px;
-        height: 64px;
-    }
 </style>
