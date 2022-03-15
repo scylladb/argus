@@ -551,8 +551,9 @@ class TestRun:
             connection=self.argus.CQL_ENGINE_CONNECTION_NAME
         )
 
+        scheduled_test_name = f"{self.group}/{self.run_info.details.name}"
         scheduled_tests = ArgusReleaseScheduleTest.filter(
-            release=self.release_name, name=self.run_info.details.name
+            release=self.release_name, name=scheduled_test_name
         ).all().using(
             connection=self.argus.CQL_ENGINE_CONNECTION_NAME
         )
