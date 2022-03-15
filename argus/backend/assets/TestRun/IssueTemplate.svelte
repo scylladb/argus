@@ -11,7 +11,7 @@
 
     const filterDbNodes = function (resources) {
         return resources.filter((val) =>
-            new RegExp(/\-db\-node/).test(val.name) && val.state != "terminated"
+            new RegExp(/\-db\-node/).test(val.name)
         );
     };
 
@@ -103,7 +103,7 @@ Scylla version (or git commit hash): `{scyllaServerPackage.version}-{scyllaServe
 
 Cluster size: {test_run.cloud_setup.db_node.node_amount} nodes ({test_run.cloud_setup.db_node.instance_type})
 
-Scylla running with shards number (live nodes):
+Scylla Nodes used in this run:
 {#each filterDbNodes(test_run.allocated_resources) as resource}
     - {resource.name} ({resource.instance_info.public_ip} | {resource.instance_info.private_ip}) (shards: {resource.instance_info.shards_amount}){"\n"}
 {:else}
