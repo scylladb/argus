@@ -3,6 +3,7 @@
     import * as chrono from "chrono-node";
     import { getPicture } from "../Common/UserUtils";
     import Schedule from "./Schedule.svelte";
+    import CommentTableRow from "./CommentTableRow.svelte";
 
     export let schedules = [];
     export let users = {};
@@ -62,6 +63,7 @@
             <thead>
                 <th>Group</th>
                 <th>Test</th>
+                <th>Comment</th>
                 <th>Assignee</th>
             </thead>
             <tbody>
@@ -85,7 +87,7 @@
                                     groupName
                                 ]?.[test.name]}
                             >
-                                <div class="d-flex align-items-center">
+                                <div class="d-flex align-items-between">
                                     <div
                                         class="border rounded p-1 px-2 cursor-pointer"
                                         on:click={() => {
@@ -121,6 +123,14 @@
                                         on:deleteSchedule
                                     />
                                 {/if}
+                            </td>
+                            <td>
+                                <CommentTableRow
+                                    bind:commentText={test.comment}
+                                    release={releaseData.release.name}
+                                    group={groupName}
+                                    test={test.name}
+                                />
                             </td>
                             <td
                                 class:table-secondary={!schedulesByTest?.[
@@ -190,7 +200,4 @@
         width: 12rem;
     }
 
-    .test-cell {
-        width: 36rem;
-    }
 </style>

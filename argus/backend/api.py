@@ -83,6 +83,29 @@ def release_planner_data():
     return jsonify(res)
 
 
+@bp.route("/release/schedules/comment/update", methods=["POST"])
+@login_required
+def release_schedules_comment_update():
+    res = {
+        "status": "ok"
+    }
+    try:
+        if not request.is_json:
+            raise Exception(
+                "Content-Type mismatch, expected application/json, got:", request.content_type)
+        request_payload = request.get_json()
+        service = ArgusService()
+        res["response"] = service.update_schedule_comment(request_payload)
+    except Exception as exc:
+        LOGGER.error("Something happened during request %s", request)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    return jsonify(res)
+
+
 @bp.route("/release/schedules", methods=["POST"])
 @login_required
 def release_schedules():

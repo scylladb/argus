@@ -199,6 +199,13 @@ class ArgusReleaseScheduleGroup(Model):
     schedule_id = columns.TimeUUID(required=True, index=True)
 
 
+class ReleasePlannerComment(Model):
+    release = columns.Text(primary_key=True)
+    group = columns.Text(primary_key=True)
+    test = columns.Text(primary_key=True)
+    comment = columns.Text(default=lambda: "")
+
+
 class WebRunComments(Model):
     test_id = columns.UUID(primary_key=True, default=uuid4)
     comments = columns.List(
@@ -246,7 +253,7 @@ USED_MODELS = [
     User, WebRunComments, WebRelease, WebCategoryGroup, WebNemesis,
     ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, ArgusPlannedTestsForRelease,
     ArgusTestRunComment, ArgusEvent, UserOauthToken,
-    WebFileStorage, ArgusGithubIssue,
+    WebFileStorage, ArgusGithubIssue, ReleasePlannerComment,
     ArgusReleaseSchedule, ArgusReleaseScheduleAssignee, ArgusReleaseScheduleGroup, ArgusReleaseScheduleTest
 ]
 USED_TYPES = [WebRunComment]
