@@ -48,6 +48,10 @@ def first(iterable, value, key: Callable = None, predicate: Callable = None):
     return None
 
 
+def check_scheduled_test(test, group, testname):
+    return testname == f"{group}/{test}" or testname == test
+
+
 class GithubOrganizationMissingError(Exception):
     pass
 
@@ -1075,11 +1079,11 @@ class ArgusService:
                 if run["assignee"] in schedule["assignees"]:
                     valid_runs.append(run)
                     continue
-                group = run["group"].split("_")[0]
-                if group in schedule["groups"]:
+                if run["group"] in schedule["groups"]:
                     valid_runs.append(run)
                     break
-                filtered_tests = [test for test in schedule["tests"] if re.match(f"^{test}(-test)?$", run["name"])]
+                filtered_tests = [test for test in schedule["tests"]
+                                  if check_scheduled_test(run["name"], run["group"], test)]
                 if len(filtered_tests) > 0:
                     valid_runs.append(run)
                     break
