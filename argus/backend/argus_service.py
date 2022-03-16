@@ -6,6 +6,7 @@ import re
 import os
 import hashlib
 import datetime
+from types import NoneType
 from typing import Callable
 from collections import namedtuple
 from uuid import UUID, uuid4
@@ -30,6 +31,7 @@ from argus.db.models import (
     ArgusTestRunComment,
     ArgusEvent,
     ArgusEventTypes,
+    ReleasePlannerComment,
     User,
     UserOauthToken,
     WebFileStorage,
@@ -844,6 +846,40 @@ class ArgusService:
 
         return response
 
+    def update_schedule_comment(self, payload: dict) -> dict:
+        new_comment = payload.get("newComment")
+        release = payload.get("release")
+        group = payload.get("group")
+        test = payload.get("test")
+
+        if not release:
+            raise Exception("No release provided")
+        if not group:
+            raise Exception("No group provided")
+        if not test:
+            raise Exception("No test provided")
+
+        if isinstance(new_comment, NoneType):
+            raise Exception("No comment provided in the body of request")
+
+        try:
+            comment = ReleasePlannerComment.get(release=release, group=group, test=test)
+        except ReleasePlannerComment.DoesNotExist:
+            comment = ReleasePlannerComment()
+            comment.release = release
+            comment.group = group
+            comment.test = test
+
+        comment.comment = new_comment
+        comment.save()
+
+        return {
+            "release": release,
+            "group": group,
+            "test": test,
+            "newComment": new_comment,
+        }
+
     def delete_schedule(self, payload: dict) -> dict:
         """
         {
@@ -882,6 +918,7 @@ class ArgusService:
             raise Exception("Release wasn't specified in the payload")
 
         release = ArgusRelease.get(name=release_name)
+        release_comments = list(ReleasePlannerComment.filter(release=release.name).all())
         groups = ArgusReleaseGroup.filter(release_id=release.id).all()
         groups_by_group_id = {str(group.id): dict(group.items()) for group in groups}
         tests = ArgusReleaseGroupTest.filter(release_id=release.id).all()
@@ -889,6 +926,12 @@ class ArgusService:
         tests_by_group = {}
         for test in tests:
             test["group_name"] = groups_by_group_id[str(test["group_id"])]["name"]
+            try:
+                comment = next(filter(lambda c: c.test == test["name"]
+                               and c.group == test["group_name"], release_comments))
+            except StopIteration:
+                comment = None
+            test["comment"] = comment.comment if comment else ""
             group_tests = tests_by_group.get(test["group_name"], [])
             group_tests.append(test)
             tests_by_group[test["group_name"]] = group_tests
