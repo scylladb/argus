@@ -1069,8 +1069,13 @@ class ArgusService:
         runs = self.session.execute(self.jobs_by_assignee, parameters=(str(user.id),))
         schedules = self.get_schedules_for_user(user)
         valid_runs = []
+        today = datetime.datetime.now()
+        month_ago = today - datetime.timedelta(days=30)
         for run in runs:
             run_date = datetime.datetime.fromtimestamp(run["start_time"])
+            if user.id == UUID(run["assignee"]) and run_date >= month_ago:
+                valid_runs.append(run)
+                continue
             for schedule in schedules:
                 if not run["release_name"] == schedule["release"]:
                     continue
