@@ -3,6 +3,8 @@
     import { testRequests, stats } from "../Stores/StatsSubscriber";
     import { StatusBackgroundCSSClassMap } from "../Common/TestStatus.js";
     import { timestampToISODate } from "../Common/DateUtils";
+    import { assigneeStore } from "../Stores/AssigneeSubscriber";
+    import AssigneeList from "./AssigneeList.svelte";
     export let release = "";
     export let group = "";
     export let filtered = false;
@@ -17,6 +19,8 @@
     };
     export let lastStatus = "unknown";
     export let runs = {};
+    let assigneeList = [];
+    $: assigneeList = $assigneeStore?.[release]?.["tests"]?.[`${group}/${test.name}`] ?? [];
     const dispatch = createEventDispatcher();
 
     let startTime = 0;
@@ -67,7 +71,12 @@
                 {/if}
             </div>
             <div class="col-10 overflow-hidden">
-                <div>{test.pretty_name ?? test.name}</div>
+                <div class="d-flex">
+                    <div>{test.pretty_name ?? test.name}</div>
+                    <div class="ms-auto text-right">
+                        <AssigneeList assignees={assigneeList}/>
+                    </div>
+                </div>
                 {#if startTime > 1}
                 <div
                     class:text-muted={!runs[`${release}/${test.name}`]}

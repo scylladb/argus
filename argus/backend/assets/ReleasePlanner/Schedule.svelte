@@ -61,7 +61,7 @@
                         <li class="list-group-item d-flex align-items-center">
                             <div>
                                 {releaseData.groups.find((val) => val.name == group)
-                                    .pretty_name}
+                                    .pretty_name ?? group}
                             </div>
                         </li>
                     {/each}

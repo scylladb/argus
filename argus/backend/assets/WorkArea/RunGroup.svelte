@@ -2,6 +2,7 @@
     import { groupRequests, stats } from "../Stores/StatsSubscriber";
     import { StatusSortPriority } from "../Common/TestStatus";
     import { sendMessage } from "../Stores/AlertStore";
+    import { requestAssigneesForReleaseTests } from "../Stores/AssigneeSubscriber";
     import NumberStats from "../Stats/NumberStats.svelte";
     import AssigneeList from "./AssigneeList.svelte";
     import Test from "./Test.svelte";
@@ -93,6 +94,7 @@
                 tests = apiJson.response["tests"];
                 clickedGroups[group.name] = true;
                 sortTestsByStatus();
+                requestAssigneesForReleaseTests(release, tests, group.name);
                 testsReady = true;
             } else {
                 throw apiJson;

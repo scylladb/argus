@@ -61,6 +61,22 @@ export const requestAssigneesForReleaseGroups = function (release, groups) {
     }, 250);
 }
 
+export const requestAssigneesForReleaseTests = function (release, tests, group) {
+    tests = tests.map((test) => `${group}/${test.name}`);
+    assigneeRequests.update((value) => {
+        let releaseBody = value[release] ?? {};
+        let testSet = new Set([...(releaseBody.tests ?? []), ...tests]);
+        releaseBody.tests = Array.from(testSet.values());
+        value[release] = releaseBody;
+        return value;
+    });
+
+    setTimeout(() => {
+        fetchAssignees((value) => assigneeStore.update(() => value));
+    }, 250);
+}
+
+
 export const assigneeStore = writable({}, (set) => {
     setInterval(() => {
         fetchAssignees(set);

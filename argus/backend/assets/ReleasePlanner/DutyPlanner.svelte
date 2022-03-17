@@ -202,7 +202,7 @@
             selectedGroups = [];
         }
         if (selectedGroups.findIndex(val => val.value == data.group.name) == -1) {
-            selectedGroups.push({ label: data.group.pretty_name, value: data.group.name });
+            selectedGroups.push({ label: data.group.pretty_name ?? data.group.name, value: data.group.name });
             selectedGroups = selectedGroups;
             handleGroupSelect({
                 detail: selectedGroups
@@ -251,7 +251,7 @@
         <div class="p-2 display-6">{releaseData.release.name}</div>
     </div>
     <div class="row">
-        {#if schedules.length > 0 && Object.values(users).length > 0}
+        {#if Object.values(users).length > 0}
             <ScheduleTable {releaseData} {users} {schedules} on:cellClick={handleCellClick} on:deleteSchedule={deleteSchedule} on:clearGroups={handleClearGroups}/>
         {/if}
     </div>

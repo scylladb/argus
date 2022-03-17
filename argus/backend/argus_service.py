@@ -961,25 +961,26 @@ class ArgusService:
                 "groups": {},
                 "tests": {}
             }
-            scheduled_groups = ArgusReleaseScheduleGroup.filter(release=release, name__in=body["groups"]).all()
-            groups_by_schedule_id = {group.schedule_id: group for group in scheduled_groups}
-            schedules = ArgusReleaseSchedule.filter(
-                release=release, schedule_id__in=tuple(groups_by_schedule_id.keys())).all()
+            scheduled_groups = ArgusReleaseScheduleGroup.filter(release=release, name__in=body.get("groups", [])).all()
+            scheduled_tests = ArgusReleaseScheduleTest.filter(release=release, name__in=body.get("tests", [])).all()
+
+            schedule_ids = {schedule.schedule_id for schedule in [*scheduled_groups, *scheduled_tests]}
+
+            schedules = ArgusReleaseSchedule.filter(release=release, schedule_id__in=tuple(schedule_ids)).all()
             today = datetime.datetime.utcnow()
-            this_monday = today - datetime.timedelta(today.weekday() + 1)
-            next_week = this_monday + datetime.timedelta(8)
-            valid_schedules = [
-                schedule
-                for schedule in schedules
-                if schedule.period_start >= this_monday and schedule.period_end <= next_week
-            ]
+            valid_schedules = []
+            for schedule in schedules:
+                if schedule.period_start <= today <= schedule.period_end:
+                    valid_schedules.append(schedule)
             for schedule in valid_schedules:
                 assignees = ArgusReleaseScheduleAssignee.filter(schedule_id=schedule.schedule_id).all()
                 assignees_uuids = [assignee.assignee for assignee in assignees]
-                assignees = response[release]["groups"].get(groups_by_schedule_id[schedule.schedule_id].name, [])
-                for assignee in assignees_uuids:
-                    assignees.append(assignee)
-                response[release]["groups"][groups_by_schedule_id[schedule.schedule_id].name] = assignees
+                schedule_groups = filter(lambda g: g.schedule_id == schedule.schedule_id, scheduled_groups)
+                schedule_tests = filter(lambda t: t.schedule_id == schedule.schedule_id, scheduled_tests)
+                groups = {group.name: assignees_uuids for group in schedule_groups}
+                tests = {test.name: assignees_uuids for test in schedule_tests}
+                response[release]["groups"] = {**groups, **response[release]["groups"]}
+                response[release]["tests"] = {**tests, **response[release]["tests"]}
 
         return response
 
