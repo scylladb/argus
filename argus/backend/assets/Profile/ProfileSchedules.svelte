@@ -1,5 +1,8 @@
 <script>
     export let schedules = [];
+    import Fa from "svelte-fa";
+    import { faExternalLinkAlt, faTasks } from "@fortawesome/free-solid-svg-icons";
+    import { stateEncoder } from "../Common/StateManagement";
 
     const sortByStartTime = function () {
         return [...schedules].sort((a, b) => {
@@ -13,6 +16,20 @@
             return 0;
         });
     };
+
+    const prepareState = function(schedule) {
+        return schedule.tests.reduce((acc, scheduledTest) => {
+            let [group, test] = scheduledTest.split("/");
+            let release = schedule.release;
+            acc[`${release}/${group}/${test}`] = {
+                release: release,
+                group: group,
+                test: test,
+            };
+            return acc;
+        }, {});
+    };
+
 </script>
 
 <div class="row p-2 justify-content-center">
@@ -45,9 +62,33 @@
                 >
                     <h5>Tests</h5>
                     <div>
+                        <div class="mb-1 text-start">
+                            <a
+                                href="/run_dashboard?{stateEncoder(prepareState(schedule))}"
+                                class="btn btn-sm btn-outline-primary"
+                            >
+                                Open Workspace <Fa icon={faTasks}/>
+                            </a>
+                        </div>
                         <ul class="list-group">
                             {#each schedule.tests as test}
-                                <li class="list-group-item">{test}</li>
+                                <li class="list-group-item text-start">
+                                    <div>
+                                        {test}
+                                        <div class="">
+                                            <a
+                                                target="_blank"
+                                                href="https://jenkins.scylladb.com/job/{schedule.release}/job/{test.split(
+                                                    '/'
+                                                )[0]}/job/{test.split('/')[1]}"
+                                                class="btn btn-sm btn-outline-dark"
+                                                >To Jenkins <Fa
+                                                    icon={faExternalLinkAlt}
+                                                /></a
+                                            >
+                                        </div>
+                                    </div>
+                                </li>
                             {/each}
                         </ul>
                     </div>
@@ -57,7 +98,19 @@
                     <div>
                         <ul class="list-group">
                             {#each schedule.groups as group}
-                                <li class="list-group-item">{group}</li>
+                                <li class="list-group-item text-start">
+                                    {group}
+                                    <div class="">
+                                        <a
+                                            target="_blank"
+                                            href="https://jenkins.scylladb.com/job/{schedule.release}/job/{group}"
+                                            class="btn btn-dark btn-outline"
+                                            >Jenkins <Fa
+                                                icon={faExternalLinkAlt}
+                                            /></a
+                                        >
+                                    </div>
+                                </li>
                             {/each}
                         </ul>
                     </div>
