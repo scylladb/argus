@@ -125,7 +125,7 @@
             {#each groups as group (group.name)}
                 <tr>
                     <td
-                        >{group.pretty_name}</td
+                        >{group.pretty_name ?? group.name}</td
                     >
                     {#each dates as date}
                         <td
