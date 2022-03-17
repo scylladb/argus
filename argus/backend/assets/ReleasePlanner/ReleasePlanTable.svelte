@@ -1,7 +1,10 @@
 <script>
+    import Fa from "svelte-fa";
+    import { faCircle } from "@fortawesome/free-solid-svg-icons";
     import { createEventDispatcher, onMount } from "svelte";
-    import * as chrono from "chrono-node";
+    import { releaseRequests, stats } from "../Stores/StatsSubscriber";
     import { getPicture } from "../Common/UserUtils";
+    import { StatusCSSClassMap } from "../Common/TestStatus";
     import Schedule from "./Schedule.svelte";
     import CommentTableRow from "./CommentTableRow.svelte";
 
@@ -11,6 +14,12 @@
     export let releaseData = {};
     export let clickedTests = {};
     let selectedSchedule = "";
+    let releaseStats = undefined;
+
+    releaseRequests.update((val) => [...val, releaseData.release.name]);
+    stats.subscribe((val) => {
+        releaseStats = val["releases"]?.[releaseData.release.name] ?? {};
+    });
 
     let schedulesByTest = {};
     const dispatch = createEventDispatcher();
@@ -58,7 +67,7 @@
 </script>
 
 <div class="my-2">
-    {#if plannerData.release}
+    {#if plannerData.release && releaseStats}
         <table class="table border table-bordered table-hover">
             <thead>
                 <th>Group</th>
@@ -101,7 +110,26 @@
                                             );
                                         }}
                                     >
-                                        {test.name}
+                                        <div class="d-flex align-items-center">
+                                            <div
+                                                class={StatusCSSClassMap[
+                                                    releaseStats?.["groups"]?.[
+                                                        groupName
+                                                    ]?.["tests"]?.[test.name]
+                                                        ?.status ?? "unknown"
+                                                ]}
+                                                title={releaseStats?.[
+                                                    "groups"
+                                                ]?.[groupName]?.["tests"]?.[
+                                                    test.name
+                                                ].status ?? "unknown / not run"}
+                                            >
+                                                <Fa icon={faCircle} />
+                                            </div>
+                                            <div class="ms-2">
+                                                {test.name}
+                                            </div>
+                                        </div>
                                     </div>
                                     <div class="ms-auto">
                                         <a
@@ -199,5 +227,4 @@
     .group-cell {
         width: 12rem;
     }
-
 </style>
