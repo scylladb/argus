@@ -449,7 +449,7 @@ class ArgusService:
         test_run = TestRun.from_id(test_id=UUID(test_run_id))
         release_name = test_run.release_name
         release = ArgusRelease.get(name=release_name)
-        test_name = re.sub(r"\-test$", "", test_run.run_info.details.name)
+        test_name = test_run.run_info.details.name
         test = [test for test in ArgusReleaseGroupTest.all() if test.release_id ==
                 release.id and test.name.startswith(test_name)]
         test = test[0]
@@ -488,7 +488,7 @@ class ArgusService:
         test_run = TestRun.from_id(test_id=UUID(test_run_id))
         release_name = test_run.release_name
         release = ArgusRelease.get(name=release_name)
-        test_name = re.sub(r"\-test$", "", test_run.run_info.details.name)
+        test_name = test_run.run_info.details.name
         test = [test for test in ArgusReleaseGroupTest.all() if test.release_id ==
                 release.id and test.name.startswith(test_name)]
         test = test[0]
@@ -611,7 +611,7 @@ class ArgusService:
             raise Exception("URL doesn't match Github schema")
 
         run = self.session.execute(self.runs_by_id_stmt, parameters=([UUID(run_id)],)).one()
-        test_name = re.sub(r"\-test$", "", run["name"])
+        test_name = run["name"]
         release = ArgusRelease.get(name=run["release_name"])
         test = ArgusReleaseGroupTest.filter(name=test_name).all()
         test = first(test, release.id, key=lambda val: val.release_id)
