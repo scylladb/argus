@@ -7,8 +7,11 @@
     export let filter_key = "run_id";
     export let submitDisabled = false;
     let newIssueUrl = "";
-    let issues = {};
+    let issues = [];
+    let fetching = false;
     const fetchIssues = async function () {
+        issues = [];
+        fetching = true;
         try {
             let apiResponse = await fetch("/api/v1/issues/get", {
                 method: "POST",
@@ -23,7 +26,7 @@
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
                 issues = apiJson.response;
-                console.log(issues);
+                fetching = false;
             } else {
                 throw apiJson;
             }
@@ -123,10 +126,16 @@
             <h6>Issues</h6>
         {/if}
         {#each issues as issue}
-            <GithubIssue {issue} />
+            <GithubIssue {issue} on:issueDeleted={fetchIssues} />
         {:else}
             <div class="row">
-                <div class="col text-center text-muted">No Issues.</div>
+                <div class="col text-center text-muted">
+                    {#if fetching}
+                        <span class="spinner-border spinner-border-sm"></span> Fetching...
+                    {:else}
+                        No Issues.
+                    {/if}
+                </div>
             </div>
         {/each}
     </div>
