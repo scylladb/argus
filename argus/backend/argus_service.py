@@ -690,6 +690,34 @@ class ArgusService:
         response = [dict(list(issue.items())) for issue in all_issues]
         return response
 
+    def delete_github_issue(self, payload: dict) -> dict:
+        issue_id = payload.get("id")
+        if not issue_id:
+            raise Exception("Issue id not supplied in the request")
+
+        issue: ArgusGithubIssue = ArgusGithubIssue.get(id=issue_id)
+
+        self.send_event(
+            kind=ArgusEventTypes.TestRunIssueRemoved,
+            body={
+                "message": "An issue titled \"{title}\" was removed by {username}",
+                "username": g.user.username,
+                "url": issue.url,
+                "title": issue.title,
+                "state": issue.last_status,
+            },
+            user_id=g.user.id,
+            run_id=issue.run_id,
+            release_id=issue.release_id,
+            group_id=issue.group_id,
+            test_id=issue.test_id
+        )
+        issue.delete()
+
+        return {
+            "deleted": issue_id
+        }
+
     def get_github_issue_state(self, payload: dict) -> dict:
         """
         Example payload:

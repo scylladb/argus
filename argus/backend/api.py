@@ -651,6 +651,29 @@ def issues_get():
     return jsonify(res)
 
 
+@bp.route("/issues/delete", methods=["POST"])
+@login_required
+def issues_delete():
+    res = {
+        "status": "ok"
+    }
+    try:
+        if not request.is_json:
+            raise Exception(
+                "Content-Type mismatch, expected application/json, got:", request.content_type)
+        request_payload = request.get_json()
+        service = ArgusService()
+        res["response"] = service.delete_github_issue(request_payload)
+    except Exception as exc:
+        LOGGER.error("Something happened during request %s", request)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    return jsonify(res)
+
+
 @bp.route("/issues/state", methods=["POST"])
 @login_required
 def issues_state():

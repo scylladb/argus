@@ -26,5 +26,6 @@ EVENT_PROCESSORS = {
     ArgusEventTypes.TestRunStatusChanged: event_process_status_changed,
     ArgusEventTypes.TestRunCommentPosted: event_process_posted_comment,
     ArgusEventTypes.TestRunIssueAdded: event_process_issue_added,
+    ArgusEventTypes.TestRunIssueRemoved: event_process_issue_added,
     ArgusEventTypes.TestRunInvestigationStatusChanged: event_process_investigation_status_changed,
 }
