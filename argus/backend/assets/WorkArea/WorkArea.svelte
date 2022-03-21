@@ -81,7 +81,7 @@
 </script>
 <svelte:window on:popstate={() => { test_runs = stateDecoder() }}/>
 
-<div class="container-fluid bg-light">
+<div class="container-fluid bg-lighter">
     <div class="row p-4" id="dashboard-main">
         <div
             class="col-3 p-0 py-4 me-3 border rounded shadow-sm bg-white"
@@ -102,16 +102,13 @@
                 {/each}
             </div>
         </div>
-        <div class="col-8 p-2 border rounded shadow-sm bg-white">
+        <div class="col-8 p-2 border rounded shadow-sm bg-main">
             <TestRunsPanel bind:test_runs={test_runs} on:testRunRemove={onTestRunRemove} workAreaAttached={true}/>
         </div>
     </div>
 </div>
 
 <style>
-    .bg-white {
-        background-color: #fff;
-    }
 
     #run-sidebar {
         height: 960px;
