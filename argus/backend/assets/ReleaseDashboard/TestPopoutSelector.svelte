@@ -4,6 +4,8 @@
     import { timestampToISODate } from "../Common/DateUtils";
     import { createEventDispatcher } from "svelte";
     import { stateEncoder } from "../Common/StateManagement";
+    import { assigneeStore } from "../Stores/AssigneeSubscriber";
+    import AssigneeList from "../WorkArea/AssigneeList.svelte";
     import {
         faCircle,
         faTimes,
@@ -13,7 +15,7 @@
         faExternalLinkSquareAlt,
     } from "@fortawesome/free-solid-svg-icons";
     import { faGithub } from "@fortawesome/free-brands-svg-icons";
-    export let tests = [];
+    export let tests = {};
     export let releaseName = "";
     let encodedState = "state=e30";
     $: encodedState = stateEncoder(
@@ -26,11 +28,23 @@
             return acc;
         }, {})
     );
+    let assigneeList = {};
+    $: assigneeList = $assigneeStore?.[releaseName] ?? {
+        groups: {},
+        tests: {},
+    };
     const dispatch = createEventDispatcher();
     const handleTrashClick = function (name) {
         dispatch("deleteRequest", {
             name: name,
         });
+    };
+
+    const getAssigneesForTest = function (test) {
+        let testAssignees =
+            assigneeList.tests?.[`${test.group}/${test.name}`] ?? [];
+        let groupAssignees = assigneeList.groups?.[test.group] ?? [];
+        return [...testAssignees, ...groupAssignees];
     };
 </script>
 
@@ -41,8 +55,19 @@
                 {#each Object.values(tests) as test (test.name)}
                     <li class="list-group-item">
                         <div class="d-flex align-items-center">
-                            <div class="d-flex flex-column">
-                                <span class="fw-bold">{test.name}</span>
+                            <div class="d-flex">
+                                <div>
+                                    {#if assigneeList}
+                                        <AssigneeList
+                                            assignees={getAssigneesForTest(
+                                                test
+                                            )}
+                                        />
+                                    {/if}
+                                </div>
+                                <span class="ms-2 fw-bold"
+                                    >{test.group}/{test.name}</span
+                                >
                             </div>
                             <button
                                 class="ms-auto btn btn-secondary btn-sm"
@@ -82,9 +107,13 @@
                                                     #{run.build_number}
                                                 </a>
                                             </div>
-                                            <div
-                                                class="ms-auto text-muted small-text"
-                                            >
+                                            <div class="ms-auto me-1">
+                                                <AssigneeList
+                                                    assignees={[run.assignee]}
+                                                    smallImage={true}
+                                                />
+                                            </div>
+                                            <div class="text-muted small-text">
                                                 {timestampToISODate(
                                                     run.start_time * 1000
                                                 )}

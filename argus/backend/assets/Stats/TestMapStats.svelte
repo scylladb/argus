@@ -16,7 +16,7 @@
         TestInvestigationStatusStrings,
         TestStatus,
     } from "../Common/TestStatus";
-    import { assigneeStore, requestAssigneesForReleaseGroups } from "../Stores/AssigneeSubscriber";
+    import { assigneeStore, requestAssigneesForReleaseGroups, requestAssigneesForReleaseTests } from "../Stores/AssigneeSubscriber";
     import { userList } from "../Stores/UserlistSubscriber";
     import { getPicture } from "../Common/UserUtils";
     export let releaseName = "";
@@ -65,8 +65,18 @@
             }, {});
     };
 
+    const requestTestAssignees = function() {
+        console.log(stats);
+        Object.entries(stats.groups).map((entry) => {
+            let [groupName, groupStats] = entry;
+            let tests = Object.values(groupStats.tests).filter((test) => test.status != "unknown");
+            requestAssigneesForReleaseTests(releaseName, tests, groupName);
+        })
+    }
+
     onMount(() =>  {
         requestAssigneesForReleaseGroups(releaseName, Object.keys(stats.groups));
+        requestTestAssignees();
     });
 </script>
 
