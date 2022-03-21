@@ -1,5 +1,5 @@
 <script>
-    import { createEventDispatcher, onDestroy } from "svelte";
+    import { createEventDispatcher, onDestroy, onMount } from "svelte";
     import { v4 as uuidv4 } from "uuid";
     import { runStore, polledRuns, TestRunsEventListener } from "../Stores/TestRunsSubscriber";
     import { StatusButtonCSSClassMap, StatusBackgroundCSSClassMap } from "../Common/TestStatus";
@@ -18,6 +18,9 @@
     let updateCounter = 0;
     let releaseName = data.release;
     let myId = `${releaseName}/${groupName}/${testName}`;
+    let sticky = false;
+    let header = undefined;
+    let runsBody = undefined;
 
     runStore.update((val) => {
         val[myId] = [releaseName, testName, groupName]
@@ -45,13 +48,38 @@
         };
     });
 
-    const handleTestRunClick = function (e) {
-        if (clickedTestRuns[e.target.dataset.argusTestId]) {
-            clickedTestRuns[e.target.dataset.argusTestId] = false;
+    const handleTestRunClick = function (runId, event) {
+        let collapse = runsBody.querySelector(`#collapse${runId}`);
+        if (clickedTestRuns[runId]) {
+            collapse.scrollIntoView({ behaviour: "smooth" });
             return;
         }
-        clickedTestRuns[e.target.dataset.argusTestId] = true;
+        clickedTestRuns[runId] = true;
+        collapse.classList.add("show");
     };
+
+    const handleTestRunClose = function (e) {
+        let id = e.detail.id;
+        if (!id) return;
+        let collapse = runsBody.querySelector(`#collapse${id}`);
+        collapse.classList.remove("show");
+        clickedTestRuns[id] = false;
+    };
+
+    onMount(() => {
+        let observer = new IntersectionObserver((entries, observer) => {
+            let entry = entries[0];
+            if (!entry) return;
+            if (entry.intersectionRatio == 0) {
+                sticky = true;
+            } else {
+                sticky = false;
+            }
+        }, {
+            threshold: [0, 0.25, 0.5, 0.75, 1]
+        })
+        observer.observe(header);
+    })
 
     onDestroy(() => {
         TestRunsEventListener.update(() => {
@@ -64,10 +92,14 @@
     });
 </script>
 
-<div class:d-none={filtered} class="accordion-item border">
-    <h4 class="accordion-header" id="heading{listId}">
+<div class:d-none={filtered} class="accordion-item border-none  bg-main mb-1">
+    <h4
+        class="accordion-header border-none"
+        bind:this={header}
+        id="heading{listId}"
+    >
         <button
-            class="accordion-button d-flex align-items-center"
+            class="accordion-button rounded shadow d-flex align-items-center"
             data-bs-toggle="collapse"
             data-bs-target="#collapse{listId}"
         >
@@ -102,18 +134,20 @@
         {:else if !noRuns && runs.length == 0}
         <div class="text-muted text-center m-3"><span class="spinner-border spinner-border-sm"></span> Loading...</div>
         {:else}
-        <div class="p-2">
-            <p class="p-2">
+        <div class="p-2" bind:this={runsBody}>
+            <p class="p-2 bg-main" class:sticky={sticky} class:border={sticky} class:shadow={sticky}>
+                {#if sticky}
+                <div class="mb-1 p-1">
+                    {testName} ({releaseName}/{groupName})
+                </div>
+                {/if}
                 {#each runs as run}
                     <div class="me-2 d-inline-block">
                         <button
                             class:active={clickedTestRuns[run.id]}
                             class="btn {StatusButtonCSSClassMap[run.status]}"
                             type="button"
-                            data-bs-toggle="collapse"
-                            data-bs-target="#collapse{run.id}"
-                            data-argus-test-id={run.id}
-                            on:click={handleTestRunClick}
+                            on:click={(event) => handleTestRunClick(run.id, event)}
                         >
                             #{run.build_number}
                         </button>
@@ -127,6 +161,7 @@
                             <TestRun
                                 id={run.id}
                                 build_number={run.build_number}
+                                on:closeRun={handleTestRunClose}
                             />
                         {/if}
                     </div>
@@ -151,6 +186,18 @@
     .active::before {
         font-family: "Noto Sans Packaged", "Noto Sans", sans-serif;
         content: "● ";
+    }
+
+    .sticky {
+        position: sticky;
+        top: 12px;
+        z-index: 999;
+        margin: 1em;
+        border-radius: 4px;
+    }
+
+    .border-none {
+        border-style: none;
     }
 
 </style>

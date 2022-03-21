@@ -1,5 +1,5 @@
 <script>
-    import { onMount, onDestroy } from "svelte";
+    import { onMount, onDestroy, createEventDispatcher } from "svelte";
     import Fa from "svelte-fa";
     import {
         faTimes,
@@ -39,6 +39,7 @@
     import { sendMessage } from "../Stores/AlertStore";
     export let id = "";
     export let build_number = -1;
+    const dispatch = createEventDispatcher();
     let test_run = undefined;
     let heartbeatHuman = "";
     let newStatus = "";
@@ -187,7 +188,9 @@
 
     const handleAssign = async function (event) {
         let new_assignee = event.detail.value;
-        new_assignee = Object.values(userSelect).find(user => (user.value == new_assignee));
+        new_assignee = Object.values(userSelect).find(
+            (user) => user.value == new_assignee
+        );
         if (!new_assignee) {
             return;
         }
@@ -317,332 +320,371 @@
     });
 </script>
 
-<div class="border rounded p-2 shadow-sm testrun-card mb-4">
-    {#if test_run}
-        <div class="row p-2">
-            <div class="col-6">
-                <div class="mb-2">
-                <a
-                    class="link-dark"
-                    href="/test_run/{id}"
-                    target="_blank"
-                >
-                {test_run.build_job_name}#{build_number}
+<div class="border rounded shadow-sm testrun-card mb-4 top-bar">
+    <div class="d-flex px-2 py-2 mb-1 border-bottom bg-white ">
+        <div class="p-1">
+            {#if test_run}
+                <a class="link-dark" href="/test_run/{id}" target="_blank">
+                    {test_run.build_job_name}#{build_number}
                 </a>
-                </div>
-                <div class="d-flex align-items-center">
-                    <div class="dropdown">
-                        <button
-                            class="btn {StatusButtonCSSClassMap[
-                                test_run.status
-                            ]} text-light"
-                            type="button"
-                            title={timestampToISODate(
-                                test_run.end_time * 1000,
-                                true
-                            )}
-                            data-bs-toggle="dropdown"
-                        >
-                            {test_run.status.toUpperCase()}
-                            {#if InProgressStatuses.find((status) => status == test_run.status)}
-                                <span
-                                    class="spinner-border spinner-border-sm d-inline-block"
+            {/if}
+        </div>
+        <div class="ms-auto text-end">
+            <button class="btn btn-sm btn-outline-dark" title="Close" on:click={() => {
+                dispatch("closeRun", { id: id })
+            }}
+                ><Fa icon={faTimes} /></button
+            >
+        </div>
+    </div>
+    {#if test_run}
+        <div class="p-2">
+            <div class="row p-2">
+                <div class="col-6">
+                    <div class="d-flex align-items-center">
+                        <div class="dropdown">
+                            <button
+                                class="btn {StatusButtonCSSClassMap[
+                                    test_run.status
+                                ]} text-light"
+                                type="button"
+                                title={timestampToISODate(
+                                    test_run.end_time * 1000,
+                                    true
+                                )}
+                                data-bs-toggle="dropdown"
+                            >
+                                {test_run.status.toUpperCase()}
+                                {#if InProgressStatuses.find((status) => status == test_run.status)}
+                                    <span
+                                        class="spinner-border spinner-border-sm d-inline-block"
+                                    />
+                                {/if}
+                            </button>
+                            <ul class="dropdown-menu">
+                                {#each Object.keys(TestStatusChangeable) as status}
+                                    <li>
+                                        <button
+                                            class="dropdown-item"
+                                            disabled={disableButtons}
+                                            on:click={() => {
+                                                newStatus =
+                                                    status.toLowerCase();
+                                                handleStatus();
+                                            }}>{status}</button
+                                        >
+                                    </li>
+                                {/each}
+                            </ul>
+                        </div>
+                        <div class="dropdown ms-2">
+                            <button
+                                class="btn {InvestigationButtonCSSClassMap[
+                                    test_run.investigation_status
+                                ]} text-light"
+                                type="button"
+                                data-bs-toggle="dropdown"
+                            >
+                                <Fa
+                                    icon={investigationStatusIcon[
+                                        test_run.investigation_status
+                                    ]}
                                 />
-                            {/if}
-                        </button>
-                        <ul class="dropdown-menu">
-                            {#each Object.keys(TestStatusChangeable) as status}
-                                <li>
-                                    <button
-                                        class="dropdown-item"
-                                        disabled={disableButtons}
-                                        on:click={() => {
-                                            newStatus = status.toLowerCase();
-                                            handleStatus();
-                                        }}>{status}</button
-                                    >
-                                </li>
-                            {/each}
-                        </ul>
-                    </div>
-                    <div class="dropdown ms-2">
-                        <button
-                            class="btn {InvestigationButtonCSSClassMap[
-                                test_run.investigation_status
-                            ]} text-light"
-                            type="button"
-                            data-bs-toggle="dropdown"
-                        >
-                            <Fa
-                                icon={investigationStatusIcon[
+                                {TestInvestigationStatusStrings[
                                     test_run.investigation_status
                                 ]}
-                            />
-                            {TestInvestigationStatusStrings[
-                                test_run.investigation_status
-                            ]}
-                        </button>
-                        <ul class="dropdown-menu">
-                            {#each Object.entries(TestInvestigationStatus) as [key, status]}
-                                <li>
-                                    <button
-                                        class="dropdown-item"
-                                        disabled={disableButtons}
-                                        on:click={() => {
-                                            newInvestigationStatus = status;
-                                            handleInvestigationStatus();
-                                        }}
-                                        >{TestInvestigationStatusStrings[
-                                            status
-                                        ]}</button
-                                    >
-                                </li>
-                            {/each}
-                        </ul>
+                            </button>
+                            <ul class="dropdown-menu">
+                                {#each Object.entries(TestInvestigationStatus) as [key, status]}
+                                    <li>
+                                        <button
+                                            class="dropdown-item"
+                                            disabled={disableButtons}
+                                            on:click={() => {
+                                                newInvestigationStatus = status;
+                                                handleInvestigationStatus();
+                                            }}
+                                            >{TestInvestigationStatusStrings[
+                                                status
+                                            ]}</button
+                                        >
+                                    </li>
+                                {/each}
+                            </ul>
+                        </div>
                     </div>
                 </div>
+                <div class="col-6">
+                    <div class="row mb-2 text-sm justify-content-end">
+                        <div class="col-6">
+                            {#if Object.keys(userSelect).length > 1}
+                                <div class="text-muted text-sm text-end mb-2">
+                                    Assignee
+                                </div>
+                                <div class="border rounded">
+                                    <div class="d-flex align-items-center m-1">
+                                        {#if users[currentAssignee.id]}
+                                            <img
+                                                class="img-profile me-2"
+                                                src={getPicture(
+                                                    users[currentAssignee.id]
+                                                        ?.picture_id
+                                                )}
+                                                alt={users[currentAssignee.id]
+                                                    ?.username}
+                                            />
+                                        {/if}
+                                        <div class="flex-fill">
+                                            <Select
+                                                Item={User}
+                                                value={currentAssignee.value}
+                                                items={Object.values(
+                                                    userSelect
+                                                )}
+                                                hideEmptyState={true}
+                                                isClearable={false}
+                                                isSearchable={true}
+                                                on:select={handleAssign}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            {/if}
+                        </div>
+                    </div>
+                    {#if InProgressStatuses.includes(test_run.status)}
+                        <div class="row text-end">
+                            <div
+                                class="col d-flex flex-column text-muted text-sm"
+                            >
+                                <div>Last heartbeat: {heartbeatHuman} ago</div>
+                                <div>Started: {startedAtHuman} ago</div>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
             </div>
-            <div class="col-6">
-                <div class="row mb-2 text-sm justify-content-end">
-                    <div class="col-6">
-                        {#if Object.keys(userSelect).length > 1}
-                            <div class="text-muted text-sm text-end mb-2">Assignee</div>
-                            <div class="border rounded">
-                                <div class="d-flex align-items-center m-1">
-                                    {#if users[currentAssignee.id]}
-                                        <img
-                                            class="img-profile me-2"
-                                            src={getPicture(
-                                                users[currentAssignee.id]
-                                                    ?.picture_id
-                                            )}
-                                            alt={users[currentAssignee.id]
-                                                ?.username}
-                                        />
-                                    {/if}
-                                    <div class="flex-fill">
-                                        <Select
-                                            Item={User}
-                                            value={currentAssignee.value}
-                                            items={Object.values(userSelect)}
-                                            hideEmptyState={true}
-                                            isClearable={false}
-                                            isSearchable={true}
-                                            on:select={handleAssign}
-                                        />
+            <nav>
+                <div class="nav nav-tabs" id="nav-tab-{id}" role="tablist">
+                    <button
+                        class="nav-link active"
+                        id="nav-details-tab-{id}"
+                        data-bs-toggle="tab"
+                        data-bs-target="#nav-details-{id}"
+                        type="button"
+                        role="tab"
+                        ><i class="fas fa-info-circle" /> Details</button
+                    >
+                    <button
+                        class="nav-link"
+                        id="nav-screenshots-tab-{id}"
+                        data-bs-toggle="tab"
+                        data-bs-target="#nav-screenshots-{id}"
+                        type="button"
+                        role="tab"
+                        ><i class="fas fa-images" /> Screenshots</button
+                    >
+                    <button
+                        class="nav-link"
+                        id="nav-resources-tab-{id}"
+                        data-bs-toggle="tab"
+                        data-bs-target="#nav-resources-{id}"
+                        type="button"
+                        role="tab"><i class="fas fa-cloud" /> Resources</button
+                    >
+                    <button
+                        class="nav-link"
+                        id="nav-events-tab-{id}"
+                        data-bs-toggle="tab"
+                        data-bs-target="#nav-events-{id}"
+                        type="button"
+                        role="tab"
+                        ><i class="fas fa-rss-square" /> Events</button
+                    >
+                    <button
+                        class="nav-link"
+                        id="nav-nemesis-tab-{id}"
+                        data-bs-toggle="tab"
+                        data-bs-target="#nav-nemesis-{id}"
+                        type="button"
+                        role="tab"><i class="fas fa-spider" /> Nemesis</button
+                    >
+                    <button
+                        class="nav-link"
+                        id="nav-logs-tab-{id}"
+                        data-bs-toggle="tab"
+                        data-bs-target="#nav-logs-{id}"
+                        type="button"
+                        role="tab"><i class="fas fa-box" /> Logs</button
+                    >
+                    <button
+                        class="nav-link"
+                        id="nav-discuss-tab-{id}"
+                        data-bs-toggle="tab"
+                        data-bs-target="#nav-discuss-{id}"
+                        type="button"
+                        on:click={() => (commentsOpen = true)}
+                        role="tab"
+                        ><i class="fas fa-comments" /> Discussion</button
+                    >
+                    <button
+                        class="nav-link"
+                        id="nav-issues-tab-{id}"
+                        data-bs-toggle="tab"
+                        data-bs-target="#nav-issues-{id}"
+                        type="button"
+                        role="tab"
+                        on:click={() => (issuesOpen = true)}
+                        ><i class="fas fa-code-branch" /> Issues</button
+                    >
+                    <button
+                        class="nav-link"
+                        id="nav-activity-tab-{id}"
+                        data-bs-toggle="tab"
+                        data-bs-target="#nav-activity-{id}"
+                        type="button"
+                        on:click={() => (activityOpen = true)}
+                        role="tab"
+                        ><i class="fas fa-exclamation-triangle" /> Activity</button
+                    >
+                </div>
+            </nav>
+            <div
+                class="tab-content border-start border-end border-bottom bg-white"
+                id="nav-tabContent-{id}"
+            >
+                <div
+                    class="tab-pane fade show active"
+                    id="nav-details-{id}"
+                    role="tabpanel"
+                >
+                    <TestRunInfo {test_run} />
+                </div>
+                <div
+                    class="tab-pane fade"
+                    id="nav-screenshots-{id}"
+                    role="tabpanel"
+                >
+                    <Screenshots screenshots={test_run.screenshots} />
+                </div>
+                <div
+                    class="tab-pane fade"
+                    id="nav-resources-{id}"
+                    role="tabpanel"
+                >
+                    <div class="p-2">
+                        <ResourcesInfo
+                            resources={test_run.allocated_resources}
+                        />
+                    </div>
+                </div>
+                <div class="tab-pane fade" id="nav-events-{id}" role="tabpanel">
+                    <div class="accordion accordion-flush" id="accordionEvents">
+                        {#each test_run.events as event_container}
+                            <div class="accordion-item">
+                                <h2
+                                    class="accordion-header"
+                                    id="accordionHeadingEvents{event_container.severity}-{id}"
+                                >
+                                    <button
+                                        class="accordion-button collapsed"
+                                        type="button"
+                                        data-bs-toggle="collapse"
+                                        data-bs-target="#accordionBodyEvents{event_container.severity}-{id}"
+                                    >
+                                        {event_container.severity.toUpperCase()}
+                                        ({event_container.event_amount})
+                                    </button>
+                                </h2>
+                                <div
+                                    id="accordionBodyEvents{event_container.severity}-{id}"
+                                    class="accordion-collapse collapse"
+                                    data-bs-parent="#accordionEvents"
+                                >
+                                    <div class="accordion-body">
+                                        {#each event_container.last_events as event}
+                                            <pre
+                                                class="mb-1 p-1 border font-monospace">
+                                                {event}
+                                            </pre>
+                                        {/each}
                                     </div>
                                 </div>
                             </div>
-                        {/if}
+                        {:else}
+                            <div class="row">
+                                <div class="col text-center p-1 text-muted">
+                                    No events submitted yet.
+                                </div>
+                            </div>
+                        {/each}
                     </div>
                 </div>
-                {#if InProgressStatuses.includes(test_run.status)}
-                <div class="row text-end">
-                        <div class="col d-flex flex-column text-muted text-sm">
-                            <div>Last heartbeat: {heartbeatHuman} ago</div>
-                            <div>Started: {startedAtHuman} ago</div>
-                        </div>
-                </div>
-                {/if}
-            </div>
-        </div>
-        <nav>
-            <div class="nav nav-tabs" id="nav-tab-{id}" role="tablist">
-                <button
-                    class="nav-link active"
-                    id="nav-details-tab-{id}"
-                    data-bs-toggle="tab"
-                    data-bs-target="#nav-details-{id}"
-                    type="button"
-                    role="tab"><i class="fas fa-info-circle" /> Details</button
+                <div
+                    class="tab-pane fade"
+                    id="nav-nemesis-{id}"
+                    role="tabpanel"
                 >
-                <button
-                    class="nav-link"
-                    id="nav-screenshots-tab-{id}"
-                    data-bs-toggle="tab"
-                    data-bs-target="#nav-screenshots-{id}"
-                    type="button"
-                    role="tab"><i class="fas fa-images" /> Screenshots</button
-                >
-                <button
-                    class="nav-link"
-                    id="nav-resources-tab-{id}"
-                    data-bs-toggle="tab"
-                    data-bs-target="#nav-resources-{id}"
-                    type="button"
-                    role="tab"><i class="fas fa-cloud" /> Resources</button
-                >
-                <button
-                    class="nav-link"
-                    id="nav-events-tab-{id}"
-                    data-bs-toggle="tab"
-                    data-bs-target="#nav-events-{id}"
-                    type="button"
-                    role="tab"><i class="fas fa-rss-square" /> Events</button
-                >
-                <button
-                    class="nav-link"
-                    id="nav-nemesis-tab-{id}"
-                    data-bs-toggle="tab"
-                    data-bs-target="#nav-nemesis-{id}"
-                    type="button"
-                    role="tab"><i class="fas fa-spider" /> Nemesis</button
-                >
-                <button
-                    class="nav-link"
-                    id="nav-logs-tab-{id}"
-                    data-bs-toggle="tab"
-                    data-bs-target="#nav-logs-{id}"
-                    type="button"
-                    role="tab"><i class="fas fa-box" /> Logs</button
-                >
-                <button
-                    class="nav-link"
-                    id="nav-discuss-tab-{id}"
-                    data-bs-toggle="tab"
-                    data-bs-target="#nav-discuss-{id}"
-                    type="button"
-                    on:click={() => (commentsOpen = true)}
-                    role="tab"><i class="fas fa-comments" /> Discussion</button
-                >
-                <button
-                    class="nav-link"
-                    id="nav-issues-tab-{id}"
-                    data-bs-toggle="tab"
-                    data-bs-target="#nav-issues-{id}"
-                    type="button"
-                    role="tab"
-                    on:click={() => (issuesOpen = true)}
-                    ><i class="fas fa-code-branch" /> Issues</button
-                >
-                <button
-                    class="nav-link"
-                    id="nav-activity-tab-{id}"
-                    data-bs-toggle="tab"
-                    data-bs-target="#nav-activity-{id}"
-                    type="button"
-                    on:click={() => (activityOpen = true)}
-                    role="tab"
-                    ><i class="fas fa-exclamation-triangle" /> Activity</button
-                >
-            </div>
-        </nav>
-        <div
-            class="tab-content border-start border-end border-bottom bg-white"
-            id="nav-tabContent-{id}"
-        >
-            <div
-                class="tab-pane fade show active"
-                id="nav-details-{id}"
-                role="tabpanel"
-            >
-                <TestRunInfo {test_run} />
-            </div>
-            <div
-                class="tab-pane fade"
-                id="nav-screenshots-{id}"
-                role="tabpanel"
-            >
-                <Screenshots screenshots={test_run.screenshots} />
-            </div>
-            <div class="tab-pane fade" id="nav-resources-{id}" role="tabpanel">
-                <div class="p-2">
-                    <ResourcesInfo
+                    <NemesisTable
+                        nemesisCollection={test_run.nemesis_data}
                         resources={test_run.allocated_resources}
                     />
                 </div>
-            </div>
-            <div class="tab-pane fade" id="nav-events-{id}" role="tabpanel">
-                <div class="accordion accordion-flush" id="accordionEvents">
-                    {#each test_run.events as event_container}
-                        <div class="accordion-item">
-                            <h2
-                                class="accordion-header"
-                                id="accordionHeadingEvents{event_container.severity}-{id}"
-                            >
-                                <button
-                                    class="accordion-button collapsed"
-                                    type="button"
-                                    data-bs-toggle="collapse"
-                                    data-bs-target="#accordionBodyEvents{event_container.severity}-{id}"
-                                >
-                                    {event_container.severity.toUpperCase()} ({event_container.event_amount})
-                                </button>
-                            </h2>
-                            <div
-                                id="accordionBodyEvents{event_container.severity}-{id}"
-                                class="accordion-collapse collapse"
-                                data-bs-parent="#accordionEvents"
-                            >
-                                <div class="accordion-body">
-                                    {#each event_container.last_events as event}
-                                        <pre
-                                            class="mb-1 p-1 border font-monospace">
-                                            {event}
-                                        </pre>
-                                    {/each}
-                                </div>
-                            </div>
-                        </div>
+                <div class="tab-pane fade" id="nav-logs-{id}" role="tabpanel">
+                    {#if test_run.logs.length > 0}
+                        <table
+                            class="table table-bordered table-sm text-center"
+                        >
+                            <thead>
+                                <th>Log Type</th>
+                                <th>Log URL</th>
+                            </thead>
+                            <tbody>
+                                {#each test_run.logs as log}
+                                    <tr>
+                                        <td>{log[0]}</td>
+                                        <td
+                                            ><a
+                                                class="btn btn-primary"
+                                                href={log[1]}>Download</a
+                                            ></td
+                                        >
+                                    </tr>
+                                {/each}
+                            </tbody>
+                        </table>
                     {:else}
                         <div class="row">
                             <div class="col text-center p-1 text-muted">
-                                No events submitted yet.
+                                No logs.
                             </div>
                         </div>
-                    {/each}
+                    {/if}
                 </div>
-            </div>
-            <div class="tab-pane fade" id="nav-nemesis-{id}" role="tabpanel">
-                <NemesisTable
-                    nemesisCollection={test_run.nemesis_data}
-                    resources={test_run.allocated_resources}
-                />
-            </div>
-            <div class="tab-pane fade" id="nav-logs-{id}" role="tabpanel">
-                {#if test_run.logs.length > 0}
-                    <table class="table table-bordered table-sm text-center">
-                        <thead>
-                            <th>Log Type</th>
-                            <th>Log URL</th>
-                        </thead>
-                        <tbody>
-                            {#each test_run.logs as log}
-                                <tr>
-                                    <td>{log[0]}</td>
-                                    <td
-                                        ><a
-                                            class="btn btn-primary"
-                                            href={log[1]}>Download</a
-                                        ></td
-                                    >
-                                </tr>
-                            {/each}
-                        </tbody>
-                    </table>
-                {:else}
-                    <div class="row">
-                        <div class="col text-center p-1 text-muted">
-                            No logs.
-                        </div>
-                    </div>
-                {/if}
-            </div>
-            <div class="tab-pane fade" id="nav-discuss-{id}" role="tabpanel">
-                {#if commentsOpen}
-                    <TestRunComments {id} />
-                {/if}
-            </div>
-            <div class="tab-pane fade" id="nav-issues-{id}" role="tabpanel">
-                <IssueTemplate {test_run} />
-                {#if issuesOpen}
-                    <GithubIssues {id} />
-                {/if}
-            </div>
-            <div class="tab-pane fade" id="nav-activity-{id}" role="tabpanel">
-                {#if activityOpen}
-                    <ActivityTab {id} />
-                {/if}
+                <div
+                    class="tab-pane fade"
+                    id="nav-discuss-{id}"
+                    role="tabpanel"
+                >
+                    {#if commentsOpen}
+                        <TestRunComments {id} />
+                    {/if}
+                </div>
+                <div class="tab-pane fade" id="nav-issues-{id}" role="tabpanel">
+                    <IssueTemplate {test_run} />
+                    {#if issuesOpen}
+                        <GithubIssues {id} />
+                    {/if}
+                </div>
+                <div
+                    class="tab-pane fade"
+                    id="nav-activity-{id}"
+                    role="tabpanel"
+                >
+                    {#if activityOpen}
+                        <ActivityTab {id} />
+                    {/if}
+                </div>
             </div>
         </div>
     {:else}
@@ -679,6 +721,10 @@
     }
 
     .testrun-card {
-        background-color: #fafafa;
+        background-color: #ededed;
+    }
+
+    .top-bar {
+        overflow: hidden;
     }
 </style>

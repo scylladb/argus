@@ -148,19 +148,19 @@
                         target="_blank"
                         href="http://{locateGrafanaNode().instance_info
                             .public_ip}:3000/"
-                        class="btn btn-warning">Open Grafana</a
+                        class="btn btn-outline-warning">Open Grafana</a
                     >
                 {:else}
                     <a
                         href="https://jenkins.scylladb.com/view/QA/job/QA-tools/job/hydra-show-monitor/parambuild/?test_id={test_run.id}"
-                        class="btn btn-primary"
+                        class="btn btn-outline-primary"
                         target="_blank"
                         aria-current="page"
                         ><Fa icon={faSearch} /> Restore Monitoring Stack</a
                     >
                     <button
                         type="button"
-                        class="btn btn-success"
+                        class="btn btn-outline-success"
                         on:click={() => {
                             navigator.clipboard.writeText(
                                 cmd_hydraInvestigateShowMonitor
@@ -169,7 +169,7 @@
                     >
                     <button
                         type="button"
-                        class="btn btn-success"
+                        class="btn btn-outline-success"
                         on:click={() => {
                             navigator.clipboard.writeText(
                                 cmd_hydraInvestigateShowLogs
@@ -180,7 +180,7 @@
                 <a
                     target="_blank"
                     href="/dashboard/{test_run.release_name}"
-                    class="btn btn-info"
+                    class="btn btn-outline-success"
                     ><Fa icon={faBusinessTime} /> Release Dashboard</a
                 >
             </div>

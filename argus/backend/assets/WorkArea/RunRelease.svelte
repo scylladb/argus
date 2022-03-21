@@ -192,7 +192,4 @@
         margin-left: 2rem;
     }
 
-    .bg-white {
-        background-color: #fff;
-    }
 </style>
