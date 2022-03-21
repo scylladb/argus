@@ -87,7 +87,7 @@ class ArgusService:
             f"start_time, end_time, heartbeat FROM {TestRun.table_name()}"
         )
         self.run_by_release_stats_statement = self.database.prepare(
-            "SELECT id, name, group, release_name, status, start_time, build_job_url, "
+            "SELECT id, name, group, release_name, status, start_time, build_job_url, assignee, "
             f"end_time, investigation_status, heartbeat FROM {TestRun.table_name()} WHERE release_name = ?"
         )
         self.event_insert_statement = self.database.prepare(
@@ -337,6 +337,7 @@ class ArgusService:
                             "build_number": run["build_job_url"].rstrip("/").split("/")[-1],
                             "build_job_url": run["build_job_url"],
                             "start_time": run["start_time"],
+                            "assignee": run["assignee"],
                             "issues": [dict(i.items()) for i in release_issues if i.run_id == run["id"]],
                             "comments": [dict(i.items()) for i in release_comments if i.test_run_id == run["id"]],
                         }
