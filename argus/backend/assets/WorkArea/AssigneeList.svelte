@@ -15,7 +15,7 @@
         {#each assignees as assignee}
             <div title={users[assignee].full_name} class="assignee-container">
                 <div
-                    src={getPicture(users[assignee].picture_id)}
+                    src={getPicture(users[assignee]?.picture_id)}
                     class="img-tiny"
                     class:img-smaller={smallImage}
                     alt="{users[assignee].full_name}"
