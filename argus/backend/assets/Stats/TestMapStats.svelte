@@ -6,17 +6,23 @@
         faEyeSlash,
         faEye,
         faBug,
-        faAngleRight,
         faComment,
     } from "@fortawesome/free-solid-svg-icons";
 
     import {
         StatusBackgroundCSSClassMap,
+        StatusCSSClassMap,
         TestInvestigationStatus,
         TestInvestigationStatusStrings,
         TestStatus,
     } from "../Common/TestStatus";
-    import { assigneeStore, requestAssigneesForReleaseGroups, requestAssigneesForReleaseTests } from "../Stores/AssigneeSubscriber";
+    import { titleCase } from "../Common/TextUtils";
+    import AssigneeList from "../WorkArea/AssigneeList.svelte";
+    import {
+        assigneeStore,
+        requestAssigneesForReleaseGroups,
+        requestAssigneesForReleaseTests,
+    } from "../Stores/AssigneeSubscriber";
     import { userList } from "../Stores/UserlistSubscriber";
     import { getPicture } from "../Common/UserUtils";
     export let releaseName = "";
@@ -46,7 +52,6 @@
     const dispatch = createEventDispatcher();
 
     const handleTestClick = function (name, test, group) {
-        if (test.start_time == 0) return;
         dispatch("testClick", {
             name: name,
             group: group,
@@ -57,102 +62,133 @@
     };
 
     const filterTestsForGroup = function (groupName, tests) {
+        let testPriorities = {
+            failed: 5,
+            passed: 4,
+            running: 3,
+            created: 2,
+            aborted: 1,
+            unknown: 0,
+        };
         return Object.values(tests)
             .filter((test) => test.group == groupName)
+            .sort((a, b) => testPriorities[b.status] - testPriorities[a.status])
             .reduce((tests, test) => {
                 tests[test.name] = test;
                 return tests;
             }, {});
     };
 
-    const requestTestAssignees = function() {
+    const requestTestAssignees = function () {
         console.log(stats);
         Object.entries(stats.groups).map((entry) => {
             let [groupName, groupStats] = entry;
-            let tests = Object.values(groupStats.tests).filter((test) => test.status != "unknown");
+            let tests = Object.values(groupStats.tests).filter(
+                (test) => test.status != "unknown"
+            );
             requestAssigneesForReleaseTests(releaseName, tests, groupName);
-        })
-    }
+        });
+    };
 
-    onMount(() =>  {
-        requestAssigneesForReleaseGroups(releaseName, Object.keys(stats.groups));
+    const getAssigneesForTest = function (test, group) {
+        let testAssignees = assigneeList.tests?.[`${group}/${test}`] ?? [];
+        let groupAssignees = assigneeList.groups?.[group] ?? [];
+        return [...testAssignees, ...groupAssignees];
+    };
+
+    onMount(() => {
+        requestAssigneesForReleaseGroups(
+            releaseName,
+            Object.keys(stats.groups)
+        );
         requestTestAssignees();
     });
 </script>
 
 {#each Object.entries(stats.groups) as [groupName, group] (groupName)}
-    <div>
-        <h5>
+    <div class="p-2 shadow mb-2 rounded bg-main">
+        <h5 class="mb-2">
             <div class="mb-2">{groupName}</div>
             {#if Object.keys(assigneeList.groups).length > 0 && Object.keys(users).length > 0}
-                <div>
+                <div class="shadow-sm bg-main rounded d-inline-block p-2">
                     <div class="d-flex align-items-center">
                         <img
                             class="img-thumb ms-2"
-                            src="{getPicture(users[assigneeList.groups[groupName]?.[0]]?.picture_id)}"
+                            src={getPicture(
+                                users[assigneeList.groups[groupName]?.[0]]
+                                    ?.picture_id
+                            )}
                             alt=""
-                            >
-                        <span class="ms-2 fs-6">{users[assigneeList.groups[groupName]?.[0]]?.full_name ?? "unassigned"}</span>
+                        />
+                        <span class="ms-2 fs-6"
+                            >{users[assigneeList.groups[groupName]?.[0]]
+                                ?.full_name ?? "unassigned"}</span
+                        >
                     </div>
                 </div>
             {/if}
         </h5>
-        <div class="my-2 d-flex flex-wrap">
-            {#each Object.entries(filterTestsForGroup(groupName, group.tests)) as [testName, test] (testName)}
+        <div class="my-2 d-flex flex-wrap bg-lighter rounded shadow-sm">
+            {#each Object.entries(filterTestsForGroup(groupName, group.tests)) as [testName, test] (`${groupName}/${testName}`)}
                 <div
+                    class:status-block-active={test.start_time != 0}
+                    class="rounded bg-main status-block m-1 d-flex flex-column overflow-hidden shadow-sm"
                     on:click={() => {
                         handleTestClick(testName, test, groupName);
                     }}
-                    class:status-block-active={test.start_time != 0}
-                    class="d-inline-block border status-block {StatusBackgroundCSSClassMap[
-                        test.status
-                    ]}"
                 >
                     <div
-                        class="position-absolute status-block-popup shadow p-1"
+                        class="{StatusBackgroundCSSClassMap[
+                            test.status
+                        ]} text-center text-light p-1 border-bottom"
                     >
-                        {testName}
-                    </div>
-                    <div
-                        class="d-flex h-100 align-items-center justify-content-center p-2 status-block-inner"
-                    >
-                        {#if clickedTests[testName]}
-                            <Fa
-                                color="#fff"
-                                icon={faAngleRight}
-                            />
+                        {test.status == "unknown"
+                            ? "Not run"
+                            : titleCase(test.status)}
+                        {#if clickedTests[`${groupName}/${testName}`]}
+                            <div class="text-tiny">Selected</div>
                         {/if}
-                        <div class="text-center">
-                            <div class="d-flex justify-content-center">
-                                {#if test.investigation_status && (test.status != TestStatus.PASSED || test.investigation_status != TestInvestigationStatus.NOT_INVESTIGATED)}
-                                    <div
-                                        class="p-1 align-self-bottom"
-                                        title="Investigation: {TestInvestigationStatusStrings[
-                                            test.investigation_status
-                                        ]}"
-                                    >
-                                        <Fa
-                                            color="#fff"
-                                            icon={investigationStatusIcon[
-                                                test.investigation_status
-                                            ]}
-                                        />
-                                    </div>
-                                {/if}
-                                {#if test.hasBugReport}
-                                    <div class="p-1 align-self-bottom" title="Has a bug report">
-                                        <Fa color="#fff" icon={faBug} />
-                                    </div>
-                                {/if}
-                            </div>
-                            <div class="align-self-top">
-                                {#if test.hasComments}
-                                    <div class="p-1" title="Has a comment">
-                                        <Fa color="#fff" icon={faComment} />
-                                    </div>
-                                {/if}
-                            </div>
+                    </div>
+                    <div class="p-1 text-small d-flex align-items-center">
+                        <div class="ms-1">{testName}</div>
+                    </div>
+                    <div class="d-flex flex-fill align-items-end justify-content-end p-1">
+                        <div class="p-1 me-auto">
+                            {#if assigneeList.tests[`${groupName}/${testName}`] || assigneeList.groups[groupName]}
+                                <AssigneeList
+                                    smallImage={false}
+                                    assignees={getAssigneesForTest(
+                                        testName,
+                                        groupName
+                                    )}
+                                />
+                            {/if}
                         </div>
+                        {#if test.investigation_status && (test.status != TestStatus.PASSED || test.investigation_status != TestInvestigationStatus.NOT_INVESTIGATED)}
+                            <div
+                                class="p-1"
+                                title="Investigation: {TestInvestigationStatusStrings[
+                                    test.investigation_status
+                                ]}"
+                            >
+                                <Fa
+                                    color="#000"
+                                    icon={investigationStatusIcon[
+                                        test.investigation_status
+                                    ]}
+                                />
+                            </div>
+                        {/if}
+                        {#if test.hasBugReport}
+                            <div class="p-1" title="Has a bug report">
+                                <Fa color="#000" icon={faBug} />
+                            </div>
+                        {/if}
+                        {#if test.hasComments}
+                            <div class="p-1" title="Has a comment">
+                                <Fa color="#000" icon={faComment} />
+                            </div>
+                        {/if}
                     </div>
                 </div>
             {:else}
@@ -164,10 +200,9 @@
 
 <style>
     .status-block {
-        cursor: help;
-        width: 64px;
-        height: 64px;
-        position: relative;
+        width: 178px;
+        max-height: 160px;
+        cursor: pointer;
     }
 
     .img-thumb {
@@ -175,27 +210,11 @@
         width: 32px;
     }
 
-    .status-block-active:hover {
-        cursor: pointer;
+    .text-small {
+        font-size: 0.8em;
     }
 
-    .status-block-active:hover > .status-block-inner {
-        border: 2px solid black;
-    }
-
-    .status-block-popup {
-        display: none;
-        width: 256px;
-        font-size: 0.9em;
-        background-color: white;
-        border: solid 1px white;
-        font-family: monospace;
-        border-radius: 8px;
-        top: -2.5em;
-        z-index: 999;
-    }
-
-    .status-block:hover > .status-block-popup {
-        display: block;
+    .text-tiny {
+        font-size: 0.6em;
     }
 </style>
