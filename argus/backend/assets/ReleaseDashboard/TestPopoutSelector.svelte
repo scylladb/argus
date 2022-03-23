@@ -108,10 +108,14 @@
                                                 </a>
                                             </div>
                                             <div class="ms-auto me-1">
-                                                <AssigneeList
-                                                    assignees={[run.assignee]}
-                                                    smallImage={true}
-                                                />
+                                                {#if run.assignee}
+                                                    <AssigneeList
+                                                        assignees={[
+                                                            run.assignee,
+                                                        ]}
+                                                        smallImage={true}
+                                                    />
+                                                {/if}
                                             </div>
                                             <div class="text-muted small-text">
                                                 {timestampToISODate(
