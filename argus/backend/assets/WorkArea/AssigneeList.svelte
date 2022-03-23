@@ -28,8 +28,8 @@
 
 <style>
     .img-tiny {
-        height: 28px;
-        width: 28px;
+        height: 24px;
+        width: 24px;
         background-color: black;
         background-clip: border-box;
         background-repeat: no-repeat;
@@ -38,7 +38,7 @@
         image-rendering: crisp-edges;
         cursor: help;
         border-radius: 50%;
-        border: solid 1px rgb(122, 122, 122);
+        /* border: solid 1px rgb(122, 122, 122); */
     }
 
     .img-smaller {

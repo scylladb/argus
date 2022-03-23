@@ -33,7 +33,7 @@
 <div class="d-flex justify-content-center" class:flex-column={!horizontal} class:align-items-center={!horizontal}>
     {#if releaseStats?.total > 0}
         {#if showReleaseStats}
-            <div class="w-100">
+            <div class="w-100 mb-2">
                 <svelte:component this={DisplayItem} stats={releaseStats} />
             </div>
         {/if}

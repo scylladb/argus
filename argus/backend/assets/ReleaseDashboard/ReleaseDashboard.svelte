@@ -1,13 +1,8 @@
 <script>
     export let releaseData = {};
-    import { faGithub } from "@fortawesome/free-brands-svg-icons";
-    import { faBug } from "@fortawesome/free-solid-svg-icons";
-    import Fa from "svelte-fa";
-    import ChartStats from "../Stats/ChartStats.svelte";
     import ReleaseStats from "../Stats/ReleaseStats.svelte";
     import ReleaseActivity from "./ReleaseActivity.svelte";
     import GithubIssues from "../Github/GithubIssues.svelte";
-    import ReleaseGithubIssues from "./ReleaseGithubIssues.svelte";
     import TestPopoutSelector from "./TestPopoutSelector.svelte";
     import { sendMessage } from "../Stores/AlertStore";
     let clickedTests = {};
@@ -17,18 +12,19 @@
             sendMessage("info", `The test "${e.detail.name}" hasn't been run yet!"`);
             return;
         }
-
-        if (!clickedTests[e.detail.name]) {
-            clickedTests[e.detail.name] = e.detail;
+        let key = `${e.detail.group}/${e.detail.name}`;
+        if (!clickedTests[key]) {
+            clickedTests[key] = e.detail;
         } else {
-            delete clickedTests[e.detail.name];
+            delete clickedTests[key];
             clickedTests = clickedTests;
         }
     };
 
-    const handleDeleteRequest = function(ev) {
-        if (clickedTests[ev.detail.name]) {
-            delete clickedTests[ev.detail.name];
+    const handleDeleteRequest = function(e) {
+        let key = `${e.detail.group}/${e.detail.name}`;
+        if (clickedTests[key]) {
+            delete clickedTests[key];
             clickedTests = clickedTests;
         }
     };
@@ -44,9 +40,8 @@
         <div class="col-8">
             <ReleaseStats
                 releaseName={releaseData.release.name}
-                DisplayItem={ChartStats}
                 showTestMap={true}
-                horizontal={true}
+                horizontal={false}
                 bind:clickedTests={clickedTests}
                 on:testClick={handleTestClick}
             />
