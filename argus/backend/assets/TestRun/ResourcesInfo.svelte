@@ -9,6 +9,8 @@
         state: "state",
         name: "name",
         shards: ["instance_info", "shards_amount"],
+        publicIp: ["instance_info", "public_ip"],
+        privateIp: ["instance_info", "private_ip"],
     };
     let sortHeader = "name";
     let sortAscending = false;
@@ -123,6 +125,44 @@
             scope="col"
             class="text-center align-middle"
             on:click={() => {
+                sortHeader = "publicIp";
+                sortAscending = !sortAscending;
+            }}
+        >
+            {#if sortHeader == "publicIp"}
+                <span
+                    class="d-inline-block"
+                    class:invertArrow={sortAscending}
+                >
+                    &#x25B2;
+                </span>
+            {/if}
+            Public IP
+        </th>
+        <th
+            role="button"
+            scope="col"
+            class="text-center align-middle"
+            on:click={() => {
+                sortHeader = "privateIp";
+                sortAscending = !sortAscending;
+            }}
+        >
+            {#if sortHeader == "privateIp"}
+                <span
+                    class="d-inline-block"
+                    class:invertArrow={sortAscending}
+                >
+                    &#x25B2;
+                </span>
+            {/if}
+            Private IP
+        </th>
+        <th
+            role="button"
+            scope="col"
+            class="text-center align-middle"
+            on:click={() => {
                 sortHeader = "state";
                 sortAscending = !sortAscending;
             }}
@@ -200,6 +240,12 @@
             <tr class:d-none={filterResource(resource)}>
                 <td>{resource.name}</td>
                 <td>{resource.instance_info.shards_amount}</td>
+                <td>
+                    {resource.instance_info.public_ip}
+                </td>
+                <td>
+                    {resource.instance_info.private_ip}
+                </td>
                 <td
                     class="{tableStates[resource.state]}"
                 >
