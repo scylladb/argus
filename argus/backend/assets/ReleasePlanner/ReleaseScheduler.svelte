@@ -280,7 +280,7 @@
         <div class="p-2 display-6">{releaseData.release.name}</div>
     </div>
     <div class="row">
-        {#if schedules.length > 0 && Object.values(users).length > 0 && plannerData.release}
+        {#if Object.values(users).length > 0 && plannerData.release}
             <ReleasePlanTable
                 {releaseData}
                 {users}
@@ -289,6 +289,7 @@
                 bind:clickedTests
                 on:cellClick={handleCellClick}
                 on:deleteSchedule={deleteSchedule}
+                on:refreshSchedules={() => fetchSchedules()}
             />
         {/if}
     </div>

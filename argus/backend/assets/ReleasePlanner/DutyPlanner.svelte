@@ -252,7 +252,7 @@
     </div>
     <div class="row">
         {#if Object.values(users).length > 0}
-            <ScheduleTable {releaseData} {users} {schedules} on:cellClick={handleCellClick} on:deleteSchedule={deleteSchedule} on:clearGroups={handleClearGroups}/>
+            <ScheduleTable {releaseData} {users} {schedules} on:cellClick={handleCellClick} on:deleteSchedule={deleteSchedule} on:clearGroups={handleClearGroups} on:refreshSchedules={() => fetchSchedules()}/>
         {/if}
     </div>
     <div class="row">

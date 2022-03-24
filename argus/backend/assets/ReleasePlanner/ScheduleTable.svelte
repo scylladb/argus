@@ -140,7 +140,7 @@
                                 {users[group.schedules[date.dateKey].assignees[0]]?.full_name}
                             {/if}
                             {#if clickedCell == `${group.name}/${date.dateKey}`}
-                            <Schedule {releaseData} scheduleData={group.schedules[date.dateKey]} {users} on:deleteSchedule on:clearGroups/>
+                            <Schedule {releaseData} scheduleData={group.schedules[date.dateKey]} {users} on:deleteSchedule on:clearGroups on:refreshSchedules/>
                             {/if}
                         </td>
                     {/each}

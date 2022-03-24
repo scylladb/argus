@@ -875,6 +875,46 @@ class ArgusService:
 
         return response
 
+    def update_schedule_assignees(self, payload: dict) -> dict:
+        """
+        {
+            "release": "master"
+        }
+        """
+        release = payload.get("release")
+        if not release:
+            raise Exception("Release name not specified in the request")
+
+        schedule_id = payload.get("scheduleId")
+        if not schedule_id:
+            raise Exception("No schedule Id provided")
+
+        assignees = payload.get("newAssignees")
+        if not assignees:
+            raise Exception("No assignees provided")
+
+        release = ArgusRelease.get(name=release)
+        schedule = ArgusReleaseSchedule.get(release=release.name, schedule_id=schedule_id)
+
+        old_assignees = list(ArgusReleaseScheduleAssignee.filter(schedule_id=schedule.schedule_id).all())
+        for new_assignee in assignees:
+            assignee = ArgusReleaseScheduleAssignee()
+            assignee.release = release.name
+            assignee.schedule_id = schedule.schedule_id
+            assignee.assignee = UUID(new_assignee)
+            assignee.save()
+
+        for old_assignee in old_assignees:
+            old_assignee.delete()
+
+        response = {
+            "scheduleId": schedule_id,
+            "status": "changed assignees",
+            "newAssignees": assignees,
+        }
+
+        return response
+
     def update_schedule_comment(self, payload: dict) -> dict:
         new_comment = payload.get("newComment")
         release = payload.get("release")

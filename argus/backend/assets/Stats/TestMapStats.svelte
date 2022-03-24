@@ -129,7 +129,7 @@
             {/if}
         </h5>
         <div class="my-2 d-flex flex-wrap bg-lighter rounded shadow-sm">
-            {#each Object.entries(filterTestsForGroup(groupName, group.tests)) as [testName, test] (`${groupName}/${testName}`)}
+            {#each Object.entries(filterTestsForGroup(groupName, group.tests ?? {})) as [testName, test] (`${groupName}/${testName}`)}
                 <div
                     class:status-block-active={test.start_time != 0}
                     class="rounded bg-main status-block m-1 d-flex flex-column overflow-hidden shadow-sm"
@@ -192,7 +192,7 @@
                     </div>
                 </div>
             {:else}
-                <div class="text-muted my-2">No tests for this group</div>
+                <div class="text-dark m-2">No tests for this group</div>
             {/each}
         </div>
     </div>
