@@ -32,10 +32,6 @@
         testRunStore,
     } from "../Stores/SingleTestRunSubscriber";
     import { userList } from "../Stores/UserlistSubscriber";
-    import {
-        assigneeStore,
-        requestAssigneesForReleaseGroups,
-    } from "../Stores/AssigneeSubscriber";
     import { sendMessage } from "../Stores/AlertStore";
     export let id = "";
     export let build_number = -1;
@@ -52,7 +48,6 @@
     let commentsOpen = false;
     let issuesOpen = false;
     let userSelect = {};
-    let assigneeList = [];
 
     const investigationStatusIcon = {
         in_progress: faSearch,
@@ -85,10 +80,6 @@
         }, {});
     };
 
-    $: assigneeList = $assigneeStore?.[test_run?.release_name] ?? {
-        groups: [],
-        tests: [],
-    };
     $: users = $userList;
     $: userSelect = createUserSelectCollection(users);
     $: heartbeatHuman = humanizeDuration(
@@ -104,7 +95,7 @@
         test_run = data[id] ?? test_run;
     });
 
-    const findAssignee = function (test_run, assigneeList, userSelect) {
+    const findAssignee = function (test_run, userSelect) {
         const placeholder = {
             value: "unassigned",
             id: "none-none-none",
@@ -120,22 +111,11 @@
                 value: user.value,
             };
         }
-        let key = Object.keys(assigneeList.groups).find((group) =>
-            new RegExp(group).test(test_run.group)
-        );
-        if (key) {
-            let assignees = assigneeList.groups[key];
-            let user = userSelect[assignees[0]];
-            return {
-                id: user.user_id,
-                value: user.value,
-            };
-        }
         return placeholder;
     };
 
     let currentAssignee = "unassigned";
-    $: currentAssignee = findAssignee(test_run, assigneeList, userSelect);
+    $: currentAssignee = findAssignee(test_run, userSelect);
 
     const fetchTestRunData = async function () {
         try {
@@ -152,9 +132,6 @@
             console.log(apiJson);
             if (apiJson.status === "ok") {
                 test_run = apiJson.response;
-                requestAssigneesForReleaseGroups(test_run.release_name, [
-                    test_run.group.split("_")[0],
-                ]);
                 if (build_number == -1) {
                     build_number = parseInt(
                         test_run.build_job_url.split("/").reverse()[1]
