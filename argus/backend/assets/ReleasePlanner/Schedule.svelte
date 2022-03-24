@@ -1,26 +1,31 @@
 <script>
     import Fa from "svelte-fa";
     import {
-        faCircle,
         faTrashAlt,
-        faTimes,
+        faEdit,
+        faCheck,
         faExternalLinkSquareAlt,
     } from "@fortawesome/free-solid-svg-icons";
-    import { StatusCSSClassMap } from "../Common/TestStatus";
+    import Select from "svelte-select";
+    import User from "../Profile/User.svelte";
+    import { sendMessage } from "../Stores/AlertStore";
     import { stateEncoder } from "../Common/StateManagement";
     import { createEventDispatcher, onMount } from "svelte";
-    import { Base64 } from "js-base64";
     export let scheduleData = {};
     export let releaseData = {};
     export let users = {};
     export let absolute = true;
+    let deleting = false;
+    let reassigning = false;
+    let updating = false;
+    let reassigned = [];
     const dispatch = createEventDispatcher();
     let state = "e30";
     const getPicture = function (id) {
         return id ? `/storage/picture/${id}` : "/static/no-user-picture.png";
     };
 
-    const prepareState = function() {
+    const prepareState = function () {
         return scheduleData.tests.reduce((acc, scheduledTest) => {
             let [group, test] = scheduledTest.split("/");
             let release = releaseData.release.name;
@@ -31,9 +36,79 @@
             };
             return acc;
         }, {});
-    }
+    };
+
+    const prepareUsers = function (users) {
+        return Object.values(users)
+            .map((val) => {
+                return {
+                    label: val.username,
+                    value: val.id,
+                    picture_id: val.picture_id,
+                    full_name: val.full_name,
+                };
+            })
+            .sort((a, b) => {
+                if (a.value > b.value) {
+                    return 1;
+                } else if (b.value > a.value) {
+                    return -1;
+                }
+                return 0;
+            });
+    };
+
+    const handleReassign = async function () {
+        updating = true;
+        if (!reassigned || reassigned.length == 0) {
+            sendMessage("error", "Assignee list is empty!");
+            updating = false;
+            return;
+        }
+        try {
+            let apiResponse = await fetch(
+                "/api/v1/release/schedules/assignee/update",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        release: releaseData.release.name,
+                        scheduleId: scheduleData.schedule_id,
+                        newAssignees: reassigned.map((v) => v.value),
+                    }),
+                }
+            );
+            let apiJson = await apiResponse.json();
+            if (apiJson.status === "ok") {
+                reassigning = false;
+                reassigned = [];
+                scheduleData.assignees = apiJson.response.newAssignees;
+                scheduleData = scheduleData;
+                dispatch("refreshSchedules")
+            } else {
+                throw apiJson;
+            }
+        } catch (error) {
+            if (error?.status === "error") {
+                sendMessage(
+                    "error",
+                    `Unable to reassign the schedule.\nAPI Response: ${error.response.arguments[0]}`
+                );
+            } else {
+                sendMessage(
+                    "error",
+                    "A backend error occurred during schedule reassignment"
+                );
+            }
+        } finally {
+            updating = false;
+        }
+    };
 
     const handleScheduleDelete = function () {
+        deleting = true;
         dispatch("deleteSchedule", {
             id: scheduleData.schedule_id,
         });
@@ -60,8 +135,9 @@
                     {#each scheduleData?.groups ?? [] as group}
                         <li class="list-group-item d-flex align-items-center">
                             <div>
-                                {releaseData.groups.find((val) => val.name == group)
-                                    .pretty_name ?? group}
+                                {releaseData.groups.find(
+                                    (val) => val.name == group
+                                ).pretty_name ?? group}
                             </div>
                         </li>
                     {/each}
@@ -83,21 +159,25 @@
                 </ul>
             </div>
             {#if releaseData.release.perpetual}
-            <div class="me-3 w-25">
-                <h6>Date</h6>
-                <div>
-                    From:
-                    <div class="text-muted font-small">
-                        {new Date(scheduleData.period_start).toLocaleDateString()}
+                <div class="me-3 w-25">
+                    <h6>Date</h6>
+                    <div>
+                        From:
+                        <div class="text-muted font-small">
+                            {new Date(
+                                scheduleData.period_start
+                            ).toLocaleDateString()}
+                        </div>
+                    </div>
+                    <div>
+                        To:
+                        <div class="text-muted font-small">
+                            {new Date(
+                                scheduleData.period_end
+                            ).toLocaleDateString()}
+                        </div>
                     </div>
                 </div>
-                <div>
-                    To:
-                    <div class="text-muted font-small">
-                        {new Date(scheduleData.period_end).toLocaleDateString()}
-                    </div>
-                </div>
-            </div>
             {/if}
         </div>
         {#if scheduleData.tag}
@@ -109,21 +189,61 @@
             </div>
         {/if}
         <div class="me-3 w-100">
-            <h6>Assignees</h6>
-            <ul class="list-group mb-3">
-                {#each scheduleData.assignees as assignee}
-                    <li class="list-group-item d-flex align-items-center">
-                        <div class="me-2">
-                            <img
-                                class="img-profile"
-                                src={getPicture(users[assignee]?.picture_id)}
-                                alt=""
+            {#if !reassigning}
+                <h6>Assignees</h6>
+                <div class="d-flex align-items-top mb-3">
+                    <ul class="list-group flex-fill">
+                        {#each scheduleData.assignees as assignee}
+                            <li
+                                class="list-group-item d-flex align-items-center"
+                            >
+                                <div class="me-2">
+                                    <img
+                                        class="img-profile"
+                                        src={getPicture(
+                                            users[assignee]?.picture_id
+                                        )}
+                                        alt=""
+                                    />
+                                </div>
+                                <div>{users[assignee]?.username}</div>
+                            </li>
+                        {/each}
+                    </ul>
+                    <button
+                        class="btn btn-dark ms-1"
+                        on:click={() => (reassigning = true)}
+                    >
+                        <Fa icon={faEdit} />
+                    </button>
+                </div>
+            {:else}
+                <div class="d-flex align-items-top mb-3">
+                    {#if !updating}
+                        <div class="flex-fill">
+                            <Select
+                                Item={User}
+                                items={prepareUsers(users)}
+                                bind:value={reassigned}
+                                isMulti={true}
+                                placeholder="Re-assign assignees"
                             />
                         </div>
-                        <div>{users[assignee]?.username}</div>
-                    </li>
-                {/each}
-            </ul>
+                        <div class="ms-1">
+                            <button
+                                class="btn btn-dark"
+                                on:click={handleReassign}
+                            >
+                                <Fa icon={faCheck} />
+                            </button>
+                        </div>
+                    {:else}
+                        <div class="flex-fill">
+                            <span class="spinner-border spinner-border-sm" /> Reassigning...
+                        </div>
+                    {/if}
+                </div>
+            {/if}
             <div class="text-end">
                 <a
                     class="btn btn-primary"
@@ -132,8 +252,62 @@
                 >
                     <Fa icon={faExternalLinkSquareAlt} />
                 </a>
-                <button class="btn btn-danger" on:click={handleScheduleDelete}>
-                    <Fa icon={faTrashAlt} />
+                {#if deleting}
+                    <button
+                        class="btn btn-sm btn-danger"
+                        title="Please wait..."
+                        type="button"
+                    >
+                        <span class="spinner-border spinner-border-sm" />
+                    </button>
+                {:else}
+                    <button
+                        class="btn btn-danger"
+                        title="Delete schedule"
+                        type="button"
+                        data-bs-toggle="modal"
+                        data-bs-target="#modalScheduleConfirmDelete-{scheduleData.schedule_id}"
+                    >
+                        <Fa icon={faTrashAlt} />
+                    </button>
+                {/if}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div
+    class="modal"
+    tabindex="-1"
+    id="modalScheduleConfirmDelete-{scheduleData.schedule_id}"
+>
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Deleting a schedule</h5>
+                <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-dismiss="modal"
+                    aria-label="Close"
+                />
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete this schedule?</p>
+            </div>
+            <div class="modal-footer">
+                <button
+                    type="button"
+                    class="btn btn-secondary"
+                    data-bs-dismiss="modal">No</button
+                >
+                <button
+                    type="button"
+                    class="btn btn-danger"
+                    data-bs-dismiss="modal"
+                    on:click={handleScheduleDelete}
+                >
+                    Yes
                 </button>
             </div>
         </div>

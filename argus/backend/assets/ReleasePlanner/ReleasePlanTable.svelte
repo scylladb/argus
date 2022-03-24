@@ -149,6 +149,7 @@
                                         {releaseData}
                                         {users}
                                         on:deleteSchedule
+                                        on:refreshSchedules
                                     />
                                 {/if}
                             </td>
