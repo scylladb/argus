@@ -90,10 +90,16 @@
         });
     };
 
-    const getAssigneesForTest = function (test, group) {
+    const getAssigneesForTest = function (test, group, last_runs) {
         let testAssignees = assigneeList.tests?.[`${group}/${test}`] ?? [];
         let groupAssignees = assigneeList.groups?.[group] ?? [];
-        return [...testAssignees, ...groupAssignees];
+        let allAssignees = [...testAssignees, ...groupAssignees];
+        let lastRun = last_runs?.[0];
+        if (lastRun?.assignee && allAssignees.findIndex(v => v == lastRun.assignee) == -1)
+        {
+            return [lastRun.assignee];
+        }
+        return allAssignees;
     };
 
     onMount(() => {
@@ -159,7 +165,8 @@
                                     smallImage={false}
                                     assignees={getAssigneesForTest(
                                         testName,
-                                        groupName
+                                        groupName,
+                                        test.last_runs ?? [],
                                     )}
                                 />
                             {/if}
