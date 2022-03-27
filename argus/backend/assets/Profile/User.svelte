@@ -13,18 +13,19 @@
     class:user-active={isActive}
     class:user-first={isFirst}
     class:user-hover={isHover}
+    class="user-element"
 >
     <div class="d-flex align-items-center">
         <div class="ms-2">
-            <img
+            <div
                 class="img-profile"
-                src={getPicture(item.picture_id)}
-                alt={item.label}
+                style="background-image: url({getPicture(item.picture_id)});"
+                title={item.label}
             />
         </div>
-        <div class="ms-2">
-            {item.full_name}
-            <div class="text-muted">{item.label}</div>
+        <div class="ms-2 text-start">
+            <div>{item.full_name ?? item.label}</div>
+            <div class="text-muted user-label">{item.label}</div>
         </div>
     </div>
 </div>
@@ -32,8 +33,13 @@
 <style>
     .img-profile {
         width: 32px;
+        height: 32px;
         border-radius: 50%;
-        object-fit: cover;
+        background-color: rgb(163, 163, 163);
+        background-clip: border-box;
+        background-repeat: no-repeat;
+        background-position: center;
+        background-size: cover;
     }
 
     .user-first {
@@ -45,9 +51,12 @@
     }
 
     .user-hover {
-        background-color: #537cee;
+        background-color: #4c66f8;
         color: white;
         cursor: pointer;
     }
 
+    .user-element:hover .user-label {
+        color: #c4c4c4 !important;
+    }
 </style>

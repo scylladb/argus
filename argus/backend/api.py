@@ -419,6 +419,54 @@ def test_run_submit_comment():
     return jsonify(res)
 
 
+@bp.route("/test_run/comments/update", methods=["POST"])
+@login_required
+def test_run_update_comment():
+    res = {
+        "status": "ok"
+    }
+    try:
+        if not request.is_json:
+            raise Exception(
+                "Content-Type mismatch, expected application/json, got:", request.content_type)
+        request_payload = request.get_json()
+        service = ArgusService()
+        result = service.update_comment(payload=request_payload)
+        res["response"] = [dict(c.items()) for c in result]
+    except Exception as exc:
+        LOGGER.error("Something happened during request %s", request)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    return jsonify(res)
+
+
+@bp.route("/test_run/comments/delete", methods=["POST"])
+@login_required
+def test_run_delete_comment():
+    res = {
+        "status": "ok"
+    }
+    try:
+        if not request.is_json:
+            raise Exception(
+                "Content-Type mismatch, expected application/json, got:", request.content_type)
+        request_payload = request.get_json()
+        service = ArgusService()
+        result = service.delete_comment(payload=request_payload)
+        res["response"] = [dict(c.items()) for c in result]
+    except Exception as exc:
+        LOGGER.error("Something happened during request %s", request)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    return jsonify(res)
+
+
 @bp.route("/users", methods=["POST"])
 @login_required
 def user_info():

@@ -644,7 +644,7 @@
                     role="tabpanel"
                 >
                     {#if commentsOpen}
-                        <TestRunComments {id} />
+                        <TestRunComments {id} releaseName={test_run.release_name} assignee={test_run.assignee} starter={test_run.started_by}/>
                     {/if}
                 </div>
                 <div class="tab-pane fade" id="nav-issues-{id}" role="tabpanel">
