@@ -1,5 +1,6 @@
 @import 'bootstrap';
 @import '@fortawesome/fontawesome-free';
+@import 'highlight.js/styles/github.css';
 
 body {
     font-family: "Noto Sans Packaged", "Noto Sans", sans-serif;

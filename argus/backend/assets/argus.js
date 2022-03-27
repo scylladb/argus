@@ -6,3 +6,5 @@ import '@fortawesome/fontawesome-free/js/brands';
 import 'marked';
 import 'github-markdown-css';
 import './argus.css';
+
+export const applicationCurrentUser = gArgusCurrentUser ?? {};

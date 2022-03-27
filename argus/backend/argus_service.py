@@ -54,6 +54,10 @@ def check_scheduled_test(test, group, testname):
     return testname == f"{group}/{test}" or testname == test
 
 
+def strip_html_tags(text: str):
+    return text.replace("<", "&lt;").replace(">", "&gt;")
+
+
 class GithubOrganizationMissingError(Exception):
     pass
 
@@ -189,27 +193,77 @@ class ArgusService:
         return {str(user.id): user.to_json() for user in users}
 
     def post_comment(self, payload: dict) -> list[ArgusTestRunComment]:
-        test_id: str = payload["test_id"]
-        message: str = payload["message"]
-        message_stripped = message.replace("<", "&lt;").replace(">", "&gt;")
-        release_name_stmt = self.database.prepare(
-            f"SELECT release_name FROM {TestRun.table_name()} WHERE id = ?")
-        release_name = self.session.execute(
-            release_name_stmt, parameters=(UUID(test_id),)).one()["release_name"]
+        test_run_id: str = payload.get("test_run_id")
+        if not test_run_id:
+            raise Exception("TestId wasn't specified in the payload")
+
+        message: str = payload.get("message")
+        if not message:
+            raise Exception("Comment message wasn't specified in the payload")
+
+        release_name: str = payload.get("release")
+        if not release_name:
+            raise Exception("Release name not specified in the payload")
+
+        reactions = payload.get("reactions", {})
+        mentions = payload.get("mentions", [])
+        message_stripped = strip_html_tags(message)
+
         release = ArgusRelease.get(name=release_name)
         comment = ArgusTestRunComment()
-        comment.test_run_id = test_id
+        comment.message = message_stripped
+        comment.reactions = reactions
+        comment.mentions = mentions
+        comment.test_run_id = test_run_id
         comment.release_id = release.id
         comment.user_id = g.user.id
-        comment.mentions = []
-        comment.message = message_stripped
         comment.posted_at = time.time()
         comment.save()
+
         self.send_event(kind=ArgusEventTypes.TestRunCommentPosted, body={
             "message": "A comment was posted by {username}",
             "username": g.user.username
-        }, user_id=g.user.id, run_id=UUID(test_id), release_id=release.id)
-        return self.get_comments(test_id=UUID(test_id))
+        }, user_id=g.user.id, run_id=UUID(test_run_id), release_id=release.id)
+
+        return self.get_comments(test_id=UUID(test_run_id))
+
+    def delete_comment(self, payload: dict) -> dict:
+        comment_id = payload.get("id")
+        if not comment_id:
+            raise Exception("Comment id not provided in request")
+
+        run_id = payload.get("test_run_id")
+        if not run_id:
+            raise Exception("Test run id not provided in request")
+
+        comment = ArgusTestRunComment.get(id=comment_id)
+        comment.delete()
+
+        return self.get_comments(test_id=UUID(run_id))
+
+    def update_comment(self, payload: dict) -> dict:
+        comment_id = payload.get("id")
+        if not comment_id:
+            raise Exception("Comment id not provided in request")
+
+        run_id = payload.get("test_run_id")
+        if not run_id:
+            raise Exception("Test run id not provided in request")
+
+        message = payload.get("message")
+        if not message:
+            raise Exception("Empty message provided")
+
+        mentions = payload.get("mentions", [])
+        reactions = payload.get("reactions", {})
+
+        comment = ArgusTestRunComment.get(id=comment_id)
+        comment.message = strip_html_tags(message)
+        comment.reactions = reactions
+        comment.mentions = mentions
+        comment.save()
+
+        return self.get_comments(test_id=UUID(run_id))
 
     def get_releases(self):
         web_releases = list(ArgusRelease.all())

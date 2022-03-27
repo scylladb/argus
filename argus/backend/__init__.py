@@ -1,6 +1,7 @@
 from datetime import datetime
 from flask import Flask
 from yaml import safe_load
+from argus.db.models import User
 from argus.backend.db import ScyllaCluster
 from argus.backend.build_system_monitor import scan_jenkins_command
 from argus.backend import auth, main, api
@@ -22,5 +23,11 @@ def create_app(config=None) -> Flask:
     @app.template_filter('from_timestamp')
     def from_timestamp_filter(timestamp: int):
         return datetime.fromtimestamp(timestamp)
+
+    @app.template_filter('safe_user')
+    def from_timestamp_filter(user: User):
+        user_dict = dict(user.items())
+        del user_dict["password"]
+        return user_dict
 
     return app

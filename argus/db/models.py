@@ -126,6 +126,7 @@ class ArgusTestRunComment(Model):
         required=True, clustering_order="desc", primary_key=True)
     message = columns.Text(min_length=1)
     mentions = columns.List(value_type=columns.UUID, default=[])
+    reactions = columns.Map(key_type=columns.Text, value_type=columns.Integer)
 
 
 class ArgusEventTypes(str, Enum):

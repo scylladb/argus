@@ -1,29 +1,31 @@
 <script>
-    import { onMount } from "svelte";
-    import { parse } from "marked";
+    import { onDestroy, onMount } from "svelte";
+    import Comment from "../Discussion/Comment.svelte";
     import { userList } from "../Stores/UserlistSubscriber";
     import { sendMessage } from "../Stores/AlertStore";
+    import CommentEditor from "../Discussion/CommentEditor.svelte";
 
     export let id;
+    export let releaseName;
+    let fetchIntervalId;
     let comments = [];
-    let user_info = {};
-    let new_comment = "";
+    let users = {};
     let fetching = false;
-
-    userList.subscribe((val) => {
-        user_info = val;
-    });
-
-    const getPictureForId = function (id) {
-        let picture_id = user_info[id]?.picture_id;
-        return picture_id
-            ? `/storage/picture/${picture_id}`
-            : "/static/no-user-picture.png";
+    $: users = $userList;
+    const newCommentTemplate = {
+        id: "",
+        message: "",
+        release: releaseName,
+        reactions: {},
+        mentions: [],
+        user_id: "",
+        release_id: "",
+        test_run_id: id,
+        posted_at: new Date(),
     };
 
     const fetchComments = async function () {
         fetching = true;
-        comments = {};
         try {
             let apiResponse = await fetch("/api/v1/test_run/comments", {
                 method: "POST",
@@ -35,7 +37,6 @@
                 }),
             });
             let apiJson = await apiResponse.json();
-            console.log(apiJson);
             if (apiJson.status === "ok") {
                 comments = apiJson.response;
                 fetching = false;
@@ -57,7 +58,8 @@
         }
     };
 
-    const handleCommentSubmit = async function () {
+    const handleCommentSubmit = async function (e) {
+        let commentBody = e.detail;
         fetching = true;
         try {
             let apiResponse = await fetch("/api/v1/test_run/comments/submit", {
@@ -65,16 +67,12 @@
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({
-                    test_id: id,
-                    message: new_comment,
-                }),
+                body: JSON.stringify(commentBody),
             });
             let apiJson = await apiResponse.json();
             console.log(apiJson);
             if (apiJson.status === "ok") {
                 comments = apiJson.response;
-
                 fetching = false;
             } else {
                 throw apiJson;
@@ -83,51 +81,104 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error when fetching releases.\nMessage: ${error.response.arguments[0]}`
+                    `API Error during comment submission.\nMessage: ${error.response.arguments[0]}`
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during release fetch"
+                    "A backend error occurred during comment submission"
                 );
             }
         }
-        new_comment = "";
     };
+
+    const handleCommentUpdate = async function (e) {
+        let commentBody = e.detail;
+        try {
+            let apiResponse = await fetch("/api/v1/test_run/comments/update", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(commentBody),
+            });
+            let apiJson = await apiResponse.json();
+            console.log(apiJson);
+            if (apiJson.status === "ok") {
+                comments = apiJson.response;
+            } else {
+                throw apiJson;
+            }
+        } catch (error) {
+            if (error?.status === "error") {
+                sendMessage(
+                    "error",
+                    `API Error during comment update.\nMessage: ${error.response.arguments[0]}`
+                );
+            } else {
+                sendMessage(
+                    "error",
+                    "A backend error occurred during comment update."
+                );
+            }
+        }
+    };
+
+    const handleCommentDelete = async function (e) {
+        let commentBody = e.detail;
+        try {
+            let apiResponse = await fetch("/api/v1/test_run/comments/delete", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(commentBody),
+            });
+            let apiJson = await apiResponse.json();
+            console.log(apiJson);
+            if (apiJson.status === "ok") {
+                comments = apiJson.response;
+            } else {
+                throw apiJson;
+            }
+        } catch (error) {
+            if (error?.status === "error") {
+                sendMessage(
+                    "error",
+                    `API Error during comment deletion.\nMessage: ${error.response.arguments[0]}`
+                );
+            } else {
+                sendMessage(
+                    "error",
+                    "A backend error occurred during release comment deletion."
+                );
+            }
+        }
+    };
+
     onMount(() => {
         fetchComments();
+        fetchIntervalId = setInterval(() => {
+            fetchComments();
+        }, 60 * 1000);
+    });
+
+    onDestroy(() => {
+        clearInterval(fetchIntervalId);
     });
 </script>
 
-<div class="container-fluid py-1 m-0">
-    {#if Object.keys(user_info).length > 0}
+<div class="container-fluid bg-editor">
+    {#if Object.keys(users).length > 0}
         {#each comments as comment (comment.id)}
-            <div class="row p-0 m-0">
-                <div class="col-1 p-1 mb-1 text-center">
-                    <img
-                        class="img-profile"
-                        src={getPictureForId(comment.user_id)}
-                        alt=""
+            <div class="row">
+                <div class="col my-3">
+                    <Comment
+                        commentBody={comment}
+                        {users}
+                        on:commentDelete={handleCommentDelete}
+                        on:commentUpdated={handleCommentUpdate}
                     />
-                </div>
-                <div class="col-11 p-0 mb-1">
-                    <div class="card-body border-bottom">
-                        <h5
-                            class="card-title"
-                            title={user_info[comment.user_id]?.username ??
-                                "ghost"}
-                        >
-                            {user_info[comment.user_id]?.full_name ?? "Ghost"}
-                        </h5>
-                        <p class="card-text">{@html parse(comment.message)}</p>
-                        <p class="card-text">
-                            <small class="text-muted"
-                                >{new Date(
-                                    comment.posted_at * 1000
-                                ).toISOString()}</small
-                            >
-                        </p>
-                    </div>
                 </div>
             </div>
         {:else}
@@ -138,29 +189,29 @@
             </div>
         {/each}
     {:else}
-        loading...
+        <div class="col m-1">
+            <div class="text-muted text-center p-2 fs-4">
+                <span class="spinner-grow" /> Loading...
+            </div>
+        </div>
     {/if}
-    <div class="row">
-        <div class="col mb-3">
-            <div class="mb-3">
-                <label for="add-comment-{id}" class="form-label"
-                    >Add a comment</label
-                >
-                <textarea
-                    class="form-control"
-                    id="add-comment-{id}"
-                    rows="4"
-                    bind:value={new_comment}
+    <div class="row border-top">
+        {#if !fetching}
+            <div class="col mx-1 my-2">
+                <CommentEditor
+                    runId={id}
+                    mode="post"
+                    commentBody={Object.assign({}, newCommentTemplate)}
+                    on:submitComment={handleCommentSubmit}
                 />
             </div>
-            <button
-                type="button"
-                class="btn btn-success"
-                on:click={handleCommentSubmit}
-                placeholder="Type a comment."
-                disabled={fetching}>Post</button
-            >
-        </div>
+        {:else}
+            <div class="col m-1">
+                <div class="text-muted text-center p-2 fs-4">
+                    <span class="spinner-grow" /> Loading...
+                </div>
+            </div>
+        {/if}
     </div>
 </div>
 
@@ -169,5 +220,9 @@
         height: 72px;
         border-radius: 50%;
         object-fit: cover;
+    }
+
+    .bg-editor {
+        background-color: #f2f2f2;
     }
 </style>
