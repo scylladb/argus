@@ -10,9 +10,11 @@
     <script>
         var globalFlashes = JSON.parse('{{ get_flashed_messages(with_categories=true) | tojson | safe }}');
     </script>
+    {% if g.user %}
     <script>
         var gArgusCurrentUser = JSON.parse('{{ g.user | safe_user | tojson | safe }}');
     </script>
+    {% endif %}
     <script src="/static/dist/main.bundle.js"></script>
     <script src="/static/dist/globalAlert.bundle.js"></script>
     {% endblock javascripts %}
