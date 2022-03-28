@@ -4,6 +4,7 @@
         faTrashAlt,
         faEdit,
         faCheck,
+        faTimes,
         faExternalLinkSquareAlt,
     } from "@fortawesome/free-solid-svg-icons";
     import Select from "svelte-select";
@@ -120,9 +121,20 @@
 </script>
 
 <div class="card-schedule card-popout" class:position-absolute={absolute}>
+
     <div
         class="border rounded bg-white shadow-sm mb-3 p-3 d-flex flex-column align-items-start justify-content-center"
     >
+        <div class="text-end w-100">
+            <button class="btn btn-sm btn-dark" on:click={
+                (e) => {
+                    e.stopPropagation();
+                    dispatch("closeSchedule", scheduleData);
+                }
+            }>
+                <Fa icon={faTimes}/>
+            </button>
+        </div>
         <div class="d-flex w-100 mb-3">
             <div
                 class="me-3"

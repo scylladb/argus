@@ -150,6 +150,9 @@
                                         {users}
                                         on:deleteSchedule
                                         on:refreshSchedules
+                                        on:closeSchedule={(e) => {
+                                            selectedSchedule = "";
+                                        }}
                                     />
                                 {/if}
                             </td>

@@ -51,7 +51,6 @@
     const onAssigneeCellClick = function(schedule, group, date) {
         if (schedule) {
             if (clickedCell == `${group.name}/${date.dateKey}`) {
-                clickedCell = "";
                 return;
             }
             clickedCell = `${group.name}/${date.dateKey}`;
@@ -140,7 +139,9 @@
                                 {users[group.schedules[date.dateKey].assignees[0]]?.full_name}
                             {/if}
                             {#if clickedCell == `${group.name}/${date.dateKey}`}
-                            <Schedule {releaseData} scheduleData={group.schedules[date.dateKey]} {users} on:deleteSchedule on:clearGroups on:refreshSchedules/>
+                            <Schedule {releaseData} scheduleData={group.schedules[date.dateKey]} {users} on:closeSchedule={(e) => {
+                                clickedCell = "";
+                            }} on:deleteSchedule on:clearGroups on:refreshSchedules/>
                             {/if}
                         </td>
                     {/each}
