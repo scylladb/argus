@@ -236,8 +236,17 @@ class ArgusService:
         if not run_id:
             raise Exception("Test run id not provided in request")
 
+        release_id = payload.get("release_id")
+        if not release_id:
+            raise Exception("Release id not provided in request")
+
         comment = ArgusTestRunComment.get(id=comment_id)
         comment.delete()
+
+        self.send_event(kind=ArgusEventTypes.TestRunCommentDeleted, body={
+            "message": "A comment was deleted by {username}",
+            "username": g.user.username
+        }, user_id=g.user.id, run_id=UUID(run_id), release_id=UUID(release_id))
 
         return self.get_comments(test_id=UUID(run_id))
 
@@ -249,6 +258,10 @@ class ArgusService:
         run_id = payload.get("test_run_id")
         if not run_id:
             raise Exception("Test run id not provided in request")
+
+        release_id = payload.get("release_id")
+        if not release_id:
+            raise Exception("Release id not provided in request")
 
         message = payload.get("message")
         if not message:
@@ -262,6 +275,11 @@ class ArgusService:
         comment.reactions = reactions
         comment.mentions = mentions
         comment.save()
+
+        self.send_event(kind=ArgusEventTypes.TestRunCommentUpdated, body={
+            "message": "A comment was edited by {username}",
+            "username": g.user.username
+        }, user_id=g.user.id, run_id=UUID(run_id), release_id=UUID(release_id))
 
         return self.get_comments(test_id=UUID(run_id))
 
