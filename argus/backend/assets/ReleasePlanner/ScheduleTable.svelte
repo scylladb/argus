@@ -16,10 +16,10 @@
 
     const generateDates = function () {
         const weekRange = Array.from({ length: 18 }, (v, k) => -4 + k);
-        const thisMonday = chrono.parseDate("This Monday", today);
+        const startOfTheWeekDay = chrono.parseDate("This Monday UTC", today);
         dates = weekRange.map((week) => {
-            let thisWeek = new Date(thisMonday);
-            thisWeek.setHours(24 * 7 * week + thisMonday.getHours());
+            let thisWeek = new Date(startOfTheWeekDay);
+            thisWeek.setHours(24 * 7 * week + startOfTheWeekDay.getHours());
             return {
                 date: thisWeek,
                 dateKey: thisWeek.toISOString().split("T").shift(),
@@ -29,6 +29,10 @@
         });
     };
 
+    const getStartOfTheWeekForDay = function(date) {
+        return chrono.parseDate("This Monday UTC", date);
+    };
+
     const prepareGroups = function () {
         selectedGroups = {};
         groups = releaseData.groups.reduce((acc, group) => {
@@ -36,7 +40,7 @@
             groupWithSchedules.schedules = schedules
                 .filter(schedule => schedule.groups.includes(group.name))
                 .reduce((acc, schedule) => {
-                    let dateKey = new Date(schedule.period_start)
+                    let dateKey = getStartOfTheWeekForDay(new Date(schedule.period_start))
                         .toISOString()
                         .split("T")
                         .shift();
@@ -139,9 +143,22 @@
                                 {users[group.schedules[date.dateKey].assignees[0]]?.full_name}
                             {/if}
                             {#if clickedCell == `${group.name}/${date.dateKey}`}
-                            <Schedule {releaseData} scheduleData={group.schedules[date.dateKey]} {users} on:closeSchedule={(e) => {
-                                clickedCell = "";
-                            }} on:deleteSchedule on:clearGroups on:refreshSchedules/>
+                            <Schedule
+                                {releaseData}
+                                scheduleData={group.schedules[date.dateKey]}
+                                {users}
+                                on:closeSchedule={(e) => {
+                                    clickedCell = "";
+                                }}
+                                on:deleteSchedule={
+                                    (e) => {
+                                        clickedCell = "";
+                                        dispatch("tableDeleteSchedule", e.detail);
+                                    }
+                                }
+                                on:clearGroups
+                                on:refreshSchedules
+                            />
                             {/if}
                         </td>
                     {/each}

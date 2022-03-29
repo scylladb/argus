@@ -108,7 +108,8 @@
         }
     };
 
-    const handleScheduleDelete = function () {
+    const handleScheduleDelete = function (e) {
+        e.stopPropagation();
         deleting = true;
         dispatch("deleteSchedule", {
             id: scheduleData.schedule_id,

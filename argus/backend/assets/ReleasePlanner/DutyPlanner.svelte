@@ -23,13 +23,13 @@
     };
 
     const generateNewScheduleDate = function(today = new Date()) {
-        let monday = chrono.parseDate("This Monday", new Date(today));
-        return monday.toISOString().split("T").shift();
+        let startingDay = chrono.parseDate("This Friday at 00:00 UTC", new Date(today));
+        return startingDay.toISOString().split("T").shift();
     }
 
     const generateEndDate = function(startDate) {
         let start = new Date(startDate);
-        let end = chrono.parseDate("Next Sunday at 23:59", start);
+        let end = chrono.parseDate("Next Thursday at 23:59 UTC", start);
         return end;
     };
 
@@ -252,7 +252,14 @@
     </div>
     <div class="row">
         {#if Object.values(users).length > 0}
-            <ScheduleTable {releaseData} {users} {schedules} on:cellClick={handleCellClick} on:deleteSchedule={deleteSchedule} on:clearGroups={handleClearGroups} on:refreshSchedules={() => fetchSchedules()}/>
+            <ScheduleTable
+                {releaseData}
+                {users} {schedules}
+                on:cellClick={handleCellClick}
+                on:tableDeleteSchedule={deleteSchedule}
+                on:clearGroups={handleClearGroups}
+                on:refreshSchedules={() => fetchSchedules()}
+            />
         {/if}
     </div>
     <div class="row">
