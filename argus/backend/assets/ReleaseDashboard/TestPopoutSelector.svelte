@@ -52,7 +52,7 @@
 <div class="sticky">
     {#if Object.values(tests).length > 0}
         <div class="d-flex flex-column">
-            <ul class="list-group" style="height: 600px;overflow-y: scroll;">
+            <ul class="list-group popout-tests">
                 {#each Object.values(tests) as test (test.name)}
                     <li class="list-group-item">
                         <div class="d-flex align-items-center">
@@ -177,5 +177,36 @@
     .sticky {
         position: sticky;
         top: 1em;
+    }
+
+    .popout-tests {
+        height: 1100px;
+        overflow-y: scroll;
+    }
+
+    @media screen and (max-height: 1080px) {
+        .popout-tests {
+            height: 900px;
+        }
+    }
+
+    @media screen and (max-height: 720px) {
+        .popout-tests {
+            height: 500px;
+        }
+    }
+
+    @media screen and (max-height: 480px) {
+        .popout-tests {
+            height: 320px;
+        }
+
+    }
+
+    @media screen and (max-height: 320px) {
+
+        .popout-tests {
+            height: 200px;
+        }
     }
 </style>
