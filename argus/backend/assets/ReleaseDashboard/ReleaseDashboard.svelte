@@ -37,7 +37,7 @@
         </div>
     </div>
     <div class="row mb-2">
-        <div class="col-8">
+        <div class="col-xs-2 col-sm-6 col-md-7">
             <ReleaseStats
                 releaseName={releaseData.release.name}
                 showTestMap={true}
@@ -46,7 +46,7 @@
                 on:testClick={handleTestClick}
             />
         </div>
-        <div class="col-4">
+        <div class="col-xs-10 col-sm-6 col-md-5">
             <TestPopoutSelector
                 bind:tests={clickedTests}
                 on:deleteRequest={handleDeleteRequest}
