@@ -17,6 +17,7 @@ class ArgusTestsMonitor(ABC):
         self._existing_releases = list(ArgusRelease.all())
         self._existing_groups = list(ArgusReleaseGroup.all())
         self._existing_tests = list(ArgusReleaseGroupTest.all())
+        self._filtered_groups: list[str] = current_app.config["BUILD_SYSTEM_FILTERED_PREFIXES"]
 
     def create_release(self, release_name):
         # pylint: disable=no-self-use
@@ -49,6 +50,13 @@ class ArgusTestsMonitor(ABC):
     @abstractmethod
     def collect(self):
         raise NotImplementedError()
+
+    def check_filter(self, group_name: str) -> bool:
+        for prefix in self._filtered_groups:
+            if prefix.lower() in group_name.lower():
+                return False
+
+        return True
 
 
 class JenkinsMonitor(ArgusTestsMonitor):
@@ -107,7 +115,7 @@ class JenkinsMonitor(ArgusTestsMonitor):
     def collect_groups_for_release(self, jobs):
         # pylint: disable=no-self-use
         groups = [folder for folder in jobs if "Folder" in folder["_class"]]
-        groups = [group for group in groups if "releng" not in group["name"]]
+        groups = [group for group in groups if self.check_filter(group["name"])]
 
         return groups
 
