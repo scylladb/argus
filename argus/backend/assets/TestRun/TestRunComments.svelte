@@ -25,7 +25,6 @@
     };
 
     const fetchComments = async function () {
-        fetching = true;
         try {
             let apiResponse = await fetch("/api/v1/test_run/comments", {
                 method: "POST",
@@ -39,7 +38,6 @@
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
                 comments = apiJson.response;
-                fetching = false;
             } else {
                 throw apiJson;
             }
