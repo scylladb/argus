@@ -1191,7 +1191,7 @@ class ArgusService:
             user = User()
             user.username = user_info.get("login")
             user.email = email_info[-1].get("email")
-            user.full_name = user_info.get("name")
+            user.full_name = user_info.get("name", user_info.get("login"))
             user.registration_date = datetime.datetime.utcnow()
             user.roles = ["ROLE_USER"]
             temp_password = base64.encodebytes(
