@@ -9,6 +9,7 @@
     } from "@fortawesome/free-solid-svg-icons";
     import { sendMessage } from "../Stores/AlertStore";
     import { userList } from "../Stores/UserlistSubscriber";
+    import { timestampToISODate } from "../Common/DateUtils";
 
     const dispatch = createEventDispatcher();
     let users = {};
@@ -92,7 +93,7 @@
                 class="text-muted me-2"
                 title={new Date(issue.added_on).toISOString()}
             >
-                Added by {users[issue.user_id].username}
+                Added by <span class="fw-bold">@{users[issue.user_id].username}</span> on {timestampToISODate(new Date(issue.added_on))}
             </div>
         {/if}
         <div class="text-muted">
