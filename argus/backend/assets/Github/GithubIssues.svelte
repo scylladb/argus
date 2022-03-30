@@ -69,6 +69,10 @@
         }
     };
 
+    const sortIssuesByDate = function(issues) {
+        return issues.sort((a,b) => new Date(b.added_on) - new Date(a.added_on));
+    };
+
     onMount(() => {
         fetchIssues();
     });
@@ -125,7 +129,7 @@
         {#if issues.length > 0}
             <h6>Issues</h6>
         {/if}
-        {#each issues as issue}
+        {#each sortIssuesByDate(issues) as issue}
             <GithubIssue {issue} on:issueDeleted={fetchIssues} />
         {:else}
             <div class="row">
