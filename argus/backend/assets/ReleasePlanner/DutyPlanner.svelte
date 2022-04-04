@@ -23,8 +23,8 @@
     };
 
     const generateNewScheduleDate = function(today = new Date()) {
-        let startingDay = chrono.parseDate("This Friday at 00:00 UTC", new Date(today));
-        return startingDay.toISOString().split("T").shift();
+        let startingDay = chrono.parseDate("Last Friday at 00:00 UTC", new Date(today));
+        return startingDay;
     }
 
     const generateEndDate = function(startDate) {
@@ -305,18 +305,8 @@
                         </div>
                     </div>
                     <div class="me-3 w-25">
-                        <div class="mb-3">
-                            <label
-                                for="newScheduleTimestampStart"
-                                class="form-label">From</label
-                            >
-                            <input
-                                type="date"
-                                id="newScheduleTimestampStart"
-                                bind:value={newScheduleDate}
-                                class="form-control"
-                                on:change={(e) => handleDateChange(e.target.value)}
-                            />
+                        <div class="mb-3 text-muted">
+                            Will start on {newScheduleDate.toLocaleDateString('en-CA', { timeZone: 'UTC' })}
                         </div>
                         <div class="mb-3 text-muted">
                             Will end on {newScheduleEndDate.toLocaleDateString('en-CA', { timeZone: 'UTC' })}

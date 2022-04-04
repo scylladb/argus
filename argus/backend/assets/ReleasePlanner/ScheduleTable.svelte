@@ -30,7 +30,7 @@
     };
 
     const getStartOfTheWeekForDay = function(date) {
-        return chrono.parseDate("This Monday UTC", date);
+        return chrono.parseDate("Next Monday UTC", date);
     };
 
     const prepareGroups = function () {
