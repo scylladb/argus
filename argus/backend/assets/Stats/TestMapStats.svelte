@@ -58,6 +58,7 @@
             status: test.status,
             start_time: test.start_time,
             last_runs: test.last_runs,
+            build_system_id: test.build_system_id,
         });
     };
 
@@ -82,11 +83,11 @@
     const requestTestAssignees = function () {
         console.log(stats);
         Object.entries(stats.groups).map((entry) => {
-            let [groupName, groupStats] = entry;
+            let [_, groupStats] = entry;
             let tests = Object.values(groupStats.tests).filter(
                 (test) => test.status != "unknown"
             );
-            requestAssigneesForReleaseTests(releaseName, tests, groupName);
+            requestAssigneesForReleaseTests(releaseName, tests);
         });
     };
 

@@ -16,11 +16,12 @@
         name: "ERROR",
         pretty_name: null,
         release_id: null,
+        build_system_id: "",
     };
     export let lastStatus = "unknown";
     export let runs = {};
     let assigneeList = [];
-    $: assigneeList = $assigneeStore?.[release]?.["tests"]?.[`${group}/${test.name}`] ?? [];
+    $: assigneeList = $assigneeStore?.[release]?.["tests"]?.[test.build_system_id] ?? [];
     const dispatch = createEventDispatcher();
 
     let startTime = 0;
@@ -43,7 +44,7 @@
         fetching = true;
         dispatch("testRunRequest", {
             uuid: `${release}/${group}/${test.name}`,
-            runs: [],
+            key: test.build_system_id,
             test: test.name,
             group: group,
             release: release

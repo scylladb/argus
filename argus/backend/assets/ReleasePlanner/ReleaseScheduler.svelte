@@ -224,7 +224,7 @@
         if (selectedTests.findIndex((test) => test.label == testLabel) == -1) {
             selectedTests.push({
                 label: testLabel,
-                value: data.test.name,
+                value: data.test.build_system_id,
             });
             selectedTests = selectedTests;
             clickedTests[testLabel] = true;
@@ -256,7 +256,7 @@
     const handleTestSelect = function (e) {
         newSchedule.tests =
             e.detail?.map((val) => {
-                return val.label;
+                return val.value;
             }) ?? [];
         newSchedule = newSchedule;
     };

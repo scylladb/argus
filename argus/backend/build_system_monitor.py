@@ -37,12 +37,14 @@ class ArgusTestsMonitor(ABC):
 
         return group
 
-    def create_test(self, release: ArgusRelease, group: ArgusReleaseGroup, test_name: str):
+    def create_test(self, release: ArgusRelease, group: ArgusReleaseGroup,
+                    test_name: str, build_id: str) -> ArgusReleaseGroupTest:
         # pylint: disable=no-self-use
         test = ArgusReleaseGroupTest()
         test.name = test_name
         test.group_id = group.id
         test.release_id = release.id
+        test.build_system_id = build_id
         test.save()
 
         return test
@@ -102,14 +104,14 @@ class JenkinsMonitor(ArgusTestsMonitor):
                                 test["name"], saved_group.name, saved_release.name)
                     saved_test = None
                     for t in self._existing_tests:  # pylint: disable=invalid-name
-                        if t.release_id == saved_release.id and t.group_id == saved_group.id and t.name == test["name"]:
+                        if t.build_system_id == test["fullname"]:
                             saved_test = t
                             break
                     if not saved_test:
                         LOGGER.warning("Test %s for release %s (group %s) doesn't exist, creating...",
                                        test["name"], saved_release.name, saved_group.name)
                         saved_test = self.create_test(
-                            saved_release, saved_group, test["name"])
+                            saved_release, saved_group, test["name"], test["fullname"])
                         self._existing_tests.append(saved_test)
 
     def collect_groups_for_release(self, jobs):

@@ -59,6 +59,7 @@
             test: event.detail.test,
             release: event.detail.release,
             group: event.detail.group,
+            build_system_id: event.detail.key,
         };
         test_runs = test_runs;
         let state = stateEncoder(test_runs);

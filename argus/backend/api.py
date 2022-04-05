@@ -317,34 +317,6 @@ def tests_last_status():
     return jsonify(res)
 
 
-@bp.route("/test_runs", methods=["POST"])
-@login_required
-def test_runs():
-    res = {
-        "status": "ok"
-    }
-    try:
-        if not request.is_json:
-            raise Exception(
-                "Content-Type mismatch, expected application/json, got:", request.content_type)
-        request_payload = request.get_json()
-        service = ArgusService()
-        release_group_runs = service.get_runs_by_name_for_release_group(
-            release_name=request_payload["release"],
-            test_name=request_payload["test_name"],
-            limit=request_payload.get("limit", 10)
-        )
-        res["response"] = release_group_runs
-    except Exception as exc:
-        LOGGER.error("Something happened during request %s", request)
-        res["status"] = "error"
-        res["response"] = {
-            "exception": exc.__class__.__name__,
-            "arguments": exc.args
-        }
-    return jsonify(res)
-
-
 @bp.route("/test_run", methods=["POST"])
 @login_required
 def test_run():

@@ -24,6 +24,7 @@
                 test: val.name,
                 group: val.group,
                 release: releaseName,
+                build_system_id: val.build_system_id
             };
             return acc;
         }, {})

@@ -14,7 +14,7 @@ from argus.db.cloud_types import CloudResource, CloudInstanceDetails, BaseCloudS
 from argus.db.interface import ArgusDatabase
 from argus.db.db_types import ColumnInfo, CollectionHint, NemesisRunInfo, TestStatus, TestInvestigationStatus, \
     EventsBySeverity, PackageVersion
-from argus.db.models import ArgusReleaseSchedule, ArgusReleaseScheduleAssignee, ArgusReleaseScheduleGroup, \
+from argus.db.models import ArgusReleaseGroup, ArgusReleaseGroupTest, ArgusReleaseSchedule, ArgusReleaseScheduleAssignee, ArgusReleaseScheduleGroup, \
     ArgusReleaseScheduleTest
 
 LOGGER = logging.getLogger(__name__)
@@ -540,20 +540,26 @@ class TestRun:
             return True
         return False
 
+    # TODO: build_system_id refactor (check e2e tests)
     def _get_current_assignee_from_schedule(self) -> str:
         """
             Iterate over all schedules (groups and tests) and return first available assignee
         """
+        associated_test = ArgusReleaseGroupTest.using(
+            connection=self.argus.CQL_ENGINE_CONNECTION_NAME
+        ).get(build_system_id=self.run_info.details.build_job_name)
+        associated_group = ArgusReleaseGroup.using(
+            connection=self.argus.CQL_ENGINE_CONNECTION_NAME
+        ).get(id=associated_test.group_id)
 
         scheduled_groups = ArgusReleaseScheduleGroup.filter(
-            release=self.release_name, name=self.group
+            release=self.release_name, name=associated_group.name
         ).all().using(
             connection=self.argus.CQL_ENGINE_CONNECTION_NAME
         )
 
-        scheduled_test_name = f"{self.group}/{self.run_info.details.name}"
         scheduled_tests = ArgusReleaseScheduleTest.filter(
-            release=self.release_name, name=scheduled_test_name
+            release=self.release_name, name=associated_test.build_system_id
         ).all().using(
             connection=self.argus.CQL_ENGINE_CONNECTION_NAME
         )
