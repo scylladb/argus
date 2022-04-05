@@ -1,9 +1,8 @@
 <script>
     import { createEventDispatcher } from "svelte";
-    import { testRequests, stats } from "../Stores/StatsSubscriber";
+    import { stats } from "../Stores/StatsSubscriber";
     import { StatusBackgroundCSSClassMap } from "../Common/TestStatus.js";
     import { timestampToISODate } from "../Common/DateUtils";
-    import { assigneeStore } from "../Stores/AssigneeSubscriber";
     import AssigneeList from "./AssigneeList.svelte";
     export let release = "";
     export let group = "";
@@ -20,13 +19,10 @@
     };
     export let lastStatus = "unknown";
     export let runs = {};
-    let assigneeList = [];
-    $: assigneeList = $assigneeStore?.[release]?.["tests"]?.[test.build_system_id] ?? [];
+    export let assigneeList = [];
     const dispatch = createEventDispatcher();
-
-    let startTime = 0;
+    let startTime;
     let fetching = false;
-    testRequests.update((val) => [...val, [release, group, test.name]]);
     $: lastStatus = $stats?.["releases"]?.[release]?.["groups"]?.[group]?.["tests"]?.[test.name]["status"] ?? lastStatus;
     $: startTime = $stats?.["releases"]?.[release]?.["groups"]?.[group]?.["tests"]?.[test.name]["start_time"] ?? startTime;
 
@@ -73,18 +69,18 @@
             </div>
             <div class="col-10 overflow-hidden">
                 <div class="d-flex">
-                    <div>{test.pretty_name ?? test.name}</div>
+                    <div>{test.pretty_name || test.name}</div>
                     <div class="ms-auto text-right">
                         <AssigneeList assignees={assigneeList}/>
                     </div>
                 </div>
-                {#if startTime > 1}
+                {#if startTime}
                 <div
                     class:text-muted={!runs[`${release}/${test.name}`]}
                     class:active-test-text-muted={runs[`${release}/${test.name}`]}
                     style="font-size: 0.75em"
                 >
-                    {timestampToISODate(startTime * 1000)}
+                    {timestampToISODate(startTime)}
                 </div>
                 {/if}
             </div>

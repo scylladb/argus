@@ -1,0 +1,194 @@
+<script>
+    import { createEventDispatcher, onMount } from "svelte";
+    import Fa from "svelte-fa";
+    import { Modal } from "bootstrap/dist/js/bootstrap.esm";
+    import { faEdit, faTrash } from "@fortawesome/free-solid-svg-icons";
+    export let group;
+    export let groups;
+    const dispatch = createEventDispatcher();
+    let editing = false;
+    let editedGroup = Object.assign({}, group);
+    let modal;
+    let deleteTests = true;
+    let newGroupId = "";
+
+    const handleGroupUpdate = function (e) {
+        e.stopPropagation();
+        dispatch("groupUpdate", {
+            group_id: editedGroup.id, 
+            name: editedGroup.name, 
+            pretty_name: editedGroup.pretty_name, 
+            enabled: editedGroup.enabled,
+        });
+    };
+
+    const handleGroupDelete = function (e) {
+        e.stopPropagation();
+        dispatch("groupDelete", {
+            group_id: group.id,
+            delete_tests: deleteTests,
+            new_group_id: newGroupId,
+        });
+    };
+
+    onMount(() => {
+        newGroupId = groups?.[0]?.id ?? "";
+    });
+</script>
+
+<div class="d-flex align-items-center w-100">
+    <div>
+        {group.name} {#if group.pretty_name}
+            [{group.pretty_name}]
+        {/if}
+    </div>
+    <div class="ms-auto">
+        <button
+            class="btn btn-light"
+            title="Edit"
+            on:click={() => (editing = true)}
+        >
+            <Fa icon={faEdit} />
+        </button>
+    </div>
+    <div class="ms-2">
+        <button
+            class="btn btn-light"
+            title="Delete"
+            on:click={(e) => {
+                e.stopPropagation();
+                Modal.getOrCreateInstance(modal).show();
+            }}
+        >
+            <Fa icon={faTrash} />
+        </button>
+    </div>
+</div>
+
+<div class="position-fixed popup-group-editor" class:d-none={!editing}>
+    <div
+        class="row justify-content-center align-items-center h-100"
+        on:click|self={() => {
+            editing = false;
+        }}
+    >
+        <div class="col-4 mt-6 bg-white rounded shadow-sm shadow-light p-2">
+            <div class="fs-6 text-muted mb-2">
+                <span class="fw-bold">Argus Group Id</span>: {editedGroup.id}
+            </div>
+            <div class="form-group">
+                <label for="" class="form-label">Group name</label>
+                <input
+                    type="text"
+                    class="form-control"
+                    bind:value={editedGroup.name}
+                />
+            </div>
+            <div class="form-group">
+                <label for="" class="form-label">Friendly name</label>
+                <input
+                    type="text"
+                    class="form-control"
+                    bind:value={editedGroup.pretty_name}
+                />
+            </div>
+            <div class="mt-2 text-end">
+                <button
+                    class="btn btn-secondary"
+                    on:click={() => (editing = false)}
+                >
+                    Cancel
+                </button>
+                <button class="btn btn-success" on:click={handleGroupUpdate}>
+                    Update
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div
+    class="modal group-delete-modal position-fixed"
+    tabindex="-1"
+    bind:this={modal}
+    id="modalGroupConfirmDelete-{editedGroup.id}"
+    on:click={(e) => e.stopPropagation()}
+>
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Deleting a group</h5>
+                <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-dismiss="modal"
+                    aria-label="Close"
+                />
+            </div>
+            <div class="modal-body">
+                <p>
+                    Are you sure you want to delete group <span class="fw-bold"
+                        >{editedGroup.name}</span
+                    >?
+                </p>
+                <div class="form-group">
+                    <label for="" class="form-label">Also delete associated tests</label>
+                    <input
+                        type="checkbox"
+                        class="form-check-input"
+                        bind:checked={deleteTests}
+                    />
+                </div>
+                {#if !deleteTests}
+                    <div class="form-group">
+                        <label for="" class="form-label">Select new group for orphaned tests</label>
+                        <select
+                            class="form-select"
+                            id=""
+                            bind:value={newGroupId}
+                        >
+                            {#each groups as group (group.id)}
+                                <option value={group.id}
+                                    >{group.pretty_name || group.name}</option
+                                >
+                            {/each}
+                        </select>
+                    </div>
+                {/if}
+            </div>
+            <div class="modal-footer">
+                <button
+                    type="button"
+                    class="btn btn-secondary"
+                    data-bs-dismiss="modal"
+                    >No</button
+                >
+                <button
+                    type="button"
+                    class="btn btn-danger"
+                    data-bs-dismiss="modal"
+                    on:click={handleGroupDelete}
+                >
+                    Yes
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .popup-group-editor {
+        background-color: rgba(0, 0, 0, 0.5);
+        color: black;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 999;
+    }
+
+    .group-delete-modal {
+        z-index: 1200;
+        color: black;
+    }
+</style>

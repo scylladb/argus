@@ -1,0 +1,14 @@
+{% extends "base.html.j2" %}
+{% block javascripts %}
+{{ super() }}
+{% endblock javascripts %}
+{% block title %}
+Admin Area
+{% endblock %}
+{% block body %}
+<div class="m-2 min-vh-100 rounded bg-light-one shadow overflow-hidden">
+    {% block content %}
+
+    {% endblock content %}
+</div>
+{% endblock %}

@@ -1,4 +1,5 @@
-from uuid import UUID
+from datetime import datetime, timedelta
+from uuid import UUID, uuid4
 import logging
 from time import sleep, time
 from os import urandom
@@ -113,9 +114,8 @@ def preset_test_resources_setup_serialized():
 
 @pytest.fixture(scope="function")
 def preset_test_details():
-    details = TestDetails(name="some-test", scm_revision_id="abcde", started_by="someone",
-                          build_job_name="some-test-job",
-                          build_job_url="https://job.tld/1", start_time=1600000000, yaml_test_duration=120,
+    details = TestDetails(scm_revision_id="abcde", started_by="someone",
+                          build_job_url="https://job.tld/1", start_time=datetime.utcfromtimestamp(1600000000), yaml_test_duration=120,
                           config_files=["some-test.yaml"],
                           packages=[PackageVersion(name="package-server", version="1.0", date="2021-10-01",
                                                    revision_id="dfcedb3", build_id="dfeeeffffff330fddd")])
@@ -125,30 +125,26 @@ def preset_test_details():
 @pytest.fixture(scope="function")
 def preset_test_details_schema():
     return {
-        "name": ColumnInfo(name="name", type=str, value=None, constraints=[]),
         "scm_revision_id": ColumnInfo(name="scm_revision_id", type=str, value=None, constraints=[]),
         "started_by": ColumnInfo(name="started_by", type=str, value=None, constraints=[]),
-        "build_job_name": ColumnInfo(name="build_job_name", type=str, value=None, constraints=[]),
         "build_job_url": ColumnInfo(name="build_job_url", type=str, value=None, constraints=[]),
-        "start_time": ColumnInfo(name="start_time", type=int, value=None, constraints=[]),
+        "start_time": ColumnInfo(name="start_time", type=datetime, value=None, constraints=[]),
         "yaml_test_duration": ColumnInfo(name="yaml_test_duration", type=int, value=None, constraints=[]),
         "config_files": ColumnInfo(name="config_files", type=CollectionHint, value=CollectionHint(list[str]),
                                    constraints=[]),
         "packages": ColumnInfo(name="packages", type=CollectionHint, value=CollectionHint(list[PackageVersion]),
                                constraints=[]),
-        "end_time": ColumnInfo(name="end_time", type=int, value=None, constraints=[])
+        "end_time": ColumnInfo(name="end_time", type=datetime, value=None, constraints=[])
     }
 
 
 @pytest.fixture(scope="function")
 def preset_test_details_serialized():
     return {
-        "name": "some-test",
         "scm_revision_id": "abcde",
         "started_by": "someone",
-        "build_job_name": "some-test-job",
         "build_job_url": "https://job.tld/1",
-        "start_time": 1600000000,
+        "start_time": datetime.utcfromtimestamp(1600000000),
         "yaml_test_duration": 120,
         "config_files": ["some-test.yaml"],
         "packages": [{
@@ -158,7 +154,7 @@ def preset_test_details_serialized():
             "revision_id": "dfcedb3",
             "build_id": "dfeeeffffff330fddd",
         }],
-        "end_time": -1,
+        "end_time": datetime(1970, 1, 1, 0, 0),
     }
 
 
@@ -296,7 +292,14 @@ def preset_test_results_serialized():
 def simple_primary_key():
     return {
         "$tablekeys$": {
-            "id": (UUID, "partition")
+            "id": (UUID, "partition"),
+            "timer": (int, "clustering"),
+        },
+        "$clustering_order$": {
+            "id": "DESC"
+        },
+        "$indices$": {
+
         }
     }
 
@@ -305,11 +308,11 @@ def simple_primary_key():
 def completed_testrun(preset_test_resource_setup: TestResourcesSetup):  # pylint: disable=redefined-outer-name
     # pylint: disable=too-many-locals
     scylla_package = PackageVersion("scylla-db", "4.4", "20210901", "deadbeef")
-    details = TestDetails(name="longevity-test-100gb-4h", scm_revision_id="773413dead", started_by="komachi",
-                          build_job_name="komachi-longevity-test-100gb-4h",
-                          build_job_url="https://notarealjob.url/jobs/komachi-longevity-test-100gb-4h",
-                          start_time=int(time()), yaml_test_duration=240, config_files=["tests/config.yaml"],
+    details = TestDetails(scm_revision_id="773413dead", started_by="k0machi",
+                          build_job_url="https://notarealjob.url/jobs/argus-test/argus/argus-testing",
+                          start_time=(datetime.utcnow() - timedelta(hours=1)).replace(microsecond=0), yaml_test_duration=240, config_files=["tests/config.yaml"],
                           packages=[scylla_package])
+    details.set_test_end_time()
     setup = preset_test_resource_setup
     logs = TestLogs()
     logs.add_log(log_type="syslog", log_url="https://thisisdefinitelyans3bucket.com/logz-abcdef331.tar.gz")
@@ -323,7 +326,7 @@ def completed_testrun(preset_test_resource_setup: TestResourcesSetup):  # pylint
             random_ip = ".".join([str(int(byte, 16)) for byte in entropy])
             instance_details = CloudInstanceDetails(public_ip=random_ip, provider="aws", region="us-east-1",
                                                     private_ip="10.10.10.1", shards_amount=8)
-            resource = CloudResource(name=f"{details.name}_{requested_node.instance_type}_{node_number}",
+            resource = CloudResource(name=f"argus-testing_{requested_node.instance_type}_{node_number}",
                                      state=ResourceState.RUNNING, instance_info=instance_details,
                                      resource_type="db-node")
             resources.attach_resource(resource)
@@ -372,7 +375,7 @@ def scylla_cluster() -> list[str]:
         "-d"
     ], check=True, capture_output=True)
     LOGGER.info("Started docker cluster.\nSTDOUT:\n%s", cluster_start.stdout.decode(encoding="utf-8"))
-    interval = 180
+    interval = 90
     LOGGER.info("Sleeping for %s seconds to let cluster catch up", interval)
     sleep(interval)
     all_containers = docker_session.containers.list(all=True)
@@ -400,12 +403,12 @@ def argus_database(scylla_cluster: list[str]):  # pylint: disable=redefined-oute
 
 
 @pytest.fixture(scope="class")
-def argus_with_release(argus_database: ArgusDatabase):
+def argus_with_release(argus_database: ArgusDatabase) -> tuple[ArgusDatabase, tuple[ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest]]:
     for model in [ArgusReleaseGroupTest, ArgusReleaseGroup, ArgusRelease]:
         management.sync_table(model, keyspaces=(argus_database._current_keyspace,),
                               connections=(argus_database.CQL_ENGINE_CONNECTION_NAME,))
     release = ArgusRelease()
-    release.name = "4_5rc5"
+    release.name = "argus-test"
     release.using(connection=argus_database.CQL_ENGINE_CONNECTION_NAME).save()
 
     group = ArgusReleaseGroup()
@@ -414,10 +417,10 @@ def argus_with_release(argus_database: ArgusDatabase):
     group.using(connection=argus_database.CQL_ENGINE_CONNECTION_NAME).save()
 
     test = ArgusReleaseGroupTest()
-    test.name = 'longevity-test-100gb-4h'
+    test.name = 'argus-testing'
     test.group_id = group.id
     test.release_id = release.id
-    test.build_system_id = 'komachi-longevity-test-100gb-4h'
+    test.build_system_id = 'argus-test/argus/argus-testing'
     test.using(connection=argus_database.CQL_ENGINE_CONNECTION_NAME).save()
 
-    return argus_database
+    return argus_database, (release, group, test)

@@ -48,11 +48,11 @@ def test_interface_schema_init(mock_cluster, mock_cql_engine, preset_test_detail
     argus_interface_default.init_table("test_table", schema)
     # pylint: disable=unsubscriptable-object
     assert MockSession.MOCK_LAST_QUERY[0] == "CREATE TABLE IF NOT EXISTS test_table" \
-                                             "(name varchar , scm_revision_id varchar , started_by varchar , " \
-                                             "build_job_name varchar , build_job_url varchar , start_time varint ," \
+                                             "(scm_revision_id varchar , started_by varchar , " \
+                                             "build_job_url varchar , start_time timestamp ," \
                                              " yaml_test_duration varint , config_files list<varchar> , " \
-                                             "packages list<frozen<PackageVersion_v2>> , end_time varint , " \
-                                             "PRIMARY KEY (id))"
+                                             "packages list<frozen<PackageVersion_v2>> , end_time timestamp , " \
+                                             "PRIMARY KEY (id, timer)) WITH CLUSTERING ORDER BY (id DESC)"
 
 
 def test_interface_init_table_twice(mock_cluster, mock_cql_engine, preset_test_details_schema, simple_primary_key,
@@ -135,11 +135,12 @@ def test_interface_update(mock_cluster, mock_cql_engine, simple_primary_key, pre
     test_id = str(uuid4())
     data = {
         "id": test_id,
+        "timer": 42,
         **preset_test_details_serialized
     }
 
     argus_interface_default.update("test_table", data)
-    assert str(MockSession.MOCK_LAST_QUERY[1][-1:][0]) == test_id  # pylint: disable=unsubscriptable-object
+    assert str(MockSession.MOCK_LAST_QUERY[1][-2:][0]) == test_id  # pylint: disable=unsubscriptable-object
 
 
 def test_interface_update_uninitialized_table(mock_cluster, mock_cql_engine, simple_primary_key, preset_test_details_schema,

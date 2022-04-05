@@ -1,9 +1,10 @@
 <script>
-    import { releaseRequests, stats } from "../Stores/StatsSubscriber";
+    import { requestReleaseStats, stats } from "../Stores/StatsSubscriber";
     import NumberStats from "./NumberStats.svelte";
     import TestMapStats from "./TestMapStats.svelte";
     import { createEventDispatcher } from "svelte";
     export let releaseName = "";
+    export let releaseId = "";
     export let DisplayItem = NumberStats;
     export let TestMapItem = TestMapStats;
     export let showTestMap = false;
@@ -25,7 +26,7 @@
         total: -1,
     };
     let releaseStats = releaseStatsDefault;
-    releaseRequests.update((val) => [...val, releaseName]);
+    requestReleaseStats(releaseName, false, true);
     $: releaseStats = $stats["releases"]?.[releaseName] ?? releaseStatsDefault;
     $: dispatch("statsUpdate", { stats: releaseStats });
 </script>
@@ -39,7 +40,7 @@
         {/if}
         {#if showTestMap}
             <div>
-                <svelte:component this={TestMapItem} stats={releaseStats} {releaseName} bind:clickedTests={clickedTests} on:testClick />
+                <svelte:component this={TestMapItem} stats={releaseStats} {releaseId} {releaseName} bind:clickedTests={clickedTests} on:testClick />
             </div>
         {/if}
     {:else if releaseStats?.total == -1}

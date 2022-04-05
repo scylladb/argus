@@ -15,13 +15,7 @@ export const userList = readable({}, (set) => {
 });
 
 const fetchUsers = function (set) {
-    return fetch("/api/v1/users", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify({}),
-    })
+    return fetch("/api/v1/users")
         .then((res) => {
             if (res.status == 200) {
                 return res.json();
@@ -33,7 +27,6 @@ const fetchUsers = function (set) {
         .then((res) => {
             if (res.status === "ok") {
                 set(res.response);
-                console.log(res.response);
             } else {
                 console.log("Something went wrong...");
                 console.log(res);

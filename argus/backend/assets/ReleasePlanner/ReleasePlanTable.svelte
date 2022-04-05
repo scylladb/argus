@@ -2,7 +2,7 @@
     import Fa from "svelte-fa";
     import { faCircle } from "@fortawesome/free-solid-svg-icons";
     import { createEventDispatcher, onMount } from "svelte";
-    import { releaseRequests, stats } from "../Stores/StatsSubscriber";
+    import { stats, requestReleaseStats } from "../Stores/StatsSubscriber";
     import { getPicture } from "../Common/UserUtils";
     import { StatusCSSClassMap } from "../Common/TestStatus";
     import Schedule from "./Schedule.svelte";
@@ -16,27 +16,27 @@
     let selectedSchedule = "";
     let releaseStats = undefined;
 
-    releaseRequests.update((val) => [...val, releaseData.release.name]);
     stats.subscribe((val) => {
         releaseStats = val["releases"]?.[releaseData.release.name] ?? {};
     });
+    requestReleaseStats(releaseData.release.name, false, true);
 
     let schedulesByTest = {};
     const dispatch = createEventDispatcher();
 
-    const getTestsByBuildSystemId = function(plannerData) {
+    const getTestsById = function(plannerData) {
         return plannerData.tests.reduce((acc, test) => {
-            acc[test.build_system_id] = test;
+            acc[test.id] = test;
             return acc;
         }, {});
     }
 
     const sortSchedulesByTest = function (schedules) {
-        let tests = getTestsByBuildSystemId(plannerData);
+        let tests = getTestsById(plannerData);
         schedulesByTest = schedules.reduce((acc, schedule) => {
             schedule.tests.forEach((test) => {
-                let groupName = tests[test].group_name;
-                let testName = tests[test].name;
+                let groupName = tests[test]?.group_name;
+                let testName = tests[test]?.name;
                 if (!testName) return;
                 if (!acc[groupName]) {
                     acc[groupName] = {};
@@ -54,12 +54,12 @@
     const onCellClick = function (test, group, schedule, cellIndex) {
         if (
             schedule &&
-            selectedSchedule == `${schedule.schedule_id}-${cellIndex}`
+            selectedSchedule == `${schedule.id}-${cellIndex}`
         ) {
             selectedSchedule = "";
             return;
         } else if (schedule) {
-            selectedSchedule = `${schedule.schedule_id}-${cellIndex}`;
+            selectedSchedule = `${schedule.id}-${cellIndex}`;
             return;
         }
         selectedSchedule = "";
@@ -141,17 +141,19 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="ms-auto">
-                                        <a
-                                            href={`https://jenkins.scylladb.com/job/${releaseData.release.name}/job/${groupName}/job/${test.name}`}
-                                            class="btn btn-sm btn-outline-dark"
-                                            target="_blank"
-                                        >
-                                            Jenkins URL
-                                        </a>
-                                    </div>
+                                    {#if test.build_system_url}
+                                        <div class="ms-auto">
+                                            <a
+                                                href={test.build_system_url}
+                                                class="btn btn-sm btn-outline-dark"
+                                                target="_blank"
+                                            >
+                                                Jenkins URL
+                                            </a>
+                                        </div>
+                                    {/if}
                                 </div>
-                                {#if `${schedulesByTest?.[groupName]?.[test.name]?.schedule_id}-${idx}` == selectedSchedule}
+                                {#if `${schedulesByTest?.[groupName]?.[test.name]?.id}-${idx}` == selectedSchedule}
                                     <Schedule
                                         scheduleData={schedulesByTest[
                                             groupName
@@ -169,9 +171,9 @@
                             <td>
                                 <CommentTableRow
                                     bind:commentText={test.comment}
-                                    release={releaseData.release.name}
-                                    group={groupName}
-                                    test={test.name}
+                                    release={releaseData.release.id}
+                                    group={test.group_id}
+                                    test={test.id}
                                 />
                             </td>
                             <td

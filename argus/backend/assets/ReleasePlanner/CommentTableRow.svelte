@@ -19,9 +19,9 @@
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    release: release,
-                    group: group,
-                    test: test,
+                    releaseId: release,
+                    groupId: group,
+                    testId: test,
                     newComment: commentText,
                 }),
             });

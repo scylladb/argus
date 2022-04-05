@@ -4,7 +4,6 @@
     import { timestampToISODate } from "../Common/DateUtils";
     import { createEventDispatcher } from "svelte";
     import { stateEncoder } from "../Common/StateManagement";
-    import { assigneeStore } from "../Stores/AssigneeSubscriber";
     import AssigneeList from "../WorkArea/AssigneeList.svelte";
     import {
         faCircle,
@@ -29,24 +28,13 @@
             return acc;
         }, {})
     );
-    let assigneeList = {};
-    $: assigneeList = $assigneeStore?.[releaseName] ?? {
-        groups: {},
-        tests: {},
-    };
+
     const dispatch = createEventDispatcher();
     const handleTrashClick = function (name, group) {
         dispatch("deleteRequest", {
             name: name,
             group: group,
         });
-    };
-
-    const getAssigneesForTest = function (test) {
-        let testAssignees =
-            assigneeList.tests?.[`${test.group}/${test.name}`] ?? [];
-        let groupAssignees = assigneeList.groups?.[test.group] ?? [];
-        return [...testAssignees, ...groupAssignees];
     };
 </script>
 
@@ -59,11 +47,9 @@
                         <div class="d-flex align-items-center">
                             <div class="d-flex">
                                 <div>
-                                    {#if assigneeList}
+                                    {#if test.assignees}
                                         <AssigneeList
-                                            assignees={getAssigneesForTest(
-                                                test
-                                            )}
+                                            assignees={test.assignees}
                                         />
                                     {/if}
                                 </div>
@@ -121,7 +107,7 @@
                                             </div>
                                             <div class="text-muted small-text">
                                                 {timestampToISODate(
-                                                    run.start_time * 1000
+                                                    run.start_time 
                                                 )}
                                             </div>
                                         </div>
@@ -161,9 +147,8 @@
                 {/each}
             </ul>
             <a
-                href="/run_dashboard?{encodedState}"
+                href="/workspace?{encodedState}"
                 class="btn btn-primary"
-                target="_blank"
                 >Investigate selected <Fa icon={faExternalLinkSquareAlt} /></a
             >
         </div>

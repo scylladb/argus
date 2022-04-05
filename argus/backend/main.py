@@ -27,6 +27,7 @@ def home():
 
 
 @bp.route("/run_dashboard")
+@bp.route("/workspace")
 @login_required
 def run_dashboard():
     return render_template('dashboard.html.j2')

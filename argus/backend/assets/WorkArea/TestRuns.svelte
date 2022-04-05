@@ -23,7 +23,7 @@
     let runsBody = undefined;
 
     runStore.update((val) => {
-        val[myId] = data.build_system_id;
+        val.push(data.build_system_id);
         return val;
     });
 
@@ -112,7 +112,7 @@
             {/if}
             <div>{testName} ({releaseName}/{groupName})</div>
             {#if runs.length > 0}
-            <div class="ms-auto flex-fill text-end">{timestampToISODate(runs[0].start_time * 1000)}</div>
+            <div class="ms-auto flex-fill text-end">{timestampToISODate(runs[0].start_time)}</div>
             <div class="mx-2">#{runs[0].build_number}</div>
             {/if}
             {#if removableRuns}

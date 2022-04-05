@@ -35,15 +35,10 @@
     const fetchActivity = async function () {
         fetching = true;
         try {
-            let apiResponse = await fetch("/api/v1/release/activity", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    release_name: releaseName,
-                }),
-            });
+            let params = new URLSearchParams({
+                releaseName: releaseName,
+            }).toString();
+            let apiResponse = await fetch("/api/v1/release/activity?" + params);
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
                 activity = apiJson.response;

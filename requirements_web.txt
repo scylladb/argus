@@ -7,3 +7,4 @@ python-magic==0.4.24
 requests==2.26.0
 uwsgi==2.0.20
 python-jenkins==1.7.0
+python-slugify==6.1.1

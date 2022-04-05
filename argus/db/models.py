@@ -7,6 +7,13 @@ from cassandra.cqlengine import columns
 from cassandra.cqlengine.columns import UserDefinedType
 
 # pylint: disable=invalid-name
+class ArgusTestException(Exception):
+    pass
+
+class UserRoles(str, Enum):
+    User = "ROLE_USER"
+    Manager = "ROLE_MANAGER"
+    Admin = "ROLE_ADMIN"
 
 
 class WebRunComment(UserType):
@@ -33,6 +40,20 @@ class User(Model):
     registration_date = columns.DateTime()
     roles = columns.List(value_type=columns.Text)
     picture_id = columns.UUID(default=None)
+
+    def is_manager(self) -> bool:
+        return UserRoles.Manager in self.roles
+
+    def is_admin(self) -> bool:
+        return UserRoles.Admin in self.roles
+
+    def set_as_admin(self) -> None:
+        if UserRoles.Admin not in self.roles:
+            self.roles.append(UserRoles.Admin.value)
+
+    def set_as_manager(self) -> None:
+        if UserRoles.Manager not in self.roles:
+            self.roles.append(UserRoles.Manager.value)
 
     def get_id(self):
         return str(self.id)
@@ -67,6 +88,7 @@ class ArgusRelease(Model):
     picture_id = columns.UUID()
     enabled = columns.Boolean(default=lambda: True)
     perpetual = columns.Boolean(default=lambda: True)
+    dormant = columns.Boolean(default=lambda: False)
 
     def __eq__(self, other):
         if isinstance(other, ArgusRelease):
@@ -85,11 +107,15 @@ class ArgusReleaseGroup(Model):
     assignee = columns.List(value_type=columns.UUID)
     enabled = columns.Boolean(default=lambda: True)
 
+    def __hash__(self) -> int:
+        return hash((self.id, self.release_id))
+
     def __eq__(self, other):
         if isinstance(other, ArgusReleaseGroup):
             return self.name == other.name and self.release_id == other.release_id
         else:
             return super().__eq__(other)
+
 
 
 class ArgusReleaseGroupTest(Model):
@@ -103,6 +129,7 @@ class ArgusReleaseGroupTest(Model):
     assignee = columns.List(value_type=columns.UUID)
     build_system_id = columns.Text(index=True)
     enabled = columns.Boolean(default=lambda: True)
+    build_system_url = columns.Text()
 
     def __eq__(self, other):
         if isinstance(other, ArgusReleaseGroupTest):
@@ -110,7 +137,17 @@ class ArgusReleaseGroupTest(Model):
         else:
             return super().__eq__(other)
 
+    def validate_build_system_id(self):
+        try:
+            t = ArgusReleaseGroupTest.get(build_system_id=self.build_system_id)
+            if t.id != self.id:
+                raise ArgusTestException("Build Id is already used by another test", t.id, self.id)
+        except ArgusReleaseGroupTest.DoesNotExist:
+            pass
+        except ArgusReleaseGroupTest.MultipleObjectsReturned:
+            raise
 
+        return
 class ArgusPlannedTestsForRelease(Model):
     id = columns.UUID(primary_key=True, default=uuid4, partition_key=True)
     release_id = columns.UUID(required=True, index=True)
@@ -172,42 +209,46 @@ class ArgusGithubIssue(Model):
 
 
 class ArgusReleaseSchedule(Model):
-    release = columns.Text(primary_key=True, required=True)
-    schedule_id = columns.TimeUUID(
-        primary_key=True, default=uuid1, clustering_order="DESC")
+    __table_name__ = "argus_schedule_v4"
+    release_id = columns.UUID(primary_key=True, required=True)
+    id = columns.TimeUUID(primary_key=True, default=uuid1, clustering_order="DESC")
     period_start = columns.DateTime(required=True, default=datetime.utcnow)
-    period_end = columns.DateTime(required=True)
+    period_end = columns.DateTime(required=True, primary_key=True, clustering_order="DESC")
     tag = columns.Text(default="")
 
 
 class ArgusReleaseScheduleAssignee(Model):
+    __table_name__ = "argus_schedule_user_v3"
     assignee = columns.UUID(primary_key=True)
     id = columns.TimeUUID(primary_key=True, default=uuid1,
                           clustering_order="DESC")
     schedule_id = columns.TimeUUID(required=True, index=True)
-    release = columns.Text(required=True)
+    release_id = columns.UUID(required=True)
 
 
 class ArgusReleaseScheduleTest(Model):
-    name = columns.Text(partition_key=True)
-    release = columns.Text(partition_key=True)
+    __table_name__ = "argus_schedule_test_v3"
+    test_id = columns.UUID(partition_key=True, required=True)
     id = columns.TimeUUID(primary_key=True, default=uuid1,
                           clustering_order="DESC")
     schedule_id = columns.TimeUUID(required=True, index=True)
+    release_id = columns.UUID(partition_key=True)
 
 
 class ArgusReleaseScheduleGroup(Model):
-    name = columns.Text(partition_key=True)
-    release = columns.Text(partition_key=True)
+    __table_name__ = "argus_schedule_group_v3"
+    group_id = columns.UUID(partition_key=True, required=True)
     id = columns.TimeUUID(primary_key=True, default=uuid1,
                           clustering_order="DESC")
     schedule_id = columns.TimeUUID(required=True, index=True)
+    release_id = columns.UUID(partition_key=True)
 
 
 class ReleasePlannerComment(Model):
-    release = columns.Text(primary_key=True)
-    group = columns.Text(primary_key=True)
-    test = columns.Text(primary_key=True)
+    __table_name__ = "argus_planner_comment_v2"
+    release = columns.UUID(primary_key=True)
+    group = columns.UUID(primary_key=True)
+    test = columns.UUID(primary_key=True)
     comment = columns.Text(default=lambda: "")
 
 

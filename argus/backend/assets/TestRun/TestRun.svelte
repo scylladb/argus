@@ -6,6 +6,7 @@
         faCheck,
         faSearch,
     } from "@fortawesome/free-solid-svg-icons";
+    import { allReleases, allGroups, allTests } from "../Stores/WorkspaceStore"; 
     import humanizeDuration from "humanize-duration";
     import Select from "svelte-select";
     import User from "../Profile/User.svelte";
@@ -48,6 +49,12 @@
     let commentsOpen = false;
     let issuesOpen = false;
     let userSelect = {};
+    let tests;
+    $: tests = $allTests;
+    let groups;
+    $: groups = $allGroups;
+    let releases;
+    $: releases = $allReleases;
 
     const investigationStatusIcon = {
         in_progress: faSearch,
@@ -87,7 +94,7 @@
         { round: true }
     );
     $: startedAtHuman = humanizeDuration(
-        currentTime - test_run?.start_time * 1000,
+        currentTime - new Date(test_run?.start_time) ,
         { round: true }
     );
 
@@ -95,6 +102,21 @@
         test_run = data[id] ?? test_run;
     });
 
+
+    const findRelease = function(releases) {
+        if (!releases) return;
+        return releases.find(release => release.id == test_run.release_id);
+    };
+
+    const findGroup = function(groups) {
+        if (!groups) return;
+        return groups.find(group => group.id == test_run.group_id);
+    };
+
+    const findTest = function(test) {
+        if (!tests) return;
+        return tests.find(test => test.id == test_run.test_id);
+    };
     const findAssignee = function (test_run, userSelect) {
         const placeholder = {
             value: "unassigned",
@@ -119,14 +141,11 @@
 
     const fetchTestRunData = async function () {
         try {
-            let apiResponse = await fetch("/api/v1/test_run", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    test_id: id,
-                }),
+            let params = new URLSearchParams({
+                runId: id,
+            }).toString();
+            let apiResponse = await fetch('/api/v1/test_run?' + params, {
+                method: "GET"
             });
             let apiJson = await apiResponse.json();
             console.log(apiJson);
@@ -252,6 +271,8 @@
                     },
                     body: JSON.stringify({
                         test_run_id: id,
+                        buildId: test_run.build_id,
+                        startTime: test_run.start_time,
                         investigation_status: newInvestigationStatus,
                     }),
                 }
@@ -301,8 +322,8 @@
     <div class="d-flex px-2 py-2 mb-1 border-bottom bg-white ">
         <div class="p-1">
             {#if test_run}
-                <a class="link-dark" href="/test_run/{id}" target="_blank">
-                    {test_run.build_job_name}#{build_number}
+                <a class="link-dark" href="/test_run/{id}">
+                    {test_run.build_id}#{build_number}
                 </a>
             {/if}
         </div>
@@ -326,7 +347,7 @@
                                 ]} text-light"
                                 type="button"
                                 title={timestampToISODate(
-                                    test_run.end_time * 1000,
+                                    test_run.end_time ,
                                     true
                                 )}
                                 data-bs-toggle="dropdown"
@@ -535,7 +556,7 @@
                     id="nav-details-{id}"
                     role="tabpanel"
                 >
-                    <TestRunInfo {test_run} />
+                    <TestRunInfo {test_run} release={findRelease(releases)} group={findGroup(groups)} test={findTest(tests)}/>
                 </div>
                 <div
                     class="tab-pane fade"
@@ -644,7 +665,7 @@
                     role="tabpanel"
                 >
                     {#if commentsOpen}
-                        <TestRunComments {id} releaseName={test_run.release_name} assignee={test_run.assignee} starter={test_run.started_by}/>
+                        <TestRunComments {id} releaseName={findRelease(releases)?.name} assignee={test_run.assignee} starter={test_run.started_by}/>
                     {/if}
                 </div>
                 <div class="tab-pane fade" id="nav-issues-{id}" role="tabpanel">
