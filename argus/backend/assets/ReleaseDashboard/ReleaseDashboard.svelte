@@ -40,6 +40,7 @@
         <div class="col-xs-2 col-sm-6 col-md-7">
             <ReleaseStats
                 releaseName={releaseData.release.name}
+                releaseId={releaseData.release.id}
                 showTestMap={true}
                 horizontal={false}
                 bind:clickedTests={clickedTests}

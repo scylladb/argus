@@ -1,3 +1,4 @@
+from datetime import datetime
 import re
 import logging
 import json
@@ -17,6 +18,7 @@ from cassandra.cluster import ExecutionProfile, EXEC_PROFILE_DEFAULT
 from cassandra.cqlengine import connection
 from cassandra.cqlengine import models
 from cassandra.cqlengine import management
+from argus.db.argus_json import ArgusJSONEncoder
 
 from argus.db.config import BaseConfig, FileConfig
 from argus.db.db_types import ColumnInfo, CollectionHint, ArgusUDTBase
@@ -61,6 +63,7 @@ class ArgusDatabase:
         float: cassandra.cqltypes.FloatType.typename,
         str: cassandra.cqltypes.VarcharType.typename,
         UUID: cassandra.cqltypes.UUIDType.typename,
+        datetime: cassandra.cqltypes.DateType.typename,
         ResourceState: cassandra.cqltypes.VarcharType.typename,
         Optional[str]: cassandra.cqltypes.VarcharType.typename,
         Optional[int]: cassandra.cqltypes.IntegerType.typename,
@@ -176,15 +179,21 @@ class ArgusDatabase:
             return True, f"Table {table_name} already initialized"
 
         primary_keys_info: dict = column_info.pop("$tablekeys$")
+        clustering_order_info: dict = column_info.pop("$clustering_order$")
+        indices_info: dict = column_info.pop("$indices$")
         partition_keys = [key for key, (cls, pk_type) in primary_keys_info.items() if pk_type == "partition"]
         partition_key_def = partition_keys[0] if len(partition_keys) == 1 else f"({', '.join(partition_keys)})"
         clustering_columns = [key for key, (cls, pk_type) in primary_keys_info.items() if pk_type == "clustering"]
         clustering_column_def = ", ".join(clustering_columns)
+        clustering_order = [f"{key} {clustering_order_info[key]}" for key in clustering_columns +
+                            partition_keys if clustering_order_info.get(key)]
+        clustering_order_def = ", ".join(clustering_order)
+        clustering_statement = f"WITH CLUSTERING ORDER BY ({clustering_order_def})" if len(clustering_order) > 0 else ""
 
         self._table_keys[table_name] = primary_keys_info
         primary_key_def = f"{partition_key_def}, {clustering_column_def}" if len(
             clustering_column_def) > 0 else partition_key_def
-        query = "CREATE TABLE IF NOT EXISTS {table_name}({columns}, PRIMARY KEY ({primary_key}))"
+        query = "CREATE TABLE IF NOT EXISTS {table_name}({columns}, PRIMARY KEY ({pk})) {cs}"
         columns_query = []
         for column in column_info.values():
             if mapped_type := self.is_native_type(column.type):
@@ -200,11 +209,18 @@ class ArgusDatabase:
             columns_query.append(column_query)
 
         columns_query = ", ".join(columns_query)
-        completed_query = query.format(table_name=table_name, columns=columns_query, primary_key=primary_key_def)
+        completed_query = query.format(table_name=table_name, columns=columns_query,
+                                       pk=primary_key_def, cs=clustering_statement)
         LOGGER.debug("About to execute: \"%s\"", completed_query)
         self.session.execute(query=completed_query, execution_profile=self.ARGUS_EXECUTION_PROFILE)
+        self.create_indices(table_name, indices=indices_info)
         self.initialized_tables[table_name] = True
         return True, "Initialization complete"
+
+    def create_indices(self, table_name, indices):
+        for index in indices:
+            self.session.execute(f"CREATE INDEX IF NOT EXISTS ON {table_name}({index})")
+        return True
 
     def create_collection_declaration(self, hint: GenericAlias):
         collection_type = get_type_origin(hint)
@@ -263,18 +279,24 @@ class ArgusDatabase:
 
         return udt_name
 
-    def fetch(self, table_name: str, run_id: UUID):
+    def fetch(self, table_name: str, run_id: UUID, where_clause = "WHERE id = ?"):
+        return self._fetch(table_name, (run_id,), where_clause)
+    
+    def _fetch(self, table_name: str, params: tuple | list, where_clause: str):
         if not self._keyspace_initialized:
             raise ArgusInterfaceDatabaseConnectionError("Uninitialized keyspace, cannot continue")
 
-        query = self.prepared_statements.get(f"{table_name}_select",
+        query = self.prepared_statements.get(f"{table_name}_select_{where_clause.lower().replace(' ', '-')}",
                                              self.prepare_query_for_table(table_name=table_name, query_type="insert",
                                                                           query=f"SELECT * FROM {table_name} "
-                                                                                "WHERE id = ?"))
+                                                                                f"{where_clause}"))
 
-        cursor = self.session.execute(query=query, parameters=(run_id,), execution_profile=self.ARGUS_EXECUTION_PROFILE)
+        cursor = self.session.execute(query=query, parameters=params, execution_profile=self.ARGUS_EXECUTION_PROFILE)
 
         return cursor.one()
+
+    def fetch_generic(self, table_name: str, params: tuple | list, where_clause: str):
+        return self._fetch(table_name, params, where_clause)
 
     def insert(self, table_name: str, run_data: dict):
         if not self._keyspace_initialized:
@@ -284,7 +306,7 @@ class ArgusDatabase:
                                              self.prepare_query_for_table(table_name=table_name, query_type="insert",
                                                                           query=f"INSERT INTO {table_name} JSON ?"))
 
-        self.session.execute(query=query, parameters=(json.dumps(run_data),),
+        self.session.execute(query=query, parameters=(json.dumps(run_data, cls=ArgusJSONEncoder),),
                              execution_profile=self.ARGUS_EXECUTION_PROFILE)
 
     def update(self, table_name: str, run_data: dict):
@@ -305,7 +327,7 @@ class ArgusDatabase:
         LOGGER.debug("Primary keys for table %s: %s", table_name, primary_keys)
         where_clause = []
         where_params = []
-        for key, (ctor, _) in primary_keys.items():
+        for key, (_, _) in primary_keys.items():
             LOGGER.debug("Ejecting %s from update set as it is a part of the primary key", key)
             try:
                 data_value = run_data.pop(key)
@@ -313,7 +335,7 @@ class ArgusDatabase:
                 raise ArgusInterfaceSchemaError("Missing key from update set", key) from exc
             field = f"{key} = ?"
             where_clause.append(field)
-            where_params.append(ctor(data_value))
+            where_params.append(data_value)
 
         where_clause_joined = " AND ".join(where_clause)
 

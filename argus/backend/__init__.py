@@ -4,7 +4,7 @@ from yaml import safe_load
 from argus.db.models import User
 from argus.backend.db import ScyllaCluster
 from argus.backend.build_system_monitor import scan_jenkins_command
-from argus.backend import auth, main, api
+from argus.backend import auth, main, api, admin
 
 
 def create_app(config=None) -> Flask:
@@ -18,11 +18,12 @@ def create_app(config=None) -> Flask:
     app.register_blueprint(auth.bp)
     app.register_blueprint(main.bp)
     app.register_blueprint(api.bp)
+    app.register_blueprint(admin.bp)
     app.cli.add_command(scan_jenkins_command)
 
     @app.template_filter('from_timestamp')
     def from_timestamp_filter(timestamp: int):
-        return datetime.fromtimestamp(timestamp)
+        return datetime.utcfromtimestamp(timestamp)
 
     @app.template_filter('safe_user')
     def from_timestamp_filter(user: User):

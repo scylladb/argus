@@ -4,11 +4,15 @@
         faSearch,
         faCopy,
     } from "@fortawesome/free-solid-svg-icons";
+    import humanizeDuration from "humanize-duration";
     import Fa from "svelte-fa";
     import { InProgressStatuses } from "../Common/TestStatus";
     import { timestampToISODate } from "../Common/DateUtils";
     import { getScyllaPackage, getKernelPackage } from "../Common/RunUtils";
     export let test_run = {};
+    export let release;
+    export let group;
+    export let test;
 
     let cmd_hydraInvestigateShowMonitor = `hydra investigate show-monitor ${test_run.id}`;
     let cmd_hydraInvestigateShowLogs = `hydra investigate show-logs ${test_run.id}`;
@@ -32,15 +36,15 @@
             <ul class="list-unstyled border-start ps-2">
                 <li>
                     <span class="fw-bold">Release:</span>
-                    {test_run.release_name}
+                    {release?.name ?? "#NO_RELEASE"}
                 </li>
                 <li>
                     <span class="fw-bold">Group:</span>
-                    {test_run.group}
+                    {(group?.pretty_name || group?.name) ?? "#NO_GROUP"}
                 </li>
                 <li>
                     <span class="fw-bold">Test:</span>
-                    {test_run.name}
+                    {(test?.pretty_name || test?.name) ?? "#NO_TEST"}
                 </li>
                 <li>
                     <span class="fw-bold">Id:</span>
@@ -48,12 +52,24 @@
                 </li>
                 <li>
                     <span class="fw-bold">Start Time:</span>
-                    {timestampToISODate(test_run.start_time * 1000, true)}
+                    {timestampToISODate(test_run.start_time, true)}
                 </li>
-                {#if test_run.end_time != -1}
+                {#if new Date(test_run.end_time).getUTCFullYear() != 1970}
                     <li>
                         <span class="fw-bold">End Time:</span>
-                        {timestampToISODate(test_run.end_time * 1000, true)}
+                        {timestampToISODate(test_run.end_time, true)}
+                    </li>
+                    <li>
+                        <span class="fw-bold">Duration:</span>
+                        {humanizeDuration(
+                            new Date(test_run.end_time) -
+                                new Date(test_run.start_time),
+                            {
+                                round: true,
+                                units: ["y", "mo", "w", "d", "h", "m"],
+                                largest: 1,
+                            }
+                        )}
                     </li>
                 {/if}
                 <li>
@@ -63,7 +79,7 @@
                 <li>
                     <span class="fw-bold">Build Job:</span>
                     <a href={test_run.build_job_url} target="_blank">
-                        {test_run.build_job_name}
+                        {test_run.build_id}
                     </a>
                 </li>
             </ul>
@@ -178,7 +194,6 @@
                     >
                 {/if}
                 <a
-                    target="_blank"
                     href="/dashboard/{test_run.release_name}"
                     class="btn btn-outline-success"
                     ><Fa icon={faBusinessTime} /> Release Dashboard</a

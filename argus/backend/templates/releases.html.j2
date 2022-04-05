@@ -10,29 +10,29 @@ Releases
 {% endblock javascripts %}
 
 {% block body %}
-    <div class="container my-2">
-        <div class="row justify-content-center">
-        {% for release in releases %}
-            <div class="col-3 card m-1 release-card" data-argus-release-name="{{ release.name }}">
-                <div class="card-body">
-                        <h3 class="card-title">{{ release.name if not release.pretty_name else release.pretty_name }}</h3>
-                        <p class="card-subtitle text-muted">{{ release.description if release.description else "No description provided" }}</p>
-                        <div class="release-stats mb-1"></div>
+    <div class="container my-2 rounded overflow-hidden shadow-sm bg-light-three p-4">
+        {% for release in releases if release.enabled %}
+            <div class="row rounded overflow-hidden shadow-sm bg-white mb-2">
+                <div class="col-8 release-card" data-argus-release-name="{{ release.name }}">
+                    <div class="card-body">
+                            <h3 class="card-title">{{ release.name if not release.pretty_name else release.pretty_name }}</h3>
+                            <p class="card-subtitle text-muted">{{ release.description if release.description else "No description provided" }}</p>
+                            <div class="release-stats mb-1"></div>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="d-flex align-items-center h-100">
                         <div class="btn-group">
-                            <a target="_blank" href="{{ url_for('main.release_dashboard', release_name=release.name) }}" class="btn btn-primary"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+                            <a href="{{ url_for('main.release_dashboard', release_name=release.name) }}" class="btn btn-primary"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
                             {% if release.perpetual %}
-                            <a target="_blank" href="{{ url_for('main.duty_planner', name=release.name) }}" class="btn btn-primary"><i class="fas fa-calendar-alt"></i> Duty Planning</a>
+                            <a href="{{ url_for('main.duty_planner', name=release.name) }}" class="btn btn-primary"><i class="fas fa-calendar-alt"></i> Duty Planning</a>
                             {% else %}
-                            <a target="_blank" href="{{ url_for('main.release_scheduler', name=release.name) }}" class="btn btn-primary"><i class="fas fa-calendar-alt"></i> Duty Planning</a>
+                            <a href="{{ url_for('main.release_scheduler', name=release.name) }}" class="btn btn-primary"><i class="fas fa-calendar-alt"></i> Duty Planning</a>
                             {% endif %}
                         </div>
+                    </div>
                 </div>
             </div>
-            {% if loop.index % 3 == 0 %}
-            <div class="w-100"></div>
-            {% else %}
-            {% endif %}
         {% endfor %}
-        </div>
     </div>
 {% endblock %}

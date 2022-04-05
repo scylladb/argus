@@ -26,15 +26,10 @@
 
     const fetchComments = async function () {
         try {
-            let apiResponse = await fetch("/api/v1/test_run/comments", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    test_id: id,
-                }),
-            });
+            let params = new URLSearchParams({
+                testId: id,
+            }).toString();
+            let apiResponse = await fetch("/api/v1/test_run/comments?" + params);
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
                 comments = apiJson.response;

@@ -31,7 +31,7 @@
     };
 
     const PayloadTemplate = {
-        release: releaseData.release.name,
+        releaseId: releaseData.release.id,
         groups: [],
         tests: [],
         start: generateNewScheduleDate(),
@@ -44,14 +44,11 @@
 
     const fetchPlannerData = async function () {
         try {
-            let apiResponse = await fetch("/api/v1/release/planner/data", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    release: releaseData.release.name,
-                }),
+            let params = new URLSearchParams({
+                releaseId: releaseData.release.id
+            }).toString()
+            let apiResponse = await fetch("/api/v1/release/planner/data?" + params, {
+                method: "GET",
             });
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
@@ -76,15 +73,14 @@
 
     const fetchSchedules = async function () {
         try {
-            let apiResponse = await fetch("/api/v1/release/schedules", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    release: releaseData.release.name,
-                }),
+            let params = new URLSearchParams({
+                releaseId: releaseData.release.id
             });
+
+            let apiResponse = await fetch("/api/v1/release/schedules?" + params, {
+                method: "GET",
+            });
+
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
                 schedules = apiJson.response?.schedules ?? [];
@@ -148,8 +144,8 @@
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    release: releaseData.release.name,
-                    schedule_id: scheduleId,
+                    releaseId: releaseData.release.id,
+                    scheduleId: scheduleId,
                 }),
             });
             let apiJson = await apiResponse.json();
@@ -200,7 +196,7 @@
             .map((val) => {
                 return {
                     label: `${val.group_name}/${val.name}`,
-                    value: val.name,
+                    value: val.id,
                     test: val,
                 };
             })
@@ -224,7 +220,7 @@
         if (selectedTests.findIndex((test) => test.label == testLabel) == -1) {
             selectedTests.push({
                 label: testLabel,
-                value: data.test.build_system_id,
+                value: data.test.id,
             });
             selectedTests = selectedTests;
             clickedTests[testLabel] = true;

@@ -18,16 +18,14 @@ def test_details_serialization(preset_test_details: TestDetails, preset_test_det
 
 def test_details_validation_invalid_packages():
     with pytest.raises(TestInfoValueError):
-        TestDetails(name="some-test", scm_revision_id="abcde", started_by="someone",
-                    build_job_name="some-test-job",
+        TestDetails(scm_revision_id="abcde", started_by="someone",
                     build_job_url="https://job.tld/1", start_time=1600000000, yaml_test_duration=120,
                     config_files=["some-test.yaml"],
                     packages=["peckege", 123])
 
 
 def test_details_no_exception_on_empty_package_list():
-    TestDetails(name="some-test", scm_revision_id="abcde", started_by="someone",
-                build_job_name="some-test-job",
+    TestDetails(scm_revision_id="abcde", started_by="someone",
                 build_job_url="https://job.tld/1", start_time=1600000000, yaml_test_duration=120,
                 config_files=["some-test.yaml"],
                 packages=[])
@@ -35,12 +33,13 @@ def test_details_no_exception_on_empty_package_list():
 
 def test_details_ctor_from_named_tuple(preset_test_details):
     ResultSet = namedtuple("Row",
-                           ["name", "scm_revision_id", "started_by", "build_job_name", "build_job_url", "start_time",
+                           ["scm_revision_id", "started_by", "build_job_url", "start_time",
                             "yaml_test_duration", "config_files", "packages", "end_time"])
     PackageMapped = namedtuple("PackageMapped", ["name", "version", "date", "revision_id", "build_id"])
     package = PackageMapped("package-server", "1.0", "2021-10-01", "dfcedb3", "dfeeeffffff330fddd")
-    row = ResultSet(preset_test_details.name, preset_test_details.scm_revision_id, preset_test_details.started_by,
-                    preset_test_details.build_job_name, preset_test_details.build_job_url,
+    row = ResultSet(preset_test_details.scm_revision_id,
+                    preset_test_details.started_by,
+                    preset_test_details.build_job_url,
                     preset_test_details.start_time,
                     preset_test_details.yaml_test_duration,
                     preset_test_details.config_files,

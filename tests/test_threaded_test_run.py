@@ -20,7 +20,8 @@ def test_heartbeat_thread(completed_testrun: TestRunInfo, mock_cluster: ArgusDat
     # pylint: disable=unused-argument
     monkeypatch.setattr(MockSession, "MOCK_RESULT_SET", FakeCursor())
     test_id = uuid4()
-    test_run = TestRunWithHeartbeat(test_id=test_id, group="longevity-test", release_name="4_5rc5", assignee="k0machi",
+    assignee = uuid4()
+    test_run = TestRunWithHeartbeat(test_id=test_id, build_id="argus-test/argus/argus-testing", assignee=assignee,
                                     run_info=completed_testrun, heartbeat_interval=3)
 
     old_ts = test_run.heartbeat
@@ -41,7 +42,8 @@ def test_heartbeat_thread_shutdown(completed_testrun: TestRunInfo, mock_cluster:
     # pylint: disable=unused-argument
     monkeypatch.setattr(MockSession, "MOCK_RESULT_SET", FakeCursor())
     test_id = uuid4()
-    test_run = TestRunWithHeartbeat(test_id=test_id, group="longevity-test", release_name="4_5rc5", assignee="k0machi",
+    assignee = uuid4()
+    test_run = TestRunWithHeartbeat(test_id=test_id, build_id="argus-test/argus/argus-testing", assignee=assignee,
                                     run_info=completed_testrun, heartbeat_interval=15)
 
     test_run.shutdown()

@@ -7,6 +7,7 @@ from flask.cli import with_appcontext
 
 from argus.backend.db import ScyllaCluster
 from argus.db.models import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest
+from argus.backend.service.release_manager import ReleaseManagerService
 
 LOGGER = logging.getLogger(__name__)
 
@@ -32,20 +33,24 @@ class ArgusTestsMonitor(ABC):
         group = ArgusReleaseGroup()
         group.release_id = release.id
         group.name = group_name.rstrip("-")
-        group.pretty_name = group_pretty_name
+        if group_pretty_name:
+            group.pretty_name = group_pretty_name
         group.save()
 
         return group
 
     def create_test(self, release: ArgusRelease, group: ArgusReleaseGroup,
-                    test_name: str, build_id: str) -> ArgusReleaseGroupTest:
+                    test_name: str, build_id: str, build_url: str) -> ArgusReleaseGroupTest:
         # pylint: disable=no-self-use
         test = ArgusReleaseGroupTest()
         test.name = test_name
         test.group_id = group.id
         test.release_id = release.id
         test.build_system_id = build_id
+        test.build_system_url = build_url
+        test.validate_build_system_id()
         test.save()
+        ReleaseManagerService().move_test_runs(test)
 
         return test
 
@@ -96,7 +101,11 @@ class JenkinsMonitor(ArgusTestsMonitor):
                 except IndexError:
                     LOGGER.warning(
                         "Group %s for release %s doesn't exist, creating...", group_name, saved_release.name)
-                    saved_group = self.create_group(saved_release, group_name)
+                    try:
+                        display_name = self._jenkins.get_job_info(name=group["fullname"])["displayName"]
+                    except Exception:
+                        display_name = None
+                    saved_group = self.create_group(saved_release, group_name, display_name)
                     self._existing_groups.append(saved_group)
                 tests = self.collect_tests_from_group(group)
                 for test in tests:
@@ -111,7 +120,7 @@ class JenkinsMonitor(ArgusTestsMonitor):
                         LOGGER.warning("Test %s for release %s (group %s) doesn't exist, creating...",
                                        test["name"], saved_release.name, saved_group.name)
                         saved_test = self.create_test(
-                            saved_release, saved_group, test["name"], test["fullname"])
+                            saved_release, saved_group, test["name"], test["fullname"], test["url"])
                         self._existing_tests.append(saved_test)
 
     def collect_groups_for_release(self, jobs):

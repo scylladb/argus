@@ -60,13 +60,13 @@
                     {run.status.toUpperCase()}
                 </div>
                 <h3 class="ms-2 p-2">
-                    <span class="text-muted">{run.build_job_name}#</span
+                    <span class="text-muted">{run.build_id}#</span
                     >{getBuildNumber(run.build_job_url)}
                 </h3>
                 <div class="ms-auto">
                     <h6 class="text-muted">Started at</h6>
                     <div>
-                        {timestampToISODate(run.start_time * 1000, true)}
+                        {timestampToISODate(run.start_time , true)}
                     </div>
                 </div>
                 <div class="ms-2">

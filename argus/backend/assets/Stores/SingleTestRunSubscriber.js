@@ -17,15 +17,10 @@ testRunStore.subscribe((val) => {
 })
 
 const pollTestRun = function (set) {
-    fetch("/api/v1/test_run/poll", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-            runs: runCollection
-        }),
-    })
+    let params = new URLSearchParams({
+        runs: runCollection,
+    }).toString();
+    fetch("/api/v1/test_run/poll?" + params)
         .then((res) => {
             if (res.status == 200) {
                 return res.json();
@@ -36,7 +31,6 @@ const pollTestRun = function (set) {
         .then((res) => {
             if (res.status == "ok") {
                 set(res.response);
-                console.log(res.response);
             } else {
                 console.log("Error parsing batch test_run data");
                 console.log(res.response);

@@ -38,7 +38,7 @@
         groups = releaseData.groups.reduce((acc, group) => {
             let groupWithSchedules = Object.assign(group);
             groupWithSchedules.schedules = schedules
-                .filter(schedule => schedule.groups.includes(group.name))
+                .filter(schedule => schedule.groups.includes(group.id))
                 .reduce((acc, schedule) => {
                     let dateKey = getStartOfTheWeekForDay(new Date(schedule.period_start))
                         .toISOString()
@@ -128,7 +128,7 @@
             {#each groups as group (group.name)}
                 <tr>
                     <td
-                        >{group.pretty_name ?? group.name}</td
+                        >{group.pretty_name || group.name}</td
                     >
                     {#each dates as date}
                         <td

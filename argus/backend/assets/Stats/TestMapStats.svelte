@@ -17,15 +17,12 @@
         TestStatus,
     } from "../Common/TestStatus";
     import { titleCase } from "../Common/TextUtils";
+    import { apiMethodCall } from "../Common/ApiUtils";
     import AssigneeList from "../WorkArea/AssigneeList.svelte";
-    import {
-        assigneeStore,
-        requestAssigneesForReleaseGroups,
-        requestAssigneesForReleaseTests,
-    } from "../Stores/AssigneeSubscriber";
     import { userList } from "../Stores/UserlistSubscriber";
     import { getPicture } from "../Common/UserUtils";
     export let releaseName = "";
+    export let releaseId = "";
     export let clickedTests = {};
     export let stats = {
         tests: {
@@ -37,10 +34,13 @@
     };
     let users = {};
     $: users = $userList;
-    let assigneeList = {};
-    $: assigneeList = $assigneeStore?.[releaseName] ?? {
-        groups: [],
-        tests: [],
+    let assigneeList = {
+        groups: {
+
+        },
+        tests: {
+            
+        }
     };
 
     const investigationStatusIcon = {
@@ -51,10 +51,11 @@
 
     const dispatch = createEventDispatcher();
 
-    const handleTestClick = function (name, test, group) {
+    const handleTestClick = function (name, test, groupName, group) {
         dispatch("testClick", {
             name: name,
-            group: group,
+            assignees: [...(assigneeList.tests?.[test.test_id] ?? []), ...(assigneeList.groups?.[group.group_id] ?? [])],
+            group: groupName,
             status: test.status,
             start_time: test.start_time,
             last_runs: test.last_runs,
@@ -80,20 +81,29 @@
             }, {});
     };
 
-    const requestTestAssignees = function () {
-        console.log(stats);
-        Object.entries(stats.groups).map((entry) => {
-            let [_, groupStats] = entry;
-            let tests = Object.values(groupStats.tests).filter(
-                (test) => test.status != "unknown"
-            );
-            requestAssigneesForReleaseTests(releaseName, tests);
-        });
+    const fetchGroupAssignees = async function(releaseId) {
+        let params = new URLSearchParams({
+            releaseId: releaseId,
+        })
+        let result = await apiMethodCall("/api/v1/release/assignees/groups?" + params, undefined, "GET");
+        if (result.status === "ok") {
+            assigneeList.groups = Object.assign(assigneeList.groups, result.response);
+        }
     };
 
-    const getAssigneesForTest = function (test, group, last_runs) {
-        let testAssignees = assigneeList.tests?.[`${group}/${test}`] ?? [];
-        let groupAssignees = assigneeList.groups?.[group] ?? [];
+    const fetchTestAssignees = async function(groupId) {
+        let params = new URLSearchParams({
+            groupId: groupId,
+        })
+        let result = await apiMethodCall("/api/v1/release/assignees/tests?" + params, undefined, "GET");
+        if (result.status === "ok") {
+            assigneeList.tests = Object.assign(assigneeList.tests, result.response);
+        }
+    };
+
+    const getAssigneesForTest = function (testId, groupId, last_runs) {
+        let testAssignees = assigneeList.tests?.[testId] ?? [];
+        let groupAssignees = assigneeList.groups?.[groupId] ?? [];
         let allAssignees = [...testAssignees, ...groupAssignees];
         let lastRun = last_runs?.[0];
         if (lastRun?.assignee && allAssignees.findIndex(v => v == lastRun.assignee) == -1)
@@ -104,11 +114,15 @@
     };
 
     onMount(() => {
-        requestAssigneesForReleaseGroups(
-            releaseName,
-            Object.keys(stats.groups)
-        );
-        requestTestAssignees();
+        if (stats.perpetual) {
+            fetchGroupAssignees(releaseId);
+        } else {
+            Object.values(stats.groups).forEach((group, idx) => {
+                setTimeout(() => {
+                    fetchTestAssignees(group.group_id);
+                }, 25 * idx);
+            })
+        }
     });
 </script>
 
@@ -122,13 +136,13 @@
                         <img
                             class="img-thumb ms-2"
                             src={getPicture(
-                                users[assigneeList.groups[groupName]?.[0]]
+                                users[assigneeList.groups[group.group_id]?.[0]]
                                     ?.picture_id
                             )}
                             alt=""
                         />
                         <span class="ms-2 fs-6"
-                            >{users[assigneeList.groups[groupName]?.[0]]
+                            >{users[assigneeList.groups[group.group_id]?.[0]]
                                 ?.full_name ?? "unassigned"}</span
                         >
                     </div>
@@ -141,7 +155,7 @@
                     class:status-block-active={test.start_time != 0}
                     class="rounded bg-main status-block m-1 d-flex flex-column overflow-hidden shadow-sm"
                     on:click={() => {
-                        handleTestClick(testName, test, groupName);
+                        handleTestClick(testName, test, groupName, group);
                     }}
                 >
                     <div
@@ -161,12 +175,12 @@
                     </div>
                     <div class="d-flex flex-fill align-items-end justify-content-end p-1">
                         <div class="p-1 me-auto">
-                            {#if assigneeList.tests[`${groupName}/${testName}`] || assigneeList.groups[groupName]}
+                            {#if assigneeList.tests[test.test_id] || assigneeList.groups[group.group_id]}
                                 <AssigneeList
                                     smallImage={false}
                                     assignees={getAssigneesForTest(
-                                        testName,
-                                        groupName,
+                                        test.test_id,
+                                        group.group_id,
                                         test.last_runs ?? [],
                                     )}
                                 />

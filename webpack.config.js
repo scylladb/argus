@@ -11,6 +11,7 @@ module.exports = {
         globalAlert: { import: './argus/backend/assets/Alert.js', dependOn: 'main'},
         flashDebug: { import: './argus/backend/assets/flashDebug.js', dependOn: 'globalAlert'},
         workArea: { import: './argus/backend/assets/work-area.js', dependOn: 'globalAlert'},
+        adminPanel: { import: './argus/backend/assets/admin-panel.js', dependOn: 'globalAlert'},
         releasePage: { import: './argus/backend/assets/release-page.js', dependOn: 'globalAlert'},
         testRunDetails: { import: './argus/backend/assets/test-run-details.js', dependOn: 'globalAlert'},
         testRuns: { import: './argus/backend/assets/test-runs-breakout.js', dependOn: 'globalAlert'},

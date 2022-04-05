@@ -14,12 +14,13 @@
     let selectedTests = [];
 
     const PayloadTemplate = {
-        release: releaseData.release.name,
+        releaseId: releaseData.release.id,
         groups: [],
         tests: [],
         start: undefined,
         end: undefined,
         assignees: [],
+        tag: "",
     };
 
     const generateNewScheduleDate = function(today = new Date()) {
@@ -47,14 +48,11 @@
 
     const fetchSchedules = async function () {
         try {
-            let apiResponse = await fetch("/api/v1/release/schedules", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    release: releaseData.release.name,
-                }),
+            let params = new URLSearchParams({
+                releaseId: releaseData.release.id,
+            }).toString();
+            let apiResponse = await fetch("/api/v1/release/schedules?" + params, {
+                method: "GET",
             });
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
@@ -119,8 +117,8 @@
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    release: releaseData.release.name,
-                    schedule_id: scheduleId,
+                    releaseId: releaseData.release.id,
+                    scheduleId: scheduleId,
                 }),
             });
             let apiJson = await apiResponse.json();
@@ -150,8 +148,8 @@
     const extractGroups = function (releaseData) {
         return Object.values(releaseData.groups).map((val) => {
             return {
-                label: val.pretty_name ?? val.name,
-                value: val.name,
+                label: val.pretty_name || val.name,
+                value: val.id,
             };
         });
     };
@@ -201,8 +199,8 @@
         if (!selectedGroups) {
             selectedGroups = [];
         }
-        if (selectedGroups.findIndex(val => val.value == data.group.name) == -1) {
-            selectedGroups.push({ label: data.group.pretty_name ?? data.group.name, value: data.group.name });
+        if (selectedGroups.findIndex(val => val.value == data.group.id) == -1) {
+            selectedGroups.push({ label: data.group.pretty_name || data.group.name, value: data.group.id });
             selectedGroups = selectedGroups;
             handleGroupSelect({
                 detail: selectedGroups

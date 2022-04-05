@@ -78,3 +78,26 @@ def login_required(view):
         return view(**kwargs)
 
     return wrapped_view
+
+
+def check_roles(needed_roles: list[str] | str = None):
+    def inner(view):
+        @functools.wraps(view)
+        def wrapped_view(**kwargs):
+            def check_roles(roles, user):
+                if isinstance(roles, str):
+                    return roles in user.roles
+                elif isinstance(roles, list):
+                    for role in roles:
+                        if role in user.roles:
+                            return True
+                return False
+
+            if not check_roles(needed_roles, g.user):
+                flash(message='Not authorized to access this area', category='error')
+                return redirect(url_for('main.home'))
+
+            return view(**kwargs)
+
+        return wrapped_view
+    return inner

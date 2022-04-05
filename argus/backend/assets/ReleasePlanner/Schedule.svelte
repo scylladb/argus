@@ -75,8 +75,8 @@
                         "Content-Type": "application/json",
                     },
                     body: JSON.stringify({
-                        release: releaseData.release.name,
-                        scheduleId: scheduleData.schedule_id,
+                        releaseId: releaseData.release.id,
+                        scheduleId: scheduleData.id,
                         newAssignees: reassigned.map((v) => v.value),
                     }),
                 }
@@ -112,7 +112,7 @@
         e.stopPropagation();
         deleting = true;
         dispatch("deleteSchedule", {
-            id: scheduleData.schedule_id,
+            id: scheduleData.id,
         });
     };
 
@@ -149,8 +149,10 @@
                         <li class="list-group-item d-flex align-items-center">
                             <div>
                                 {releaseData.groups.find(
-                                    (val) => val.name == group
-                                ).pretty_name ?? group}
+                                    (val) => val.id == group
+                                ).pretty_name || releaseData.groups.find(
+                                    (val) => val.id == group
+                                ).name}
                             </div>
                         </li>
                     {/each}
@@ -166,7 +168,9 @@
                 <ul class="list-group list-schedule">
                     {#each scheduleData.tests as test}
                         <li class="list-group-item d-flex align-items-center">
-                            <div>{test}</div>
+                            <div>{releaseData.tests.find(
+                                (val) => val.id == test
+                            ).name}</div>
                         </li>
                     {/each}
                 </ul>
@@ -260,8 +264,7 @@
             <div class="text-end">
                 <a
                     class="btn btn-primary"
-                    href="/run_dashboard?{state}"
-                    target="_blank"
+                    href="/workspace?{state}"
                 >
                     <Fa icon={faExternalLinkSquareAlt} />
                 </a>
@@ -279,7 +282,7 @@
                         title="Delete schedule"
                         type="button"
                         data-bs-toggle="modal"
-                        data-bs-target="#modalScheduleConfirmDelete-{scheduleData.schedule_id}"
+                        data-bs-target="#modalScheduleConfirmDelete-{scheduleData.id}"
                     >
                         <Fa icon={faTrashAlt} />
                     </button>
@@ -292,7 +295,7 @@
 <div
     class="modal"
     tabindex="-1"
-    id="modalScheduleConfirmDelete-{scheduleData.schedule_id}"
+    id="modalScheduleConfirmDelete-{scheduleData.id}"
 >
     <div class="modal-dialog">
         <div class="modal-content">

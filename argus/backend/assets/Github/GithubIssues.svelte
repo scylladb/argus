@@ -13,16 +13,11 @@
         issues = [];
         fetching = true;
         try {
-            let apiResponse = await fetch("/api/v1/issues/get", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    filter_key: filter_key,
-                    id: id,
-                }),
-            });
+            let params = new URLSearchParams({
+                filterKey: filter_key,
+                id: id,
+            }).toString();
+            let apiResponse = await fetch("/api/v1/issues/get?" + params);
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
                 issues = apiJson.response;
@@ -47,6 +42,7 @@
                     run_id: id,
                 }),
             });
+            newIssueUrl = "";
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
 

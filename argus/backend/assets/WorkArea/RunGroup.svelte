@@ -1,11 +1,12 @@
 <script>
-    import { groupRequests, stats } from "../Stores/StatsSubscriber";
+    import { stats } from "../Stores/StatsSubscriber";
+    import { allTests } from "../Stores/WorkspaceStore";
     import { StatusSortPriority } from "../Common/TestStatus";
-    import { sendMessage } from "../Stores/AlertStore";
-    import { requestAssigneesForReleaseTests } from "../Stores/AssigneeSubscriber";
+    import { apiMethodCall } from "../Common/ApiUtils";
     import NumberStats from "../Stats/NumberStats.svelte";
     import AssigneeList from "./AssigneeList.svelte";
     import Test from "./Test.svelte";
+    import { onMount } from "svelte";
     export let release = "";
     export let group = {
         name: "",
@@ -24,13 +25,15 @@
         total: -1,
         lastStatus: "unknown",
         tests: {},
+        dormant: true,
     };
     let groupStats = groupStatsTemplate;
+    let groupClicked = false;
+    let testAssignees = {};
     let tests = [];
     let testStatus = {};
     let clickedGroups = {};
     let testsReady = false;
-    groupRequests.update((val) => [...val, [release, group.name]]);
 
     const sortTestsByStatus = function () {
         if (tests.length == 0) return;
@@ -59,13 +62,29 @@
         return !RegExp(filterString.toLowerCase()).test(name.toLowerCase());
     };
 
-    stats.subscribe((val) => {
-        groupStats =
-            val["releases"]?.[release]?.["groups"]?.[group.name] ??
-            groupStatsTemplate;
-        testStatus = groupStats["tests"];
+    allTests.subscribe((val) => {
+        if (!val) return;
+        tests = val.filter((test) => test.group_id == group.id);
+        clickedGroups[group.name] = true;
         sortTestsByStatus();
+        testsReady = true;
     });
+
+    const handleGroupClick = async function (e) {
+        if (groupClicked) return;
+        let params = new URLSearchParams({
+            groupId: group.id,
+        });
+        let result = await apiMethodCall(
+            "/api/v1/release/assignees/tests?" + params,
+            undefined,
+            "GET"
+        );
+        if (result.status === "ok") {
+            testAssignees = result.response;
+            groupClicked = true;
+        }
+    };
 
     const normalize = function (val, minVal, maxVal, total) {
         return ((val - minVal) / (maxVal - minVal)) * total;
@@ -75,44 +94,15 @@
         return str.replaceAll(".", "_");
     };
 
-    const fetchTestNamesForReleaseGroup = async function (e) {
-        if (clickedGroups[group.name]) return;
-        tests = [];
-        try {
-            let apiResponse = await fetch("/api/v1/tests", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    release: release,
-                    group: group,
-                }),
-            });
-            let apiJson = await apiResponse.json();
-            if (apiJson.status === "ok") {
-                tests = apiJson.response["tests"];
-                clickedGroups[group.name] = true;
-                sortTestsByStatus();
-                requestAssigneesForReleaseTests(release, tests);
-                testsReady = true;
-            } else {
-                throw apiJson;
-            }
-        } catch (error) {
-            if (error?.status === "error") {
-                sendMessage(
-                    "error",
-                    `API Error when fetching release groups.\nMessage: ${error.response.arguments[0]}`
-                );
-            } else {
-                sendMessage(
-                    "error",
-                    "A backend error occurred during release groups fetch"
-                );
-            }
-        }
-    };
+    onMount(() => {
+        stats.subscribe((val) => {
+            groupStats =
+                val["releases"]?.[release]?.["groups"]?.[group.name] ??
+                groupStatsTemplate;
+            testStatus = groupStats["tests"];
+            sortTestsByStatus();
+        });
+    });
 </script>
 
 <div class="accordion-item" class:d-none={filtered}>
@@ -121,25 +111,27 @@
             class="accordion-button collapsed"
             data-bs-toggle="collapse"
             data-bs-target="#collapse{removeDots(release)}{group.name}"
-            on:click={fetchTestNamesForReleaseGroup}
+            on:click={handleGroupClick}
         >
             <div class="container-fluid p-0 m-0">
                 <div class="row p-0 m-0">
                     <div class="col-8">
-                        {group.pretty_name ?? group.name}
+                        {group.pretty_name || group.name}
                     </div>
                     <div class="col-4 text-end">
                         {#if groupStats?.total > 0}
                             <NumberStats stats={groupStats} />
-                        {:else if groupStats?.total == -1}
-                            <span class="spinner-border spinner-border-sm" />
-                        {:else}
+                        {:else if groupStats?.total ?? 0 == 0}
                             <!-- svelte-ignore empty-block -->
+                        {:else if groupStats?.dormant ?? false}
+                            <!-- svelte-ignore empty-block -->
+                        {:else}
+                            <span class="spinner-border spinner-border-sm" />
                         {/if}
                     </div>
                 </div>
                 <div class="row p-0 m-0">
-                    <AssigneeList assignees={assigneeList}/>
+                    <AssigneeList assignees={assigneeList} />
                 </div>
             </div>
         </button>
@@ -170,7 +162,8 @@
                             {test}
                             filtered={isFiltered(test.name)}
                             group={group.name}
-                            bind:runs={runs}
+                            assigneeList={testAssignees?.[test.id] ?? []}
+                            bind:runs
                             on:testRunRequest
                             on:testRunRemove
                         />
