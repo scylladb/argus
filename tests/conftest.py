@@ -10,6 +10,7 @@ import docker
 import cassandra.cluster
 import cassandra.cqlengine.management
 import cassandra.cqlengine.connection
+from cassandra.cqlengine import management
 
 from mocks.mock_cluster import MockCluster
 from argus.db.testrun import TestRunInfo, TestDetails, TestResourcesSetup, TestLogs, TestResults, TestResources
@@ -19,6 +20,7 @@ from argus.db.db_types import PackageVersion, NemesisRunInfo, EventsBySeverity, 
     NemesisStatus, ColumnInfo, CollectionHint
 from argus.db.cloud_types import AWSSetupDetails, CloudNodesInfo, CloudInstanceDetails, CloudResource, ResourceState, \
     BaseCloudSetupDetails
+from argus.db.models import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest
 
 LOGGER = logging.getLogger(__name__)
 
@@ -395,3 +397,27 @@ def argus_database(scylla_cluster: list[str]):  # pylint: disable=redefined-oute
     database = ArgusDatabase.from_config(config)
     yield database
     ArgusDatabase.destroy()
+
+
+@pytest.fixture(scope="class")
+def argus_with_release(argus_database: ArgusDatabase):
+    for model in [ArgusReleaseGroupTest, ArgusReleaseGroup, ArgusRelease]:
+        management.sync_table(model, keyspaces=(argus_database._current_keyspace,),
+                              connections=(argus_database.CQL_ENGINE_CONNECTION_NAME,))
+    release = ArgusRelease()
+    release.name = "4_5rc5"
+    release.using(connection=argus_database.CQL_ENGINE_CONNECTION_NAME).save()
+
+    group = ArgusReleaseGroup()
+    group.name = 'arbitrary-group'
+    group.release_id = release.id
+    group.using(connection=argus_database.CQL_ENGINE_CONNECTION_NAME).save()
+
+    test = ArgusReleaseGroupTest()
+    test.name = 'longevity-test-100gb-4h'
+    test.group_id = group.id
+    test.release_id = release.id
+    test.build_system_id = 'komachi-longevity-test-100gb-4h'
+    test.using(connection=argus_database.CQL_ENGINE_CONNECTION_NAME).save()
+
+    return argus_database

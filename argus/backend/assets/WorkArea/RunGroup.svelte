@@ -94,7 +94,7 @@
                 tests = apiJson.response["tests"];
                 clickedGroups[group.name] = true;
                 sortTestsByStatus();
-                requestAssigneesForReleaseTests(release, tests, group.name);
+                requestAssigneesForReleaseTests(release, tests);
                 testsReady = true;
             } else {
                 throw apiJson;

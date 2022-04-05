@@ -101,6 +101,7 @@ class ArgusReleaseGroupTest(Model):
     pretty_name = columns.Text()
     description = columns.Text()
     assignee = columns.List(value_type=columns.UUID)
+    build_system_id = columns.Text(index=True)
     enabled = columns.Boolean(default=lambda: True)
 
     def __eq__(self, other):

@@ -23,10 +23,20 @@
 
     let schedulesByTest = {};
     const dispatch = createEventDispatcher();
+
+    const getTestsByBuildSystemId = function(plannerData) {
+        return plannerData.tests.reduce((acc, test) => {
+            acc[test.build_system_id] = test;
+            return acc;
+        }, {});
+    }
+
     const sortSchedulesByTest = function (schedules) {
+        let tests = getTestsByBuildSystemId(plannerData);
         schedulesByTest = schedules.reduce((acc, schedule) => {
             schedule.tests.forEach((test) => {
-                let [groupName, testName] = test.split("/");
+                let groupName = tests[test].group_name;
+                let testName = tests[test].name;
                 if (!testName) return;
                 if (!acc[groupName]) {
                     acc[groupName] = {};

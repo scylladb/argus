@@ -79,6 +79,11 @@ class ArgusService:
             "status, start_time, end_time, heartbeat "
             f"FROM {TestRun.table_name()} WHERE release_name = ?"
         )
+        self.runs_by_build_system_id = self.database.prepare(
+            "SELECT id, name, group, release_name, build_job_name, build_job_url, "
+            "status, start_time, end_time, heartbeat "
+            f"FROM {TestRun.table_name()} WHERE build_job_name = ?"
+        )
         self.jobs_by_assignee = self.database.prepare(
             "SELECT id, status, start_time, assignee, release_name, "
             "investigation_status, "
@@ -91,7 +96,7 @@ class ArgusService:
             f"start_time, end_time, heartbeat FROM {TestRun.table_name()}"
         )
         self.run_by_release_stats_statement = self.database.prepare(
-            "SELECT id, name, group, release_name, status, start_time, build_job_url, assignee, "
+            "SELECT id, name, group, release_name, status, start_time, build_job_url, build_job_name, assignee, "
             f"end_time, investigation_status, heartbeat FROM {TestRun.table_name()} WHERE release_name = ?"
         )
         self.event_insert_statement = self.database.prepare(
@@ -168,18 +173,6 @@ class ArgusService:
             response[test_name] = "created"
 
         return response
-
-    def get_test_table(self):
-        rows = self.session.execute(self.test_table_statement).all()
-        for row in rows:
-            row["natural_heartbeat"] = humanize.naturaltime(
-                datetime.datetime.fromtimestamp(row["heartbeat"]))
-            row["natural_start_time"] = humanize.naturaltime(
-                datetime.datetime.fromtimestamp(row["start_time"]))
-            row["natural_end_time"] = humanize.naturaltime(
-                datetime.datetime.fromtimestamp(row["end_time"]))
-
-        return sorted(rows, key=lambda x: x["start_time"], reverse=True)
 
     def load_test_run(self, test_run_id: UUID):
         run = TestRun.from_id(test_id=test_run_id)
@@ -317,22 +310,6 @@ class ArgusService:
 
         return response
 
-    def get_runs_by_name_for_release_group(self, test_name: str, release_name: str, limit=10):
-        rows = self.session.execute(self.run_by_release_name_stmt, parameters=(release_name,)).all()
-        rows = [row for row in rows if row["release_name"]
-                == release_name and re.match(f"^{test_name}(-test)?$", row["name"])]
-        for row in rows:
-            row["natural_heartbeat"] = humanize.naturaltime(
-                datetime.datetime.fromtimestamp(row["heartbeat"]))
-            row["natural_start_time"] = humanize.naturaltime(
-                datetime.datetime.fromtimestamp(row["start_time"]))
-            row["natural_end_time"] = humanize.naturaltime(
-                datetime.datetime.fromtimestamp(row["end_time"]))
-            row["build_number"] = int(
-                row["build_job_url"].rstrip("/").split("/")[-1])
-
-        return sorted(rows, key=lambda x: x["start_time"], reverse=True)[:limit]
-
     def collect_stats(self, payload: dict) -> dict:
         """
         Example body:
@@ -388,21 +365,19 @@ class ArgusService:
                 response["releases"][release_name] = release_stats
                 continue
 
-            rows = self.session.execute(self.run_by_release_stats_statement, parameters=(release_name,))
-            rows = sorted(rows, key=lambda r: r["start_time"], reverse=True)
             release_issues = ArgusGithubIssue.filter(release_id=release.id).all()
             release_comments = ArgusTestRunComment.filter(release_id=release.id)
+            rows = self.session.execute(self.run_by_release_stats_statement, parameters=(release_name,))
+            rows = sorted(rows, key=lambda r: r["start_time"], reverse=True)
             for test in release_tests:
                 test_group = release_groups_by_id[test.group_id]
                 if not release_stats["groups"][test_group.name]["tests"]:
                     release_stats["groups"][test_group.name]["tests"] = dict()
                 release_stats["total"] += 1
-                rows_by_group = [row for row in rows if row["group"] == test_group.name]
-                run = first(rows_by_group, test.name, predicate=lambda elem,
-                            val: re.match(f"^{val}(-test)?$", elem["name"]))
+                test_rows = [row for row in rows if row["build_job_name"] == test.build_system_id]
+                run = next(iter(test_rows)) if len(test_rows) > 0 else None
                 if not limited and run:
-                    last_runs = list(filter(lambda run: re.match(
-                        f"^{test.name}(-test)?$", run["name"]), rows_by_group))[:4]
+                    last_runs = test_rows[:4]
                     last_runs = [
                         {
                             "status": run["status"],
@@ -423,7 +398,8 @@ class ArgusService:
                         "name": test.name,
                         "status": "unknown",
                         "group": test_group.name,
-                        "start_time": 0
+                        "start_time": 0,
+                        "build_system_id": test.build_system_id,
                     }
                     release_stats["not_run"] += 1
                     release_stats["groups"][test_group.name]["not_run"] += 1
@@ -436,6 +412,7 @@ class ArgusService:
                     "status": run["status"],
                     "start_time": run["start_time"],
                     "investigation_status": run["investigation_status"],
+                    "build_system_id": test.build_system_id,
                 }
 
                 if not limited:
@@ -463,10 +440,10 @@ class ArgusService:
         runs: dict = payload["runs"]
         response = {}
 
-        for uid, [release_name, test_name, group_name] in runs.items():
+        for uid, build_system_id in runs.items():
             rows = self.session.execute(
-                self.run_by_release_name_stmt,
-                parameters=(release_name,),
+                self.runs_by_build_system_id,
+                parameters=(build_system_id,),
                 execution_profile="read_fast"
             ).all()
             rows = sorted(rows, key=lambda val: val["start_time"], reverse=True)
@@ -477,10 +454,7 @@ class ArgusService:
                 except ValueError:
                     row["build_number"] = -1
 
-            result = [
-                row for row in rows
-                if re.match(f"^{test_name}(-test)?$", row["name"]) and row["group"] == group_name
-            ][:limit]
+            result = rows[:limit]
             response[uid] = result
         return response
 
@@ -520,12 +494,7 @@ class ArgusService:
 
         new_status = TestStatus(new_status)
         test_run = TestRun.from_id(test_id=UUID(test_run_id))
-        release_name = test_run.release_name
-        release = ArgusRelease.get(name=release_name)
-        test_name = test_run.run_info.details.name
-        test = [test for test in ArgusReleaseGroupTest.all() if test.release_id ==
-                release.id and test.name.startswith(test_name)]
-        test = test[0]
+        test = ArgusReleaseGroupTest.get(build_system_id=test_run.run_info.details.build_job_name)
         old_status = test_run.run_info.results.status
         test_run.run_info.results.status = new_status
         test_run.save()
@@ -559,12 +528,7 @@ class ArgusService:
 
         new_status = TestInvestigationStatus(new_status)
         test_run = TestRun.from_id(test_id=UUID(test_run_id))
-        release_name = test_run.release_name
-        release = ArgusRelease.get(name=release_name)
-        test_name = test_run.run_info.details.name
-        test = [test for test in ArgusReleaseGroupTest.all() if test.release_id ==
-                release.id and test.name.startswith(test_name)]
-        test = test[0]
+        test = ArgusReleaseGroupTest.get(build_system_id=test_run.run_info.details.build_job_name)
         old_status = test_run.investigation_status
         test_run.investigation_status = new_status
         test_run.save()
@@ -604,11 +568,7 @@ class ArgusService:
                 raise
             new_assignee = DummyUser(id="", username="None")
         test_run = TestRun.from_id(test_id=UUID(test_run_id))
-        release_name = test_run.release_name
-        release = ArgusRelease.get(name=release_name)
-        test_name = test_run.run_info.details.name
-        test = [test for test in ArgusReleaseGroupTest.filter(
-            name=test_name).all() if test.release_id == release.id][0]
+        test = ArgusReleaseGroupTest.get(build_system_id=test_run.run_info.details.build_job_name)
         old_assignee = test_run.assignee
         old_assignee = User.get(id=old_assignee) if old_assignee else None
         test_run.assignee = new_assignee.id
@@ -684,10 +644,8 @@ class ArgusService:
             raise Exception("URL doesn't match Github schema")
 
         run = self.session.execute(self.runs_by_id_stmt, parameters=([UUID(run_id)],)).one()
-        test_name = run["name"]
         release = ArgusRelease.get(name=run["release_name"])
-        test = ArgusReleaseGroupTest.filter(name=test_name).all()
-        test = first(test, release.id, key=lambda val: val.release_id)
+        test = ArgusReleaseGroupTest.get(build_system_id=run["build_job_name"])
         group = ArgusReleaseGroup.get(id=test.group_id)
 
         new_issue = ArgusGithubIssue()
@@ -1268,12 +1226,11 @@ class ArgusService:
                     continue
                 if run["assignee"] in schedule["assignees"]:
                     valid_runs.append(run)
-                    continue
-                if run["group"] in schedule["groups"]:
+                    break
+                if run["group"] in schedule["groups"]:  # FIXME: Broken (Fill correct group in plugin?)
                     valid_runs.append(run)
                     break
-                filtered_tests = [test for test in schedule["tests"]
-                                  if check_scheduled_test(run["name"], run["group"], test)]
+                filtered_tests = [test for test in schedule["tests"] if test == run["build_job_name"]]
                 if len(filtered_tests) > 0:
                     valid_runs.append(run)
                     break

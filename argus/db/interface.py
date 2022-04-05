@@ -22,7 +22,7 @@ from argus.db.config import BaseConfig, FileConfig
 from argus.db.db_types import ColumnInfo, CollectionHint, ArgusUDTBase
 from argus.db.cloud_types import ResourceState
 from argus.db.models import ArgusReleaseSchedule, ArgusReleaseScheduleAssignee, \
-    ArgusReleaseScheduleGroup, ArgusReleaseScheduleTest
+    ArgusReleaseScheduleGroup, ArgusReleaseScheduleTest, ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest
 
 LOGGER = logging.getLogger(__name__)
 
@@ -52,6 +52,9 @@ class ArgusDatabase:
         ArgusReleaseScheduleGroup,
         ArgusReleaseScheduleTest,
         ArgusReleaseScheduleAssignee,
+        ArgusReleaseGroupTest,
+        ArgusReleaseGroup,
+        ArgusRelease,
     ]
     PYTHON_SCYLLA_TYPE_MAPPING = {
         int: cassandra.cqltypes.IntegerType.typename,

@@ -61,8 +61,8 @@ export const requestAssigneesForReleaseGroups = function (release, groups) {
     }, 250);
 }
 
-export const requestAssigneesForReleaseTests = function (release, tests, group) {
-    tests = tests.map((test) => `${group}/${test.name}`);
+export const requestAssigneesForReleaseTests = function (release, tests) {
+    tests = tests.map((test) => test.build_system_id);
     assigneeRequests.update((value) => {
         let releaseBody = value[release] ?? {};
         let testSet = new Set([...(releaseBody.tests ?? []), ...tests]);

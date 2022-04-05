@@ -23,7 +23,7 @@
     let runsBody = undefined;
 
     runStore.update((val) => {
-        val[myId] = [releaseName, testName, groupName]
+        val[myId] = data.build_system_id;
         return val;
     });
 
