@@ -1,5 +1,5 @@
 <script>
-    import { parse as markdownParse } from "marked";
+    import * as marked from "marked";
     import Fa from "svelte-fa";
     import { faEdit, faTrashAlt } from "@fortawesome/free-regular-svg-icons";
     import humanizeDuration from "humanize-duration";
@@ -8,6 +8,8 @@
     import { timestampToISODate } from "../Common/DateUtils";
     import { createEventDispatcher, onDestroy, onMount } from "svelte";
     import { markdownRendererOptions } from "../markdownOptions";
+    import { MarkdownUserMention } from "./MarkedMentionExtension";
+    import { applicationCurrentUser } from "../argus";
     export let users = {};
     export let commentBody = {
         id: "",
@@ -20,6 +22,11 @@
         test_run_id: id,
         posted_at: new Date(),
     };
+
+    marked.use({
+        extensions: [MarkdownUserMention]
+    });
+
     const dispatch = createEventDispatcher();
     let editing = false;
     let deleting = false;
@@ -79,23 +86,25 @@
                 just now
             {/if}
         </div>
-        <div class="ms-auto">
-            <button
-                class="btn btn-light bg-editor"
-                title="Edit"
-                on:click={() => (editing = true)}
-            >
-                <Fa icon={faEdit} />
-            </button>
-            <button
-                class="btn btn-light bg-editor"
-                title="Delete"
-                data-bs-toggle="modal"
-                data-bs-target="#modalCommentConfirmDelete-{commentBody.id}"
-            >
-                <Fa icon={faTrashAlt} />
-            </button>
-        </div>
+        {#if applicationCurrentUser.id == commentBody.user_id}
+            <div class="ms-auto">
+                <button
+                    class="btn btn-light bg-editor"
+                    title="Edit"
+                    on:click={() => (editing = true)}
+                >
+                    <Fa icon={faEdit} />
+                </button>
+                <button
+                    class="btn btn-light bg-editor"
+                    title="Delete"
+                    data-bs-toggle="modal"
+                    data-bs-target="#modalCommentConfirmDelete-{commentBody.id}"
+                >
+                    <Fa icon={faTrashAlt} />
+                </button>
+            </div>
+        {/if}
     </div>
     <div>
         {#if editing}
@@ -108,7 +117,7 @@
         {:else}
             <div class="p-2 rounded bg-light">
                 <div class="border rounded p-2 bg-white markdown-body">
-                    {@html markdownParse(commentBody.message, markdownRendererOptions)}
+                    {@html marked.parse(commentBody.message, markdownRendererOptions)}
                 </div>
             </div>
         {/if}

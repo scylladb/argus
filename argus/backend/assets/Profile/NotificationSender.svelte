@@ -1,0 +1,25 @@
+<script>
+    import { getPicture } from "../Common/UserUtils";
+    export let user;
+</script>
+
+<div class="d-flex align-items-center px-2">
+    <div class="img-profile" style="background-image: url({getPicture(user.picture_id)})"></div>
+    <div class="ms-3">
+        <div class="">{user.full_name}</div>
+        <div class="text-muted">{user.username}</div>
+    </div>
+</div>
+
+<style>
+    .img-profile {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background-color: rgb(163, 163, 163);
+        background-clip: border-box;
+        background-repeat: no-repeat;
+        background-position: center;
+        background-size: cover;
+    }
+</style>

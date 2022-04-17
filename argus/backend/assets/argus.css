@@ -71,3 +71,21 @@ div#argusErrors {
 .bg-light-three {
     background-color: #f5f5f5;
 }
+
+div#notificationCounter {
+    margin-top: -12px;
+    margin-left: -12px;
+}
+
+.user-mention {
+    font-weight: 600;
+    color: black;
+}
+
+.user-mention:hover {
+    text-decoration: underline;
+}
+
+.user-mention-self {
+    background-color: #fff67b;
+}

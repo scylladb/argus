@@ -41,7 +41,7 @@
                     size=16
                     bind:value={selectedTests}
                 >
-                    {#each tests as test}
+                    {#each tests.sort((a, b) => a.name > b.name ? 1 : -1) as test (test.id)}
                         <option value={test.id}
                             >{test.name ?? test.pretty_name}</option
                         >

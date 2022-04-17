@@ -1,14 +1,22 @@
-from uuid import uuid1, uuid4
+from uuid import UUID, uuid1, uuid4
 from datetime import datetime
-from enum import Enum
+from enum import Enum, IntEnum, auto
 from cassandra.cqlengine.models import Model
 from cassandra.cqlengine.usertype import UserType
 from cassandra.cqlengine import columns
+from cassandra.util import uuid_from_time, unix_time_from_uuid1
 from cassandra.cqlengine.columns import UserDefinedType
 
+
+def uuid_now():
+    return uuid_from_time(datetime.utcnow())
+
 # pylint: disable=invalid-name
+
+
 class ArgusTestException(Exception):
     pass
+
 
 class UserRoles(str, Enum):
     User = "ROLE_USER"
@@ -41,6 +49,9 @@ class User(Model):
     roles = columns.List(value_type=columns.Text)
     picture_id = columns.UUID(default=None)
 
+    def __hash__(self) -> int:
+        return hash(self.id)
+
     def is_manager(self) -> bool:
         return UserRoles.Manager in self.roles
 
@@ -57,6 +68,24 @@ class User(Model):
 
     def get_id(self):
         return str(self.id)
+
+    @classmethod
+    def exists(cls, user_id: UUID):
+        try:
+            user = cls.get(id=user_id)
+            if user:
+                return user
+        except cls.DoesNotExist:
+            return None
+
+    @classmethod
+    def exists_by_name(cls, name: str):
+        try:
+            user = cls.get(username=name)
+            if user:
+                return user
+        except cls.DoesNotExist:
+            return None
 
     def __str__(self):
         return f"User('{self.id}','{self.username}')"
@@ -117,7 +146,6 @@ class ArgusReleaseGroup(Model):
             return super().__eq__(other)
 
 
-
 class ArgusReleaseGroupTest(Model):
     __table_name__ = "argus_test_v2"
     id = columns.UUID(primary_key=True, default=uuid4)
@@ -148,6 +176,8 @@ class ArgusReleaseGroupTest(Model):
             raise
 
         return
+
+
 class ArgusPlannedTestsForRelease(Model):
     id = columns.UUID(primary_key=True, default=uuid4, partition_key=True)
     release_id = columns.UUID(required=True, index=True)
@@ -188,6 +218,60 @@ class ArgusEvent(Model):
     kind = columns.Text(required=True, index=True)
     body = columns.Text(required=True)
     created_at = columns.DateTime(required=True)
+
+
+class ArgusNotificationTypes(str, Enum):
+    Mention = "TYPE_MENTION"
+    StatusChange = "TYPE_STATUS_CHANGE"
+    AssigneeChange = "TYPE_ASSIGNEE_CHANGE"
+    ScheduleChange = "TYPE_SCHEDULE_CHANGE"
+
+
+class ArgusNotificationSourceTypes(str, Enum):
+    TestRun = "TEST_RUN"
+    Schedule = "SCHEDULE"
+    Comment = "COMMENT"
+
+
+class ArgusNotificationState(IntEnum):
+    UNREAD = auto()
+    READ = auto()
+
+
+class ArgusNotification(Model):
+    receiver = columns.UUID(primary_key=True, partition_key=True)
+    id = columns.TimeUUID(primary_key=True, clustering_order="DESC", default=uuid_now)
+    type = columns.Text(required=True)
+    state = columns.SmallInt(required=True, default=lambda: ArgusNotificationState.UNREAD)
+    sender = columns.UUID(required=True)
+    source_type = columns.Text(required=True)
+    source_id = columns.UUID(required=True)
+    title = columns.Text(required=True, max_length=1024)
+    content = columns.Text(required=True, max_length=65535)
+
+    def to_dict_short_summary(self) -> dict:
+        return {
+            "receiver": self.receiver,
+            "sender": self.sender,
+            "id": self.id,
+            "created": unix_time_from_uuid1(self.id) * 1000,
+            "title": self.title,
+            "state": self.state,
+        }
+
+    def to_dict(self) -> dict:
+        return {
+            "receiver": self.receiver,
+            "sender": self.sender,
+            "id": self.id,
+            "created": unix_time_from_uuid1(self.id) * 1000,
+            "title": self.title,
+            "type": self.type,
+            "content": self.content,
+            "source": self.source_type,
+            "source_id": self.source_id,
+            "state": self.state,
+        }
 
 
 class ArgusGithubIssue(Model):
@@ -299,7 +383,7 @@ USED_MODELS = [
     User, WebRunComments, WebRelease, WebCategoryGroup, WebNemesis,
     ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, ArgusPlannedTestsForRelease,
     ArgusTestRunComment, ArgusEvent, UserOauthToken,
-    WebFileStorage, ArgusGithubIssue, ReleasePlannerComment,
+    WebFileStorage, ArgusGithubIssue, ReleasePlannerComment, ArgusNotification,
     ArgusReleaseSchedule, ArgusReleaseScheduleAssignee, ArgusReleaseScheduleGroup, ArgusReleaseScheduleTest
 ]
 USED_TYPES = [WebRunComment]

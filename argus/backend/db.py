@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 import click
 from flask import g, Flask
@@ -20,7 +21,7 @@ from argus.db.testrun import TestRun
 
 DB_CONFIG = FileConfig()
 CLUSTER: Cluster | None = None
-
+LOGGER = logging.getLogger(__name__)
 
 class ScyllaCluster:
     # pylint: disable=too-many-instance-attributes
@@ -70,7 +71,7 @@ class ScyllaCluster:
 
     def prepare(self, query: str) -> PreparedStatement:
         if not (statement := self.prepared_statements.get(query)):
-            print("unprepared statement, preparing...")
+            LOGGER.info("Unprepared statement %s, preparing...", query)
             statement = self.session.prepare(query=query)
             self.prepared_statements[query] = statement
         return statement

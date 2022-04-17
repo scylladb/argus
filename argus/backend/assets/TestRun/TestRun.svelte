@@ -6,7 +6,7 @@
         faCheck,
         faSearch,
     } from "@fortawesome/free-solid-svg-icons";
-    import { allReleases, allGroups, allTests } from "../Stores/WorkspaceStore"; 
+    import { allReleases, allGroups, allTests } from "../Stores/WorkspaceStore";
     import humanizeDuration from "humanize-duration";
     import Select from "svelte-select";
     import User from "../Profile/User.svelte";
@@ -34,6 +34,7 @@
     } from "../Stores/SingleTestRunSubscriber";
     import { userList } from "../Stores/UserlistSubscriber";
     import { sendMessage } from "../Stores/AlertStore";
+    import { filterUser } from "../Common/SelectUtils";
     export let id = "";
     export let build_number = -1;
     const dispatch = createEventDispatcher();
@@ -50,6 +51,7 @@
     let issuesOpen = false;
     let userSelect = {};
     let tests;
+    let failedToLoad = false;
     $: tests = $allTests;
     let groups;
     $: groups = $allGroups;
@@ -113,7 +115,7 @@
         return groups.find(group => group.id == test_run.group_id);
     };
 
-    const findTest = function(test) {
+    const findTest = function(tests) {
         if (!tests) return;
         return tests.find(test => test.id == test_run.test_id);
     };
@@ -151,6 +153,10 @@
             console.log(apiJson);
             if (apiJson.status === "ok") {
                 test_run = apiJson.response;
+                if (!test_run) {
+                    failedToLoad = true;
+                    return;
+                }
                 if (build_number == -1) {
                     build_number = parseInt(
                         test_run.build_job_url.split("/").reverse()[1]
@@ -434,6 +440,7 @@
                                         {/if}
                                         <div class="flex-fill">
                                             <Select
+                                                itemFilter={filterUser}
                                                 Item={User}
                                                 value={currentAssignee.value}
                                                 items={Object.values(
@@ -669,7 +676,7 @@
                     {/if}
                 </div>
                 <div class="tab-pane fade" id="nav-issues-{id}" role="tabpanel">
-                    <IssueTemplate {test_run} />
+                    <IssueTemplate {test_run} test={findTest(tests)} />
                     {#if issuesOpen}
                         <GithubIssues {id} />
                     {/if}
@@ -684,6 +691,14 @@
                     {/if}
                 </div>
             </div>
+        </div>
+    {:else if failedToLoad}
+        <div
+            class="text-center p-2 m-1 d-flex align-items-center justify-content-center"
+        >
+            <span class="fs-4"
+                >Run not found.</span
+            >
         </div>
     {:else}
         <div

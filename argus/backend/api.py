@@ -7,6 +7,7 @@ from flask import (
     request
 )
 from flask.json import jsonify
+from argus.backend.notification_api import bp as notifications_bp
 from argus.backend.argus_service import ArgusService
 from argus.backend.auth import login_required
 from argus.db.argus_json import ArgusJSONEncoder
@@ -14,6 +15,7 @@ from argus.db.argus_json import ArgusJSONEncoder
 # pylint: disable=broad-except
 
 bp = Blueprint('api', __name__, url_prefix='/api/v1')
+bp.register_blueprint(notifications_bp)
 LOGGER = logging.getLogger(__name__)
 
 
@@ -174,6 +176,7 @@ def group_assignees():
         }
     return jsonify(res)
 
+
 @bp.route("/release/assignees/tests", methods=["GET"])
 @login_required
 def tests_assignees():
@@ -207,7 +210,7 @@ def release_schedules_submit():
             raise Exception(
                 "Content-Type mismatch, expected application/json, got:", request.content_type)
         j = request.get_json()
-        service = ArgusService()        
+        service = ArgusService()
         res["response"] = service.submit_new_schedule(release=j["releaseId"], start_time=j["start"], end_time=j["end"],
                                                       tests=j["tests"], groups=j["groups"], assignees=j["assignees"], tag=j["tag"])
     except Exception as exc:
@@ -347,6 +350,29 @@ def test_run_comments():
         service = ArgusService()
         comments = service.get_comments(test_id=UUID(test_id))
         res["response"] = [dict(c.items()) for c in comments]
+    except Exception as exc:
+        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    return jsonify(res)
+
+
+@bp.route("/test_run/comment/get", methods=["GET"])
+@login_required
+def get_test_run_comment():
+    res = {
+        "status": "ok"
+    }
+    try:
+        comment_id = request.args.get("commentId")
+        if not comment_id:
+            raise Exception("commentId wasn't specified in the request")
+        service = ArgusService()
+        comment = service.get_comment(comment_id=UUID(comment_id))
+        res["response"] = dict(comment.items()) if comment else False
     except Exception as exc:
         LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
         res["status"] = "error"
@@ -504,10 +530,8 @@ def test_run_poll_single():
         "status": "ok"
     }
     try:
-        runs = request.args.get("runs")
-        if not runs:
-            raise Exception("Runs weren't provided")
-        runs = [UUID(r) for r in runs.split(",")]
+        runs = request.args.get("runs", "")
+        runs = [UUID(r) for r in runs.split(",") if r]
         service = ArgusService()
         res["response"] = service.poll_test_runs_single(runs=runs)
     except Exception as exc:
