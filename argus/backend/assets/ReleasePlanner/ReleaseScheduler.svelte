@@ -8,6 +8,7 @@
     import { userList } from "../Stores/UserlistSubscriber";
     import { sendMessage } from "../Stores/AlertStore";
     import { timestampToISODate } from "../Common/DateUtils";
+    import { filterUser } from "../Common/SelectUtils";
     export let releaseData = {};
     export let schedules = [];
     let users = {};
@@ -340,6 +341,7 @@
                                 Item={User}
                                 items={prepareUsers(users)}
                                 isMulti={true}
+                                itemFilter={filterUser}
                                 placeholder="Select assignees"
                                 bind:value={selectedAssignees}
                                 on:select={handleAssigneeSelect}

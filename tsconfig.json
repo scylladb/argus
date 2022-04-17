@@ -1,0 +1,16 @@
+{
+    "extends": "@tsconfig/svelte/tsconfig.json",
+    "include": ["src/**/*", "src/node_modules", "argus/backend/assets/**/*"],
+    "exclude": ["node_modules/*", "__sapper__/*", "public/*"],
+    "compilerOptions": {
+        "outDir": "./argus/backend/static/dist",
+        "noImplicitAny": true,
+        "module": "es6",
+        "target": "es6",
+        "jsx": "react",
+        "strict": true,
+        "forceConsistentCasingInFileNames": true,
+        "allowJs": true,
+        "moduleResolution": "node"
+    }
+}

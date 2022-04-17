@@ -32,7 +32,7 @@
     };
 
     const polledRunsUnsub = polledRuns.subscribe((val) => {
-        runs = val[myId] ?? runs;
+        runs = val[data.build_system_id] ?? runs;
         updateCounter++;
         if (runs.length == 0 && updateCounter > 1) {
             noRuns = true;

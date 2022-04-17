@@ -18,6 +18,7 @@ from cassandra.cqlengine import ValidationError
 from flask import g, current_app, session
 from werkzeug.security import check_password_hash, generate_password_hash
 from argus.backend.db import ScyllaCluster
+from argus.backend.service.notification_manager import NotificationManagerService
 from argus.db.db_types import TestInvestigationStatus
 from argus.db.testrun import TestRun, TestStatus
 from argus.db.models import (
@@ -30,6 +31,8 @@ from argus.db.models import (
     ArgusReleaseScheduleGroup,
     ArgusReleaseScheduleTest,
     ArgusTestRunComment,
+    ArgusNotificationSourceTypes,
+    ArgusNotificationTypes,
     ArgusEvent,
     ArgusEventTypes,
     ReleasePlannerComment,
@@ -58,8 +61,10 @@ def check_scheduled_test(test, group, testname):
 def strip_html_tags(text: str):
     return text.replace("<", "&lt;").replace(">", "&gt;")
 
+
 def convert_str_list_to_uuid(l: list[str]) -> list[UUID]:
     return [UUID(s) for s in l]
+
 
 class GithubOrganizationMissingError(Exception):
     pass
@@ -70,6 +75,7 @@ class ArgusService:
     def __init__(self, database_session=None):
         self.session = database_session if database_session else ScyllaCluster.get_session()
         self.database = ScyllaCluster.get()
+        self.notification_manager = NotificationManagerService()
         self.github_headers = {
             "Accept": "application/vnd.github.v3+json",
             "Authorization": f"token {current_app.config['GITHUB_ACCESS_TOKEN']}"
@@ -100,6 +106,9 @@ class ArgusService:
         self.stats_by_build_id_statement = self.database.prepare(
             "SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, assignee, "
             f"end_time, investigation_status, heartbeat FROM {TestRun.table_name()} WHERE build_id IN ?"
+        )
+        self.build_id_and_url_statement = self.database.prepare(
+            f"SELECT build_id, build_job_url FROM {TestRun.table_name()} WHERE id = ?" 
         )
         self.event_insert_statement = self.database.prepare(
             'INSERT INTO argus.argus_event '
@@ -177,8 +186,14 @@ class ArgusService:
         return response
 
     def load_test_run(self, test_run_id: UUID):
-        run = TestRun.from_id(test_id=test_run_id).serialize()
-        return run
+        run = TestRun.from_id(test_id=test_run_id)
+        return run.serialize() if run else None
+
+    def get_comment(self, comment_id: UUID) -> ArgusTestRunComment | None:
+        try:
+            return ArgusTestRunComment.get(id=comment_id)
+        except ArgusTestRunComment.DoesNotExist:
+            return None
 
     def get_comments(self, test_id: UUID) -> list[ArgusTestRunComment]:
         return sorted(ArgusTestRunComment.filter(test_run_id=test_id).all(), key=lambda c: c.posted_at)
@@ -204,16 +219,39 @@ class ArgusService:
         mentions = payload.get("mentions", [])
         message_stripped = strip_html_tags(message)
 
+        mentions = set(mentions)
+        for potential_mention in re.findall(r"@[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}", message_stripped):
+            if user := User.exists_by_name(potential_mention.lstrip("@")):
+                mentions.add(user)
+
         release = ArgusRelease.get(name=release_name)
         comment = ArgusTestRunComment()
         comment.message = message_stripped
         comment.reactions = reactions
-        comment.mentions = mentions
+        comment.mentions = [m.id for m in mentions]
         comment.test_run_id = test_run_id
         comment.release_id = release.id
         comment.user_id = g.user.id
         comment.posted_at = time.time()
         comment.save()
+
+        run_info = self.session.execute(self.build_id_and_url_statement, parameters=(comment.test_run_id,)).one()
+        build_number = run_info["build_job_url"].strip("/").split("/")[-1]
+        for mention in mentions:
+            params = {
+                "username": mention.username,
+                "run_id": comment.test_run_id,
+                "build_id": run_info["build_id"],
+                "build_number": build_number,
+            }
+            self.notification_manager.send_notification(
+                receiver=mention.id,
+                sender=comment.user_id,
+                notification_type=ArgusNotificationTypes.Mention,
+                source_type=ArgusNotificationSourceTypes.Comment,
+                source_id=comment.id,
+                content_params=params
+            )
 
         self.send_event(kind=ArgusEventTypes.TestRunCommentPosted, body={
             "message": "A comment was posted by {username}",
@@ -236,6 +274,9 @@ class ArgusService:
             raise Exception("Release id not provided in request")
 
         comment = ArgusTestRunComment.get(id=comment_id)
+        if comment.user_id != g.user.id:
+            raise Exception("Unable to delete other user comments")
+
         comment.delete()
 
         self.send_event(kind=ArgusEventTypes.TestRunCommentDeleted, body={
@@ -266,6 +307,8 @@ class ArgusService:
         reactions = payload.get("reactions", {})
 
         comment = ArgusTestRunComment.get(id=comment_id)
+        if comment.user_id != g.user.id:
+            raise Exception("Unable to edit other user comments")
         comment.message = strip_html_tags(message)
         comment.reactions = reactions
         comment.mentions = mentions
@@ -287,7 +330,7 @@ class ArgusService:
     def get_groups(self):
         groups = list(ArgusReleaseGroup.all())
         return sorted(groups, key=lambda g: g.name)
-        
+
     def get_tests(self):
         return ArgusReleaseGroupTest.all()
 
@@ -466,7 +509,7 @@ class ArgusService:
             rows.append(row)
 
         response = {str(row.id): TestRun.from_db_row(row).serialize()
-                    for row in rows}
+                    for row in rows if row}
 
         return response
 
@@ -756,7 +799,7 @@ class ArgusService:
 
         return response
 
-    def submit_new_schedule(self, release: str | UUID, start_time: str, end_time: str, tests: list[str | UUID], 
+    def submit_new_schedule(self, release: str | UUID, start_time: str, end_time: str, tests: list[str | UUID],
                             groups: list[str | UUID], assignees: list[str | UUID], tag: str) -> dict:
         release = UUID(release) if isinstance(release, str) else release
         if len(assignees) == 0:
@@ -995,7 +1038,7 @@ class ArgusService:
             schedule_groups = filter(lambda g: g.schedule_id == schedule.id, scheduled_groups)
             groups = {str(group.group_id): assignees_uuids for group in schedule_groups}
             response = {**groups, **response}
-        
+
         return response
 
     def get_tests_assignees(self, group_id: UUID | str):
@@ -1010,7 +1053,7 @@ class ArgusService:
         scheduled_tests = ArgusReleaseScheduleTest.filter(release_id=release.id, test_id__in=tuple(test_ids)).all()
         schedule_ids = {test.schedule_id for test in scheduled_tests}
         schedules = list(ArgusReleaseSchedule.filter(release_id=release.id, id__in=tuple(schedule_ids)).all())
-        
+
         response = {}
         for schedule in schedules:
             assignees = ArgusReleaseScheduleAssignee.filter(schedule_id=schedule.id).all()
@@ -1018,7 +1061,7 @@ class ArgusService:
             schedule_tests = filter(lambda t: t.schedule_id == schedule.id, scheduled_tests)
             tests = {str(test.test_id): assignees_uuids for test in schedule_tests}
             response = {**tests, **response}
-        
+
         return response
 
     def update_email(self, user: User, new_email: str):
@@ -1182,7 +1225,10 @@ class ArgusService:
         today = datetime.datetime.utcnow()
         last_week = today - datetime.timedelta(days=today.weekday() + 1)
         for release_id, schedule_id in schedule_keys:
-            schedule = dict(ArgusReleaseSchedule.get(release_id=release_id, id=schedule_id).items())
+            try:
+                schedule = dict(ArgusReleaseSchedule.get(release_id=release_id, id=schedule_id).items())
+            except ArgusReleaseSchedule.DoesNotExist:
+                continue
             if last_week > schedule["period_end"]:
                 continue
             tests = ArgusReleaseScheduleTest.filter(schedule_id=schedule_id).all()

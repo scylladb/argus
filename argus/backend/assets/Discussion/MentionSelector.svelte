@@ -4,6 +4,7 @@
     import Fa from "svelte-fa";
     import { faTimes } from "@fortawesome/free-solid-svg-icons";
     import User from "../Profile/User.svelte";
+    import { filterUser } from "../Common/SelectUtils";
     export let users = {};
     let select;
     const dispatch = createEventDispatcher();
@@ -51,6 +52,7 @@
         <Select
             Item={User}
             items={prepareUsers(users)}
+            itemFilter={filterUser}
             placeholder="@..."
             on:select={handleMention}
         />

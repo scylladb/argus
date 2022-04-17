@@ -2,11 +2,13 @@ from uuid import UUID
 from flask import (
     Blueprint, flash, g, redirect, render_template, request, session, url_for, make_response
 )
+from argus.backend.notifications import bp as notifications_bp
 from argus.backend.argus_service import ArgusService
 from argus.db.models import WebFileStorage
 from argus.backend.auth import login_required
 
 bp = Blueprint('main', __name__)
+bp.register_blueprint(notifications_bp)
 
 
 @bp.route("/test_runs")
@@ -139,6 +141,8 @@ def get_picture(picture_id: str):
         res.content_type = "text/plain"
         res.set_data("404 NOT FOUND")
 
+    res.cache_control.max_age = 86400
+    res.cache_control.public = True
     return res
 
 

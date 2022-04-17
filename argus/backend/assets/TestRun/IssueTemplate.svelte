@@ -1,10 +1,12 @@
 <script>
     export let test_run = {};
+    export let test;
     import Fa from "svelte-fa";
     import { faCopy } from "@fortawesome/free-solid-svg-icons";
     import { parse } from "marked";
     import { onMount } from "svelte";
     import { getScyllaPackage, getKernelPackage } from "../Common/RunUtils";
+    import { markdownRendererOptions } from "../markdownOptions";
     let renderedElement;
     let templateElement;
     let issueTemplateText = "";
@@ -25,7 +27,7 @@
     $: kernelPackage = getKernelPackage(test_run.packages);
 
     onMount(() => {
-        renderedElement.innerHTML = parse(templateElement.innerHTML);
+        renderedElement.innerHTML = parse(templateElement.innerHTML, markdownRendererOptions);
         issueTemplateText = templateElement.innerHTML;
     });
 </script>
@@ -96,11 +98,9 @@
 {#if kernelPackage}
 Kernel Version: {kernelPackage.version}
 {/if}
-
 {#if scyllaServerPackage}
 Scylla version (or git commit hash): `{scyllaServerPackage.version}-{scyllaServerPackage.date}.{scyllaServerPackage.revision_id}` with build-id `{scyllaServerPackage.build_id}`
 {/if}
-
 Cluster size: {test_run.cloud_setup.db_node.node_amount} nodes ({test_run.cloud_setup.db_node.instance_type})
 
 Scylla Nodes used in this run:
@@ -112,31 +112,22 @@ Scylla Nodes used in this run:
 
 OS / Image: `{test_run.cloud_setup.db_node.image_id}` ({test_run.sct_runner_host.provider}: {test_run.sct_runner_host.region})
 
-
-Test: `{test_run.name}`
-
+Test: `{test?.name}`
 Test id: `{test_run.id}`
-
-Test name: `{test_run.group}/{test_run.name}`
-
+Test name: `{test_run.build_id}`
 Test config file(s):
 
 - [{test_run.config_files[0].split("/").reverse()[0]}](https://github.com/scylladb/scylla-cluster-tests/blob/{test_run.scm_revision_id}/{test_run.config_files[0]})
 
-
 ## Issue description
 
-&gt;&gt;&gt;&gt;&gt;&gt;&gt;
-
+**&gt;&gt;&gt;&gt;&gt;&gt;&gt;**
 **Your description here...**
-
-&lt;&lt;&lt;&lt;&lt;&lt;&lt;
+**&lt;&lt;&lt;&lt;&lt;&lt;&lt;**
 
 - Restore Monitor Stack command: `$ hydra investigate show-monitor {test_run.id}`
 - Restore monitor on AWS instance using [Jenkins job](https://jenkins.scylladb.com/view/QA/job/QA-tools/job/hydra-show-monitor/parambuild/?test_id={test_run.id})
 - Show all stored logs command: `$ hydra investigate show-logs {test_run.id}`
-
-
 
 ## Logs:
 {#each test_run.logs as log}

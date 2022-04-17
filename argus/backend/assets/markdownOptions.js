@@ -1,5 +1,4 @@
 import highlight from "highlight.js";
-
 export let markdownRendererOptions = {
     highlight: function (code, lang) {
         const hljs = highlight;
@@ -10,5 +9,5 @@ export let markdownRendererOptions = {
     },
     gfm: true,
     langPrefix: 'hljs language-',
-    breaks: true
+    breaks: true,
 };

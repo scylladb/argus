@@ -6,6 +6,7 @@
     import ScheduleTable from "./ScheduleTable.svelte";
     import { userList } from "../Stores/UserlistSubscriber";
     import { sendMessage } from "../Stores/AlertStore";
+import { filterUser } from "../Common/SelectUtils";
     export let releaseData = {};
     export let schedules = [];
     let users = {};
@@ -316,6 +317,7 @@
                             <Select
                                 Item={User}
                                 items={prepareUsers(users)}
+                                itemFilter={filterUser}
                                 isMulti={true}
                                 placeholder="Select assignees"
                                 on:select={handleAssigneeSelect}
