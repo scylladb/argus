@@ -239,7 +239,7 @@ class ArgusService:
         build_number = run_info["build_job_url"].strip("/").split("/")[-1]
         for mention in mentions:
             params = {
-                "username": mention.username,
+                "username": g.user.username,
                 "run_id": comment.test_run_id,
                 "build_id": run_info["build_id"],
                 "build_number": build_number,
