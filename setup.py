@@ -5,7 +5,7 @@ base_dir = os.path.dirname(os.path.realpath(__file__))
 
 setup(
     name='argus',
-    version='0.6.2',
+    version='0.7.0',
     packages=["argus.db", "argus.backend"],
     include_package_data=True,
     zip_safe=False,
