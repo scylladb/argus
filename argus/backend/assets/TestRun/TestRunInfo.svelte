@@ -51,12 +51,12 @@
                     {test_run.id}
                 </li>
                 <li>
-                    <span class="fw-bold">Start Time:</span>
+                    <span class="fw-bold">Start time:</span>
                     {timestampToISODate(test_run.start_time, true)}
                 </li>
                 {#if new Date(test_run.end_time).getUTCFullYear() != 1970}
                     <li>
-                        <span class="fw-bold">End Time:</span>
+                        <span class="fw-bold">End time:</span>
                         {timestampToISODate(test_run.end_time, true)}
                     </li>
                     <li>
@@ -77,7 +77,7 @@
                     {test_run.started_by ?? "Unknown, probably jenkins"}
                 </li>
                 <li>
-                    <span class="fw-bold">Build Job:</span>
+                    <span class="fw-bold">Build job:</span>
                     <a href={test_run.build_job_url} target="_blank">
                         {test_run.build_id}
                     </a>
@@ -96,36 +96,36 @@
                     {test_run.region_name.join(", ")}
                 </li>
                 <li>
-                    <span class="fw-bold">AMI ImageId:</span>
+                    <span class="fw-bold">Image id:</span>
                     {test_run.cloud_setup.db_node.image_id}
                 </li>
                 <!-- Scylla v4.5.3-0.20211223.c8f14886d (ami-0df0fbe3daf5ad63d) -->
                 {#if test_run.packages}
                     {#if kernelPackage}
                         <li>
-                            <span class="fw-bold">Kernel Version:</span>
+                            <span class="fw-bold">Kernel version:</span>
                             {kernelPackage.version}
                         </li>
                     {/if}
                     {#if scyllaPackage}
                         <li>
-                            <span class="fw-bold">Scylla Version:</span>
+                            <span class="fw-bold">Scylla version:</span>
                             {scyllaPackage?.version}-{scyllaPackage?.date}.{scyllaPackage?.revision_id}
                         </li>
                         {#if scyllaPackage?.build_id}
                             <li>
-                                <span class="fw-bold">Build Id:</span>
+                                <span class="fw-bold">Build id:</span>
                                 {scyllaPackage?.build_id}
                             </li>
                         {/if}
                     {/if}
                 {/if}
                 <li>
-                    <span class="fw-bold">Instance Type:</span>
+                    <span class="fw-bold">Instance type:</span>
                     {test_run.cloud_setup.db_node.instance_type}
                 </li>
                 <li>
-                    <span class="fw-bold">Node Amount:</span>
+                    <span class="fw-bold">Node amount:</span>
                     {test_run.cloud_setup.db_node.node_amount}
                 </li>
             </ul>
