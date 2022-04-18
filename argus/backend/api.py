@@ -10,7 +10,6 @@ from flask.json import jsonify
 from argus.backend.notification_api import bp as notifications_bp
 from argus.backend.argus_service import ArgusService
 from argus.backend.auth import login_required
-from argus.db.argus_json import ArgusJSONEncoder
 
 # pylint: disable=broad-except
 
@@ -331,10 +330,7 @@ def test_run():
             "exception": exc.__class__.__name__,
             "arguments": exc.args
         }
-    response = make_response()
-    response.content_type = "application/json"
-    response.data = json.dumps(res, cls=ArgusJSONEncoder)
-    return response
+    return jsonify(res)
 
 
 @bp.route("/test_run/comments", methods=["GET"])
