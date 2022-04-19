@@ -6,7 +6,7 @@
             (job) =>
                 job.investigation_status == "investigated" ||
                 job.status == "passed"
-        );
+        ).sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
     };
 
     const filterNotInvestigated = function (jobs) {
@@ -14,7 +14,7 @@
             (job) =>
                 job.investigation_status == "not_investigated" &&
                 job.status != "passed"
-        );
+        ).sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
     };
 </script>
 

@@ -115,6 +115,18 @@ class ArgusService:
             '("id", "release_id", "group_id", "test_id", "run_id", "user_id", "kind", "body", "created_at") '
             'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
         )
+        self.assignee_runs_by_schedule = self.database.prepare(
+            f"SELECT build_id, start_time, assignee, test_id FROM {TestRun.table_name()} "
+            "WHERE build_id = ? AND start_time >= ? AND start_time <= ?"
+        )
+        self.assignee_runs_by_schedule_multi = self.database.prepare(
+            f"SELECT build_id, start_time, assignee, test_id FROM {TestRun.table_name()} "
+            "WHERE build_id IN ? AND start_time >= ? AND start_time <= ?"
+        )
+        self.assignee_update_stmt = self.database.prepare(
+            f"UPDATE {TestRun.table_name()} SET assignee = ?"
+            "WHERE build_id = ? AND start_time = ?"
+        )
 
     def get_version(self) -> str:
         try:
@@ -609,7 +621,7 @@ class ArgusService:
         except ValidationError:
             if new_assignee != "none-none-none":
                 raise
-            new_assignee = DummyUser(id="", username="None")
+            new_assignee = DummyUser(id=None, username="None")
         test_run = TestRun.from_id(test_id=UUID(test_run_id))
         test = ArgusReleaseGroupTest.get(build_system_id=test_run.build_id)
         old_assignee = test_run.assignee
@@ -812,6 +824,36 @@ class ArgusService:
 
         return response
 
+    def assign_runs_for_scheduled_test(self, schedule: ArgusReleaseSchedule, test_id: UUID, new_assignee: UUID):
+        test = ArgusReleaseGroupTest.get(id=test_id)
+        affected_rows = self.session.execute(
+            self.assignee_runs_by_schedule,
+            parameters=(test.build_system_id, schedule.period_start, schedule.period_end)
+        )
+
+        for row in affected_rows:
+            if row["assignee"] == new_assignee:
+                continue
+            self.session.execute(
+                self.assignee_update_stmt,
+                parameters=(new_assignee, row["build_id"], row["start_time"])
+            )
+
+    def assign_runs_for_scheduled_group(self, schedule: ArgusReleaseSchedule, group_id: UUID, new_assignee: UUID):
+        tests = ArgusReleaseGroupTest.filter(group_id=group_id).all()
+        build_ids = [test.build_system_id for test in tests]
+        affected_rows = self.session.execute(
+            self.assignee_runs_by_schedule_multi,
+            parameters=(build_ids, schedule.period_start, schedule.period_end)
+        )
+        for row in affected_rows:
+            if row["assignee"] == new_assignee:
+                continue
+            self.session.execute(
+                self.assignee_update_stmt,
+                parameters=(new_assignee, row["build_id"], row["start_time"])
+            )
+
     def submit_new_schedule(self, release: str | UUID, start_time: str, end_time: str, tests: list[str | UUID],
                             groups: list[str | UUID], assignees: list[str | UUID], tag: str) -> dict:
         release = UUID(release) if isinstance(release, str) else release
@@ -841,6 +883,7 @@ class ArgusService:
             test_entity.test_id = UUID(test_id) if isinstance(test_id, str) else test_id
             test_entity.release_id = release
             test_entity.save()
+            self.assign_runs_for_scheduled_test(schedule, test_entity.test_id, UUID(assignees[0]))
             response["tests"].append(test_id)
 
         for group_id in groups:
@@ -850,6 +893,7 @@ class ArgusService:
             group_entity.group_id = UUID(group_id) if isinstance(group_id, str) else group_id
             group_entity.release_id = release
             group_entity.save()
+            self.assign_runs_for_scheduled_group(schedule, group_entity.group_id, UUID(assignees[0]))
             response["groups"].append(group_id)
 
         for assignee_id in assignees:
@@ -914,6 +958,13 @@ class ArgusService:
 
         release = ArgusRelease.get(id=release_id)
         schedule = ArgusReleaseSchedule.get(release_id=release.id, id=schedule_id)
+        schedule_tests = ArgusReleaseScheduleTest.filter(schedule_id=schedule.id).all()
+        schedule_groups = ArgusReleaseScheduleGroup.filter(schedule_id=schedule.id).all()
+        for test in schedule_tests:
+            self.assign_runs_for_scheduled_test(schedule, test.test_id, UUID(assignees[0]))
+
+        for group in schedule_groups:
+            self.assign_runs_for_scheduled_group(schedule, group.group_id, UUID(assignees[0]))
 
         old_assignees = list(ArgusReleaseScheduleAssignee.filter(schedule_id=schedule.id).all())
         for new_assignee in assignees:
