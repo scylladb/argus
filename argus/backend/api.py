@@ -3,6 +3,7 @@ import logging
 from uuid import UUID
 from flask import (
     Blueprint,
+    g,
     make_response,
     request
 )
@@ -10,6 +11,7 @@ from flask.json import jsonify
 from argus.backend.notification_api import bp as notifications_bp
 from argus.backend.argus_service import ArgusService
 from argus.backend.auth import login_required
+from argus.db.models import UserOauthToken
 
 # pylint: disable=broad-except
 
@@ -28,6 +30,33 @@ def version():
             "commit_id": argus_version
         }
     })
+
+
+@bp.route("/profile/github/token")
+@login_required
+def get_github_oauth_token():
+    res = {
+        "status": "ok"
+    }
+    try:
+        user_tokens = UserOauthToken.filter(user_id=g.user.id).all()
+        for tok in user_tokens:
+            if tok.kind == "github":
+                res["response"] = tok.token
+                break
+        if not res.get("response"):
+            raise Exception("Github token not found")
+    except Exception as exc:
+        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    res = jsonify(res)
+    res.cache_control.max_age = 300
+
+    return res
 
 
 @bp.route("/releases")
@@ -696,8 +725,12 @@ def issues_get():
             raise Exception("Id wasn't provided in the request")
         else:
             key_value = UUID(key_value)
+        aggregate_by_issue = request.args.get("aggregateByIssue")
+        aggregate_by_issue = bool(int(aggregate_by_issue)) if aggregate_by_issue else False
         service = ArgusService()
-        res["response"] = service.get_github_issues(filter_key=filter_key, filter_id=key_value)
+        res["response"] = service.get_github_issues(filter_key=filter_key,
+                                                    filter_id=key_value,
+                                                    aggregate_by_issue=aggregate_by_issue)
     except Exception as exc:
         LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
         res["status"] = "error"

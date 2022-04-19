@@ -6,6 +6,7 @@
     export let id = "";
     export let filter_key = "run_id";
     export let submitDisabled = false;
+    export let aggregateByIssue = false;
     let newIssueUrl = "";
     let issues = [];
     let fetching = false;
@@ -16,6 +17,7 @@
             let params = new URLSearchParams({
                 filterKey: filter_key,
                 id: id,
+                aggregateByIssue: new Number(aggregateByIssue),
             }).toString();
             let apiResponse = await fetch("/api/v1/issues/get?" + params);
             let apiJson = await apiResponse.json();
@@ -126,7 +128,7 @@
             <h6>Issues</h6>
         {/if}
         {#each sortIssuesByDate(issues) as issue}
-            <GithubIssue {issue} on:issueDeleted={fetchIssues} />
+            <GithubIssue {issue} aggregated={aggregateByIssue} deleteEnabled={!submitDisabled} on:issueDeleted={fetchIssues} />
         {:else}
             <div class="row">
                 <div class="col text-center text-muted">

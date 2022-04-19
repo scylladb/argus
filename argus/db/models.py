@@ -291,6 +291,17 @@ class ArgusGithubIssue(Model):
     title = columns.Text()
     url = columns.Text()
 
+    def __hash__(self) -> int:
+        return hash((self.owner, self.repo, self.issue_number))
+
+    def __eq__(self, other):
+        if isinstance(other, ArgusGithubIssue):
+            return self.owner == other.owner and self.repo == other.repo and self.issue_number == other.issue_number
+        return super().__eq__(other)
+
+    def __ne__(self, other):
+        return not(self == other)
+
 
 class ArgusReleaseSchedule(Model):
     __table_name__ = "argus_schedule_v4"
