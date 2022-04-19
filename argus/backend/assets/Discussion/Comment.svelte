@@ -116,7 +116,7 @@
             />
         {:else}
             <div class="p-2 rounded bg-light">
-                <div class="border rounded p-2 bg-white markdown-body">
+                <div class="border rounded p-2 markdown-body">
                     {@html marked.parse(commentBody.message, markdownRendererOptions)}
                 </div>
             </div>
