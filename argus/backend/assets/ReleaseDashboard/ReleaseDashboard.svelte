@@ -37,6 +37,37 @@
         </div>
     </div>
     <div class="row mb-2">
+        <div class="col">
+            <div class="accordion">
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button
+                            class="accordion-button collapsed"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#collapseIssues"
+                        >
+                            All Issues
+                        </button>
+                    </h2>
+                    <div
+                        id="collapseIssues"
+                        class="accordion-collapse collapse bg-light-one"
+                    >
+                        <div class="accordion-body">
+                            <GithubIssues
+                                id={releaseData.release.id}
+                                filter_key="release_id"
+                                submitDisabled={true}
+                                aggregateByIssue={true}
+                            />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row mb-2">
         <div class="col-xs-2 col-sm-6 col-md-7">
             <ReleaseStats
                 releaseName={releaseData.release.name}
@@ -57,35 +88,5 @@
     </div>
     <div class="row mb-2">
         <ReleaseActivity releaseName={releaseData.release.name} />
-    </div>
-    <div class="row mb-2">
-        <div class="col">
-            <div class="accordion">
-                <div class="accordion-item">
-                    <h2 class="accordion-header">
-                        <button
-                            class="accordion-button collapsed"
-                            type="button"
-                            data-bs-toggle="collapse"
-                            data-bs-target="#collapseIssues"
-                        >
-                            All Issues
-                        </button>
-                    </h2>
-                    <div
-                        id="collapseIssues"
-                        class="accordion-collapse collapse"
-                    >
-                        <div class="accordion-body">
-                            <GithubIssues
-                                id={releaseData.release.id}
-                                filter_key="release_id"
-                                submitDisabled={true}
-                            />
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
     </div>
 </div>
