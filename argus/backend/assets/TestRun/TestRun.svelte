@@ -35,6 +35,7 @@
     import { userList } from "../Stores/UserlistSubscriber";
     import { sendMessage } from "../Stores/AlertStore";
     import { filterUser } from "../Common/SelectUtils";
+    import Event from "./Event.svelte";
     export let id = "";
     export let build_number = -1;
     const dispatch = createEventDispatcher();
@@ -608,10 +609,7 @@
                                 >
                                     <div class="accordion-body">
                                         {#each event_container.last_events as event}
-                                            <pre
-                                                class="mb-1 p-1 border font-monospace">
-                                                {event}
-                                            </pre>
+                                            <Event eventText={event} />
                                         {/each}
                                     </div>
                                 </div>
