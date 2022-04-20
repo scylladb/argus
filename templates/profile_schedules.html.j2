@@ -1,0 +1,22 @@
+{% extends "base.html.j2" %}
+
+{% block title %}
+My Schedule
+{% endblock %}
+
+{% block javascripts %}
+<script>
+    var globalSchedules = JSON.parse('{{ schedules | tojson | safe}}');
+</script>
+{{super()}}
+<script defer src="/s/dist/profileSchedules.bundle.js"></script>
+{% endblock javascripts %}
+
+{% block body %}
+{% if g.user %}
+<div class="container" id="scheduleContainer">
+
+</div>
+{% else %}
+{% endif %}
+{% endblock %}

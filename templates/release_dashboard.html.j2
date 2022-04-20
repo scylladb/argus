@@ -1,0 +1,19 @@
+{% extends "base.html.j2" %}
+
+{% block title %}
+Release: {{ release_name }}
+{% endblock %}
+
+{% block javascripts %}
+{{ super() }}
+<script>
+    const releaseData = JSON.parse('{{ data | tojson | safe }}');
+</script>
+<script defer src="/s/dist/releaseDashboard.bundle.js"></script>
+{% endblock javascripts %}
+
+{% block body %}
+    <div class="container-fluid my-4">
+        <div id="releaseDashboard"></div>
+    </div>
+{% endblock %}

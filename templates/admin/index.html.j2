@@ -1,0 +1,18 @@
+{% extends "admin/base.html.j2" %}
+{% block javascripts %}
+{{ super() }}
+    {% if current_route %}
+        <script>const gCurrentRoute = "{{ current_route }}";</script>
+    {% endif %}
+    <script defer src="/s/dist/adminPanel.bundle.js"></script>
+{% endblock javascripts %}
+
+{% block title %}
+{{ super() }} - %ROUTE
+{% endblock %}
+
+{% block content %}
+<div id="adminPanel">
+
+</div>
+{% endblock %}
