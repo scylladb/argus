@@ -161,8 +161,16 @@
                     {/each}
                 </div>
             {:catch error}
+                <div
+                    class="me-2"
+                    style="width: 30em;"
+                    title={issue.title}
+                >
+                    <Fa icon={faGithub} /> <a target="_blank" class="link-dark" href={issue.url}>{issue.title}</a>
+                    <div class="text-muted ms-auto me-2">{issue.repo}#{issue.issue_number}</div>
+                </div>
                 <div class="ms-2 me-2">
-                    Error fetching state: {error?.message ?? "Unknown"}
+                    Error fetching state from Github: {error?.message ?? "Unknown"}
                 </div>
             {/await}
             <div class="ms-auto me-2">
