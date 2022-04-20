@@ -519,7 +519,9 @@ def release_stats():
             "exception": exc.__class__.__name__,
             "arguments": exc.args
         }
-    return jsonify(res)
+    res = jsonify(res)
+    res.cache_control.max_age = 60
+    return res
 
 
 @bp.route("/test_runs/poll", methods=["GET"])
