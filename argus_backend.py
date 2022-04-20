@@ -27,9 +27,12 @@ def start_server(config=None) -> Flask:
         return datetime.utcfromtimestamp(timestamp)
 
     @app.template_filter('safe_user')
-    def from_timestamp_filter(user: User):
+    def safe_user(user: User):
         user_dict = dict(user.items())
         del user_dict["password"]
         return user_dict
 
     return app
+
+
+argus_app = start_server()
