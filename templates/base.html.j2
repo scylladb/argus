@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Argus - {%block title%}{%endblock%}</title>
+    <link rel="stylesheet" href="/s/dist/main.css">
+    <link rel="stylesheet" href="/s/dist/noto.css">
+    <link rel="stylesheet" href="/s/dist/fontAwesome.css">
+    <link rel="shortcut icon" href="/s/argus.png" type="image/png">
+    {% block javascripts %}
+    <script>
+        var globalFlashes = JSON.parse('{{ get_flashed_messages(with_categories=true) | tojson | safe }}');
+    </script>
+    {% if g.user %}
+    <script>
+        var gArgusCurrentUser = JSON.parse('{{ g.user | safe_user | tojson | safe }}');
+    </script>
+    {% endif %}
+    <script src="/s/dist/fontAwesome.bundle.js"></script>
+    <script src="/s/dist/main.bundle.js"></script>
+    <script src="/s/dist/globalAlert.bundle.js"></script>
+    <script defer src="/s/dist/notificationCounter.bundle.js"></script>
+    {% endblock javascripts %}
+</head>
+<body class="bg-lighter">
+    <div class="app d-flex flex-column min-vh-100">
+        {% include "partials/nav_bar.html.j2" %}
+        <div id="argusErrors">
+        </div>
+        <div id="argusMain" class="container-fluid">
+            {% block body %}
+            {% endblock %}
+        </div>
+        <div id="argusFooter" class="mt-auto container-fluid bg-dark text-center text-light fw-light fs-6 p-4">
+        Argus
+        </div>
+    </div>
+</body>
+</html>

@@ -1,9 +1,9 @@
 {
     "extends": "@tsconfig/svelte/tsconfig.json",
-    "include": ["src/**/*", "src/node_modules", "argus/backend/assets/**/*"],
+    "include": ["src/**/*", "src/node_modules", "frontend/**/*"],
     "exclude": ["node_modules/*", "__sapper__/*", "public/*"],
     "compilerOptions": {
-        "outDir": "./argus/backend/static/dist",
+        "outDir": "./public/dist",
         "noImplicitAny": true,
         "module": "es6",
         "target": "es6",

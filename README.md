@@ -56,7 +56,7 @@ pip install -e .
 yarn install
 ```
 
-Compile frontend files from `argus/backend/assets/` into `/argus/backend/static/dist`
+Compile frontend files from `/frontend` into `/public/dist`
 
 ```bash
 yarn webpack
@@ -130,7 +130,7 @@ pip install -e .
 yarn install
 ```
 
-Compile frontend files from `argus/backend/assets/` into `/argus/backend/static/dist`. Add --watch to recompile files on change.
+Compile frontend files from `/frontend` into `/public/dist`. Add --watch to recompile files on change.
 
 ```bash
 yarn webpack --watch

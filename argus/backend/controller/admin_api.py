@@ -1,0 +1,271 @@
+import logging
+from uuid import UUID
+from flask import (
+    Blueprint,
+    g,
+    request,
+    Request,
+    session,
+    flash,
+    redirect,
+    render_template,
+    url_for,
+    make_response
+)
+from flask.json import jsonify
+from argus.backend.service.argus_service import ArgusService
+from argus.backend.service.admin import AdminService
+from argus.backend.service.release_manager import ReleaseManagerService
+from argus.backend.controller.auth import login_required, check_roles
+from argus.db.models import UserRoles
+
+# pylint: disable=broad-except
+bp = Blueprint('admin_api', __name__, url_prefix='/api/v1')
+LOGGER = logging.getLogger(__name__)
+
+
+def get_payload(request: Request):
+    if not request.is_json:
+        raise Exception(
+            "Content-Type mismatch, expected application/json, got:", request.content_type)
+    request_payload = request.get_json()
+
+    return request_payload
+
+
+@bp.route("/", methods=["GET"])
+def index():
+    return jsonify({
+        "version": "v1"
+    })
+
+
+@bp.route("/release/create", methods=["POST"])
+def create_release():
+    res = {
+        "status": "ok"
+    }
+    try:
+        payload = get_payload(request)
+        release = ReleaseManagerService().create_release(**payload)
+        res["response"] = {
+            "new_release": dict(release.items())
+        }
+    except Exception as exc:
+        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    return jsonify(res)
+
+
+@bp.route("/release/set_perpetual", methods=["POST"])
+def set_release_perpetual():
+    res = {
+        "status": "ok"
+    }
+    try:
+        payload = get_payload(request)
+        result = ReleaseManagerService().set_release_perpetuality(**payload)
+        res["response"] = {
+            "updated": result
+        }
+    except Exception as exc:
+        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    return jsonify(res)
+
+
+@bp.route("/release/set_state", methods=["POST"])
+def set_release_state():
+    res = {
+        "status": "ok"
+    }
+    try:
+        payload = get_payload(request)
+        result = ReleaseManagerService().set_release_state(**payload)
+        res["response"] = {
+            "updated": result
+        }
+    except Exception as exc:
+        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    return jsonify(res)
+
+
+@bp.route("/release/set_dormant", methods=["POST"])
+def set_release_dormancy():
+    res = {
+        "status": "ok"
+    }
+    try:
+        payload = get_payload(request)
+        result = ReleaseManagerService().set_release_dormancy(**payload)
+        res["response"] = {
+            "updated": result
+        }
+    except Exception as exc:
+        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    return jsonify(res)
+
+
+@bp.route("/group/create", methods=["POST"])
+def create_group():
+    res = {
+        "status": "ok"
+    }
+    try:
+        payload = get_payload(request)
+        group = ReleaseManagerService().create_group(**payload)
+        res["response"] = {
+            "new_group": dict(group.items())
+        }
+    except Exception as exc:
+        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    return jsonify(res)
+
+
+@bp.route("/group/update", methods=["POST"])
+def update_group():
+    res = {
+        "status": "ok"
+    }
+    try:
+        payload = get_payload(request)
+        result = ReleaseManagerService().update_group(**payload)
+        res["response"] = {
+            "updated": result
+        }
+    except Exception as exc:
+        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    return jsonify(res)
+
+
+@bp.route("/group/delete", methods=["POST"])
+def delete_group():
+    res = {
+        "status": "ok"
+    }
+    try:
+        payload = get_payload(request)
+        result = ReleaseManagerService().delete_group(**payload)
+        res["response"] = {
+            "deleted": result
+        }
+    except Exception as exc:
+        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    return jsonify(res)
+
+
+@bp.route("/test/create", methods=["POST"])
+def create_test():
+    res = {
+        "status": "ok"
+    }
+    try:
+        payload = get_payload(request)
+        test = ReleaseManagerService().create_test(**payload)
+        res["response"] = {
+            "new_test": dict(test.items())
+        }
+    except Exception as exc:
+        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    return jsonify(res)
+
+
+@bp.route("/test/update", methods=["POST"])
+def update_test():
+    res = {
+        "status": "ok"
+    }
+    try:
+        payload = get_payload(request)
+        result = ReleaseManagerService().update_test(**payload)
+        res["response"] = {
+            "updated": result
+        }
+    except Exception as exc:
+        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    return jsonify(res)
+
+
+@bp.route("/test/batch_move", methods=["POST"])
+def batch_move_tests():
+    res = {
+        "status": "ok"
+    }
+    try:
+        payload = get_payload(request)
+        result = ReleaseManagerService().batch_move_tests(**payload)
+        res["response"] = {
+            "moved": result
+        }
+    except Exception as exc:
+        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    return jsonify(res)
+
+
+@bp.route("/test/delete", methods=["POST"])
+def delete_test():
+    res = {
+        "status": "ok"
+    }
+    try:
+        payload = get_payload(request)
+        result = ReleaseManagerService().delete_test(**payload)
+        res["response"] = {
+            "deleted": result
+        }
+    except Exception as exc:
+        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    return jsonify(res)

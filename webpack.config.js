@@ -1,71 +1,74 @@
 const path = require('path');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 
+const environment = process.env.WEBPACK_ENVIRONMENT || "production";
+
 module.exports = {
     plugins: [new MiniCssExtractPlugin()],
-    mode: 'development',
+    mode: environment,
     entry: {
-        main: './argus/backend/assets/argus.js',
-        noto: './argus/frontend/fonts/noto.css',
+        main: './frontend/argus.js',
+        fontAwesome: './frontend/font-awesome.js',
+        noto: './frontend/fonts/noto.css',
         globalAlert: {
-            import: './argus/backend/assets/Alert.js',
+            import: './frontend/Alert.js',
             dependOn: 'main'
         },
         notificationCounter: {
-            import: './argus/backend/assets/notification-counter.js',
+            import: './frontend/notification-counter.js',
             dependOn: 'globalAlert'
         },
         flashDebug: {
-            import: './argus/backend/assets/flashDebug.js',
+            import: './frontend/flashDebug.js',
             dependOn: 'globalAlert'
         },
         workArea: {
-            import: './argus/backend/assets/work-area.js',
+            import: './frontend/work-area.js',
             dependOn: 'globalAlert'
         },
         adminPanel: {
-            import: './argus/backend/assets/admin-panel.js',
+            import: './frontend/admin-panel.js',
             dependOn: 'globalAlert'
         },
         releasePage: {
-            import: './argus/backend/assets/release-page.js',
+            import: './frontend/release-page.js',
             dependOn: 'globalAlert'
         },
         testRunDetails: {
-            import: './argus/backend/assets/test-run-details.js',
+            import: './frontend/test-run-details.js',
             dependOn: 'globalAlert'
         },
         testRuns: {
-            import: './argus/backend/assets/test-runs-breakout.js',
+            import: './frontend/test-runs-breakout.js',
             dependOn: 'globalAlert'
         },
         releaseDashboard: {
-            import: './argus/backend/assets/release-dashboard.js',
+            import: './frontend/release-dashboard.js',
             dependOn: 'globalAlert'
         },
         releaseScheduler: {
-            import: './argus/backend/assets/release-scheduler.js',
+            import: './frontend/release-scheduler.js',
             dependOn: 'globalAlert'
         },
         dutyPlanner: {
-            import: './argus/backend/assets/duty-planner.js',
+            import: './frontend/duty-planner.js',
             dependOn: 'globalAlert'
         },
         profileJobs: {
-            import: './argus/backend/assets/profile-jobs.js',
+            import: './frontend/profile-jobs.js',
             dependOn: 'globalAlert'
         },
         profileNotifications: {
-            import: './argus/backend/assets/profile-notifications.js',
+            import: './frontend/profile-notifications.js',
             dependOn: 'globalAlert'
         },
         profileSchedules: {
-            import: './argus/backend/assets/profile-schedules.js',
+            import: './frontend/profile-schedules.js',
             dependOn: 'globalAlert'
         },
     },
     output: {
-        path: path.resolve(__dirname, 'argus/backend/static/dist'),
+        path: path.resolve(__dirname, 'public/dist'),
         filename: '[name].bundle.js',
     },
     resolve: {
@@ -109,5 +112,5 @@ module.exports = {
             }
         ],
     },
-    devtool: "eval-source-map"
+    devtool: environment == "production" ? "source-map" : "eval-source-map"
 };

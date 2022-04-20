@@ -1,0 +1,20 @@
+{% extends "base.html.j2" %}
+
+{% block javascripts %}
+{{super()}}
+<script defer src="/s/dist/testRuns.bundle.js"></script>
+{% endblock javascripts %}
+
+{% block title %}
+Test Runs
+{% endblock %}
+
+{% block body %}
+<div class="container mt-3">
+<div class="row">
+    <div class="col border rounded shadow-sm bg-main" id="testRunsBreakout">
+
+    </div>
+</div>
+</div>
+{% endblock %}

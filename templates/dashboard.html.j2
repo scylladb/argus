@@ -1,0 +1,16 @@
+{% extends "base.html.j2" %}
+{% block javascripts %}
+{{ super() }}
+<script defer src="/s/dist/workArea.bundle.js"></script>
+{% endblock javascripts %}
+
+{% block title %}
+Dashboard
+{% endblock %}
+
+{% block body %}
+
+<div class="container-fluid" id="dashboard-body">
+</div>
+
+{% endblock %}

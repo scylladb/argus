@@ -1,0 +1,25 @@
+{% extends "base.html.j2" %}
+
+{% block title %}
+Alert Tester
+{% endblock %}
+
+{% block javascripts %}
+{{super()}}
+<script src="/s/dist/flashDebug.bundle.js"></script>
+{% endblock javascripts %}
+
+{% block body %}
+<div class="container">
+    <div class="row" id="svelteAlertDebug">
+
+    </div>
+    <div class="row">
+        <div class="col">
+            <a href="/alert_debug?type=error&message=Example%20Backend%20Error" class="btn btn-danger">Error</a>
+            <a href="/alert_debug?type=success&message=Example%20Backend%20Success" class="btn btn-success">Success</a>
+        </div>
+        <div class="col" id="flashDebug"></div>
+    </div>
+</div>
+{% endblock %}

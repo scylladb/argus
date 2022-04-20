@@ -1,0 +1,84 @@
+{% extends "base.html.j2" %}
+
+{% block title %}
+Profile
+{% endblock %}
+
+{% block body %}
+{% if g.user %}
+<div class="container">
+    {% if first_run %}
+    <div class="row">
+        <div class="col my-3 border bg-warning rounded shadow-sm text-center p-4">
+        Welcome to Argus! Your temporary recovery password is: <span class="user-select-all bg-light text-danger rounded border border-warning">{{ first_run.password or "undefined"}}</span>. Make sure to save it if you want to use password login
+        </div>
+    </div>
+    {% endif %}
+    <div class="row border rounded bg-main my-3 shadow-sm">
+        <div class="col-2 border-end p-2">
+            {% if g.user.picture_id %}
+                <img class="img-fluid" src="/storage/picture/{{g.user.picture_id}}" alt="">
+            {% else %}
+                <img class="img-profile img-thumbnail" src="/s/no-user-picture.png" alt="">
+            {% endif %}
+        </div>
+        <div class="col-10">
+            <h1>Profile</h1>
+            <h4>{{g.user.username}}</h4>
+            <h6>Details</h6>
+            <div class="row">
+                <div class="col-1 p-2">
+                    Name:
+                </div>
+                <div class="col-4">
+                    <form class="form mb-3" action="/profile/update/name" method="post" enctype="multipart/form-data">
+                        <div class="mb-3 d-flex align-items-center">
+                            <input class="form-control form-control-sm me-3" id="formUpdateName" name="new_name" type="text" placeholder="{{ g.user.full_name }}">
+                            <button type="submit" class="btn btn-primary">Change</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-1 p-2">
+                    Email:
+                </div>
+                <div class="col-6">
+                    <form class="form mb-3" action="/profile/update/email" method="post" enctype="multipart/form-data">
+                        <div class="mb-3 d-flex align-items-center">
+                            <input class="form-control form-control-sm me-3" id="formUpdateName" name="new_email" type="text" placeholder="{{ g.user.email }}">
+                            <button type="submit" class="btn btn-primary">Change</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <h4>Change profile picture</h4>
+            <form class="form mb-3" action="/profile/update/picture" method="post" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="formPictureData" class="form-label">Profile Image</label>
+                    <input class="form-control form-control-sm" id="formPictureData" name="filedata" type="file">
+                </div>
+                <button type="submit" class="btn btn-primary">Upload new image</button>
+            </form>
+            <h4>Change password</h4>
+            <form class="form mb-3" action="/profile/update/password" method="post" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="formCurrentPassword" class="form-label">Current Password</label>
+                    <input class="form-control form-control-sm" id="formCurrentPassword" name="old_password" type="password">
+                </div>
+                <div class="mb-3">
+                    <label for="formNewPassword" class="form-label">New Password</label>
+                    <input class="form-control form-control-sm" id="formNewPassword" name="new_password" type="password">
+                </div>
+                <div class="mb-3">
+                    <label for="formNewPasswordConfirm" class="form-label">New Password confirmation</label>
+                    <input class="form-control form-control-sm" id="formNewPasswordConfirm" name="new_password_confirm" type="password">
+                </div>
+                <button type="submit" class="btn btn-primary">Change</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% else %}
+{% endif %}
+{% endblock %}
