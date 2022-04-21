@@ -89,8 +89,22 @@
                             id="issueTemplateRaw-{test_run.id}"
                             role="tabpanel"
                         >
+                            <div class="p-1 mb-2">
+                                <button
+                                    class="btn btn-sm btn-primary"
+                                    on:click={() => {
+                                        let range = document.createRange();
+                                        range.selectNodeContents(templateElement);
+                                        let selection = window.getSelection();
+                                        selection.removeAllRanges();
+                                        selection.addRange(range);
+                                    }}
+                                >
+                                    Select All
+                                </button>
+                            </div>
                             <pre
-                                class="code user-select-all"
+                                class="code"
                                 bind:this={templateElement}
                                 id="issueTemplateText-{test_run.id}">
 ## Installation details
