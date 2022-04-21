@@ -2,10 +2,13 @@ from datetime import datetime
 from flask import Flask
 from yaml import safe_load
 from argus.backend.controller import admin, api, main
+from argus.backend.logsetup import setup_argus_logging
 from argus.db.models import User
 from argus.backend.db import ScyllaCluster
 from argus.backend.build_system_monitor import scan_jenkins_command
 from argus.backend.controller import auth
+
+setup_argus_logging()
 
 
 def start_server(config=None) -> Flask:
@@ -15,7 +18,9 @@ def start_server(config=None) -> Flask:
     app.config.from_mapping(config_mapping)
     if config:
         app.config.from_mapping(config)
+    app.logger.info("Starting Scylla Cluster connection...")
     ScyllaCluster.get().attach_to_app(app)
+    app.logger.info("Registering blueprints")
     app.register_blueprint(auth.bp)
     app.register_blueprint(main.bp)
     app.register_blueprint(api.bp)
@@ -31,7 +36,7 @@ def start_server(config=None) -> Flask:
         user_dict = dict(user.items())
         del user_dict["password"]
         return user_dict
-
+    app.logger.info("Ready.")
     return app
 
 

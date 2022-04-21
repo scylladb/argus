@@ -85,6 +85,7 @@ class ArgusDatabase:
             row_factory=named_tuple_factory
         )
         self.cluster = cassandra.cluster.Cluster(contact_points=self.config.contact_points,
+                                                 protocol_version=4,
                                                  auth_provider=PlainTextAuthProvider(
                                                      username=self.config.username,
                                                      password=self.config.password),
@@ -279,9 +280,9 @@ class ArgusDatabase:
 
         return udt_name
 
-    def fetch(self, table_name: str, run_id: UUID, where_clause = "WHERE id = ?"):
+    def fetch(self, table_name: str, run_id: UUID, where_clause="WHERE id = ?"):
         return self._fetch(table_name, (run_id,), where_clause)
-    
+
     def _fetch(self, table_name: str, params: tuple | list, where_clause: str):
         if not self._keyspace_initialized:
             raise ArgusInterfaceDatabaseConnectionError("Uninitialized keyspace, cannot continue")

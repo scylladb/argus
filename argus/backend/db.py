@@ -23,6 +23,7 @@ DB_CONFIG = FileConfig()
 CLUSTER: Cluster | None = None
 LOGGER = logging.getLogger(__name__)
 
+
 class ScyllaCluster:
     # pylint: disable=too-many-instance-attributes
     APP_INSTANCE: Optional['ScyllaCluster'] = None
@@ -37,6 +38,7 @@ class ScyllaCluster:
             load_balancing_policy=self.lb_policy, consistency_level=ConsistencyLevel.QUORUM)
         connection.setup(hosts=config.contact_points, default_keyspace=config.keyspace_name,
                          auth_provider=self.auth_provider,
+                         protocol_version=4,
                          execution_profiles={EXEC_PROFILE_DEFAULT: self.execution_profile})
         self.cluster: Cluster = connection.get_cluster(connection='default')
         self.session = self.cluster.connect(keyspace=self.config.keyspace_name)
