@@ -86,6 +86,22 @@
             return acc;
         }, {});
     };
+
+    const fetchTestComment = async function (testId) {
+        let params = new URLSearchParams({
+            id: testId,
+        });
+        try {
+            let response = await fetch("/api/v1/release/planner/comment/get/test?" + params);
+            if (response.status == 200) {
+                return response.json();
+            } else {
+                return Promise.reject(new Error("API Error"));
+            }
+        } catch (error) {
+            return Promise.reject(error);
+        }
+    };
 </script>
 
 {#each sortByStartTime() as schedule}
@@ -150,6 +166,19 @@
                                                     tests?.[test]?.name}
                                             </div>
                                             <div class="ms-auto">
+                                                {#await fetchTestComment(test)}
+                                                    <span class="spinner-border spinner-border-sm"></span> Loading comment...
+                                                {:then res}
+                                                    {#if res.status === "ok" && res.response}
+                                                        <div class="rounded border p-1 comment-text">
+                                                            {res.response}
+                                                        </div>
+                                                    {/if}
+                                                {:catch error}
+                                                    <div class="rounded border border-danger p-1">Error fetching comment: {error?.message ?? "Unknown"}</div>
+                                                {/await}
+                                            </div>
+                                            <div class="ms-2">
                                                 <a
                                                     target="_blank"
                                                     href={tests?.[test]?.build_system_url}
@@ -210,5 +239,10 @@
     .list-height-limit {
         max-height: 256px;
         overflow-y: scroll;
+    }
+
+    .comment-text {
+        font-size: 0.9em;
+        max-width: 20em;
     }
 </style>

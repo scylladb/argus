@@ -65,10 +65,13 @@ def releases():
     service = ArgusService()
     force_all = request.args.get("all", False)
     all_releases = service.get_releases()
-    return jsonify({
+    response = jsonify({
         "status": "ok",
         "response": [dict(d.items()) for d in all_releases if d.enabled or force_all]
     })
+
+    response.cache_control.max_age = 300
+    return response
 
 
 @bp.route("/release/activity", methods=["GET"])
@@ -113,6 +116,30 @@ def release_planner_data():
             "arguments": exc.args
         }
     return jsonify(res)
+
+
+@bp.route("/release/planner/comment/get/test")
+def get_planner_comment_by_test():
+    res = {
+        "status": "ok"
+    }
+    try:
+        test_id = request.args.get("id")
+        if not test_id:
+            raise Exception("TestId was not specified")
+        service = ArgusService()
+        res["response"] = service.get_planner_comment_by_test(UUID(test_id))
+    except Exception as exc:
+        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+
+    response = jsonify(res)
+    response.cache_control.max_age = 1200
+    return response
 
 
 @bp.route("/release/schedules/comment/update", methods=["POST"])
@@ -316,7 +343,9 @@ def groups():
             "exception": exc.__class__.__name__,
             "arguments": exc.args
         }
-    return jsonify(res)
+    response = jsonify(res)
+    response.cache_control.max_age = 300
+    return response
 
 
 @bp.route("/tests", methods=["GET"])
@@ -337,7 +366,9 @@ def tests():
             "exception": exc.__class__.__name__,
             "arguments": exc.args
         }
-    return jsonify(res)
+    response = jsonify(res)
+    response.cache_control.max_age = 300
+    return response
 
 
 @bp.route("/test_run", methods=["GET"])
