@@ -1304,3 +1304,10 @@ class ArgusService:
             schedules.append(schedule)
 
         return schedules
+
+    def get_planner_comment_by_test(self, test_id):
+        try:
+            test = ArgusReleaseGroupTest.get(id=test_id)
+            return ReleasePlannerComment.get(test=test.id, release=test.release_id, group=test.group_id).comment
+        except ReleasePlannerComment.DoesNotExist:
+            return ""
