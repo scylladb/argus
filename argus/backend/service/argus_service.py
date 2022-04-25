@@ -427,6 +427,8 @@ class ArgusService:
         rows = self.session.execute(self.run_by_release_stats_statement, parameters=(release.id,)).all()
         for group, tests in tests_by_group.items():
             for test in tests:
+                if not test.enabled:
+                    continue
                 test_group = release_groups_by_id[test.group_id]
                 if not release_stats["groups"][test_group.name]["tests"]:
                     release_stats["groups"][test_group.name]["tests"] = dict()
