@@ -129,7 +129,7 @@
 {#each Object.entries(stats.groups) as [groupName, group] (groupName)}
     <div class="p-2 shadow mb-2 rounded bg-main">
         <h5 class="mb-2">
-            <div class="mb-2">{groupName}</div>
+            <div class="mb-2">{group.pretty_name || groupName}</div>
             {#if Object.keys(assigneeList.groups).length > 0 && Object.keys(users).length > 0}
                 <div class="shadow-sm bg-main rounded d-inline-block p-2">
                     <div class="d-flex align-items-center">

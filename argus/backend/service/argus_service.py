@@ -407,7 +407,7 @@ class ArgusService:
             "lastInvestigationStatus": "unknown",
             "hasBugReport": False,
             "groups": {
-                group.name: dict(**group_stats_body, group_id=group.id) for group in release_groups
+                group.name: dict(**group_stats_body, group_id=group.id, pretty_name=group.pretty_name) for group in release_groups
             },
             "tests": {},
             "disabled": not release.enabled,
