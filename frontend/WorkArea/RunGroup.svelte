@@ -39,10 +39,10 @@
         if (tests.length == 0) return;
         tests = tests.sort((a, b) => {
             let leftStatus =
-                StatusSortPriority[testStatus[a.name]?.status] ??
+                StatusSortPriority?.[testStatus?.[a.name]?.status] ??
                 StatusSortPriority["none"];
             let rightStatus =
-                StatusSortPriority[testStatus[b.name]?.status] ??
+                StatusSortPriority?.[testStatus?.[b.name]?.status] ??
                 StatusSortPriority["none"];
             if (leftStatus > rightStatus) {
                 return 1;
