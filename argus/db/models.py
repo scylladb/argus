@@ -192,7 +192,7 @@ class ArgusTestRunComment(Model):
     release_id = columns.UUID(required=True, index=True)
     posted_at = columns.Integer(
         required=True, clustering_order="desc", primary_key=True)
-    message = columns.Text(min_length=1)
+    message = columns.Text(min_length=1, max_length=65535)
     mentions = columns.List(value_type=columns.UUID, default=[])
     reactions = columns.Map(key_type=columns.Text, value_type=columns.Integer)
 
