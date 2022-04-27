@@ -94,7 +94,7 @@
                                     class="group-cell fs-2 fw-bold align-middle"
                                     rowspan={tests.length}
                                 >
-                                    {groupName}
+                                    {tests[0].pretty_group_name || groupName}
                                 </td>
                             {/if}
                             <td
@@ -241,6 +241,6 @@
     }
 
     .group-cell {
-        width: 12rem;
+        width: 8rem;
     }
 </style>
