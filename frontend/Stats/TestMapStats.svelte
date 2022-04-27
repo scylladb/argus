@@ -127,97 +127,99 @@
 </script>
 
 {#each Object.entries(stats.groups) as [groupName, group] (groupName)}
-    <div class="p-2 shadow mb-2 rounded bg-main">
-        <h5 class="mb-2">
-            <div class="mb-2">{group.pretty_name || groupName}</div>
-            {#if Object.keys(assigneeList.groups).length > 0 && Object.keys(users).length > 0}
-                <div class="shadow-sm bg-main rounded d-inline-block p-2">
-                    <div class="d-flex align-items-center">
-                        <img
-                            class="img-thumb ms-2"
-                            src={getPicture(
-                                users[assigneeList.groups[group.group_id]?.[0]]
-                                    ?.picture_id
-                            )}
-                            alt=""
-                        />
-                        <span class="ms-2 fs-6"
-                            >{users[assigneeList.groups[group.group_id]?.[0]]
-                                ?.full_name ?? "unassigned"}</span
-                        >
+    {#if !group.disabled}
+        <div class="p-2 shadow mb-2 rounded bg-main">
+            <h5 class="mb-2">
+                <div class="mb-2">{group.pretty_name || groupName}</div>
+                {#if Object.keys(assigneeList.groups).length > 0 && Object.keys(users).length > 0}
+                    <div class="shadow-sm bg-main rounded d-inline-block p-2">
+                        <div class="d-flex align-items-center">
+                            <img
+                                class="img-thumb ms-2"
+                                src={getPicture(
+                                    users[assigneeList.groups[group.group_id]?.[0]]
+                                        ?.picture_id
+                                )}
+                                alt=""
+                            />
+                            <span class="ms-2 fs-6"
+                                >{users[assigneeList.groups[group.group_id]?.[0]]
+                                    ?.full_name ?? "unassigned"}</span
+                            >
+                        </div>
                     </div>
-                </div>
-            {/if}
-        </h5>
-        <div class="my-2 d-flex flex-wrap bg-lighter rounded shadow-sm">
-            {#each Object.entries(filterTestsForGroup(groupName, group.tests ?? {})) as [testName, test] (`${groupName}/${testName}`)}
-                <div
-                    class:status-block-active={test.start_time != 0}
-                    class="rounded bg-main status-block m-1 d-flex flex-column overflow-hidden shadow-sm"
-                    on:click={() => {
-                        handleTestClick(testName, test, groupName, group);
-                    }}
-                >
+                {/if}
+            </h5>
+            <div class="my-2 d-flex flex-wrap bg-lighter rounded shadow-sm">
+                {#each Object.entries(filterTestsForGroup(groupName, group.tests ?? {})) as [testName, test] (`${groupName}/${testName}`)}
                     <div
-                        class="{StatusBackgroundCSSClassMap[
-                            test.status
-                        ]} text-center text-light p-1 border-bottom"
+                        class:status-block-active={test.start_time != 0}
+                        class="rounded bg-main status-block m-1 d-flex flex-column overflow-hidden shadow-sm"
+                        on:click={() => {
+                            handleTestClick(testName, test, groupName, group);
+                        }}
                     >
-                        {test.status == "unknown"
-                            ? "Not run"
-                            : titleCase(test.status)}
-                        {#if clickedTests[`${groupName}/${testName}`]}
-                            <div class="text-tiny">Selected</div>
-                        {/if}
-                    </div>
-                    <div class="p-1 text-small d-flex align-items-center">
-                        <div class="ms-1">{testName}</div>
-                    </div>
-                    <div class="d-flex flex-fill align-items-end justify-content-end p-1">
-                        <div class="p-1 me-auto">
-                            {#if assigneeList.tests[test.test_id] || assigneeList.groups[group.group_id]}
-                                <AssigneeList
-                                    smallImage={false}
-                                    assignees={getAssigneesForTest(
-                                        test.test_id,
-                                        group.group_id,
-                                        test.last_runs ?? [],
-                                    )}
-                                />
+                        <div
+                            class="{StatusBackgroundCSSClassMap[
+                                test.status
+                            ]} text-center text-light p-1 border-bottom"
+                        >
+                            {test.status == "unknown"
+                                ? "Not run"
+                                : titleCase(test.status)}
+                            {#if clickedTests[`${groupName}/${testName}`]}
+                                <div class="text-tiny">Selected</div>
                             {/if}
                         </div>
-                        {#if test.investigation_status && (test.status != TestStatus.PASSED || test.investigation_status != TestInvestigationStatus.NOT_INVESTIGATED)}
-                            <div
-                                class="p-1"
-                                title="Investigation: {TestInvestigationStatusStrings[
-                                    test.investigation_status
-                                ]}"
-                            >
-                                <Fa
-                                    color="#000"
-                                    icon={investigationStatusIcon[
+                        <div class="p-1 text-small d-flex align-items-center">
+                            <div class="ms-1">{testName}</div>
+                        </div>
+                        <div class="d-flex flex-fill align-items-end justify-content-end p-1">
+                            <div class="p-1 me-auto">
+                                {#if assigneeList.tests[test.test_id] || assigneeList.groups[group.group_id]}
+                                    <AssigneeList
+                                        smallImage={false}
+                                        assignees={getAssigneesForTest(
+                                            test.test_id,
+                                            group.group_id,
+                                            test.last_runs ?? [],
+                                        )}
+                                    />
+                                {/if}
+                            </div>
+                            {#if test.investigation_status && (test.status != TestStatus.PASSED || test.investigation_status != TestInvestigationStatus.NOT_INVESTIGATED)}
+                                <div
+                                    class="p-1"
+                                    title="Investigation: {TestInvestigationStatusStrings[
                                         test.investigation_status
-                                    ]}
-                                />
-                            </div>
-                        {/if}
-                        {#if test.hasBugReport}
-                            <div class="p-1" title="Has a bug report">
-                                <Fa color="#000" icon={faBug} />
-                            </div>
-                        {/if}
-                        {#if test.hasComments}
-                            <div class="p-1" title="Has a comment">
-                                <Fa color="#000" icon={faComment} />
-                            </div>
-                        {/if}
+                                    ]}"
+                                >
+                                    <Fa
+                                        color="#000"
+                                        icon={investigationStatusIcon[
+                                            test.investigation_status
+                                        ]}
+                                    />
+                                </div>
+                            {/if}
+                            {#if test.hasBugReport}
+                                <div class="p-1" title="Has a bug report">
+                                    <Fa color="#000" icon={faBug} />
+                                </div>
+                            {/if}
+                            {#if test.hasComments}
+                                <div class="p-1" title="Has a comment">
+                                    <Fa color="#000" icon={faComment} />
+                                </div>
+                            {/if}
+                        </div>
                     </div>
-                </div>
-            {:else}
-                <div class="text-dark m-2">No tests for this group</div>
-            {/each}
+                {:else}
+                    <div class="text-dark m-2">No tests for this group</div>
+                {/each}
+            </div>
         </div>
-    </div>
+    {/if}
 {/each}
 
 <style>

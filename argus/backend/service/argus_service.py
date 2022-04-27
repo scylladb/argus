@@ -366,7 +366,7 @@ class ArgusService:
             "lastStatus": "unknown",
             "lastInvestigationStatus": "unknown",
             "hasBugReport": False,
-            "disabled": False,
+            "disabled": True,
             "tests": None,
         }
 
@@ -415,8 +415,9 @@ class ArgusService:
         release_comments = ArgusTestRunComment.filter(release_id=release.id)
         rows = self.session.execute(self.run_by_release_stats_statement, parameters=(release.id,)).all()
         for group, tests in tests_by_group.items():
-            if not group.enabled:
-                release_stats["groups"][group.name]["disabled"] = True
+            if group.enabled:
+                release_stats["groups"][group.name]["disabled"] = False
+            else:
                 continue
             for test in tests:
                 if not test.enabled:
