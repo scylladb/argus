@@ -134,6 +134,7 @@ class ArgusReleaseGroup(Model):
     pretty_name = columns.Text()
     description = columns.Text()
     assignee = columns.List(value_type=columns.UUID)
+    build_system_id = columns.Text()
     enabled = columns.Boolean(default=lambda: True)
 
     def __hash__(self) -> int:

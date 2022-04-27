@@ -354,18 +354,6 @@ class ArgusService:
         return release, release_groups, release_tests
 
     def collect_stats(self, release_name: str, limited: bool = False, force: bool = False) -> dict:
-        """
-        Example body:
-        {
-            "master": {
-                "force": true, // Forcefully retrieve stats even if release is disabled
-                "limited": false, // Do not retrieve extra information (last runs, bug reports)
-                "groups": ["longevity", "artifacts"],
-                "tests": ["longevity-100gb", "artifacts-ami"]
-            }
-        }
-        Both groups and tests are considered prefixes to test_run names
-        """
         response = {
             "releases": {
 
@@ -378,6 +366,7 @@ class ArgusService:
             "lastStatus": "unknown",
             "lastInvestigationStatus": "unknown",
             "hasBugReport": False,
+            "disabled": False,
             "tests": None,
         }
 
@@ -426,6 +415,9 @@ class ArgusService:
         release_comments = ArgusTestRunComment.filter(release_id=release.id)
         rows = self.session.execute(self.run_by_release_stats_statement, parameters=(release.id,)).all()
         for group, tests in tests_by_group.items():
+            if not group.enabled:
+                release_stats["groups"][group.name]["disabled"] = True
+                continue
             for test in tests:
                 if not test.enabled:
                     continue
