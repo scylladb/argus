@@ -70,7 +70,7 @@ def releases():
         "response": [dict(d.items()) for d in all_releases if d.enabled or force_all]
     })
 
-    response.cache_control.max_age = 300
+    response.cache_control.max_age = 60
     return response
 
 
@@ -138,7 +138,7 @@ def get_planner_comment_by_test():
         }
 
     response = jsonify(res)
-    response.cache_control.max_age = 1200
+    response.cache_control.max_age = 60
     return response
 
 
@@ -344,7 +344,7 @@ def groups():
             "arguments": exc.args
         }
     response = jsonify(res)
-    response.cache_control.max_age = 300
+    response.cache_control.max_age = 60
     return response
 
 
@@ -367,7 +367,7 @@ def tests():
             "arguments": exc.args
         }
     response = jsonify(res)
-    response.cache_control.max_age = 300
+    response.cache_control.max_age = 60
     return response
 
 
