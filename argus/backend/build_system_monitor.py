@@ -28,11 +28,12 @@ class ArgusTestsMonitor(ABC):
 
         return release
 
-    def create_group(self, release: ArgusRelease, group_name: str, group_pretty_name: str | None = None):
+    def create_group(self, release: ArgusRelease, group_name: str, build_id: str, group_pretty_name: str | None = None):
         # pylint: disable=no-self-use
         group = ArgusReleaseGroup()
         group.release_id = release.id
-        group.name = group_name.rstrip("-")
+        group.name = group_name
+        group.build_system_id = build_id
         if group_pretty_name:
             group.pretty_name = group_pretty_name
         group.save()
@@ -76,52 +77,60 @@ class JenkinsMonitor(ArgusTestsMonitor):
 
     def collect(self):
         click.echo("Collecting new tests from jenkins")
-        all_jobs = self._jenkins.get_all_jobs(folder_depth=4)
-        all_monitored_folders = [
-            job for job in all_jobs if job["name"] in self._monitored_releases]
+        all_jobs = self._jenkins.get_all_jobs()
+        all_monitored_folders = [job for job in all_jobs if job["name"] in self._monitored_releases]
         for release in all_monitored_folders:
             LOGGER.info("Processing release %s", release["name"])
             try:
                 saved_release = ArgusRelease.get(name=release["name"])
+                LOGGER.info("Release %s exists", release["name"])
             except ArgusRelease.DoesNotExist:
-                LOGGER.warning(
-                    "Release %s does not exist, creating...", release["name"])
+                LOGGER.warning("Release %s does not exist, creating...", release["name"])
                 saved_release = self.create_release(release["name"])
                 self._existing_releases.append(saved_release)
 
             groups = self.collect_groups_for_release(release["jobs"])
-            for group in groups:
-                LOGGER.info("Processing group %s for release %s",
-                            group["name"], saved_release.name)
+            folder_stack = [dict(parent_name="", parent_display_name="", group=g) for g in reversed(groups)]
+            while len(folder_stack) != 0:
+                group_dict = folder_stack.pop()
+                group = group_dict["group"]
+                LOGGER.info("Processing group %s for release %s", group["name"], saved_release.name)
                 try:
-                    group_name = group["name"].rstrip("-")
-                    saved_groups = [g for g in self._existing_groups if g.release_id ==
-                                    saved_release.id and g.name == group_name]
-                    saved_group = saved_groups[0]
-                except IndexError:
+                    group_name = group["name"] if not group_dict["parent_name"] else f"{group_dict['parent_name']}-{group['name']}"
+                    saved_group = filter(lambda g: g.build_system_id == group["fullname"], self._existing_groups)
+                    saved_group = next(saved_group)
+                    LOGGER.info("Group %s already exists. (id: %s)", saved_group.build_system_id, saved_group.id)
+                except StopIteration:
                     LOGGER.warning(
                         "Group %s for release %s doesn't exist, creating...", group_name, saved_release.name)
                     try:
                         display_name = self._jenkins.get_job_info(name=group["fullname"])["displayName"]
+                        display_name = display_name if not group_dict[
+                            "parent_display_name"] else f"{group_dict['parent_display_name']} - {display_name}"
                     except Exception:
                         display_name = None
-                    saved_group = self.create_group(saved_release, group_name, display_name)
+
+                    saved_group = self.create_group(saved_release, group_name, group["fullname"], display_name)
                     self._existing_groups.append(saved_group)
-                tests = self.collect_tests_from_group(group)
-                for test in tests:
-                    LOGGER.info("Processing test %s for release %s and group %s",
-                                test["name"], saved_group.name, saved_release.name)
+
+                for job in group["jobs"]:
+                    LOGGER.info("Processing job %s for release %s and group %s",
+                                job["fullname"], saved_group.name, saved_release.name)
                     saved_test = None
-                    for t in self._existing_tests:  # pylint: disable=invalid-name
-                        if t.build_system_id == test["fullname"]:
-                            saved_test = t
-                            break
-                    if not saved_test:
-                        LOGGER.warning("Test %s for release %s (group %s) doesn't exist, creating...",
-                                       test["name"], saved_release.name, saved_group.name)
-                        saved_test = self.create_test(
-                            saved_release, saved_group, test["name"], test["fullname"], test["url"])
-                        self._existing_tests.append(saved_test)
+                    if "Folder" in job["_class"]:
+                        folder_stack.append(dict(parent_name=saved_group.name,
+                                            parent_display_name=saved_group.pretty_name, group=job))
+                    if "WorkflowJob" in job["_class"]:
+                        try:
+                            saved_test = filter(lambda t: t.build_system_id == job["fullname"], self._existing_tests)
+                            saved_test = next(saved_test)
+                            LOGGER.info("Test %s already exists. (id: %s)", saved_test.build_system_id, saved_test.id)
+                        except StopIteration:
+                            LOGGER.warning("Test %s for release %s (group %s) doesn't exist, creating...",
+                                           job["name"], saved_release.name, saved_group.name)
+                            saved_test = self.create_test(
+                                saved_release, saved_group, job["name"], job["fullname"], job["url"])
+                            self._existing_tests.append(saved_test)
 
     def collect_groups_for_release(self, jobs):
         # pylint: disable=no-self-use
@@ -129,12 +138,6 @@ class JenkinsMonitor(ArgusTestsMonitor):
         groups = [group for group in groups if self.check_filter(group["name"])]
 
         return groups
-
-    def collect_tests_from_group(self, group):
-        # pylint: disable=no-self-use
-        tests = [test for test in group["jobs"]
-                 if "WorkflowJob" in test["_class"]]
-        return tests
 
 
 @click.command('scan-jenkins')
