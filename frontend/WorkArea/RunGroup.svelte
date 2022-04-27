@@ -106,11 +106,11 @@
 </script>
 
 <div class="accordion-item" class:d-none={filtered}>
-    <h2 class="accordion-header" id="heading{removeDots(release)}{group.name}">
+    <h2 class="accordion-header" id="heading{removeDots(`${release}_${group.name}`)}">
         <button
             class="accordion-button collapsed"
             data-bs-toggle="collapse"
-            data-bs-target="#collapse{removeDots(release)}{group.name}"
+            data-bs-target="#collapse{removeDots(`${release}_${group.name}`)}"
             on:click={handleGroupClick}
         >
             <div class="container-fluid p-0 m-0">
@@ -121,9 +121,9 @@
                     <div class="col-4 text-end">
                         {#if groupStats?.total > 0}
                             <NumberStats stats={groupStats} />
-                        {:else if groupStats?.total ?? 0 == 0}
+                        {:else if groupStats?.disabled ?? false}
                             <!-- svelte-ignore empty-block -->
-                        {:else if groupStats?.dormant ?? false}
+                        {:else if groupStats?.total == 0}
                             <!-- svelte-ignore empty-block -->
                         {:else}
                             <span class="spinner-border spinner-border-sm" />
@@ -138,7 +138,7 @@
     </h2>
     <div
         class="accordion-collapse collapse"
-        id="collapse{removeDots(release)}{group.name}"
+        id="collapse{removeDots(`${release}_${group.name}`)}"
     >
         {#if testsReady}
             <div class="p-2 border-bottom">

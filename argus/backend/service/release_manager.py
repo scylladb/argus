@@ -40,13 +40,15 @@ class ReleaseManagerService:
 
         return release
 
-    def create_group(self, group_name: str, pretty_name: str, release_id: str) -> ArgusReleaseGroup:
+    def create_group(self, group_name: str, pretty_name: str, build_system_id: str,
+                     release_id: str) -> ArgusReleaseGroup:
         release = ArgusRelease.get(id=UUID(release_id))
 
         new_group = ArgusReleaseGroup()
         new_group.name = group_name
         new_group.pretty_name = pretty_name
         new_group.release_id = release.id
+        new_group.build_system_id = build_system_id
         new_group.save()
 
         return new_group
@@ -91,10 +93,11 @@ class ReleaseManagerService:
 
         return True
 
-    def update_group(self, group_id: str, name: str, pretty_name: str, enabled: bool) -> bool:
+    def update_group(self, group_id: str, name: str, pretty_name: str, enabled: bool, build_system_id: str) -> bool:
         group = ArgusReleaseGroup.get(id=UUID(group_id))
 
         group.name = name
+        group.build_system_id = build_system_id
         group.pretty_name = pretty_name
         group.enabled = enabled
 

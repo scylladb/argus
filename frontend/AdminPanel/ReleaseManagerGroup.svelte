@@ -18,6 +18,7 @@
             group_id: editedGroup.id,
             name: editedGroup.name,
             pretty_name: editedGroup.pretty_name,
+            build_system_id: editedGroup.build_system_id,
             enabled: editedGroup.enabled,
         });
     };
@@ -90,6 +91,22 @@
                     type="text"
                     class="form-control"
                     bind:value={editedGroup.pretty_name}
+                />
+            </div>
+            <div class="form-group">
+                <label for="" class="form-label">Build System Id</label>
+                <input
+                    type="text"
+                    class="form-control"
+                    bind:value={editedGroup.build_system_id}
+                />
+            </div>
+            <div class="form-group">
+                <label for="" class="form-label">Enabled</label>
+                <input
+                    type="checkbox"
+                    class="form-check-input"
+                    bind:checked={editedGroup.enabled}
                 />
             </div>
             <div class="mt-2 text-end">

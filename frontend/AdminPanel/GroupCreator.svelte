@@ -6,6 +6,7 @@
     let newGroup = {
         group_name: "",
         pretty_name: "",
+        build_system_id: "",
     };
 
     $: newGroup.group_name = urlSlug.convert(newGroup.pretty_name);
@@ -39,6 +40,14 @@
                     type="text"
                     class="form-control"
                     bind:value={newGroup.pretty_name}
+                />
+            </div>
+            <div class="form-group">
+                <label for="" class="form-label">Build System Id</label>
+                <input
+                    type="text"
+                    class="form-control"
+                    bind:value={newGroup.build_system_id}
                 />
             </div>
             <div class="mt-2 text-end">
