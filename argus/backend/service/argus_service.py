@@ -1056,6 +1056,7 @@ class ArgusService:
         tests_by_group = {}
         for test in tests:
             test["group_name"] = groups_by_group_id[str(test["group_id"])]["name"]
+            test["pretty_group_name"] = groups_by_group_id[str(test["group_id"])]["pretty_name"]
             try:
                 comment = next(filter(lambda c: c.test == test["id"]
                                and c.group == test["group_id"], release_comments))
