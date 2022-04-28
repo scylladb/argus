@@ -23,8 +23,8 @@
     const dispatch = createEventDispatcher();
     let startTime;
     let fetching = false;
-    $: lastStatus = $stats?.["releases"]?.[release]?.["groups"]?.[group]?.["tests"]?.[test.name]["status"] ?? lastStatus;
-    $: startTime = $stats?.["releases"]?.[release]?.["groups"]?.[group]?.["tests"]?.[test.name]["start_time"] ?? startTime;
+    $: lastStatus = $stats?.["releases"]?.[release]?.["groups"]?.[group]?.["tests"]?.[test.name]?.["status"] ?? lastStatus;
+    $: startTime = $stats?.["releases"]?.[release]?.["groups"]?.[group]?.["tests"]?.[test.name]?.["start_time"] ?? startTime;
 
     const titleCase = function (string) {
         return string[0].toUpperCase() + string.slice(1).toLowerCase();
