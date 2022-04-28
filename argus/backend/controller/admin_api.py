@@ -1,20 +1,10 @@
 import logging
-from uuid import UUID
 from flask import (
     Blueprint,
-    g,
     request,
     Request,
-    session,
-    flash,
-    redirect,
-    render_template,
-    url_for,
-    make_response
 )
 from flask.json import jsonify
-from argus.backend.service.argus_service import ArgusService
-from argus.backend.service.admin import AdminService
 from argus.backend.service.release_manager import ReleaseManagerService
 from argus.backend.controller.auth import login_required, check_roles
 from argus.db.models import UserRoles
@@ -24,16 +14,18 @@ bp = Blueprint('admin_api', __name__, url_prefix='/api/v1')
 LOGGER = logging.getLogger(__name__)
 
 
-def get_payload(request: Request):
-    if not request.is_json:
+def get_payload(client_request: Request):
+    if not client_request.is_json:
         raise Exception(
-            "Content-Type mismatch, expected application/json, got:", request.content_type)
-    request_payload = request.get_json()
+            "Content-Type mismatch, expected application/json, got:", client_request.content_type)
+    request_payload = client_request.get_json()
 
     return request_payload
 
 
 @bp.route("/", methods=["GET"])
+@check_roles(UserRoles.Admin)
+@login_required
 def index():
     return jsonify({
         "version": "v1"
@@ -41,6 +33,8 @@ def index():
 
 
 @bp.route("/release/create", methods=["POST"])
+@check_roles(UserRoles.Admin)
+@login_required
 def create_release():
     res = {
         "status": "ok"
@@ -62,6 +56,8 @@ def create_release():
 
 
 @bp.route("/release/set_perpetual", methods=["POST"])
+@check_roles(UserRoles.Admin)
+@login_required
 def set_release_perpetual():
     res = {
         "status": "ok"
@@ -83,6 +79,8 @@ def set_release_perpetual():
 
 
 @bp.route("/release/set_state", methods=["POST"])
+@check_roles(UserRoles.Admin)
+@login_required
 def set_release_state():
     res = {
         "status": "ok"
@@ -104,6 +102,8 @@ def set_release_state():
 
 
 @bp.route("/release/set_dormant", methods=["POST"])
+@check_roles(UserRoles.Admin)
+@login_required
 def set_release_dormancy():
     res = {
         "status": "ok"
@@ -125,6 +125,8 @@ def set_release_dormancy():
 
 
 @bp.route("/group/create", methods=["POST"])
+@check_roles(UserRoles.Admin)
+@login_required
 def create_group():
     res = {
         "status": "ok"
@@ -146,6 +148,8 @@ def create_group():
 
 
 @bp.route("/group/update", methods=["POST"])
+@check_roles(UserRoles.Admin)
+@login_required
 def update_group():
     res = {
         "status": "ok"
@@ -167,6 +171,8 @@ def update_group():
 
 
 @bp.route("/group/delete", methods=["POST"])
+@check_roles(UserRoles.Admin)
+@login_required
 def delete_group():
     res = {
         "status": "ok"
@@ -188,6 +194,8 @@ def delete_group():
 
 
 @bp.route("/test/create", methods=["POST"])
+@check_roles(UserRoles.Admin)
+@login_required
 def create_test():
     res = {
         "status": "ok"
@@ -209,6 +217,8 @@ def create_test():
 
 
 @bp.route("/test/update", methods=["POST"])
+@check_roles(UserRoles.Admin)
+@login_required
 def update_test():
     res = {
         "status": "ok"
@@ -230,6 +240,8 @@ def update_test():
 
 
 @bp.route("/test/batch_move", methods=["POST"])
+@check_roles(UserRoles.Admin)
+@login_required
 def batch_move_tests():
     res = {
         "status": "ok"
@@ -251,6 +263,8 @@ def batch_move_tests():
 
 
 @bp.route("/test/delete", methods=["POST"])
+@check_roles(UserRoles.Admin)
+@login_required
 def delete_test():
     res = {
         "status": "ok"
