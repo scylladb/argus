@@ -1,4 +1,5 @@
 import logging
+from uuid import UUID
 from flask import (
     Blueprint,
     request,
@@ -275,6 +276,72 @@ def delete_test():
         res["response"] = {
             "deleted": result
         }
+    except Exception as exc:
+        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    return jsonify(res)
+
+
+@bp.route("/releases/get", methods=["GET"])
+@check_roles(UserRoles.Admin)
+@login_required
+def get_releases():
+    res = {
+        "status": "ok"
+    }
+    try:
+        releases = ReleaseManagerService().get_releases()
+        res["response"] = [dict(r.items()) for r in releases]
+    except Exception as exc:
+        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    return jsonify(res)
+
+
+@bp.route("/groups/get", methods=["GET"])
+@check_roles(UserRoles.Admin)
+@login_required
+def get_groups_for_release():
+    res = {
+        "status": "ok"
+    }
+    try:
+        release_id = request.args.get("releaseId")
+        if not release_id:
+            raise Exception("ReleaseId not provided in the request")
+        groups = ReleaseManagerService().get_groups(release_id=UUID(release_id))
+        res["response"] = [dict(g.items()) for g in groups]
+    except Exception as exc:
+        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    return jsonify(res)
+
+
+@bp.route("/tests/get", methods=["GET"])
+@check_roles(UserRoles.Admin)
+@login_required
+def get_tests_for_group():
+    res = {
+        "status": "ok"
+    }
+    try:
+        group_id = request.args.get("groupId")
+        if not group_id:
+            raise Exception("GroupId not provided in the request")
+        tests = ReleaseManagerService().get_tests(group_id=UUID(group_id))
+        res["response"] = [dict(t.items()) for t in tests]
     except Exception as exc:
         LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
         res["status"] = "error"

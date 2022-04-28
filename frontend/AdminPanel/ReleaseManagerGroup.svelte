@@ -47,7 +47,10 @@
         <button
             class="btn btn-light"
             title="Edit"
-            on:click={() => (editing = true)}
+            on:click={(e) => {
+                e.stopPropagation();
+                editing = true;
+            }}
         >
             <Fa icon={faEdit} />
         </button>
@@ -66,10 +69,10 @@
     </div>
 </div>
 
-<div class="position-fixed popup-group-editor" class:d-none={!editing}>
+<div class="position-fixed popup-group-editor" class:d-none={!editing}  on:click={(e) => e.stopPropagation()}>
     <div
         class="row justify-content-center align-items-center h-100"
-        on:click|self={() => {
+        on:mousedown|self={() => {
             editing = false;
         }}
     >
@@ -205,7 +208,6 @@
     }
 
     .group-delete-modal {
-        z-index: 1200;
         color: black;
     }
 </style>

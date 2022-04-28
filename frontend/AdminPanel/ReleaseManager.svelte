@@ -27,16 +27,18 @@
     const fetchReleases = async function () {
         try {
             fetching = true;
-            let apiResponse = await fetch("/api/v1/releases?all=true");
+            let apiResponse = await fetch("/admin/api/v1/releases/get");
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
-                releases = apiJson.response;
+                releases = apiJson.response.sort((a, b) =>
+                    a.name > b.name ? 1 : -1
+                );
                 if (releases.length > 0) {
                     if (!currentRelease?.id) {
                         currentRelease = releases[0];
                         currentReleaseId = currentRelease.id;
                     }
-                    fetchReleaseData(currentRelease.id);
+                    ;
                 }
             } else {
                 throw apiJson;
@@ -58,39 +60,43 @@
         }
     };
 
-    const fetchReleaseData = async function (id) {
-        currentReleaseData = undefined;
+    const fetchReleaseGroups = async function (release) {
+        let params = new URLSearchParams({
+            releaseId: release.id,
+        });
         try {
-            fetching = true;
-            let params = new URLSearchParams({
-                releaseId: id,
-            });
             let apiResponse = await fetch(
-                "/api/v1/release/planner/data?" + params,
-                {
-                    method: "GET",
-                }
+                "/admin/api/v1/groups/get?" + params.toString()
             );
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
-                currentReleaseData = apiJson.response ?? {};
+                return Promise.resolve(apiJson.response);
             } else {
-                throw apiJson;
+                return Promise.reject(new Error(apiJson.message));
             }
         } catch (error) {
-            if (error?.status === "error") {
-                sendMessage(
-                    "error",
-                    `Unable to fetch release data.\nMessage: ${error.response.arguments[0]}`
-                );
+            console.log(error);
+            return Promise.reject(error);
+        }
+    };
+
+    const fetchGroupTests = async function (group) {
+        let params = new URLSearchParams({
+            groupId: group.id,
+        });
+        try {
+            let apiResponse = await fetch(
+                "/admin/api/v1/tests/get?" + params.toString()
+            );
+            let apiJson = await apiResponse.json();
+            if (apiJson.status === "ok") {
+                return Promise.resolve(apiJson.response);
             } else {
-                sendMessage(
-                    "error",
-                    "A backend error occurred during release data fetch"
-                );
+                return Promise.reject(new Error(apiJson.message));
             }
-        } finally {
-            fetching = false;
+        } catch (error) {
+            console.log(error);
+            return Promise.reject(error);
         }
     };
 
@@ -132,11 +138,11 @@
         currentRelease = releases.find(
             (release) => release.id == currentReleaseId
         );
-        fetchReleaseData(currentRelease.id);
+        ;
     };
 
-    const handleGroupChange = function (id) {
-        currentGroup = id;
+    const handleGroupChange = function (group) {
+        currentGroup = group;
     };
 
     const handleGroupCreate = async function (e) {
@@ -146,18 +152,19 @@
             e.detail
         );
         if (result.status === "ok") {
-            fetchReleaseData(currentRelease.id);
+            currentRelease = currentRelease;
         }
     };
 
     const handleGroupUpdate = async function (e) {
         creatingGroup = false;
+
         let result = await apiMethodCall(
             "/admin/api/v1/group/update",
             e.detail
         );
         if (result.status === "ok") {
-            fetchReleaseData(currentRelease.id);
+            currentRelease = currentRelease;
         }
     };
 
@@ -168,7 +175,10 @@
             e.detail
         );
         if (result.status === "ok") {
-            fetchReleaseData(currentRelease.id);
+            if (e.detail.group_id == currentGroup?.id) {
+                currentGroup = undefined;
+            }
+            currentRelease = currentRelease;
         }
     };
 
@@ -183,7 +193,7 @@
             e.detail
         );
         if (result.status === "ok") {
-            fetchReleaseData(currentRelease.id);
+            currentGroup = currentGroup;
         }
     };
 
@@ -195,7 +205,7 @@
         creatingTest = false;
         let result = await apiMethodCall("/admin/api/v1/test/create", e.detail);
         if (result.status === "ok") {
-            fetchReleaseData(currentRelease.id);
+            currentGroup = currentGroup;
         }
     };
 
@@ -203,7 +213,7 @@
         creatingTest = false;
         let result = await apiMethodCall("/admin/api/v1/test/update", e.detail);
         if (result.status === "ok") {
-            fetchReleaseData(currentRelease.id);
+            currentGroup = currentGroup;
         }
     };
 
@@ -211,7 +221,7 @@
         creatingTest = false;
         let result = await apiMethodCall("/admin/api/v1/test/delete", e.detail);
         if (result.status === "ok") {
-            fetchReleaseData(currentRelease.id);
+            currentGroup = currentGroup;
         }
     };
 
@@ -357,114 +367,125 @@
     {#if fetching}
         <div class="row border-top mt-2">
             <div class="col">
-                <div class="text-center bg-white py-4">
-                    <span class="spinner-border" /> Loading...
+                <div class="d-flex align-items-center justify-content-center bg-white py-4">
+                    <span class="spinner-border spinner-border-sm" /> <span class="ms-2">Working...</span>
                 </div>
             </div>
         </div>
     {/if}
-    {#if currentRelease && currentReleaseData}
-        <div class="row border-top mt-2 manager-row">
-            <div class="col-5">
-                <div class="d-flex align-items-center my-2">
-                    <div class="fw-bold">Groups</div>
-                    <div class="ms-auto">
-                        <button
-                            class="ms-2 btn btn-sm btn-success"
-                            title="Create new"
-                            on:click={() => (creatingGroup = true)}
-                        >
-                            New Group
-                        </button>
-                        {#if creatingGroup}
-                            <GroupCreator
-                                releaseId={currentReleaseId}
-                                on:groupCreate={handleGroupCreate}
-                                on:groupCreateCancel={handleGroupCreateCancel}
-                            />
-                        {/if}
+    {#if currentRelease}
+        {#await fetchReleaseGroups(currentRelease)}
+            <row class="border-top mt-2">
+                <div class="col">
+                    <div class="text-muted text-center mt-4">
+                        <span class="spinner-border spinner-border-sm" /> Loading...
                     </div>
                 </div>
-                <ul class="list-group manager-list">
-                    {#each Object.values(currentReleaseData.groups) as group (group.id)}
-                        <li
-                            class="list-group-item d-flex"
-                            role="button"
-                            class:active={currentGroup == group.id}
-                            on:click={() => handleGroupChange(group.id)}
-                        >
-                            <ReleaseManagerGroup
-                                {group}
-                                groups={Object.values(
-                                    currentReleaseData.groups
-                                )}
-                                on:groupDelete={handleGroupDelete}
-                                on:groupUpdate={handleGroupUpdate}
-                            />
-                        </li>
-                    {/each}
-                </ul>
-            </div>
-            {#if currentGroup}
-                <div
-                    class="col-1 d-flex fs-1 align-items-top justify-content-center"
-                >
-                    <Fa icon={faAngleRight} />
-                </div>
-                <div class="col-5">
-                    <div class="d-flex align-items-center mb-2 my-2">
-                        <div class="fw-bold">Tests</div>
-                        <button
-                            class="ms-2 btn btn-sm btn-success"
-                            title="Batch move"
-                            on:click={() => (moving = true)}
-                            ><Fa icon={faDolly} /></button
-                        >
-                        {#if moving}
-                            <BatchTestMover
-                                groups={Object.values(
-                                    currentReleaseData.groups
-                                )}
-                                tests={currentReleaseData.tests_by_group[
-                                    currentReleaseData.groups[currentGroup].name
-                                ]}
-                                on:testsMoveCancel={handleTestsMoveCancel}
-                                on:testsMove={handleTestsMove}
-                            />
-                        {/if}
+            </row>
+        {:then releaseGroups}
+            <div class="row border-top mt-2 manager-row">
+                <div class="col-6">
+                    <div class="d-flex align-items-center my-2">
+                        <div class="fw-bold">Groups</div>
                         <div class="ms-auto">
                             <button
                                 class="ms-2 btn btn-sm btn-success"
                                 title="Create new"
-                                on:click={() => (creatingTest = true)}
-                                >New Test</button
+                                on:click={() => (creatingGroup = true)}
                             >
-                            {#if creatingTest}
-                                <TestCreator
-                                    groups={Object.values(
-                                        currentReleaseData.groups
-                                    )}
+                                New Group
+                            </button>
+                            {#if creatingGroup}
+                                <GroupCreator
                                     releaseId={currentReleaseId}
-                                    groupId={currentGroup}
-                                    on:testCreate={handleTestCreate}
-                                    on:testCreateCancel={handleTestCreateCancel}
+                                    on:groupCreate={handleGroupCreate}
+                                    on:groupCreateCancel={handleGroupCreateCancel}
                                 />
                             {/if}
                         </div>
                     </div>
                     <ul class="list-group manager-list">
-                        {#each currentReleaseData.tests_by_group[currentReleaseData.groups[currentGroup].name] ?? [] as test (test.id)}
-                            <ReleaseManagerTest
-                                {test}
-                                releaseData={currentReleaseData}
-                                on:testUpdate={handleTestUpdate}
-                                on:testDelete={handleTestDelete}
-                            />
+                        {#each releaseGroups.sort((a, b) => a.name > b.name ? 1 : -1) as group (group.id)}
+                            <li
+                                class="list-group-item d-flex"
+                                role="button"
+                                class:selected={currentGroup?.id == group.id}
+                                on:click={() => handleGroupChange(group)}
+                            >
+                                <ReleaseManagerGroup
+                                    {group}
+                                    groups={releaseGroups}
+                                    on:groupDelete={handleGroupDelete}
+                                    on:groupUpdate={handleGroupUpdate}
+                                />
+                            </li>
                         {/each}
                     </ul>
                 </div>
-            {/if}
-        </div>
+                {#if currentGroup}
+                    <div class="col-6">
+                        {#await fetchGroupTests(currentGroup)}
+                            <div class="text-center text-muted mt-4">
+                                <span class="spinner-border spinner-border-sm" /> Loading...
+                            </div>
+                        {:then groupTests}
+                            <div class="d-flex align-items-center mb-2 my-2">
+                                <div class="fw-bold">Tests</div>
+                                <button
+                                    class="ms-2 btn btn-sm btn-success"
+                                    title="Batch move"
+                                    on:click={() => (moving = true)}
+                                    ><Fa icon={faDolly} /></button
+                                >
+                                {#if moving}
+                                    <BatchTestMover
+                                        groups={releaseGroups}
+                                        tests={groupTests}
+                                        on:testsMoveCancel={handleTestsMoveCancel}
+                                        on:testsMove={handleTestsMove}
+                                    />
+                                {/if}
+                                <div class="ms-auto">
+                                    <button
+                                        class="ms-2 btn btn-sm btn-success"
+                                        title="Create new"
+                                        on:click={() => (creatingTest = true)}
+                                        >New Test</button
+                                    >
+                                    {#if creatingTest}
+                                        <TestCreator
+                                            groups={releaseGroups}
+                                            releaseId={currentReleaseId}
+                                            groupId={currentGroup.id}
+                                            on:testCreate={handleTestCreate}
+                                            on:testCreateCancel={handleTestCreateCancel}
+                                        />
+                                    {/if}
+                                </div>
+                            </div>
+                            <ul class="list-group manager-list">
+                                {#each groupTests.sort((a, b) => a.name > b.name ? 1 : -1) as test (test.id)}
+                                    <ReleaseManagerTest
+                                        {test}
+                                        groups={releaseGroups}
+                                        on:testUpdate={handleTestUpdate}
+                                        on:testDelete={handleTestDelete}
+                                    />
+                                {/each}
+                            </ul>
+                        {:catch error}
+                            <div class="text-muted text-center p-2">
+                                Error loading tests for group {currentGroup.pretty_name || currentGroup.name}: {error.message}
+                            </div>
+                        {/await}
+                    </div>
+                {/if}
+            </div>
+        {:catch error}
+            <div class="text-muted text-center p-2">
+                Error loading groups for release {currentRelease.name}: {error.message}
+            </div>
+        {/await}
     {/if}
 </div>
 
@@ -478,5 +499,9 @@
     .manager-row {
         min-height: 480px;
         max-height: 900px;
+    }
+
+    .selected {
+        background-color: rgb(95, 201, 81);
     }
 </style>
