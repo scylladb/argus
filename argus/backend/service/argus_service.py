@@ -448,6 +448,7 @@ class ArgusService:
                 if not run:
                     release_stats["groups"][test_group.name]["tests"][test.name] = {
                         "name": test.name,
+                        "test_id": test.id,
                         "status": "unknown",
                         "group": test_group.name,
                         "start_time": 0,
