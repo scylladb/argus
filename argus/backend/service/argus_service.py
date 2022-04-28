@@ -1051,16 +1051,18 @@ class ArgusService:
         release = ArgusRelease.get(id=release_id)
         release_comments = list(ReleasePlannerComment.filter(release=release.id).all())
         groups = ArgusReleaseGroup.filter(release_id=release.id).all()
-        groups_by_group_id = {str(group.id): dict(group.items()) for group in groups}
+        groups_by_group_id = {str(group.id): dict(group.items()) for group in groups if group.enabled}
         tests = ArgusReleaseGroupTest.filter(release_id=release.id).all()
-        tests = [dict(t.items()) for t in tests]
+        tests = [dict(t.items()) for t in tests if t.enabled]
         tests_by_group = {}
         for test in tests:
-            test["group_name"] = groups_by_group_id[str(test["group_id"])]["name"]
+            group = groups_by_group_id.get(str(test["group_id"]))
+            if not group:
+                continue
+            test["group_name"] = group["name"]
             test["pretty_group_name"] = groups_by_group_id[str(test["group_id"])]["pretty_name"]
             try:
-                comment = next(filter(lambda c: c.test == test["id"]
-                               and c.group == test["group_id"], release_comments))
+                comment = next(filter(lambda c: c.test == test["id"], release_comments))
             except StopIteration:
                 comment = None
             test["comment"] = comment.comment if comment else ""
