@@ -54,7 +54,7 @@ def get_github_oauth_token():
             "arguments": exc.args
         }
     res = jsonify(res)
-    res.cache_control.max_agGITHUB_ACCESS_TOKENe = 300
+    res.cache_control.max_age = 300
 
     return res
 
