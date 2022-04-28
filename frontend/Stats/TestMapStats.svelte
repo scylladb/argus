@@ -15,6 +15,7 @@
         TestInvestigationStatus,
         TestInvestigationStatusStrings,
         TestStatus,
+TestStatusChangeable,
     } from "../Common/TestStatus";
     import { titleCase } from "../Common/TextUtils";
     import { apiMethodCall } from "../Common/ApiUtils";
@@ -154,6 +155,7 @@
                 {#each Object.entries(filterTestsForGroup(groupName, group.tests ?? {})) as [testName, test] (`${groupName}/${testName}`)}
                     <div
                         class:status-block-active={test.start_time != 0}
+                        class:should-be-investigated={test?.investigation_status == TestInvestigationStatus.NOT_INVESTIGATED && test?.status == TestStatus.FAILED}
                         class="rounded bg-main status-block m-1 d-flex flex-column overflow-hidden shadow-sm"
                         on:click={() => {
                             handleTestClick(testName, test, groupName, group);
@@ -240,5 +242,10 @@
 
     .text-tiny {
         font-size: 0.6em;
+    }
+
+    .should-be-investigated {
+        box-sizing: content-box;
+        border: 3px solid #dc3545 !important;
     }
 </style>
