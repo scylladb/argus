@@ -341,7 +341,7 @@ class ArgusService:
 
     def get_groups(self):
         groups = list(ArgusReleaseGroup.all())
-        return sorted(groups, key=lambda g: g.name)
+        return sorted(groups, key=lambda g: g.pretty_name if g.pretty_name else g.name)
 
     def get_tests(self):
         return ArgusReleaseGroupTest.all()
