@@ -148,11 +148,11 @@
                     {#each scheduleData?.groups ?? [] as group}
                         <li class="list-group-item d-flex align-items-center">
                             <div>
-                                {releaseData.groups.find(
+                                {(releaseData.groups.find(
                                     (val) => val.id == group
-                                ).pretty_name || releaseData.groups.find(
+                                )?.pretty_name || releaseData.groups.find(
                                     (val) => val.id == group
-                                ).name}
+                                )?.name) ?? `[Deleted: ${group}]`}
                             </div>
                         </li>
                     {/each}
@@ -170,7 +170,7 @@
                         <li class="list-group-item d-flex align-items-center">
                             <div>{releaseData.tests.find(
                                 (val) => val.id == test
-                            ).name}</div>
+                            )?.name ?? `[Deleted: ${test}]`}</div>
                         </li>
                     {/each}
                 </ul>
