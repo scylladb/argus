@@ -6,12 +6,13 @@
         faTrash,
     } from "@fortawesome/free-solid-svg-icons";
     export let test;
-    export let releaseData;
+    export let groups;
     const dispatch = createEventDispatcher();
     let editing = false;
     let editedTest = Object.assign({}, test);
 
     const handleTestUpdate = function () {
+        editing = false;
         dispatch("testUpdate", {
             test_id: editedTest.id,
             name: editedTest.name,
@@ -24,6 +25,7 @@
     };
 
     const handleTestDelete = function () {
+        editing = false;
         dispatch("testDelete", {
             test_id: editedTest.id
         });
@@ -32,7 +34,13 @@
 
 <li class="list-group-item d-flex align-items-center">
     <div>
-        {test.name}
+        <div>
+            {test.name}
+            {#if test.pretty_name}
+                [{test.pretty_name}]
+            {/if}
+        </div>
+        <div class="text-muted text-small">{test.build_system_id}</div>
     </div>
     <div class="ms-auto">
         <button
@@ -58,7 +66,7 @@
 <div class="position-fixed popup-test-editor" class:d-none={!editing}>
     <div
         class="row justify-content-center align-items-center h-100"
-        on:click|self={() => {
+        on:mousedown|self={() => {
             editing = false;
         }}
     >
@@ -106,7 +114,7 @@
                     id=""
                     bind:value={editedTest.group_id}
                 >
-                    {#each Object.values(releaseData.groups) as group (group.id)}
+                    {#each groups as group (group.id)}
                         <option value={group.id}
                             >{group.pretty_name || group.name}</option
                         >
@@ -183,5 +191,9 @@
         width: 100%;
         height: 100%;
         z-index: 999;
+    }
+
+    .text-small {
+        font-size: 0.75em;
     }
 </style>

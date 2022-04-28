@@ -24,6 +24,15 @@ class ReleaseManagerService:
             "WHERE build_id = ? AND start_time = ?"
         )
 
+    def get_releases(self) -> list[ArgusRelease]:
+        return list(ArgusRelease.all())
+
+    def get_groups(self, release_id: UUID) -> list[ArgusReleaseGroup]:
+        return list(ArgusReleaseGroup.filter(release_id=release_id).all())
+
+    def get_tests(self, group_id: UUID) -> list[ArgusReleaseGroupTest]:
+        return list(ArgusReleaseGroupTest.filter(group_id=group_id).all())
+
     def create_release(self, release_name: str, pretty_name: str, perpetual: bool) -> ArgusRelease:
         try:
             release = ArgusRelease.get(name=release_name)
