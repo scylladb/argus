@@ -13,9 +13,9 @@ optional = true
 
 [tool.poetry.dependencies]
 python = "^3.10"
-pydantic = "1.8.2"
-PyYAML = "5.4.1"
-scylla-driver = "3.24.8"
+pydantic = "^1.8.2"
+PyYAML = "^5.4.1"
+scylla-driver = "^3.24.8"
 
 
 [tool.poetry.group.web-backend.dependencies]
