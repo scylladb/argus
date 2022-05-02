@@ -114,6 +114,16 @@ TestStatusChangeable,
         return allAssignees;
     };
 
+    const sortedGroups = function (groups) {
+        return Object
+            .values(groups)
+            .sort((lhs, rhs) => {
+                let lhsKey = lhs.pretty_name || lhs.name;
+                let rhsKey = rhs.pretty_name || rhs.name;
+                return lhsKey >= rhsKey ? 1 : -1;
+            });
+    }
+
     onMount(() => {
         if (stats.perpetual) {
             fetchGroupAssignees(releaseId);
@@ -127,11 +137,11 @@ TestStatusChangeable,
     });
 </script>
 
-{#each Object.entries(stats.groups) as [groupName, group] (groupName)}
+{#each sortedGroups(stats.groups) as group (group.group_id)}
     {#if !group.disabled}
         <div class="p-2 shadow mb-2 rounded bg-main">
             <h5 class="mb-2">
-                <div class="mb-2">{group.pretty_name || groupName}</div>
+                <div class="mb-2">{group.pretty_name || group.name}</div>
                 {#if Object.keys(assigneeList.groups).length > 0 && Object.keys(users).length > 0}
                     <div class="shadow-sm bg-main rounded d-inline-block p-2">
                         <div class="d-flex align-items-center">
@@ -152,13 +162,13 @@ TestStatusChangeable,
                 {/if}
             </h5>
             <div class="my-2 d-flex flex-wrap bg-lighter rounded shadow-sm">
-                {#each Object.entries(filterTestsForGroup(groupName, group.tests ?? {})) as [testName, test] (`${groupName}/${testName}`)}
+                {#each Object.entries(filterTestsForGroup(group.name, group.tests ?? {})) as [testName, test] (test.test_id)}
                     <div
                         class:status-block-active={test.start_time != 0}
                         class:should-be-investigated={test?.investigation_status == TestInvestigationStatus.NOT_INVESTIGATED && test?.status == TestStatus.FAILED}
                         class="rounded bg-main status-block m-1 d-flex flex-column overflow-hidden shadow-sm"
                         on:click={() => {
-                            handleTestClick(testName, test, groupName, group);
+                            handleTestClick(testName, test, group.name, group);
                         }}
                     >
                         <div
@@ -169,7 +179,7 @@ TestStatusChangeable,
                             {test.status == "unknown"
                                 ? "Not run"
                                 : titleCase(test.status)}
-                            {#if clickedTests[`${groupName}/${testName}`]}
+                            {#if clickedTests[`${group.name}/${testName}`]}
                                 <div class="text-tiny">Selected</div>
                             {/if}
                         </div>

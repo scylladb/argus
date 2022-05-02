@@ -343,6 +343,10 @@ class ArgusService:
         groups = list(ArgusReleaseGroup.all())
         return sorted(groups, key=lambda g: g.pretty_name if g.pretty_name else g.name)
 
+    def get_groups_for_release(self, release: ArgusRelease):
+        groups = ArgusReleaseGroup.filter(release_id=release.id).all()
+        return sorted(groups, key=lambda g: g.pretty_name if g.pretty_name else g.name)
+
     def get_tests(self):
         return ArgusReleaseGroupTest.all()
 
@@ -377,7 +381,7 @@ class ArgusService:
             }
             return response
         release_tests = ArgusReleaseGroupTest.filter(release_id=release.id).all()
-        release_groups = ArgusReleaseGroup.filter(release_id=release.id).all()
+        release_groups = self.get_groups_for_release(release=release)
         release_groups_by_id = {group.id: group for group in release_groups}
         tests_by_group = {}
         for test in release_tests:
@@ -396,7 +400,7 @@ class ArgusService:
             "lastInvestigationStatus": "unknown",
             "hasBugReport": False,
             "groups": {
-                group.name: dict(**group_stats_body, group_id=group.id, pretty_name=group.pretty_name) for group in release_groups
+                g.name: dict(**group_stats_body, group_id=g.id, pretty_name=g.pretty_name, name=g.name) for g in release_groups
             },
             "tests": {},
             "disabled": not release.enabled,
