@@ -11,6 +11,9 @@ packages = [{include = "argus"}]
 [tool.poetry.group.web-backend]
 optional = true
 
+[tool.poetry.group.docker-image]
+optional = true
+
 [tool.poetry.dependencies]
 python = "^3.10"
 pydantic = "^1.8.2"
@@ -29,6 +32,8 @@ uwsgi = "2.0.20"
 python-jenkins = "^1.7.0"
 python-slugify = "^6.1.1"
 
+[tool.poetry.group.docker-image.dependencies]
+supervisor = "^4.2.4"
 
 [tool.poetry.dev-dependencies]
 coverage = "5.5"

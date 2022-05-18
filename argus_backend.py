@@ -1,3 +1,5 @@
+import logging
+from pathlib import Path
 from datetime import datetime
 from flask import Flask
 from yaml import safe_load
@@ -9,11 +11,28 @@ from argus.backend.build_system_monitor import scan_jenkins_command
 from argus.backend.controller import auth
 
 setup_argus_logging()
+LOGGER = logging.getLogger(__name__)
+
+CONFIG_PATHS = [
+    Path("./config/argus_web.yaml"),
+    Path("argus_web.yaml"),
+]
+
+
+def locate_argus_web_config() -> Path:
+    for config in CONFIG_PATHS:
+        if config.exists():
+            return config
+        else:
+            LOGGER.debug("Tried %s as config, not found.", config)
+
+    raise Exception("Failed to locate web application config file!")
 
 
 def start_server(config=None) -> Flask:
     app = Flask(__name__, static_url_path="/s/", static_folder="public")
-    with open("argus_web.yaml", "rt", encoding="utf-8") as config_file:
+    config = locate_argus_web_config()
+    with config.open(mode="rt", encoding="utf-8") as config_file:
         config_mapping = safe_load(config_file.read())
     app.config.from_mapping(config_mapping)
     if config:

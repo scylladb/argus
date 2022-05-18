@@ -55,6 +55,7 @@ class FileConfig(BaseConfig):
         return self.as_dict.get("keyspace_name")
 
     DEFAULT_CONFIG_PATHS = (
+        "./config/argus.local.yaml",
         "argus.local.yaml",
         "argus.yaml",
         getenv("HOME") + "/.argus.yaml"
