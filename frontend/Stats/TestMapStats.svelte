@@ -165,6 +165,7 @@ TestStatusChangeable,
                 {#each Object.entries(filterTestsForGroup(group.name, group.tests ?? {})) as [testName, test] (test.test_id)}
                     <div
                         class:status-block-active={test.start_time != 0}
+                        class:investigating={test?.investigation_status == TestInvestigationStatus.IN_PROGRESS}
                         class:should-be-investigated={test?.investigation_status == TestInvestigationStatus.NOT_INVESTIGATED && test?.status == TestStatus.FAILED}
                         class="rounded bg-main status-block m-1 d-flex flex-column overflow-hidden shadow-sm"
                         on:click={() => {
@@ -238,6 +239,7 @@ TestStatusChangeable,
     .status-block {
         width: 178px;
         max-height: 160px;
+        box-sizing: border-box;
         cursor: pointer;
     }
 
@@ -255,7 +257,10 @@ TestStatusChangeable,
     }
 
     .should-be-investigated {
-        box-sizing: content-box;
         border: 3px solid #dc3545 !important;
+    }
+
+    .investigating {
+        border: 3px solid #ff9036 !important;
     }
 </style>
