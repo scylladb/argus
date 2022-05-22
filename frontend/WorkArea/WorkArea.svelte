@@ -1,13 +1,24 @@
 <script>
     import { onDestroy, onMount } from "svelte";
     import { stateEncoder, stateDecoder } from "../Common/StateManagement";
-    import { allReleases } from "../Stores/WorkspaceStore";
     import TestRunsPanel from "./TestRunsPanel.svelte";
     import RunRelease from "./RunRelease.svelte";
-    let testRuns = {};
+    let testRuns = [];
     let releases;
     let filterString = "";
-    $: releases = $allReleases;
+
+    const fetchReleases = async function() {
+        let res = await fetch("/api/v1/releases");
+        if (res.status != 200) {
+            return Promise.reject("API Error");
+        }
+        let json = await res.json();
+        if (json.status != "ok") {
+            return Promise.reject(json.exception);
+        }
+        releases = json.response;
+
+    };
 
     const isFiltered = function (name = "", filterString = "") {
         if (filterString == "") {
@@ -17,21 +28,16 @@
     };
 
     const onTestRunRequest = function (event) {
-        testRuns[event.detail.uuid] = {
-            test: event.detail.test,
-            release: event.detail.release,
-            group: event.detail.group,
-            build_system_id: event.detail.key,
-        };
+        if (testRuns.find(v => v == event.detail.testId)) return;
+        testRuns.push(event.detail.testId)
         testRuns = testRuns;
         let state = stateEncoder(testRuns);
         history.pushState({}, "", `?${state}`);
     };
 
     const onTestRunRemove = function (event) {
-        let id = event.detail.runId;
-        delete testRuns[id];
-        testRuns = testRuns;
+        let id = event.detail.testId;
+        testRuns = testRuns.filter(v => v != id);
         let state = stateEncoder(testRuns);
         history.pushState({}, "", `?${state}`);
     };
@@ -41,7 +47,7 @@
     });
 
     onDestroy(() => {
-        unsub();
+
     });
 </script>
 
@@ -57,7 +63,12 @@
             class="col-3 p-0 py-4 me-3 border rounded shadow-sm bg-white"
             id="run-sidebar"
         >
-            {#if releases}
+            {#await fetchReleases()}
+                <div class="d-flex align-items-center justify-content-center">
+                    <div class="spinner-border"></div>
+                    <div class="ms-2">Fetching releases...</div>
+                </div>
+            {:then}
                 <div class="p-2">
                     <input
                         class="form-control"
@@ -80,11 +91,11 @@
                         />
                     {/each}
                 </div>
-            {/if}
+            {/await}
         </div>
         <div class="col-8 p-2 border rounded shadow-sm bg-main">
             <TestRunsPanel
-                bind:test_runs={testRuns}
+                bind:testRuns={testRuns}
                 on:testRunRemove={onTestRunRemove}
                 workAreaAttached={true}
             />

@@ -38,6 +38,10 @@ module.exports = {
             import: './frontend/test-run-details.js',
             dependOn: 'globalAlert'
         },
+        testRunsStandalone: {
+            import: './frontend/test-runs-standalone.js',
+            dependOn: 'globalAlert'
+        },
         testRuns: {
             import: './frontend/test-runs-breakout.js',
             dependOn: 'globalAlert'

@@ -5,6 +5,7 @@ import json
 import re
 import os
 import hashlib
+import logging
 import datetime
 from types import NoneType
 from typing import Callable
@@ -41,6 +42,8 @@ from argus.db.models import (
     WebFileStorage,
 )
 from argus.backend.event_processors import EVENT_PROCESSORS
+
+LOGGER = logging.getLogger(__name__)
 
 
 def first(iterable, value, key: Callable = None, predicate: Callable = None):
@@ -91,7 +94,7 @@ class ArgusService:
         self.runs_by_build_system_id = self.database.prepare(
             "SELECT id, test_id, group_id, release_id, build_job_url, build_id, "
             "status, start_time, end_time, heartbeat "
-            f"FROM {TestRun.table_name()} WHERE build_id = ?"
+            f"FROM {TestRun.table_name()} WHERE build_id = ? LIMIT ?"
         )
         self.jobs_by_assignee = self.database.prepare(
             "SELECT id, status, start_time, assignee, release_id, "
@@ -339,16 +342,26 @@ class ArgusService:
         releases = sorted(releases, key=lambda r: r.dormant)
         return releases
 
-    def get_groups(self):
-        groups = list(ArgusReleaseGroup.all())
+    def get_groups(self, release_id: UUID) -> list[ArgusReleaseGroup]:
+        groups = list(ArgusReleaseGroup.filter(release_id=release_id).all())
         return sorted(groups, key=lambda g: g.pretty_name if g.pretty_name else g.name)
 
     def get_groups_for_release(self, release: ArgusRelease):
         groups = ArgusReleaseGroup.filter(release_id=release.id).all()
         return sorted(groups, key=lambda g: g.pretty_name if g.pretty_name else g.name)
 
-    def get_tests(self):
-        return ArgusReleaseGroupTest.all()
+    def get_tests(self, group_id: UUID) -> list[ArgusReleaseGroupTest]:
+        return list(ArgusReleaseGroupTest.filter(group_id=group_id).all())
+
+    def get_test_info(self, test_id: UUID) -> dict:
+        test = ArgusReleaseGroupTest.get(id=test_id)
+        group = ArgusReleaseGroup.get(id=test.group_id)
+        release = ArgusRelease.get(id=test.release_id)
+        return {
+            "test": dict(test.items()),
+            "group": dict(group.items()),
+            "release": dict(release.items()),
+        }
 
     def get_data_for_release_dashboard(self, release_name: str):
         release = ArgusRelease.get(name=release_name)
@@ -357,25 +370,34 @@ class ArgusService:
 
         return release, release_groups, release_tests
 
-    def poll_test_runs(self, runs: list[str], limit: int = 10):
-        response = {}
-        for build_system_id in runs:
-            rows = self.session.execute(
-                self.runs_by_build_system_id,
-                parameters=(build_system_id,),
-                execution_profile="read_fast"
-            ).all()
-            rows = sorted(rows, key=lambda val: val["start_time"], reverse=True)
-            for row in rows:
-                try:
-                    row["build_number"] = int(
-                        row["build_job_url"].rstrip("/").split("/")[-1])
-                except ValueError:
-                    row["build_number"] = -1
+    def poll_test_runs(self, test_id: UUID, additional_runs: list[UUID], limit: int = 10):
+        test: ArgusReleaseGroupTest = ArgusReleaseGroupTest.get(id=test_id)
 
-            result = rows[:limit]
-            response[build_system_id] = result
-        return response
+        rows = self.session.execute(
+            self.runs_by_build_system_id,
+            parameters=(test.build_system_id, limit),
+            execution_profile="read_fast"
+        ).all()
+
+        rows_ids = [row["id"] for row in rows]
+
+        for run_id in additional_runs:
+            if run_id not in rows_ids:
+                row = self.session.execute(
+                    self.runs_by_id_stmt,
+                    parameters=(UUID(run_id),),
+                    execution_profile="read_fast"
+                ).one()
+                rows.append(row)
+
+        for row in rows:
+            try:
+                row["build_number"] = int(
+                    row["build_job_url"].rstrip("/").split("/")[-1])
+            except ValueError:
+                row["build_number"] = -1
+
+        return rows
 
     def poll_test_runs_single(self, runs: list[UUID]):
         rows = []

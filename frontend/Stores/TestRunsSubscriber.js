@@ -13,7 +13,7 @@ export const polledRuns = writable({}, set => {
     return () => clearInterval(interval);
 });
 
-let runCollection = {};
+let runCollection = [];
 let fetching = false;
 runStore.subscribe((val) => {
     runCollection = val;
@@ -45,9 +45,13 @@ const pollTestRuns = function (set) {
     fetching = true;
     let params = new URLSearchParams({
         limit: 10,
-        runs: runCollection
-    })
-    fetch("/api/v1/test_runs/poll?" + params)
+    }).toString();
+    let runs = runCollection.map(val => {
+        let [buildId, additionalIds] = val;
+        let idsQs = additionalIds.map(val => `additionalRuns${buildId}[]=${val}`);
+        return [`runs[]=${buildId}`, ...idsQs].join("&");
+    }).join("&");
+    fetch("/api/v1/test_runs/poll?" + params + "&" + runs)
         .then((res) => {
             if (res.status == 200) {
                 return res.json();

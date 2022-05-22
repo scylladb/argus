@@ -18,15 +18,7 @@
     export let releaseName = "";
     let encodedState = "state=e30";
     $: encodedState = stateEncoder(
-        Object.values(tests).reduce((acc, val) => {
-            acc[`${releaseName}/${val.group}/${val.name}`] = {
-                test: val.name,
-                group: val.group,
-                release: releaseName,
-                build_system_id: val.build_system_id
-            };
-            return acc;
-        }, {})
+        Object.values(tests).map(v => v.id)
     );
 
     const dispatch = createEventDispatcher();

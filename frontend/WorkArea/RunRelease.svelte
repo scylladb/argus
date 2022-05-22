@@ -1,6 +1,5 @@
 <script>
     import { onDestroy, onMount } from "svelte";
-    import { allGroups } from "../Stores/WorkspaceStore";
     import NumberStats from "../Stats/NumberStats.svelte";
     import { apiMethodCall } from "../Common/ApiUtils";
     import RunGroup from "./RunGroup.svelte";
@@ -10,19 +9,12 @@
         pretty_name: "undefined",
     };
     export let filtered = false;
-    export let runs = {};
+    export let runs = [];
     let releaseStats;
     let releaseStatsRefreshInterval;
 
     let releaseClicked = false;
     let releaseGroups = [];
-
-    const unsub = allGroups.subscribe((groups) => {
-        if (!groups) return;
-        releaseGroups = groups.filter(
-            (group) => group.release_id == release.id
-        );
-    });
 
     let filterString = "";
     let assigneeList = {};
@@ -39,7 +31,10 @@
     };
 
     const handleReleaseClick = async function (e) {
-        if (releaseClicked) return;
+        releaseClicked = !releaseClicked;
+    };
+
+    const fetchGroupAssignees = async function () {
         let params = new URLSearchParams({
             releaseId: release.id,
         });
@@ -50,8 +45,24 @@
         );
         if (result.status === "ok") {
             assigneeList = result.response;
-            releaseClicked = true;
         }
+    };
+
+    const fetchGroups = async function () {
+        let params = new URLSearchParams({
+            releaseId: release.id,
+        });
+
+        let res = await fetch("/api/v1/groups?" + params);
+        if (res.status != 200) {
+            return Promise.reject("API Error");
+        }
+        let json = await res.json();
+        if (json.status != "ok") {
+            return Promise.reject(json.exception);
+        }
+        releaseGroups = json.response;
+        fetchGroupAssignees();
     };
 
     const fetchStats = async function () {
@@ -69,7 +80,6 @@
     };
 
     onMount(() => {
-
         releaseStatsRefreshInterval = setInterval(() => {
             fetchStats();
         }, 60 * 1000);
@@ -79,7 +89,6 @@
         if (releaseStatsRefreshInterval) {
             clearInterval(releaseStatsRefreshInterval);
         }
-        unsub();
     });
 </script>
 
@@ -138,25 +147,31 @@
                 class="accordion accordion-flush accordion-release-groups border-start bg-white"
                 id="accordionGroups{removeDots(release.name)}"
             >
-                {#each releaseGroups ?? [] as group (group.id)}
-                    <RunGroup
-                        release={release.name}
-                        {group}
-                        filtered={isFiltered(group.pretty_name || group.name)}
-                        parent="#accordionGroups{release.name}"
-                        assigneeList={assigneeList?.[group.id] ?? []}
-                        groupStats={releaseStats?.groups?.[group.id]}
-                        bind:runs
-                        on:testRunRequest
-                        on:testRunRemove
-                    />
-                {:else}
+            {#if releaseClicked}
+                {#await fetchGroups()}
                     <div class="row">
                         <div class="col text-center p-1">
-                            <span class="spinner-border spinner-border-sm" /> Loading...
+                            <span class="spinner-border spinner-border-sm" /> Getting groups...
                         </div>
                     </div>
-                {/each}
+                {:then}
+                    {#each releaseGroups ?? [] as group (group.id)}
+                        <RunGroup
+                            release={release.name}
+                            {group}
+                            filtered={isFiltered(group.pretty_name || group.name)}
+                            parent="#accordionGroups{release.name}"
+                            assigneeList={assigneeList?.[group.id] ?? []}
+                            groupStats={releaseStats?.groups?.[group.id]}
+                            bind:runs
+                            on:testRunRequest
+                            on:testRunRemove
+                        />
+                    {:else}
+                        <div>No groups defined for this release!</div>
+                    {/each}
+                {/await}
+            {/if}
             </div>
         </div>
     </div>
