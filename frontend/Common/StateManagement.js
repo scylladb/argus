@@ -13,5 +13,5 @@ export const stateDecoder = function () {
         let decodedState = JSON.parse(Base64.decode(state));
         return decodedState;
     }
-    return {};
+    return [];
 }

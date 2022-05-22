@@ -38,6 +38,7 @@
     import Event from "./Event.svelte";
     export let id = "";
     export let build_number = -1;
+    export let testInfo = {};
     const dispatch = createEventDispatcher();
     let test_run = undefined;
     let heartbeatHuman = "";
@@ -105,21 +106,6 @@
         test_run = data[id] ?? test_run;
     });
 
-
-    const findRelease = function(releases) {
-        if (!releases) return;
-        return releases.find(release => release.id == test_run.release_id);
-    };
-
-    const findGroup = function(groups) {
-        if (!groups) return;
-        return groups.find(group => group.id == test_run.group_id);
-    };
-
-    const findTest = function(tests) {
-        if (!tests) return;
-        return tests.find(test => test.id == test_run.test_id);
-    };
     const findAssignee = function (test_run, userSelect) {
         const placeholder = {
             value: "unassigned",
@@ -329,7 +315,7 @@
     <div class="d-flex px-2 py-2 mb-1 border-bottom bg-white ">
         <div class="p-1">
             {#if test_run}
-                <a class="link-dark" href="/test_run/{id}">
+                <a class="link-dark" href="/test/{test_run.test_id}/runs?additionalRuns[]={test_run.id}">
                     {test_run.build_id}#{build_number}
                 </a>
             {/if}
@@ -564,7 +550,7 @@
                     id="nav-details-{id}"
                     role="tabpanel"
                 >
-                    <TestRunInfo {test_run} release={findRelease(releases)} group={findGroup(groups)} test={findTest(tests)}/>
+                    <TestRunInfo {test_run} release={testInfo.release} group={testInfo.group} test={testInfo.test}/>
                 </div>
                 <div
                     class="tab-pane fade"
@@ -670,11 +656,11 @@
                     role="tabpanel"
                 >
                     {#if commentsOpen}
-                        <TestRunComments {id} releaseName={findRelease(releases)?.name} assignee={test_run.assignee} starter={test_run.started_by}/>
+                        <TestRunComments {id} releaseName={testInfo.release.name} assignee={test_run.assignee} starter={test_run.started_by}/>
                     {/if}
                 </div>
                 <div class="tab-pane fade" id="nav-issues-{id}" role="tabpanel">
-                    <IssueTemplate {test_run} test={findTest(tests)} />
+                    <IssueTemplate {test_run} test={testInfo.test} />
                     {#if issuesOpen}
                         <GithubIssues {id} />
                     {/if}

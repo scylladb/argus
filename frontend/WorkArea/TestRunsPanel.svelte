@@ -1,10 +1,10 @@
 <script>
     import { stateEncoder } from "../Common/StateManagement";
     import TestRuns from "./TestRuns.svelte";
-    export let test_runs = {};
+    export let testRuns = [];
     export let workAreaAttached = false;
     let serializedState = "";
-    $: serializedState = stateEncoder(test_runs);
+    $: serializedState = stateEncoder(testRuns);
     let filterStringRuns = "";
     const isFiltered = function(name = "", filterString = "") {
         if (filterString == "") {
@@ -14,17 +14,17 @@
     };
 </script>
 
-{#if Object.keys(test_runs).length > 0}
+{#if Object.keys(testRuns).length > 0}
 <div class="p-2 mb-1 text-end"><a href="/test_runs?{serializedState}" class="btn btn-secondary btn-sm">Share</a></div>
 <div class="p-2">
-    <input class="form-control" type="text" placeholder="Filter runs" bind:value={filterStringRuns} on:input={() => { test_runs = test_runs }}>
+    <input class="form-control" type="text" placeholder="Filter runs" bind:value={filterStringRuns} on:input={() => { testRuns = testRuns }}>
 </div>
 <div class="accordion mb-2" id="accordionTestRuns">
-    {#each Object.entries(test_runs).reverse() as [id, data] (id)}
+    {#each testRuns as testId (testId)}
         <TestRuns
-            {data}
+            {testId}
             parent="#accordionTestRuns"
-            filtered={isFiltered(data.test, filterStringRuns)}
+            filtered={isFiltered(testId, filterStringRuns)}
             removableRuns={workAreaAttached}
             on:testRunRemove
         />

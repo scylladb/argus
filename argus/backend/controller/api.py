@@ -1,10 +1,8 @@
-import json
 import logging
 from uuid import UUID
 from flask import (
     Blueprint,
     g,
-    make_response,
     request
 )
 from flask.json import jsonify
@@ -12,7 +10,7 @@ from argus.backend.controller.notification_api import bp as notifications_bp
 from argus.backend.service.argus_service import ArgusService
 from argus.backend.controller.auth import login_required
 from argus.backend.service.stats import ReleaseStatsCollector
-from argus.db.models import UserOauthToken
+from argus.db.models import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, UserOauthToken
 
 # pylint: disable=broad-except
 
@@ -333,9 +331,13 @@ def groups():
         "status": "ok"
     }
     try:
+        release_id = request.args.get("releaseId")
+        if not release_id:
+            raise Exception("No releaseId provided")
+
         force_all = request.args.get("all", False)
         service = ArgusService()
-        groups = service.get_groups()
+        groups = service.get_groups(UUID(release_id))
         res["response"] = [dict(g.items()) for g in groups if g.enabled or force_all]
     except Exception as exc:
         LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
@@ -356,9 +358,12 @@ def tests():
         "status": "ok"
     }
     try:
+        group_id = request.args.get("groupId")
+        if not group_id:
+            raise Exception("No groupId provided")
         force_all = request.args.get("all", False)
         service = ArgusService()
-        tests = service.get_tests()
+        tests = service.get_tests(group_id=group_id)
         res["response"] = [dict(t.items()) for t in tests if t.enabled or force_all]
     except Exception as exc:
         LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
@@ -367,6 +372,95 @@ def tests():
             "exception": exc.__class__.__name__,
             "arguments": exc.args
         }
+    response = jsonify(res)
+    response.cache_control.max_age = 60
+    return response
+
+
+@bp.route("/release/<string:release_id>/details", methods=["GET"])
+@login_required
+def get_release_details(release_id: str):
+    res = {
+        "status": "ok"
+    }
+    try:
+        release = ArgusRelease.get(id=UUID(release_id))
+        res["response"] = dict(release.items())
+    except Exception as exc:
+        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    response = jsonify(res)
+    response.cache_control.max_age = 60
+    return response
+
+
+@bp.route("/group/<string:group_id>/details", methods=["GET"])
+@login_required
+def get_group_details(group_id: str):
+    res = {
+        "status": "ok"
+    }
+    try:
+        group = ArgusReleaseGroup.get(id=UUID(group_id))
+        res["response"] = dict(group.items())
+    except Exception as exc:
+        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    response = jsonify(res)
+    response.cache_control.max_age = 60
+    return response
+
+
+@bp.route("/test/<string:test_id>/details", methods=["GET"])
+@login_required
+def get_test_details(test_id: str):
+    res = {
+        "status": "ok"
+    }
+    try:
+        test = ArgusReleaseGroupTest.get(id=UUID(test_id))
+        res["response"] = dict(test.items())
+    except Exception as exc:
+        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    response = jsonify(res)
+    response.cache_control.max_age = 60
+    return response
+
+
+@bp.route("/test-info", methods=["GET"])
+@login_required
+def test_info():
+    res = {
+        "status": "ok"
+    }
+    try:
+        test_id = request.args.get("testId")
+        if not test_id:
+            raise Exception("No testId provided")
+        service = ArgusService()
+        info = service.get_test_info(test_id=UUID(test_id))
+        res["response"] = info
+    except Exception as exc:
+        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+
     response = jsonify(res)
     response.cache_control.max_age = 60
     return response
@@ -568,10 +662,10 @@ def test_runs_poll():
             limit = 10
         else:
             limit = int(limit)
-        runs = request.args.get('runs')
-        runs = runs.split(',')
+        test_id = UUID(request.args.get('testId'))
+        additional_runs = [UUID(run) for run in request.args.getlist('additionalRuns[]')]
         service = ArgusService()
-        res["response"] = service.poll_test_runs(runs=runs, limit=limit)
+        res["response"] = service.poll_test_runs(test_id=test_id, additional_runs=additional_runs, limit=limit)
     except Exception as exc:
         LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
         res["status"] = "error"

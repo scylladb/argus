@@ -1,5 +1,4 @@
 <script>
-    import { allTests } from "../Stores/WorkspaceStore";
     import { StatusSortPriority } from "../Common/TestStatus";
     import { apiMethodCall } from "../Common/ApiUtils";
     import NumberStats from "../Stats/NumberStats.svelte";
@@ -14,18 +13,16 @@
     };
     export let filtered = false;
     export let assigneeList = [];
-    export let runs = {};
+    export let runs = [];
     export let groupStats;
 
     let groupClicked = false;
     let testAssignees = {};
     let tests = [];
-    let clickedGroups = {};
-    let testsReady = false;
 
-    const sortTestsByStatus = function () {
+    const sortTestsByStatus = function (tests) {
         if (tests.length == 0 || !groupStats) return;
-        tests = tests.sort((a, b) => {
+        return tests.sort((a, b) => {
             let leftStatus =
                 StatusSortPriority?.[groupStats?.tests?.[a.id]?.status] ??
                 StatusSortPriority["none"];
@@ -42,6 +39,38 @@
         });
     };
 
+    const fetchTests = async function () {
+        let params = new URLSearchParams({
+            groupId: group.id
+        });
+        let res = await fetch("/api/v1/tests?" + params);
+        if (res.status != 200) {
+            return Promise.reject("API Error");
+        }
+        let json = await res.json();
+        if (json.status != "ok") {
+            return Promise.reject(json.exception);
+        }
+        tests = sortTestsByStatus(json.response);
+        fetchTestAssignees();
+    }
+
+    const fetchTestAssignees = async function () {
+        let params = new URLSearchParams({
+            groupId: group.id,
+        });
+
+        let result = await apiMethodCall(
+            "/api/v1/release/assignees/tests?" + params,
+            undefined,
+            "GET"
+        );
+
+        if (result.status === "ok") {
+            testAssignees = result.response;
+        }
+    };
+
     let filterString = "";
     const isFiltered = function (name = "") {
         if (filterString == "") {
@@ -50,28 +79,8 @@
         return !RegExp(filterString.toLowerCase()).test(name.toLowerCase());
     };
 
-    allTests.subscribe((val) => {
-        if (!val) return;
-        tests = val.filter((test) => test.group_id == group.id);
-        clickedGroups[group.name] = true;
-        sortTestsByStatus();
-        testsReady = true;
-    });
-
     const handleGroupClick = async function (e) {
-        if (groupClicked) return;
-        let params = new URLSearchParams({
-            groupId: group.id,
-        });
-        let result = await apiMethodCall(
-            "/api/v1/release/assignees/tests?" + params,
-            undefined,
-            "GET"
-        );
-        if (result.status === "ok") {
-            testAssignees = result.response;
-            groupClicked = true;
-        }
+        groupClicked = !groupClicked;
     };
 
     const removeDots = function (str) {
@@ -79,7 +88,7 @@
     };
 
     onMount(() => {
-        sortTestsByStatus();
+
     });
 </script>
 
@@ -118,7 +127,14 @@
         class="accordion-collapse collapse"
         id="collapse{removeDots(`${release}_${group.name}`)}"
     >
-        {#if testsReady}
+    {#if groupClicked}
+        {#await fetchTests()}
+            <div class="row">
+                <div class="col text-center p-1">
+                    <span class="spinner-border spinner-border-sm" /> Loading...
+                </div>
+            </div>
+        {:then}
             <div class="p-2 border-bottom">
                 <input
                     class="form-control"
@@ -136,10 +152,8 @@
                 >
                     {#each tests as test (test.id)}
                         <Test
-                            {release}
                             {test}
                             filtered={isFiltered(test.name)}
-                            group={group.name}
                             assigneeList={testAssignees?.[test.id] ?? []}
                             testStats={groupStats?.tests?.[test.id]}
                             bind:runs
@@ -155,13 +169,8 @@
                     {/each}
                 </ul>
             </div>
-        {:else}
-            <div class="row">
-                <div class="col text-center p-1">
-                    <span class="spinner-border spinner-border-sm" /> Loading...
-                </div>
-            </div>
-        {/if}
+        {/await}
+    {/if}
     </div>
 </div>
 

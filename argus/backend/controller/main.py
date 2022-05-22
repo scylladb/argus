@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 from flask import (
     Blueprint, flash, g, redirect, render_template, request, session, url_for, make_response
@@ -6,6 +7,8 @@ from argus.backend.controller.notifications import bp as notifications_bp
 from argus.backend.service.argus_service import ArgusService
 from argus.db.models import WebFileStorage
 from argus.backend.controller.auth import login_required
+
+LOGGER = logging.getLogger(__name__)
 
 bp = Blueprint('main', __name__)
 bp.register_blueprint(notifications_bp)
@@ -21,6 +24,13 @@ def test_runs():
 @login_required
 def test_run(run_id: UUID):
     return render_template("test_run.html.j2", id=run_id)
+
+
+@bp.route("/test/<string:test_id>/runs")
+@login_required
+def runs(test_id: UUID):
+    additional_runs = request.args.getlist("additionalRuns[]")
+    return render_template("standalone_test_with_runs.html.j2", test_id=test_id, additional_runs=additional_runs)
 
 
 @bp.route("/")

@@ -3,8 +3,6 @@
     import { StatusBackgroundCSSClassMap } from "../Common/TestStatus.js";
     import { timestampToISODate } from "../Common/DateUtils";
     import AssigneeList from "./AssigneeList.svelte";
-    export let release = "";
-    export let group = "";
     export let filtered = false;
     export let test = {
         assignee: [],
@@ -14,10 +12,10 @@
         name: "ERROR",
         pretty_name: null,
         release_id: null,
-        build_system_id: "",
+        id: "",
     };
     export let testStats;
-    export let runs = {};
+    export let runs = [];
     export let assigneeList = [];
     const dispatch = createEventDispatcher();
     let fetching = false;
@@ -28,18 +26,14 @@
 
 
     const handleTestClick = function (e) {
-        if (runs[`${release}/${group}/${test.name}`]) {
-            dispatch("testRunRemove", { runId: `${release}/${group}/${test.name}`});
+        if (runs.find(v => v == test.id)) {
+            dispatch("testRunRemove", { testId: test.id });
             return;
         }
         if (fetching) return;
         fetching = true;
         dispatch("testRunRequest", {
-            uuid: `${release}/${group}/${test.name}`,
-            key: test.build_system_id,
-            test: test.name,
-            group: group,
-            release: release
+            testId: test.id
         });
         fetching = false;
     };
@@ -47,8 +41,8 @@
 
 <li
     class:d-none={filtered}
-    class:active={runs[`${release}/${group}/${test.name}`]}
-    class:active-test-text={runs[`${release}/${group}/${test.name}`]}
+    class:active={runs.find(v => v == test.id)}
+    class:active-test-text={runs.find(v => v == test.id)}
     class="list-group-item argus-test"
     on:click={handleTestClick}
 >
@@ -72,8 +66,8 @@
                 </div>
                 {#if testStats?.start_time}
                 <div
-                    class:text-muted={!runs[`${release}/${test.name}`]}
-                    class:active-test-text-muted={runs[`${release}/${test.name}`]}
+                    class:text-muted={!runs.find(v => v == test.id)}
+                    class:active-test-text-muted={runs.find(v => v == test.id)}
                     style="font-size: 0.75em"
                 >
                     {timestampToISODate(testStats.start_time)}

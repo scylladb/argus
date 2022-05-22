@@ -1,0 +1,20 @@
+{% extends "base.html.j2" %}
+
+{% block title %}
+Test Run
+{% endblock %}
+
+{% block javascripts %}
+{{ super() }}
+<script>
+    const gTestId = "{{ test_id }}";
+    const additionalRuns = JSON.parse('{{ additional_runs | tojson | safe }}');
+</script>
+<script defer src="/s/dist/testRunsStandalone.bundle.js"></script>
+{% endblock javascripts %}
+
+{% block body %}
+<div class="container p-1" id="testRunBody">
+
+</div>
+{% endblock %}
