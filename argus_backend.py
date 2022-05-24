@@ -31,8 +31,8 @@ def locate_argus_web_config() -> Path:
 
 def start_server(config=None) -> Flask:
     app = Flask(__name__, static_url_path="/s/", static_folder="public")
-    config = locate_argus_web_config()
-    with config.open(mode="rt", encoding="utf-8") as config_file:
+    config_path = locate_argus_web_config()
+    with config_path.open(mode="rt", encoding="utf-8") as config_file:
         config_mapping = safe_load(config_file.read())
     app.config.from_mapping(config_mapping)
     if config:
