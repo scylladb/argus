@@ -67,6 +67,8 @@ class TestStatus(str, Enum):
     FAILED = "failed"
     PASSED = "passed"
     ABORTED = "aborted"
+    NOT_PLANNED = "not_planned"
+    NOT_RUN = "not_run"
 
 
 class TestInvestigationStatus(str, Enum):

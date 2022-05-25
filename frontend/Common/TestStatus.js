@@ -1,9 +1,12 @@
 export const TestStatus = {
-    CREATED: "created",
-    RUNNING: "running",
-    FAILED: "failed",
     PASSED: "passed",
+    FAILED: "failed",
+    RUNNING: "running",
+    CREATED: "created",
     ABORTED: "aborted",
+    NOT_RUN: "not_run",
+    NOT_PLANNED: "not_planned",
+    UNKNOWN: "unknown",
 };
 
 export const TestStatusChangeable = {
@@ -37,7 +40,9 @@ export const StatusBackgroundCSSClassMap = {
     "failed": "bg-danger",
     "passed": "bg-success",
     "aborted": "bg-dark",
-    "unknown": "bg-secondary"
+    "not_run": "bg-secondary",
+    "not_planned": "bg-not-planned",
+    "unknown": "bg-dark"
 };
 
 export const StatusCSSClassMap = {
@@ -46,6 +51,8 @@ export const StatusCSSClassMap = {
     "failed": "text-danger",
     "passed": "text-success",
     "aborted": "text-dark",
+    "not_run": "text-secondary",
+    "not_planned": "text-not-planned",
     "unknown": "text-muted"
 };
 
@@ -55,6 +62,8 @@ export const StatusButtonCSSClassMap = {
     "failed": "btn-danger",
     "passed": "btn-success",
     "aborted": "btn-dark",
+    "not_run": "btn-secondary",
+    "not_planned": "btn-muted",
     "unknown": "btn-muted"
 };
 
@@ -65,6 +74,8 @@ export const StatusSortPriority = {
     running: 3,
     created: 4,
     none: 5,
+    not_run: 5,
+    not_planned: 5,
     unknown: 5,
 };
 

@@ -29,3 +29,12 @@ export const determineLuma = function(col) {
     }
     return false;
 }
+
+/**
+ *
+ * @param {string} str
+ * @returns
+ */
+export const subUnderscores = function(str) {
+    return str.replace("_", " ");
+}

@@ -88,3 +88,11 @@ div#notificationCounter {
 .user-mention-self {
     background-color: #fff67b;
 }
+
+.bg-not-planned {
+    background-color: #b3b3b3;
+}
+
+.text-not-planned {
+    color: #b3b3b3;
+}

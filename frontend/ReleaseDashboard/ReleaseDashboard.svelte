@@ -1,28 +1,31 @@
 <script>
-    export let releaseData = {};
     import ReleaseStats from "../Stats/ReleaseStats.svelte";
     import ReleaseActivity from "./ReleaseActivity.svelte";
     import GithubIssues from "../Github/GithubIssues.svelte";
     import TestPopoutSelector from "./TestPopoutSelector.svelte";
     import { sendMessage } from "../Stores/AlertStore";
+    import TestDashboard from "./TestDashboard.svelte";
+    export let releaseData = {};
     let clickedTests = {};
 
     const handleTestClick = function (e) {
+        console.log(e);
         if (e.detail.start_time == 0) {
             sendMessage("info", `The test "${e.detail.name}" hasn't been run yet!"`);
             return;
         }
-        let key = `${e.detail.group}/${e.detail.name}`;
+        let key = e.detail.id;
         if (!clickedTests[key]) {
             clickedTests[key] = e.detail;
         } else {
             delete clickedTests[key];
             clickedTests = clickedTests;
         }
+        console.log(clickedTests);
     };
 
     const handleDeleteRequest = function(e) {
-        let key = `${e.detail.group}/${e.detail.name}`;
+        let key = e.detail.id;
         if (clickedTests[key]) {
             delete clickedTests[key];
             clickedTests = clickedTests;
@@ -68,12 +71,18 @@
         </div>
     </div>
     <div class="row mb-2">
-        <div class="col-xs-2 col-sm-6 col-md-7">
+        <div class="col">
             <ReleaseStats
                 releaseName={releaseData.release.name}
-                releaseId={releaseData.release.id}
-                showTestMap={true}
                 horizontal={false}
+            />
+        </div>
+    </div>
+    <div class="row mb-2">
+        <div class="col-xs-2 col-sm-6 col-md-7">
+            <TestDashboard
+                releaseName={releaseData.release.name}
+                releaseId={releaseData.release.id}
                 bind:clickedTests={clickedTests}
                 on:testClick={handleTestClick}
             />
