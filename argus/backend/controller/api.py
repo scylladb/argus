@@ -11,6 +11,7 @@ from flask.json import jsonify
 from argus.backend.controller.notification_api import bp as notifications_bp
 from argus.backend.service.argus_service import ArgusService
 from argus.backend.controller.auth import login_required
+from argus.backend.service.stats import ReleaseStatsCollector
 from argus.db.models import UserOauthToken
 
 # pylint: disable=broad-except
@@ -542,6 +543,31 @@ def release_stats():
         limited = bool(int(request.args.get("limited")))
         force = bool(int(request.args.get("force")))
         res["response"] = ArgusService().collect_stats(release, limited, force)
+    except Exception as exc:
+        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
+        LOGGER.error("Details: ", exc_info=True)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    res = jsonify(res)
+    res.cache_control.max_age = 60
+    return res
+
+
+@bp.route("/release/stats/v2", methods=["GET"])
+@login_required
+def release_stats_v2():
+    res = {
+        "status": "ok"
+    }
+    try:
+        request.query_string.decode(encoding="UTF-8")
+        release = request.args.get("release")
+        limited = bool(int(request.args.get("limited")))
+        force = bool(int(request.args.get("force")))
+        res["response"] = ReleaseStatsCollector(release_name=release).collect(limited=limited, force=force)
     except Exception as exc:
         LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
         LOGGER.error("Details: ", exc_info=True)

@@ -24,21 +24,6 @@ class UserRoles(str, Enum):
     Admin = "ROLE_ADMIN"
 
 
-class WebRunComment(UserType):
-    user_id = columns.UUID(required=True)
-    timestamp = columns.Integer(required=True)
-    message = columns.Text(min_length=1)
-    mentions = columns.List(value_type=columns.UUID, default=[])
-
-    def to_json(self):
-        return {
-            'user_id': self.user_id,
-            'timestamp': self.timestamp,
-            'message': self.message,
-            'mentions': self.mentions,
-        }
-
-
 class User(Model):
     id = columns.UUID(primary_key=True, default=uuid4)
     username = columns.Text(index=True)
@@ -179,13 +164,6 @@ class ArgusReleaseGroupTest(Model):
         return
 
 
-class ArgusPlannedTestsForRelease(Model):
-    id = columns.UUID(primary_key=True, default=uuid4, partition_key=True)
-    release_id = columns.UUID(required=True, index=True)
-    group_id = columns.UUID(required=True, index=True)
-    test_id = columns.UUID(required=True, index=True)
-
-
 class ArgusTestRunComment(Model):
     id = columns.UUID(primary_key=True, default=uuid4, partition_key=True)
     test_run_id = columns.UUID(required=True, index=True)
@@ -323,8 +301,8 @@ class ArgusReleaseScheduleAssignee(Model):
 
 
 class ArgusReleaseScheduleTest(Model):
-    __table_name__ = "argus_schedule_test_v3"
-    test_id = columns.UUID(partition_key=True, required=True)
+    __table_name__ = "argus_schedule_test_v5"
+    test_id = columns.UUID(primary_key=True, required=True)
     id = columns.TimeUUID(primary_key=True, default=uuid1,
                           clustering_order="DESC")
     schedule_id = columns.TimeUUID(required=True, index=True)
@@ -348,54 +326,17 @@ class ReleasePlannerComment(Model):
     comment = columns.Text(default=lambda: "")
 
 
-class WebRunComments(Model):
-    test_id = columns.UUID(primary_key=True, default=uuid4)
-    comments = columns.List(
-        value_type=UserDefinedType(WebRunComment), default=list)
-
-    def get_comments_by_user(self, user: User):
-        return [(idx, comment) for idx, comment in enumerate(self.comments) if comment.user_id == user.id]
-
-    def to_json(self):
-        return {
-            'test': self.test_id,
-            'comments': [comment.to_json() for comment in self.comments]  # pylint: disable=not-an-iterable
-        }
-
-
 class WebFileStorage(Model):
     id = columns.UUID(primary_key=True, default=uuid4)
     filepath = columns.Text(min_length=1)
     filename = columns.Text(min_length=1)
 
 
-class WebRelease(Model):
-    id = columns.UUID(primary_key=True, default=uuid4)
-    name = columns.Text(min_length=1)
-    pretty_name = columns.Text()
-    description = columns.Text()
-    picture_id = columns.UUID()
-
-
-class WebCategoryGroup(Model):
-    id = columns.UUID(primary_key=True, default=uuid4)
-    name = columns.Text(min_length=1)
-    pretty_name = columns.Text()
-    description = columns.Text()
-
-
-class WebNemesis(Model):
-    id = columns.UUID(primary_key=True, default=uuid4)
-    name = columns.Text(min_length=1)
-    pretty_name = columns.Text()
-    description = columns.Text()
-
-
 USED_MODELS = [
-    User, WebRunComments, WebRelease, WebCategoryGroup, WebNemesis,
-    ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, ArgusPlannedTestsForRelease,
-    ArgusTestRunComment, ArgusEvent, UserOauthToken,
+    User, UserOauthToken,
+    ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest,
+    ArgusTestRunComment, ArgusEvent,
     WebFileStorage, ArgusGithubIssue, ReleasePlannerComment, ArgusNotification,
     ArgusReleaseSchedule, ArgusReleaseScheduleAssignee, ArgusReleaseScheduleGroup, ArgusReleaseScheduleTest
 ]
-USED_TYPES = [WebRunComment]
+USED_TYPES = []

@@ -30,10 +30,9 @@
     );
 
     const dispatch = createEventDispatcher();
-    const handleTrashClick = function (name, group) {
+    const handleTrashClick = function (id) {
         dispatch("deleteRequest", {
-            name: name,
-            group: group,
+            id: id
         });
     };
 </script>
@@ -67,7 +66,7 @@
                             <button
                                 class="ms-1 btn btn-secondary btn-sm"
                                 title="Dismiss"
-                                on:click={() => handleTrashClick(test.name, test.group)}
+                                on:click={() => handleTrashClick(test.id)}
                                 ><Fa icon={faTimes} /></button
                             >
                         </div>
