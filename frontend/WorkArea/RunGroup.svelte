@@ -1,5 +1,4 @@
 <script>
-    import { stats } from "../Stores/StatsSubscriber";
     import { allTests } from "../Stores/WorkspaceStore";
     import { StatusSortPriority } from "../Common/TestStatus";
     import { apiMethodCall } from "../Common/ApiUtils";
@@ -16,33 +15,22 @@
     export let filtered = false;
     export let assigneeList = [];
     export let runs = {};
+    export let groupStats;
 
-    const groupStatsTemplate = {
-        created: 0,
-        running: 0,
-        passed: 0,
-        failed: 0,
-        total: -1,
-        lastStatus: "unknown",
-        tests: {},
-        dormant: true,
-    };
-    let groupStats = groupStatsTemplate;
     let groupClicked = false;
     let testAssignees = {};
     let tests = [];
-    let testStatus = {};
     let clickedGroups = {};
     let testsReady = false;
 
     const sortTestsByStatus = function () {
-        if (tests.length == 0) return;
+        if (tests.length == 0 || !groupStats) return;
         tests = tests.sort((a, b) => {
             let leftStatus =
-                StatusSortPriority?.[testStatus?.[a.name]?.status] ??
+                StatusSortPriority?.[groupStats?.tests?.[a.id]?.status] ??
                 StatusSortPriority["none"];
             let rightStatus =
-                StatusSortPriority?.[testStatus?.[b.name]?.status] ??
+                StatusSortPriority?.[groupStats?.tests?.[b.id]?.status] ??
                 StatusSortPriority["none"];
             if (leftStatus > rightStatus) {
                 return 1;
@@ -86,22 +74,12 @@
         }
     };
 
-    const normalize = function (val, minVal, maxVal, total) {
-        return ((val - minVal) / (maxVal - minVal)) * total;
-    };
-
     const removeDots = function (str) {
         return str.replaceAll(".", "_");
     };
 
     onMount(() => {
-        stats.subscribe((val) => {
-            groupStats =
-                val["releases"]?.[release]?.["groups"]?.[group.name] ??
-                groupStatsTemplate;
-            testStatus = groupStats["tests"];
-            sortTestsByStatus();
-        });
+        sortTestsByStatus();
     });
 </script>
 
@@ -113,12 +91,12 @@
             data-bs-target="#collapse{removeDots(`${release}_${group.name}`)}"
             on:click={handleGroupClick}
         >
-            <div class="container-fluid p-0 m-0">
-                <div class="row p-0 m-0">
-                    <div class="col-8">
-                        {group.pretty_name || group.name}
-                    </div>
-                    <div class="col-4 text-end">
+            <div class="d-flex flex-column w-100">
+                <div class="mb-1">
+                    {group.pretty_name || group.name}
+                </div>
+                <div class="d-flex">
+                    <div class="w-25">
                         {#if groupStats?.total > 0}
                             <NumberStats stats={groupStats} />
                         {:else if groupStats?.disabled ?? false}
@@ -129,9 +107,9 @@
                             <span class="spinner-border spinner-border-sm" />
                         {/if}
                     </div>
-                </div>
-                <div class="row p-0 m-0">
-                    <AssigneeList assignees={assigneeList} />
+                    <div class="ms-auto me-4">
+                        <AssigneeList assignees={assigneeList} />
+                    </div>
                 </div>
             </div>
         </button>
@@ -163,6 +141,7 @@
                             filtered={isFiltered(test.name)}
                             group={group.name}
                             assigneeList={testAssignees?.[test.id] ?? []}
+                            testStats={groupStats?.tests?.[test.id]}
                             bind:runs
                             on:testRunRequest
                             on:testRunRemove

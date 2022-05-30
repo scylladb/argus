@@ -127,6 +127,7 @@ class TestStats:
             "status": self.status,
             "investigation_status": self.investigation_status,
             "last_runs": self.last_runs,
+            "start_time": self.start_time,
             "hasBugReport": self.has_bug_report,
             "hasComments": self.has_comments
         }

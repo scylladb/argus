@@ -1,8 +1,7 @@
 <script>
     import Fa from "svelte-fa";
     import { faCircle } from "@fortawesome/free-solid-svg-icons";
-    import { createEventDispatcher, onMount } from "svelte";
-    import { stats, requestReleaseStats } from "../Stores/StatsSubscriber";
+    import { createEventDispatcher, onDestroy, onMount } from "svelte";
     import { getPicture } from "../Common/UserUtils";
     import { StatusCSSClassMap } from "../Common/TestStatus";
     import Schedule from "./Schedule.svelte";
@@ -14,12 +13,22 @@
     export let releaseData = {};
     export let clickedTests = {};
     let selectedSchedule = "";
-    let releaseStats = undefined;
+    let releaseStats;
+    let releaseStatsRefreshInterval;
 
-    stats.subscribe((val) => {
-        releaseStats = val["releases"]?.[releaseData.release.name] ?? {};
-    });
-    requestReleaseStats(releaseData.release.name, false, true);
+    const fetchStats = async function () {
+        let params = new URLSearchParams({
+            release: releaseData.release.name,
+            limited: new Number(false),
+            force: new Number(false),
+        });
+        let response = await fetch("/api/v1/release/stats/v2?" + params);
+        let json = await response.json();
+        if (json.status != "ok") {
+            return false;
+        }
+        releaseStats = json.response;
+    };
 
     let schedulesByTest = {};
     const dispatch = createEventDispatcher();
@@ -72,8 +81,16 @@
     $: sortSchedulesByTest(schedules);
 
     onMount(() => {
+        fetchStats();
+        releaseStatsRefreshInterval = setInterval(() => {
+            fetchStats();
+        }, 60 * 1000);
         sortSchedulesByTest(schedules);
     });
+
+    onDestroy(() => {
+        clearInterval(releaseStatsRefreshInterval);
+    })
 </script>
 
 <div class="my-2">
@@ -124,14 +141,14 @@
                                             <div
                                                 class={StatusCSSClassMap[
                                                     releaseStats?.["groups"]?.[
-                                                        groupName
-                                                    ]?.["tests"]?.[test.name]
+                                                        test.group_id
+                                                    ]?.["tests"]?.[test.id]
                                                         ?.status ?? "unknown"
                                                 ]}
                                                 title={releaseStats?.[
                                                     "groups"
-                                                ]?.[groupName]?.["tests"]?.[
-                                                    test.name
+                                                ]?.[test.group_id]?.["tests"]?.[
+                                                    test.id
                                                 ].status ?? "unknown / not run"}
                                             >
                                                 <Fa icon={faCircle} />

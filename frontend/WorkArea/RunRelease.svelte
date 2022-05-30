@@ -1,23 +1,22 @@
 <script>
     import { onDestroy, onMount } from "svelte";
     import { allGroups } from "../Stores/WorkspaceStore";
-    import {
-        stats,
-        requestReleaseStats,
-        removeReleaseRequest,
-    } from "../Stores/StatsSubscriber";
     import NumberStats from "../Stats/NumberStats.svelte";
     import { apiMethodCall } from "../Common/ApiUtils";
     import RunGroup from "./RunGroup.svelte";
+
     export let release = {
         name: "undefined",
         pretty_name: "undefined",
     };
     export let filtered = false;
     export let runs = {};
+    let releaseStats;
+    let releaseStatsRefreshInterval;
 
     let releaseClicked = false;
     let releaseGroups = [];
+
     const unsub = allGroups.subscribe((groups) => {
         if (!groups) return;
         releaseGroups = groups.filter(
@@ -25,20 +24,6 @@
         );
     });
 
-    const releaseStatsDefault = {
-        created: 0,
-        running: 0,
-        passed: 0,
-        failed: 0,
-        aborted: 0,
-        lastStatus: "unknown",
-        disabled: true,
-        groups: {},
-        tests: {},
-        total: -1,
-    };
-    let releaseStats = releaseStatsDefault;
-    let groupStats = {};
     let filterString = "";
     let assigneeList = {};
 
@@ -69,19 +54,31 @@
         }
     };
 
-    onMount(() => {
-        requestReleaseStats(release.name, true, false);
-        stats.subscribe((val) => {
-            releaseStats =
-                val["releases"]?.[release.name] ?? releaseStatsDefault;
-            groupStats =
-                val["releases"]?.[release.name]?.["groups"] ??
-                releaseStatsDefault;
+    const fetchStats = async function () {
+        let params = new URLSearchParams({
+            release: release.name,
+            limited: new Number(false),
+            force: new Number(false),
         });
+        let response = await fetch("/api/v1/release/stats/v2?" + params);
+        let json = await response.json();
+        if (json.status != "ok") {
+            return false;
+        }
+        releaseStats = json.response;
+    };
+
+    onMount(() => {
+
+        releaseStatsRefreshInterval = setInterval(() => {
+            fetchStats();
+        }, 60 * 1000);
     });
 
     onDestroy(() => {
-        removeReleaseRequest(release.name);
+        if (releaseStatsRefreshInterval) {
+            clearInterval(releaseStatsRefreshInterval);
+        }
         unsub();
     });
 </script>
@@ -94,26 +91,26 @@
             data-bs-toggle="collapse"
             data-bs-target="#collapse{removeDots(release.name)}"
             on:click={handleReleaseClick}
-            ><div class="container-fluid p-0 m-0">
-                <div class="row p-0 m-0">
-                    <div class="col-8">
+            >
+                <div class="d-flex flex-column">
+                    <div class="mb-1">
                         {release.pretty_name || release.name}
                     </div>
-                    <div class="col-4 text-end">
-                        {#if releaseStats?.total > 0}
-                            <NumberStats stats={releaseStats} />
-                        {:else if releaseStats?.total == -1}
-                            <span class="spinner-border spinner-border-sm" />
-                        {:else if releaseStats?.empty}
-                            <!-- svelte-ignore empty-block -->
-                        {:else if releaseStats?.dormant}
-                            <!-- svelte-ignore empty-block -->
-                        {:else}
-                            <!-- svelte-ignore empty-block -->
-                        {/if}
+                    <div>
+                        {#await fetchStats()}
+                            <span class="spinner-border spinner-border-sm" /> Loading stats.
+                        {:then}
+                            {#if releaseStats?.total > 0}
+                                <NumberStats stats={releaseStats} />
+                            {:else if releaseStats?.total == 0}
+                                <!-- svelte-ignore empty-block -->
+                            {/if}
+                        {:catch}
+                            <span>Error fetching stats.</span>
+                        {/await}
                     </div>
                 </div>
-            </div></button
+            </button
         >
     </h2>
     <div
@@ -148,6 +145,7 @@
                         filtered={isFiltered(group.pretty_name || group.name)}
                         parent="#accordionGroups{release.name}"
                         assigneeList={assigneeList?.[group.id] ?? []}
+                        groupStats={releaseStats?.groups?.[group.id]}
                         bind:runs
                         on:testRunRequest
                         on:testRunRemove
