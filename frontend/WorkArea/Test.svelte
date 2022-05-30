@@ -1,6 +1,5 @@
 <script>
     import { createEventDispatcher } from "svelte";
-    import { stats } from "../Stores/StatsSubscriber";
     import { StatusBackgroundCSSClassMap } from "../Common/TestStatus.js";
     import { timestampToISODate } from "../Common/DateUtils";
     import AssigneeList from "./AssigneeList.svelte";
@@ -17,14 +16,11 @@
         release_id: null,
         build_system_id: "",
     };
-    export let lastStatus = "unknown";
+    export let testStats;
     export let runs = {};
     export let assigneeList = [];
     const dispatch = createEventDispatcher();
-    let startTime;
     let fetching = false;
-    $: lastStatus = $stats?.["releases"]?.[release]?.["groups"]?.[group]?.["tests"]?.[test.name]?.["status"] ?? lastStatus;
-    $: startTime = $stats?.["releases"]?.[release]?.["groups"]?.[group]?.["tests"]?.[test.name]?.["start_time"] ?? startTime;
 
     const titleCase = function (string) {
         return string[0].toUpperCase() + string.slice(1).toLowerCase();
@@ -59,10 +55,10 @@
     <div class="container-fluid p-0 m-0">
         <div class="row p-0 m-0 align-items-center">
             <div class="col-1 text-center">
-                {#if lastStatus}
+                {#if testStats?.status}
                     <span
-                        title={titleCase(lastStatus)}
-                        class="cursor-question status-circle {StatusBackgroundCSSClassMap[lastStatus] ?? StatusBackgroundCSSClassMap["unknown"]}"
+                        title={titleCase(testStats?.status ?? "unknown")}
+                        class="cursor-question status-circle {StatusBackgroundCSSClassMap[testStats?.status] ?? StatusBackgroundCSSClassMap["unknown"]}"
                         ></span
                     >
                 {/if}
@@ -74,13 +70,13 @@
                         <AssigneeList assignees={assigneeList}/>
                     </div>
                 </div>
-                {#if startTime}
+                {#if testStats?.start_time}
                 <div
                     class:text-muted={!runs[`${release}/${test.name}`]}
                     class:active-test-text-muted={runs[`${release}/${test.name}`]}
                     style="font-size: 0.75em"
                 >
-                    {timestampToISODate(startTime)}
+                    {timestampToISODate(testStats.start_time)}
                 </div>
                 {/if}
             </div>

@@ -531,31 +531,6 @@ def user_info():
     return jsonify(res)
 
 
-@bp.route("/release/stats", methods=["GET"])
-@login_required
-def release_stats():
-    res = {
-        "status": "ok"
-    }
-    try:
-        request.query_string.decode(encoding="UTF-8")
-        release = request.args.get("release")
-        limited = bool(int(request.args.get("limited")))
-        force = bool(int(request.args.get("force")))
-        res["response"] = ArgusService().collect_stats(release, limited, force)
-    except Exception as exc:
-        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
-        LOGGER.error("Details: ", exc_info=True)
-        res["status"] = "error"
-        res["response"] = {
-            "exception": exc.__class__.__name__,
-            "arguments": exc.args
-        }
-    res = jsonify(res)
-    res.cache_control.max_age = 60
-    return res
-
-
 @bp.route("/release/stats/v2", methods=["GET"])
 @login_required
 def release_stats_v2():
