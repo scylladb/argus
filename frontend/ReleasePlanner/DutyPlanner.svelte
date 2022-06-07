@@ -1,12 +1,18 @@
 <script>
     import { onMount } from "svelte";
-    import * as chrono from "chrono-node";
     import Select from "svelte-select";
     import User from "../Profile/User.svelte";
     import ScheduleTable from "./ScheduleTable.svelte";
     import { userList } from "../Stores/UserlistSubscriber";
     import { sendMessage } from "../Stores/AlertStore";
-import { filterUser } from "../Common/SelectUtils";
+    import { filterUser } from "../Common/SelectUtils";
+    import {
+        startDate,
+        endDate,
+        timestampToISODate
+    } from "../Common/DateUtils";
+    import { faArrowAltCircleRight, faCalendar, faFlagCheckered } from "@fortawesome/free-solid-svg-icons";
+    import Fa from "svelte-fa";
     export let releaseData = {};
     export let schedules = [];
     let users = {};
@@ -24,28 +30,17 @@ import { filterUser } from "../Common/SelectUtils";
         tag: "",
     };
 
-    const generateNewScheduleDate = function(today = new Date()) {
-        let startingDay = chrono.parseDate("Last Friday at 00:00 UTC", new Date(today));
-        return startingDay;
-    }
-
-    const generateEndDate = function(startDate) {
-        let start = new Date(startDate);
-        let end = chrono.parseDate("Next Thursday at 23:59 UTC", start);
-        return end;
-    };
-
     const handleDateChange = function(value) {
-        newScheduleDate = generateNewScheduleDate(value);
-        newScheduleEndDate = generateEndDate(newScheduleDate);
+        newScheduleDate = startDate(releaseData.release, value)
+        newScheduleEndDate = endDate(releaseData.release, newScheduleDate);
 
-        newSchedule.start = new Date(newScheduleDate).toISOString().split(".").shift();
-        newSchedule.end = newScheduleEndDate.toISOString().split(".").shift();
+        newSchedule.start = timestampToISODate(newScheduleDate.getTime());
+        newSchedule.end =  timestampToISODate(newScheduleEndDate.getTime());
     }
 
     let newSchedule = Object.assign(PayloadTemplate);
-    let newScheduleDate = generateNewScheduleDate();
-    let newScheduleEndDate = generateEndDate(newScheduleDate);
+    let newScheduleDate = startDate(releaseData.release);
+    let newScheduleEndDate = endDate(releaseData.release, newScheduleDate);
 
     const fetchSchedules = async function () {
         try {
@@ -101,6 +96,7 @@ import { filterUser } from "../Common/SelectUtils";
                     `Unable to submit schedule.\nAPI Response: ${error.response.arguments[0]}`
                 );
             } else {
+                console.log(error);
                 sendMessage(
                     "error",
                     "A backend error occurred during schedule submission"
@@ -233,10 +229,7 @@ import { filterUser } from "../Common/SelectUtils";
         newSchedule = newSchedule;
     };
     const handleAssigneeSelect = function (e) {
-        newSchedule.assignees =
-            e.detail?.map((val) => {
-                return val.value;
-            }) ?? [];
+        newSchedule.assignees = [e.detail.value];
         newSchedule = newSchedule;
     };
 
@@ -248,7 +241,19 @@ import { filterUser } from "../Common/SelectUtils";
 <div class="container-fluid border rounded bg-white my-3 min-vh-100 shadow-sm">
     <div class="row">
         <div class="p-2 display-6">{releaseData.release.name}</div>
+        <div>
+            <a class="btn btn-primary" href="/release/{releaseData.release.name}/scheduler"><Fa icon={faCalendar}/> Test Planner</a>
+        </div>
     </div>
+    {#if !releaseData.release.perpetual}
+        <div class="row">
+            <div class="col p-2">
+                <div class="rounded p-2 border-warning border bg-warning bg-opacity-50">
+                    <b>Important:</b> Not supported for non-weekly schedules yet!
+                </div>
+            </div>
+        </div>
+    {/if}
     <div class="row">
         {#if Object.values(users).length > 0}
             <ScheduleTable
@@ -304,22 +309,22 @@ import { filterUser } from "../Common/SelectUtils";
                         </div>
                     </div>
                     <div class="me-3 w-25">
-                        <div class="mb-3 text-muted">
-                            Will start on {newScheduleDate.toLocaleDateString('en-CA', { timeZone: 'UTC' })}
+                        <div class="mb-1">Timing</div>
+                        <div class="mb-1 p-1 text-muted rounded shadow-sm d-inline-block">
+                            <Fa icon={faArrowAltCircleRight} /> Will start on {timestampToISODate(newScheduleDate.getTime())}
                         </div>
-                        <div class="mb-3 text-muted">
-                            Will end on {newScheduleEndDate.toLocaleDateString('en-CA', { timeZone: 'UTC' })}
+                        <div class="mb-1 p-1 text-muted rounded shadow-sm d-inline-block">
+                            <Fa icon={faFlagCheckered} /> Will end on {timestampToISODate(newScheduleEndDate.getTime())}
                         </div>
                     </div>
                     <div class="me-3 w-25">
                         <div class="mb-3">
-                            <div class="form-label">Assignees</div>
+                            <div class="form-label">Assignee</div>
                             <Select
                                 Item={User}
                                 items={prepareUsers(users)}
                                 itemFilter={filterUser}
-                                isMulti={true}
-                                placeholder="Select assignees"
+                                placeholder="Select assignee"
                                 on:select={handleAssigneeSelect}
                             />
                         </div>
