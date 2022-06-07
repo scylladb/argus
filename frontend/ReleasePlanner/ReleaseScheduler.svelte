@@ -2,41 +2,32 @@
     import { onMount } from "svelte";
     import Select from "svelte-select";
     import Fa from "svelte-fa";
-    import { faArrowDown } from "@fortawesome/free-solid-svg-icons";
+    import { faArrowAltCircleRight, faArrowDown, faCalendar, faFlagCheckered } from "@fortawesome/free-solid-svg-icons";
     import User from "../Profile/User.svelte";
     import ReleasePlanTable from "./ReleasePlanTable.svelte";
     import { userList } from "../Stores/UserlistSubscriber";
     import { sendMessage } from "../Stores/AlertStore";
-    import { timestampToISODate } from "../Common/DateUtils";
+    import {
+        startDate,
+        endDate,
+        timestampToISODate
+    } from "../Common/DateUtils";
     import { filterUser } from "../Common/SelectUtils";
     export let releaseData = {};
     export let schedules = [];
     let users = {};
     $: users = $userList;
     let selectedTests = [];
-    let selectedAssignees = [];
+    let selectedAssignee;
     let clickedTests = {};
     let plannerData = {};
-
-    const generateNewScheduleDate = function () {
-        let startOfMonth = new Date();
-        startOfMonth.setUTCDate(1);
-        return startOfMonth.toISOString().split("T").shift();
-    };
-
-    const generateEndDate = function () {
-        let endDate = new Date();
-        let endMonth = endDate.getMonth() + 8;
-        endDate.setMonth(endMonth);
-        return timestampToISODate(endDate);
-    };
 
     const PayloadTemplate = {
         releaseId: releaseData.release.id,
         groups: [],
         tests: [],
-        start: generateNewScheduleDate(),
-        end: generateEndDate(),
+        start: startDate(releaseData.release),
+        end: endDate(releaseData.release, startDate(releaseData.release)),
         assignees: [],
         tag: "",
     };
@@ -105,18 +96,22 @@
 
     const submitNewSchedule = async function () {
         try {
+            let payload = Object.assign({}, newSchedule);
+            payload.start = timestampToISODate(payload.start.getTime());
+            payload.end = timestampToISODate(payload.end.getTime());
+
             let apiResponse = await fetch("/api/v1/release/schedules/submit", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify(newSchedule),
+                body: JSON.stringify(payload),
             });
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
                 fetchSchedules();
                 handleTestsClear();
-                selectedAssignees = undefined;
+                selectedAssignee = undefined;
             } else {
                 throw apiJson;
             }
@@ -259,10 +254,7 @@
     };
 
     const handleAssigneeSelect = function (e) {
-        newSchedule.assignees =
-            e.detail?.map((val) => {
-                return val.value;
-            }) ?? [];
+        newSchedule.assignees = [e.detail.value];
         newSchedule = newSchedule;
     };
 
@@ -272,9 +264,12 @@
     });
 </script>
 
-<div class="container border rounded bg-white my-3 min-vh-100 shadow-sm">
+<div class="container-fluid border rounded bg-white my-3 min-vh-100 shadow-sm">
     <div class="row">
         <div class="p-2 display-6">{releaseData.release.name}</div>
+        <div>
+            <a class="btn btn-primary" href="/release/{releaseData.release.name}/duty"><Fa icon={faCalendar}/> Group Planner</a>
+        </div>
     </div>
     <div class="row">
         {#if Object.values(users).length > 0 && plannerData.release}
@@ -290,7 +285,15 @@
             />
         {/if}
     </div>
-
+    {#if releaseData.release.perpetual}
+        <div class="row">
+            <div class="col p-2">
+                <div class="rounded p-2 border-warning border bg-warning bg-opacity-50">
+                    <b>Important:</b> Test schedules are only valid for this week!
+                </div>
+            </div>
+        </div>
+    {/if}
     <div class="row">
         {#if Object.values(users).length > 0}
             <div class="col border rounded m-3 p-3">
@@ -313,6 +316,7 @@
                         <div class="mb-3">
                             <label for="newScheduleComment" class="form-label">Comment</label>
                             <textarea
+                                class="form-control"
                                 id="newScheduleComment"
                                 cols="30"
                                 rows="5"
@@ -333,17 +337,27 @@
                                 on:clear={handleTestsClear}
                             />
                         </div>
+                        {#if releaseData.release.perpetual}
+                            <div>
+                                <div class="mb-1">Timing</div>
+                                <div class="mb-1 p-1 text-muted rounded shadow-sm d-inline-block">
+                                    <Fa icon={faArrowAltCircleRight} /> Will start on {timestampToISODate(newSchedule.start.getTime())}
+                                </div>
+                                <div class="mb-1 p-1 text-muted rounded shadow-sm d-inline-block">
+                                    <Fa icon={faFlagCheckered} /> Will end on {timestampToISODate(newSchedule.end.getTime())}
+                                </div>
+                            </div>
+                        {/if}
                     </div>
                     <div class="me-3 w-25">
                         <div class="mb-3">
-                            <div class="form-label">Assignees</div>
+                            <div class="form-label">Assignee</div>
                             <Select
                                 Item={User}
                                 items={prepareUsers(users)}
-                                isMulti={true}
                                 itemFilter={filterUser}
-                                placeholder="Select assignees"
-                                bind:value={selectedAssignees}
+                                placeholder="Select assignee"
+                                bind:value={selectedAssignee}
                                 on:select={handleAssigneeSelect}
                             />
                         </div>
