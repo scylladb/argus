@@ -116,7 +116,7 @@ def preset_test_resources_setup_serialized():
 def preset_test_details():
     details = TestDetails(scm_revision_id="abcde", started_by="someone",
                           build_job_url="https://job.tld/1", start_time=datetime.utcfromtimestamp(1600000000), yaml_test_duration=120,
-                          config_files=["some-test.yaml"],
+                          config_files=["some-test.yaml"], scylla_version="4.0-rc1",
                           packages=[PackageVersion(name="package-server", version="1.0", date="2021-10-01",
                                                    revision_id="dfcedb3", build_id="dfeeeffffff330fddd")])
     return details
@@ -134,6 +134,8 @@ def preset_test_details_schema():
                                    constraints=[]),
         "packages": ColumnInfo(name="packages", type=CollectionHint, value=CollectionHint(list[PackageVersion]),
                                constraints=[]),
+        "scylla_version": ColumnInfo(name="scylla_version", type=str, value=None,
+                                     constraints=[]),
         "end_time": ColumnInfo(name="end_time", type=datetime, value=None, constraints=[])
     }
 
@@ -154,6 +156,7 @@ def preset_test_details_serialized():
             "revision_id": "dfcedb3",
             "build_id": "dfeeeffffff330fddd",
         }],
+        "scylla_version": "4.0-rc1",
         "end_time": datetime(1970, 1, 1, 0, 0),
     }
 

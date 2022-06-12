@@ -34,7 +34,7 @@ def test_details_no_exception_on_empty_package_list():
 def test_details_ctor_from_named_tuple(preset_test_details):
     ResultSet = namedtuple("Row",
                            ["scm_revision_id", "started_by", "build_job_url", "start_time",
-                            "yaml_test_duration", "config_files", "packages", "end_time"])
+                            "yaml_test_duration", "config_files", "packages", "scylla_version", "end_time"])
     PackageMapped = namedtuple("PackageMapped", ["name", "version", "date", "revision_id", "build_id"])
     package = PackageMapped("package-server", "1.0", "2021-10-01", "dfcedb3", "dfeeeffffff330fddd")
     row = ResultSet(preset_test_details.scm_revision_id,
@@ -43,7 +43,9 @@ def test_details_ctor_from_named_tuple(preset_test_details):
                     preset_test_details.start_time,
                     preset_test_details.yaml_test_duration,
                     preset_test_details.config_files,
-                    [package], preset_test_details.end_time)
+                    [package],
+                    preset_test_details.scylla_version,
+                    preset_test_details.end_time)
 
     new_test_details = TestDetails.from_db_row(row)
     assert new_test_details.serialize() == preset_test_details.serialize()
