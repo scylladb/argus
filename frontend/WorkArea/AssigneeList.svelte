@@ -1,25 +1,22 @@
 <script>
+    import { getUser, getPicture } from "../Common/UserUtils";
     import { userList } from "../Stores/UserlistSubscriber";
     export let assignees = [];
     export let smallImage = false;
     let users = {};
     $: users = $userList;
-
-    const getPicture = function (id) {
-        return id ? `/storage/picture/${id}` : "/s/no-user-picture.png";
-    };
 </script>
 
 {#if Object.keys(users).length > 0}
     <div class="d-flex">
         {#each assignees as assignee}
-            <div title={users[assignee].full_name} class="assignee-container">
+            <div title={getUser(assignee, users).full_name} class="assignee-container">
                 <div
-                    src={getPicture(users[assignee]?.picture_id)}
+                    src={getPicture(getUser(assignee, users).picture_id)}
                     class="img-tiny"
                     class:img-smaller={smallImage}
-                    alt="{users[assignee].full_name}"
-                    style="background-image: url({getPicture(users[assignee].picture_id)});"
+                    alt="{getUser(assignee, users).full_name}"
+                    style="background-image: url({getPicture(getUser(assignee, users).picture_id)});"
                 />
             </div>
         {/each}
