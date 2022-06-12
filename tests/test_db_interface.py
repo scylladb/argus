@@ -51,7 +51,8 @@ def test_interface_schema_init(mock_cluster, mock_cql_engine, preset_test_detail
                                              "(scm_revision_id varchar , started_by varchar , " \
                                              "build_job_url varchar , start_time timestamp ," \
                                              " yaml_test_duration varint , config_files list<varchar> , " \
-                                             "packages list<frozen<PackageVersion_v2>> , end_time timestamp , " \
+                                             "packages list<frozen<PackageVersion_v2>> , " \
+                                             "scylla_version varchar , end_time timestamp , " \
                                              "PRIMARY KEY (id, timer)) WITH CLUSTERING ORDER BY (id DESC)"
 
 

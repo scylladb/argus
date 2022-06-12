@@ -109,7 +109,7 @@ class TestDetails(BaseTestInfo):
     # pylint: disable=too-many-instance-attributes
     EXPOSED_ATTRIBUTES = {"scm_revision_id": str, "started_by": str, "build_job_url": str,
                           "start_time": datetime.datetime, "end_time": datetime.datetime,
-                          "config_files": list, "packages": list,
+                          "config_files": list, "packages": list, "scylla_version": str,
                           "yaml_test_duration": int,
                           }
     COLLECTION_HINTS = {
@@ -121,7 +121,8 @@ class TestDetails(BaseTestInfo):
                  started_by: str, build_job_url: str,
                  yaml_test_duration: int, start_time: datetime,
                  config_files: list[str], packages: list[PackageVersion],
-                 end_time: datetime.datetime = datetime.datetime.utcfromtimestamp(0)):
+                 end_time: datetime.datetime = datetime.datetime.utcfromtimestamp(0),
+                 scylla_version: str | None = None):
         # pylint: disable=too-many-arguments
         super().__init__()
         self.scm_revision_id = scm_revision_id
@@ -136,6 +137,7 @@ class TestDetails(BaseTestInfo):
         self.packages = packages
         self.config_files = config_files
         self.end_time = end_time
+        self.scylla_version = scylla_version
 
     @classmethod
     def from_db_row(cls, row):
@@ -149,7 +151,7 @@ class TestDetails(BaseTestInfo):
 
         return cls(scm_revision_id=row.scm_revision_id, started_by=row.started_by, build_job_url=row.build_job_url,
                    start_time=row.start_time, end_time=row.end_time, yaml_test_duration=row.yaml_test_duration,
-                   config_files=config_files,
+                   config_files=config_files, scylla_version=row.scylla_version,
                    packages=packages)
 
     def set_test_end_time(self):
@@ -360,7 +362,7 @@ class TestRun:
     }
     INDICES = ["release_id", "group_id", "test_id", "id", "assignee", "status"]
     _USING_RUNINFO = TestRunInfo
-    _TABLE_NAME = "test_runs_v7"
+    _TABLE_NAME = "test_runs_v8"
     _IS_TABLE_INITIALIZED = False
     _ARGUS_DB_INTERFACE = None
 
