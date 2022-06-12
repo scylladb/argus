@@ -117,6 +117,9 @@
         }
         if (test_run.assignee) {
             let user = userSelect[test_run.assignee];
+            if (!user) {
+                return placeholder;
+            }
             return {
                 id: user.user_id,
                 value: user.value,
