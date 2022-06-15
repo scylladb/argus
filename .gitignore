@@ -130,10 +130,9 @@ dmypy.json
 .idea
 
 # Project stuff
-argus.local.yaml
+argus.*.yaml
 argus_web.yaml
 /node_modules/
 storage
-migration
+/migration
 .vscode
-migrate*.py
