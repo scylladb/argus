@@ -15,6 +15,30 @@
     let selectedSchedule = "";
     let releaseStats;
     let releaseStatsRefreshInterval;
+    let autocompleteVersions = [];
+
+    const getAllComments = function () {
+        return plannerData.tests
+            .map((test) => {
+                return test.comment;
+            })
+            .filter((comment) => comment);
+    };
+
+    /**
+     *
+     * @param {Array<string>} autocompleteList
+     */
+    const uniqueAutocompleteTokens = function(autocompleteList) {
+        return autocompleteList.reduce((acc, val) => {
+            if (!acc.includes(val)) {
+                acc.push(val);
+            }
+            return acc;
+        }, []);
+    };
+
+    let autocompleteComments = getAllComments();
 
     const fetchStats = async function () {
         let params = new URLSearchParams({
@@ -30,6 +54,20 @@
         releaseStats = json.response;
     };
 
+    const fetchVersions = async function() {
+        let response = await fetch(`/api/v1/release/${plannerData.release.id}/versions`);
+        if (response.status != 200) {
+            return Promise.reject("API Error");
+        }
+        let json = await response.json();
+        if (json.status !== "ok") {
+            return Promise.reject(json.exception);
+        }
+
+        autocompleteVersions = json.response;
+    };
+
+
     let schedulesByTest = {};
     const dispatch = createEventDispatcher();
 
@@ -38,7 +76,7 @@
             acc[test.id] = test;
             return acc;
         }, {});
-    }
+    };
 
     const sortSchedulesByTest = function (schedules) {
         let tests = getTestsById(plannerData);
@@ -82,6 +120,7 @@
 
     onMount(() => {
         fetchStats();
+        fetchVersions();
         releaseStatsRefreshInterval = setInterval(() => {
             fetchStats();
         }, 60 * 1000);
@@ -90,7 +129,7 @@
 
     onDestroy(() => {
         clearInterval(releaseStatsRefreshInterval);
-    })
+    });
 </script>
 
 <div class="my-2">
@@ -188,6 +227,7 @@
                             <td>
                                 <CommentTableRow
                                     bind:commentText={test.comment}
+                                    autocompleteList={uniqueAutocompleteTokens([...autocompleteVersions, ...autocompleteComments])}
                                     release={releaseData.release.id}
                                     group={test.group_id}
                                     test={test.id}

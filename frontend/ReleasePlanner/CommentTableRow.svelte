@@ -6,6 +6,7 @@
     export let group = "";
     export let test = "";
     export let commentText = "";
+    export let autocompleteList = [];
     let editing = false;
     let updating = false;
 
@@ -51,11 +52,16 @@
 </script>
 
 <div class="d-flex">
-    <div class="me-2">
+    <div class="me-2  w-100">
         {#if editing}
             <div>
-                <textarea bind:value={commentText}></textarea>
+                <input class="form-control" type="text" bind:value={commentText} list="comment-autocomplete">
             </div>
+            <datalist id="comment-autocomplete">
+                {#each autocompleteList as val}
+                    <option value="{val}"></option>
+                {/each}
+            </datalist>
         {:else if updating}
             <div>
                 <span class="spinner-border spinner-border-sm"></span> Saving...

@@ -1,8 +1,12 @@
+import logging
+
 from datetime import datetime
 from argus.db.db_types import TestStatus, TestInvestigationStatus
 from argus.db.testrun import TestRun
 from argus.db.models import ArgusGithubIssue, ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, ArgusReleaseScheduleTest, ArgusTestRunComment
 from argus.backend.db import ScyllaCluster
+
+LOGGER = logging.getLogger(__name__)
 
 
 class ReleaseStats:
@@ -168,14 +172,15 @@ class TestStats:
 
 
 class ReleaseStatsCollector:
-    def __init__(self, release_name: str) -> None:
+    def __init__(self, release_name: str, release_version: str | None = None) -> None:
         self.database = ScyllaCluster.get()
         self.session = self.database.get_session()
         self.run_by_release_stats_statement = self.database.prepare(
             "SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, assignee, "
-            f"end_time, investigation_status, heartbeat FROM {TestRun.table_name()} WHERE release_id = ?"
+            f"end_time, investigation_status, heartbeat, scylla_version FROM {TestRun.table_name()} WHERE release_id = ?"
         )
         self.release_name = release_name
+        self.release_version = release_version
 
     def collect(self, limited=False, force=False) -> dict:
         self.release: ArgusRelease = ArgusRelease.get(name=self.release_name)
@@ -185,6 +190,10 @@ class ReleaseStatsCollector:
             return {
                 "dormant": True
             }
+
+        if self.release_version:
+            self.release_rows = list(
+                filter(lambda row: row["scylla_version"] == self.release_version, self.release_rows))
 
         self.release_stats = ReleaseStats(release=self.release)
         self.release_stats.collect(rows=self.release_rows, limited=limited, force=force)

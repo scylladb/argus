@@ -31,12 +31,12 @@
     };
 
     const handleDateChange = function(value) {
-        newScheduleDate = startDate(releaseData.release, value)
+        newScheduleDate = startDate(releaseData.release, value);
         newScheduleEndDate = endDate(releaseData.release, newScheduleDate);
 
         newSchedule.start = timestampToISODate(newScheduleDate.getTime());
         newSchedule.end =  timestampToISODate(newScheduleEndDate.getTime());
-    }
+    };
 
     let newSchedule = Object.assign(PayloadTemplate);
     let newScheduleDate = startDate(releaseData.release);
@@ -212,7 +212,7 @@
         handleGroupSelect({
             detail: selectedGroups
         });
-    }
+    };
 
     const handleTestSelect = function (e) {
         newSchedule.tests =

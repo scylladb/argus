@@ -130,6 +130,9 @@ class ArgusService:
             f"UPDATE {TestRun.table_name()} SET assignee = ?"
             "WHERE build_id = ? AND start_time = ?"
         )
+        self.scylla_versions_by_release = self.database.prepare(
+            f"SELECT scylla_version FROM {TestRun.table_name()} WHERE release_id = ?"
+        )
 
     def get_version(self) -> str:
         try:
@@ -369,6 +372,13 @@ class ArgusService:
         release_tests = ArgusReleaseGroupTest.filter(release_id=release.id).all()
 
         return release, release_groups, release_tests
+
+    def get_distinct_release_versions(self, release_id: UUID | str) -> list[str]:
+        release_id = UUID(release_id) if isinstance(release_id, str) else release_id
+        rows = self.session.execute(self.scylla_versions_by_release, parameters=(release_id,))
+        unique_versions = {r["scylla_version"] for r in rows if r["scylla_version"]}
+
+        return sorted(list(unique_versions), reverse=True)
 
     def poll_test_runs(self, test_id: UUID, additional_runs: list[UUID], limit: int = 10):
         test: ArgusReleaseGroupTest = ArgusReleaseGroupTest.get(id=test_id)

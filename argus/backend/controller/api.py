@@ -20,7 +20,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 @bp.route("/version")
-def version():
+def app_version():
     service = ArgusService()
     argus_version = service.get_version()
     return jsonify({
@@ -107,6 +107,26 @@ def release_planner_data():
             raise Exception("Release Id not specified")
         service = ArgusService()
         res["response"] = service.get_planner_data(release_id)
+    except Exception as exc:
+        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
+        res["status"] = "error"
+        res["response"] = {
+            "exception": exc.__class__.__name__,
+            "arguments": exc.args
+        }
+    return jsonify(res)
+
+
+@bp.route("/release/<string:release_id>/versions")
+@login_required
+def release_versions(release_id: str):
+    res = {
+        "status": "ok"
+    }
+    try:
+        release_id = UUID(release_id)
+        service = ArgusService()
+        res["response"] = service.get_distinct_release_versions(release_id=release_id)
     except Exception as exc:
         LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
         res["status"] = "error"
@@ -326,7 +346,7 @@ def release_issues():
 
 @bp.route("/groups", methods=["GET"])
 @login_required
-def groups():
+def argus_groups():
     res = {
         "status": "ok"
     }
@@ -353,7 +373,7 @@ def groups():
 
 @bp.route("/tests", methods=["GET"])
 @login_required
-def tests():
+def argus_tests():
     res = {
         "status": "ok"
     }
@@ -635,8 +655,10 @@ def release_stats_v2():
         request.query_string.decode(encoding="UTF-8")
         release = request.args.get("release")
         limited = bool(int(request.args.get("limited")))
+        version = request.args.get("productVersion", None)
         force = bool(int(request.args.get("force")))
-        res["response"] = ReleaseStatsCollector(release_name=release).collect(limited=limited, force=force)
+        res["response"] = ReleaseStatsCollector(
+            release_name=release, release_version=version).collect(limited=limited, force=force)
     except Exception as exc:
         LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
         LOGGER.error("Details: ", exc_info=True)
@@ -776,8 +798,7 @@ def test_run_activity():
         run_id = request.args.get("runId")
         if not run_id:
             raise Exception("RunId not provided in the request")
-        else:
-            run_id = UUID(run_id)
+        run_id = UUID(run_id)
         service = ArgusService()
         res["response"] = service.fetch_run_activity(run_id=run_id)
     except Exception as exc:
@@ -851,8 +872,7 @@ def issues_get():
         key_value = request.args.get("id")
         if not key_value:
             raise Exception("Id wasn't provided in the request")
-        else:
-            key_value = UUID(key_value)
+        key_value = UUID(key_value)
         aggregate_by_issue = request.args.get("aggregateByIssue")
         aggregate_by_issue = bool(int(aggregate_by_issue)) if aggregate_by_issue else False
         service = ArgusService()

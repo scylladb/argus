@@ -2,6 +2,7 @@
     import NumberStats from "./NumberStats.svelte";
     import { createEventDispatcher, onDestroy, onMount } from "svelte";
     export let releaseName = "";
+    export let productVersion = "";
     export let DisplayItem = NumberStats;
     export let showTestMap = false;
     export let showReleaseStats = true;
@@ -12,6 +13,7 @@
             release: releaseName,
             limited: new Number(false),
             force: new Number(false),
+            productVersion: productVersion,
         });
         let response = await fetch("/api/v1/release/stats/v2?" + params);
         let json = await response.json();
@@ -38,6 +40,7 @@
 
     let statRefreshInterval;
     let releaseStats = releaseStatsDefault;
+    $: fetchStats(productVersion);
 
     onMount(() => {
         fetchStats();
