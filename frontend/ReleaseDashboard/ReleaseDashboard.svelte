@@ -7,6 +7,7 @@
     import TestDashboard from "./TestDashboard.svelte";
     export let releaseData = {};
     let clickedTests = {};
+    let productVersion = "";
 
     const handleTestClick = function (e) {
         console.log(e);
@@ -22,6 +23,10 @@
             clickedTests = clickedTests;
         }
         console.log(clickedTests);
+    };
+
+    const handleVersionChange = function (e) {
+        productVersion = e.detail.version;
     };
 
     const handleDeleteRequest = function(e) {
@@ -75,6 +80,7 @@
             <ReleaseStats
                 releaseName={releaseData.release.name}
                 horizontal={false}
+                {productVersion}
             />
         </div>
     </div>
@@ -83,8 +89,10 @@
             <TestDashboard
                 releaseName={releaseData.release.name}
                 releaseId={releaseData.release.id}
+                {productVersion}
                 bind:clickedTests={clickedTests}
                 on:testClick={handleTestClick}
+                on:versionChange={handleVersionChange}
             />
         </div>
         <div class="col-xs-10 col-sm-6 col-md-5">

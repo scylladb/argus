@@ -11,11 +11,9 @@
 
     import {
         StatusBackgroundCSSClassMap,
-        StatusCSSClassMap,
         TestInvestigationStatus,
         TestInvestigationStatusStrings,
         TestStatus,
-        TestStatusChangeable,
     } from "../Common/TestStatus";
     import { subUnderscores, titleCase } from "../Common/TextUtils";
     import { apiMethodCall } from "../Common/ApiUtils";
@@ -25,6 +23,7 @@
     export let releaseName = "";
     export let releaseId = "";
     export let clickedTests = {};
+    export let productVersion;
     let stats;
     let statRefreshInterval;
     let users = {};
@@ -39,9 +38,9 @@
     };
 
     const investigationStatusIcon = {
-        in_progress: faEye,
+        in_progress: faSearch,
         not_investigated: faEyeSlash,
-        investigated: faSearch,
+        investigated: faEye,
     };
 
     const dispatch = createEventDispatcher();
@@ -51,6 +50,7 @@
             release: releaseName,
             limited: new Number(false),
             force: new Number(true),
+            productVersion: productVersion ?? "",
         });
         let response = await fetch("/api/v1/release/stats/v2?" + params);
         let json = await response.json();
@@ -66,8 +66,27 @@
                 setTimeout(() => {
                     fetchTestAssignees(groupStat.group.id);
                 }, 25 * idx);
-            })
+            });
         }
+    };
+
+    const fetchVersions = async function() {
+        let response = await fetch(`/api/v1/release/${releaseId}/versions`);
+        if (response.status != 200) {
+            return Promise.reject("API Error");
+        }
+        let json = await response.json();
+        if (json.status !== "ok") {
+            return Promise.reject(json.exception);
+        }
+
+        return json.response;
+    };
+
+    const handleVersionClick = function(versionString) {
+        productVersion = versionString;
+        fetchStats();
+        dispatch("versionChange", { version: productVersion });
     };
 
     const handleTestClick = function (testStats, groupStats) {
@@ -84,7 +103,7 @@
     };
 
     const sortTestStats = function (testStats) {
-        let testPriorities = {
+        const testPriorities = {
             failed: 6,
             passed: 5,
             running: 4,
@@ -107,7 +126,7 @@
     const fetchGroupAssignees = async function(releaseId) {
         let params = new URLSearchParams({
             releaseId: releaseId,
-        })
+        });
         let result = await apiMethodCall("/api/v1/release/assignees/groups?" + params, undefined, "GET");
         if (result.status === "ok") {
             assigneeList.groups = Object.assign(assigneeList.groups, result.response);
@@ -117,7 +136,7 @@
     const fetchTestAssignees = async function(groupId) {
         let params = new URLSearchParams({
             groupId: groupId,
-        })
+        });
         let result = await apiMethodCall("/api/v1/release/assignees/tests?" + params, undefined, "GET");
         if (result.status === "ok") {
             assigneeList.tests = Object.assign(assigneeList.tests, result.response);
@@ -144,7 +163,7 @@
                 let rhsKey = rhs.group.pretty_name || rhs.group.name;
                 return lhsKey >= rhsKey ? 1 : -1;
             });
-    }
+    };
 
     onMount(() => {
         fetchStats();
@@ -162,6 +181,24 @@
 
 </script>
 <div class="rounded bg-light-one shadow-sm p-2">
+    {#await fetchVersions()}
+        <div>Loading versions...</div>
+    {:then versions}
+        <div class="d-flex flex-wrap p-2">
+            <button
+                class="btn ms-2 mb-2"
+                class:btn-primary={!productVersion}
+                class:btn-light={productVersion}
+                on:click={() => { handleVersionClick(""); }}>All</button>
+            {#each versions as version}
+                <button
+                    class="btn btn-light ms-2 mb-2"
+                    class:btn-primary={productVersion == version}
+                    class:btn-light={productVersion != version}
+                    on:click={() => { handleVersionClick(version); }}>{version}</button>
+            {/each}
+        </div>
+    {/await}
     {#if stats}
         {#each sortedGroups(stats.groups) as groupStats (groupStats.group.id)}
             {#if !groupStats.disabled}
@@ -215,7 +252,7 @@
                                 </div>
                                 <div class="d-flex flex-fill align-items-end justify-content-end p-1">
                                     <div class="p-1 me-auto">
-                                        {#if assigneeList.tests[testStats.test.id] || assigneeList.groups[groupStats.group.id]}
+                                        {#if assigneeList.tests[testStats.test.id] || assigneeList.groups[groupStats.group.id] || testStats.last_runs?.[0]?.assignee}
                                             <AssigneeList
                                                 smallImage={false}
                                                 assignees={getAssigneesForTest(
