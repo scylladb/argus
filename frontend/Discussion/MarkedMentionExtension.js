@@ -10,7 +10,7 @@ export const MarkdownUserMention = {
     },
 
     tokenizer(src, tokens) {
-        const rule = /^\s(@[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38})/;
+        const rule = /^\s(@[A-Za-z\d](?:[A-Za-z\d]|-(?=[A-Za-z\d])){0,38})/;
         const match = rule.exec(src);
         if (match) {
             const token = {
@@ -26,4 +26,4 @@ export const MarkdownUserMention = {
         let selfMention = token.text.includes(applicationCurrentUser.username) ? "user-mention-self" : "";
         return ` <span class="user-mention ${selfMention}">${token.text}</span>`;
     }
-}
+};
