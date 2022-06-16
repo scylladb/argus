@@ -111,7 +111,7 @@ class ArgusService:
             f"end_time, investigation_status, heartbeat FROM {TestRun.table_name()} WHERE build_id IN ?"
         )
         self.build_id_and_url_statement = self.database.prepare(
-            f"SELECT build_id, build_job_url FROM {TestRun.table_name()} WHERE id = ?"
+            f"SELECT build_id, build_job_url, test_id FROM {TestRun.table_name()} WHERE id = ?"
         )
         self.event_insert_statement = self.database.prepare(
             'INSERT INTO argus.argus_event '
@@ -256,6 +256,7 @@ class ArgusService:
             params = {
                 "username": g.user.username,
                 "run_id": comment.test_run_id,
+                "test_id": run_info["test_id"],
                 "build_id": run_info["build_id"],
                 "build_number": build_number,
             }
