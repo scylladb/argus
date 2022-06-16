@@ -235,7 +235,7 @@ class ArgusService:
         message_stripped = strip_html_tags(message)
 
         mentions = set(mentions)
-        for potential_mention in re.findall(r"@[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}", message_stripped):
+        for potential_mention in re.findall(r"@[A-Za-z\d](?:[A-Za-z\d]|-(?=[A-Za-z\d])){0,38}", message_stripped):
             if user := User.exists_by_name(potential_mention.lstrip("@")):
                 mentions.add(user)
 
