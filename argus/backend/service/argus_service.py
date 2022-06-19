@@ -981,9 +981,11 @@ class ArgusService:
         scheduled_groups = ArgusReleaseScheduleGroup.filter(release_id=release.id, group_id__in=group_ids).all()
         schedule_ids = {schedule.schedule_id for schedule in scheduled_groups}
 
-        today = datetime.datetime.utcnow()
         schedules = ArgusReleaseSchedule.filter(release_id=release.id, id__in=tuple(schedule_ids)).all()
-        valid_schedules = [s for s in schedules if s.period_start <= today <= s.period_end]
+
+        if release.perpetual:
+            today = datetime.datetime.utcnow()
+            valid_schedules = [s for s in schedules if s.period_start <= today <= s.period_end]
 
         response = {}
         for schedule in valid_schedules:
@@ -1007,6 +1009,10 @@ class ArgusService:
         scheduled_tests = ArgusReleaseScheduleTest.filter(release_id=release.id, test_id__in=tuple(test_ids)).all()
         schedule_ids = {test.schedule_id for test in scheduled_tests}
         schedules = list(ArgusReleaseSchedule.filter(release_id=release.id, id__in=tuple(schedule_ids)).all())
+
+        if release.perpetual:
+            today = datetime.datetime.utcnow()
+            schedules = list(filter(lambda s: s.period_start <= today <= s.period_end, schedules))
 
         response = {}
         for schedule in schedules:
@@ -1177,21 +1183,19 @@ class ArgusService:
                          for schedule_assignee in all_assigned_schedules]
         schedules = []
         today = datetime.datetime.utcnow()
-        last_week = today - datetime.timedelta(days=today.weekday() + 1)
         for release_id, schedule_id in schedule_keys:
             try:
                 schedule = dict(ArgusReleaseSchedule.get(release_id=release_id, id=schedule_id).items())
             except ArgusReleaseSchedule.DoesNotExist:
                 continue
-            if last_week > schedule["period_end"]:
-                continue
-            tests = ArgusReleaseScheduleTest.filter(schedule_id=schedule_id).all()
-            schedule["tests"] = [test.test_id for test in tests]
-            groups = ArgusReleaseScheduleGroup.filter(schedule_id=schedule_id).all()
-            schedule["groups"] = [group.group_id for group in groups]
-            assignees = ArgusReleaseScheduleAssignee.filter(schedule_id=schedule_id).all()
-            schedule["assignees"] = [assignee.assignee for assignee in assignees]
-            schedules.append(schedule)
+            if schedule["period_start"] <= today <= schedule["period_end"]:
+                tests = ArgusReleaseScheduleTest.filter(schedule_id=schedule_id).all()
+                schedule["tests"] = [test.test_id for test in tests]
+                groups = ArgusReleaseScheduleGroup.filter(schedule_id=schedule_id).all()
+                schedule["groups"] = [group.group_id for group in groups]
+                assignees = ArgusReleaseScheduleAssignee.filter(schedule_id=schedule_id).all()
+                schedule["assignees"] = [assignee.assignee for assignee in assignees]
+                schedules.append(schedule)
 
         return schedules
 
