@@ -8,7 +8,6 @@
         assignee: [],
         description: null,
         group_id: null,
-        id: null,
         name: "ERROR",
         pretty_name: null,
         release_id: null,
