@@ -993,6 +993,7 @@ class ArgusService:
 
         schedules = ArgusReleaseSchedule.filter(release_id=release.id, id__in=tuple(schedule_ids)).all()
 
+        valid_schedules = schedules
         if release.perpetual:
             today = datetime.datetime.utcnow()
             valid_schedules = [s for s in schedules if s.period_start <= today <= s.period_end]
