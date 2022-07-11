@@ -16,9 +16,7 @@ Argus is a test tracking system intended to provide observability into automated
 
 - nginx
 
-- pyenv
-
-- pyenv-virtualenv
+- poetry >=1.2.0b1
 
 ### From source
 
@@ -33,7 +31,7 @@ useradd -m -s /bin/bash argus
 sudo -iu argus
 ```
 
-Install pyenv and create a virtualenv for this user:
+(Optional) Install pyenv and create a virtualenv for this user:
 
 ```bash
 pyenv install 3.10.0
@@ -51,8 +49,7 @@ cd ~/app
 Install project dependencies:
 
 ```bash
-pip install -r requirements_web.txt
-pip install -e .
+poetry install --with default,dev,web-backend,docker-image
 yarn install
 ```
 
@@ -107,26 +104,17 @@ sudo systemctl enable --now argus.service
 
 #### Development
 
-Install pyenv and create a virtualenv for argus:
-
-```bash
-pyenv install 3.10.0
-pyenv virtualenv argus
-pyenv activate argus
-```
-
 Clone the project into a directory somewhere
 
 ```bash
-git clone https://github.com/bentsi/argus
+git clone https://github.com/scylladb/argus
 cd argus
 ```
 
 Install project dependencies:
 
 ```bash
-pip install -r requirements_web.txt
-pip install -e .
+poetry install --with default,dev,web-backend,docker-image
 yarn install
 ```
 
@@ -135,6 +123,30 @@ Compile frontend files from `/frontend` into `/public/dist`. Add --watch to reco
 ```bash
 yarn webpack --watch
 ```
+
+##### Database Initialization
+
+You can initialize a scylla cluster in any way you like, either using docker image with docker-compose or using cassandra cluster manager. You will need to create the keyspace manually before you can sync database models.
+
+Initial sync can be done as follows:
+
+```py
+from argus.backend.db import ScyllaCluster
+from argus.db.testrun import TestRun
+db = ScyllaCluster.get()
+
+db.sync_models() # Syncronizes Object Mapper models
+TestRun.init_own_table() # Syncronizes TestRun table (separate from python-driver Object Mapper)
+
+```
+
+You can also use `flask sync-models` afterwards during development when making small changes to models.
+
+It is recommended to set up jenkins api key and run `flask scan-jenkins` afterwards to get basic release/group/test structure.
+
+There are scripts in `./scripts` directory that can be used to download data from production, upload them into your dev db and fix their relations to other models in your instance of the application. Specifically, `download_runs_from_prod.py` requires additional config, `argus.local.prod.yaml` which is the config used to connect to the production cluster. The scripts are split to prevent mistakes and accidentally affecting production cluster.
+
+##### Configuration
 
 Create a `argus.local.yaml` configuration file (used to configure database connection) and a `argus_web.yaml` (used for webapp secrets) in your application install directory.
 
@@ -145,12 +157,12 @@ cp argus.yaml argus.local.yaml
 
 Open `argus.local.yaml` and add the database connection information (contact_points, user, password and keyspace name).
 
-Open `argus_web.yaml` and change the `SECRET_KEY` value to something secure, like a sha512 digest of random bytes. Fill out GITHUB_* variables with their respective values.
+Open `argus_web.yaml` and change the `SECRET_KEY` value to something secure, like a sha512 digest of random bytes. Fill out GITHUB_* and JENKINS_* variables with their respective values.
 
 Run the application from CLI using:
 
 ```bash
-FLASK_ENV="development" FLASK_APP="argus.backend" FLASK_DEBUG=1 flask run
+FLASK_ENV="development" FLASK_APP="argus_backend:start_server" FLASK_DEBUG=1 CQLENG_ALLOW_SCHEMA_MANAGEMENT=1 flask run
 ```
 
 Omit `FLASK_DEBUG` if running your own debugger (pdb, pycharm, vscode)
