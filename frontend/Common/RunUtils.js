@@ -5,3 +5,7 @@ export const getScyllaPackage = function (packages) {
 export const getKernelPackage = function (packages) {
     return packages.find((pkg) => pkg.name == "kernel");
 };
+
+export const extractBuildNumber = function (run) {
+    return run.build_job_url.trim().split("/").reverse()[1];
+};

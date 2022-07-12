@@ -12,16 +12,15 @@ from typing import Callable
 from collections import namedtuple
 from uuid import UUID, uuid4
 
-import humanize
 import requests
-from cassandra.util import uuid_from_time
+from cassandra.util import uuid_from_time  # pylint: disable=no-name-in-module
 from cassandra.cqlengine import ValidationError
 from flask import g, current_app, session
 from werkzeug.security import check_password_hash, generate_password_hash
 from argus.backend.db import ScyllaCluster
+from argus.backend.models.sct_testrun import SCTTestRun
 from argus.backend.service.notification_manager import NotificationManagerService
-from argus.db.db_types import TestInvestigationStatus
-from argus.db.testrun import TestRun, TestStatus
+from argus.backend.enums import TestStatus, TestInvestigationStatus
 from argus.db.models import (
     ArgusGithubIssue,
     ArgusRelease,
@@ -65,8 +64,8 @@ def strip_html_tags(text: str):
     return text.replace("<", "&lt;").replace(">", "&gt;")
 
 
-def convert_str_list_to_uuid(l: list[str]) -> list[UUID]:
-    return [UUID(s) for s in l]
+def convert_str_list_to_uuid(lst: list[str]) -> list[UUID]:
+    return [UUID(s) for s in lst]
 
 
 class GithubOrganizationMissingError(Exception):
@@ -83,55 +82,16 @@ class ArgusService:
             "Accept": "application/vnd.github.v3+json",
             "Authorization": f"token {current_app.config['GITHUB_ACCESS_TOKEN']}"
         }
-        self.runs_by_id_stmt = self.database.prepare(
-            f"SELECT * FROM {TestRun.table_name()} WHERE id = ?"
-        )
-        self.run_by_release_name_stmt = self.database.prepare(
-            "SELECT id, test_id, group_id, release_id, build_job_url, build_id, "
-            "status, start_time, end_time, heartbeat "
-            f"FROM {TestRun.table_name()} WHERE release_id = ?"
-        )
-        self.runs_by_build_system_id = self.database.prepare(
-            "SELECT id, test_id, group_id, release_id, build_job_url, build_id, "
-            "status, start_time, end_time, heartbeat "
-            f"FROM {TestRun.table_name()} WHERE build_id = ? LIMIT ?"
-        )
-        self.jobs_by_assignee = self.database.prepare(
-            "SELECT id, status, start_time, assignee, release_id, "
-            "investigation_status, "
-            "group_id, test_id, build_job_url, build_id FROM "
-            f"{TestRun.table_name()} WHERE assignee = ?"
-        )
-        self.run_by_release_stats_statement = self.database.prepare(
-            "SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, assignee, "
-            f"end_time, investigation_status, heartbeat FROM {TestRun.table_name()} WHERE release_id = ?"
-        )
-        self.stats_by_build_id_statement = self.database.prepare(
-            "SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, assignee, "
-            f"end_time, investigation_status, heartbeat FROM {TestRun.table_name()} WHERE build_id IN ?"
-        )
         self.build_id_and_url_statement = self.database.prepare(
-            f"SELECT build_id, build_job_url, test_id FROM {TestRun.table_name()} WHERE id = ?"
+            f"SELECT build_id, build_job_url, test_id FROM {SCTTestRun.table_name()} WHERE id = ?"
         )
         self.event_insert_statement = self.database.prepare(
             'INSERT INTO argus.argus_event '
             '("id", "release_id", "group_id", "test_id", "run_id", "user_id", "kind", "body", "created_at") '
             'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
         )
-        self.assignee_runs_by_schedule = self.database.prepare(
-            f"SELECT build_id, start_time, assignee, test_id FROM {TestRun.table_name()} "
-            "WHERE build_id = ? AND start_time >= ? AND start_time <= ?"
-        )
-        self.assignee_runs_by_schedule_multi = self.database.prepare(
-            f"SELECT build_id, start_time, assignee, test_id FROM {TestRun.table_name()} "
-            "WHERE build_id IN ? AND start_time >= ? AND start_time <= ?"
-        )
-        self.assignee_update_stmt = self.database.prepare(
-            f"UPDATE {TestRun.table_name()} SET assignee = ?"
-            "WHERE build_id = ? AND start_time = ?"
-        )
         self.scylla_versions_by_release = self.database.prepare(
-            f"SELECT scylla_version FROM {TestRun.table_name()} WHERE release_id = ?"
+            f"SELECT scylla_version FROM {SCTTestRun.table_name()} WHERE release_id = ?"
         )
 
     def get_version(self) -> str:
@@ -204,8 +164,10 @@ class ArgusService:
         return response
 
     def load_test_run(self, test_run_id: UUID):
-        run = TestRun.from_id(test_id=test_run_id)
-        return run.serialize() if run else None
+        try:
+            return SCTTestRun.get(id=test_run_id)
+        except SCTTestRun.DoesNotExist:
+            return None
 
     def get_comment(self, comment_id: UUID) -> ArgusTestRunComment | None:
         try:
@@ -384,42 +346,33 @@ class ArgusService:
     def poll_test_runs(self, test_id: UUID, additional_runs: list[UUID], limit: int = 10):
         test: ArgusReleaseGroupTest = ArgusReleaseGroupTest.get(id=test_id)
 
-        rows = self.session.execute(
-            self.runs_by_build_system_id,
-            parameters=(test.build_system_id, limit),
-            execution_profile="read_fast"
-        ).all()
+        rows: list[SCTTestRun] = list(SCTTestRun.filter(build_id=test.build_system_id).all().limit(limit))
 
-        rows_ids = [row["id"] for row in rows]
+        rows_ids = [row.id for row in rows]
 
         for run_id in additional_runs:
             if run_id not in rows_ids:
-                row = self.session.execute(
-                    self.runs_by_id_stmt,
-                    parameters=(UUID(run_id),),
-                    execution_profile="read_fast"
-                ).one()
+                row: SCTTestRun = SCTTestRun.get(id=run_id)
                 rows.append(row)
 
         for row in rows:
             try:
-                row["build_number"] = int(
-                    row["build_job_url"].rstrip("/").split("/")[-1])
+                setattr(row, "build_number", int(row["build_job_url"].rstrip("/").split("/")[-1]))
             except ValueError:
-                row["build_number"] = -1
+                setattr(row, "build_number", -1)
 
         return rows
 
     def poll_test_runs_single(self, runs: list[UUID]):
-        rows = []
+        rows: list[SCTTestRun] = []
         for run_id in runs:
-            row = self.session.execute(self.runs_by_id_stmt, parameters=(
-                run_id,), execution_profile="read_fast_named_tuple").one()
-            rows.append(row)
+            try:
+                row: SCTTestRun = SCTTestRun.get(id=run_id)
+                rows.append(row)
+            except SCTTestRun.DoesNotExist:
+                pass
 
-        response = {str(row.id): TestRun.from_db_row(row).serialize()
-                    for row in rows if row}
-
+        response = {str(row.id): row for row in rows}
         return response
 
     def send_event(self, kind: str, body: dict, user_id=None, run_id=None, release_id=None, group_id=None, test_id=None):
@@ -445,10 +398,10 @@ class ArgusService:
             raise Exception("New Status wasn't specified in the request")
 
         new_status = TestStatus(new_status)
-        test_run = TestRun.from_id(test_id=UUID(test_run_id))
+        test_run: SCTTestRun = SCTTestRun.get(id=UUID(test_run_id))
         test = ArgusReleaseGroupTest.get(build_system_id=test_run.build_id)
-        old_status = test_run.run_info.results.status
-        test_run.run_info.results.status = new_status
+        old_status = TestStatus(test_run.status)
+        test_run.status = new_status.value
         test_run.save()
 
         self.send_event(
@@ -479,10 +432,10 @@ class ArgusService:
             raise Exception("New investigation status wasn't specified in the request")
 
         new_status = TestInvestigationStatus(new_status)
-        test_run = TestRun.from_id(UUID(test_run_id))
+        test_run: SCTTestRun = SCTTestRun.get(id=UUID(test_run_id))
         test = ArgusReleaseGroupTest.get(build_system_id=test_run.build_id)
         old_status = test_run.investigation_status
-        test_run.investigation_status = new_status
+        test_run.investigation_status = new_status.value
         test_run.save()
 
         self.send_event(
@@ -519,7 +472,7 @@ class ArgusService:
             if new_assignee != "none-none-none":
                 raise
             new_assignee = DummyUser(id=None, username="None")
-        test_run = TestRun.from_id(test_id=UUID(test_run_id))
+        test_run: SCTTestRun = SCTTestRun.get(id=UUID(test_run_id))
         test = ArgusReleaseGroupTest.get(build_system_id=test_run.build_id)
         old_assignee = test_run.assignee
         old_assignee = User.get(id=old_assignee) if old_assignee else None
@@ -588,7 +541,7 @@ class ArgusService:
         if not match:
             raise Exception("URL doesn't match Github schema")
 
-        run = self.session.execute(self.runs_by_id_stmt, parameters=(UUID(run_id),)).one()
+        run = SCTTestRun.get(id=UUID(run_id))
         release = ArgusRelease.get(id=run["release_id"])
         test = ArgusReleaseGroupTest.get(build_system_id=run["build_id"])
         group = ArgusReleaseGroup.get(id=test.group_id)
@@ -690,66 +643,32 @@ class ArgusService:
             "deleted": issue_id
         }
 
-    def fetch_release_issues(self, payload: dict) -> dict:
-        # TODO: Unused
-        """
-        Example payload
-        {
-            "release_id": "abcadedf-efadd-24124",
-            "tests": [ArgusReleaseGroupTest <, ...>]
-        }
-        Response
-        [[ArgusReleaseGroupTest, GithubIssue[]], ...]
-        """
-
-        release_id = payload.get("release_id")
-        if not release_id:
-            raise Exception("ReleaseId wasn't specified in the request")
-
-        release_issues = self.get_github_issues({
-            "filter_key": "release_id",
-            "id": release_id
-        })
-
-        tests = payload.get("tests", [])
-
-        response = []
-        for test in tests:
-            issues_for_test = [issue for issue in release_issues if issue["test_id"] == UUID(test["id"])]
-            if len(issues_for_test) > 0:
-                response.append([test, issues_for_test])
-
-        return response
-
     def assign_runs_for_scheduled_test(self, schedule: ArgusReleaseSchedule, test_id: UUID, new_assignee: UUID):
-        test = ArgusReleaseGroupTest.get(id=test_id)
-        affected_rows = self.session.execute(
-            self.assignee_runs_by_schedule,
-            parameters=(test.build_system_id, schedule.period_start, schedule.period_end)
+        test: ArgusReleaseGroupTest = ArgusReleaseGroupTest.get(id=test_id)
+        affected_rows: list[SCTTestRun] = list(SCTTestRun.filter(
+            build_id=test.build_system_id,
+            start_time__gte=schedule.period_start,
+            start_time__lte=schedule.period_end
+            ).all()
         )
-
         for row in affected_rows:
-            if row["assignee"] == new_assignee:
-                continue
-            self.session.execute(
-                self.assignee_update_stmt,
-                parameters=(new_assignee, row["build_id"], row["start_time"])
-            )
+            if row.assignee != new_assignee:
+                row.assignee = new_assignee
+                row.save()
 
     def assign_runs_for_scheduled_group(self, schedule: ArgusReleaseSchedule, group_id: UUID, new_assignee: UUID):
         tests = ArgusReleaseGroupTest.filter(group_id=group_id).all()
         build_ids = [test.build_system_id for test in tests]
-        affected_rows = self.session.execute(
-            self.assignee_runs_by_schedule_multi,
-            parameters=(build_ids, schedule.period_start, schedule.period_end)
+        affected_rows: list[SCTTestRun] = list(SCTTestRun.filter(
+            build_id__in=build_ids,
+            start_time__gte=schedule.period_start,
+            start_time__lte=schedule.period_end
+            ).all()
         )
         for row in affected_rows:
-            if row["assignee"] == new_assignee:
-                continue
-            self.session.execute(
-                self.assignee_update_stmt,
-                parameters=(new_assignee, row["build_id"], row["start_time"])
-            )
+            if row.assignee != new_assignee:
+                row.assignee = new_assignee
+                row.save()
 
     def submit_new_schedule(self, release: str | UUID, start_time: str, end_time: str, tests: list[str | UUID],
                             groups: list[str | UUID], assignees: list[str | UUID], tag: str) -> dict:
@@ -1019,7 +938,7 @@ class ArgusService:
 
         scheduled_tests = ArgusReleaseScheduleTest.filter(release_id=release.id, test_id__in=tuple(test_ids)).all()
         schedule_ids = {test.schedule_id for test in scheduled_tests}
-        schedules = list(ArgusReleaseSchedule.filter(release_id=release.id, id__in=tuple(schedule_ids)).all())
+        schedules: list[ArgusReleaseSchedule] = list(ArgusReleaseSchedule.filter(release_id=release.id, id__in=tuple(schedule_ids)).all())
 
         if release.perpetual:
             today = datetime.datetime.utcnow()
@@ -1161,28 +1080,28 @@ class ArgusService:
         return None
 
     def get_jobs_for_user(self, user: User):
-        runs = self.session.execute(self.jobs_by_assignee, parameters=(user.id,))
+        runs: list[SCTTestRun] = list(SCTTestRun.filter(assignee=user.id).all())
         schedules = self.get_schedules_for_user(user)
         valid_runs = []
         today = datetime.datetime.now()
         month_ago = today - datetime.timedelta(days=30)
         for run in runs:
-            run_date = run["start_time"]
-            if user.id == run["assignee"] and run_date >= month_ago:
+            run_date = run.start_time
+            if user.id == run.assignee and run_date >= month_ago:
                 valid_runs.append(run)
                 continue
             for schedule in schedules:
-                if not run["release_id"] == schedule["release_id"]:
+                if not run.release_id == schedule["release_id"]:
                     continue
                 if not schedule["period_start"] < run_date < schedule["period_end"]:
                     continue
-                if run["assignee"] in schedule["assignees"]:
+                if run.assignee in schedule["assignees"]:
                     valid_runs.append(run)
                     break
-                if run["group_id"] in schedule["groups"]:
+                if run.group_id in schedule["groups"]:
                     valid_runs.append(run)
                     break
-                filtered_tests = [test for test in schedule["tests"] if test == run["test_id"]]
+                filtered_tests = [test for test in schedule["tests"] if test == run.test_id]
                 if len(filtered_tests) > 0:
                     valid_runs.append(run)
                     break

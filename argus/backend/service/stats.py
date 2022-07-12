@@ -1,9 +1,10 @@
 import logging
 
 from datetime import datetime
+from argus.backend.models.sct_testrun import SCTTestRun
 from argus.db.db_types import TestStatus, TestInvestigationStatus
-from argus.db.testrun import TestRun
-from argus.db.models import ArgusGithubIssue, ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, ArgusReleaseScheduleTest, ArgusTestRunComment
+from argus.db.models import ArgusGithubIssue, ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest,\
+     ArgusReleaseScheduleTest, ArgusTestRunComment
 from argus.backend.db import ScyllaCluster
 
 LOGGER = logging.getLogger(__name__)
@@ -177,8 +178,11 @@ class ReleaseStatsCollector:
         self.session = self.database.get_session()
         self.run_by_release_stats_statement = self.database.prepare(
             "SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, assignee, "
-            f"end_time, investigation_status, heartbeat, scylla_version FROM {TestRun.table_name()} WHERE release_id = ?"
+            f"end_time, investigation_status, heartbeat, scylla_version FROM {SCTTestRun.table_name()} WHERE release_id = ?"
         )
+        self.release = None
+        self.release_stats = None
+        self.release_rows = []
         self.release_name = release_name
         self.release_version = release_version
 

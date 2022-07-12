@@ -54,23 +54,23 @@ def setup_argus_logging():
         },
         'loggers': {
             'cassandra': {
-                'level': 'INFO',
+                'level': 'DEBUG',
                 'handlers': ['main']
             },
             'argus': {
-                'level': 'INFO',
+                'level': 'DEBUG',
                 'handlers': ['main']
             },
             'argus_backend': {
-                'level': 'INFO',
+                'level': 'DEBUG',
                 'handlers': ['main']
             },
             'werkzeug': {
-                'level': 'INFO',
+                'level': 'DEBUG',
                 'handlers': ['main']
             },
             'uwsgi': {
-                'level': 'INFO',
+                'level': 'DEBUG',
                 'handlers': ['main']
             }
         }
