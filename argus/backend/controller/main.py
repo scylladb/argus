@@ -237,7 +237,7 @@ def update_password():
 @login_required
 def profile_jobs():
     service = ArgusService()
-    jobs = [dict(job.items()) for job in service.get_jobs_for_user(g.user)]
+    jobs = service.get_jobs_for_user(g.user)
     return render_template("profile_jobs.html.j2", runs=jobs)
 
 

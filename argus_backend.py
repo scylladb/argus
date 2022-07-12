@@ -5,6 +5,7 @@ from flask import Flask
 from yaml import safe_load
 from argus.backend.controller import admin, api, main
 from argus.backend.logsetup import setup_argus_logging
+from argus.backend.encoders import ArgusJSONEncoder
 from argus.db.models import User
 from argus.backend.db import ScyllaCluster
 from argus.backend.build_system_monitor import scan_jenkins_command
@@ -31,6 +32,7 @@ def locate_argus_web_config() -> Path:
 
 def start_server(config=None) -> Flask:
     app = Flask(__name__, static_url_path="/s/", static_folder="public")
+    app.json_encoder = ArgusJSONEncoder
     config_path = locate_argus_web_config()
     with config_path.open(mode="rt", encoding="utf-8") as config_file:
         config_mapping = safe_load(config_file.read())

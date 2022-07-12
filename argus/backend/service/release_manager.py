@@ -1,8 +1,8 @@
 import logging
 from uuid import UUID
 from argus.backend.db import ScyllaCluster
+from argus.backend.models.sct_testrun import SCTTestRun
 from argus.db.models import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest
-from argus.db.testrun import TestRun
 
 LOGGER = logging.getLogger(__name__)
 
@@ -17,10 +17,10 @@ class ReleaseManagerService:
         self.database = ScyllaCluster.get()
         self.runs_by_build_id_stmt = self.database.prepare(
             "SELECT id, test_id, group_id, release_id, build_id, start_time "
-            f"FROM {TestRun.table_name()} WHERE build_id = ?"
+            f"FROM {SCTTestRun.table_name()} WHERE build_id = ?"
         )
         self.update_run_stmt = self.database.prepare(
-            f"UPDATE {TestRun.table_name()} SET test_id = ?, group_id = ?, release_id = ? "
+            f"UPDATE {SCTTestRun.table_name()} SET test_id = ?, group_id = ?, release_id = ? "
             "WHERE build_id = ? AND start_time = ?"
         )
 

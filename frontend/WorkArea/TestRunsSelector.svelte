@@ -1,5 +1,6 @@
 <script>
     import { createEventDispatcher, onMount } from "svelte";
+    import { extractBuildNumber } from "../Common/RunUtils";
     import { StatusButtonCSSClassMap } from "../Common/TestStatus";
 
     export let testInfo = {};
@@ -11,7 +12,7 @@
     let header;
 
     onMount(() => {
-        let observer = new IntersectionObserver((entries, observer) => {
+        let observer = new IntersectionObserver((entries) => {
             let entry = entries[0];
             if (!entry) return;
             if (entry.intersectionRatio == 0 && !entry.isIntersecting) {
@@ -21,7 +22,7 @@
             }
         }, {
             threshold: [0, 0.25, 0.5, 0.75, 1]
-        })
+        });
         observer.observe(header);
     });
 
@@ -42,7 +43,7 @@
                 type="button"
                 on:click={() => dispatch("runClick", { runId: run.id })}
             >
-                #{run.build_number}
+                #{extractBuildNumber(run)}
             </button>
         </div>
     {/each}

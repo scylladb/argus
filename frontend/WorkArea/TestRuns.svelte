@@ -1,11 +1,12 @@
 <script>
-    import { createEventDispatcher, onDestroy, onMount } from "svelte";
+    import { createEventDispatcher } from "svelte";
     import { v4 as uuidv4 } from "uuid";
     import { StatusBackgroundCSSClassMap } from "../Common/TestStatus";
     import { titleCase } from "../Common/TextUtils";
     import { timestampToISODate } from "../Common/DateUtils";
     import TestRun from "../TestRun/TestRun.svelte";
     import TestRunsSelector from "./TestRunsSelector.svelte";
+    import { extractBuildNumber } from "../Common/RunUtils";
 
     export let testId;
     export let listId = uuidv4();
@@ -17,7 +18,7 @@
     let runsBody = undefined;
     let clickedTestRuns = additionalRuns.reduce((acc, val) => {
         acc[val] = true;
-        return acc
+        return acc;
     }, {});
 
     const fetchTestInfo = async function () {
@@ -70,14 +71,6 @@
         collapse.classList.remove("show");
         clickedTestRuns[id] = false;
     };
-
-    onMount(() => {
-
-    });
-
-    onDestroy(() => {
-
-    });
 </script>
 
 <div class:d-none={filtered} class="accordion-item border-none  bg-main mb-1">
@@ -106,14 +99,14 @@
                 <div>{testInfo.test.name} ({testInfo.release.name}/{testInfo.group.name})</div>
             {#if runs.length > 0}
                 <div class="ms-auto flex-fill text-end">{timestampToISODate(runs[0].start_time)}</div>
-                <div class="mx-2">#{runs[0].build_number}</div>
+                <div class="mx-2">#{extractBuildNumber(runs[0])}</div>
             {/if}
             {#if removableRuns}
                 <div class="mx-2 text-end" class:flex-fill={runs.length == 0}>
                     <div
                         class="d-inline-block btn btn-close"
                         role="button"
-                        on:click={() => { dispatch("testRunRemove", { testId: testId })}}
+                        on:click={() => { dispatch("testRunRemove", { testId: testId }); }}
                     >
                     </div>
                 </div>
@@ -133,7 +126,7 @@
                                 <TestRun
                                     id={run.id}
                                     {testInfo}
-                                    build_number={run.build_number}
+                                    build_number={extractBuildNumber(run)}
                                     on:closeRun={handleTestRunClose}
                                 />
                             {/if}
