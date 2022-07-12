@@ -8,6 +8,7 @@
     export let id;
     export let releaseName;
     let fetchIntervalId;
+    let suppressFetch = false;
     let comments = [];
     let users = {};
     let fetching = false;
@@ -87,6 +88,7 @@
 
     const handleCommentUpdate = async function (e) {
         let commentBody = e.detail;
+        suppressFetch = false;
         try {
             let apiResponse = await fetch("/api/v1/test_run/comments/update", {
                 method: "POST",
@@ -152,6 +154,7 @@
     onMount(() => {
         fetchComments();
         fetchIntervalId = setInterval(() => {
+            if (suppressFetch) return;
             fetchComments();
         }, 60 * 1000);
     });
@@ -171,6 +174,7 @@
                         {users}
                         on:commentDelete={handleCommentDelete}
                         on:commentUpdated={handleCommentUpdate}
+                        on:commentEditing={() => (suppressFetch = true)}
                     />
                 </div>
             </div>
