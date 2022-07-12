@@ -14,12 +14,12 @@
     export let commentBody = {
         id: "",
         message: "",
-        release: releaseName,
+        release: "",
         reactions: {},
         mentions: [],
         user_id: "",
         release_id: "",
-        test_run_id: id,
+        test_run_id: "",
         posted_at: new Date(),
     };
 
@@ -91,7 +91,10 @@
                 <button
                     class="btn btn-light bg-editor"
                     title="Edit"
-                    on:click={() => (editing = true)}
+                    on:click={() => {
+                        editing = true;
+                        dispatch("commentEditing");
+                    }}
                 >
                     <Fa icon={faEdit} />
                 </button>

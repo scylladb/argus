@@ -137,28 +137,28 @@
     const editorHandleKeyDown = function (e) {
         if (!e.code) return;
         switch (e.code) {
-            case "Tab": {
-                performButtonAction("tab");
-                e.preventDefault();
-                break;
-            }
-            case "Enter": {
-                if (!e.ctrlKey) break;
-                e.preventDefault();
-                handleSubmitComment();
-                break;
-            }
+        case "Tab": {
+            performButtonAction("tab");
+            e.preventDefault();
+            break;
+        }
+        case "Enter": {
+            if (!e.ctrlKey) break;
+            e.preventDefault();
+            handleSubmitComment();
+            break;
+        }
         }
     };
 
     const editorBeforeInput = function (e) {
         switch (e.data) {
-            case "@": {
-                mentioning = true;
-                mentionKeyPressed = true;
-                e.preventDefault();
-                break;
-            }
+        case "@": {
+            mentioning = true;
+            mentionKeyPressed = true;
+            e.preventDefault();
+            break;
+        }
         }
     };
 
