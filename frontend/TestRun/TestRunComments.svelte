@@ -12,6 +12,7 @@
     let comments = [];
     let users = {};
     let fetching = false;
+    let hideReplyButton = false;
     $: users = $userList;
     const newCommentTemplate = {
         id: "",
@@ -24,6 +25,8 @@
         test_run_id: id,
         posted_at: new Date(),
     };
+
+    let newCommentBody = Object.assign({}, newCommentTemplate);
 
     const fetchComments = async function () {
         try {
@@ -83,6 +86,8 @@
                     "A backend error occurred during comment submission"
                 );
             }
+        } finally {
+            newCommentBody = Object.assign({}, newCommentTemplate);
         }
     };
 
@@ -117,6 +122,11 @@
                 );
             }
         }
+    };
+
+    const handleCommentReply = function (e) {
+        let quotedMessage = e.detail.message.trim().split("\n").map((val) => `> ${val}`).join("\n");
+        newCommentBody.message = `${newCommentBody.message}\n${quotedMessage}\n`;
     };
 
     const handleCommentDelete = async function (e) {
@@ -172,9 +182,11 @@
                     <Comment
                         commentBody={comment}
                         {users}
+                        {hideReplyButton}
                         on:commentDelete={handleCommentDelete}
                         on:commentUpdated={handleCommentUpdate}
                         on:commentEditing={() => (suppressFetch = true)}
+                        on:commentReply={handleCommentReply}
                     />
                 </div>
             </div>
@@ -198,7 +210,7 @@
                 <CommentEditor
                     runId={id}
                     mode="post"
-                    commentBody={Object.assign({}, newCommentTemplate)}
+                    bind:commentBody={newCommentBody}
                     on:submitComment={handleCommentSubmit}
                 />
             </div>

@@ -1,7 +1,7 @@
 <script>
     import * as marked from "marked";
     import Fa from "svelte-fa";
-    import { faEdit, faTrashAlt } from "@fortawesome/free-regular-svg-icons";
+    import { faEdit, faArrowAltCircleLeft, faTrashAlt } from "@fortawesome/free-regular-svg-icons";
     import humanizeDuration from "humanize-duration";
     import CommentEditor from "./CommentEditor.svelte";
     import UserProfile from "./UserProfile.svelte";
@@ -22,7 +22,7 @@
         test_run_id: "",
         posted_at: new Date(),
     };
-
+    export let hideReplyButton = false;
     marked.use({
         extensions: [MarkdownUserMention]
     });
@@ -86,8 +86,19 @@
                 just now
             {/if}
         </div>
-        {#if applicationCurrentUser.id == commentBody.user_id}
+        {#if !hideReplyButton}
             <div class="ms-auto">
+                <button
+                    class="btn btn-light bg-editor"
+                    title="Quote Reply"
+                    on:click={() => (dispatch("commentReply", { message: commentBody.message }))}
+                >
+                    <Fa icon={faArrowAltCircleLeft} />
+                </button>
+            </div>
+        {/if}
+        {#if applicationCurrentUser.id == commentBody.user_id}
+            <div class="ms-1">
                 <button
                     class="btn btn-light bg-editor"
                     title="Edit"
