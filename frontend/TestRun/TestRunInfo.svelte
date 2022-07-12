@@ -174,24 +174,26 @@
                         aria-current="page"
                         ><Fa icon={faSearch} /> Restore Monitoring Stack</a
                     >
-                    <button
-                        type="button"
-                        class="btn btn-outline-success"
-                        on:click={() => {
-                            navigator.clipboard.writeText(
-                                cmd_hydraInvestigateShowMonitor
-                            );
-                        }}><Fa icon={faCopy} /> Hydra Show Monitor</button
-                    >
-                    <button
-                        type="button"
-                        class="btn btn-outline-success"
-                        on:click={() => {
-                            navigator.clipboard.writeText(
-                                cmd_hydraInvestigateShowLogs
-                            );
-                        }}><Fa icon={faCopy} /> Hydra Show Logs</button
-                    >
+                    {#if navigator.clipboard}
+                        <button
+                            type="button"
+                            class="btn btn-outline-success"
+                            on:click={() => {
+                                navigator.clipboard.writeText(
+                                    cmd_hydraInvestigateShowMonitor
+                                );
+                            }}><Fa icon={faCopy} /> Hydra Show Monitor</button
+                        >
+                        <button
+                            type="button"
+                            class="btn btn-outline-success"
+                            on:click={() => {
+                                navigator.clipboard.writeText(
+                                    cmd_hydraInvestigateShowLogs
+                                );
+                            }}><Fa icon={faCopy} /> Hydra Show Logs</button
+                        >
+                    {/if}
                 {/if}
                 <a
                     href="/dashboard/{test_run.release_name}"
@@ -200,5 +202,27 @@
                 >
             </div>
         </div>
+        {#if !navigator.clipboard}
+        <div class="d-flex flex-column p-2">
+            <div class="input-group mb-2">
+                <span class="input-group-text fw-bold">Show logs</span>
+                <input
+                    type="text"
+                    class="form-control user-select-all"
+                    disabled
+                    value={cmd_hydraInvestigateShowLogs}
+                />
+            </div>
+            <div class="input-group mb-2">
+                <span class="input-group-text fw-bold">Show monitor</span>
+                <input
+                    type="text"
+                    class="form-control user-select-all"
+                    disabled
+                    value={cmd_hydraInvestigateShowMonitor}
+                />
+            </div>
+        </div>
+    {/if}
     </div>
 </div>
