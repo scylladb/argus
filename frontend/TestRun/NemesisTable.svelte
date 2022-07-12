@@ -5,7 +5,8 @@
     import humanizeDuration from "humanize-duration";
     import { timestampToISODate } from "../Common/DateUtils";
     import { titleCase } from "../Common/TextUtils";
-    import { NemesisStatuses, NemesisStatusBackgrounds } from "../Common/TestStatus";
+    import { NemesisStatusBackgrounds } from "../Common/TestStatus";
+    import NemesisReason from "./NemesisReason.svelte";
     let sortHeaders = {
         "startTime": "start_time",
         "endTime": "end_time",
@@ -205,14 +206,7 @@
                                     <span class="fw-bold">Duration:</span> {humanizeDuration(nemesis.duration * 1000)}
                                 </li>
                                 {/if}
-                                {#if nemesis.stack_trace}
-                                    <li>
-                                        <span class="fw-bold">{nemesis.status != NemesisStatuses.SKIPPED ? "Failure" : "Skip"} reason</span>
-                                        <pre class="stacktrace overflow-scroll">
-                                            {nemesis.stack_trace}
-                                        </pre>
-                                    </li>
-                                {/if}
+                                {#if nemesis.stack_trace}<NemesisReason {nemesis} />{/if}
                             </ul>
                             <h5>Target Information</h5>
                             <ul class="list-unstyled">
@@ -240,15 +234,6 @@
 </div>
 
 <style>
-    .stacktrace {
-        padding: 0.5rem;
-        font-family: monospace;
-        font-size: 12pt;
-        background-color: #f0f0f0;
-        border-radius: 0.25rem;
-        width: 60em;
-    }
-
     .invertArrow {
         transform: rotate(180deg);
     }
