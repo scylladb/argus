@@ -13,8 +13,6 @@ from argus.backend.controller.auth import login_required
 from argus.backend.service.stats import ReleaseStatsCollector
 from argus.backend.models.web import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, UserOauthToken
 
-# pylint: disable=broad-except
-
 bp = Blueprint('api', __name__, url_prefix='/api/v1')
 bp.register_blueprint(notifications_bp)
 bp.register_error_handler(Exception, handle_api_exception)
