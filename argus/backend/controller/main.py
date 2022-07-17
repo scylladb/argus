@@ -6,7 +6,7 @@ from flask import (
 from argus.backend.controller.notifications import bp as notifications_bp
 from argus.backend.service.argus_service import ArgusService
 from argus.backend.models.web import WebFileStorage
-from argus.backend.controller.auth import login_required
+from argus.backend.service.user import login_required
 
 LOGGER = logging.getLogger(__name__)
 
@@ -113,8 +113,9 @@ def error():
 @login_required
 def profile():
     first_run = session.pop("first_run_info", None)
+    token_generated = session.pop("token_generated", None)
 
-    return render_template("profile.html.j2", first_run=first_run)
+    return render_template("profile.html.j2", first_run=first_run, token_generated=token_generated)
 
 
 @bp.route("/profile/oauth/github", methods=["GET"])

@@ -9,7 +9,7 @@ from flask.json import jsonify
 from argus.backend.error_handlers import handle_api_exception
 from argus.backend.controller.notification_api import bp as notifications_bp
 from argus.backend.service.argus_service import ArgusService
-from argus.backend.controller.auth import login_required
+from argus.backend.service.user import api_login_required
 from argus.backend.service.stats import ReleaseStatsCollector
 from argus.backend.models.web import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, UserOauthToken
 
@@ -32,7 +32,7 @@ def app_version():
 
 
 @bp.route("/profile/github/token")
-@login_required
+@api_login_required
 def get_github_oauth_token():
     user_tokens = UserOauthToken.filter(user_id=g.user.id).all()
     token = None
@@ -53,7 +53,7 @@ def get_github_oauth_token():
 
 
 @bp.route("/releases")
-@login_required
+@api_login_required
 def releases():
     service = ArgusService()
     force_all = request.args.get("all", False)
@@ -68,7 +68,7 @@ def releases():
 
 
 @bp.route("/release/activity", methods=["GET"])
-@login_required
+@api_login_required
 def release_activity():
     release_name = request.args.get("releaseName")
     if not release_name:
@@ -83,7 +83,7 @@ def release_activity():
 
 
 @bp.route("/release/planner/data", methods=["GET"])
-@login_required
+@api_login_required
 def release_planner_data():
 
     release_id = request.args.get("releaseId")
@@ -98,7 +98,7 @@ def release_planner_data():
 
 
 @bp.route("/release/<string:release_id>/versions")
-@login_required
+@api_login_required
 def release_versions(release_id: str):
     release_id = UUID(release_id)
     service = ArgusService()
@@ -127,7 +127,7 @@ def get_planner_comment_by_test():
 
 
 @bp.route("/release/schedules/comment/update", methods=["POST"])
-@login_required
+@api_login_required
 def release_schedules_comment_update():
     if not request.is_json:
         raise Exception(
@@ -143,7 +143,7 @@ def release_schedules_comment_update():
 
 
 @bp.route("/release/schedules", methods=["GET"])
-@login_required
+@api_login_required
 def release_schedules():
     release = request.args.get("releaseId")
     if not release:
@@ -158,7 +158,7 @@ def release_schedules():
 
 
 @bp.route("/release/schedules/assignee/update", methods=["POST"])
-@login_required
+@api_login_required
 def release_schedules_assignee_update():
     if not request.is_json:
         raise Exception(
@@ -174,7 +174,7 @@ def release_schedules_assignee_update():
 
 
 @bp.route("/release/assignees/groups", methods=["GET"])
-@login_required
+@api_login_required
 def group_assignees():
     release_id = request.args.get("releaseId")
     if not release_id:
@@ -189,7 +189,7 @@ def group_assignees():
 
 
 @bp.route("/release/assignees/tests", methods=["GET"])
-@login_required
+@api_login_required
 def tests_assignees():
     group_id = request.args.get("groupId")
     if not group_id:
@@ -204,7 +204,7 @@ def tests_assignees():
 
 
 @bp.route("/release/schedules/submit", methods=["POST"])
-@login_required
+@api_login_required
 def release_schedules_submit():
     if not request.is_json:
         raise Exception(
@@ -228,7 +228,7 @@ def release_schedules_submit():
 
 
 @bp.route("/release/schedules/delete", methods=["POST"])
-@login_required
+@api_login_required
 def release_schedules_delete():
     if not request.is_json:
         raise Exception(
@@ -244,7 +244,7 @@ def release_schedules_delete():
 
 
 @bp.route("/groups", methods=["GET"])
-@login_required
+@api_login_required
 def argus_groups():
     release_id = request.args.get("releaseId")
     if not release_id:
@@ -264,7 +264,7 @@ def argus_groups():
 
 
 @bp.route("/tests", methods=["GET"])
-@login_required
+@api_login_required
 def argus_tests():
     group_id = request.args.get("groupId")
     if not group_id:
@@ -283,7 +283,7 @@ def argus_tests():
 
 
 @bp.route("/release/<string:release_id>/details", methods=["GET"])
-@login_required
+@api_login_required
 def get_release_details(release_id: str):
     release = ArgusRelease.get(id=UUID(release_id))
     response = jsonify({
@@ -295,7 +295,7 @@ def get_release_details(release_id: str):
 
 
 @bp.route("/group/<string:group_id>/details", methods=["GET"])
-@login_required
+@api_login_required
 def get_group_details(group_id: str):
     group = ArgusReleaseGroup.get(id=UUID(group_id))
     response = jsonify({
@@ -307,7 +307,7 @@ def get_group_details(group_id: str):
 
 
 @bp.route("/test/<string:test_id>/details", methods=["GET"])
-@login_required
+@api_login_required
 def get_test_details(test_id: str):
     test = ArgusReleaseGroupTest.get(id=UUID(test_id))
     response = jsonify({
@@ -319,7 +319,7 @@ def get_test_details(test_id: str):
 
 
 @bp.route("/test-info", methods=["GET"])
-@login_required
+@api_login_required
 def test_info():
     test_id = request.args.get("testId")
     if not test_id:
@@ -335,7 +335,7 @@ def test_info():
 
 
 @bp.route("/test_run", methods=["GET"])
-@login_required
+@api_login_required
 def test_run():
     run_id = request.args.get("runId")
     service = ArgusService()
@@ -349,7 +349,7 @@ def test_run():
 
 
 @bp.route("/test_run/comments", methods=["GET"])
-@login_required
+@api_login_required
 def test_run_comments():
     test_id = request.args.get("testId")
     if not test_id:
@@ -364,7 +364,7 @@ def test_run_comments():
 
 
 @bp.route("/test_run/comment/get", methods=["GET"])
-@login_required
+@api_login_required
 def get_test_run_comment():
     comment_id = request.args.get("commentId")
     if not comment_id:
@@ -378,7 +378,7 @@ def get_test_run_comment():
 
 
 @bp.route("/test_run/comments/submit", methods=["POST"])
-@login_required
+@api_login_required
 def test_run_submit_comment():
     if not request.is_json:
         raise Exception(
@@ -394,7 +394,7 @@ def test_run_submit_comment():
 
 
 @bp.route("/test_run/comments/update", methods=["POST"])
-@login_required
+@api_login_required
 def test_run_update_comment():
     if not request.is_json:
         raise Exception(
@@ -410,7 +410,7 @@ def test_run_update_comment():
 
 
 @bp.route("/test_run/comments/delete", methods=["POST"])
-@login_required
+@api_login_required
 def test_run_delete_comment():
     if not request.is_json:
         raise Exception(
@@ -426,7 +426,7 @@ def test_run_delete_comment():
 
 
 @bp.route("/users", methods=["GET"])
-@login_required
+@api_login_required
 def user_info():
     result = ArgusService().get_user_info()
 
@@ -437,7 +437,7 @@ def user_info():
 
 
 @bp.route("/release/stats/v2", methods=["GET"])
-@login_required
+@api_login_required
 def release_stats_v2():
     request.query_string.decode(encoding="UTF-8")
     release = request.args.get("release")
@@ -456,7 +456,7 @@ def release_stats_v2():
 
 
 @bp.route("/test_runs/poll", methods=["GET"])
-@login_required
+@api_login_required
 def test_runs_poll():
     limit = request.args.get("limit")
     if not limit:
@@ -475,7 +475,7 @@ def test_runs_poll():
 
 
 @bp.route("/test_run/poll", methods=["GET"])
-@login_required
+@api_login_required
 def test_run_poll_single():
     runs = request.args.get("runs", "")
     runs = [UUID(r) for r in runs.split(",") if r]
@@ -489,7 +489,7 @@ def test_run_poll_single():
 
 
 @bp.route("/test_run/change_status", methods=["POST"])
-@login_required
+@api_login_required
 def test_run_change_status():
     if not request.is_json:
         raise Exception(
@@ -505,7 +505,7 @@ def test_run_change_status():
 
 
 @bp.route("/test_run/change_investigation_status", methods=["POST"])
-@login_required
+@api_login_required
 def test_run_change_investigation_status():
     if not request.is_json:
         raise Exception(
@@ -521,7 +521,7 @@ def test_run_change_investigation_status():
 
 
 @bp.route("/test_run/change_assignee", methods=["POST"])
-@login_required
+@api_login_required
 def test_run_change_assignee():
     if not request.is_json:
         raise Exception(
@@ -537,7 +537,7 @@ def test_run_change_assignee():
 
 
 @bp.route("/test_run/activity", methods=["GET"])
-@login_required
+@api_login_required
 def test_run_activity():
     run_id = request.args.get("runId")
     if not run_id:
@@ -553,7 +553,7 @@ def test_run_activity():
 
 
 @bp.route("/release/create", methods=["POST"])
-@login_required
+@api_login_required
 def release_create():
     if not request.is_json:
         raise Exception(
@@ -569,7 +569,7 @@ def release_create():
 
 
 @bp.route("/issues/submit", methods=["POST"])
-@login_required
+@api_login_required
 def issues_submit():
     if not request.is_json:
         raise Exception(
@@ -585,7 +585,7 @@ def issues_submit():
 
 
 @bp.route("/issues/get", methods=["GET"])
-@login_required
+@api_login_required
 def issues_get():
     filter_key = request.args.get("filterKey")
     if not filter_key:
@@ -610,7 +610,7 @@ def issues_get():
 
 
 @bp.route("/issues/delete", methods=["POST"])
-@login_required
+@api_login_required
 def issues_delete():
     if not request.is_json:
         raise Exception(

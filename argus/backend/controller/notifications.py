@@ -2,7 +2,7 @@ from flask import (
     Blueprint,
     render_template,
 )
-from argus.backend.controller.auth import login_required
+from argus.backend.service.user import login_required
 
 bp = Blueprint('notifications', __name__, url_prefix='/notifications')
 

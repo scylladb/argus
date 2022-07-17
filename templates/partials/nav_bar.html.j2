@@ -22,7 +22,13 @@
             {% endif %}
             {{g.user.username}}
             </a>
-            <a href="{{ url_for('auth.logout')}}" class="nav-link text-danger"><i class="fas fa-sign-out-alt"></i> Logout</a>
+            <div class="d-inline-flex align-items-center">
+                <form action="{{ url_for('auth.logout')}}" method="post">
+                    <button class="btn btn-sm btn-danger" type="submit">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </button>
+                </form>
+            </div>
             {% else %}
             <a href="{{ url_for('auth.login')}}" class="{% if request.path == url_for('auth.login')%}active{%endif%} nav-link"><i class="fas fa-sign-in-alt"></i> Login</a>
             {% endif %}
