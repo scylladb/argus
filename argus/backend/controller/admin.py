@@ -16,7 +16,7 @@ from argus.backend.service.argus_service import ArgusService
 from argus.backend.service.admin import AdminService
 from argus.backend.controller.admin_api import bp as admin_api_bp
 from argus.backend.controller.auth import login_required, check_roles
-from argus.db.models import UserRoles
+from argus.backend.models.web import UserRoles
 
 # pylint: disable=broad-except
 bp = Blueprint('admin', __name__, url_prefix='/admin')

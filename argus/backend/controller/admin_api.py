@@ -8,7 +8,7 @@ from flask import (
 from flask.json import jsonify
 from argus.backend.service.release_manager import ReleaseManagerService
 from argus.backend.controller.auth import login_required, check_roles
-from argus.db.models import UserRoles
+from argus.backend.models.web import UserRoles
 
 # pylint: disable=broad-except
 bp = Blueprint('admin_api', __name__, url_prefix='/api/v1')

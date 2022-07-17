@@ -6,7 +6,7 @@ from flask import current_app
 from flask.cli import with_appcontext
 
 from argus.backend.db import ScyllaCluster
-from argus.db.models import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest
+from argus.backend.models.web import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest
 from argus.backend.service.release_manager import ReleaseManagerService
 
 LOGGER = logging.getLogger(__name__)

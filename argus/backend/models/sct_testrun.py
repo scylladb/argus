@@ -5,7 +5,7 @@ from cassandra.cqlengine.models import Model
 from cassandra.cqlengine.usertype import UserType
 from cassandra.cqlengine import columns
 
-from argus.backend.enums import TestStatus, TestInvestigationStatus
+from argus.backend.util.enums import TestStatus, TestInvestigationStatus
 
 
 class PackageVersion(UserType):

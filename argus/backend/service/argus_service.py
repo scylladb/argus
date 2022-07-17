@@ -8,7 +8,6 @@ import hashlib
 import logging
 import datetime
 from types import NoneType
-from typing import Callable
 from collections import namedtuple
 from uuid import UUID, uuid4
 
@@ -20,8 +19,8 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.sct_testrun import SCTTestRun
 from argus.backend.service.notification_manager import NotificationManagerService
-from argus.backend.enums import TestStatus, TestInvestigationStatus
-from argus.db.models import (
+from argus.backend.util.enums import TestStatus, TestInvestigationStatus
+from argus.backend.models.web import (
     ArgusGithubIssue,
     ArgusRelease,
     ArgusReleaseGroup,
@@ -40,32 +39,10 @@ from argus.db.models import (
     UserOauthToken,
     WebFileStorage,
 )
-from argus.backend.event_processors import EVENT_PROCESSORS
+from argus.backend.events.event_processors import EVENT_PROCESSORS
+from argus.backend.util.common import strip_html_tags
 
 LOGGER = logging.getLogger(__name__)
-
-
-def first(iterable, value, key: Callable = None, predicate: Callable = None):
-    for elem in iterable:
-        if predicate and predicate(elem, value):
-            return elem
-        elif key and key(elem) == value:
-            return elem
-        elif elem == value:
-            return elem
-    return None
-
-
-def check_scheduled_test(test, group, testname):
-    return testname == f"{group}/{test}" or testname == test
-
-
-def strip_html_tags(text: str):
-    return text.replace("<", "&lt;").replace(">", "&gt;")
-
-
-def convert_str_list_to_uuid(lst: list[str]) -> list[UUID]:
-    return [UUID(s) for s in lst]
 
 
 class GithubOrganizationMissingError(Exception):
@@ -649,7 +626,7 @@ class ArgusService:
             build_id=test.build_system_id,
             start_time__gte=schedule.period_start,
             start_time__lte=schedule.period_end
-            ).all()
+        ).all()
         )
         for row in affected_rows:
             if row.assignee != new_assignee:
@@ -663,7 +640,7 @@ class ArgusService:
             build_id__in=build_ids,
             start_time__gte=schedule.period_start,
             start_time__lte=schedule.period_end
-            ).all()
+        ).all()
         )
         for row in affected_rows:
             if row.assignee != new_assignee:
@@ -938,7 +915,8 @@ class ArgusService:
 
         scheduled_tests = ArgusReleaseScheduleTest.filter(release_id=release.id, test_id__in=tuple(test_ids)).all()
         schedule_ids = {test.schedule_id for test in scheduled_tests}
-        schedules: list[ArgusReleaseSchedule] = list(ArgusReleaseSchedule.filter(release_id=release.id, id__in=tuple(schedule_ids)).all())
+        schedules: list[ArgusReleaseSchedule] = list(ArgusReleaseSchedule.filter(
+            release_id=release.id, id__in=tuple(schedule_ids)).all())
 
         if release.perpetual:
             today = datetime.datetime.utcnow()
