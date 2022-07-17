@@ -1,7 +1,7 @@
 import logging
 from uuid import UUID
 from flask import render_template
-from argus.db.models import ArgusNotification, ArgusNotificationSourceTypes, ArgusNotificationTypes, ArgusNotificationState, User
+from argus.backend.models.web import ArgusNotification, ArgusNotificationSourceTypes, ArgusNotificationTypes, ArgusNotificationState, User
 
 LOGGER = logging.getLogger(__name__)
 

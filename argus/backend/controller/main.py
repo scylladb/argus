@@ -5,7 +5,7 @@ from flask import (
 )
 from argus.backend.controller.notifications import bp as notifications_bp
 from argus.backend.service.argus_service import ArgusService
-from argus.db.models import WebFileStorage
+from argus.backend.models.web import WebFileStorage
 from argus.backend.controller.auth import login_required
 
 LOGGER = logging.getLogger(__name__)

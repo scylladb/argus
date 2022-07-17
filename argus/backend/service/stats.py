@@ -2,9 +2,9 @@ import logging
 
 from datetime import datetime
 from argus.backend.models.sct_testrun import SCTTestRun
-from argus.db.db_types import TestStatus, TestInvestigationStatus
-from argus.db.models import ArgusGithubIssue, ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest,\
-     ArgusReleaseScheduleTest, ArgusTestRunComment
+from argus.backend.util.enums import TestStatus, TestInvestigationStatus
+from argus.backend.models.web import ArgusGithubIssue, ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest,\
+    ArgusReleaseScheduleTest, ArgusTestRunComment
 from argus.backend.db import ScyllaCluster
 
 LOGGER = logging.getLogger(__name__)

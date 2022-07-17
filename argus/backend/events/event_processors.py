@@ -1,4 +1,4 @@
-from argus.db.models import ArgusEventTypes
+from argus.backend.models.web import ArgusEventTypes
 
 
 def event_process_posted_comment(event: dict) -> dict:

@@ -23,7 +23,7 @@ from argus.db.argus_json import ArgusJSONEncoder
 from argus.db.config import BaseConfig, FileConfig
 from argus.db.db_types import ColumnInfo, CollectionHint, ArgusUDTBase
 from argus.db.cloud_types import ResourceState
-from argus.db.models import ArgusReleaseSchedule, ArgusReleaseScheduleAssignee, \
+from argus.backend.models.web import ArgusReleaseSchedule, ArgusReleaseScheduleAssignee, \
     ArgusReleaseScheduleGroup, ArgusReleaseScheduleTest, ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest
 
 LOGGER = logging.getLogger(__name__)

@@ -14,7 +14,7 @@ from argus.db.cloud_types import CloudResource, CloudInstanceDetails, BaseCloudS
 from argus.db.interface import ArgusDatabase
 from argus.db.db_types import ColumnInfo, CollectionHint, NemesisRunInfo, TestStatus, TestInvestigationStatus, \
     EventsBySeverity, PackageVersion
-from argus.db.models import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, ArgusReleaseSchedule, ArgusReleaseScheduleAssignee, ArgusReleaseScheduleGroup, \
+from argus.backend.models.web import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, ArgusReleaseSchedule, ArgusReleaseScheduleAssignee, ArgusReleaseScheduleGroup, \
     ArgusReleaseScheduleTest
 
 LOGGER = logging.getLogger(__name__)

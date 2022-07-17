@@ -2,7 +2,7 @@ import logging
 from uuid import UUID
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.sct_testrun import SCTTestRun
-from argus.db.models import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest
+from argus.backend.models.web import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest
 
 LOGGER = logging.getLogger(__name__)
 

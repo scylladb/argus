@@ -6,7 +6,7 @@ from flask import (
     Blueprint, flash, g, redirect, render_template, request, session, url_for, current_app
 )
 from werkzeug.security import check_password_hash
-from argus.db.models import User
+from argus.backend.models.web import User
 
 bp = Blueprint('auth', __name__, url_prefix='/auth')
 
