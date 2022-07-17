@@ -1,3 +1,19 @@
+# Main DB Cluster contact points
+SCYLLA_CONTACT_POINTS:
+  - 1.1.1.1
+  - 2.2.2.2
+  - 3.3.3.3
+# Username
+SCYLLA_USERNAME: user
+# Password
+SCYLLA_PASSWORD: password
+# Default keyspace (can be created using 'create-keyspace' command with RF set to the number of contact points)
+SCYLLA_KEYSPACE_NAME: mykeyspacename
+# Replication factor used - if set, will override contact_points as amount of nodes for replication
+# SCYLLA_REPLICATION_FACTOR: 3
+
+# Application log level
+APP_LOG_LEVEL: INFO
 # Secret key used to match session data
 SECRET_KEY: MUSTBEUNIQUE
 # Client ID of a github oauth application
@@ -6,7 +22,7 @@ GITHUB_CLIENT_ID: YOUR_GITHUB_CLIENT_ID
 GITHUB_CLIENT_SECRET: YOUR_GITHUB_CLIENT_SECRET
 # Github personal access token
 GITHUB_ACCESS_TOKEN: YOUR_GITHUB_PERSONAL_ACCESS_TOKEN
-# List of required organization names
+# List of required organization names (Comment out to disable organization requirement)
 GITHUB_REQUIRED_ORGANIZATIONS:
   # at least one is required for user to successfully authenticate
   - myorg
