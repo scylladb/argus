@@ -5,7 +5,7 @@ from flask import (
     request,
     Request,
 )
-from flask.json import jsonify
+from argus.backend.error_handlers import handle_api_exception
 from argus.backend.service.notification_manager import NotificationManagerService
 from argus.backend.controller.auth import login_required
 
@@ -19,93 +19,64 @@ def get_payload(client_request: Request):
     return request_payload
 
 
-# pylint: disable=broad-except
 bp = Blueprint('notifications', __name__, url_prefix='/notifications')
 LOGGER = logging.getLogger(__name__)
+bp.register_error_handler(Exception, handle_api_exception)
 
 
 @bp.route("/get")
 @login_required
 def get_notification():
-    res = {
-        "status": "ok"
+    notification_id = request.args.get("id")
+    if not notification_id:
+        raise Exception("No notification id provided")
+    service = NotificationManagerService()
+    notification = service.get_notificaton(
+        receiver=g.user.id, notification_id=notification_id)
+    return {
+        "status": "ok",
+        "response": notification.to_dict()
     }
-    try:
-        notification_id = request.args.get("id")
-        if not notification_id:
-            raise Exception("No notification id provided")
-        service = NotificationManagerService()
-        notification = service.get_notificaton(receiver=g.user.id, notification_id=notification_id)
-        res["response"] = notification.to_dict()
-    except Exception as exc:
-        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
-        res["status"] = "error"
-        res["response"] = {
-            "exception": exc.__class__.__name__,
-            "arguments": exc.args
-        }
-    return jsonify(res)
 
 
 @bp.route("/get_unread")
 @login_required
 def get_unread_count():
-    res = {
-        "status": "ok"
+    service = NotificationManagerService()
+    unread_count = service.get_unread_count(receiver=g.user.id)
+    return {
+        "status": "ok",
+        "response": unread_count
     }
-    try:
-        service = NotificationManagerService()
-        unread_count = service.get_unread_count(receiver=g.user.id)
-        res["response"] = unread_count
-    except Exception as exc:
-        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
-        res["status"] = "error"
-        res["response"] = {
-            "exception": exc.__class__.__name__,
-            "arguments": exc.args
-        }
-    return jsonify(res)
 
 
 @bp.route("/summary")
 @login_required
 def get_summary():
-    res = {
-        "status": "ok"
+    after = request.args.get("afterId")
+    limit = request.args.get("limit")
+    limit = int(limit) if limit else 20
+    service = NotificationManagerService()
+    notifications = service.get_notifications(
+        receiver=g.user.id,
+        limit=limit,
+        after=after
+    )
+    return {
+        "status": "ok",
+        "response": [n.to_dict_short_summary() for n in notifications]
     }
-    try:
-        after = request.args.get("afterId")
-        limit = request.args.get("limit")
-        limit = int(limit) if limit else 20
-        service = NotificationManagerService()
-        notifications = service.get_notifications(receiver=g.user.id, limit=limit, after=after)
-        res["response"] = [n.to_dict_short_summary() for n in notifications]
-    except Exception as exc:
-        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
-        res["status"] = "error"
-        res["response"] = {
-            "exception": exc.__class__.__name__,
-            "arguments": exc.args
-        }
-    return jsonify(res)
 
 
 @bp.route("/read", methods=["POST"])
 @login_required
 def read_notification():
-    res = {
-        "status": "ok"
+    payload = get_payload(request)
+    service = NotificationManagerService()
+    status = service.read_notification(
+        receiver=g.user.id, notification_id=payload["id"])
+
+    return {
+        "status": "ok",
+        "response": status
     }
-    try:
-        payload = get_payload(request)
-        service = NotificationManagerService()
-        status = service.read_notification(receiver=g.user.id, notification_id=payload["id"])
-        res["response"] = status
-    except Exception as exc:
-        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
-        res["status"] = "error"
-        res["response"] = {
-            "exception": exc.__class__.__name__,
-            "arguments": exc.args
-        }
-    return jsonify(res)
