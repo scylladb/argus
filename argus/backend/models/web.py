@@ -2,10 +2,8 @@ from uuid import UUID, uuid1, uuid4
 from datetime import datetime
 from enum import Enum, IntEnum, auto
 from cassandra.cqlengine.models import Model
-from cassandra.cqlengine.usertype import UserType
 from cassandra.cqlengine import columns
-from cassandra.util import uuid_from_time, unix_time_from_uuid1
-from cassandra.cqlengine.columns import UserDefinedType
+from cassandra.util import uuid_from_time, unix_time_from_uuid1  # pylint: disable=no-name-in-module
 
 
 def uuid_now():
@@ -33,21 +31,26 @@ class User(Model):
     registration_date = columns.DateTime()
     roles = columns.List(value_type=columns.Text)
     picture_id = columns.UUID(default=None)
+    api_token = columns.Text(index=True)
 
     def __hash__(self) -> int:
         return hash(self.id)
 
     def is_manager(self) -> bool:
+        # pylint: disable=unsupported-membership-test
         return UserRoles.Manager in self.roles
 
     def is_admin(self) -> bool:
+        # pylint: disable=unsupported-membership-test
         return UserRoles.Admin in self.roles
 
     def set_as_admin(self) -> None:
+        # pylint: disable=unsupported-membership-test
         if UserRoles.Admin not in self.roles:
             self.roles.append(UserRoles.Admin.value)
 
     def set_as_manager(self) -> None:
+        # pylint: disable=unsupported-membership-test
         if UserRoles.Manager not in self.roles:
             self.roles.append(UserRoles.Manager.value)
 
@@ -55,22 +58,24 @@ class User(Model):
         return str(self.id)
 
     @classmethod
-    def exists(cls, user_id: UUID):
+    def exists(cls, user_id: UUID) -> 'User' | None:
         try:
             user = cls.get(id=user_id)
             if user:
                 return user
         except cls.DoesNotExist:
-            return None
+            pass
+        return None
 
     @classmethod
-    def exists_by_name(cls, name: str):
+    def exists_by_name(cls, name: str) -> 'User' | None:
         try:
             user = cls.get(username=name)
             if user:
                 return user
         except cls.DoesNotExist:
-            return None
+            pass
+        return None
 
     def __str__(self):
         return f"User('{self.id}','{self.username}')"
@@ -158,10 +163,6 @@ class ArgusReleaseGroupTest(Model):
                 raise ArgusTestException("Build Id is already used by another test", t.id, self.id)
         except ArgusReleaseGroupTest.DoesNotExist:
             pass
-        except ArgusReleaseGroupTest.MultipleObjectsReturned:
-            raise
-
-        return
 
 
 class ArgusTestRunComment(Model):
@@ -279,7 +280,7 @@ class ArgusGithubIssue(Model):
         return super().__eq__(other)
 
     def __ne__(self, other):
-        return not(self == other)
+        return not self == other
 
 
 class ArgusReleaseSchedule(Model):

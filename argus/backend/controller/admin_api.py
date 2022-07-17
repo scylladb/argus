@@ -7,7 +7,7 @@ from flask import (
 )
 from argus.backend.error_handlers import handle_api_exception
 from argus.backend.service.release_manager import ReleaseManagerService
-from argus.backend.controller.auth import login_required, check_roles
+from argus.backend.service.user import api_login_required, check_roles
 from argus.backend.models.web import UserRoles
 
 bp = Blueprint('admin_api', __name__, url_prefix='/api/v1')
@@ -26,7 +26,7 @@ def get_payload(client_request: Request):
 
 @bp.route("/", methods=["GET"])
 @check_roles(UserRoles.Admin)
-@login_required
+@api_login_required
 def index():
     return {
         "version": "v1"
@@ -35,7 +35,7 @@ def index():
 
 @bp.route("/release/create", methods=["POST"])
 @check_roles(UserRoles.Admin)
-@login_required
+@api_login_required
 def create_release():
     payload = get_payload(request)
     release = ReleaseManagerService().create_release(**payload)
@@ -50,7 +50,7 @@ def create_release():
 
 @bp.route("/release/set_perpetual", methods=["POST"])
 @check_roles(UserRoles.Admin)
-@login_required
+@api_login_required
 def set_release_perpetual():
     payload = get_payload(request)
     result = ReleaseManagerService().set_release_perpetuality(**payload)
@@ -64,7 +64,7 @@ def set_release_perpetual():
 
 @bp.route("/release/set_state", methods=["POST"])
 @check_roles(UserRoles.Admin)
-@login_required
+@api_login_required
 def set_release_state():
     payload = get_payload(request)
     result = ReleaseManagerService().set_release_state(**payload)
@@ -79,7 +79,7 @@ def set_release_state():
 
 @bp.route("/release/set_dormant", methods=["POST"])
 @check_roles(UserRoles.Admin)
-@login_required
+@api_login_required
 def set_release_dormancy():
     payload = get_payload(request)
     result = ReleaseManagerService().set_release_dormancy(**payload)
@@ -94,7 +94,7 @@ def set_release_dormancy():
 
 @bp.route("/group/create", methods=["POST"])
 @check_roles(UserRoles.Admin)
-@login_required
+@api_login_required
 def create_group():
     payload = get_payload(request)
     group = ReleaseManagerService().create_group(**payload)
@@ -109,7 +109,7 @@ def create_group():
 
 @bp.route("/group/update", methods=["POST"])
 @check_roles(UserRoles.Admin)
-@login_required
+@api_login_required
 def update_group():
     payload = get_payload(request)
     result = ReleaseManagerService().update_group(**payload)
@@ -123,7 +123,7 @@ def update_group():
 
 @bp.route("/group/delete", methods=["POST"])
 @check_roles(UserRoles.Admin)
-@login_required
+@api_login_required
 def delete_group():
     payload = get_payload(request)
     result = ReleaseManagerService().delete_group(**payload)
@@ -138,7 +138,7 @@ def delete_group():
 
 @bp.route("/test/create", methods=["POST"])
 @check_roles(UserRoles.Admin)
-@login_required
+@api_login_required
 def create_test():
     payload = get_payload(request)
     test = ReleaseManagerService().create_test(**payload)
@@ -152,7 +152,7 @@ def create_test():
 
 @bp.route("/test/update", methods=["POST"])
 @check_roles(UserRoles.Admin)
-@login_required
+@api_login_required
 def update_test():
     payload = get_payload(request)
     result = ReleaseManagerService().update_test(**payload)
@@ -166,7 +166,7 @@ def update_test():
 
 @bp.route("/test/batch_move", methods=["POST"])
 @check_roles(UserRoles.Admin)
-@login_required
+@api_login_required
 def batch_move_tests():
     payload = get_payload(request)
     result = ReleaseManagerService().batch_move_tests(**payload)
@@ -180,7 +180,7 @@ def batch_move_tests():
 
 @bp.route("/test/delete", methods=["POST"])
 @check_roles(UserRoles.Admin)
-@login_required
+@api_login_required
 def delete_test():
     payload = get_payload(request)
     result = ReleaseManagerService().delete_test(**payload)
@@ -195,7 +195,7 @@ def delete_test():
 
 @bp.route("/releases/get", methods=["GET"])
 @check_roles(UserRoles.Admin)
-@login_required
+@api_login_required
 def get_releases():
     releases = ReleaseManagerService().get_releases()
     return {
@@ -206,7 +206,7 @@ def get_releases():
 
 @bp.route("/groups/get", methods=["GET"])
 @check_roles(UserRoles.Admin)
-@login_required
+@api_login_required
 def get_groups_for_release():
     release_id = request.args.get("releaseId")
     if not release_id:
@@ -221,7 +221,7 @@ def get_groups_for_release():
 
 @bp.route("/tests/get", methods=["GET"])
 @check_roles(UserRoles.Admin)
-@login_required
+@api_login_required
 def get_tests_for_group():
     group_id = request.args.get("groupId")
     if not group_id:

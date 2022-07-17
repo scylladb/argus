@@ -76,6 +76,28 @@ Profile
                 </div>
                 <button type="submit" class="btn btn-primary">Change</button>
             </form>
+            <h4>API Token</h4>
+            <div class="mb-2">
+                <p>Generate an API token</p>
+                {% if token_generated %}
+                    <div class="col my-3 border bg-warning rounded shadow-sm text-center p-4">
+                        Token Generated! Make sure to save it, or else you would need to regenerate it.
+                    </div>
+                {% endif %}
+                <form class="d-flex align-items-center" action="{{ url_for('auth.generate_api_token') }}" method="post">
+                    {% if g.user.api_token %}
+                        <div class="input-group">
+                            <span class="input-group-text">Current token</span>
+                            <input class="form-control" type="text" disabled value="{{ g.user.api_token if token_generated else '************'}}">
+                        </div>
+                    {% endif %}
+                    <div class="ms-2">
+                        <button class="btn btn-sm btn-primary" type="submit">
+                            {{ "Generate" if not g.user.api_token else "Regenerate"}}
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 </div>

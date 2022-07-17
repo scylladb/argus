@@ -7,7 +7,7 @@ from flask import (
 )
 from argus.backend.error_handlers import handle_api_exception
 from argus.backend.service.notification_manager import NotificationManagerService
-from argus.backend.controller.auth import login_required
+from argus.backend.service.user import api_login_required
 
 
 def get_payload(client_request: Request):
@@ -25,7 +25,7 @@ bp.register_error_handler(Exception, handle_api_exception)
 
 
 @bp.route("/get")
-@login_required
+@api_login_required
 def get_notification():
     notification_id = request.args.get("id")
     if not notification_id:
@@ -40,7 +40,7 @@ def get_notification():
 
 
 @bp.route("/get_unread")
-@login_required
+@api_login_required
 def get_unread_count():
     service = NotificationManagerService()
     unread_count = service.get_unread_count(receiver=g.user.id)
@@ -51,7 +51,7 @@ def get_unread_count():
 
 
 @bp.route("/summary")
-@login_required
+@api_login_required
 def get_summary():
     after = request.args.get("afterId")
     limit = request.args.get("limit")
@@ -69,7 +69,7 @@ def get_summary():
 
 
 @bp.route("/read", methods=["POST"])
-@login_required
+@api_login_required
 def read_notification():
     payload = get_payload(request)
     service = NotificationManagerService()

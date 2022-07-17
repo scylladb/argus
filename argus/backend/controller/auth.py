@@ -1,12 +1,11 @@
-import functools
 import os
 import hashlib
-from uuid import UUID
 from flask import (
     Blueprint, flash, g, redirect, render_template, request, session, url_for, current_app
 )
 from werkzeug.security import check_password_hash
 from argus.backend.models.web import User
+from argus.backend.service.user import UserService, load_logged_in_user, login_required
 
 bp = Blueprint('auth', __name__, url_prefix='/auth')
 
@@ -49,55 +48,18 @@ def login():
                            )
 
 
-@bp.before_app_request
-def load_logged_in_user():
-    user_id = session.get('user_id')
-
-    if user_id is None:
-        g.user = None  # pylint: disable=assigning-non-slot
-    else:
-        try:
-            g.user = User.get(id=UUID(user_id))  # pylint: disable=assigning-non-slot
-        except User.DoesNotExist:
-            session.clear()
+@bp.route("/profile/api/token/generate", methods=("POST",))
+@login_required
+def generate_api_token():
+    new_token = UserService().generate_token(g.user)
+    session["token_generated"] = new_token
+    return redirect(url_for('main.profile'))
 
 
-@bp.route('/logout')
+@bp.route('/logout', methods=("POST",))
 def logout():
     session.clear()
     return redirect(url_for('main.home'))
 
 
-def login_required(view):
-    @functools.wraps(view)
-    def wrapped_view(**kwargs):
-        if g.user is None:
-            flash(message='Unauthorized, please login', category='error')
-            return redirect(url_for('auth.login'))
-
-        return view(**kwargs)
-
-    return wrapped_view
-
-
-def check_roles(needed_roles: list[str] | str = None):
-    def inner(view):
-        @functools.wraps(view)
-        def wrapped_view(**kwargs):
-            def check_roles(roles, user):
-                if isinstance(roles, str):
-                    return roles in user.roles
-                elif isinstance(roles, list):
-                    for role in roles:
-                        if role in user.roles:
-                            return True
-                return False
-
-            if not check_roles(needed_roles, g.user):
-                flash(message='Not authorized to access this area', category='error')
-                return redirect(url_for('main.home'))
-
-            return view(**kwargs)
-
-        return wrapped_view
-    return inner
+bp.before_app_request(load_logged_in_user)
