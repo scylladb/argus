@@ -4,7 +4,7 @@ from flask import (
     render_template,
 )
 from argus.backend.controller.admin_api import bp as admin_api_bp
-from argus.backend.controller.auth import login_required, check_roles
+from argus.backend.service.user import login_required, check_roles
 from argus.backend.models.web import UserRoles
 
 bp = Blueprint('admin', __name__, url_prefix='/admin')
