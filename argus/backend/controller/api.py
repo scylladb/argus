@@ -10,7 +10,7 @@ from argus.backend.controller.notification_api import bp as notifications_bp
 from argus.backend.service.argus_service import ArgusService
 from argus.backend.controller.auth import login_required
 from argus.backend.service.stats import ReleaseStatsCollector
-from argus.db.models import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, UserOauthToken
+from argus.backend.models.web import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, UserOauthToken
 
 # pylint: disable=broad-except
 
@@ -310,30 +310,6 @@ def release_schedules_delete():
         request_payload = request.get_json()
         service = ArgusService()
         res["response"] = service.delete_schedule(request_payload)
-    except Exception as exc:
-        LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
-        res["status"] = "error"
-        res["response"] = {
-            "exception": exc.__class__.__name__,
-            "arguments": exc.args
-        }
-    return jsonify(res)
-
-
-@bp.route("/release/issues", methods=["POST"])
-@login_required
-def release_issues():
-    # TODO: Unused
-    res = {
-        "status": "ok"
-    }
-    try:
-        if not request.is_json:
-            raise Exception(
-                "Content-Type mismatch, expected application/json, got:", request.content_type)
-        request_payload = request.get_json()
-        service = ArgusService()
-        res["response"] = service.fetch_release_issues(request_payload)
     except Exception as exc:
         LOGGER.error("Exception in %s", request.endpoint, exc_info=True)
         res["status"] = "error"

@@ -13,14 +13,10 @@ from cassandra.cqlengine.management import sync_table, sync_type
 from cassandra.cqlengine import connection
 from cassandra.query import dict_factory
 from cassandra.auth import PlainTextAuthProvider
+from argus.backend.util.config import Config
 
-from argus.db.config import FileConfig
-from argus.db.models import USED_MODELS, USED_TYPES
-from argus.db.interface import ArgusDatabase
-from argus.db.testrun import TestRun
+from argus.backend.models.web import USED_MODELS, USED_TYPES
 
-DB_CONFIG = FileConfig()
-CLUSTER: Cluster | None = None
 LOGGER = logging.getLogger(__name__)
 
 
@@ -30,20 +26,20 @@ class ScyllaCluster:
 
     def __init__(self, config=None):
         if not config:
-            config = FileConfig()
+            config = Config.load_yaml_config()
         self.config = config
-        self.auth_provider = PlainTextAuthProvider(username=config.username, password=config.password)
-        self.lb_policy = WhiteListRoundRobinPolicy(hosts=config.contact_points)
+        self.auth_provider = PlainTextAuthProvider(
+            username=config["SCYLLA_USERNAME"], password=config["SCYLLA_PASSWORD"])
+        self.lb_policy = WhiteListRoundRobinPolicy(hosts=config["SCYLLA_CONTACT_POINTS"])
         self.execution_profile = ExecutionProfile(
             load_balancing_policy=self.lb_policy, consistency_level=ConsistencyLevel.QUORUM)
-        connection.setup(hosts=config.contact_points, default_keyspace=config.keyspace_name,
+        connection.setup(hosts=config["SCYLLA_CONTACT_POINTS"], default_keyspace=config["SCYLLA_KEYSPACE_NAME"],
                          auth_provider=self.auth_provider,
                          protocol_version=4,
                          execution_profiles={EXEC_PROFILE_DEFAULT: self.execution_profile})
         self.cluster: Cluster = connection.get_cluster(connection='default')
-        self.session = self.cluster.connect(keyspace=self.config.keyspace_name)
+        self.session: Session = self.cluster.connect(keyspace=config["SCYLLA_KEYSPACE_NAME"])
         self.prepared_statements = {}
-        self.argus_interface = ArgusDatabase(config=FileConfig())
         self.read_exec_profile = ExecutionProfile(
             consistency_level=ConsistencyLevel.ONE,
             row_factory=dict_factory,
@@ -55,10 +51,9 @@ class ScyllaCluster:
         )
         self.cluster.add_execution_profile("read_fast", self.read_exec_profile)
         self.cluster.add_execution_profile("read_fast_named_tuple", self.read_named_tuple_exec_profile)
-        TestRun.set_argus(self.argus_interface)
 
     @classmethod
-    def get(cls, config: FileConfig = None) -> 'ScyllaCluster':
+    def get(cls, config: Config = None) -> 'ScyllaCluster':
         if cls.APP_INSTANCE:
             return cls.APP_INSTANCE
 

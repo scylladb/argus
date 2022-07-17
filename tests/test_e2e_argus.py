@@ -7,7 +7,7 @@ import pytest
 from argus.db.testrun import TestRun, TestRunInfo, TestRunWithHeartbeat
 from argus.db.db_types import TestInvestigationStatus
 from argus.db.interface import ArgusDatabase
-from argus.db.models import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, ArgusReleaseSchedule, ArgusReleaseScheduleAssignee, \
+from argus.backend.models.web import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, ArgusReleaseSchedule, ArgusReleaseScheduleAssignee, \
     ArgusReleaseScheduleGroup, ArgusReleaseScheduleTest
 
 LOGGER = logging.getLogger(__name__)
@@ -86,7 +86,7 @@ class TestEndToEnd:
 
     @staticmethod
     @pytest.mark.docker_required
-    def test_auto_assign_run_by_group(completed_testrun: TestRunInfo, 
+    def test_auto_assign_run_by_group(completed_testrun: TestRunInfo,
                                       argus_with_release: tuple[ArgusDatabase, tuple[ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest]]):
         group_assignee_user = uuid4()
         argus_database, [release, group, test] = argus_with_release
@@ -123,14 +123,14 @@ class TestEndToEnd:
         row = argus_database.fetch(table_name=TestRun.table_name(), run_id=test_id)
         rebuilt_testrun = TestRun.from_db_row(row)
         assert group_assignee_user == rebuilt_testrun.assignee
-        
+
         scheduled_assignee.using(connection=argus_database.CQL_ENGINE_CONNECTION_NAME).delete()
         scheduled_group.using(connection=argus_database.CQL_ENGINE_CONNECTION_NAME).delete()
         schedule.using(connection=argus_database.CQL_ENGINE_CONNECTION_NAME).delete()
 
     @staticmethod
     @pytest.mark.docker_required
-    def test_auto_assign_run_by_test_name(completed_testrun: TestRunInfo, 
+    def test_auto_assign_run_by_test_name(completed_testrun: TestRunInfo,
                                           argus_with_release: tuple[ArgusDatabase, tuple[ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest]]):
         test_assignee_user = uuid4()
         argus_database, [release, _, test] = argus_with_release

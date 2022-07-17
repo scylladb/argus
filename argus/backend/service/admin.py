@@ -2,7 +2,7 @@
 from flask import g, current_app, session
 
 from argus.backend.db import ScyllaCluster
-from argus.db.models import (
+from argus.backend.models.web import (
     ArgusGithubIssue,
     ArgusRelease,
     ArgusReleaseGroup,

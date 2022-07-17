@@ -21,7 +21,7 @@ from argus.db.db_types import PackageVersion, NemesisRunInfo, EventsBySeverity, 
     NemesisStatus, ColumnInfo, CollectionHint
 from argus.db.cloud_types import AWSSetupDetails, CloudNodesInfo, CloudInstanceDetails, CloudResource, ResourceState, \
     BaseCloudSetupDetails
-from argus.db.models import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest
+from argus.backend.models.web import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest
 
 LOGGER = logging.getLogger(__name__)
 
