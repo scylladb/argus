@@ -138,11 +138,3 @@ class JenkinsMonitor(ArgusTestsMonitor):
         groups = [group for group in groups if self.check_filter(group["name"])]
 
         return groups
-
-
-@click.command('scan-jenkins')
-@with_appcontext
-def scan_jenkins_command():
-    monitor = JenkinsMonitor()
-    monitor.collect()
-    click.echo("Done.")

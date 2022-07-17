@@ -2,10 +2,10 @@ import logging
 from flask import Flask
 from argus.backend.template_filters import export_filters
 from argus.backend.controller import admin, api, main
+from argus.backend.cli import cli_bp
 from argus.backend.util.logsetup import setup_application_logging
 from argus.backend.util.encoders import ArgusJSONEncoder
 from argus.backend.db import ScyllaCluster
-from argus.backend.service.build_system_monitor import scan_jenkins_command
 from argus.backend.controller import auth
 from argus.backend.util.config import Config
 
@@ -32,7 +32,7 @@ def start_server(config=None) -> Flask:
     app.register_blueprint(main.bp)
     app.register_blueprint(api.bp)
     app.register_blueprint(admin.bp)
-    app.cli.add_command(scan_jenkins_command)
+    app.register_blueprint(cli_bp)
 
     app.logger.info("Ready.")
     return app

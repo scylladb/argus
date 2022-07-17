@@ -1,8 +1,6 @@
 import logging
 from typing import Optional
-import click
 from flask import g, Flask
-from flask.cli import with_appcontext
 # pylint: disable=no-name-in-module
 from cassandra.policies import WhiteListRoundRobinPolicy
 from cassandra.cluster import Session
@@ -75,39 +73,21 @@ class ScyllaCluster:
 
     def sync_models(self):
         for udt in USED_TYPES:
-            sync_type(ks_name=self.config.keyspace_name, type_model=udt)
+            sync_type(ks_name=self.config["SCYLLA_KEYSPACE_NAME"], type_model=udt)
         for model in USED_MODELS:
             sync_table(model)
-
-    def create_session(self) -> Session:
-        return self.session
-
-    def shutdown_session(self, session: Session):
-        pass
 
     @classmethod
     def get_session(cls):
         cluster = cls.get()
         if 'scylla_session' not in g:
-            g.scylla_session = cluster.create_session()  # pylint: disable=assigning-non-slot
+            g.scylla_session = cluster.session  # pylint: disable=assigning-non-slot
         return g.scylla_session
 
     @classmethod
     def close_session(cls, error=None):  # pylint: disable=unused-argument
-        cluster = cls.get()
-        session: Session = g.pop("scylla_session", None)
-        if session:
-            cluster.shutdown_session(session)
-
-    @click.command('sync-models')
-    @with_appcontext
-    @staticmethod
-    def sync_models_command():
-        cluster = ScyllaCluster.get()
-        cluster.sync_models()
-        click.echo("Models synchronized.")
+        g.pop("scylla_session", None)
 
     @classmethod
     def attach_to_app(cls, app: Flask):
         app.teardown_appcontext(cls.close_session)
-        app.cli.add_command(cls.sync_models_command)
