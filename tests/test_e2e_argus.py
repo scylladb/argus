@@ -7,8 +7,8 @@ import pytest
 from argus.db.testrun import TestRun, TestRunInfo, TestRunWithHeartbeat
 from argus.db.db_types import TestInvestigationStatus
 from argus.db.interface import ArgusDatabase
-from argus.backend.models.web import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, ArgusReleaseSchedule, ArgusReleaseScheduleAssignee, \
-    ArgusReleaseScheduleGroup, ArgusReleaseScheduleTest
+from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, ArgusSchedule, ArgusScheduleAssignee, \
+    ArgusSchedueGroup, ArgusScheduleTest
 
 LOGGER = logging.getLogger(__name__)
 
@@ -87,7 +87,7 @@ class TestEndToEnd:
     @staticmethod
     @pytest.mark.docker_required
     def test_auto_assign_run_by_group(completed_testrun: TestRunInfo,
-                                      argus_with_release: tuple[ArgusDatabase, tuple[ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest]]):
+                                      argus_with_release: tuple[ArgusDatabase, tuple[ArgusRelease, ArgusGroup, ArgusTest]]):
         group_assignee_user = uuid4()
         argus_database, [release, group, test] = argus_with_release
 
@@ -95,19 +95,19 @@ class TestEndToEnd:
         this_monday = today - datetime.timedelta(today.weekday() + 1)
         next_week = this_monday + datetime.timedelta(8)
 
-        schedule = ArgusReleaseSchedule()
+        schedule = ArgusSchedule()
         schedule.release_id = release.id
         schedule.period_start = this_monday
         schedule.period_end = next_week
         schedule.using(connection=argus_database.CQL_ENGINE_CONNECTION_NAME).save()
 
-        scheduled_group = ArgusReleaseScheduleGroup()
+        scheduled_group = ArgusSchedueGroup()
         scheduled_group.schedule_id = schedule.id
         scheduled_group.release_id = release.id
         scheduled_group.group_id = group.id
         scheduled_group.using(connection=argus_database.CQL_ENGINE_CONNECTION_NAME).save()
 
-        scheduled_assignee = ArgusReleaseScheduleAssignee()
+        scheduled_assignee = ArgusScheduleAssignee()
         scheduled_assignee.schedule_id = schedule.id
         scheduled_assignee.release_id = release.id
         scheduled_assignee.assignee = group_assignee_user
@@ -131,7 +131,7 @@ class TestEndToEnd:
     @staticmethod
     @pytest.mark.docker_required
     def test_auto_assign_run_by_test_name(completed_testrun: TestRunInfo,
-                                          argus_with_release: tuple[ArgusDatabase, tuple[ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest]]):
+                                          argus_with_release: tuple[ArgusDatabase, tuple[ArgusRelease, ArgusGroup, ArgusTest]]):
         test_assignee_user = uuid4()
         argus_database, [release, _, test] = argus_with_release
 
@@ -139,19 +139,19 @@ class TestEndToEnd:
         this_monday = today - datetime.timedelta(today.weekday() + 1)
         next_week = this_monday + datetime.timedelta(8)
 
-        schedule = ArgusReleaseSchedule()
+        schedule = ArgusSchedule()
         schedule.release_id = release.id
         schedule.period_start = this_monday
         schedule.period_end = next_week
         schedule.using(connection=argus_database.CQL_ENGINE_CONNECTION_NAME).save()
 
-        scheduled_test = ArgusReleaseScheduleTest()
+        scheduled_test = ArgusScheduleTest()
         scheduled_test.schedule_id = schedule.id
         scheduled_test.release_id = release.id
         scheduled_test.test_id = test.id
         scheduled_test.using(connection=argus_database.CQL_ENGINE_CONNECTION_NAME).save()
 
-        scheduled_assignee = ArgusReleaseScheduleAssignee()
+        scheduled_assignee = ArgusScheduleAssignee()
         scheduled_assignee.schedule_id = schedule.id
         scheduled_assignee.release_id = release.id
         scheduled_assignee.assignee = test_assignee_user

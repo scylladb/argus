@@ -11,7 +11,7 @@ from argus.backend.controller.notification_api import bp as notifications_bp
 from argus.backend.service.argus_service import ArgusService
 from argus.backend.service.user import UserService, api_login_required
 from argus.backend.service.stats import ReleaseStatsCollector
-from argus.backend.models.web import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, UserOauthToken
+from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, UserOauthToken
 
 bp = Blueprint('api', __name__, url_prefix='/api/v1')
 bp.register_blueprint(notifications_bp)
@@ -297,7 +297,7 @@ def get_release_details(release_id: str):
 @bp.route("/group/<string:group_id>/details", methods=["GET"])
 @api_login_required
 def get_group_details(group_id: str):
-    group = ArgusReleaseGroup.get(id=UUID(group_id))
+    group = ArgusGroup.get(id=UUID(group_id))
     response = jsonify({
         "status": "ok",
         "response": group,
@@ -309,7 +309,7 @@ def get_group_details(group_id: str):
 @bp.route("/test/<string:test_id>/details", methods=["GET"])
 @api_login_required
 def get_test_details(test_id: str):
-    test = ArgusReleaseGroupTest.get(id=UUID(test_id))
+    test = ArgusTest.get(id=UUID(test_id))
     response = jsonify({
         "status": "ok",
         "response": test
