@@ -2,7 +2,7 @@ import logging
 from uuid import UUID
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.sct_testrun import SCTTestRun
-from argus.backend.models.web import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest
+from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest
 
 LOGGER = logging.getLogger(__name__)
 
@@ -27,11 +27,11 @@ class ReleaseManagerService:
     def get_releases(self) -> list[ArgusRelease]:
         return list(ArgusRelease.all())
 
-    def get_groups(self, release_id: UUID) -> list[ArgusReleaseGroup]:
-        return list(ArgusReleaseGroup.filter(release_id=release_id).all())
+    def get_groups(self, release_id: UUID) -> list[ArgusGroup]:
+        return list(ArgusGroup.filter(release_id=release_id).all())
 
-    def get_tests(self, group_id: UUID) -> list[ArgusReleaseGroupTest]:
-        return list(ArgusReleaseGroupTest.filter(group_id=group_id).all())
+    def get_tests(self, group_id: UUID) -> list[ArgusTest]:
+        return list(ArgusTest.filter(group_id=group_id).all())
 
     def create_release(self, release_name: str, pretty_name: str, perpetual: bool) -> ArgusRelease:
         try:
@@ -50,10 +50,10 @@ class ReleaseManagerService:
         return release
 
     def create_group(self, group_name: str, pretty_name: str, build_system_id: str,
-                     release_id: str) -> ArgusReleaseGroup:
+                     release_id: str) -> ArgusGroup:
         release = ArgusRelease.get(id=UUID(release_id))
 
-        new_group = ArgusReleaseGroup()
+        new_group = ArgusGroup()
         new_group.name = group_name
         new_group.pretty_name = pretty_name
         new_group.release_id = release.id
@@ -62,11 +62,11 @@ class ReleaseManagerService:
 
         return new_group
 
-    def create_test(self, test_name, pretty_name, build_id, build_url, group_id, release_id) -> ArgusReleaseGroupTest:
+    def create_test(self, test_name, pretty_name, build_id, build_url, group_id, release_id) -> ArgusTest:
         release = ArgusRelease.get(id=UUID(release_id))
-        group = ArgusReleaseGroup.get(id=UUID(group_id))
+        group = ArgusGroup.get(id=UUID(group_id))
 
-        new_test = ArgusReleaseGroupTest()
+        new_test = ArgusTest()
         new_test.name = test_name
         new_test.pretty_name = pretty_name
         new_test.build_system_id = build_id
@@ -79,15 +79,15 @@ class ReleaseManagerService:
         return new_test
 
     def delete_group(self, group_id: str, delete_tests: bool = True, new_group_id: str = "") -> bool:
-        group_to_delete = ArgusReleaseGroup.get(id=UUID(group_id))
+        group_to_delete = ArgusGroup.get(id=UUID(group_id))
 
-        tests_to_change = ArgusReleaseGroupTest.filter(
+        tests_to_change = ArgusTest.filter(
             group_id=group_to_delete.id)
         if delete_tests:
             for test in tests_to_change.all():
                 test.delete()
         else:
-            new_group = ArgusReleaseGroup.get(id=UUID(new_group_id))
+            new_group = ArgusGroup.get(id=UUID(new_group_id))
             for test in tests_to_change.all():
                 test.group_id = new_group.id
                 test.save()
@@ -97,13 +97,13 @@ class ReleaseManagerService:
         return True
 
     def delete_test(self, test_id: str) -> bool:
-        test_to_delete = ArgusReleaseGroupTest.get(id=test_id)
+        test_to_delete = ArgusTest.get(id=test_id)
         test_to_delete.delete()
 
         return True
 
     def update_group(self, group_id: str, name: str, pretty_name: str, enabled: bool, build_system_id: str) -> bool:
-        group = ArgusReleaseGroup.get(id=UUID(group_id))
+        group = ArgusGroup.get(id=UUID(group_id))
 
         group.name = name
         group.build_system_id = build_system_id
@@ -116,8 +116,8 @@ class ReleaseManagerService:
 
     def update_test(self, test_id: str, name: str, pretty_name: str,
                     enabled: bool, build_system_id: str, build_system_url: str, group_id) -> bool:
-        test: ArgusReleaseGroupTest = ArgusReleaseGroupTest.get(id=UUID(test_id))
-        group = ArgusReleaseGroup.get(id=UUID(group_id))
+        test: ArgusTest = ArgusTest.get(id=UUID(test_id))
+        group = ArgusGroup.get(id=UUID(group_id))
 
         test.name = name
         test.pretty_name = pretty_name
@@ -155,9 +155,9 @@ class ReleaseManagerService:
         return True
 
     def batch_move_tests(self, new_group_id: str, tests: list[str]) -> bool:
-        group = ArgusReleaseGroup.get(id=UUID(new_group_id))
+        group = ArgusGroup.get(id=UUID(new_group_id))
 
-        tests: list[ArgusReleaseGroupTest] = [ArgusReleaseGroupTest.get(id=UUID(test_id)) for test_id in tests]
+        tests: list[ArgusTest] = [ArgusTest.get(id=UUID(test_id)) for test_id in tests]
 
         for test in tests:
             test.group_id = group.id
@@ -166,7 +166,7 @@ class ReleaseManagerService:
 
         return True
 
-    def move_test_runs(self, test: ArgusReleaseGroupTest) -> None:
+    def move_test_runs(self, test: ArgusTest) -> None:
         run_rows = self.session.execute(self.runs_by_build_id_stmt, parameters=(
             test.build_system_id,), execution_profile="read_fast")
         for run in run_rows:

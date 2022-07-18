@@ -6,7 +6,7 @@ from flask import current_app
 from flask.cli import with_appcontext
 
 from argus.backend.db import ScyllaCluster
-from argus.backend.models.web import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest
+from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest
 from argus.backend.service.release_manager import ReleaseManagerService
 
 LOGGER = logging.getLogger(__name__)
@@ -16,8 +16,8 @@ class ArgusTestsMonitor(ABC):
     def __init__(self) -> None:
         self._cluster = ScyllaCluster.get()
         self._existing_releases = list(ArgusRelease.all())
-        self._existing_groups = list(ArgusReleaseGroup.all())
-        self._existing_tests = list(ArgusReleaseGroupTest.all())
+        self._existing_groups = list(ArgusGroup.all())
+        self._existing_tests = list(ArgusTest.all())
         self._filtered_groups: list[str] = current_app.config["BUILD_SYSTEM_FILTERED_PREFIXES"]
 
     def create_release(self, release_name):
@@ -30,7 +30,7 @@ class ArgusTestsMonitor(ABC):
 
     def create_group(self, release: ArgusRelease, group_name: str, build_id: str, group_pretty_name: str | None = None):
         # pylint: disable=no-self-use
-        group = ArgusReleaseGroup()
+        group = ArgusGroup()
         group.release_id = release.id
         group.name = group_name
         group.build_system_id = build_id
@@ -40,10 +40,10 @@ class ArgusTestsMonitor(ABC):
 
         return group
 
-    def create_test(self, release: ArgusRelease, group: ArgusReleaseGroup,
-                    test_name: str, build_id: str, build_url: str) -> ArgusReleaseGroupTest:
+    def create_test(self, release: ArgusRelease, group: ArgusGroup,
+                    test_name: str, build_id: str, build_url: str) -> ArgusTest:
         # pylint: disable=no-self-use
-        test = ArgusReleaseGroupTest()
+        test = ArgusTest()
         test.name = test_name
         test.group_id = group.id
         test.release_id = release.id

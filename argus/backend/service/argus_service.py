@@ -19,12 +19,12 @@ from argus.backend.util.enums import TestStatus, TestInvestigationStatus
 from argus.backend.models.web import (
     ArgusGithubIssue,
     ArgusRelease,
-    ArgusReleaseGroup,
-    ArgusReleaseGroupTest,
-    ArgusReleaseSchedule,
-    ArgusReleaseScheduleAssignee,
-    ArgusReleaseScheduleGroup,
-    ArgusReleaseScheduleTest,
+    ArgusGroup,
+    ArgusTest,
+    ArgusSchedule,
+    ArgusScheduleAssignee,
+    ArgusSchedueGroup,
+    ArgusScheduleTest,
     ArgusTestRunComment,
     ArgusNotificationSourceTypes,
     ArgusNotificationTypes,
@@ -103,7 +103,7 @@ class ArgusService:
     def create_groups(self, groups: dict, parent_release_id) -> dict:
         response = {}
         for group_name, group_definition in groups.items():
-            new_group = ArgusReleaseGroup()
+            new_group = ArgusGroup()
             new_group.release_id = parent_release_id
             new_group.name = group_name
             new_group.pretty_name = group_definition.get("pretty_name")
@@ -121,7 +121,7 @@ class ArgusService:
         response = {}
 
         for test_name in tests:
-            new_test = ArgusReleaseGroupTest()
+            new_test = ArgusTest()
             new_test.release_id = parent_release_id
             new_test.group_id = parent_group_id
             new_test.name = test_name
@@ -271,20 +271,20 @@ class ArgusService:
         releases = sorted(releases, key=lambda r: r.dormant)
         return releases
 
-    def get_groups(self, release_id: UUID) -> list[ArgusReleaseGroup]:
-        groups = list(ArgusReleaseGroup.filter(release_id=release_id).all())
+    def get_groups(self, release_id: UUID) -> list[ArgusGroup]:
+        groups = list(ArgusGroup.filter(release_id=release_id).all())
         return sorted(groups, key=lambda g: g.pretty_name if g.pretty_name else g.name)
 
     def get_groups_for_release(self, release: ArgusRelease):
-        groups = ArgusReleaseGroup.filter(release_id=release.id).all()
+        groups = ArgusGroup.filter(release_id=release.id).all()
         return sorted(groups, key=lambda g: g.pretty_name if g.pretty_name else g.name)
 
-    def get_tests(self, group_id: UUID) -> list[ArgusReleaseGroupTest]:
-        return list(ArgusReleaseGroupTest.filter(group_id=group_id).all())
+    def get_tests(self, group_id: UUID) -> list[ArgusTest]:
+        return list(ArgusTest.filter(group_id=group_id).all())
 
     def get_test_info(self, test_id: UUID) -> dict:
-        test = ArgusReleaseGroupTest.get(id=test_id)
-        group = ArgusReleaseGroup.get(id=test.group_id)
+        test = ArgusTest.get(id=test_id)
+        group = ArgusGroup.get(id=test.group_id)
         release = ArgusRelease.get(id=test.release_id)
         return {
             "test": dict(test.items()),
@@ -294,8 +294,8 @@ class ArgusService:
 
     def get_data_for_release_dashboard(self, release_name: str):
         release = ArgusRelease.get(name=release_name)
-        release_groups = ArgusReleaseGroup.filter(release_id=release.id).all()
-        release_tests = ArgusReleaseGroupTest.filter(release_id=release.id).all()
+        release_groups = ArgusGroup.filter(release_id=release.id).all()
+        release_tests = ArgusTest.filter(release_id=release.id).all()
 
         return release, release_groups, release_tests
 
@@ -307,7 +307,7 @@ class ArgusService:
         return sorted(list(unique_versions), reverse=True)
 
     def poll_test_runs(self, test_id: UUID, additional_runs: list[UUID], limit: int = 10):
-        test: ArgusReleaseGroupTest = ArgusReleaseGroupTest.get(id=test_id)
+        test: ArgusTest = ArgusTest.get(id=test_id)
 
         rows: list[SCTTestRun] = list(SCTTestRun.filter(build_id=test.build_system_id).all().limit(limit))
 
@@ -362,7 +362,7 @@ class ArgusService:
 
         new_status = TestStatus(new_status)
         test_run: SCTTestRun = SCTTestRun.get(id=UUID(test_run_id))
-        test = ArgusReleaseGroupTest.get(build_system_id=test_run.build_id)
+        test = ArgusTest.get(build_system_id=test_run.build_id)
         old_status = TestStatus(test_run.status)
         test_run.status = new_status.value
         test_run.save()
@@ -396,7 +396,7 @@ class ArgusService:
 
         new_status = TestInvestigationStatus(new_status)
         test_run: SCTTestRun = SCTTestRun.get(id=UUID(test_run_id))
-        test = ArgusReleaseGroupTest.get(build_system_id=test_run.build_id)
+        test = ArgusTest.get(build_system_id=test_run.build_id)
         old_status = test_run.investigation_status
         test_run.investigation_status = new_status.value
         test_run.save()
@@ -436,7 +436,7 @@ class ArgusService:
                 raise
             new_assignee = DummyUser(id=None, username="None")
         test_run: SCTTestRun = SCTTestRun.get(id=UUID(test_run_id))
-        test = ArgusReleaseGroupTest.get(build_system_id=test_run.build_id)
+        test = ArgusTest.get(build_system_id=test_run.build_id)
         old_assignee = test_run.assignee
         old_assignee = User.get(id=old_assignee) if old_assignee else None
         test_run.assignee = new_assignee.id
@@ -506,8 +506,8 @@ class ArgusService:
 
         run = SCTTestRun.get(id=UUID(run_id))
         release = ArgusRelease.get(id=run["release_id"])
-        test = ArgusReleaseGroupTest.get(build_system_id=run["build_id"])
-        group = ArgusReleaseGroup.get(id=test.group_id)
+        test = ArgusTest.get(build_system_id=run["build_id"])
+        group = ArgusGroup.get(id=test.group_id)
 
         new_issue = ArgusGithubIssue()
         new_issue.user_id = g.user.id
@@ -606,8 +606,8 @@ class ArgusService:
             "deleted": issue_id
         }
 
-    def assign_runs_for_scheduled_test(self, schedule: ArgusReleaseSchedule, test_id: UUID, new_assignee: UUID):
-        test: ArgusReleaseGroupTest = ArgusReleaseGroupTest.get(id=test_id)
+    def assign_runs_for_scheduled_test(self, schedule: ArgusSchedule, test_id: UUID, new_assignee: UUID):
+        test: ArgusTest = ArgusTest.get(id=test_id)
         affected_rows: list[SCTTestRun] = list(SCTTestRun.filter(
             build_id=test.build_system_id,
             start_time__gte=schedule.period_start,
@@ -619,8 +619,8 @@ class ArgusService:
                 row.assignee = new_assignee
                 row.save()
 
-    def assign_runs_for_scheduled_group(self, schedule: ArgusReleaseSchedule, group_id: UUID, new_assignee: UUID):
-        tests = ArgusReleaseGroupTest.filter(group_id=group_id).all()
+    def assign_runs_for_scheduled_group(self, schedule: ArgusSchedule, group_id: UUID, new_assignee: UUID):
+        tests = ArgusTest.filter(group_id=group_id).all()
         build_ids = [test.build_system_id for test in tests]
         affected_rows: list[SCTTestRun] = list(SCTTestRun.filter(
             build_id__in=build_ids,
@@ -642,7 +642,7 @@ class ArgusService:
         if len(tests) == 0 and len(groups) == 0:
             raise Exception("Schedule does not contain scheduled objects")
 
-        schedule = ArgusReleaseSchedule()
+        schedule = ArgusSchedule()
         schedule.release_id = release
         schedule.period_start = datetime.datetime.fromisoformat(start_time)
         schedule.period_end = datetime.datetime.fromisoformat(end_time)
@@ -656,7 +656,7 @@ class ArgusService:
         response["groups"] = []
 
         for test_id in tests:
-            test_entity = ArgusReleaseScheduleTest()
+            test_entity = ArgusScheduleTest()
             test_entity.id = uuid_from_time(schedule.period_start)
             test_entity.schedule_id = schedule.id
             test_entity.test_id = UUID(test_id) if isinstance(test_id, str) else test_id
@@ -666,7 +666,7 @@ class ArgusService:
             response["tests"].append(test_id)
 
         for group_id in groups:
-            group_entity = ArgusReleaseScheduleGroup()
+            group_entity = ArgusSchedueGroup()
             group_entity.id = uuid_from_time(schedule.period_start)
             group_entity.schedule_id = schedule.id
             group_entity.group_id = UUID(group_id) if isinstance(group_id, str) else group_id
@@ -676,7 +676,7 @@ class ArgusService:
             response["groups"].append(group_id)
 
         for assignee_id in assignees:
-            assignee_entity = ArgusReleaseScheduleAssignee()
+            assignee_entity = ArgusScheduleAssignee()
             assignee_entity.id = uuid_from_time(schedule.period_start)
             assignee_entity.schedule_id = schedule.id
             assignee_entity.assignee = UUID(assignee_id) if isinstance(assignee_id, str) else assignee_id
@@ -698,19 +698,19 @@ class ArgusService:
             today = datetime.datetime.utcnow()
             six_months_ago = today - datetime.timedelta(days=180)
             uuid_six_months = uuid_from_time(six_months_ago)
-            schedules = ArgusReleaseSchedule.filter(release_id=release_id, id__gte=uuid_six_months).all()
+            schedules = ArgusSchedule.filter(release_id=release_id, id__gte=uuid_six_months).all()
         else:
-            schedules = ArgusReleaseSchedule.filter(release_id=release_id).all()
+            schedules = ArgusSchedule.filter(release_id=release_id).all()
         response = {
             "schedules": []
         }
         for schedule in schedules:
             serialized_schedule = dict(schedule.items())
-            tests = ArgusReleaseScheduleTest.filter(schedule_id=schedule.id).all()
+            tests = ArgusScheduleTest.filter(schedule_id=schedule.id).all()
             serialized_schedule["tests"] = [test.test_id for test in tests]
-            groups = ArgusReleaseScheduleGroup.filter(schedule_id=schedule.id).all()
+            groups = ArgusSchedueGroup.filter(schedule_id=schedule.id).all()
             serialized_schedule["groups"] = [group.group_id for group in groups]
-            assignees = ArgusReleaseScheduleAssignee.filter(schedule_id=schedule.id).all()
+            assignees = ArgusScheduleAssignee.filter(schedule_id=schedule.id).all()
             serialized_schedule["assignees"] = [assignee.assignee for assignee in assignees]
             response["schedules"].append(serialized_schedule)
 
@@ -736,18 +736,18 @@ class ArgusService:
             raise Exception("No assignees provided")
 
         release = ArgusRelease.get(id=release_id)
-        schedule = ArgusReleaseSchedule.get(release_id=release.id, id=schedule_id)
-        schedule_tests = ArgusReleaseScheduleTest.filter(schedule_id=schedule.id).all()
-        schedule_groups = ArgusReleaseScheduleGroup.filter(schedule_id=schedule.id).all()
+        schedule = ArgusSchedule.get(release_id=release.id, id=schedule_id)
+        schedule_tests = ArgusScheduleTest.filter(schedule_id=schedule.id).all()
+        schedule_groups = ArgusSchedueGroup.filter(schedule_id=schedule.id).all()
         for test in schedule_tests:
             self.assign_runs_for_scheduled_test(schedule, test.test_id, UUID(assignees[0]))
 
         for group in schedule_groups:
             self.assign_runs_for_scheduled_group(schedule, group.group_id, UUID(assignees[0]))
 
-        old_assignees = list(ArgusReleaseScheduleAssignee.filter(schedule_id=schedule.id).all())
+        old_assignees = list(ArgusScheduleAssignee.filter(schedule_id=schedule.id).all())
         for new_assignee in assignees:
-            assignee = ArgusReleaseScheduleAssignee()
+            assignee = ArgusScheduleAssignee()
             assignee.release_id = release.id
             assignee.schedule_id = schedule.id
             assignee.assignee = UUID(new_assignee)
@@ -814,10 +814,10 @@ class ArgusService:
             raise Exception("Schedule id not specified in the request")
 
         release = ArgusRelease.get(id=release_id)
-        schedule = ArgusReleaseSchedule.get(release_id=release.id, id=schedule_id)
-        tests = ArgusReleaseScheduleTest.filter(schedule_id=schedule.id).all()
-        groups = ArgusReleaseScheduleGroup.filter(schedule_id=schedule.id).all()
-        assignees = ArgusReleaseScheduleAssignee.filter(schedule_id=schedule.id).all()
+        schedule = ArgusSchedule.get(release_id=release.id, id=schedule_id)
+        tests = ArgusScheduleTest.filter(schedule_id=schedule.id).all()
+        groups = ArgusSchedueGroup.filter(schedule_id=schedule.id).all()
+        assignees = ArgusScheduleAssignee.filter(schedule_id=schedule.id).all()
 
         for entities in [tests, groups, assignees]:
             for entity in entities:
@@ -834,9 +834,9 @@ class ArgusService:
 
         release = ArgusRelease.get(id=release_id)
         release_comments = list(ReleasePlannerComment.filter(release=release.id).all())
-        groups = ArgusReleaseGroup.filter(release_id=release.id).all()
+        groups = ArgusGroup.filter(release_id=release.id).all()
         groups_by_group_id = {str(group.id): dict(group.items()) for group in groups if group.enabled}
-        tests = ArgusReleaseGroupTest.filter(release_id=release.id).all()
+        tests = ArgusTest.filter(release_id=release.id).all()
         tests = [dict(t.items()) for t in tests if t.enabled]
         tests_by_group = {}
         for test in tests:
@@ -867,13 +867,13 @@ class ArgusService:
         release_id = UUID(release_id) if isinstance(release_id, str) else release_id
         release = ArgusRelease.get(id=release_id)
 
-        groups = ArgusReleaseGroup.filter(release_id=release_id).all()
+        groups = ArgusGroup.filter(release_id=release_id).all()
         group_ids = [group.id for group in groups if group.enabled]
 
-        scheduled_groups = ArgusReleaseScheduleGroup.filter(release_id=release.id, group_id__in=group_ids).all()
+        scheduled_groups = ArgusSchedueGroup.filter(release_id=release.id, group_id__in=group_ids).all()
         schedule_ids = {schedule.schedule_id for schedule in scheduled_groups}
 
-        schedules = ArgusReleaseSchedule.filter(release_id=release.id, id__in=tuple(schedule_ids)).all()
+        schedules = ArgusSchedule.filter(release_id=release.id, id__in=tuple(schedule_ids)).all()
 
         valid_schedules = schedules
         if release.perpetual:
@@ -882,7 +882,7 @@ class ArgusService:
 
         response = {}
         for schedule in valid_schedules:
-            assignees = ArgusReleaseScheduleAssignee.filter(schedule_id=schedule.id).all()
+            assignees = ArgusScheduleAssignee.filter(schedule_id=schedule.id).all()
             assignees_uuids = [assignee.assignee for assignee in assignees]
             schedule_groups = filter(lambda g: g.schedule_id == schedule.id, scheduled_groups)
             groups = {str(group.group_id): assignees_uuids for group in schedule_groups}
@@ -892,16 +892,16 @@ class ArgusService:
 
     def get_tests_assignees(self, group_id: UUID | str):
         group_id = UUID(group_id) if isinstance(group_id, str) else group_id
-        group = ArgusReleaseGroup.get(id=group_id)
+        group = ArgusGroup.get(id=group_id)
 
         release = ArgusRelease.get(id=group.release_id)
-        tests = ArgusReleaseGroupTest.filter(group_id=group_id).all()
+        tests = ArgusTest.filter(group_id=group_id).all()
 
         test_ids = [test.id for test in tests if test.enabled]
 
-        scheduled_tests = ArgusReleaseScheduleTest.filter(release_id=release.id, test_id__in=tuple(test_ids)).all()
+        scheduled_tests = ArgusScheduleTest.filter(release_id=release.id, test_id__in=tuple(test_ids)).all()
         schedule_ids = {test.schedule_id for test in scheduled_tests}
-        schedules: list[ArgusReleaseSchedule] = list(ArgusReleaseSchedule.filter(
+        schedules: list[ArgusSchedule] = list(ArgusSchedule.filter(
             release_id=release.id, id__in=tuple(schedule_ids)).all())
 
         if release.perpetual:
@@ -910,7 +910,7 @@ class ArgusService:
 
         response = {}
         for schedule in schedules:
-            assignees = ArgusReleaseScheduleAssignee.filter(schedule_id=schedule.id).all()
+            assignees = ArgusScheduleAssignee.filter(schedule_id=schedule.id).all()
             assignees_uuids = [assignee.assignee for assignee in assignees]
             schedule_tests = filter(lambda t: t.schedule_id == schedule.id, scheduled_tests)
             tests = {str(test.test_id): assignees_uuids for test in schedule_tests}
@@ -947,22 +947,22 @@ class ArgusService:
         return valid_runs
 
     def get_schedules_for_user(self, user: User):
-        all_assigned_schedules = ArgusReleaseScheduleAssignee.filter(assignee=user.id).all()
+        all_assigned_schedules = ArgusScheduleAssignee.filter(assignee=user.id).all()
         schedule_keys = [(schedule_assignee.release_id, schedule_assignee.schedule_id)
                          for schedule_assignee in all_assigned_schedules]
         schedules = []
         today = datetime.datetime.utcnow()
         for release_id, schedule_id in schedule_keys:
             try:
-                schedule = dict(ArgusReleaseSchedule.get(release_id=release_id, id=schedule_id).items())
-            except ArgusReleaseSchedule.DoesNotExist:
+                schedule = dict(ArgusSchedule.get(release_id=release_id, id=schedule_id).items())
+            except ArgusSchedule.DoesNotExist:
                 continue
             if schedule["period_start"] <= today <= schedule["period_end"]:
-                tests = ArgusReleaseScheduleTest.filter(schedule_id=schedule_id).all()
+                tests = ArgusScheduleTest.filter(schedule_id=schedule_id).all()
                 schedule["tests"] = [test.test_id for test in tests]
-                groups = ArgusReleaseScheduleGroup.filter(schedule_id=schedule_id).all()
+                groups = ArgusSchedueGroup.filter(schedule_id=schedule_id).all()
                 schedule["groups"] = [group.group_id for group in groups]
-                assignees = ArgusReleaseScheduleAssignee.filter(schedule_id=schedule_id).all()
+                assignees = ArgusScheduleAssignee.filter(schedule_id=schedule_id).all()
                 schedule["assignees"] = [assignee.assignee for assignee in assignees]
                 schedules.append(schedule)
 
@@ -970,7 +970,7 @@ class ArgusService:
 
     def get_planner_comment_by_test(self, test_id):
         try:
-            test = ArgusReleaseGroupTest.get(id=test_id)
+            test = ArgusTest.get(id=test_id)
             return ReleasePlannerComment.get(test=test.id, release=test.release_id, group=test.group_id).comment
         except ReleasePlannerComment.DoesNotExist:
             return ""
