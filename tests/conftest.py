@@ -21,7 +21,7 @@ from argus.db.db_types import PackageVersion, NemesisRunInfo, EventsBySeverity, 
     NemesisStatus, ColumnInfo, CollectionHint
 from argus.db.cloud_types import AWSSetupDetails, CloudNodesInfo, CloudInstanceDetails, CloudResource, ResourceState, \
     BaseCloudSetupDetails
-from argus.backend.models.web import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest
+from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest
 
 LOGGER = logging.getLogger(__name__)
 
@@ -406,20 +406,20 @@ def argus_database(scylla_cluster: list[str]):  # pylint: disable=redefined-oute
 
 
 @pytest.fixture(scope="class")
-def argus_with_release(argus_database: ArgusDatabase) -> tuple[ArgusDatabase, tuple[ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest]]:
-    for model in [ArgusReleaseGroupTest, ArgusReleaseGroup, ArgusRelease]:
+def argus_with_release(argus_database: ArgusDatabase) -> tuple[ArgusDatabase, tuple[ArgusRelease, ArgusGroup, ArgusTest]]:
+    for model in [ArgusTest, ArgusGroup, ArgusRelease]:
         management.sync_table(model, keyspaces=(argus_database._current_keyspace,),
                               connections=(argus_database.CQL_ENGINE_CONNECTION_NAME,))
     release = ArgusRelease()
     release.name = "argus-test"
     release.using(connection=argus_database.CQL_ENGINE_CONNECTION_NAME).save()
 
-    group = ArgusReleaseGroup()
+    group = ArgusGroup()
     group.name = 'arbitrary-group'
     group.release_id = release.id
     group.using(connection=argus_database.CQL_ENGINE_CONNECTION_NAME).save()
 
-    test = ArgusReleaseGroupTest()
+    test = ArgusTest()
     test.name = 'argus-testing'
     test.group_id = group.id
     test.release_id = release.id
