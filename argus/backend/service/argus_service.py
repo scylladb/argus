@@ -1,10 +1,7 @@
-import base64
 import subprocess
 import time
 import json
 import re
-import os
-import hashlib
 import logging
 import datetime
 from types import NoneType
@@ -14,8 +11,7 @@ from uuid import UUID, uuid4
 import requests
 from cassandra.util import uuid_from_time  # pylint: disable=no-name-in-module
 from cassandra.cqlengine import ValidationError
-from flask import g, current_app, session
-from werkzeug.security import check_password_hash, generate_password_hash
+from flask import g, current_app
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.sct_testrun import SCTTestRun
 from argus.backend.service.notification_manager import NotificationManagerService
@@ -36,17 +32,11 @@ from argus.backend.models.web import (
     ArgusEventTypes,
     ReleasePlannerComment,
     User,
-    UserOauthToken,
-    WebFileStorage,
 )
 from argus.backend.events.event_processors import EVENT_PROCESSORS
 from argus.backend.util.common import strip_html_tags
 
 LOGGER = logging.getLogger(__name__)
-
-
-class GithubOrganizationMissingError(Exception):
-    pass
 
 
 class ArgusService:
@@ -154,10 +144,6 @@ class ArgusService:
 
     def get_comments(self, test_id: UUID) -> list[ArgusTestRunComment]:
         return sorted(ArgusTestRunComment.filter(test_run_id=test_id).all(), key=lambda c: c.posted_at)
-
-    def get_user_info(self) -> dict:
-        users = User.all()
-        return {str(user.id): user.to_json() for user in users}
 
     def post_comment(self, payload: dict) -> list[ArgusTestRunComment]:
         test_run_id: str = payload.get("test_run_id")
@@ -711,8 +697,8 @@ class ArgusService:
         if release.perpetual:
             today = datetime.datetime.utcnow()
             six_months_ago = today - datetime.timedelta(days=180)
-            u = uuid_from_time(six_months_ago)
-            schedules = ArgusReleaseSchedule.filter(release_id=release_id, id__gte=u).all()
+            uuid_six_months = uuid_from_time(six_months_ago)
+            schedules = ArgusReleaseSchedule.filter(release_id=release_id, id__gte=uuid_six_months).all()
         else:
             schedules = ArgusReleaseSchedule.filter(release_id=release_id).all()
         response = {
@@ -931,131 +917,6 @@ class ArgusService:
             response = {**tests, **response}
 
         return response
-
-    def update_email(self, user: User, new_email: str):
-        user.email = new_email
-        user.save()
-
-    def update_password(self, user: User, old_password: str, new_password: str):
-        if check_password_hash(user.password, old_password):
-            raise Exception("Incorrect old password")
-
-        user.password = generate_password_hash(new_password)
-        user.save()
-
-    def update_name(self, user: User, new_name: str):
-        user.full_name = new_name
-        user.save()
-
-    def update_profile_picture(self, filename, filepath):
-        web_file = WebFileStorage()
-        web_file.filename = filename
-        web_file.filepath = filepath
-        web_file.save()
-
-        try:
-            if old_picture_id := g.user.picture_id:
-                old_file = WebFileStorage.get(id=old_picture_id)
-                os.unlink(old_file.filepath)
-                old_file.delete()
-        except Exception as exc:  # pylint: disable=broad-except
-            print(exc)
-
-        g.user.picture_id = web_file.id
-        g.user.save()
-
-    def save_profile_picture_to_disk(self, original_filename, filedata, suffix):
-        filename_fragment = hashlib.sha256(os.urandom(64)).hexdigest()[:10]
-        filename = f"profile_{suffix}_{filename_fragment}"
-        filepath = f"storage/profile_pictures/{filename}"
-        with open(filepath, "wb") as file:
-            file.write(filedata)
-
-        return original_filename, filepath
-
-    def github_callback(self, req_code):
-        oauth_response = requests.post("https://github.com/login/oauth/access_token",
-                                       headers={
-                                           "Accept": "application/json",
-                                       },
-                                       params={
-                                           "code": req_code,
-                                           "client_id": current_app.config.get("GITHUB_CLIENT_ID"),
-                                           "client_secret": current_app.config.get("GITHUB_CLIENT_SECRET"),
-                                       })
-
-        oauth_data = oauth_response.json()
-
-        user_info = requests.get("https://api.github.com/user",
-                                 headers={
-                                     "Accept": "application/json",
-                                     "Authorization": f"token {oauth_data.get('access_token')}"
-                                 }).json()
-        email_info = requests.get("https://api.github.com/user/emails",
-                                  headers={
-                                      "Accept": "application/json",
-                                      "Authorization": f"token {oauth_data.get('access_token')}"
-                                  }).json()
-
-        organizations = requests.get("https://api.github.com/user/orgs", headers={
-            "Accept": "application/json",
-            "Authorization": f"token {oauth_data.get('access_token')}"
-        }).json()
-        temp_password = None
-        required_organizations = current_app.config.get("GITHUB_REQUIRED_ORGANIZATIONS")
-        if required_organizations:
-            logins = set([org["login"] for org in organizations])  # pylint: disable=consider-using-set-comprehension
-            required_organizations = set(required_organizations)
-            if len(logins.intersection(required_organizations)) == 0:
-                raise GithubOrganizationMissingError(
-                    "Not a member of a required organization or missing organization scope")
-
-        try:
-            user = User.get(username=user_info.get("login"))
-        except User.DoesNotExist:
-            user = User()
-            user.username = user_info.get("login")
-            user.email = email_info[-1].get("email")
-            user.full_name = user_info.get("name", user_info.get("login"))
-            user.registration_date = datetime.datetime.utcnow()
-            user.roles = ["ROLE_USER"]
-            temp_password = base64.encodebytes(
-                os.urandom(48)).decode("ascii").strip()
-            user.password = generate_password_hash(temp_password)
-
-            avatar_url: str = user_info.get("avatar_url")
-            avatar = requests.get(avatar_url).content
-            avatar_name = avatar_url.split("/")[-1]
-            filename, filepath = self.save_profile_picture_to_disk(avatar_name, avatar, user.username)
-
-            web_file = WebFileStorage()
-            web_file.filename = filename
-            web_file.filepath = filepath
-            web_file.save()
-            user.picture_id = web_file.id
-            user.save()
-
-        try:
-            tokens = list(UserOauthToken.filter(user_id=user.id).all())
-            github_token = [
-                token for token in tokens if token["kind"] == "github"][0]
-            github_token.token = oauth_data.get('access_token')
-            github_token.save()
-        except (UserOauthToken.DoesNotExist, IndexError):
-            github_token = UserOauthToken()
-            github_token.kind = "github"
-            github_token.user_id = user.id
-            github_token.token = oauth_data.get('access_token')
-            github_token.save()
-
-        session.clear()
-        session["user_id"] = str(user.id)
-        if temp_password:
-            return {
-                "password": temp_password,
-                "first_login": True
-            }
-        return None
 
     def get_jobs_for_user(self, user: User):
         runs: list[SCTTestRun] = list(SCTTestRun.filter(assignee=user.id).all())
