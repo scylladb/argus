@@ -58,7 +58,7 @@ class User(Model):
         return str(self.id)
 
     @classmethod
-    def exists(cls, user_id: UUID) -> 'User' | None:
+    def exists(cls, user_id: UUID):
         try:
             user = cls.get(id=user_id)
             if user:
@@ -68,7 +68,7 @@ class User(Model):
         return None
 
     @classmethod
-    def exists_by_name(cls, name: str) -> 'User' | None:
+    def exists_by_name(cls, name: str):
         try:
             user = cls.get(username=name)
             if user:

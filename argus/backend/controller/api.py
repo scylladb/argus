@@ -9,7 +9,7 @@ from flask.json import jsonify
 from argus.backend.error_handlers import handle_api_exception
 from argus.backend.controller.notification_api import bp as notifications_bp
 from argus.backend.service.argus_service import ArgusService
-from argus.backend.service.user import api_login_required
+from argus.backend.service.user import UserService, api_login_required
 from argus.backend.service.stats import ReleaseStatsCollector
 from argus.backend.models.web import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, UserOauthToken
 
@@ -428,7 +428,7 @@ def test_run_delete_comment():
 @bp.route("/users", methods=["GET"])
 @api_login_required
 def user_info():
-    result = ArgusService().get_user_info()
+    result = UserService().get_users()
 
     return jsonify({
         "status": "ok",
