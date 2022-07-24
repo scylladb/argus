@@ -1,3 +1,4 @@
+# TODO: Deprecated, will be removed once REST API client is ready
 from datetime import datetime
 import re
 import logging
@@ -24,7 +25,7 @@ from argus.db.config import BaseConfig, FileConfig
 from argus.db.db_types import ColumnInfo, CollectionHint, ArgusUDTBase
 from argus.db.cloud_types import ResourceState
 from argus.backend.models.web import ArgusSchedule, ArgusScheduleAssignee, \
-    ArgusSchedueGroup, ArgusScheduleTest, ArgusRelease, ArgusGroup, ArgusTest
+    ArgusScheduleGroup, ArgusScheduleTest, ArgusRelease, ArgusGroup, ArgusTest
 
 LOGGER = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ class ArgusDatabase:
     ARGUS_EXECUTION_PROFILE = "argus_named_tuple"
     REQUIRED_CQL_ENGINE_MODELS = [
         ArgusSchedule,
-        ArgusSchedueGroup,
+        ArgusScheduleGroup,
         ArgusScheduleTest,
         ArgusScheduleAssignee,
         ArgusTest,
