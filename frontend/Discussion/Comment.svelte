@@ -91,7 +91,7 @@
                 <button
                     class="btn btn-light bg-editor"
                     title="Quote Reply"
-                    on:click={() => (dispatch("commentReply", { message: commentBody.message }))}
+                    on:click={() => (dispatch("commentReply", { message: commentBody.message, author: commentBody.user_id }))}
                 >
                     <Fa icon={faArrowAltCircleLeft} />
                 </button>
