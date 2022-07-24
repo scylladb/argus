@@ -125,8 +125,10 @@
     };
 
     const handleCommentReply = function (e) {
+        let author_id = e.detail.author;
+        let author = users?.[author_id]?.username;
         let quotedMessage = e.detail.message.trim().split("\n").map((val) => `> ${val}`).join("\n");
-        newCommentBody.message = `${newCommentBody.message}\n${quotedMessage}\n`;
+        newCommentBody.message = `${author ? `@${author} posted:` : ""}${newCommentBody.message}\n${quotedMessage}\n`;
     };
 
     const handleCommentDelete = async function (e) {
