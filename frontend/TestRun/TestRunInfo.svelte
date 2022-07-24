@@ -8,7 +8,7 @@
     import Fa from "svelte-fa";
     import { InProgressStatuses } from "../Common/TestStatus";
     import { timestampToISODate } from "../Common/DateUtils";
-    import { getScyllaPackage, getKernelPackage } from "../Common/RunUtils";
+    import { getScyllaPackage, getKernelPackage, getUpgradedScyllaPackage } from "../Common/RunUtils";
     export let test_run = {};
     export let release;
     export let group;
@@ -27,6 +27,8 @@
     $: scyllaPackage = getScyllaPackage(test_run.packages);
     let kernelPackage = getKernelPackage(test_run.packages);
     $: kernelPackage = getKernelPackage(test_run.packages);
+    let upgradedPackage = getUpgradedScyllaPackage(test_run.packages);
+    $: upgradedPackage = getUpgradedScyllaPackage(test_run.packages);
 </script>
 
 <div class="container-fluid">
@@ -109,7 +111,7 @@
                     {/if}
                     {#if scyllaPackage}
                         <li>
-                            <span class="fw-bold">Scylla version:</span>
+                            <span class="fw-bold">{ upgradedPackage ? "Base scylla" : "Scylla"} version:</span>
                             {scyllaPackage?.version}-{scyllaPackage?.date}.{scyllaPackage?.revision_id}
                         </li>
                         {#if scyllaPackage?.build_id}
@@ -119,6 +121,18 @@
                             </li>
                         {/if}
                     {/if}
+                    {#if upgradedPackage}
+                    <li>
+                        <span class="fw-bold">Upgraded scylla version:</span>
+                        {upgradedPackage?.version}-{upgradedPackage?.date}.{upgradedPackage?.revision_id}
+                    </li>
+                    {#if upgradedPackage?.build_id}
+                        <li>
+                            <span class="fw-bold">Build id:</span>
+                            {upgradedPackage?.build_id}
+                        </li>
+                    {/if}
+                {/if}
                 {/if}
                 <li>
                     <span class="fw-bold">Instance type:</span>
