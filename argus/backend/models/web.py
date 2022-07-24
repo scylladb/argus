@@ -2,10 +2,8 @@ from uuid import UUID, uuid1, uuid4
 from datetime import datetime
 from enum import Enum, IntEnum, auto
 from cassandra.cqlengine.models import Model
-from cassandra.cqlengine.usertype import UserType
 from cassandra.cqlengine import columns
-from cassandra.util import uuid_from_time, unix_time_from_uuid1
-from cassandra.cqlengine.columns import UserDefinedType
+from cassandra.util import uuid_from_time, unix_time_from_uuid1  # pylint: disable=no-name-in-module
 
 
 def uuid_now():
@@ -33,21 +31,26 @@ class User(Model):
     registration_date = columns.DateTime()
     roles = columns.List(value_type=columns.Text)
     picture_id = columns.UUID(default=None)
+    api_token = columns.Text(index=True)
 
     def __hash__(self) -> int:
         return hash(self.id)
 
     def is_manager(self) -> bool:
+        # pylint: disable=unsupported-membership-test
         return UserRoles.Manager in self.roles
 
     def is_admin(self) -> bool:
+        # pylint: disable=unsupported-membership-test
         return UserRoles.Admin in self.roles
 
     def set_as_admin(self) -> None:
+        # pylint: disable=unsupported-membership-test
         if UserRoles.Admin not in self.roles:
             self.roles.append(UserRoles.Admin.value)
 
     def set_as_manager(self) -> None:
+        # pylint: disable=unsupported-membership-test
         if UserRoles.Manager not in self.roles:
             self.roles.append(UserRoles.Manager.value)
 
@@ -61,7 +64,8 @@ class User(Model):
             if user:
                 return user
         except cls.DoesNotExist:
-            return None
+            pass
+        return None
 
     @classmethod
     def exists_by_name(cls, name: str):
@@ -70,7 +74,8 @@ class User(Model):
             if user:
                 return user
         except cls.DoesNotExist:
-            return None
+            pass
+        return None
 
     def __str__(self):
         return f"User('{self.id}','{self.username}')"
@@ -111,7 +116,7 @@ class ArgusRelease(Model):
             return super().__eq__(other)
 
 
-class ArgusReleaseGroup(Model):
+class ArgusGroup(Model):
     __table_name__ = "argus_group_v2"
     id = columns.UUID(primary_key=True, default=uuid4)
     release_id = columns.UUID(required=True, index=True)
@@ -126,13 +131,13 @@ class ArgusReleaseGroup(Model):
         return hash((self.id, self.release_id))
 
     def __eq__(self, other):
-        if isinstance(other, ArgusReleaseGroup):
+        if isinstance(other, ArgusGroup):
             return self.name == other.name and self.release_id == other.release_id
         else:
             return super().__eq__(other)
 
 
-class ArgusReleaseGroupTest(Model):
+class ArgusTest(Model):
     __table_name__ = "argus_test_v2"
     id = columns.UUID(primary_key=True, default=uuid4)
     group_id = columns.UUID(required=True, index=True)
@@ -146,22 +151,18 @@ class ArgusReleaseGroupTest(Model):
     build_system_url = columns.Text()
 
     def __eq__(self, other):
-        if isinstance(other, ArgusReleaseGroupTest):
+        if isinstance(other, ArgusTest):
             return self.name == other.name and self.group_id == other.group_id and self.release_id == other.release_id
         else:
             return super().__eq__(other)
 
     def validate_build_system_id(self):
         try:
-            t = ArgusReleaseGroupTest.get(build_system_id=self.build_system_id)
+            t = ArgusTest.get(build_system_id=self.build_system_id)
             if t.id != self.id:
                 raise ArgusTestException("Build Id is already used by another test", t.id, self.id)
-        except ArgusReleaseGroupTest.DoesNotExist:
+        except ArgusTest.DoesNotExist:
             pass
-        except ArgusReleaseGroupTest.MultipleObjectsReturned:
-            raise
-
-        return
 
 
 class ArgusTestRunComment(Model):
@@ -279,10 +280,10 @@ class ArgusGithubIssue(Model):
         return super().__eq__(other)
 
     def __ne__(self, other):
-        return not(self == other)
+        return not self == other
 
 
-class ArgusReleaseSchedule(Model):
+class ArgusSchedule(Model):
     __table_name__ = "argus_schedule_v4"
     release_id = columns.UUID(primary_key=True, required=True)
     id = columns.TimeUUID(primary_key=True, default=uuid1, clustering_order="DESC")
@@ -291,7 +292,7 @@ class ArgusReleaseSchedule(Model):
     tag = columns.Text(default="")
 
 
-class ArgusReleaseScheduleAssignee(Model):
+class ArgusScheduleAssignee(Model):
     __table_name__ = "argus_schedule_user_v3"
     assignee = columns.UUID(primary_key=True)
     id = columns.TimeUUID(primary_key=True, default=uuid1,
@@ -300,7 +301,7 @@ class ArgusReleaseScheduleAssignee(Model):
     release_id = columns.UUID(required=True)
 
 
-class ArgusReleaseScheduleTest(Model):
+class ArgusScheduleTest(Model):
     __table_name__ = "argus_schedule_test_v5"
     test_id = columns.UUID(primary_key=True, required=True)
     id = columns.TimeUUID(primary_key=True, default=uuid1,
@@ -309,7 +310,7 @@ class ArgusReleaseScheduleTest(Model):
     release_id = columns.UUID(partition_key=True)
 
 
-class ArgusReleaseScheduleGroup(Model):
+class ArgusScheduleGroup(Model):
     __table_name__ = "argus_schedule_group_v3"
     group_id = columns.UUID(partition_key=True, required=True)
     id = columns.TimeUUID(primary_key=True, default=uuid1,
@@ -334,9 +335,9 @@ class WebFileStorage(Model):
 
 USED_MODELS = [
     User, UserOauthToken,
-    ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest,
+    ArgusRelease, ArgusGroup, ArgusTest,
     ArgusTestRunComment, ArgusEvent,
     WebFileStorage, ArgusGithubIssue, ReleasePlannerComment, ArgusNotification,
-    ArgusReleaseSchedule, ArgusReleaseScheduleAssignee, ArgusReleaseScheduleGroup, ArgusReleaseScheduleTest
+    ArgusSchedule, ArgusScheduleAssignee, ArgusScheduleGroup, ArgusScheduleTest
 ]
 USED_TYPES = []

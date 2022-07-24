@@ -6,7 +6,7 @@ My Jobs
 
 {% block javascripts %}
 <script>
-    var globalRuns = JSON.parse(`{{ runs | tojson | safe}}`);
+    var globalRuns = {{ runs | tojson }};
 </script>
 {{super()}}
 <script defer src="/s/dist/profileJobs.bundle.js"></script>

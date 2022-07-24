@@ -1,3 +1,4 @@
+# TODO: Deprecated, will be removed once REST API client is ready
 from datetime import datetime
 import re
 import logging
@@ -23,8 +24,8 @@ from argus.db.argus_json import ArgusJSONEncoder
 from argus.db.config import BaseConfig, FileConfig
 from argus.db.db_types import ColumnInfo, CollectionHint, ArgusUDTBase
 from argus.db.cloud_types import ResourceState
-from argus.db.models import ArgusReleaseSchedule, ArgusReleaseScheduleAssignee, \
-    ArgusReleaseScheduleGroup, ArgusReleaseScheduleTest, ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest
+from argus.backend.models.web import ArgusSchedule, ArgusScheduleAssignee, \
+    ArgusScheduleGroup, ArgusScheduleTest, ArgusRelease, ArgusGroup, ArgusTest
 
 LOGGER = logging.getLogger(__name__)
 
@@ -50,12 +51,12 @@ class ArgusDatabase:
     CQL_ENGINE_CONNECTION_NAME = 'argus_cql_engine_conn'
     ARGUS_EXECUTION_PROFILE = "argus_named_tuple"
     REQUIRED_CQL_ENGINE_MODELS = [
-        ArgusReleaseSchedule,
-        ArgusReleaseScheduleGroup,
-        ArgusReleaseScheduleTest,
-        ArgusReleaseScheduleAssignee,
-        ArgusReleaseGroupTest,
-        ArgusReleaseGroup,
+        ArgusSchedule,
+        ArgusScheduleGroup,
+        ArgusScheduleTest,
+        ArgusScheduleAssignee,
+        ArgusTest,
+        ArgusGroup,
         ArgusRelease,
     ]
     PYTHON_SCYLLA_TYPE_MAPPING = {

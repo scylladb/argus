@@ -5,8 +5,8 @@ from flask import (
 )
 from argus.backend.controller.notifications import bp as notifications_bp
 from argus.backend.service.argus_service import ArgusService
-from argus.db.models import WebFileStorage
-from argus.backend.controller.auth import login_required
+from argus.backend.models.web import WebFileStorage
+from argus.backend.service.user import UserService, login_required
 
 LOGGER = logging.getLogger(__name__)
 
@@ -113,8 +113,9 @@ def error():
 @login_required
 def profile():
     first_run = session.pop("first_run_info", None)
+    token_generated = session.pop("token_generated", None)
 
-    return render_template("profile.html.j2", first_run=first_run)
+    return render_template("profile.html.j2", first_run=first_run, token_generated=token_generated)
 
 
 @bp.route("/profile/oauth/github", methods=["GET"])
@@ -124,7 +125,7 @@ def profile_oauth_github_callback():
         return redirect(url_for("main.error", type=403))
 
     req_code = request.args.get("code", "WTF")
-    service = ArgusService()
+    service = UserService()
     try:
         first_run_info = service.github_callback(req_code)
     except Exception as exc:  # pylint: disable=broad-except
@@ -170,7 +171,7 @@ def upload_file():
         flash(message="No picture provided", category="error")
         return redirect(url_for("main.profile"))
 
-    service = ArgusService()
+    service = UserService()
     filename, filepath = service.save_profile_picture_to_disk(
         picture_name, picture_data, g.user.username)
     service.update_profile_picture(filename, filepath)
@@ -185,7 +186,7 @@ def update_full_name():
     if not new_name:
         flash(message="Incorrect new name", category="error")
     else:
-        service = ArgusService()
+        service = UserService()
         service.update_name(g.user, new_name)
         flash("Successfully changed name!", category="success")
     return redirect(url_for("main.profile"))
@@ -198,7 +199,7 @@ def update_email():
     if not new_email:
         flash("Incorrect new email", category="error")
     else:
-        service = ArgusService()
+        service = UserService()
         service.update_email(g.user, new_email)
         flash("Successfully changed email!", category="success")
     return redirect(url_for("main.profile"))
@@ -221,7 +222,7 @@ def update_password():
         flash("New password doesn't match confirmation!", category="error")
         return redirect(url_for("main.profile"))
 
-    service = ArgusService()
+    service = UserService()
     try:
         service.update_password(
             g.user, old_password=old_password, new_password=new_password)
@@ -237,7 +238,7 @@ def update_password():
 @login_required
 def profile_jobs():
     service = ArgusService()
-    jobs = [dict(job.items()) for job in service.get_jobs_for_user(g.user)]
+    jobs = service.get_jobs_for_user(g.user)
     return render_template("profile_jobs.html.j2", runs=jobs)
 
 

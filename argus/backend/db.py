@@ -1,8 +1,6 @@
 import logging
 from typing import Optional
-import click
 from flask import g, Flask
-from flask.cli import with_appcontext
 # pylint: disable=no-name-in-module
 from cassandra.policies import WhiteListRoundRobinPolicy
 from cassandra.cluster import Session
@@ -13,14 +11,10 @@ from cassandra.cqlengine.management import sync_table, sync_type
 from cassandra.cqlengine import connection
 from cassandra.query import dict_factory
 from cassandra.auth import PlainTextAuthProvider
+from argus.backend.util.config import Config
 
-from argus.db.config import FileConfig
-from argus.db.models import USED_MODELS, USED_TYPES
-from argus.db.interface import ArgusDatabase
-from argus.db.testrun import TestRun
+from argus.backend.models.web import USED_MODELS, USED_TYPES
 
-DB_CONFIG = FileConfig()
-CLUSTER: Cluster | None = None
 LOGGER = logging.getLogger(__name__)
 
 
@@ -30,20 +24,20 @@ class ScyllaCluster:
 
     def __init__(self, config=None):
         if not config:
-            config = FileConfig()
+            config = Config.load_yaml_config()
         self.config = config
-        self.auth_provider = PlainTextAuthProvider(username=config.username, password=config.password)
-        self.lb_policy = WhiteListRoundRobinPolicy(hosts=config.contact_points)
+        self.auth_provider = PlainTextAuthProvider(
+            username=config["SCYLLA_USERNAME"], password=config["SCYLLA_PASSWORD"])
+        self.lb_policy = WhiteListRoundRobinPolicy(hosts=config["SCYLLA_CONTACT_POINTS"])
         self.execution_profile = ExecutionProfile(
             load_balancing_policy=self.lb_policy, consistency_level=ConsistencyLevel.QUORUM)
-        connection.setup(hosts=config.contact_points, default_keyspace=config.keyspace_name,
+        connection.setup(hosts=config["SCYLLA_CONTACT_POINTS"], default_keyspace=config["SCYLLA_KEYSPACE_NAME"],
                          auth_provider=self.auth_provider,
                          protocol_version=4,
                          execution_profiles={EXEC_PROFILE_DEFAULT: self.execution_profile})
         self.cluster: Cluster = connection.get_cluster(connection='default')
-        self.session = self.cluster.connect(keyspace=self.config.keyspace_name)
+        self.session: Session = self.cluster.connect(keyspace=config["SCYLLA_KEYSPACE_NAME"])
         self.prepared_statements = {}
-        self.argus_interface = ArgusDatabase(config=FileConfig())
         self.read_exec_profile = ExecutionProfile(
             consistency_level=ConsistencyLevel.ONE,
             row_factory=dict_factory,
@@ -55,10 +49,9 @@ class ScyllaCluster:
         )
         self.cluster.add_execution_profile("read_fast", self.read_exec_profile)
         self.cluster.add_execution_profile("read_fast_named_tuple", self.read_named_tuple_exec_profile)
-        TestRun.set_argus(self.argus_interface)
 
     @classmethod
-    def get(cls, config: FileConfig = None) -> 'ScyllaCluster':
+    def get(cls, config: Config = None) -> 'ScyllaCluster':
         if cls.APP_INSTANCE:
             return cls.APP_INSTANCE
 
@@ -80,39 +73,21 @@ class ScyllaCluster:
 
     def sync_models(self):
         for udt in USED_TYPES:
-            sync_type(ks_name=self.config.keyspace_name, type_model=udt)
+            sync_type(ks_name=self.config["SCYLLA_KEYSPACE_NAME"], type_model=udt)
         for model in USED_MODELS:
             sync_table(model)
-
-    def create_session(self) -> Session:
-        return self.session
-
-    def shutdown_session(self, session: Session):
-        pass
 
     @classmethod
     def get_session(cls):
         cluster = cls.get()
         if 'scylla_session' not in g:
-            g.scylla_session = cluster.create_session()  # pylint: disable=assigning-non-slot
+            g.scylla_session = cluster.session  # pylint: disable=assigning-non-slot
         return g.scylla_session
 
     @classmethod
     def close_session(cls, error=None):  # pylint: disable=unused-argument
-        cluster = cls.get()
-        session: Session = g.pop("scylla_session", None)
-        if session:
-            cluster.shutdown_session(session)
-
-    @click.command('sync-models')
-    @with_appcontext
-    @staticmethod
-    def sync_models_command():
-        cluster = ScyllaCluster.get()
-        cluster.sync_models()
-        click.echo("Models synchronized.")
+        g.pop("scylla_session", None)
 
     @classmethod
     def attach_to_app(cls, app: Flask):
         app.teardown_appcontext(cls.close_session)
-        app.cli.add_command(cls.sync_models_command)

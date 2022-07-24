@@ -36,12 +36,12 @@ class ArgusRequestLogFormatter(logging.Formatter):
         return super().format(record)
 
 
-def setup_argus_logging():
+def setup_application_logging(log_level=logging.INFO):
     dictConfig({
         'version': 1,
         'formatters': {
             'request': {
-                'class': 'argus.backend.logsetup.ArgusRequestLogFormatter',
+                'class': f"{__name__}.{ArgusRequestLogFormatter.__name__}",
                 'format': LOG_FORMAT_REQUEST,
             }
         },
@@ -54,23 +54,23 @@ def setup_argus_logging():
         },
         'loggers': {
             'cassandra': {
-                'level': 'INFO',
+                'level': log_level,
                 'handlers': ['main']
             },
             'argus': {
-                'level': 'INFO',
+                'level': log_level,
                 'handlers': ['main']
             },
             'argus_backend': {
-                'level': 'INFO',
+                'level': log_level,
                 'handlers': ['main']
             },
             'werkzeug': {
-                'level': 'INFO',
+                'level': log_level,
                 'handlers': ['main']
             },
             'uwsgi': {
-                'level': 'INFO',
+                'level': log_level,
                 'handlers': ['main']
             }
         }

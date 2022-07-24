@@ -1,9 +1,10 @@
 import logging
 
 from datetime import datetime
-from argus.db.db_types import TestStatus, TestInvestigationStatus
-from argus.db.testrun import TestRun
-from argus.db.models import ArgusGithubIssue, ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, ArgusReleaseScheduleTest, ArgusTestRunComment
+from argus.backend.plugins.sct.testrun import SCTTestRun
+from argus.backend.util.enums import TestStatus, TestInvestigationStatus
+from argus.backend.models.web import ArgusGithubIssue, ArgusRelease, ArgusGroup, ArgusTest,\
+    ArgusScheduleTest, ArgusTestRunComment
 from argus.backend.db import ScyllaCluster
 
 LOGGER = logging.getLogger(__name__)
@@ -20,7 +21,7 @@ class ReleaseStats:
         self.has_bug_report = False
         self.issues: list[ArgusGithubIssue] = []
         self.comments: list[ArgusTestRunComment] = []
-        self.test_schedules: list[ArgusReleaseScheduleTest] = []
+        self.test_schedules: list[ArgusScheduleTest] = []
         self.forced_collection = False
 
     def to_dict(self) -> dict:
@@ -42,7 +43,7 @@ class ReleaseStats:
             return
 
         if not self.release.perpetual and not limited:
-            self.test_schedules = list(ArgusReleaseScheduleTest.filter(
+            self.test_schedules = list(ArgusScheduleTest.filter(
                 release_id=self.release.id
             ).all())
 
@@ -50,8 +51,8 @@ class ReleaseStats:
         if not limited or force:
             self.issues = ArgusGithubIssue.filter(release_id=self.release.id).all()
             self.comments = ArgusTestRunComment.filter(release_id=self.release.id).all()
-        self.all_tests = ArgusReleaseGroupTest.filter(release_id=self.release.id).all()
-        groups: list[ArgusReleaseGroup] = ArgusReleaseGroup.filter(release_id=self.release.id).all()
+        self.all_tests = ArgusTest.filter(release_id=self.release.id).all()
+        groups: list[ArgusGroup] = ArgusGroup.filter(release_id=self.release.id).all()
         for group in groups:
             if group.enabled:
                 stats = GroupStats(group=group, parent_release=self)
@@ -65,7 +66,7 @@ class ReleaseStats:
 
 
 class GroupStats:
-    def __init__(self, group: ArgusReleaseGroup, parent_release: ReleaseStats) -> None:
+    def __init__(self, group: ArgusGroup, parent_release: ReleaseStats) -> None:
         self.group = group
         self.parent_release = parent_release
         self.status_map = {status: 0 for status in TestStatus}
@@ -110,9 +111,9 @@ class GroupStats:
 class TestStats:
     def __init__(
         self,
-        test: ArgusReleaseGroupTest,
+        test: ArgusTest,
         parent_group: GroupStats,
-        schedules: list[ArgusReleaseScheduleTest] | None = None
+        schedules: list[ArgusScheduleTest] | None = None
     ) -> None:
         self.test = test
         self.parent_group = parent_group
@@ -177,8 +178,11 @@ class ReleaseStatsCollector:
         self.session = self.database.get_session()
         self.run_by_release_stats_statement = self.database.prepare(
             "SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, assignee, "
-            f"end_time, investigation_status, heartbeat, scylla_version FROM {TestRun.table_name()} WHERE release_id = ?"
+            f"end_time, investigation_status, heartbeat, scylla_version FROM {SCTTestRun.table_name()} WHERE release_id = ?"
         )
+        self.release = None
+        self.release_stats = None
+        self.release_rows = []
         self.release_name = release_name
         self.release_version = release_version
 

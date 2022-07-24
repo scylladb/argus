@@ -1,3 +1,4 @@
+# TODO: Deprecated, will be removed once REST API client is ready
 import logging
 import datetime
 import time
@@ -14,8 +15,8 @@ from argus.db.cloud_types import CloudResource, CloudInstanceDetails, BaseCloudS
 from argus.db.interface import ArgusDatabase
 from argus.db.db_types import ColumnInfo, CollectionHint, NemesisRunInfo, TestStatus, TestInvestigationStatus, \
     EventsBySeverity, PackageVersion
-from argus.db.models import ArgusRelease, ArgusReleaseGroup, ArgusReleaseGroupTest, ArgusReleaseSchedule, ArgusReleaseScheduleAssignee, ArgusReleaseScheduleGroup, \
-    ArgusReleaseScheduleTest
+from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, ArgusSchedule, ArgusScheduleAssignee, ArgusScheduleGroup, \
+    ArgusScheduleTest
 
 LOGGER = logging.getLogger(__name__)
 
@@ -609,13 +610,13 @@ class TestRun:
     def _assign_categories(self):
         key = self._build_id
         try:
-            test: ArgusReleaseGroupTest = ArgusReleaseGroupTest.using(
+            test: ArgusTest = ArgusTest.using(
                 connection=self.argus.CQL_ENGINE_CONNECTION_NAME
             ).get(build_system_id=key)
             self.release_id = test.release_id
             self.group_id = test.group_id
             self.test_id = test.id
-        except ArgusReleaseGroupTest.DoesNotExist:
+        except ArgusTest.DoesNotExist:
             LOGGER.warning(
                 "Test entity missing for key \"%s\", run won't be visible until this is corrected", key)
 
@@ -623,23 +624,23 @@ class TestRun:
         """
             Iterate over all schedules (groups and tests) and return first available assignee
         """
-        associated_test = ArgusReleaseGroupTest.using(
+        associated_test = ArgusTest.using(
             connection=self.argus.CQL_ENGINE_CONNECTION_NAME
         ).get(build_system_id=self.build_id)
-        associated_group = ArgusReleaseGroup.using(
+        associated_group = ArgusGroup.using(
             connection=self.argus.CQL_ENGINE_CONNECTION_NAME
         ).get(id=associated_test.group_id)
         associated_release = ArgusRelease.using(
             connection=self.argus.CQL_ENGINE_CONNECTION_NAME
         ).get(id=associated_test.release_id)
 
-        scheduled_groups = ArgusReleaseScheduleGroup.filter(
+        scheduled_groups = ArgusScheduleGroup.filter(
             release_id=associated_release.id, group_id=associated_group.id
         ).all().using(
             connection=self.argus.CQL_ENGINE_CONNECTION_NAME
         )
 
-        scheduled_tests = ArgusReleaseScheduleTest.filter(
+        scheduled_tests = ArgusScheduleTest.filter(
             release_id=associated_release.id, test_id=associated_test.id
         ).all().using(
             connection=self.argus.CQL_ENGINE_CONNECTION_NAME
@@ -648,7 +649,7 @@ class TestRun:
         unique_schedule_ids = {scheduled_obj.schedule_id for scheduled_obj in [
             *scheduled_tests, *scheduled_groups]}
 
-        schedules = ArgusReleaseSchedule.filter(
+        schedules = ArgusSchedule.filter(
             release_id=associated_release.id, id__in=tuple(
                 unique_schedule_ids)
         ).all().using(
@@ -664,7 +665,7 @@ class TestRun:
 
         assignees_uuids = []
         for schedule in valid_schedules:
-            assignees = ArgusReleaseScheduleAssignee.filter(
+            assignees = ArgusScheduleAssignee.filter(
                 schedule_id=schedule.id
             ).all().using(
                 connection=self.argus.CQL_ENGINE_CONNECTION_NAME
