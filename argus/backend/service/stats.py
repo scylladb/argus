@@ -1,7 +1,7 @@
 import logging
 
 from datetime import datetime
-from argus.backend.models.sct_testrun import SCTTestRun
+from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.util.enums import TestStatus, TestInvestigationStatus
 from argus.backend.models.web import ArgusGithubIssue, ArgusRelease, ArgusGroup, ArgusTest,\
     ArgusScheduleTest, ArgusTestRunComment

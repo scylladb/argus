@@ -310,7 +310,7 @@ class ArgusScheduleTest(Model):
     release_id = columns.UUID(partition_key=True)
 
 
-class ArgusSchedueGroup(Model):
+class ArgusScheduleGroup(Model):
     __table_name__ = "argus_schedule_group_v3"
     group_id = columns.UUID(partition_key=True, required=True)
     id = columns.TimeUUID(primary_key=True, default=uuid1,
@@ -338,6 +338,6 @@ USED_MODELS = [
     ArgusRelease, ArgusGroup, ArgusTest,
     ArgusTestRunComment, ArgusEvent,
     WebFileStorage, ArgusGithubIssue, ReleasePlannerComment, ArgusNotification,
-    ArgusSchedule, ArgusScheduleAssignee, ArgusSchedueGroup, ArgusScheduleTest
+    ArgusSchedule, ArgusScheduleAssignee, ArgusScheduleGroup, ArgusScheduleTest
 ]
 USED_TYPES = []

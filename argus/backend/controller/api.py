@@ -8,6 +8,7 @@ from flask import (
 from flask.json import jsonify
 from argus.backend.error_handlers import handle_api_exception
 from argus.backend.controller.notification_api import bp as notifications_bp
+from argus.backend.controller.client_api import bp as client_bp
 from argus.backend.service.argus_service import ArgusService
 from argus.backend.service.user import UserService, api_login_required
 from argus.backend.service.stats import ReleaseStatsCollector
@@ -15,6 +16,7 @@ from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, UserOa
 
 bp = Blueprint('api', __name__, url_prefix='/api/v1')
 bp.register_blueprint(notifications_bp)
+bp.register_blueprint(client_bp)
 bp.register_error_handler(Exception, handle_api_exception)
 LOGGER = logging.getLogger(__name__)
 

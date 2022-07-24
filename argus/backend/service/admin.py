@@ -9,7 +9,7 @@ from argus.backend.models.web import (
     ArgusTest,
     ArgusSchedule,
     ArgusScheduleAssignee,
-    ArgusSchedueGroup,
+    ArgusScheduleGroup,
     ArgusScheduleTest,
     ArgusTestRunComment,
     ArgusEvent,

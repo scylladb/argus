@@ -1,3 +1,4 @@
+# TODO: Deprecated, will be removed once REST API client is ready
 import logging
 import datetime
 import time
@@ -14,7 +15,7 @@ from argus.db.cloud_types import CloudResource, CloudInstanceDetails, BaseCloudS
 from argus.db.interface import ArgusDatabase
 from argus.db.db_types import ColumnInfo, CollectionHint, NemesisRunInfo, TestStatus, TestInvestigationStatus, \
     EventsBySeverity, PackageVersion
-from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, ArgusSchedule, ArgusScheduleAssignee, ArgusSchedueGroup, \
+from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, ArgusSchedule, ArgusScheduleAssignee, ArgusScheduleGroup, \
     ArgusScheduleTest
 
 LOGGER = logging.getLogger(__name__)
@@ -633,7 +634,7 @@ class TestRun:
             connection=self.argus.CQL_ENGINE_CONNECTION_NAME
         ).get(id=associated_test.release_id)
 
-        scheduled_groups = ArgusSchedueGroup.filter(
+        scheduled_groups = ArgusScheduleGroup.filter(
             release_id=associated_release.id, group_id=associated_group.id
         ).all().using(
             connection=self.argus.CQL_ENGINE_CONNECTION_NAME

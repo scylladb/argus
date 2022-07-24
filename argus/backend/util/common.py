@@ -1,7 +1,7 @@
 from typing import Callable
 from uuid import UUID
 
-from flask import Response
+from flask import Request, Response
 
 
 FlaskView = Callable[..., Response]
@@ -28,3 +28,14 @@ def strip_html_tags(text: str):
 
 def convert_str_list_to_uuid(lst: list[str]) -> list[UUID]:
     return [UUID(s) for s in lst]
+
+
+def get_payload(client_request: Request) -> dict:
+    if not client_request.is_json:
+        raise Exception(
+            "Content-Type mismatch, expected application/json, got:",
+            client_request.content_type
+        )
+    request_payload = client_request.get_json()
+
+    return request_payload

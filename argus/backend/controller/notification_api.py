@@ -3,21 +3,11 @@ from flask import (
     Blueprint,
     g,
     request,
-    Request,
 )
 from argus.backend.error_handlers import handle_api_exception
 from argus.backend.service.notification_manager import NotificationManagerService
 from argus.backend.service.user import api_login_required
-
-
-def get_payload(client_request: Request):
-    if not client_request.is_json:
-        raise Exception(
-            "Content-Type mismatch, expected application/json, got:", client_request.content_type)
-    request_payload = client_request.get_json()
-
-    return request_payload
-
+from argus.backend.util.common import get_payload
 
 bp = Blueprint('notifications', __name__, url_prefix='/notifications')
 LOGGER = logging.getLogger(__name__)
