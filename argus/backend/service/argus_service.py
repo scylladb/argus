@@ -13,7 +13,7 @@ from cassandra.util import uuid_from_time  # pylint: disable=no-name-in-module
 from cassandra.cqlengine import ValidationError
 from flask import g, current_app
 from argus.backend.db import ScyllaCluster
-from argus.backend.models.sct_testrun import SCTTestRun
+from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.service.notification_manager import NotificationManagerService
 from argus.backend.util.enums import TestStatus, TestInvestigationStatus
 from argus.backend.models.web import (
@@ -23,7 +23,7 @@ from argus.backend.models.web import (
     ArgusTest,
     ArgusSchedule,
     ArgusScheduleAssignee,
-    ArgusSchedueGroup,
+    ArgusScheduleGroup,
     ArgusScheduleTest,
     ArgusTestRunComment,
     ArgusNotificationSourceTypes,
@@ -666,7 +666,7 @@ class ArgusService:
             response["tests"].append(test_id)
 
         for group_id in groups:
-            group_entity = ArgusSchedueGroup()
+            group_entity = ArgusScheduleGroup()
             group_entity.id = uuid_from_time(schedule.period_start)
             group_entity.schedule_id = schedule.id
             group_entity.group_id = UUID(group_id) if isinstance(group_id, str) else group_id
@@ -708,7 +708,7 @@ class ArgusService:
             serialized_schedule = dict(schedule.items())
             tests = ArgusScheduleTest.filter(schedule_id=schedule.id).all()
             serialized_schedule["tests"] = [test.test_id for test in tests]
-            groups = ArgusSchedueGroup.filter(schedule_id=schedule.id).all()
+            groups = ArgusScheduleGroup.filter(schedule_id=schedule.id).all()
             serialized_schedule["groups"] = [group.group_id for group in groups]
             assignees = ArgusScheduleAssignee.filter(schedule_id=schedule.id).all()
             serialized_schedule["assignees"] = [assignee.assignee for assignee in assignees]
@@ -738,7 +738,7 @@ class ArgusService:
         release = ArgusRelease.get(id=release_id)
         schedule = ArgusSchedule.get(release_id=release.id, id=schedule_id)
         schedule_tests = ArgusScheduleTest.filter(schedule_id=schedule.id).all()
-        schedule_groups = ArgusSchedueGroup.filter(schedule_id=schedule.id).all()
+        schedule_groups = ArgusScheduleGroup.filter(schedule_id=schedule.id).all()
         for test in schedule_tests:
             self.assign_runs_for_scheduled_test(schedule, test.test_id, UUID(assignees[0]))
 
@@ -816,7 +816,7 @@ class ArgusService:
         release = ArgusRelease.get(id=release_id)
         schedule = ArgusSchedule.get(release_id=release.id, id=schedule_id)
         tests = ArgusScheduleTest.filter(schedule_id=schedule.id).all()
-        groups = ArgusSchedueGroup.filter(schedule_id=schedule.id).all()
+        groups = ArgusScheduleGroup.filter(schedule_id=schedule.id).all()
         assignees = ArgusScheduleAssignee.filter(schedule_id=schedule.id).all()
 
         for entities in [tests, groups, assignees]:
@@ -870,7 +870,7 @@ class ArgusService:
         groups = ArgusGroup.filter(release_id=release_id).all()
         group_ids = [group.id for group in groups if group.enabled]
 
-        scheduled_groups = ArgusSchedueGroup.filter(release_id=release.id, group_id__in=group_ids).all()
+        scheduled_groups = ArgusScheduleGroup.filter(release_id=release.id, group_id__in=group_ids).all()
         schedule_ids = {schedule.schedule_id for schedule in scheduled_groups}
 
         schedules = ArgusSchedule.filter(release_id=release.id, id__in=tuple(schedule_ids)).all()
@@ -960,7 +960,7 @@ class ArgusService:
             if schedule["period_start"] <= today <= schedule["period_end"]:
                 tests = ArgusScheduleTest.filter(schedule_id=schedule_id).all()
                 schedule["tests"] = [test.test_id for test in tests]
-                groups = ArgusSchedueGroup.filter(schedule_id=schedule_id).all()
+                groups = ArgusScheduleGroup.filter(schedule_id=schedule_id).all()
                 schedule["groups"] = [group.group_id for group in groups]
                 assignees = ArgusScheduleAssignee.filter(schedule_id=schedule_id).all()
                 schedule["assignees"] = [assignee.assignee for assignee in assignees]

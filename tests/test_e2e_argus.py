@@ -8,7 +8,7 @@ from argus.db.testrun import TestRun, TestRunInfo, TestRunWithHeartbeat
 from argus.db.db_types import TestInvestigationStatus
 from argus.db.interface import ArgusDatabase
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, ArgusSchedule, ArgusScheduleAssignee, \
-    ArgusSchedueGroup, ArgusScheduleTest
+    ArgusScheduleGroup, ArgusScheduleTest
 
 LOGGER = logging.getLogger(__name__)
 
@@ -101,7 +101,7 @@ class TestEndToEnd:
         schedule.period_end = next_week
         schedule.using(connection=argus_database.CQL_ENGINE_CONNECTION_NAME).save()
 
-        scheduled_group = ArgusSchedueGroup()
+        scheduled_group = ArgusScheduleGroup()
         scheduled_group.schedule_id = schedule.id
         scheduled_group.release_id = release.id
         scheduled_group.group_id = group.id

@@ -1,11 +1,5 @@
-from datetime import datetime
-from time import time
-
-from cassandra.cqlengine.models import Model
 from cassandra.cqlengine.usertype import UserType
 from cassandra.cqlengine import columns
-
-from argus.backend.util.enums import TestStatus, TestInvestigationStatus
 
 
 class PackageVersion(UserType):
@@ -52,6 +46,9 @@ class CloudResource(UserType):
     resource_type = columns.Text()
     instance_info = columns.UserDefinedType(user_type=CloudInstanceDetails)
 
+    def get_instance_info(self) -> CloudInstanceDetails:
+        return self.instance_info
+
 
 class EventsBySeverity(UserType):
     __type_name__ = "EventsBySeverity"
@@ -78,49 +75,3 @@ class NemesisRunInfo(UserType):
     start_time = columns.Integer()
     end_time = columns.Integer()
     stack_trace = columns.Text()
-
-
-class SCTTestRun(Model):
-    __table_name__ = "test_runs_v8"
-
-    # Metadata
-    build_id = columns.Text(required=True, partition_key=True)
-    start_time = columns.DateTime(required=True, primary_key=True, clustering_order="DESC", default=datetime.now)
-    id = columns.UUID(index=True, required=True)
-    release_id = columns.UUID(index=True)
-    group_id = columns.UUID(index=True)
-    test_id = columns.UUID(index=True)
-    assignee = columns.UUID(index=True)
-    status = columns.Text(default=lambda: TestStatus.CREATED)
-    investigation_status = columns.Text(default=lambda: TestInvestigationStatus.NOT_INVESTIGATED)
-    heartbeat = columns.Integer(default=lambda: int(time()))
-
-    # Test Details
-    end_time = columns.DateTime(default=lambda: datetime.fromtimestamp(0))
-    scm_revision_id = columns.Text()
-    started_by = columns.Text()
-    build_job_url = columns.Text()
-    config_files = columns.List(value_type=columns.Text())
-    packages = columns.List(value_type=columns.UserDefinedType(user_type=PackageVersion))
-    scylla_version = columns.Text()
-    yaml_test_duration = columns.Integer()
-
-    # Test Resources
-    sct_runner_host = columns.UserDefinedType(user_type=CloudInstanceDetails)
-    region_name = columns.List(value_type=columns.Text())
-    cloud_setup = columns.UserDefinedType(user_type=CloudSetupDetails)
-
-    # Test Logs Collection
-    logs = columns.List(value_type=columns.Tuple(columns.Text(), columns.Text()))
-
-    # Test Resources
-    allocated_resources = columns.List(value_type=columns.UserDefinedType(user_type=CloudResource))
-
-    # Test Results
-    events = columns.List(value_type=columns.UserDefinedType(user_type=EventsBySeverity))
-    nemesis_data = columns.List(value_type=columns.UserDefinedType(user_type=NemesisRunInfo))
-    screenshots = columns.List(value_type=columns.Text())
-
-    @classmethod
-    def table_name(cls) -> str:
-        return cls.__table_name__
