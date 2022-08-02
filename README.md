@@ -42,7 +42,7 @@ pyenv activate argus
 Clone the project into a directory somewhere where user has full write permissions
 
 ```bash
-git clone https://github.com/bentsi/argus ~/app
+git clone https://github.com/scylladb/argus ~/app
 cd ~/app
 ```
 
@@ -123,10 +123,29 @@ Compile frontend files from `/frontend` into `/public/dist`. Add --watch to reco
 ```bash
 yarn webpack --watch
 ```
+##### Configuration
+Create a `argus.local.yaml` configuration file (used to configure database connection) and a `argus_web.yaml` (used for webapp secrets) in your application install directory.
 
+See `Production` section for more details.
+To configure Github authentication follow steps:
+1. Authorize OAuth App
+   1. go to your Account Settings (top right corner) -> Developer settings (left pane) -> OAuth Apps
+   2. Click Create New OAuth App button
+   3. Fill the fields (app name: `argus-dev`, homepage URL `http://localhost:5000`, Auth callback URL: `http://localhost:5000/profile/oauth/github`)
+   4. Confirm and get the tokens/ids required for config
+2. Create Jenkins token for your account
+   1. Go to `Configure` in top right corner
+   2. Click `Add new Token`
+   3. Get it and paste to config to `JENKINS_API_TOKEN` param
 ##### Database Initialization
 
 You can initialize a scylla cluster in any way you like, either using docker image with docker-compose or using cassandra cluster manager. You will need to create the keyspace manually before you can sync database models.
+
+Create keyspace according to your configuration.
+e.g. (need to test if it works with RF=1 if not, make it 3)
+```
+CREATE KEYSPACE argus WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1}
+```
 
 Initial sync can be done as follows:
 

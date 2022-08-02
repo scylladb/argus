@@ -133,6 +133,5 @@ dmypy.json
 argus.*.yaml
 argus_web.yaml
 /node_modules/
-storage
 /migration
 .vscode
