@@ -28,7 +28,7 @@ def _prepare_aws_resource_setup(sct_config: dict) -> CloudSetupDetails:
                                         node_amount=sct_config.get("n_monitor_nodes"),
                                         post_behaviour=sct_config.get("post_behavior_monitor_nodes"))
     cloud_setup = CloudSetupDetails(db_node=db_node_setup, loader_node=loader_node_setup,
-                                    monitor_node=monitor_node_setup)
+                                    monitor_node=monitor_node_setup, backend=sct_config.get("cluster_backend"))
 
     return cloud_setup
 
@@ -48,7 +48,7 @@ def _prepare_gce_resource_setup(sct_config: dict) -> CloudSetupDetails:
                                         node_amount=sct_config.get("n_monitor_nodes"),
                                         post_behaviour=sct_config.get("post_behavior_monitor_nodes"))
     cloud_setup = CloudSetupDetails(db_node=db_node_setup, loader_node=loader_node_setup,
-                                    monitor_node=monitor_node_setup)
+                                    monitor_node=monitor_node_setup, backend=sct_config.get("cluster_backend"))
 
     return cloud_setup
 

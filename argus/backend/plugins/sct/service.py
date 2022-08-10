@@ -10,7 +10,7 @@ from argus.backend.plugins.sct.udt import (
     NodeDescription,
     PackageVersion,
 )
-from argus.backend.util.enums import NemesisStatus
+from argus.backend.util.enums import NemesisStatus, ResourceState
 
 LOGGER = logging.getLogger(__name__)
 
@@ -23,7 +23,6 @@ class SCTServiceException(Exception):
 class NemesisSubmissionRequest:
     name: str
     class_name: str
-    method_name: str
     start_time: int
     node_name: str
     node_ip: str
@@ -111,6 +110,7 @@ class SCTService:
             resource = next(res for res in run.get_resources() if res.name == resource_name)
             resource.get_instance_info().termination_reason = reason
             resource.get_instance_info().termination_time = int(time())
+            resource.state = ResourceState.TERMINATED.value
             run.save()
         except StopIteration as exception:
             LOGGER.error("Resource %s not found in run %s", resource_name, run_id)
@@ -128,7 +128,6 @@ class SCTService:
         nemesis_info = NemesisRunInfo(
             class_name=nem_req.class_name,
             name=nem_req.name,
-            method_name=nem_req.method_name,
             start_time=int(nem_req.start_time),
             end_time=0,
             duration=0,

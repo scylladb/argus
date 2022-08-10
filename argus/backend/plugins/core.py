@@ -18,10 +18,10 @@ class PluginModelBase(Model):
     group_id = columns.UUID(index=True)
     test_id = columns.UUID(index=True)
     assignee = columns.UUID(index=True)
-    status = columns.Text(default=lambda: TestStatus.CREATED)
-    investigation_status = columns.Text(default=lambda: TestInvestigationStatus.NOT_INVESTIGATED)
+    status = columns.Text(default=lambda: TestStatus.CREATED.value)
+    investigation_status = columns.Text(default=lambda: TestInvestigationStatus.NOT_INVESTIGATED.value)
     heartbeat = columns.Integer(default=lambda: int(time()))
-    end_time = columns.DateTime(default=lambda: datetime.fromtimestamp(0))
+    end_time = columns.DateTime(default=lambda: datetime.utcfromtimestamp(0))
 
     # Test Logs Collection
     logs = columns.List(value_type=columns.Tuple(columns.Text(), columns.Text()))
