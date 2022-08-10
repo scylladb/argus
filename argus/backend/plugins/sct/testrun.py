@@ -123,10 +123,11 @@ class SCTTestRun(PluginModelBase):
             public_ip=req.runner_public_ip,
             private_ip=req.runner_private_ip,
             provider=backend,
-            region_name=primary_region
+            region=primary_region,
         )
 
         run.config_files = req.sct_config.get("config_files")
+        run.region_name = regions
         run.save()
         return run
 

@@ -1,5 +1,8 @@
+from time import time
 from cassandra.cqlengine.usertype import UserType
 from cassandra.cqlengine import columns
+
+from argus.backend.util.enums import ResourceState
 
 
 class PackageVersion(UserType):
@@ -17,10 +20,10 @@ class CloudInstanceDetails(UserType):
     region = columns.Text()
     public_ip = columns.Text()
     private_ip = columns.Text()
-    creation_time = columns.Integer()
-    termination_time = columns.Integer()
-    termination_reason = columns.Text()
-    shards_amount = columns.Integer()
+    creation_time = columns.Integer(default=lambda: int(time()))
+    termination_time = columns.Integer(default=lambda: 0)
+    termination_reason = columns.Text(default=lambda: "")
+    shards_amount = columns.Integer(default=lambda: 0)
 
 
 class CloudNodesInfo(UserType):
@@ -42,7 +45,7 @@ class CloudSetupDetails(UserType):
 class CloudResource(UserType):
     __type_name__ = "CloudResource_v3"
     name = columns.Text()
-    state = columns.Text()
+    state = columns.Text(default=lambda: ResourceState.RUNNING)
     resource_type = columns.Text()
     instance_info = columns.UserDefinedType(user_type=CloudInstanceDetails)
 
