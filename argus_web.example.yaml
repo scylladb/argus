@@ -18,6 +18,8 @@ APP_LOG_LEVEL: INFO
 SECRET_KEY: MUSTBEUNIQUE
 # Client ID of a github oauth application
 GITHUB_CLIENT_ID: YOUR_GITHUB_CLIENT_ID
+# Scopes used for Github Application:
+# GITHUB_SCOPES: 'user:email read:user read:org repo'
 # Client secret of a github oauth application
 GITHUB_CLIENT_SECRET: YOUR_GITHUB_CLIENT_SECRET
 # Github personal access token
