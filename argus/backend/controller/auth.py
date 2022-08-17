@@ -44,7 +44,7 @@ def login():
     return render_template('auth/login.html.j2',
                            csrf_token=token,
                            github_cid=current_app.config.get("GITHUB_CLIENT_ID", "NO_CLIENT_ID"),
-                           github_scopes="user:email read:user read:org"
+                           github_scopes=current_app.config.get("GITHUB_SCOPES", "user:email read:user read:org repo")
                            )
 
 
