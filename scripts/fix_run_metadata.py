@@ -8,7 +8,7 @@ LOGGER.setLevel(logging.DEBUG)
 
 
 DB = ScyllaCluster.get()
-
+DB.execution_profile.request_timeout = 600
 ALL_RUNS = list(DB.session.execute(f"SELECT id FROM {TestRun.table_name()}").all())
 TOTAL_RUNS = len(ALL_RUNS)
 

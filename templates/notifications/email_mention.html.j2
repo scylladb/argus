@@ -1,0 +1,2 @@
+<div>You were mentioned by <span style="font-weight:bold">@{{ username }}</span> in a discussion of <a href='{{ config["BASE_URL"] }}{{url_for("main.runs", **{ "test_id": test_id, "additionalRuns[]": run_id })}}'>{{ build_id }}#{{ build_number }}</a>. </div>
+<div>{{ message }}</div>
