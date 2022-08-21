@@ -1,6 +1,8 @@
 import logging
 
 from datetime import datetime
+from typing import TypedDict
+from uuid import UUID
 from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.util.enums import TestStatus, TestInvestigationStatus
 from argus.backend.models.web import ArgusGithubIssue, ArgusRelease, ArgusGroup, ArgusTest,\
@@ -8,6 +10,68 @@ from argus.backend.models.web import ArgusGithubIssue, ArgusRelease, ArgusGroup,
 from argus.backend.db import ScyllaCluster
 
 LOGGER = logging.getLogger(__name__)
+
+
+class TestRunStatRow(TypedDict):
+    build_id: str
+    status: TestStatus
+    investigation_status: TestInvestigationStatus
+    assignee: UUID
+    scylla_version: str  # TODO: rework SCT specific field
+    start_time: datetime
+    end_time: datetime
+    heartbeat: int
+    id: UUID
+    test_id: UUID
+    group_id: UUID
+    release_id: UUID
+    build_job_url: str
+
+
+class ComparableTestStatus:
+    PRIORITY_MAP = {
+        TestStatus.FAILED: 10,
+        TestStatus.ABORTED: 9,
+        TestStatus.RUNNING: 8,
+        TestStatus.CREATED: 7,
+        TestStatus.PASSED: 6,
+    }
+
+    def __init__(self, status: TestStatus):
+        self._status = status
+
+    def _get_prio(self):
+        return self.PRIORITY_MAP.get(self._status, 0)
+
+    def __eq__(self, __o: object) -> bool:
+        if not isinstance(__o, ComparableTestStatus):
+            return False
+        return self._get_prio() == __o._get_prio()
+
+    def __ne__(self, __o: object) -> bool:
+        if not isinstance(__o, ComparableTestStatus):
+            return False
+        return not self.__eq__(__o)
+
+    def __lt__(self, __o: object) -> bool:
+        if not isinstance(__o, ComparableTestStatus):
+            return False
+        return self._get_prio() < __o._get_prio()
+
+    def __gt__(self, __o: object) -> bool:
+        if not isinstance(__o, ComparableTestStatus):
+            return False
+        return self._get_prio() > __o._get_prio()
+
+    def __ge__(self, __o: object) -> bool:
+        if not isinstance(__o, ComparableTestStatus):
+            return False
+        return self._get_prio() >= __o._get_prio()
+
+    def __le__(self, __o: object) -> bool:
+        if not isinstance(__o, ComparableTestStatus):
+            return False
+        return self._get_prio() <= __o._get_prio()
 
 
 class ReleaseStats:
@@ -23,6 +87,8 @@ class ReleaseStats:
         self.comments: list[ArgusTestRunComment] = []
         self.test_schedules: list[ArgusScheduleTest] = []
         self.forced_collection = False
+        self.rows = []
+        self.all_tests = []
 
     def to_dict(self) -> dict:
         return {
@@ -37,7 +103,7 @@ class ReleaseStats:
             "hasBugReport": self.has_bug_report
         }
 
-    def collect(self, rows: list[dict], limited=False, force=False) -> None:
+    def collect(self, rows: list[TestRunStatRow], limited=False, force=False) -> None:
         self.forced_collection = force
         if not self.release.enabled and not force:
             return
@@ -137,36 +203,61 @@ class TestStats:
             "hasComments": self.has_comments
         }
 
+    def _generate_status_map(self, last_runs: list[TestRunStatRow]) -> dict[int, str]:
+        status_map = {}
+        for run in last_runs:
+            run_number = self._get_build_number(run["build_job_url"])
+            match status := status_map.get(run_number):
+                case str():
+                    if ComparableTestStatus(TestStatus(status)) < ComparableTestStatus(TestStatus(run["status"])):
+                        status_map[run_number] = run["status"]
+                case _:
+                    status_map[run_number] = run["status"]
+        return status_map
+
+    @staticmethod
+    def _get_build_number(build_job_url: str) -> int | None:
+        build_number = build_job_url.rstrip("/").split("/")[-1]
+        if build_number:
+            try:
+                return int(build_number)
+            except ValueError:
+                LOGGER.error("Error parsing build number from %s: got %s as build_number", build_job_url, build_number)
+        return None
+
     def collect(self, limited=False):
 
-        last_runs = filter(lambda r: r["build_id"] == self.test.build_system_id, self.parent_group.parent_release.rows)
+        last_runs = [r for r in self.parent_group.parent_release.rows if r["build_id"] == self.test.build_system_id]
+        last_runs: list[TestRunStatRow] = sorted(
+            last_runs, reverse=True, key=lambda r: self._get_build_number(r["build_job_url"]))
         try:
-            last_run = next(last_runs)
-        except StopIteration:
+            last_run = last_runs[0]
+        except IndexError:
             self.status = TestStatus.NOT_RUN if self.is_scheduled else TestStatus.NOT_PLANNED
             self.parent_group.increment_status(status=self.status)
             return
+        status_map = self._generate_status_map(last_runs)
 
-        self.status = TestStatus(last_run["status"])
+        self.status = status_map.get(self._get_build_number(last_run["build_job_url"]))
         self.investigation_status = TestInvestigationStatus(last_run["investigation_status"])
         self.start_time = last_run["start_time"]
 
-        self.parent_group.increment_status(status=last_run["status"])
+        self.parent_group.increment_status(status=self.status)
         if limited and not self.parent_group.parent_release.forced_collection:
             return
 
         self.last_runs = [
             {
                 "status": run["status"],
-                "build_number": run["build_job_url"].rstrip("/").split("/")[-1],
+                "build_number": self._get_build_number(run["build_job_url"]),
                 "build_job_name": run["build_id"],
                 "start_time": run["start_time"],
                 "assignee": run["assignee"],
                 "issues": [dict(i.items()) for i in self.parent_group.parent_release.issues if i.run_id == run["id"]],
                 "comments": [dict(i.items()) for i in self.parent_group.parent_release.comments if i.test_run_id == run["id"]],
             }
-            for run in [last_run, *last_runs]
-        ][:4]
+            for run in last_runs
+        ][:5]
         self.has_bug_report = len(self.last_runs[0]["issues"]) > 0
         self.parent_group.parent_release.has_bug_report = self.has_bug_report or self.parent_group.parent_release.has_bug_report
         self.has_comments = len(self.last_runs[0]["comments"]) > 0
