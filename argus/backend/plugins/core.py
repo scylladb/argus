@@ -4,6 +4,7 @@ from time import time
 
 from cassandra.cqlengine import columns
 from cassandra.cqlengine.models import Model
+from cassandra.cqlengine.usertype import UserType
 from flask import Blueprint
 from argus.backend.db import ScyllaCluster
 from argus.backend.util.enums import TestInvestigationStatus, TestStatus
@@ -62,3 +63,5 @@ class PluginInfoBase:
     name: str
     controller: Blueprint
     model: PluginModelBase
+    all_models: list[Model]
+    all_types: list[UserType]

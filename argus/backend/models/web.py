@@ -2,6 +2,7 @@ from uuid import UUID, uuid1, uuid4
 from datetime import datetime
 from enum import Enum, IntEnum, auto
 from cassandra.cqlengine.models import Model
+from cassandra.cqlengine.usertype import UserType
 from cassandra.cqlengine import columns
 from cassandra.util import uuid_from_time, unix_time_from_uuid1  # pylint: disable=no-name-in-module
 
@@ -333,11 +334,24 @@ class WebFileStorage(Model):
     filename = columns.Text(min_length=1)
 
 
-USED_MODELS = [
-    User, UserOauthToken,
-    ArgusRelease, ArgusGroup, ArgusTest,
-    ArgusTestRunComment, ArgusEvent,
-    WebFileStorage, ArgusGithubIssue, ReleasePlannerComment, ArgusNotification,
-    ArgusSchedule, ArgusScheduleAssignee, ArgusScheduleGroup, ArgusScheduleTest
+USED_MODELS: list[Model] = [
+    User,
+    UserOauthToken,
+    WebFileStorage,
+    ArgusRelease,
+    ArgusGroup,
+    ArgusTest,
+    ArgusTestRunComment,
+    ArgusEvent,
+    ArgusGithubIssue,
+    ReleasePlannerComment,
+    ArgusNotification,
+    ArgusSchedule,
+    ArgusScheduleAssignee,
+    ArgusScheduleGroup,
+    ArgusScheduleTest,
 ]
-USED_TYPES = []
+
+USED_TYPES: list[UserType] = [
+
+]
