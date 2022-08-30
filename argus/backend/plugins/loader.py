@@ -4,6 +4,7 @@ from argus.backend.plugins.core import PluginInfoBase
 
 
 class PluginModule(typing.Protocol):
+    # pylint: disable=too-few-public-methods
     PluginInfo: PluginInfoBase
 
 
@@ -28,3 +29,11 @@ def plugin_loader() -> dict[str, PluginInfoBase]:
 
 
 AVAILABLE_PLUGINS = plugin_loader()
+
+
+def all_plugin_models():
+    return [model for plugin in AVAILABLE_PLUGINS.values() for model in plugin.all_models]
+
+
+def all_plugin_types():
+    return [user_type for plugin in AVAILABLE_PLUGINS.values() for user_type in plugin.all_types]
