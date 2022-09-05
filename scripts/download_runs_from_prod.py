@@ -15,9 +15,8 @@ LOGGER.setLevel(logging.DEBUG)
 
 SAVE_DIR = Path(f"./migration/{TestRun.table_name()}-{int(time())}")
 PROD_INTERFACE = ArgusDatabase(FileConfig("./argus.local.prod.yaml"))
-PROD_INTERFACE.execution_profile.request_timeout = 600
 
-ALL_ROWS = list(PROD_INTERFACE.session.execute("SELECT id FROM test_runs_v8").all())
+ALL_ROWS = list(PROD_INTERFACE.session.execute("SELECT id FROM test_runs_v7").all())
 TestRun.set_argus(PROD_INTERFACE)
 
 if not (p := Path("./migration")).exists():

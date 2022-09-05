@@ -194,8 +194,7 @@ class ArgusService:
                 notification_type=ArgusNotificationTypes.Mention,
                 source_type=ArgusNotificationSourceTypes.Comment,
                 source_id=comment.id,
-                content_params=params,
-                source_message=comment.message,
+                content_params=params
             )
 
         self.send_event(kind=ArgusEventTypes.TestRunCommentPosted, body={
