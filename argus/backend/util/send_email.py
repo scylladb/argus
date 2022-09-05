@@ -15,32 +15,38 @@ class Email:
     _attachments_size_limit = 10485760  # 10Mb = 20 * 1024 * 1024
     _body_size_limit = 26214400  # 25Mb = 20 * 1024 * 1024
 
-    def __init__(self):
-        self.sender = ""
-        self._password = ""
-        self._user = ""
-        self._server_host = ""
-        self._server_port = ""
-        self._conn = None
+    def __init__(self, init_connection=True):
+        self.sender: str = ""
+        self._password: str = ""
+        self._user: str = ""
+        self._server_host: str = ""
+        self._server_port: int = 0
+        self._connection: smtplib.SMTP | None = None
         self._retrieve_credentials()
-        self._connect()
+        if init_connection:
+            self._connect()
 
     def _retrieve_credentials(self):
         self.sender = current_app.config["EMAIL_SENDER"]
         self._password = current_app.config["EMAIL_SENDER_PASS"]
         self._user = current_app.config["EMAIL_SENDER_USER"]
         self._server_host = current_app.config["EMAIL_SERVER"]
-        self._server_port = current_app.config["EMAIL_SERVER_PORT"]
+        self._server_port = int(current_app.config["EMAIL_SERVER_PORT"])
 
     def _connect(self):
-        self.conn = smtplib.SMTP(host=self._server_host, port=self._server_port)
-        self.conn.ehlo()
-        self.conn.starttls()
-        self.conn.login(user=self._user, password=self._password)
+        try:
+            self._connection = smtplib.SMTP(host=self._server_host, port=self._server_port)
+            self._connection.ehlo()
+            self._connection.starttls()
+            self._connection.login(user=self._user, password=self._password)
+        except SMTPException as details:
+            current_app.logger.error("Failed to initialize smtp session %s", details)
 
     def _is_connection_open(self):
+        if not self._connection:
+            return False
         try:
-            status, _ = self.conn.noop()
+            status, _ =  self._connection.noop()
         except SMTPException:
             status = -1
 
@@ -78,7 +84,8 @@ class Email:
     def _send_email(self, recipients, email):
         if not self._is_connection_open():
             self._connect()
-        self.conn.sendmail(self.sender, recipients, email)
+        self._connection.sendmail(self.sender, recipients, email)
 
     def __del__(self):
-        self.conn.quit()
+        if self._connection:
+            self._connection.quit()

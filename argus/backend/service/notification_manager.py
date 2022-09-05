@@ -118,7 +118,7 @@ class EmailNotificationServiceSender(NotificationSenderBase):
         ArgusNotificationTypes.Mention: lambda p: render_template("notifications/email_mention.html.j2", **p if p else {})
     }
     def __init__(self):
-        self.email = Email()
+        self.email = Email(init_connection=False)
 
     def get_user(self, user_id: UUID) -> User:
         return User.get(id=user_id)
