@@ -1,4 +1,4 @@
-<script>
+    <script>
     import { onMount, onDestroy, createEventDispatcher } from "svelte";
     import Fa from "svelte-fa";
     import {
@@ -36,6 +36,7 @@
     import { sendMessage } from "../Stores/AlertStore";
     import { filterUser } from "../Common/SelectUtils";
     import Event from "./Event.svelte";
+    import ArtifactRow from "./ArtifactRow.svelte";
     export let id = "";
     export let build_number = -1;
     export let testInfo = {};
@@ -51,6 +52,7 @@
     let activityOpen = false;
     let commentsOpen = false;
     let issuesOpen = false;
+    let artifactTabOpened = false;
     let userSelect = {};
     let tests;
     let failedToLoad = false;
@@ -510,6 +512,7 @@
                         data-bs-toggle="tab"
                         data-bs-target="#nav-logs-{id}"
                         type="button"
+                        on:click={() => (artifactTabOpened = true)}
                         role="tab"><i class="fas fa-box" /> Logs</button
                     >
                     <button
@@ -623,34 +626,28 @@
                     />
                 </div>
                 <div class="tab-pane fade" id="nav-logs-{id}" role="tabpanel">
-                    {#if test_run.logs.length > 0}
-                        <table
-                            class="table table-bordered table-sm text-center"
-                        >
-                            <thead>
-                                <th>Log Type</th>
-                                <th>Log URL</th>
-                            </thead>
-                            <tbody>
-                                {#each test_run.logs as log}
-                                    <tr>
-                                        <td>{log[0]}</td>
-                                        <td
-                                            ><a
-                                                class="btn btn-primary"
-                                                href={log[1]}>Download</a
-                                            ></td
-                                        >
-                                    </tr>
-                                {/each}
-                            </tbody>
-                        </table>
-                    {:else}
-                        <div class="row">
-                            <div class="col text-center p-1 text-muted">
-                                No logs.
+                    {#if artifactTabOpened}
+                        {#if test_run.logs.length > 0}
+                            <table
+                                class="table table-bordered table-sm text-center"
+                            >
+                                <thead>
+                                    <th>Log Type</th>
+                                    <th>Log URL</th>
+                                </thead>
+                                <tbody>
+                                    {#each test_run.logs as log}
+                                        <ArtifactRow artifactName={log[0]} artifactLink={log[1]}/>
+                                    {/each}
+                                </tbody>
+                            </table>
+                        {:else}
+                            <div class="row">
+                                <div class="col text-center p-1 text-muted">
+                                    No logs.
+                                </div>
                             </div>
-                        </div>
+                        {/if}
                     {/if}
                 </div>
                 <div

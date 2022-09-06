@@ -19,6 +19,7 @@
     "lz-string": "^1.4.4",
     "marked": "^4.0.3",
     "mini-css-extract-plugin": "^1.6.0",
+    "prettysize": "^2.0.0",
     "style-loader": "^2.0.0",
     "svelte": "^3.38.3",
     "svelte-fa": "^2.4.0",
