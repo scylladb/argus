@@ -6,7 +6,6 @@
         faCheck,
         faSearch,
     } from "@fortawesome/free-solid-svg-icons";
-    import { allReleases, allGroups, allTests } from "../Stores/WorkspaceStore";
     import humanizeDuration from "humanize-duration";
     import Select from "svelte-select";
     import User from "../Profile/User.svelte";
@@ -28,39 +27,31 @@
     import { getPicture } from "../Common/UserUtils";
     import { timestampToISODate } from "../Common/DateUtils";
     import IssueTemplate from "./IssueTemplate.svelte";
-    import {
-        polledTestRuns,
-        testRunStore,
-    } from "../Stores/SingleTestRunSubscriber";
     import { userList } from "../Stores/UserlistSubscriber";
     import { sendMessage } from "../Stores/AlertStore";
     import { filterUser } from "../Common/SelectUtils";
     import Event from "./Event.svelte";
+    import { fetchRun } from "../Common/RunUtils";
     import ArtifactRow from "./ArtifactRow.svelte";
-    export let id = "";
-    export let build_number = -1;
+    export let runId = "";
+    export let buildNumber = -1;
     export let testInfo = {};
     const dispatch = createEventDispatcher();
-    let test_run = undefined;
+    let testRun = undefined;
     let heartbeatHuman = "";
     let newStatus = "";
     let newInvestigationStatus = "";
     let disableButtons = false;
     let currentTime = new Date();
     let clockInterval;
+    let runRefreshInterval;
     let users = {};
     let activityOpen = false;
     let commentsOpen = false;
     let issuesOpen = false;
     let artifactTabOpened = false;
     let userSelect = {};
-    let tests;
     let failedToLoad = false;
-    $: tests = $allTests;
-    let groups;
-    $: groups = $allGroups;
-    let releases;
-    $: releases = $allReleases;
 
     const investigationStatusIcon = {
         in_progress: faSearch,
@@ -96,29 +87,25 @@
     $: users = $userList;
     $: userSelect = createUserSelectCollection(users);
     $: heartbeatHuman = humanizeDuration(
-        currentTime - test_run?.heartbeat * 1000,
+        currentTime - testRun?.heartbeat * 1000,
         { round: true }
     );
     $: startedAtHuman = humanizeDuration(
-        currentTime - new Date(test_run?.start_time) ,
+        currentTime - new Date(testRun?.start_time) ,
         { round: true }
     );
 
-    const polledRunUnsub = polledTestRuns.subscribe((data) => {
-        test_run = data[id] ?? test_run;
-    });
-
-    const findAssignee = function (test_run, userSelect) {
+    const findAssignee = function (run, userSelect) {
         const placeholder = {
             value: "unassigned",
             id: "none-none-none",
         };
         if (Object.values(userSelect).length < 2) return;
-        if (!test_run) {
+        if (!run) {
             return placeholder;
         }
-        if (test_run.assignee) {
-            let user = userSelect[test_run.assignee];
+        if (run.assignee) {
+            let user = userSelect[run.assignee];
             if (!user) {
                 return placeholder;
             }
@@ -131,40 +118,22 @@
     };
 
     let currentAssignee = "unassigned";
-    $: currentAssignee = findAssignee(test_run, userSelect);
+    $: currentAssignee = findAssignee(testRun, userSelect);
 
     const fetchTestRunData = async function () {
         try {
-            let params = new URLSearchParams({
-                runId: id,
-            }).toString();
-            let apiResponse = await fetch('/api/v1/test_run?' + params, {
-                method: "GET"
-            });
-            let apiJson = await apiResponse.json();
-            console.log(apiJson);
-            if (apiJson.status === "ok") {
-                test_run = apiJson.response;
-                if (!test_run) {
-                    failedToLoad = true;
-                    return;
-                }
-                if (build_number == -1) {
-                    build_number = parseInt(
-                        test_run.build_job_url.split("/").reverse()[1]
-                    );
-                }
-                testRunStore.update((store) => {
-                    if (!store.find((val) => val == id)) {
-                        return [...store, id];
-                    } else {
-                        return store;
-                    }
-                });
-                disableButtons = false;
-            } else {
-                throw apiJson;
+            let run = await fetchRun(testInfo.test.plugin_name, runId);
+            testRun = run;
+            if (!testRun) {
+                failedToLoad = true;
+                return;
             }
+            if (buildNumber == -1) {
+                buildNumber = parseInt(
+                    testRun.build_job_url.split("/").reverse()[1]
+                );
+            }
+            disableButtons = false;
         } catch (error) {
             if (error?.status === "error") {
                 sendMessage(
@@ -196,7 +165,7 @@
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    test_run_id: id,
+                    test_run_id: runId,
                     assignee: new_assignee,
                 }),
             });
@@ -231,7 +200,7 @@
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    test_run_id: id,
+                    test_run_id: runId,
                     status: newStatus,
                 }),
             });
@@ -268,9 +237,9 @@
                         "Content-Type": "application/json",
                     },
                     body: JSON.stringify({
-                        test_run_id: id,
-                        buildId: test_run.build_id,
-                        startTime: test_run.start_time,
+                        test_run_id: runId,
+                        buildId: testRun.build_id,
+                        startTime: testRun.start_time,
                         investigation_status: newInvestigationStatus,
                     }),
                 }
@@ -300,6 +269,10 @@
     onMount(() => {
         fetchTestRunData();
 
+        runRefreshInterval = setInterval(() => {
+            fetchTestRunData();
+        }, 1000 * 30);
+
         clockInterval = setInterval(() => {
             currentTime = new Date();
         }, 1000);
@@ -307,33 +280,28 @@
 
     onDestroy(() => {
         if (clockInterval) clearInterval(clockInterval);
-        polledRunUnsub();
-        testRunStore.update((store) => {
-            return store.filter((run) => {
-                return run != test_run.id;
-            });
-        });
+        if (runRefreshInterval) clearInterval(runRefreshInterval);
     });
 </script>
 
 <div class="border rounded shadow-sm testrun-card mb-4 top-bar">
     <div class="d-flex px-2 py-2 mb-1 border-bottom bg-white ">
         <div class="p-1">
-            {#if test_run}
-                <a class="link-dark" href="/test/{test_run.test_id}/runs?additionalRuns[]={test_run.id}">
-                    {test_run.build_id}#{build_number}
+            {#if testRun}
+                <a class="link-dark" href="/test/{testRun.test_id}/runs?additionalRuns[]={testRun.id}">
+                    {testRun.build_id}#{buildNumber}
                 </a>
             {/if}
         </div>
         <div class="ms-auto text-end">
             <button class="btn btn-sm btn-outline-dark" title="Close" on:click={() => {
-                dispatch("closeRun", { id: id })
+                dispatch("closeRun", { id: runId });
             }}
                 ><Fa icon={faTimes} /></button
             >
         </div>
     </div>
-    {#if test_run}
+    {#if testRun}
         <div class="p-2">
             <div class="row p-2">
                 <div class="col-6">
@@ -341,17 +309,17 @@
                         <div class="dropdown">
                             <button
                                 class="btn {StatusButtonCSSClassMap[
-                                    test_run.status
+                                    testRun.status
                                 ]} text-light"
                                 type="button"
                                 title={timestampToISODate(
-                                    test_run.end_time ,
+                                    testRun.end_time ,
                                     true
                                 )}
                                 data-bs-toggle="dropdown"
                             >
-                                {test_run.status.toUpperCase()}
-                                {#if InProgressStatuses.find((status) => status == test_run.status)}
+                                {testRun.status.toUpperCase()}
+                                {#if InProgressStatuses.find((status) => status == testRun.status)}
                                     <span
                                         class="spinner-border spinner-border-sm d-inline-block"
                                     />
@@ -376,18 +344,18 @@
                         <div class="dropdown ms-2">
                             <button
                                 class="btn {InvestigationButtonCSSClassMap[
-                                    test_run.investigation_status
+                                    testRun.investigation_status
                                 ]} text-light"
                                 type="button"
                                 data-bs-toggle="dropdown"
                             >
                                 <Fa
                                     icon={investigationStatusIcon[
-                                        test_run.investigation_status
+                                        testRun.investigation_status
                                     ]}
                                 />
                                 {TestInvestigationStatusStrings[
-                                    test_run.investigation_status
+                                    testRun.investigation_status
                                 ]}
                             </button>
                             <ul class="dropdown-menu">
@@ -449,7 +417,7 @@
                             {/if}
                         </div>
                     </div>
-                    {#if InProgressStatuses.includes(test_run.status)}
+                    {#if InProgressStatuses.includes(testRun.status)}
                         <div class="row text-end">
                             <div
                                 class="col d-flex flex-column text-muted text-sm"
@@ -462,64 +430,64 @@
                 </div>
             </div>
             <nav>
-                <div class="nav nav-tabs" id="nav-tab-{id}" role="tablist">
+                <div class="nav nav-tabs" id="nav-tab-{runId}" role="tablist">
                     <button
                         class="nav-link active"
-                        id="nav-details-tab-{id}"
+                        id="nav-details-tab-{runId}"
                         data-bs-toggle="tab"
-                        data-bs-target="#nav-details-{id}"
+                        data-bs-target="#nav-details-{runId}"
                         type="button"
                         role="tab"
                         ><i class="fas fa-info-circle" /> Details</button
                     >
                     <button
                         class="nav-link"
-                        id="nav-screenshots-tab-{id}"
+                        id="nav-screenshots-tab-{runId}"
                         data-bs-toggle="tab"
-                        data-bs-target="#nav-screenshots-{id}"
+                        data-bs-target="#nav-screenshots-{runId}"
                         type="button"
                         role="tab"
                         ><i class="fas fa-images" /> Screenshots</button
                     >
                     <button
                         class="nav-link"
-                        id="nav-resources-tab-{id}"
+                        id="nav-resources-tab-{runId}"
                         data-bs-toggle="tab"
-                        data-bs-target="#nav-resources-{id}"
+                        data-bs-target="#nav-resources-{runId}"
                         type="button"
                         role="tab"><i class="fas fa-cloud" /> Resources</button
                     >
                     <button
                         class="nav-link"
-                        id="nav-events-tab-{id}"
+                        id="nav-events-tab-{runId}"
                         data-bs-toggle="tab"
-                        data-bs-target="#nav-events-{id}"
+                        data-bs-target="#nav-events-{runId}"
                         type="button"
                         role="tab"
                         ><i class="fas fa-rss-square" /> Events</button
                     >
                     <button
                         class="nav-link"
-                        id="nav-nemesis-tab-{id}"
+                        id="nav-nemesis-tab-{runId}"
                         data-bs-toggle="tab"
-                        data-bs-target="#nav-nemesis-{id}"
+                        data-bs-target="#nav-nemesis-{runId}"
                         type="button"
                         role="tab"><i class="fas fa-spider" /> Nemesis</button
                     >
                     <button
                         class="nav-link"
-                        id="nav-logs-tab-{id}"
+                        id="nav-logs-tab-{runId}"
                         data-bs-toggle="tab"
-                        data-bs-target="#nav-logs-{id}"
+                        data-bs-target="#nav-logs-{runId}"
                         type="button"
                         on:click={() => (artifactTabOpened = true)}
                         role="tab"><i class="fas fa-box" /> Logs</button
                     >
                     <button
                         class="nav-link"
-                        id="nav-discuss-tab-{id}"
+                        id="nav-discuss-tab-{runId}"
                         data-bs-toggle="tab"
-                        data-bs-target="#nav-discuss-{id}"
+                        data-bs-target="#nav-discuss-{runId}"
                         type="button"
                         on:click={() => (commentsOpen = true)}
                         role="tab"
@@ -527,9 +495,9 @@
                     >
                     <button
                         class="nav-link"
-                        id="nav-issues-tab-{id}"
+                        id="nav-issues-tab-{runId}"
                         data-bs-toggle="tab"
-                        data-bs-target="#nav-issues-{id}"
+                        data-bs-target="#nav-issues-{runId}"
                         type="button"
                         role="tab"
                         on:click={() => (issuesOpen = true)}
@@ -537,9 +505,9 @@
                     >
                     <button
                         class="nav-link"
-                        id="nav-activity-tab-{id}"
+                        id="nav-activity-tab-{runId}"
                         data-bs-toggle="tab"
-                        data-bs-target="#nav-activity-{id}"
+                        data-bs-target="#nav-activity-{runId}"
                         type="button"
                         on:click={() => (activityOpen = true)}
                         role="tab"
@@ -549,53 +517,53 @@
             </nav>
             <div
                 class="tab-content border-start border-end border-bottom bg-white"
-                id="nav-tabContent-{id}"
+                id="nav-tabContent-{runId}"
             >
                 <div
                     class="tab-pane fade show active"
-                    id="nav-details-{id}"
+                    id="nav-details-{runId}"
                     role="tabpanel"
                 >
-                    <TestRunInfo {test_run} release={testInfo.release} group={testInfo.group} test={testInfo.test}/>
+                    <TestRunInfo test_run={testRun} release={testInfo.release} group={testInfo.group} test={testInfo.test}/>
                 </div>
                 <div
                     class="tab-pane fade"
-                    id="nav-screenshots-{id}"
+                    id="nav-screenshots-{runId}"
                     role="tabpanel"
                 >
-                    <Screenshots screenshots={test_run.screenshots} />
+                    <Screenshots screenshots={testRun.screenshots} />
                 </div>
                 <div
                     class="tab-pane fade"
-                    id="nav-resources-{id}"
+                    id="nav-resources-{runId}"
                     role="tabpanel"
                 >
                     <div class="p-2">
                         <ResourcesInfo
-                            resources={test_run.allocated_resources}
+                            resources={testRun.allocated_resources}
                         />
                     </div>
                 </div>
-                <div class="tab-pane fade" id="nav-events-{id}" role="tabpanel">
+                <div class="tab-pane fade" id="nav-events-{runId}" role="tabpanel">
                     <div class="accordion accordion-flush" id="accordionEvents">
-                        {#each test_run.events as event_container}
+                        {#each testRun.events as event_container}
                             <div class="accordion-item">
                                 <h2
                                     class="accordion-header"
-                                    id="accordionHeadingEvents{event_container.severity}-{id}"
+                                    id="accordionHeadingEvents{event_container.severity}-{runId}"
                                 >
                                     <button
                                         class="accordion-button collapsed"
                                         type="button"
                                         data-bs-toggle="collapse"
-                                        data-bs-target="#accordionBodyEvents{event_container.severity}-{id}"
+                                        data-bs-target="#accordionBodyEvents{event_container.severity}-{runId}"
                                     >
                                         {event_container.severity.toUpperCase()}
                                         ({event_container.event_amount})
                                     </button>
                                 </h2>
                                 <div
-                                    id="accordionBodyEvents{event_container.severity}-{id}"
+                                    id="accordionBodyEvents{event_container.severity}-{runId}"
                                     class="accordion-collapse collapse"
                                     data-bs-parent="#accordionEvents"
                                 >
@@ -617,17 +585,17 @@
                 </div>
                 <div
                     class="tab-pane fade"
-                    id="nav-nemesis-{id}"
+                    id="nav-nemesis-{runId}"
                     role="tabpanel"
                 >
                     <NemesisTable
-                        nemesisCollection={test_run.nemesis_data}
-                        resources={test_run.allocated_resources}
+                        nemesisCollection={testRun.nemesis_data}
+                        resources={testRun.allocated_resources}
                     />
                 </div>
-                <div class="tab-pane fade" id="nav-logs-{id}" role="tabpanel">
+                <div class="tab-pane fade" id="nav-logs-{runId}" role="tabpanel">
                     {#if artifactTabOpened}
-                        {#if test_run.logs.length > 0}
+                        {#if testRun.logs.length > 0}
                             <table
                                 class="table table-bordered table-sm text-center"
                             >
@@ -636,7 +604,7 @@
                                     <th>Log URL</th>
                                 </thead>
                                 <tbody>
-                                    {#each test_run.logs as log}
+                                    {#each testRun.logs as log}
                                         <ArtifactRow artifactName={log[0]} artifactLink={log[1]}/>
                                     {/each}
                                 </tbody>
@@ -652,26 +620,26 @@
                 </div>
                 <div
                     class="tab-pane fade"
-                    id="nav-discuss-{id}"
+                    id="nav-discuss-{runId}"
                     role="tabpanel"
                 >
                     {#if commentsOpen}
-                        <TestRunComments {id} releaseName={testInfo.release.name} assignee={test_run.assignee} starter={test_run.started_by}/>
+                        <TestRunComments id={runId} releaseName={testInfo.release.name} assignee={testRun.assignee} starter={testRun.started_by}/>
                     {/if}
                 </div>
-                <div class="tab-pane fade" id="nav-issues-{id}" role="tabpanel">
-                    <IssueTemplate {test_run} test={testInfo.test} />
+                <div class="tab-pane fade" id="nav-issues-{runId}" role="tabpanel">
+                    <IssueTemplate test_run={testRun} test={testInfo.test} />
                     {#if issuesOpen}
-                        <GithubIssues {id} />
+                        <GithubIssues id={runId} />
                     {/if}
                 </div>
                 <div
                     class="tab-pane fade"
-                    id="nav-activity-{id}"
+                    id="nav-activity-{runId}"
                     role="tabpanel"
                 >
                     {#if activityOpen}
-                        <ActivityTab {id} />
+                        <ActivityTab id={runId} />
                     {/if}
                 </div>
             </div>

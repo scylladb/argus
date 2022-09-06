@@ -52,7 +52,7 @@
     const fetchGithubToken = async function() {
         let tokenRequest = await apiMethodCall("/api/v1/profile/github/token", undefined, "GET");
         if (tokenRequest.status != "ok") {
-            return Promise.reject(new Error('noToken'));
+            return Promise.reject(new Error("noToken"));
         } else {
             return Promise.resolve(tokenRequest.response);
         }
@@ -75,11 +75,11 @@
             }
         });
         if (issueStateResponse.status < 200 || issueStateResponse.status >= 300) {
-            return Promise.reject(new Error('API Error'));
+            return Promise.reject(new Error("API Error"));
         }
 
         if (parseInt(issueStateResponse.headers.get("x-ratelimit-remaining")) === 0) {
-            return Promise.reject(new Error('Rate limit exceeded'));
+            return Promise.reject(new Error("Rate limit exceeded"));
         }
         return issueStateResponse.json();
     };
@@ -94,7 +94,7 @@
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    id: issue.id,
+                    issue_id: issue.id,
                 }),
             });
             let apiJson = await apiResponse.json();

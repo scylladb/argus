@@ -17,7 +17,7 @@
 {#if Object.keys(testRuns).length > 0}
 <div class="p-2 mb-1 text-end"><a href="/test_runs?{serializedState}" class="btn btn-secondary btn-sm">Share</a></div>
 <div class="p-2">
-    <input class="form-control" type="text" placeholder="Filter runs" bind:value={filterStringRuns} on:input={() => { testRuns = testRuns }}>
+    <input class="form-control" type="text" placeholder="Filter runs" bind:value={filterStringRuns} on:input={() => { testRuns = testRuns; }}>
 </div>
 <div class="accordion mb-2" id="accordionTestRuns">
     {#each testRuns as testId (testId)}

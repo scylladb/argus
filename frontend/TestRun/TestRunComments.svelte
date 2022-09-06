@@ -227,12 +227,6 @@
 </div>
 
 <style>
-    .img-profile {
-        height: 72px;
-        border-radius: 50%;
-        object-fit: cover;
-    }
-
     .bg-editor {
         background-color: #f2f2f2;
     }
