@@ -1,5 +1,6 @@
 import logging
 from uuid import UUID
+import requests
 from flask import (
     Blueprint,
     g,
@@ -625,3 +626,27 @@ def issues_delete():
         "status": "ok",
         "response": result
     })
+
+
+@bp.route("/artifact/resolveSize")
+@api_login_required
+def resolve_artifact_size():
+    link = request.args.get("l")
+    if not link:
+        raise Exception("No link provided")
+
+    res = requests.head(link)
+
+    if res.status_code != 200:
+        raise Exception("Error requesting resource")
+
+    length = res.headers.get("Content-Length")
+    if length:
+        length = int(length)
+
+    return {
+        "status": "ok",
+        "response": {
+            "artifactSize": length,
+        }
+    }
