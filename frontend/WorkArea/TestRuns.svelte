@@ -4,9 +4,10 @@
     import { StatusBackgroundCSSClassMap } from "../Common/TestStatus";
     import { titleCase } from "../Common/TextUtils";
     import { timestampToISODate } from "../Common/DateUtils";
-    import TestRun from "../TestRun/TestRun.svelte";
     import TestRunsSelector from "./TestRunsSelector.svelte";
     import { extractBuildNumber } from "../Common/RunUtils";
+    import TestRunDispatcher from "./TestRunDispatcher.svelte";
+import { isPluginSupported } from "../Common/PluginDispatch";
 
     export let testId;
     export let listId = uuidv4();
@@ -37,11 +38,8 @@
     };
 
     const fetchTestRuns = async function () {
-        let params = new URLSearchParams({
-            testId: testId,
-        });
         let additionals = additionalRuns.map(v => `additionalRuns[]=${v}`).join("&");
-        let res = await fetch("/api/v1/test_runs/poll?" + params + "&" + additionals);
+        let res = await fetch(`/api/v1/test/${testId}/runs?` + additionals);
         if (res.status != 200) {
             return Promise.reject("API Error");
         }
@@ -118,6 +116,11 @@
             <div class="text-muted text-center m-3"><span class="spinner-border spinner-border-sm"></span> Loading...</div>
         {:then runs}
             <div class="p-2" bind:this={runsBody}>
+                {#if isPluginSupported(testInfo.test.plugin_name)}
+                    <div class="rounded shadow-sm bg-white p-2 text-center">
+                        <span class="fw-bold">Unsupported plugin</span> <span class="d-inline-block text-danger bg-light-one rounded p-1">{testInfo.test.plugin_name}</span>
+                    </div>
+                {/if}
                 <TestRunsSelector
                     {runs}
                     {testInfo}
@@ -129,10 +132,10 @@
                     <div class:show={clickedTestRuns[run.id]} class="collapse mb-2" id="collapse{run.id}">
                         <div class="container-fluid p-0 bg-light">
                             {#if clickedTestRuns[run.id]}
-                                <TestRun
-                                    id={run.id}
+                                <TestRunDispatcher
+                                    runId={run.id}
                                     {testInfo}
-                                    build_number={extractBuildNumber(run)}
+                                    buildNumber={extractBuildNumber(run)}
                                     on:closeRun={handleTestRunClose}
                                 />
                             {/if}

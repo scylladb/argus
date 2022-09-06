@@ -51,15 +51,15 @@ class ArgusService:
         }
         self.build_id_and_url_statement = self.database.prepare(
             f"SELECT build_id, build_job_url, test_id FROM {SCTTestRun.table_name()} WHERE id = ?"
-        )
+        )  # TODO: transfer to PluginModelBase
         self.event_insert_statement = self.database.prepare(
             'INSERT INTO argus.argus_event '
             '("id", "release_id", "group_id", "test_id", "run_id", "user_id", "kind", "body", "created_at") '
             'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        )
+        )  # TODO: Fixed and not needed, use ArgusEvent directly
         self.scylla_versions_by_release = self.database.prepare(
             f"SELECT scylla_version FROM {SCTTestRun.table_name()} WHERE release_id = ?"
-        )
+        )  # TODO: Moved to PluginModelBase
 
     def get_version(self) -> str:
         try:

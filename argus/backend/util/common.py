@@ -1,9 +1,11 @@
+import logging
 from typing import Callable
 from uuid import UUID
 
 from flask import Request, Response
 
 
+LOGGER = logging.getLogger(__name__)
 FlaskView = Callable[..., Response]
 
 
@@ -39,3 +41,13 @@ def get_payload(client_request: Request) -> dict:
     request_payload = client_request.get_json()
 
     return request_payload
+
+
+def get_build_number(build_job_url: str) -> int | None:
+    build_number = build_job_url.rstrip("/").split("/")[-1]
+    if build_number:
+        try:
+            return int(build_number)
+        except ValueError:
+            LOGGER.error("Error parsing build number from %s: got %s as build_number", build_job_url, build_number)
+    return None

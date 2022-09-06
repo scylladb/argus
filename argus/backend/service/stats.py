@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import TypedDict
 from uuid import UUID
 from argus.backend.plugins.sct.testrun import SCTTestRun
+from argus.backend.util.common import get_build_number
 from argus.backend.util.enums import TestStatus, TestInvestigationStatus
 from argus.backend.models.web import ArgusGithubIssue, ArgusRelease, ArgusGroup, ArgusTest,\
     ArgusScheduleTest, ArgusTestRunComment
@@ -206,7 +207,7 @@ class TestStats:
     def _generate_status_map(self, last_runs: list[TestRunStatRow]) -> dict[int, str]:
         status_map = {}
         for run in last_runs:
-            run_number = self._get_build_number(run["build_job_url"])
+            run_number = get_build_number(run["build_job_url"])
             match status := status_map.get(run_number):
                 case str():
                     if ComparableTestStatus(TestStatus(status)) < ComparableTestStatus(TestStatus(run["status"])):
@@ -215,21 +216,11 @@ class TestStats:
                     status_map[run_number] = run["status"]
         return status_map
 
-    @staticmethod
-    def _get_build_number(build_job_url: str) -> int | None:
-        build_number = build_job_url.rstrip("/").split("/")[-1]
-        if build_number:
-            try:
-                return int(build_number)
-            except ValueError:
-                LOGGER.error("Error parsing build number from %s: got %s as build_number", build_job_url, build_number)
-        return None
-
     def collect(self, limited=False):
 
         last_runs = [r for r in self.parent_group.parent_release.rows if r["build_id"] == self.test.build_system_id]
         last_runs: list[TestRunStatRow] = sorted(
-            last_runs, reverse=True, key=lambda r: self._get_build_number(r["build_job_url"]))
+            last_runs, reverse=True, key=lambda r: get_build_number(r["build_job_url"]))
         try:
             last_run = last_runs[0]
         except IndexError:
@@ -238,7 +229,7 @@ class TestStats:
             return
         status_map = self._generate_status_map(last_runs)
 
-        self.status = status_map.get(self._get_build_number(last_run["build_job_url"]))
+        self.status = status_map.get(get_build_number(last_run["build_job_url"]))
         self.investigation_status = TestInvestigationStatus(last_run["investigation_status"])
         self.start_time = last_run["start_time"]
 
@@ -249,7 +240,7 @@ class TestStats:
         self.last_runs = [
             {
                 "status": run["status"],
-                "build_number": self._get_build_number(run["build_job_url"]),
+                "build_number": get_build_number(run["build_job_url"]),
                 "build_job_name": run["build_id"],
                 "start_time": run["start_time"],
                 "assignee": run["assignee"],
