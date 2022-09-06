@@ -1,5 +1,7 @@
 <script>
     import { createEventDispatcher, onMount } from "svelte";
+    import Fa from "svelte-fa";
+    import { faTimes } from "@fortawesome/free-solid-svg-icons";
     import { extractBuildNumber } from "../Common/RunUtils";
     import { StatusButtonCSSClassMap } from "../Common/TestStatus";
 
@@ -37,19 +39,35 @@
     {/if}
     {#each runs as run (run.id)}
         <div class="me-2 d-inline-block">
-            <button
-                class:active={clickedTestRuns[run.id]}
-                class="btn {StatusButtonCSSClassMap[run.status]}"
-                type="button"
-                on:click={() => dispatch("runClick", { runId: run.id })}
-            >
-                #{extractBuildNumber(run)}
-            </button>
+            <div class="btn-group">
+                <button
+                    class:active={clickedTestRuns[run.id]}
+                    class="btn {StatusButtonCSSClassMap[run.status]}"
+                    type="button"
+                    on:click={() => dispatch("runClick", { runId: run.id })}
+                >
+                    #{extractBuildNumber(run)}
+                </button>
+                {#if clickedTestRuns[run.id]}
+                    <button
+                        class="btn border-start-dark {StatusButtonCSSClassMap[run.status]}"
+                        data-run-id={run.id}
+                        on:click={() => {
+                            dispatch("closeRun", { id: run.id });
+                        }}
+                    >
+                        <Fa icon={faTimes} />
+                    </button>
+                {/if}
+            </div>
         </div>
     {/each}
 </div>
 
 <style>
+    .border-start-dark {
+        border-left: 1px solid rgb(81, 81, 81);
+    }
     .active::before {
         font-family: "Noto Sans Packaged", "Noto Sans", sans-serif;
         content: "● ";
