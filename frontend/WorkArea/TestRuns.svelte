@@ -118,7 +118,13 @@
             <div class="text-muted text-center m-3"><span class="spinner-border spinner-border-sm"></span> Loading...</div>
         {:then runs}
             <div class="p-2" bind:this={runsBody}>
-                <TestRunsSelector {runs} {testInfo} bind:clickedTestRuns={clickedTestRuns} on:runClick={handleTestRunClick} />
+                <TestRunsSelector
+                    {runs}
+                    {testInfo}
+                    bind:clickedTestRuns={clickedTestRuns}
+                    on:runClick={handleTestRunClick}
+                    on:closeRun={handleTestRunClose}
+                />
                 {#each runs as run (run.id)}
                     <div class:show={clickedTestRuns[run.id]} class="collapse mb-2" id="collapse{run.id}">
                         <div class="container-fluid p-0 bg-light">
