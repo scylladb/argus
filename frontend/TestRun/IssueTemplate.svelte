@@ -5,7 +5,7 @@
     import { faCopy } from "@fortawesome/free-solid-svg-icons";
     import { parse } from "marked";
     import { onMount } from "svelte";
-    import { getScyllaPackage, getKernelPackage } from "../Common/RunUtils";
+    import { getScyllaPackage, getKernelPackage, getRelocatableScyllaPackage } from "../Common/RunUtils";
     import { markdownRendererOptions } from "../markdownOptions";
     let renderedElement;
     let templateElement;
@@ -23,8 +23,10 @@
 
     let scyllaServerPackage = getScyllaPackage(test_run.packages);
     let kernelPackage = getKernelPackage(test_run.packages);
+    let relocatablePackage = getRelocatableScyllaPackage(test_run.packages);
     $: scyllaServerPackage = getScyllaPackage(test_run.packages);
     $: kernelPackage = getKernelPackage(test_run.packages);
+    $: relocatablePackage = getRelocatableScyllaPackage(test_run.packages);
 
     onMount(() => {
         renderedElement.innerHTML = parse(templateElement.innerHTML, markdownRendererOptions);
@@ -114,6 +116,9 @@ Kernel Version: {kernelPackage.version}
 {/if}
 {#if scyllaServerPackage}
 Scylla version (or git commit hash): `{scyllaServerPackage.version}-{scyllaServerPackage.date}.{scyllaServerPackage.revision_id}` with build-id `{scyllaServerPackage.build_id}`
+{/if}
+{#if relocatablePackage}
+Relocatable Package: {relocatablePackage.version}
 {/if}
 Cluster size: {test_run.cloud_setup.db_node.node_amount} nodes ({test_run.cloud_setup.db_node.instance_type})
 
