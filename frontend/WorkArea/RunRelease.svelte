@@ -80,9 +80,10 @@
     };
 
     onMount(() => {
+        let refreshInterval = 600 + 15 + Math.round((Math.random() * 10));
         releaseStatsRefreshInterval = setInterval(() => {
             fetchStats();
-        }, 60 * 1000);
+        }, refreshInterval * 1000);
     });
 
     onDestroy(() => {

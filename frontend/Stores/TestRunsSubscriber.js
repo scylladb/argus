@@ -8,7 +8,7 @@ export const polledRuns = writable({}, set => {
 
     const interval = setInterval(() => {
         pollTestRuns(set);
-    }, 20 * 1000);
+    }, 120 * 1000);
 
     return () => clearInterval(interval);
 });
