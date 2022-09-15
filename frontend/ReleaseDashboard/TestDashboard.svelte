@@ -167,10 +167,10 @@
 
     onMount(() => {
         fetchStats();
-
+        let refreshInterval = 300 + 15 + Math.round((Math.random() * 10));
         statRefreshInterval = setInterval(() => {
             fetchStats();
-        }, 30 * 1000);
+        }, refreshInterval * 1000);
     });
 
     onDestroy(() => {

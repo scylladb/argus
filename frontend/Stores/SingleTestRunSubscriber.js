@@ -5,7 +5,7 @@ export const polledTestRuns = readable({}, set => {
 
     const interval = setInterval(() => {
         pollTestRun(set);
-    }, 20 * 1000);
+    }, 120 * 1000);
 
     return () => clearInterval(interval);
 });

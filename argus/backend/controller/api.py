@@ -454,7 +454,7 @@ def release_stats_v2():
         "status": "ok",
         "response": stats
     })
-    res.cache_control.max_age = 60
+    res.cache_control.max_age = 300
     return res
 
 
