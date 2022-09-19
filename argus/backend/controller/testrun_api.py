@@ -112,7 +112,7 @@ def set_testrun_assignee(test_id: str, run_id: str):
     result = service.change_run_assignee(
         test_id=UUID(test_id),
         run_id=UUID(run_id),
-        new_assignee=UUID(assignee),
+        new_assignee=UUID(assignee) if assignee != TestRunService.ASSIGNEE_PLACEHOLDER else None,
     )
 
     return {

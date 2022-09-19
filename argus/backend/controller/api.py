@@ -339,36 +339,7 @@ def test_info():
     return response
 
 
-@bp.route("/test_run", methods=["GET"])
-@api_login_required
-def test_run():
-    run_id = request.args.get("runId")
-    service = ArgusService()
-    loaded_run = service.load_test_run(
-        test_run_id=UUID(run_id))
-
-    return jsonify({
-        "status": "ok",
-        "response": loaded_run
-    })
-
-
-@bp.route("/test_run/comments", methods=["GET"])
-@api_login_required
-def test_run_comments():
-    test_id = request.args.get("testId")
-    if not test_id:
-        raise Exception("TestId wasn't specified in the request")
-    service = ArgusService()
-    comments = service.get_comments(test_id=UUID(test_id))
-
-    return jsonify({
-        "status": "ok",
-        "response": comments
-    })
-
-
-@bp.route("/test_run/comment/get", methods=["GET"])
+@bp.route("/test_run/comment/get", methods=["GET"])  # TODO: remove
 @api_login_required
 def get_test_run_comment():
     comment_id = request.args.get("commentId")
@@ -379,54 +350,6 @@ def get_test_run_comment():
     return jsonify({
         "status": "ok",
         "response": comment if comment else False
-    })
-
-
-@bp.route("/test_run/comments/submit", methods=["POST"])
-@api_login_required
-def test_run_submit_comment():
-    if not request.is_json:
-        raise Exception(
-            "Content-Type mismatch, expected application/json, got:", request.content_type)
-    request_payload = request.get_json()
-    service = ArgusService()
-    result = service.post_comment(payload=request_payload)
-
-    return jsonify({
-        "status": "ok",
-        "response": result
-    })
-
-
-@bp.route("/test_run/comments/update", methods=["POST"])
-@api_login_required
-def test_run_update_comment():
-    if not request.is_json:
-        raise Exception(
-            "Content-Type mismatch, expected application/json, got:", request.content_type)
-    request_payload = request.get_json()
-    service = ArgusService()
-    result = service.update_comment(payload=request_payload)
-
-    return jsonify({
-        "status": "ok",
-        "response": result
-    })
-
-
-@bp.route("/test_run/comments/delete", methods=["POST"])
-@api_login_required
-def test_run_delete_comment():
-    if not request.is_json:
-        raise Exception(
-            "Content-Type mismatch, expected application/json, got:", request.content_type)
-    request_payload = request.get_json()
-    service = ArgusService()
-    result = service.delete_comment(payload=request_payload)
-
-    return jsonify({
-        "status": "ok",
-        "response": result
     })
 
 
@@ -493,70 +416,6 @@ def test_run_poll_single():
     })
 
 
-@bp.route("/test_run/change_status", methods=["POST"])
-@api_login_required
-def test_run_change_status():
-    if not request.is_json:
-        raise Exception(
-            "Content-Type mismatch, expected application/json, got:", request.content_type)
-    request_payload = request.get_json()
-    service = ArgusService()
-    result = service.toggle_test_status(request_payload)
-
-    return jsonify({
-        "status": "ok",
-        "response": result
-    })
-
-
-@bp.route("/test_run/change_investigation_status", methods=["POST"])
-@api_login_required
-def test_run_change_investigation_status():
-    if not request.is_json:
-        raise Exception(
-            "Content-Type mismatch, expected application/json, got:", request.content_type)
-    request_payload = request.get_json()
-    service = ArgusService()
-    result = service.toggle_test_investigation_status(request_payload)
-
-    return jsonify({
-        "status": "ok",
-        "response": result
-    })
-
-
-@bp.route("/test_run/change_assignee", methods=["POST"])
-@api_login_required
-def test_run_change_assignee():
-    if not request.is_json:
-        raise Exception(
-            "Content-Type mismatch, expected application/json, got:", request.content_type)
-    request_payload = request.get_json()
-    service = ArgusService()
-    result = service.change_assignee(request_payload)
-
-    return jsonify({
-        "status": "ok",
-        "response": result
-    })
-
-
-@bp.route("/test_run/activity", methods=["GET"])
-@api_login_required
-def test_run_activity():
-    run_id = request.args.get("runId")
-    if not run_id:
-        raise Exception("RunId not provided in the request")
-    run_id = UUID(run_id)
-    service = ArgusService()
-    activity = service.fetch_run_activity(run_id=run_id)
-
-    return jsonify({
-        "status": "ok",
-        "response": activity
-    })
-
-
 @bp.route("/release/create", methods=["POST"])
 @api_login_required
 def release_create():
@@ -566,63 +425,6 @@ def release_create():
     request_payload = request.get_json()
     service = ArgusService()
     result = service.create_release(request_payload)
-
-    return jsonify({
-        "status": "ok",
-        "response": result
-    })
-
-
-@bp.route("/issues/submit/v1", methods=["POST"])
-@api_login_required
-def issues_submit():
-    if not request.is_json:
-        raise Exception(
-            "Content-Type mismatch, expected application/json, got:", request.content_type)
-    request_payload = request.get_json()
-    service = ArgusService()
-    submit_result = service.submit_github_issue(request_payload)
-
-    return jsonify({
-        "status": "ok",
-        "response": submit_result
-    })
-
-
-@bp.route("/issues/get/v1", methods=["GET"])
-@api_login_required
-def issues_get():
-    filter_key = request.args.get("filterKey")
-    if not filter_key:
-        raise Exception("Filter key not provided in the request")
-    key_value = request.args.get("id")
-    if not key_value:
-        raise Exception("Id wasn't provided in the request")
-    key_value = UUID(key_value)
-    aggregate_by_issue = request.args.get("aggregateByIssue")
-    aggregate_by_issue = bool(int(aggregate_by_issue)) if aggregate_by_issue else False
-    service = ArgusService()
-    issues = service.get_github_issues(
-        filter_key=filter_key,
-        filter_id=key_value,
-        aggregate_by_issue=aggregate_by_issue
-    )
-
-    return jsonify({
-        "status": "ok",
-        "response": issues
-    })
-
-
-@bp.route("/issues/delete/v1", methods=["POST"])
-@api_login_required
-def issues_delete():
-    if not request.is_json:
-        raise Exception(
-            "Content-Type mismatch, expected application/json, got:", request.content_type)
-    request_payload = request.get_json()
-    service = ArgusService()
-    result = service.delete_github_issue(request_payload)
 
     return jsonify({
         "status": "ok",

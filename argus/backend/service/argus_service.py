@@ -1,23 +1,15 @@
 import subprocess
-import time
 import json
-import re
 import logging
 import datetime
 from types import NoneType
-from collections import namedtuple
-from uuid import UUID, uuid4
-
-import requests
+from uuid import UUID
 from cassandra.util import uuid_from_time  # pylint: disable=no-name-in-module
-from cassandra.cqlengine import ValidationError
-from flask import g, current_app
+from flask import current_app
 from argus.backend.db import ScyllaCluster
 from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.service.notification_manager import NotificationManagerService
-from argus.backend.util.enums import TestStatus, TestInvestigationStatus
 from argus.backend.models.web import (
-    ArgusGithubIssue,
     ArgusRelease,
     ArgusGroup,
     ArgusTest,
@@ -26,15 +18,11 @@ from argus.backend.models.web import (
     ArgusScheduleGroup,
     ArgusScheduleTest,
     ArgusTestRunComment,
-    ArgusNotificationSourceTypes,
-    ArgusNotificationTypes,
     ArgusEvent,
-    ArgusEventTypes,
     ReleasePlannerComment,
     User,
 )
 from argus.backend.events.event_processors import EVENT_PROCESSORS
-from argus.backend.util.common import strip_html_tags
 
 LOGGER = logging.getLogger(__name__)
 
@@ -52,11 +40,6 @@ class ArgusService:
         self.build_id_and_url_statement = self.database.prepare(
             f"SELECT build_id, build_job_url, test_id FROM {SCTTestRun.table_name()} WHERE id = ?"
         )  # TODO: transfer to PluginModelBase
-        self.event_insert_statement = self.database.prepare(
-            'INSERT INTO argus.argus_event '
-            '("id", "release_id", "group_id", "test_id", "run_id", "user_id", "kind", "body", "created_at") '
-            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        )  # TODO: Fixed and not needed, use ArgusEvent directly
         self.scylla_versions_by_release = self.database.prepare(
             f"SELECT scylla_version FROM {SCTTestRun.table_name()} WHERE release_id = ?"
         )  # TODO: Moved to PluginModelBase
@@ -130,141 +113,11 @@ class ArgusService:
 
         return response
 
-    def load_test_run(self, test_run_id: UUID):
-        try:
-            return SCTTestRun.get(id=test_run_id)
-        except SCTTestRun.DoesNotExist:
-            return None
-
     def get_comment(self, comment_id: UUID) -> ArgusTestRunComment | None:
         try:
             return ArgusTestRunComment.get(id=comment_id)
         except ArgusTestRunComment.DoesNotExist:
             return None
-
-    def get_comments(self, test_id: UUID) -> list[ArgusTestRunComment]:
-        return sorted(ArgusTestRunComment.filter(test_run_id=test_id).all(), key=lambda c: c.posted_at)
-
-    def post_comment(self, payload: dict) -> list[ArgusTestRunComment]:
-        test_run_id: str = payload.get("test_run_id")
-        if not test_run_id:
-            raise Exception("TestId wasn't specified in the payload")
-
-        message: str = payload.get("message")
-        if not message:
-            raise Exception("Comment message wasn't specified in the payload")
-
-        release_name: str = payload.get("release")
-        if not release_name:
-            raise Exception("Release name not specified in the payload")
-
-        reactions = payload.get("reactions", {})
-        mentions = payload.get("mentions", [])
-        message_stripped = strip_html_tags(message)
-
-        mentions = set(mentions)
-        for potential_mention in re.findall(r"@[A-Za-z\d](?:[A-Za-z\d]|-(?=[A-Za-z\d])){0,38}", message_stripped):
-            if user := User.exists_by_name(potential_mention.lstrip("@")):
-                mentions.add(user)
-
-        release = ArgusRelease.get(name=release_name)
-        comment = ArgusTestRunComment()
-        comment.message = message_stripped
-        comment.reactions = reactions
-        comment.mentions = [m.id for m in mentions]
-        comment.test_run_id = test_run_id
-        comment.release_id = release.id
-        comment.user_id = g.user.id
-        comment.posted_at = time.time()
-        comment.save()
-
-        run_info = self.session.execute(self.build_id_and_url_statement, parameters=(comment.test_run_id,)).one()
-        build_number = run_info["build_job_url"].strip("/").split("/")[-1]
-        for mention in mentions:
-            params = {
-                "username": g.user.username,
-                "run_id": comment.test_run_id,
-                "test_id": run_info["test_id"],
-                "build_id": run_info["build_id"],
-                "build_number": build_number,
-            }
-            self.notification_manager.send_notification(
-                receiver=mention.id,
-                sender=comment.user_id,
-                notification_type=ArgusNotificationTypes.Mention,
-                source_type=ArgusNotificationSourceTypes.Comment,
-                source_id=comment.id,
-                content_params=params,
-                source_message=comment.message,
-            )
-
-        self.send_event(kind=ArgusEventTypes.TestRunCommentPosted, body={
-            "message": "A comment was posted by {username}",
-            "username": g.user.username
-        }, user_id=g.user.id, run_id=UUID(test_run_id), release_id=release.id)
-
-        return self.get_comments(test_id=UUID(test_run_id))
-
-    def delete_comment(self, payload: dict) -> dict:
-        comment_id = payload.get("id")
-        if not comment_id:
-            raise Exception("Comment id not provided in request")
-
-        run_id = payload.get("test_run_id")
-        if not run_id:
-            raise Exception("Test run id not provided in request")
-
-        release_id = payload.get("release_id")
-        if not release_id:
-            raise Exception("Release id not provided in request")
-
-        comment = ArgusTestRunComment.get(id=comment_id)
-        if comment.user_id != g.user.id:
-            raise Exception("Unable to delete other user comments")
-
-        comment.delete()
-
-        self.send_event(kind=ArgusEventTypes.TestRunCommentDeleted, body={
-            "message": "A comment was deleted by {username}",
-            "username": g.user.username
-        }, user_id=g.user.id, run_id=UUID(run_id), release_id=UUID(release_id))
-
-        return self.get_comments(test_id=UUID(run_id))
-
-    def update_comment(self, payload: dict) -> dict:
-        comment_id = payload.get("id")
-        if not comment_id:
-            raise Exception("Comment id not provided in request")
-
-        run_id = payload.get("test_run_id")
-        if not run_id:
-            raise Exception("Test run id not provided in request")
-
-        release_id = payload.get("release_id")
-        if not release_id:
-            raise Exception("Release id not provided in request")
-
-        message = payload.get("message")
-        if not message:
-            raise Exception("Empty message provided")
-
-        mentions = payload.get("mentions", [])
-        reactions = payload.get("reactions", {})
-
-        comment = ArgusTestRunComment.get(id=comment_id)
-        if comment.user_id != g.user.id:
-            raise Exception("Unable to edit other user comments")
-        comment.message = strip_html_tags(message)
-        comment.reactions = reactions
-        comment.mentions = mentions
-        comment.save()
-
-        self.send_event(kind=ArgusEventTypes.TestRunCommentUpdated, body={
-            "message": "A comment was edited by {username}",
-            "username": g.user.username
-        }, user_id=g.user.id, run_id=UUID(run_id), release_id=UUID(release_id))
-
-        return self.get_comments(test_id=UUID(run_id))
 
     def get_releases(self):
         releases = list(ArgusRelease.all())
@@ -339,139 +192,6 @@ class ArgusService:
         response = {str(row.id): row for row in rows}
         return response
 
-    def send_event(self, kind: str, body: dict, user_id=None, run_id=None, release_id=None, group_id=None, test_id=None):
-        params = (
-            uuid4(),
-            release_id,
-            group_id,
-            test_id,
-            run_id,
-            user_id,
-            ArgusEventTypes(kind),
-            json.dumps(body, ensure_ascii=True, separators=(',', ':')),
-            datetime.datetime.utcnow()
-        )
-        self.session.execute(query=self.event_insert_statement, parameters=params)
-
-    def toggle_test_status(self, payload: dict):
-        new_status = payload.get("status")
-        test_run_id = payload.get("test_run_id")
-        if not test_run_id:
-            raise Exception("Test run id wasn't specified in the request")
-        if not new_status:
-            raise Exception("New Status wasn't specified in the request")
-
-        new_status = TestStatus(new_status)
-        test_run: SCTTestRun = SCTTestRun.get(id=UUID(test_run_id))
-        test = ArgusTest.get(build_system_id=test_run.build_id)
-        old_status = TestStatus(test_run.status)
-        test_run.status = new_status.value
-        test_run.save()
-
-        self.send_event(
-            kind=ArgusEventTypes.TestRunStatusChanged,
-            body={
-                "message": "Status was changed from {old_status} to {new_status} by {username}",
-                "old_status": old_status.value,
-                "new_status": new_status.value,
-                "username": g.user.username
-            },
-            user_id=g.user.id,
-            run_id=test_run.id,
-            release_id=test.release_id,
-            group_id=test.group_id,
-            test_id=test.id
-        )
-        return {
-            "test_run_id": test_run_id,
-            "status": new_status
-        }
-
-    def toggle_test_investigation_status(self, payload: dict):
-        new_status = payload.get("investigation_status")
-        test_run_id = payload.get("test_run_id")
-        if not test_run_id:
-            raise Exception("Test run id wasn't specified in the request")
-        if not new_status:
-            raise Exception("New investigation status wasn't specified in the request")
-
-        new_status = TestInvestigationStatus(new_status)
-        test_run: SCTTestRun = SCTTestRun.get(id=UUID(test_run_id))
-        test = ArgusTest.get(build_system_id=test_run.build_id)
-        old_status = test_run.investigation_status
-        test_run.investigation_status = new_status.value
-        test_run.save()
-
-        self.send_event(
-            kind=ArgusEventTypes.TestRunStatusChanged,
-            body={
-                "message": "Investigation status was changed from {old_status} to {new_status} by {username}",
-                "old_status": old_status,
-                "new_status": new_status.value,
-                "username": g.user.username
-            },
-            user_id=g.user.id,
-            run_id=test_run.id,
-            release_id=test.release_id,
-            group_id=test.group_id,
-            test_id=test.id
-        )
-        return {
-            "test_run_id": test_run_id,
-            "investigation_status": new_status
-        }
-
-    def change_assignee(self, payload: dict):
-        DummyUser = namedtuple("DummyUser", ["id", "username"])
-        new_assignee = payload.get("assignee")
-        test_run_id = payload.get("test_run_id")
-        if not test_run_id:
-            raise Exception("Test run id wasn't specified in the request")
-        if not new_assignee:
-            raise Exception("New assignee wasn't specified in the request")
-
-        try:
-            new_assignee = User.get(id=new_assignee)
-        except ValidationError:
-            if new_assignee != "none-none-none":
-                raise
-            new_assignee = DummyUser(id=None, username="None")
-        test_run: SCTTestRun = SCTTestRun.get(id=UUID(test_run_id))
-        test = ArgusTest.get(build_system_id=test_run.build_id)
-        old_assignee = test_run.assignee
-        old_assignee = User.get(id=old_assignee) if old_assignee else None
-        test_run.assignee = new_assignee.id
-        test_run.save()
-
-        self.send_event(
-            kind=ArgusEventTypes.AssigneeChanged,
-            body={
-                "message": "Assignee was changed from \"{old_user}\" to \"{new_user}\" by {username}",
-                "old_user": old_assignee.username if old_assignee else "None",
-                "new_user": new_assignee.username,
-                "username": g.user.username
-            },
-            user_id=g.user.id,
-            run_id=test_run.id,
-            release_id=test.release_id,
-            group_id=test.group_id,
-            test_id=test.id
-        )
-        return {
-            "test_run_id": test_run_id,
-            "assignee": str(new_assignee.id)
-        }
-
-    def fetch_run_activity(self, run_id: UUID) -> dict:
-        response = {}
-        all_events = ArgusEvent.filter(run_id=run_id).all()
-        all_events = sorted(all_events, key=lambda ev: ev.created_at)
-        response["run_id"] = run_id
-        response["raw_events"] = [dict(event.items()) for event in all_events]
-        response["events"] = {str(event.id): EVENT_PROCESSORS.get(
-            event.kind)(json.loads(event.body)) for event in all_events}
-        return response
-
     def fetch_release_activity(self, release_name: str) -> dict:
         response = {}
         release = ArgusRelease.get(name=release_name)
@@ -482,130 +202,6 @@ class ArgusService:
         response["events"] = {str(event.id): EVENT_PROCESSORS.get(
             event.kind)(json.loads(event.body)) for event in all_events}
         return response
-
-    def submit_github_issue(self, payload: dict) -> dict:
-        """
-        Example payload:
-        {
-            "issue_url": "https://github.com/example/repo/issues/6"
-            "run_id": "abcdef-5354235-1232145-dd"
-        }
-        """
-        issue_url = payload.get("issue_url")
-        run_id = payload.get("run_id")
-        if not run_id:
-            raise Exception("Run Id missing from request")
-        if not issue_url:
-            raise Exception("Missing or empty issue url")
-
-        match = re.match(
-            r"http(s)?://(www\.)?github\.com/(?P<owner>[\w\d]+)/"
-            r"(?P<repo>[\w\d\-_]+)/(?P<type>issues|pull)/(?P<issue_number>\d+)(/)?",
-            issue_url)
-        if not match:
-            raise Exception("URL doesn't match Github schema")
-
-        run = SCTTestRun.get(id=UUID(run_id))
-        release = ArgusRelease.get(id=run["release_id"])
-        test = ArgusTest.get(build_system_id=run["build_id"])
-        group = ArgusGroup.get(id=test.group_id)
-
-        new_issue = ArgusGithubIssue()
-        new_issue.user_id = g.user.id
-        new_issue.run_id = run_id
-        new_issue.group_id = group.id
-        new_issue.release_id = release.id
-        new_issue.test_id = test.id
-        new_issue.type = match.group("type")
-        new_issue.owner = match.group("owner")
-        new_issue.repo = match.group("repo")
-        new_issue.issue_number = int(match.group("issue_number"))
-
-        issue_state = requests.get(
-            f"https://api.github.com/repos/{new_issue.owner}/{new_issue.repo}/issues/{new_issue.issue_number}",
-            headers=self.github_headers
-        ).json()
-
-        new_issue.title = issue_state.get("title")
-        new_issue.url = issue_state.get("html_url")
-        new_issue.last_status = issue_state.get("state")
-        new_issue.save()
-
-        self.send_event(
-            kind=ArgusEventTypes.TestRunIssueAdded,
-            body={
-                "message": "An issue titled \"{title}\" was added by {username}",
-                "username": g.user.username,
-                "url": issue_url,
-                "title": issue_state.get("title"),
-                "state": issue_state.get("state"),
-            },
-            user_id=g.user.id,
-            run_id=new_issue.run_id,
-            release_id=new_issue.release_id,
-            group_id=new_issue.group_id,
-            test_id=new_issue.test_id
-        )
-
-        response = {
-            **dict(list(new_issue.items())),
-            "title": issue_state.get("title"),
-            "state": issue_state.get("state"),
-        }
-
-        return response
-
-    def get_github_issues(self, filter_key: str, filter_id: UUID, aggregate_by_issue: bool = False) -> dict:
-
-        if filter_key not in ["release_id", "group_id", "test_id", "run_id", "user_id"]:
-            raise Exception(
-                "filter_key can only be one of: \"release_id\", \"group_id\", \"test_id\", \"run_id\", \"user_id\""
-            )
-        all_issues = ArgusGithubIssue.filter(**{filter_key: filter_id}).all()
-        if aggregate_by_issue:
-            runs_by_issue = {}
-            response = []
-            for issue in all_issues:
-                runs = runs_by_issue.get(issue, [])
-                runs.append(issue.run_id)
-                runs_by_issue[issue] = runs
-
-            for issue, runs in runs_by_issue.items():
-                issue_dict = dict(issue.items())
-                issue_dict["runs"] = runs
-                response.append(issue_dict)
-
-        else:
-            response = [dict(issue.items()) for issue in all_issues]
-        return response
-
-    def delete_github_issue(self, payload: dict) -> dict:
-        issue_id = payload.get("id")
-        if not issue_id:
-            raise Exception("Issue id not supplied in the request")
-
-        issue: ArgusGithubIssue = ArgusGithubIssue.get(id=issue_id)
-
-        self.send_event(
-            kind=ArgusEventTypes.TestRunIssueRemoved,
-            body={
-                "message": "An issue titled \"{title}\" was removed by {username}",
-                "username": g.user.username,
-                "url": issue.url,
-                "title": issue.title,
-                "state": issue.last_status,
-            },
-            user_id=g.user.id,
-            run_id=issue.run_id,
-            release_id=issue.release_id,
-            group_id=issue.group_id,
-            test_id=issue.test_id
-        )
-        issue.delete()
-
-        return {
-            "deleted": issue_id
-        }
 
     def assign_runs_for_scheduled_test(self, schedule: ArgusSchedule, test_id: UUID, new_assignee: UUID):
         test: ArgusTest = ArgusTest.get(id=test_id)

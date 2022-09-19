@@ -4,6 +4,7 @@
     import GithubIssue from "./GithubIssue.svelte";
     import { sendMessage } from "../Stores/AlertStore";
     export let id = "";
+    export let testId;
     export let filter_key = "run_id";
     export let submitDisabled = false;
     export let aggregateByIssue = false;
@@ -34,14 +35,14 @@
 
     const submitIssue = async function () {
         try {
-            let apiResponse = await fetch("/api/v1/issues/submit", {
+            if (!testId) return;
+            let apiResponse = await fetch(`/api/v1/test/${testId}/run/${id}/issues/submit`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
                     issue_url: newIssueUrl,
-                    run_id: id,
                 }),
             });
             newIssueUrl = "";
