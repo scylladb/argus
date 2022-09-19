@@ -35,6 +35,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class TestRunService:
+    ASSIGNEE_PLACEHOLDER = "none-none-none"
 
     RE_MENTION = r"@[A-Za-z\d](?:[A-Za-z\d]|-(?=[A-Za-z\d])){0,38}"
 
@@ -145,7 +146,7 @@ class TestRunService:
             "investigation_status": new_status
         }
 
-    def change_run_assignee(self, test_id: UUID, run_id: UUID, new_assignee: UUID):
+    def change_run_assignee(self, test_id: UUID, run_id: UUID, new_assignee: UUID | None):
         test = ArgusTest.get(id=test_id)
         plugin = self.get_plugin(plugin_name=test.plugin_name)
         run: PluginModelBase = plugin.model.get(id=run_id)
@@ -153,15 +154,23 @@ class TestRunService:
         run.assignee = new_assignee
         run.save()
 
-        new_assignee_user = User.get(id=new_assignee)
+        if new_assignee:
+            new_assignee_user = User.get(id=new_assignee)
+        else:
+            new_assignee_user = None
         if old_assignee:
-            old_assignee_user = User.get(id=old_assignee)
+            try:
+                old_assignee_user = User.get(id=old_assignee)
+            except User.DoesNotExist:
+                LOGGER.warning("Non existent assignee was present on the run %s for test %s: %s",
+                               run_id, test_id, old_assignee)
+                old_assignee = None
         self.create_run_event(
             kind=ArgusEventTypes.AssigneeChanged,
             body={
                 "message": "Assignee was changed from \"{old_user}\" to \"{new_user}\" by {username}",
                 "old_user": old_assignee_user.username if old_assignee else "None",
-                "new_user": new_assignee_user.username,
+                "new_user": new_assignee_user.username if new_assignee else "None",
                 "username": g.user.username
             },
             user_id=g.user.id,
@@ -172,7 +181,7 @@ class TestRunService:
         )
         return {
             "test_run_id": run.id,
-            "assignee": str(new_assignee_user.id)
+            "assignee": str(new_assignee_user.id) if new_assignee_user else None
         }
 
     def get_run_comment(self, comment_id: UUID):
@@ -240,7 +249,7 @@ class TestRunService:
         self.create_run_event(kind=ArgusEventTypes.TestRunCommentDeleted, body={
             "message": "A comment was deleted by {username}",
             "username": g.user.username
-        }, user_id=g.user.id, run_id=UUID(run_id), release_id=comment.release_id, test_id=test_id)
+        }, user_id=g.user.id, run_id=run_id, release_id=comment.release_id, test_id=test_id)
 
         return self.get_run_comments(run_id=run_id)
 

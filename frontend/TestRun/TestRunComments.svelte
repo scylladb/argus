@@ -5,8 +5,8 @@
     import { sendMessage } from "../Stores/AlertStore";
     import CommentEditor from "../Discussion/CommentEditor.svelte";
 
-    export let id;
-    export let releaseName;
+    export let testInfo;
+    export let testRun;
     let fetchIntervalId;
     let suppressFetch = false;
     let comments = [];
@@ -17,12 +17,12 @@
     const newCommentTemplate = {
         id: "",
         message: "",
-        release: releaseName,
+        release: testInfo.release.name,
         reactions: {},
         mentions: [],
         user_id: "",
         release_id: "",
-        test_run_id: id,
+        test_run_id: testRun.id,
         posted_at: new Date(),
     };
 
@@ -30,10 +30,7 @@
 
     const fetchComments = async function () {
         try {
-            let params = new URLSearchParams({
-                testId: id,
-            }).toString();
-            let apiResponse = await fetch("/api/v1/test_run/comments?" + params);
+            let apiResponse = await fetch(`/api/v1/run/${testRun.id}/comments`);
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
                 comments = apiJson.response;
@@ -59,12 +56,16 @@
         let commentBody = e.detail;
         fetching = true;
         try {
-            let apiResponse = await fetch("/api/v1/test_run/comments/submit", {
+            let apiResponse = await fetch(`/api/v1/test/${testInfo.test.id}/run/${testRun.id}/comments/submit`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify(commentBody),
+                body: JSON.stringify({
+                    message: commentBody.message,
+                    reactions: commentBody.reactions,
+                    mentions: commentBody.mentions,
+                }),
             });
             let apiJson = await apiResponse.json();
             console.log(apiJson);
@@ -95,12 +96,16 @@
         let commentBody = e.detail;
         suppressFetch = false;
         try {
-            let apiResponse = await fetch("/api/v1/test_run/comments/update", {
+            let apiResponse = await fetch(`/api/v1/test/${testInfo.test.id}/run/${testRun.id}/comment/${commentBody.id}/update`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify(commentBody),
+                body: JSON.stringify({
+                    message: commentBody.message,
+                    reactions: commentBody.reactions,
+                    mentions: commentBody.mentions,
+                }),
             });
             let apiJson = await apiResponse.json();
             console.log(apiJson);
@@ -134,12 +139,11 @@
     const handleCommentDelete = async function (e) {
         let commentBody = e.detail;
         try {
-            let apiResponse = await fetch("/api/v1/test_run/comments/delete", {
+            let apiResponse = await fetch(`/api/v1/test/${testInfo.test.id}/run/${testRun.id}/comment/${commentBody.id}/delete`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify(commentBody),
             });
             let apiJson = await apiResponse.json();
             console.log(apiJson);
@@ -210,7 +214,7 @@
         {#if !fetching}
             <div class="col mx-1 my-2">
                 <CommentEditor
-                    runId={id}
+                    runId={testRun.id}
                     mode="post"
                     bind:commentBody={newCommentBody}
                     on:submitComment={handleCommentSubmit}

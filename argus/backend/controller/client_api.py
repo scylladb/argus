@@ -9,7 +9,8 @@ from argus.backend.plugins.loader import AVAILABLE_PLUGINS
 bp = Blueprint("client_api", __name__, url_prefix="/client")
 bp.register_error_handler(Exception, handle_api_exception)
 for plugin in AVAILABLE_PLUGINS.values():
-    bp.register_blueprint(plugin.controller)
+    if plugin.controller:
+        bp.register_blueprint(plugin.controller)
 
 
 @bp.route("/testrun/<string:run_type>/submit", methods=["POST"])

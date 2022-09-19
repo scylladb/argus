@@ -1,9 +1,9 @@
+from functools import cached_property
 import logging
 from typing import Optional
 from flask import g, Flask
 # pylint: disable=no-name-in-module
 from cassandra.policies import WhiteListRoundRobinPolicy
-from cassandra.cluster import Session
 from cassandra import ConsistencyLevel
 from cassandra.cluster import ExecutionProfile, EXEC_PROFILE_DEFAULT, Cluster
 from cassandra.cluster import PreparedStatement
@@ -36,7 +36,6 @@ class ScyllaCluster:
                          protocol_version=4,
                          execution_profiles={EXEC_PROFILE_DEFAULT: self.execution_profile})
         self.cluster: Cluster = connection.get_cluster(connection='default')
-        self.session: Session = self.cluster.connect(keyspace=config["SCYLLA_KEYSPACE_NAME"])
         self.prepared_statements = {}
         self.read_exec_profile = ExecutionProfile(
             consistency_level=ConsistencyLevel.ONE,
@@ -49,6 +48,10 @@ class ScyllaCluster:
         )
         self.cluster.add_execution_profile("read_fast", self.read_exec_profile)
         self.cluster.add_execution_profile("read_fast_named_tuple", self.read_named_tuple_exec_profile)
+
+    @cached_property
+    def session(self):
+        return self.cluster.connect(keyspace=self.config["SCYLLA_KEYSPACE_NAME"])
 
     @classmethod
     def get(cls, config: Config = None) -> 'ScyllaCluster':

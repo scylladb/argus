@@ -22,10 +22,7 @@
     const fetchActivity = async function () {
         fetching = true;
         try {
-            let params = new URLSearchParams({
-                runId: id,
-            }).toString();
-            let apiResponse = await fetch("/api/v1/test_run/activity?" + params);
+            let apiResponse = await fetch(`/api/v1/run/${id}/activity`);
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
                 activity = apiJson.response;
