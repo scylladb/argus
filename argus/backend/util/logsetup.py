@@ -72,6 +72,10 @@ def setup_application_logging(log_level=logging.INFO):
             'uwsgi': {
                 'level': log_level,
                 'handlers': ['main']
-            }
+            },
+            '__main__': {
+                'level': log_level,
+                'handlers': ['main']
+            },
         }
     })

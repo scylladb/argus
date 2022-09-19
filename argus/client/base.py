@@ -61,7 +61,7 @@ class ArgusClient:
         if response_data.get("status") != "ok":
             raise ArgusClientError(
                 f"API Error encountered using endpoint: {response.request.method} {response.request.path_url}",
-                response_data["message"],
+                response_data["response"]["arguments"][0],
             )
 
     def get_url_for_endpoint(self, endpoint: str, location_params: dict[str, str] | None) -> str:

@@ -230,6 +230,7 @@ class TestRunService:
                 notification_type=ArgusNotificationTypes.Mention,
                 source_type=ArgusNotificationSourceTypes.Comment,
                 source_id=comment.id,
+                source_message=comment.message,
                 content_params=params
             )
 

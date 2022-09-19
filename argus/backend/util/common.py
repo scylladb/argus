@@ -44,7 +44,7 @@ def get_payload(client_request: Request) -> dict:
 
 
 def get_build_number(build_job_url: str) -> int | None:
-    build_number = build_job_url.rstrip("/").split("/")[-1]
+    build_number = build_job_url.rstrip("/").split("/")[-1] if build_job_url else -1
     if build_number:
         try:
             return int(build_number)

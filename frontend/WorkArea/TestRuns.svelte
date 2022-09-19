@@ -7,7 +7,7 @@
     import TestRunsSelector from "./TestRunsSelector.svelte";
     import { extractBuildNumber } from "../Common/RunUtils";
     import TestRunDispatcher from "./TestRunDispatcher.svelte";
-import { isPluginSupported } from "../Common/PluginDispatch";
+    import { isPluginSupported } from "../Common/PluginDispatch";
 
     export let testId;
     export let listId = uuidv4();

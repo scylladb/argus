@@ -11,7 +11,7 @@ export const getUpgradedScyllaPackage = function(packages) {
 };
 
 export const extractBuildNumber = function (run) {
-    return run.build_job_url.trim().split("/").reverse()[1];
+    return run.build_job_url ? run.build_job_url.trim().split("/").reverse()[1] : -1;
 };
 
 export const getRelocatableScyllaPackage = function(packages) {
