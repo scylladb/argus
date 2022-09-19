@@ -15,7 +15,7 @@ class NotificationManagerException(Exception):
 class NotificationManagerService:
 
     def __init__(self, notification_senders: list["NotificationSenderBase"] | None = None) -> None:
-        self.notification_services = [
+        self.notification_services: list["NotificationSenderBase"] = [
             ArgusDBNotificationSaver(),
             EmailNotificationServiceSender()
         ]
@@ -81,7 +81,7 @@ class NotificationSenderBase:
         raise NotificationManagerException(
             f"Content renderer for notification type {content_type} not found.", content_type)
 
-    def send_notification(self, receiver: UUID, sender: UUID, 
+    def send_notification(self, receiver: UUID, sender: UUID,
                           notification_type: ArgusNotificationTypes,
                           source_type: ArgusNotificationSourceTypes,
                           source_id: UUID,
@@ -109,14 +109,17 @@ class ArgusDBNotificationSaver(NotificationSenderBase):
         new_notification.source_type = source_type.value
         new_notification.source_id = source_id
         new_notification.title = title if title else self._get_title_for_notification_type(notification_type)
-        new_notification.content = content if not content_params else self._render_content(notification_type, content_params)
+        new_notification.content = content if not content_params else self._render_content(
+            notification_type, content_params)
         return new_notification.save()
 
 
 class EmailNotificationServiceSender(NotificationSenderBase):
     CONTENT_TEMPLATES = {
-        ArgusNotificationTypes.Mention: lambda p: render_template("notifications/email_mention.html.j2", **p if p else {})
+        ArgusNotificationTypes.Mention: lambda p: render_template(
+            "notifications/email_mention.html.j2", **p if p else {})
     }
+
     def __init__(self):
         self.email = Email(init_connection=False)
 

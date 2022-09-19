@@ -21,7 +21,7 @@
     let tests = [];
 
     const sortTestsByStatus = function (tests) {
-        if (tests.length == 0 || !groupStats) return;
+        if (tests.length == 0 || !groupStats) return tests;
         return tests.sort((a, b) => {
             let leftStatus =
                 StatusSortPriority?.[groupStats?.tests?.[a.id]?.status] ??
@@ -53,7 +53,7 @@
         }
         tests = sortTestsByStatus(json.response);
         fetchTestAssignees();
-    }
+    };
 
     const fetchTestAssignees = async function () {
         let params = new URLSearchParams({
