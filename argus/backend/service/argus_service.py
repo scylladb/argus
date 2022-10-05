@@ -180,7 +180,7 @@ class ArgusService:
             except ValueError:
                 setattr(row, "build_number", -1)
 
-        return rows
+        return sorted(rows, reverse=True, key=lambda r: r.build_number)
 
     def poll_test_runs_single(self, runs: list[UUID]):
         rows: list[SCTTestRun] = []

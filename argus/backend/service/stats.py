@@ -218,7 +218,9 @@ class TestStats:
 
     def collect(self, limited=False):
 
-        last_runs = [r for r in self.parent_group.parent_release.rows if r["build_id"] == self.test.build_system_id]
+        # TODO: Parametrize run limit
+        # FIXME: This is only a mitigation, build_number overflows on the build system side.
+        last_runs = [r for r in self.parent_group.parent_release.rows if r["build_id"] == self.test.build_system_id][:15]
         last_runs: list[TestRunStatRow] = sorted(
             last_runs, reverse=True, key=lambda r: get_build_number(r["build_job_url"]))
         try:
