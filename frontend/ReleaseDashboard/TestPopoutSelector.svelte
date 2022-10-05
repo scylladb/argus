@@ -33,7 +33,7 @@
     {#if Object.values(tests).length > 0}
         <div class="d-flex flex-column">
             <ul class="list-group popout-tests">
-                {#each Object.values(tests) as test (test.name)}
+                {#each Object.values(tests) as test (test.id)}
                     <li class="list-group-item">
                         <div class="d-flex align-items-center">
                             <div class="d-flex">
