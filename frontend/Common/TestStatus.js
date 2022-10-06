@@ -32,7 +32,7 @@ export const TestInvestigationStatusStrings = {
     "in_progress": "In progress",
     "not_investigated": "Not Investigated",
     "investigated": "Investigated",
-}
+};
 
 export const StatusBackgroundCSSClassMap = {
     "created": "bg-info",
@@ -90,7 +90,7 @@ export const TestStatusColors = {
     "passed": "#198754",
     "aborted": "#212529",
     "unknown": "#6c757d"
-}
+};
 
 export const NemesisStatuses = {
     STARTED: "started",
@@ -98,7 +98,7 @@ export const NemesisStatuses = {
     FAILED: "failed",
     SKIPPED: "skipped",
     SUCCEEDED: "succeeded",
-}
+};
 
 export const NemesisStatusBackgrounds = {
     "started": "table-info",

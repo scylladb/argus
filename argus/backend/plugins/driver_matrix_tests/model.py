@@ -59,10 +59,6 @@ class DriverTestRun(PluginModelBase):
     environment_info = columns.List(value_type=columns.UserDefinedType(user_type=EnvironmentInfo))
 
     @classmethod
-    def table_name(cls) -> str:
-        return cls.__table_name__
-
-    @classmethod
     def get_distinct_product_versions(cls, cluster: ScyllaCluster, release_id: UUID) -> list[str]:
         statement = cluster.prepare(f"SELECT scylla_version FROM {cls.table_name()} WHERE release_id = ?")
         rows = cluster.session.execute(query=statement, parameters=(release_id,))

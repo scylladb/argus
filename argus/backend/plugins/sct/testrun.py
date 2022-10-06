@@ -5,6 +5,7 @@ from uuid import UUID
 
 from cassandra.cqlengine import columns
 from argus.backend.db import ScyllaCluster
+from argus.backend.models.web import ArgusRelease
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.sct.resource_setup import ResourceSetup
 from argus.backend.plugins.sct.udt import (
@@ -65,10 +66,6 @@ class SCTTestRun(PluginModelBase):
     events = columns.List(value_type=columns.UserDefinedType(user_type=EventsBySeverity))
     nemesis_data = columns.List(value_type=columns.UserDefinedType(user_type=NemesisRunInfo))
     screenshots = columns.List(value_type=columns.Text())
-
-    @classmethod
-    def table_name(cls) -> str:
-        return cls.__table_name__
 
     @classmethod
     def load_test_run(cls, run_id: UUID) -> 'SCTTestRun':

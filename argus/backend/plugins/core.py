@@ -40,6 +40,10 @@ class PluginModelBase(Model):
     # Test Logs Collection
     logs = columns.List(value_type=columns.Tuple(columns.Text(), columns.Text()))
 
+    @classmethod
+    def table_name(cls) -> str:
+        return cls.__table_name__
+
     def assign_categories(self):
         key = self.build_id
         try:
@@ -102,6 +106,10 @@ class PluginModelBase(Model):
 
     @classmethod
     def get_distinct_product_versions(cls, cluster: ScyllaCluster, release_id: UUID) -> list[str]:
+        raise NotImplementedError()
+
+    @classmethod
+    def get_stats_rows_for_release(cls,  cluster: ScyllaCluster, release_id: UUID) -> list:
         raise NotImplementedError()
 
     def update_heartbeat(self):
