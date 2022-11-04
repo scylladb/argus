@@ -100,6 +100,15 @@ class SCTTestRun(PluginModelBase):
         return sorted(list(unique_versions), reverse=True)
 
     @classmethod
+    def get_version_data_for_release(cls, release_name: str):
+        cluster = ScyllaCluster.get()
+        release = ArgusRelease.get(name=release_name)
+        query = cluster.prepare(f"SELECT scylla_version, packages, status FROM {cls.table_name()} WHERE release_id = ?")
+        rows = cluster.session.execute(query=query, parameters=(release.id,))
+
+        return list(rows)
+
+    @classmethod
     def from_sct_config(cls, req: SCTTestRunSubmissionRequest):
         run = cls()
         run.build_id = req.job_name
