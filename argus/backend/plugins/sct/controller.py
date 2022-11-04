@@ -95,3 +95,13 @@ def sct_events_submit(run_id: str):
         "status": "ok",
         "response": result
     }
+
+
+@bp.route("/release/<string:release_name>/kernels", methods=["GET"])
+@api_login_required
+def sct_get_kernel_report(release_name: str):
+    result = SCTService.get_scylla_version_kernels_report(release_name=release_name)
+    return {
+        "status": "ok",
+        "response": result
+    }
