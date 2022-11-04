@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import logging
 from time import time
+from argus.backend.models.web import ArgusRelease
 from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.plugins.sct.udt import (
     CloudInstanceDetails,
@@ -180,3 +181,38 @@ class SCTService:
             raise SCTServiceException("Run not found", run_id) from exception
 
         return "added"
+
+    @staticmethod
+    def get_scylla_version_kernels_report(release_name: str):
+        release = ArgusRelease.get(name=release_name)
+        all_release_runs = SCTTestRun.filter(release_id=release.id).all()
+        kernels_by_version = {}
+        kernel_metadata = {}
+        for run in all_release_runs:
+            scylla_pkgs = {p.name: p for p in run.packages if "scylla-server" in p.name}
+            scylla_pkg = scylla_pkgs["scylla-server-upgraded"] if scylla_pkgs.get(
+                "scylla-server-upgraded") else scylla_pkgs.get("scylla-server")
+            version = f"{scylla_pkg.version}-{scylla_pkg.date}.{scylla_pkg.revision_id}" if scylla_pkgs else "unknown"
+            kernel_packages = [p for p in run.packages if "kernel" in p.name]
+            kernel_package = kernel_packages[0] if len(kernel_packages) > 0 else None
+            if not kernel_package:
+                continue
+            version_list = set(kernels_by_version.get(version, []))
+            version_list.add(kernel_package.version)
+            kernels_by_version[version] = list(version_list)
+            metadata = kernel_metadata.get(
+                kernel_package.version,
+                {
+                    "passed": 0,
+                    "failed": 0,
+                    "aborted": 0,
+                }
+            )
+            if run.status in ["passed", "failed", "aborted"]:
+                metadata[run.status] += 1
+            kernel_metadata[kernel_package.version] = metadata
+
+        return {
+            "versions": kernels_by_version,
+            "metadata": kernel_metadata
+        }
