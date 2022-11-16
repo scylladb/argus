@@ -1,6 +1,7 @@
 from pathlib import Path
 import typing
 from argus.backend.plugins.core import PluginInfoBase
+from argus.backend.plugins.core import PluginModelBase
 
 
 class PluginModule(typing.Protocol):
@@ -31,7 +32,7 @@ def plugin_loader() -> dict[str, PluginInfoBase]:
 AVAILABLE_PLUGINS = plugin_loader()
 
 
-def all_plugin_models():
+def all_plugin_models() -> list[PluginModelBase]:
     return [model for plugin in AVAILABLE_PLUGINS.values() for model in plugin.all_models]
 
 

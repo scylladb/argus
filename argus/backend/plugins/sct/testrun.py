@@ -68,6 +68,11 @@ class SCTTestRun(PluginModelBase):
     screenshots = columns.List(value_type=columns.Text())
 
     @classmethod
+    def _stats_query(cls) -> str:
+        return ("SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, "
+                f"assignee, end_time, investigation_status, heartbeat, scylla_version FROM {cls.table_name()} WHERE release_id = ?")
+
+    @classmethod
     def load_test_run(cls, run_id: UUID) -> 'SCTTestRun':
         return cls.get(id=run_id)
 
@@ -77,9 +82,10 @@ class SCTTestRun(PluginModelBase):
         return cls.from_sct_config(req=req)
 
     @classmethod
-    def get_distinct_product_versions(cls, cluster: ScyllaCluster, release_id: UUID) -> list[str]:
+    def get_distinct_product_versions(cls, release: ArgusRelease) -> list[str]:
+        cluster = ScyllaCluster.get()
         statement = cluster.prepare(f"SELECT scylla_version FROM {cls.table_name()} WHERE release_id = ?")
-        rows = cluster.session.execute(query=statement, parameters=(release_id,))
+        rows = cluster.session.execute(query=statement, parameters=(release.id,))
         unique_versions = {r["scylla_version"] for r in rows if r["scylla_version"]}
 
         return sorted(list(unique_versions), reverse=True)

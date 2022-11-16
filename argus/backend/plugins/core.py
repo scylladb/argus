@@ -15,7 +15,8 @@ from argus.backend.models.web import (
     ArgusScheduleGroup,
     ArgusSchedule,
     ArgusScheduleTest,
-    ArgusScheduleAssignee
+    ArgusScheduleAssignee,
+    User
 )
 from argus.backend.util.enums import TestInvestigationStatus, TestStatus
 
@@ -43,6 +44,10 @@ class PluginModelBase(Model):
     @classmethod
     def table_name(cls) -> str:
         return cls.__table_name__
+
+    @classmethod
+    def _stats_query(cls) -> str:
+        raise NotImplementedError()
 
     def assign_categories(self):
         key = self.build_id
@@ -97,6 +102,23 @@ class PluginModelBase(Model):
         return assignees_uuids[0] if len(assignees_uuids) > 0 else None
 
     @classmethod
+    def get_jobs_assigned_to_user(cls, user: User):
+        cluster = ScyllaCluster.get()
+        query = cluster.prepare("SELECT build_id, start_time, release_id, group_id, assignee, "
+                                f"test_id, id, status, investigation_status, build_job_url FROM {cls.table_name()} WHERE assignee = ?")
+        rows = cluster.session.execute(query=query, parameters=(user.id,))
+
+        return list(rows)
+
+    @classmethod
+    def get_stats_for_release(cls, release: ArgusRelease):
+        cluster = ScyllaCluster.get()
+        query = cluster.prepare(cls._stats_query())
+        rows = cluster.session.execute(query=query, parameters=(release.id,))
+
+        return list(rows)
+
+    @classmethod
     def load_test_run(cls, run_id: UUID) -> 'PluginModelBase':
         raise NotImplementedError()
 
@@ -105,11 +127,7 @@ class PluginModelBase(Model):
         raise NotImplementedError()
 
     @classmethod
-    def get_distinct_product_versions(cls, cluster: ScyllaCluster, release_id: UUID) -> list[str]:
-        raise NotImplementedError()
-
-    @classmethod
-    def get_stats_rows_for_release(cls,  cluster: ScyllaCluster, release_id: UUID) -> list:
+    def get_distinct_product_versions(cls, release: ArgusRelease) -> list[str]:
         raise NotImplementedError()
 
     def update_heartbeat(self):
