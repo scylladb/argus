@@ -8,7 +8,7 @@
     let filterString = "";
 
     const filterJob = function (job) {
-        let jobName = `${job.build_job_name}#${getBuildNumber(
+        let jobName = `${job.build_id}#${getBuildNumber(
             job.build_job_url
         )}`;
         if (filterString == "") {

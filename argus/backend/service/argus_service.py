@@ -7,6 +7,7 @@ from uuid import UUID
 from cassandra.util import uuid_from_time  # pylint: disable=no-name-in-module
 from flask import current_app
 from argus.backend.db import ScyllaCluster
+from argus.backend.plugins.loader import all_plugin_models
 from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.service.notification_manager import NotificationManagerService
 from argus.backend.models.web import (
@@ -155,8 +156,9 @@ class ArgusService:
 
     def get_distinct_release_versions(self, release_id: UUID | str) -> list[str]:
         release_id = UUID(release_id) if isinstance(release_id, str) else release_id
-        rows = self.session.execute(self.scylla_versions_by_release, parameters=(release_id,))
-        unique_versions = {r["scylla_version"] for r in rows if r["scylla_version"]}
+        release = ArgusRelease.get(id=release_id)
+        unique_versions = {ver for plugin in all_plugin_models()
+                           for ver in plugin.get_distinct_product_versions(release=release)}
 
         return sorted(list(unique_versions), reverse=True)
 
@@ -516,28 +518,28 @@ class ArgusService:
         return response
 
     def get_jobs_for_user(self, user: User):
-        runs: list[SCTTestRun] = list(SCTTestRun.filter(assignee=user.id).all())
+        runs = [run for plugin in all_plugin_models() for run in plugin.get_jobs_assigned_to_user(user=user)]
         schedules = self.get_schedules_for_user(user)
         valid_runs = []
         today = datetime.datetime.now()
         month_ago = today - datetime.timedelta(days=30)
         for run in runs:
-            run_date = run.start_time
-            if user.id == run.assignee and run_date >= month_ago:
+            run_date = run["start_time"]
+            if user.id == run["assignee"] and run_date >= month_ago:
                 valid_runs.append(run)
                 continue
             for schedule in schedules:
-                if not run.release_id == schedule["release_id"]:
+                if not run["release_id"] == schedule["release_id"]:
                     continue
                 if not schedule["period_start"] < run_date < schedule["period_end"]:
                     continue
-                if run.assignee in schedule["assignees"]:
+                if run["assignee"] in schedule["assignees"]:
                     valid_runs.append(run)
                     break
-                if run.group_id in schedule["groups"]:
+                if run["group_id"] in schedule["groups"]:
                     valid_runs.append(run)
                     break
-                filtered_tests = [test for test in schedule["tests"] if test == run.test_id]
+                filtered_tests = [test for test in schedule["tests"] if test == run["test_id"]]
                 if len(filtered_tests) > 0:
                     valid_runs.append(run)
                     break

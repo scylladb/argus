@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 from typing import TypedDict
 from uuid import UUID
-from argus.backend.plugins.sct.testrun import SCTTestRun
+from argus.backend.plugins.loader import all_plugin_models
 from argus.backend.util.common import get_build_number
 from argus.backend.util.enums import TestStatus, TestInvestigationStatus
 from argus.backend.models.web import ArgusGithubIssue, ArgusRelease, ArgusGroup, ArgusTest,\
@@ -258,10 +258,6 @@ class ReleaseStatsCollector:
     def __init__(self, release_name: str, release_version: str | None = None) -> None:
         self.database = ScyllaCluster.get()
         self.session = self.database.get_session()
-        self.run_by_release_stats_statement = self.database.prepare(
-            "SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, assignee, "
-            f"end_time, investigation_status, heartbeat, scylla_version FROM {SCTTestRun.table_name()} WHERE release_id = ?"
-        )
         self.release = None
         self.release_stats = None
         self.release_rows = []
@@ -270,8 +266,8 @@ class ReleaseStatsCollector:
 
     def collect(self, limited=False, force=False) -> dict:
         self.release: ArgusRelease = ArgusRelease.get(name=self.release_name)
-        self.release_rows = self.session.execute(
-            self.run_by_release_stats_statement, parameters=(self.release.id,)).all()
+        self.release_rows = [row for plugin in all_plugin_models()
+                             for row in plugin.get_stats_for_release(release=self.release)]
         if self.release.dormant and not force:
             return {
                 "dormant": True
