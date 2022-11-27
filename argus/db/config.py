@@ -36,6 +36,10 @@ class BaseConfig(ABC):
     def keyspace_name(self) -> str:
         raise NotImplementedError()
 
+    @property
+    def address_mapping(self) -> dict:
+        return NotImplementedError()
+
 
 class FileConfig(BaseConfig):
     @property
@@ -53,6 +57,10 @@ class FileConfig(BaseConfig):
     @property
     def keyspace_name(self) -> str:
         return self.as_dict.get("keyspace_name")
+
+    @property
+    def address_mapping(self) -> dict:
+        return self.as_dict.get("address_mapping")
 
     DEFAULT_CONFIG_PATHS = (
         "./config/argus.local.yaml",
@@ -108,13 +116,18 @@ class Config(BaseConfig):
     def keyspace_name(self) -> str:
         return self.as_dict.get("keyspace_name")
 
-    def __init__(self, username: str, password: str, contact_points: list[str], keyspace_name: str):
+    @property
+    def address_mapping(self) -> dict:
+        return self.as_dict.get("address_mapping")
+
+    def __init__(self, username: str, password: str, contact_points: list[str], keyspace_name: str, address_mapping: dict | None = None):
         super().__init__()
         self._config = {
             "username": username,
             "password": password,
             "contact_points": contact_points,
             "keyspace_name": keyspace_name,
+            "address_mapping": address_mapping,
         }
 
     @property

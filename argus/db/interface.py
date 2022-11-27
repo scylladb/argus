@@ -14,7 +14,7 @@ import cassandra.cqltypes
 from cassandra import ConsistencyLevel
 from cassandra.auth import PlainTextAuthProvider
 from cassandra.query import named_tuple_factory
-from cassandra.policies import WhiteListRoundRobinPolicy
+from cassandra.policies import WhiteListRoundRobinPolicy, AddressTranslator
 from cassandra.cluster import ExecutionProfile, EXEC_PROFILE_DEFAULT
 from cassandra.cqlengine import connection
 from cassandra.cqlengine import models
@@ -44,6 +44,14 @@ class ArgusInterfaceSchemaError(Exception):
 
 class ArgusInterfaceNameError(Exception):
     pass
+
+
+class PrivateToPublicAddressTranslator(AddressTranslator):
+    def __init__(self, address_mapping):
+        self.address_mapping = address_mapping
+
+    def translate(self, addr):
+        return self.address_mapping.get(addr, addr)
 
 
 class ArgusDatabase:
@@ -85,6 +93,10 @@ class ArgusDatabase:
             consistency_level=ConsistencyLevel.QUORUM,
             row_factory=named_tuple_factory
         )
+        address_translator = None
+        if self.config.address_mapping:
+            address_translator = PrivateToPublicAddressTranslator(self.config.address_mapping)
+
         self.cluster = cassandra.cluster.Cluster(contact_points=self.config.contact_points,
                                                  protocol_version=4,
                                                  auth_provider=PlainTextAuthProvider(
@@ -93,7 +105,8 @@ class ArgusDatabase:
                                                  execution_profiles={
                                                      EXEC_PROFILE_DEFAULT: self.execution_profile,
                                                      self.ARGUS_EXECUTION_PROFILE: self.exec_profile_named_tuple
-                                                 }
+                                                 },
+                                                 address_translator=address_translator,
                                                  )
         self.session = self.cluster.connect()
         self._keyspace_initialized = False
