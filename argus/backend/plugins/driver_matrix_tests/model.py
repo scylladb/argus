@@ -1,6 +1,4 @@
-
 from dataclasses import dataclass
-from typing import TypedDict
 from datetime import datetime
 from uuid import UUID
 from cassandra.cqlengine import columns
@@ -8,40 +6,7 @@ from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import ArgusRelease
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.driver_matrix_tests.udt import TestCollection, TestSuite, TestCase, EnvironmentInfo
-
-
-class RawMatrixTestCase(TypedDict):
-    name: str
-    status: str
-    time: float
-    classname: str
-    message: str
-
-
-class RawMatrixTestSuite(TypedDict):
-    name: str
-    tests: int
-    failures: int
-    disabled: int
-    skipped: int
-    passed: int
-    errors: int
-    time: float
-    cases: list[RawMatrixTestCase]
-
-
-class RawMatrixTestResult(TypedDict):
-    name: str
-    driver_name: str
-    tests: int
-    failures: int
-    errors: int
-    disabled: int
-    skipped: int
-    passed: int
-    time: float
-    timestamp: str
-    suites: list[RawMatrixTestSuite]
+from argus.backend.plugins.driver_matrix_tests.raw_types import RawMatrixTestResult
 
 
 @dataclass(init=True, repr=True, frozen=True)
