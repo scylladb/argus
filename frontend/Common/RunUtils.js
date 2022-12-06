@@ -2,6 +2,18 @@ export const getScyllaPackage = function (packages) {
     return packages.find((pkg) => pkg.name == "scylla-server");
 };
 
+export const getOperatorPackage = function (packages) {
+    return packages.find((pkg) => pkg.name == "operator-image");
+};
+
+export const getOperatorHelmPackage = function (packages) {
+    return packages.find((pkg) => pkg.name == "operator-chart");
+};
+
+export const getOperatorHelmRepoPackage = function (packages) {
+    return packages.find((pkg) => pkg.name == "operator-helm-repo");
+};
+
 export const getKernelPackage = function (packages) {
     return packages.find((pkg) => pkg.name == "kernel");
 };
