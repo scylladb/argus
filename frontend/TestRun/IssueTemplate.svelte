@@ -5,7 +5,9 @@
     import { faCopy } from "@fortawesome/free-solid-svg-icons";
     import { parse } from "marked";
     import { onMount } from "svelte";
-    import { getScyllaPackage, getKernelPackage, getRelocatableScyllaPackage } from "../Common/RunUtils";
+    import { getScyllaPackage, getKernelPackage, getRelocatableScyllaPackage,
+             getOperatorPackage, getOperatorHelmPackage, getOperatorHelmRepoPackage,
+    } from "../Common/RunUtils";
     import { markdownRendererOptions } from "../markdownOptions";
     let renderedElement;
     let templateElement;
@@ -27,6 +29,13 @@
     $: scyllaServerPackage = getScyllaPackage(test_run.packages);
     $: kernelPackage = getKernelPackage(test_run.packages);
     $: relocatablePackage = getRelocatableScyllaPackage(test_run.packages);
+
+    let operatorPackage = getOperatorPackage(test_run.packages);
+    $: operatorPackage = getOperatorPackage(test_run.packages);
+    let operatorHelmPackage = getOperatorHelmPackage(test_run.packages);
+    $: operatorHelmPackage = getOperatorHelmPackage(test_run.packages);
+    let operatorHelmRepoPackage = getOperatorHelmRepoPackage(test_run.packages);
+    $: operatorHelmRepoPackage = getOperatorHelmRepoPackage(test_run.packages);
 
     onMount(() => {
         renderedElement.innerHTML = parse(templateElement.innerHTML, markdownRendererOptions);
@@ -119,6 +128,15 @@ Scylla version (or git commit hash): `{scyllaServerPackage.version}-{scyllaServe
 {/if}
 {#if relocatablePackage}
 Relocatable Package: {relocatablePackage.version}
+{/if}
+{#if operatorPackage}
+Operator Image: {operatorPackage.version}
+{/if}
+{#if operatorHelmPackage}
+Operator Helm Version: {operatorHelmPackage.version}
+{/if}
+{#if operatorHelmRepoPackage}
+Operator Helm Repository: {operatorHelmRepoPackage.version}
 {/if}
 Cluster size: {test_run.cloud_setup.db_node.node_amount} nodes ({test_run.cloud_setup.db_node.instance_type})
 

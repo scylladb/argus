@@ -8,7 +8,9 @@
     import Fa from "svelte-fa";
     import { InProgressStatuses } from "../Common/TestStatus";
     import { timestampToISODate } from "../Common/DateUtils";
-    import { getScyllaPackage, getKernelPackage, getUpgradedScyllaPackage } from "../Common/RunUtils";
+    import { getScyllaPackage, getKernelPackage, getUpgradedScyllaPackage,
+             getOperatorPackage, getOperatorHelmPackage, getOperatorHelmRepoPackage,
+    } from "../Common/RunUtils";
     export let test_run = {};
     export let release;
     export let group;
@@ -25,6 +27,14 @@
 
     let scyllaPackage = getScyllaPackage(test_run.packages);
     $: scyllaPackage = getScyllaPackage(test_run.packages);
+
+    let operatorPackage = getOperatorPackage(test_run.packages);
+    $: operatorPackage = getOperatorPackage(test_run.packages);
+    let operatorHelmPackage = getOperatorHelmPackage(test_run.packages);
+    $: operatorHelmPackage = getOperatorHelmPackage(test_run.packages);
+    let operatorHelmRepoPackage = getOperatorHelmRepoPackage(test_run.packages);
+    $: operatorHelmRepoPackage = getOperatorHelmRepoPackage(test_run.packages);
+
     let kernelPackage = getKernelPackage(test_run.packages);
     $: kernelPackage = getKernelPackage(test_run.packages);
     let upgradedPackage = getUpgradedScyllaPackage(test_run.packages);
@@ -130,6 +140,24 @@
                         <li>
                             <span class="fw-bold">Build id:</span>
                             {upgradedPackage?.build_id}
+                        </li>
+                    {/if}
+                    {#if operatorPackage}
+                        <li>
+                            <span class="fw-bold">Operator Image:</span>
+                            {operatorPackage.version}
+                        </li>
+                    {/if}
+                    {#if operatorHelmPackage}
+                        <li>
+                            <span class="fw-bold">Operator Helm Version:</span>
+                            {operatorHelmPackage.version}
+                        </li>
+                    {/if}
+                    {#if operatorHelmRepoPackage}
+                        <li>
+                            <span class="fw-bold">Operator Helm Repository:</span>
+                            {operatorHelmRepoPackage.version}
                         </li>
                     {/if}
                 {/if}
