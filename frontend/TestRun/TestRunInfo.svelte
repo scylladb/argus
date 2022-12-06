@@ -131,17 +131,6 @@
                             </li>
                         {/if}
                     {/if}
-                    {#if upgradedPackage}
-                    <li>
-                        <span class="fw-bold">Upgraded scylla version:</span>
-                        {upgradedPackage?.version}-{upgradedPackage?.date}.{upgradedPackage?.revision_id}
-                    </li>
-                    {#if upgradedPackage?.build_id}
-                        <li>
-                            <span class="fw-bold">Build id:</span>
-                            {upgradedPackage?.build_id}
-                        </li>
-                    {/if}
                     {#if operatorPackage}
                         <li>
                             <span class="fw-bold">Operator Image:</span>
@@ -160,7 +149,18 @@
                             {operatorHelmRepoPackage.version}
                         </li>
                     {/if}
-                {/if}
+                    {#if upgradedPackage}
+                        <li>
+                            <span class="fw-bold">Upgraded scylla version:</span>
+                            {upgradedPackage?.version}-{upgradedPackage?.date}.{upgradedPackage?.revision_id}
+                        </li>
+                        {#if upgradedPackage?.build_id}
+                            <li>
+                               <span class="fw-bold">Build id:</span>
+                               {upgradedPackage?.build_id}
+                            </li>
+                        {/if}
+                    {/if}
                 {/if}
                 <li>
                     <span class="fw-bold">Instance type:</span>
