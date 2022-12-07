@@ -5,7 +5,13 @@
     import { faCircle, faExternalLinkSquareAlt } from "@fortawesome/free-solid-svg-icons";
     import TestRuns from "../WorkArea/TestRuns.svelte";
     import { timestampToISODate } from "../Common/DateUtils";
+    import { onMount } from "svelte";
     let filterString = "";
+    let pagedRuns = [];
+    let totalPages = 0;
+    let selectedPage = 0;
+    let clickedRuns = {};
+    let listDomElement;
 
     const filterJob = function (job) {
         let jobName = `${job.build_id}#${getBuildNumber(
@@ -57,11 +63,32 @@
         return json.response;
     };
 
-    let clickedRuns = {};
+    /**
+     * @param {Object[]} runs
+     */
+    const paginateRuns = function(runs) {
+        const PAGE_SIZE = 10;
+        const steps = Math.max(parseInt(runs.length / PAGE_SIZE) + 1, 1);
+        const pages = Array
+            .from({length: steps}, () => [])
+            .map((_, pageIdx) => {
+                const sliceIdx = pageIdx * PAGE_SIZE;
+                const slice = runs.slice(sliceIdx, PAGE_SIZE + sliceIdx);
+                return [...slice];
+            });
+
+        return pages;
+    };
+
+
+    onMount(() => {
+        pagedRuns = paginateRuns(runs);
+        totalPages = pagedRuns.length;
+    });
 </script>
 
 {#if runs.length > 1}
-    <div class="row mb-2">
+    <div class="row mb-2" bind:this={listDomElement}>
         <input
             class="form-control"
             type="text"
@@ -74,8 +101,8 @@
     </div>
 {/if}
 
-{#each runs as run}
-    <div class="row" class:d-none={filterJob(run)}>
+{#each pagedRuns[selectedPage] ?? [] as run (run.id)}
+    <div class="row mb-2" class:d-none={filterJob(run)}>
         <div class="col shadow rounded bg-white mb-2">
             <div class="row p-2">
                 <h3 class="col-9 d-flex align-items-center">
@@ -136,3 +163,24 @@
         </div>
     </div>
 {/each}
+
+<div class="row mb-2">
+    <div class="col">
+        <div class="d-flex text-center align-items-center justify-content-center">
+            {#each pagedRuns as _, idx}
+                <button
+                    class="ms-2 btn btn-sm"
+                    class:btn-primary={selectedPage == idx}
+                    class:btn-outline-primary={selectedPage != idx}
+                    on:click={() => {
+                        if (selectedPage == idx) return;
+                        listDomElement.scrollIntoView();
+                        selectedPage = idx;
+                        clickedRuns = {};
+                    }}
+                    >{idx + 1}
+                </button>
+            {/each}
+        </div>
+    </div>
+</div>
