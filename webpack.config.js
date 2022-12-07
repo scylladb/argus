@@ -70,6 +70,10 @@ module.exports = {
             import: "./frontend/profile-schedules.js",
             dependOn: "globalAlert"
         },
+        teams: {
+            import: "./frontend/teams.js",
+            dependOn: "globalAlert"
+        },
     },
     output: {
         path: path.resolve(__dirname, "public/dist"),
@@ -84,36 +88,36 @@ module.exports = {
     },
     module: {
         rules: [{
-                test: /\.css$/,
+            test: /\.css$/,
             use: [MiniCssExtractPlugin.loader, "css-loader"]
-            },
-            {
-                test: /\.tsx?$/,
+        },
+        {
+            test: /\.tsx?$/,
             use: "ts-loader",
-                exclude: /node_modules/,
-            },
-            {
-                test: /\.svelte$/,
-                use: {
+            exclude: /node_modules/,
+        },
+        {
+            test: /\.svelte$/,
+            use: {
                 loader: "svelte-loader",
 
-                    options: {
+                options: {
                     preprocess: require("svelte-preprocess")({
 
-                        })
-                    },
-                }
-            },
-            {
-                test: /\.(woff|woff2|eot|ttf|otf)$/i,
-            type: "asset/resource",
-            },
-            {
-                test: /node_modules\/svelte\/.*\.mjs$/,
-                resolve: {
-                    fullySpecified: false
-                }
+                    })
+                },
             }
+        },
+        {
+            test: /\.(woff|woff2|eot|ttf|otf)$/i,
+            type: "asset/resource",
+        },
+        {
+            test: /node_modules\/svelte\/.*\.mjs$/,
+            resolve: {
+                fullySpecified: false
+            }
+        }
         ],
     },
     devtool: environment == "production" ? "source-map" : "eval-source-map"
