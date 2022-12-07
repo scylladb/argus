@@ -8,6 +8,8 @@
     import { extractBuildNumber } from "../Common/RunUtils";
     import TestRunDispatcher from "./TestRunDispatcher.svelte";
     import { isPluginSupported } from "../Common/PluginDispatch";
+    import { AVAILABLE_PLUGINS } from "../Common/PluginDispatch";
+    import { sendMessage } from "../Stores/AlertStore";
 
     export let testId;
     export let listId = uuidv4();
@@ -16,6 +18,8 @@
     export let additionalRuns = [];
 
     const dispatch = createEventDispatcher();
+    let selectedPlugin = "";
+    let pluginFixed = false;
     let runsBody = undefined;
     let clickedTestRuns = additionalRuns.reduce((acc, val) => {
         acc[val] = true;
@@ -69,6 +73,27 @@
         collapse.classList.remove("show");
         clickedTestRuns[id] = false;
     };
+
+    const handlePluginFixup = async function () {
+        let response = await fetch(`/api/v1/test/${testId}/set_plugin`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                plugin_name: selectedPlugin
+            })
+        });
+        if (response.status != 200) {
+            sendMessage("error", "Failed adjusting plugin for this test");
+        }
+        let json = await response.json();
+        if (json.status != "ok") {
+            sendMessage("error", "Failed adjusting plugin for this test");
+            console.log(json);
+        }
+        pluginFixed = true;
+    };
 </script>
 
 <div class:d-none={filtered} class="accordion-item border-none  bg-main mb-1">
@@ -116,9 +141,31 @@
             <div class="text-muted text-center m-3"><span class="spinner-border spinner-border-sm"></span> Loading...</div>
         {:then runs}
             <div class="p-2" bind:this={runsBody}>
-                {#if isPluginSupported(testInfo.test.plugin_name)}
+                {#if !isPluginSupported(testInfo.test.plugin_name)}
                     <div class="rounded shadow-sm bg-white p-2 text-center">
-                        <span class="fw-bold">Unsupported plugin</span> <span class="d-inline-block text-danger bg-light-one rounded p-1">{testInfo.test.plugin_name}</span>
+                        <span class="fw-bold">Unsupported plugin</span> <span class="d-inline-block text-danger bg-light-one rounded p-1">{testInfo.test.plugin_name ? testInfo.test.plugin_name : "#empty-test-name"}</span>
+                    </div>
+                    <div>
+                        {#if !pluginFixed}
+                            <div class="p-2 alert alert-warning my-2">This looks like a newly added test and it will need to have its plugin name specified. If you know which plugin this test should use, select it from the list below and click save.</div>
+                            <div class="form-group mb-2">
+                                <label for="" class="form-label">Plugin</label>
+                                <select id="" class="form-select" bind:value={selectedPlugin}>
+                                    {#each Object.keys(AVAILABLE_PLUGINS) as plugin}
+                                        <option value={plugin}
+                                            >{plugin}</option
+                                        >
+                                    {/each}
+                                </select>
+                            </div>
+                            <div>
+                                <button class="btn btn-success w-100" on:click={handlePluginFixup}>Save</button>
+                            </div>
+                        {:else}
+                            <div>
+                                Refresh the page to see updated changes.
+                            </div>
+                        {/if}
                     </div>
                 {/if}
                 <TestRunsSelector

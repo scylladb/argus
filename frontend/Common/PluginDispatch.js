@@ -9,5 +9,5 @@ export const AVAILABLE_PLUGINS = {
 };
 
 export const isPluginSupported = function(pluginName) {
-    return !(pluginName in AVAILABLE_PLUGINS);
+    return (pluginName in AVAILABLE_PLUGINS);
 };

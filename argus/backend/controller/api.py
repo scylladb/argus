@@ -16,6 +16,7 @@ from argus.backend.service.argus_service import ArgusService
 from argus.backend.service.user import UserService, api_login_required
 from argus.backend.service.stats import ReleaseStatsCollector
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, UserOauthToken
+from argus.backend.util.common import get_payload
 
 bp = Blueprint('api', __name__, url_prefix='/api/v1')
 bp.register_blueprint(notifications_bp)
@@ -325,6 +326,21 @@ def get_test_details(test_id: str):
     return response
 
 
+@bp.route("/test/<string:test_id>/set_plugin", methods=["POST"])
+@api_login_required
+def set_test_plugin(test_id: str):
+    payload = get_payload(request)
+
+    test: ArgusTest = ArgusTest.get(id=UUID(test_id))
+    test.plugin_name = payload["plugin_name"]
+    test.save()
+
+    return {
+        "status": "ok",
+        "response": test
+    }
+
+
 @bp.route("/test-info", methods=["GET"])
 @api_login_required
 def test_info():
@@ -333,12 +349,11 @@ def test_info():
         raise Exception("No testId provided")
     service = ArgusService()
     info = service.get_test_info(test_id=UUID(test_id))
-    response = jsonify({
+
+    return {
         "status": "ok",
         "response": info
-    })
-    response.cache_control.max_age = 60
-    return response
+    }
 
 
 @bp.route("/test_run/comment/get", methods=["GET"])  # TODO: remove
