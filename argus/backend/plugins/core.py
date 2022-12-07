@@ -24,6 +24,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class PluginModelBase(Model):
+    _plugin_name = "unknown"
     # Metadata
     build_id = columns.Text(required=True, partition_key=True)
     start_time = columns.DateTime(required=True, primary_key=True, clustering_order="DESC", default=datetime.now)
@@ -56,6 +57,9 @@ class PluginModelBase(Model):
             self.release_id = test.release_id
             self.group_id = test.group_id
             self.test_id = test.id
+            if not test.plugin_name:
+                test.plugin_name = self._plugin_name
+                test.save()
         except ArgusTest.DoesNotExist:
             LOGGER.warning("Test entity missing for key \"%s\", run won't be visible until this is corrected", key)
 

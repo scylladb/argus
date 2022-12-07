@@ -45,6 +45,7 @@ class SCTTestRunSubmissionRequest():
 
 class SCTTestRun(PluginModelBase):
     __table_name__ = "test_runs_v8"
+    _plugin_name = "scylla-cluster-tests"
 
     # Test Details
     scm_revision_id = columns.Text()
