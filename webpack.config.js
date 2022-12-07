@@ -1,5 +1,5 @@
-const path = require('path');
-const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+const path = require("path");
+const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 
 const environment = process.env.WEBPACK_ENVIRONMENT || "production";
 
@@ -7,98 +7,98 @@ module.exports = {
     plugins: [new MiniCssExtractPlugin()],
     mode: environment,
     entry: {
-        main: './frontend/argus.js',
-        fontAwesome: './frontend/font-awesome.js',
-        noto: './frontend/fonts/noto.css',
+        main: "./frontend/argus.js",
+        fontAwesome: "./frontend/font-awesome.js",
+        noto: "./frontend/fonts/noto.css",
         globalAlert: {
-            import: './frontend/Alert.js',
-            dependOn: 'main'
+            import: "./frontend/Alert.js",
+            dependOn: "main"
         },
         notificationCounter: {
-            import: './frontend/notification-counter.js',
-            dependOn: 'globalAlert'
+            import: "./frontend/notification-counter.js",
+            dependOn: "globalAlert"
         },
         flashDebug: {
-            import: './frontend/flashDebug.js',
-            dependOn: 'globalAlert'
+            import: "./frontend/flashDebug.js",
+            dependOn: "globalAlert"
         },
         workArea: {
-            import: './frontend/work-area.js',
-            dependOn: 'globalAlert'
+            import: "./frontend/work-area.js",
+            dependOn: "globalAlert"
         },
         adminPanel: {
-            import: './frontend/admin-panel.js',
-            dependOn: 'globalAlert'
+            import: "./frontend/admin-panel.js",
+            dependOn: "globalAlert"
         },
         releasePage: {
-            import: './frontend/release-page.js',
-            dependOn: 'globalAlert'
+            import: "./frontend/release-page.js",
+            dependOn: "globalAlert"
         },
         testRunDetails: {
-            import: './frontend/test-run-details.js',
-            dependOn: 'globalAlert'
+            import: "./frontend/test-run-details.js",
+            dependOn: "globalAlert"
         },
         testRunsStandalone: {
-            import: './frontend/test-runs-standalone.js',
-            dependOn: 'globalAlert'
+            import: "./frontend/test-runs-standalone.js",
+            dependOn: "globalAlert"
         },
         testRuns: {
-            import: './frontend/test-runs-breakout.js',
-            dependOn: 'globalAlert'
+            import: "./frontend/test-runs-breakout.js",
+            dependOn: "globalAlert"
         },
         releaseDashboard: {
-            import: './frontend/release-dashboard.js',
-            dependOn: 'globalAlert'
+            import: "./frontend/release-dashboard.js",
+            dependOn: "globalAlert"
         },
         releaseScheduler: {
-            import: './frontend/release-scheduler.js',
-            dependOn: 'globalAlert'
+            import: "./frontend/release-scheduler.js",
+            dependOn: "globalAlert"
         },
         dutyPlanner: {
-            import: './frontend/duty-planner.js',
-            dependOn: 'globalAlert'
+            import: "./frontend/duty-planner.js",
+            dependOn: "globalAlert"
         },
         profileJobs: {
-            import: './frontend/profile-jobs.js',
-            dependOn: 'globalAlert'
+            import: "./frontend/profile-jobs.js",
+            dependOn: "globalAlert"
         },
         profileNotifications: {
-            import: './frontend/profile-notifications.js',
-            dependOn: 'globalAlert'
+            import: "./frontend/profile-notifications.js",
+            dependOn: "globalAlert"
         },
         profileSchedules: {
-            import: './frontend/profile-schedules.js',
-            dependOn: 'globalAlert'
+            import: "./frontend/profile-schedules.js",
+            dependOn: "globalAlert"
         },
     },
     output: {
-        path: path.resolve(__dirname, 'public/dist'),
-        filename: '[name].bundle.js',
+        path: path.resolve(__dirname, "public/dist"),
+        filename: "[name].bundle.js",
     },
     resolve: {
         alias: {
-            svelte: path.resolve('node_modules', 'svelte')
+            svelte: path.resolve("node_modules", "svelte")
         },
-        extensions: ['.mjs', '.js', '.svelte', '.ts', ".tsx"],
-        mainFields: ['svelte', 'browser', 'module', 'main']
+        extensions: [".mjs", ".js", ".svelte", ".ts", ".tsx"],
+        mainFields: ["svelte", "browser", "module", "main"]
     },
     module: {
         rules: [{
                 test: /\.css$/,
-                use: [MiniCssExtractPlugin.loader, 'css-loader']
+            use: [MiniCssExtractPlugin.loader, "css-loader"]
             },
             {
                 test: /\.tsx?$/,
-                use: 'ts-loader',
+            use: "ts-loader",
                 exclude: /node_modules/,
             },
             {
                 test: /\.svelte$/,
                 use: {
-                    loader: 'svelte-loader',
+                loader: "svelte-loader",
 
                     options: {
-                        preprocess: require('svelte-preprocess')({
+                    preprocess: require("svelte-preprocess")({
 
                         })
                     },
@@ -106,7 +106,7 @@ module.exports = {
             },
             {
                 test: /\.(woff|woff2|eot|ttf|otf)$/i,
-                type: 'asset/resource',
+            type: "asset/resource",
             },
             {
                 test: /node_modules\/svelte\/.*\.mjs$/,

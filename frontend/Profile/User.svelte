@@ -3,7 +3,6 @@
     export let isActive = false;
     export let isFirst = false;
     export let isHover = false;
-
     const getPicture = function (id) {
         return id ? `/storage/picture/${id}` : "/s/no-user-picture.png";
     };

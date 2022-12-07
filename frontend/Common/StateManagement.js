@@ -14,4 +14,4 @@ export const stateDecoder = function () {
         return decodedState;
     }
     return [];
-}
+};

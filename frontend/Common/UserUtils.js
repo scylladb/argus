@@ -11,4 +11,4 @@ export const getUser = function (userId, usersCollection) {
     };
 
     return usersCollection[userId] ? usersCollection[userId] : GHOST_USER;
-}
+};
