@@ -31,6 +31,22 @@ export const getRelocatableScyllaPackage = function(packages) {
     return packages.find((pkg) => pkg.name == "relocatable_pkg");
 };
 
+export const filterInvestigated = function (jobs) {
+    return jobs.filter(
+        (job) =>
+            job.investigation_status == "investigated" ||
+            job.status == "passed"
+    ).sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
+};
+
+export const filterNotInvestigated = function (jobs) {
+    return jobs.filter(
+        (job) =>
+            job.investigation_status != "investigated" &&
+            job.status != "passed"
+    ).sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
+};
+
 /**
  * @param {string} runType
  * @param {string} runId
