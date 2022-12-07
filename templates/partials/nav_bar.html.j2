@@ -14,6 +14,7 @@
                 {% if g.user.is_admin() %}
                     <a class="{% if request.path == url_for('admin.index')%}active{%endif%} nav-link" href="{{ url_for('admin.index')}}"><i class="fas fa-wrench"></i> Admin Area</a>
                 {% endif %}
+            <a class="{% if request.path == url_for('main.teams.index')%}active{%endif%} nav-link" href="{{ url_for('main.teams.index')}}"><i class="fas fa-users"></i> Teams</a>
             <a class="{% if request.path == url_for('main.profile')%}active{%endif%} nav-link d-flex align-items-center" href="{{ url_for('main.profile')}}">
             {% if g.user.picture_id %}
             <img class="me-1" src="/storage/picture/{{ g.user.picture_id }}" style="height: 24px; border-radius: 50%" alt="">
