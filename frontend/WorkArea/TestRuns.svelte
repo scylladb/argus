@@ -10,12 +10,17 @@
     import { isPluginSupported } from "../Common/PluginDispatch";
     import { AVAILABLE_PLUGINS } from "../Common/PluginDispatch";
     import { sendMessage } from "../Stores/AlertStore";
+    import { applicationCurrentUser } from "../argus";
 
     export let testId;
     export let listId = uuidv4();
     export let filtered = false;
     export let removableRuns = false;
     export let additionalRuns = [];
+    /**
+     * @type {{roles: string[]}}
+     */
+    const currentUser = applicationCurrentUser;
 
     const dispatch = createEventDispatcher();
     let selectedPlugin = "";
@@ -145,28 +150,30 @@
                     <div class="rounded shadow-sm bg-white p-2 text-center">
                         <span class="fw-bold">Unsupported plugin</span> <span class="d-inline-block text-danger bg-light-one rounded p-1">{testInfo.test.plugin_name ? testInfo.test.plugin_name : "#empty-test-name"}</span>
                     </div>
-                    <div>
-                        {#if !pluginFixed}
-                            <div class="p-2 alert alert-warning my-2">This looks like a newly added test and it will need to have its plugin name specified. If you know which plugin this test should use, select it from the list below and click save.</div>
-                            <div class="form-group mb-2">
-                                <label for="" class="form-label">Plugin</label>
-                                <select id="" class="form-select" bind:value={selectedPlugin}>
-                                    {#each Object.keys(AVAILABLE_PLUGINS) as plugin}
-                                        <option value={plugin}
-                                            >{plugin}</option
-                                        >
-                                    {/each}
-                                </select>
-                            </div>
-                            <div>
-                                <button class="btn btn-success w-100" on:click={handlePluginFixup}>Save</button>
-                            </div>
-                        {:else}
-                            <div>
-                                Refresh the page to see updated changes.
-                            </div>
-                        {/if}
-                    </div>
+                    {#if currentUser.roles.indexOf("ROLE_ADMIN") != -1}
+                        <div>
+                            {#if !pluginFixed}
+                                <div class="p-2 alert alert-warning my-2">This looks like a newly added test and it will need to have its plugin name specified. If you know which plugin this test should use, select it from the list below and click save.</div>
+                                <div class="form-group mb-2">
+                                    <label for="" class="form-label">Plugin</label>
+                                    <select id="" class="form-select" bind:value={selectedPlugin}>
+                                        {#each Object.keys(AVAILABLE_PLUGINS) as plugin}
+                                            <option value={plugin}
+                                                >{plugin}</option
+                                            >
+                                        {/each}
+                                    </select>
+                                </div>
+                                <div>
+                                    <button class="btn btn-success w-100" on:click={handlePluginFixup}>Save</button>
+                                </div>
+                            {:else}
+                                <div>
+                                    Refresh the page to see updated changes.
+                                </div>
+                            {/if}
+                        </div>
+                    {/if}
                 {/if}
                 <TestRunsSelector
                     {runs}

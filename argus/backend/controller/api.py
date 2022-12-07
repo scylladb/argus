@@ -14,7 +14,7 @@ from argus.backend.controller.testrun_api import bp as testrun_bp
 from argus.backend.service.argus_service import ArgusService
 from argus.backend.service.user import UserService, api_login_required
 from argus.backend.service.stats import ReleaseStatsCollector
-from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, UserOauthToken
+from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, User, UserOauthToken
 from argus.backend.util.common import get_payload
 
 bp = Blueprint('api', __name__, url_prefix='/api/v1')
@@ -329,6 +329,9 @@ def get_test_details(test_id: str):
 def set_test_plugin(test_id: str):
     payload = get_payload(request)
 
+    current_user: User = g.user
+    if not current_user.is_admin():
+        raise Exception("Cannot set plugin as a non-administrator")
     test: ArgusTest = ArgusTest.get(id=UUID(test_id))
     test.plugin_name = payload["plugin_name"]
     test.save()

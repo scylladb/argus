@@ -20,6 +20,7 @@ class DriverMatrixRunSubmissionRequest():
 
 
 class DriverTestRun(PluginModelBase):
+    _plugin_name = "driver-matrix-tests"
     __table_name__ = "driver_test_run"
     scylla_version = columns.Text()
     test_collection = columns.List(value_type=columns.UserDefinedType(user_type=TestCollection))
