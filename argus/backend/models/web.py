@@ -90,6 +90,13 @@ class User(Model):
         }
 
 
+class Team(Model):
+    id = columns.UUID(primary_key=True, default=uuid4)
+    name = columns.Text(required=True)
+    leader = columns.UUID(index=True, required=True)
+    members = columns.List(value_type=columns.UUID)
+    motd = columns.Text()
+
 class UserOauthToken(Model):
     id = columns.UUID(primary_key=True, default=uuid4)
     user_id = columns.UUID(index=True, required=True)
@@ -338,6 +345,7 @@ class WebFileStorage(Model):
 USED_MODELS: list[Model] = [
     User,
     UserOauthToken,
+    Team,
     WebFileStorage,
     ArgusRelease,
     ArgusGroup,
