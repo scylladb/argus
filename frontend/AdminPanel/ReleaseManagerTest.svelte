@@ -5,6 +5,7 @@
         faEdit,
         faTrash,
     } from "@fortawesome/free-solid-svg-icons";
+    import { AVAILABLE_PLUGINS } from "../Common/PluginDispatch";
     export let test;
     export let groups;
     const dispatch = createEventDispatcher();
@@ -21,6 +22,7 @@
             build_system_id: editedTest.build_system_id,
             build_system_url: editedTest.build_system_url,
             group_id: editedTest.group_id,
+            plugin_name: editedTest.plugin_name
         });
     };
 
@@ -98,6 +100,16 @@
                     class="form-control"
                     bind:value={editedTest.name}
                 />
+            </div>
+            <div class="form-group mb-2">
+                <label for="" class="form-label">Plugin</label>
+                <select id="" class="form-select" bind:value={editedTest.plugin_name}>
+                    {#each Object.keys(AVAILABLE_PLUGINS) as plugin}
+                        <option value={plugin}
+                            >{plugin}</option
+                        >
+                    {/each}
+                </select>
             </div>
             <div class="form-group">
                 <label for="" class="form-label">Friendly name</label>

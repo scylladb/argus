@@ -62,7 +62,7 @@ class ReleaseManagerService:
 
         return new_group
 
-    def create_test(self, test_name, pretty_name, build_id, build_url, group_id, release_id) -> ArgusTest:
+    def create_test(self, test_name, pretty_name, build_id, build_url, group_id, release_id, plugin_name) -> ArgusTest:
         release = ArgusRelease.get(id=UUID(release_id))
         group = ArgusGroup.get(id=UUID(group_id))
 
@@ -72,6 +72,7 @@ class ReleaseManagerService:
         new_test.build_system_id = build_id
         new_test.release_id = release.id
         new_test.group_id = group.id
+        new_test.plugin_name = plugin_name
         new_test.build_system_url = build_url
         new_test.validate_build_system_id()
         new_test.save()
@@ -114,13 +115,14 @@ class ReleaseManagerService:
 
         return True
 
-    def update_test(self, test_id: str, name: str, pretty_name: str,
+    def update_test(self, test_id: str, name: str, pretty_name: str, plugin_name: str,
                     enabled: bool, build_system_id: str, build_system_url: str, group_id) -> bool:
         test: ArgusTest = ArgusTest.get(id=UUID(test_id))
         group = ArgusGroup.get(id=UUID(group_id))
 
         test.name = name
         test.pretty_name = pretty_name
+        test.plugin_name = plugin_name
         test.enabled = enabled
         test.build_system_id = build_system_id
         test.build_system_url = build_system_url
