@@ -1,6 +1,6 @@
 <script>
     import { applicationCurrentUser } from "../argus";
-    import { getPicture } from "../Common/UserUtils"
+    import { getPicture } from "../Common/UserUtils";
     export let user = {};
 </script>
 
