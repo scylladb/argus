@@ -1,6 +1,7 @@
 <script>
     import { createEventDispatcher } from "svelte";
     import * as urlSlug from "url-slug";
+    import { AVAILABLE_PLUGINS } from "../Common/PluginDispatch";
     export let groups = [];
     export let releaseId = "";
     export let groupId = "";
@@ -11,7 +12,7 @@
         group_id: groupId,
         build_id: "",
         build_url: "",
-
+        plugin_name: "",
     };
     $: newTest.test_name = urlSlug.convert(newTest.pretty_name);
 
@@ -38,6 +39,16 @@
                     disabled
                     bind:value={newTest.test_name}
                 />
+            </div>
+            <div class="form-group mb-2">
+                <label for="" class="form-label">Plugin</label>
+                <select id="" class="form-select" bind:value={newTest.plugin_name}>
+                    {#each Object.keys(AVAILABLE_PLUGINS) as plugin}
+                        <option value={plugin}
+                            >{plugin}</option
+                        >
+                    {/each}
+                </select>
             </div>
             <div class="form-group">
                 <label for="" class="form-label">Friendly name</label>
