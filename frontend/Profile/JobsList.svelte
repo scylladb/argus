@@ -166,10 +166,10 @@
 
 <div class="row mb-2">
     <div class="col">
-        <div class="d-flex text-center align-items-center justify-content-center">
+        <div class="d-flex flex-wrap p-2 text-center align-items-center justify-content-center">
             {#each pagedRuns as _, idx}
                 <button
-                    class="ms-2 btn btn-sm"
+                    class="page-button ms-2 my-2 btn btn-sm"
                     class:btn-primary={selectedPage == idx}
                     class:btn-outline-primary={selectedPage != idx}
                     on:click={() => {
@@ -184,3 +184,10 @@
         </div>
     </div>
 </div>
+
+
+<style>
+    .page-button {
+        flex-basis: 5%;
+    }
+</style>
