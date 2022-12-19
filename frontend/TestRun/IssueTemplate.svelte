@@ -118,6 +118,21 @@
                                 class="code"
                                 bind:this={templateElement}
                                 id="issueTemplateText-{test_run.id}">
+## Issue description
+
+- [ ] This issue is a regression.
+- [ ] It is unknown if this issue is a regression.
+
+*Describe your issue in detail and steps it took to produce it.*
+
+## Impact
+
+*Describe the impact this issue causes to the user.*
+
+## How frequently does it reproduce?
+
+*Describe the frequency with how this issue can be reproduced.*
+
 ## Installation details
 
 {#if kernelPackage}
@@ -156,15 +171,17 @@ Test config file(s):
 
 - [{test_run.config_files[0].split("/").reverse()[0]}](https://github.com/scylladb/scylla-cluster-tests/blob/{test_run.scm_revision_id}/{test_run.config_files[0]})
 
-## Issue description
 
-**&gt;&gt;&gt;&gt;&gt;&gt;&gt;**
-**Your description here...**
-**&lt;&lt;&lt;&lt;&lt;&lt;&lt;**
+&lt;details&gt;
+&lt;summary&gt;
+Logs and commands
+&lt;/summary&gt;
+
 
 - Restore Monitor Stack command: `$ hydra investigate show-monitor {test_run.id}`
 - Restore monitor on AWS instance using [Jenkins job](https://jenkins.scylladb.com/view/QA/job/QA-tools/job/hydra-show-monitor/parambuild/?test_id={test_run.id})
 - Show all stored logs command: `$ hydra investigate show-logs {test_run.id}`
+
 
 ## Logs:
 {#each test_run.logs as log}
@@ -174,6 +191,8 @@ Test config file(s):
 {/each}
 
 [Jenkins job URL]({test_run.build_job_url})
+&lt;/details&gt;
+
                             </pre>
                         </div>
                         <div class="tab-pane fade" id="issueTemplatePreview-{test_run.id}" role="tabpanel">
