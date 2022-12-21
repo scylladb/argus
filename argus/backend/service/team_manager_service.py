@@ -77,7 +77,7 @@ class TeamManagerService:
             raise TeamManagerException(f"Team {team_id} doesn't exist!", team_id) from exc
 
     def get_users_teams(self, user_id: UUID) -> list[Team]:
-        teams_containing_user = list(Team.filter(members__contains=user_id).allow_filtering().all())
+        teams_containing_user = list(Team.all())
         users_teams = self.get_teams_for_user(user_id)
         created_teams_ids = [team.id for team in users_teams]
         return [*users_teams, *[team for team in teams_containing_user if team.id not in created_teams_ids]]
