@@ -149,7 +149,7 @@ class SCTTestRun(PluginModelBase):
 
     def submit_logs(self, logs: list[dict]):
         for log in logs:
-            self.logs.append((log["name"], log["link"]))
+            self.logs.append((log["log_name"], log["log_link"]))
 
     def add_screenshot(self, screenshot_link: str):
         self.screenshots.append(screenshot_link)
