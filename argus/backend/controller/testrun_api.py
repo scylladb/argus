@@ -257,3 +257,15 @@ def test_run_delete_comment(test_id: str, run_id: str, comment_id: str):
         "status": "ok",
         "response": result
     }
+
+
+@bp.route("/terminate_stuck_runs", methods=["POST"])
+@api_login_required
+def sct_terminate_stuck_runs():
+    result = TestRunService().terminate_stuck_runs()
+    return {
+        "status": "ok",
+        "response": {
+            "total": result
+        }
+    }

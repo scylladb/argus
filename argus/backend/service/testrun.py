@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import logging
 import re
@@ -419,3 +419,21 @@ class TestRunService:
         return {
             "deleted": issue_id
         }
+
+    def terminate_stuck_runs(self):
+        sct = AVAILABLE_PLUGINS.get("scylla-cluster-tests").model
+        now = datetime.utcnow()
+        stuck_period = now - timedelta(minutes=45)
+        stuck_runs_running = sct.filter(heartbeat__lt=int(
+            stuck_period.timestamp()), status=TestStatus.RUNNING.value).allow_filtering().all()
+        stuck_runs_created = sct.filter(heartbeat__lt=int(
+            stuck_period.timestamp()), status=TestStatus.CREATED.value).allow_filtering().all()
+
+        all_stuck_runs = [*stuck_runs_running, *stuck_runs_created]
+        LOGGER.info("Found %s stuck runs", len(all_stuck_runs))
+
+        for run in all_stuck_runs:
+            LOGGER.info("Will set %s as ABORTED", run.id)
+            self.change_run_status(test_id=run.test_id, run_id=run.id, new_status=TestStatus.ABORTED)
+        
+        return len(all_stuck_runs)
