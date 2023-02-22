@@ -7,6 +7,8 @@
         faEye,
         faBug,
         faComment,
+        faArrowDown,
+        faArrowUp,
     } from "@fortawesome/free-solid-svg-icons";
 
     import {
@@ -44,6 +46,22 @@
     };
 
     const dispatch = createEventDispatcher();
+
+    const loadCollapseState = function() {
+        return JSON.parse(window.localStorage.getItem(`releaseDashState-${releaseId}`)) || {};
+    };
+
+    const toggleCollapse = function(collapseId) {
+        collapseState[collapseId] = !(collapseState[collapseId] || false);
+        window.localStorage.setItem(`releaseDashState-${releaseId}`, JSON.stringify(collapseState));
+    };
+
+    const getCollapseState = function(collapseId) {
+        return collapseState[collapseId] ?? false;
+    };
+
+    let collapseState = loadCollapseState();
+
 
     const fetchStats = async function () {
         let params = new URLSearchParams({
@@ -203,96 +221,116 @@
         {#each sortedGroups(stats.groups) as groupStats (groupStats.group.id)}
             {#if !groupStats.disabled}
                 <div class="p-2 shadow mb-2 rounded bg-main">
-                    <h5 class="mb-2">
-                        <div class="mb-2">{groupStats.group.pretty_name || groupStats.group.name}</div>
-                        {#if Object.keys(assigneeList.groups).length > 0 && Object.keys(users).length > 0}
-                            <div class="shadow-sm bg-main rounded d-inline-block p-2">
-                                <div class="d-flex align-items-center">
-                                    <img
-                                        class="img-thumb ms-2"
-                                        src={getPicture(
-                                            users[assigneeList.groups[groupStats.group.id]?.[0]]
-                                                ?.picture_id
-                                        )}
-                                        alt=""
-                                    />
-                                    <span class="ms-2 fs-6"
-                                        >{users[assigneeList.groups[groupStats.group.id]?.[0]]
-                                            ?.full_name ?? "unassigned"}</span
-                                    >
+                    <h5 class="mb-2 d-flex">
+                        <div>
+                            <div class="mb-2">{groupStats.group.pretty_name || groupStats.group.name}</div>
+                            {#if Object.keys(assigneeList.groups).length > 0 && Object.keys(users).length > 0}
+                                <div class="shadow-sm bg-main rounded d-inline-block p-2">
+                                    <div class="d-flex align-items-center">
+                                        <img
+                                            class="img-thumb ms-2"
+                                            src={getPicture(
+                                                users[assigneeList.groups[groupStats.group.id]?.[0]]
+                                                    ?.picture_id
+                                            )}
+                                            alt=""
+                                        />
+                                        <span class="ms-2 fs-6"
+                                            >{users[assigneeList.groups[groupStats.group.id]?.[0]]
+                                                ?.full_name ?? "unassigned"}</span
+                                        >
+                                    </div>
                                 </div>
-                            </div>
-                        {/if}
-                    </h5>
-                    <div class="my-2 d-flex flex-wrap bg-lighter rounded shadow-sm">
-                        {#each Object.entries(sortTestStats(groupStats.tests)) as [testId, testStats] (testId)}
-                            <div
-                                class:status-block-active={testStats.start_time != 0}
-                                class:investigating={testStats?.investigation_status == TestInvestigationStatus.IN_PROGRESS}
-                                class:should-be-investigated={testStats?.investigation_status == TestInvestigationStatus.NOT_INVESTIGATED && testStats?.status == TestStatus.FAILED}
-                                class="rounded bg-main status-block m-1 d-flex flex-column overflow-hidden shadow-sm"
+                            {/if}
+                        </div>
+                        <div class="ms-auto">
+                            <button
+                                class="btn btn-sm"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#collapse-{groupStats.group.id}"
                                 on:click={() => {
-                                    handleTestClick(testStats, groupStats);
+                                    toggleCollapse(`collapse-${groupStats.group.id}`);
                                 }}
                             >
+                            {#if getCollapseState(`collapse-${groupStats.group.id}`, collapseState)}
+                                <Fa icon={faArrowDown}/>
+                            {:else}
+                                <Fa icon={faArrowUp}/>
+                            {/if}
+                            </button>
+                        </div>
+                    </h5>
+                    <div class="collapse" class:show={!getCollapseState(`collapse-${groupStats.group.id}`)} id="collapse-{groupStats.group.id}">
+                        <div class="my-2 d-flex flex-wrap bg-lighter rounded shadow-sm">
+                            {#each Object.entries(sortTestStats(groupStats.tests)) as [testId, testStats] (testId)}
                                 <div
-                                    class="{StatusBackgroundCSSClassMap[
-                                        testStats.status
-                                    ]} text-center text-light p-1 border-bottom"
+                                    class:status-block-active={testStats.start_time != 0}
+                                    class:investigating={testStats?.investigation_status == TestInvestigationStatus.IN_PROGRESS}
+                                    class:should-be-investigated={testStats?.investigation_status == TestInvestigationStatus.NOT_INVESTIGATED && testStats?.status == TestStatus.FAILED}
+                                    class="rounded bg-main status-block m-1 d-flex flex-column overflow-hidden shadow-sm"
+                                    on:click={() => {
+                                        handleTestClick(testStats, groupStats);
+                                    }}
                                 >
-                                    {testStats.status == "unknown"
-                                        ? "Not run"
-                                        : subUnderscores(titleCase(testStats.status))}
-                                    {#if clickedTests[testStats.test.id]}
-                                        <div class="text-tiny">Selected</div>
-                                    {/if}
-                                </div>
-                                <div class="p-1 text-small d-flex align-items-center">
-                                    <div class="ms-1">{testStats.test.name}</div>
-                                </div>
-                                <div class="d-flex flex-fill align-items-end justify-content-end p-1">
-                                    <div class="p-1 me-auto">
-                                        {#if assigneeList.tests[testStats.test.id] || assigneeList.groups[groupStats.group.id] || testStats.last_runs?.[0]?.assignee}
-                                            <AssigneeList
-                                                smallImage={false}
-                                                assignees={getAssigneesForTest(
-                                                    testStats.test.id,
-                                                    groupStats.group.id,
-                                                    testStats.last_runs ?? [],
-                                                )}
-                                            />
+                                    <div
+                                        class="{StatusBackgroundCSSClassMap[
+                                            testStats.status
+                                        ]} text-center text-light p-1 border-bottom"
+                                    >
+                                        {testStats.status == "unknown"
+                                            ? "Not run"
+                                            : subUnderscores(titleCase(testStats.status))}
+                                        {#if clickedTests[testStats.test.id]}
+                                            <div class="text-tiny">Selected</div>
                                         {/if}
                                     </div>
-                                    {#if testStats.investigation_status && (testStats.status != TestStatus.PASSED || testStats.investigation_status != TestInvestigationStatus.NOT_INVESTIGATED)}
-                                        <div
-                                            class="p-1"
-                                            title="Investigation: {TestInvestigationStatusStrings[
-                                                testStats.investigation_status
-                                            ]}"
-                                        >
-                                            <Fa
-                                                color="#000"
-                                                icon={investigationStatusIcon[
+                                    <div class="p-1 text-small d-flex align-items-center">
+                                        <div class="ms-1">{testStats.test.name}</div>
+                                    </div>
+                                    <div class="d-flex flex-fill align-items-end justify-content-end p-1">
+                                        <div class="p-1 me-auto">
+                                            {#if assigneeList.tests[testStats.test.id] || assigneeList.groups[groupStats.group.id] || testStats.last_runs?.[0]?.assignee}
+                                                <AssigneeList
+                                                    smallImage={false}
+                                                    assignees={getAssigneesForTest(
+                                                        testStats.test.id,
+                                                        groupStats.group.id,
+                                                        testStats.last_runs ?? [],
+                                                    )}
+                                                />
+                                            {/if}
+                                        </div>
+                                        {#if testStats.investigation_status && (testStats.status != TestStatus.PASSED || testStats.investigation_status != TestInvestigationStatus.NOT_INVESTIGATED)}
+                                            <div
+                                                class="p-1"
+                                                title="Investigation: {TestInvestigationStatusStrings[
                                                     testStats.investigation_status
-                                                ]}
-                                            />
-                                        </div>
-                                    {/if}
-                                    {#if testStats.hasBugReport}
-                                        <div class="p-1" title="Has a bug report">
-                                            <Fa color="#000" icon={faBug} />
-                                        </div>
-                                    {/if}
-                                    {#if testStats.hasComments}
-                                        <div class="p-1" title="Has a comment">
-                                            <Fa color="#000" icon={faComment} />
-                                        </div>
-                                    {/if}
+                                                ]}"
+                                            >
+                                                <Fa
+                                                    color="#000"
+                                                    icon={investigationStatusIcon[
+                                                        testStats.investigation_status
+                                                    ]}
+                                                />
+                                            </div>
+                                        {/if}
+                                        {#if testStats.hasBugReport}
+                                            <div class="p-1" title="Has a bug report">
+                                                <Fa color="#000" icon={faBug} />
+                                            </div>
+                                        {/if}
+                                        {#if testStats.hasComments}
+                                            <div class="p-1" title="Has a comment">
+                                                <Fa color="#000" icon={faComment} />
+                                            </div>
+                                        {/if}
+                                    </div>
                                 </div>
-                            </div>
-                        {:else}
-                            <div class="text-dark m-2">No tests for this group</div>
-                        {/each}
+                            {:else}
+                                <div class="text-dark m-2">No tests for this group</div>
+                            {/each}
+                        </div>
                     </div>
                 </div>
             {/if}
