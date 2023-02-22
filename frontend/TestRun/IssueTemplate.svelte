@@ -6,7 +6,7 @@
     import { parse } from "marked";
     import { onMount } from "svelte";
     import { getScyllaPackage, getKernelPackage, getRelocatableScyllaPackage,
-             getOperatorPackage, getOperatorHelmPackage, getOperatorHelmRepoPackage,
+        getOperatorPackage, getOperatorHelmPackage, getOperatorHelmRepoPackage,
     } from "../Common/RunUtils";
     import { markdownRendererOptions } from "../markdownOptions";
     let renderedElement;
@@ -15,12 +15,12 @@
 
     const filterDbNodes = function (resources) {
         return resources.filter((val) =>
-            new RegExp(/\-db\-node/).test(val.name)
+            new RegExp(/-db-node/).test(val.name)
         );
     };
 
     const copyTemplateToClipboard = function () {
-        navigator.clipboard.writeText(issueTemplateText);
+        navigator.clipboard.writeText(templateElement.innerText);
     };
 
     let scyllaServerPackage = getScyllaPackage(test_run.packages);
