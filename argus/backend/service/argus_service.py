@@ -24,6 +24,7 @@ from argus.backend.models.web import (
     User,
 )
 from argus.backend.events.event_processors import EVENT_PROCESSORS
+from argus.backend.service.testrun import TestRunService
 
 LOGGER = logging.getLogger(__name__)
 
@@ -418,6 +419,19 @@ class ArgusService:
         groups = ArgusScheduleGroup.filter(schedule_id=schedule.id).all()
         assignees = ArgusScheduleAssignee.filter(schedule_id=schedule.id).all()
 
+        full_schedule = dict(schedule)
+        full_schedule["tests"] = [test.test_id for test in tests]
+        full_schedule["groups"] = [group.group_id for group in groups]
+        full_schedule["assignees"] = [assignee.assignee for assignee in assignees]
+
+        schedule_user = User.get(id=assignees[0].assignee)
+
+        jobs_for_schedule = self.get_jobs_for_user(user=schedule_user, ignore_time=True, schedules=[full_schedule])
+
+        service = TestRunService()
+        for job in jobs_for_schedule:
+            service.change_run_assignee(test_id=job["test_id"], run_id=job["id"], new_assignee=None)
+
         for entities in [tests, groups, assignees]:
             for entity in entities:
                 entity.delete()
@@ -517,15 +531,15 @@ class ArgusService:
 
         return response
 
-    def get_jobs_for_user(self, user: User):
+    def get_jobs_for_user(self, user: User, ignore_time: bool = False, schedules: list[dict] = None):
         runs = [run for plugin in all_plugin_models() for run in plugin.get_jobs_assigned_to_user(user=user)]
-        schedules = self.get_schedules_for_user(user)
+        schedules = self.get_schedules_for_user(user) if not schedules else schedules
         valid_runs = []
         today = datetime.datetime.now()
         month_ago = today - datetime.timedelta(days=30)
         for run in runs:
             run_date = run["start_time"]
-            if user.id == run["assignee"] and run_date >= month_ago:
+            if user.id == run["assignee"] and run_date >= month_ago and not ignore_time:
                 valid_runs.append(run)
                 continue
             for schedule in schedules:
@@ -545,7 +559,7 @@ class ArgusService:
                     break
         return valid_runs
 
-    def get_schedules_for_user(self, user: User):
+    def get_schedules_for_user(self, user: User) -> list[dict]:
         all_assigned_schedules = ArgusScheduleAssignee.filter(assignee=user.id).all()
         schedule_keys = [(schedule_assignee.release_id, schedule_assignee.schedule_id)
                          for schedule_assignee in all_assigned_schedules]
