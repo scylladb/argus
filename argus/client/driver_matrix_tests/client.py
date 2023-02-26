@@ -65,6 +65,16 @@ class ArgusDriverMatrixClient(ArgusClient):
 
         return match.groupdict() if match else {}
 
+    def get_passed_count(self, suite_attribs: dict[str, str]) -> int:
+        if (pass_count := suite_attribs.get("passed")):
+            return int(pass_count)
+        total = int(suite_attribs.get("total", 0))
+        errors = int(suite_attribs.get("failures", 0))
+        skipped = int(suite_attribs.get("skipped", 0))
+        failures = int(suite_attribs.get("failures", 0))
+
+        return total - errors - skipped - failures
+
     def parse_result_xml(self, xml_path: Path, env: dict[str, str] = None) -> RawMatrixTestResult:
         with xml_path.open(mode="rt", encoding="utf-8") as xml_file:
             xml = ElementTree.parse(source=xml_file)
@@ -89,12 +99,12 @@ class ArgusDriverMatrixClient(ArgusClient):
                 test_collection["timestamp"] = suite.attrib.get("timestamp")
             raw_suite = {
                 "name": suite.attrib["name"],
-                "tests": int(suite.attrib["tests"]),
-                "failures": int(suite.attrib["failures"]),
+                "tests": int(suite.attrib.get("tests", 0)),
+                "failures": int(suite.attrib.get("failures", 0)),
                 "disabled": int(0),
-                "passed": int(suite.attrib["passed"]),
-                "skipped": int(suite.attrib["skipped"]),
-                "errors": int(suite.attrib["errors"]),
+                "passed": self.get_passed_count(suite.attrib),
+                "skipped": int(suite.attrib.get("skipped", 0)),
+                "errors": int(suite.attrib.get("errors", 0)),
                 "time": float(suite.attrib["time"]),
                 "cases": self.get_test_cases(list(suite.iter("testcase")))
             }
@@ -126,7 +136,7 @@ class ArgusDriverMatrixClient(ArgusClient):
         results = self.get_results(result_path, env)
 
         self.submit_driver_matrix_run(job_name=build_id, job_url=build_url, test_environment=env, results=results)
-        failures = reduce(lambda total, coll: coll["failures"] + total, results, 0)
+        failures = reduce(lambda total, coll: (coll["failures"] + coll["errors"]) + total, results, 0)
         status = TestStatus.FAILED if failures > 0 else TestStatus.PASSED
         self.set_matrix_status(status)
 
