@@ -150,7 +150,6 @@
                     <div class="rounded shadow-sm bg-white p-2 text-center">
                         <span class="fw-bold">Unsupported plugin</span> <span class="d-inline-block text-danger bg-light-one rounded p-1">{testInfo.test.plugin_name ? testInfo.test.plugin_name : "#empty-test-name"}</span>
                     </div>
-                    {#if currentUser.roles.indexOf("ROLE_ADMIN") != -1}
                         <div>
                             {#if !pluginFixed}
                                 <div class="p-2 alert alert-warning my-2">This looks like a newly added test and it will need to have its plugin name specified. If you know which plugin this test should use, select it from the list below and click save.</div>
@@ -173,7 +172,6 @@
                                 </div>
                             {/if}
                         </div>
-                    {/if}
                 {/if}
                 <TestRunsSelector
                     {runs}

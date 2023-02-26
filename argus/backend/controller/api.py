@@ -332,8 +332,6 @@ def set_test_plugin(test_id: str):
     payload = get_payload(request)
 
     current_user: User = g.user
-    if not current_user.is_admin():
-        raise Exception("Cannot set plugin as a non-administrator")
     test: ArgusTest = ArgusTest.get(id=UUID(test_id))
     test.plugin_name = payload["plugin_name"]
     test.save()
