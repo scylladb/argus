@@ -34,6 +34,10 @@ from argus.backend.util.enums import TestInvestigationStatus, TestStatus
 LOGGER = logging.getLogger(__name__)
 
 
+class TestRunServiceException(Exception):
+    pass
+
+
 class TestRunService:
     ASSIGNEE_PLACEHOLDER = "none-none-none"
 
@@ -91,7 +95,10 @@ class TestRunService:
         return response
 
     def change_run_status(self, test_id: UUID, run_id: UUID, new_status: TestStatus):
-        test = ArgusTest.get(id=test_id)
+        try:
+            test = ArgusTest.get(id=test_id)
+        except ArgusTest.DoesNotExist as exc:
+            raise TestRunServiceException("Test entity does not exist for provided test_id", test_id) from exc
         plugin = self.get_plugin(plugin_name=test.plugin_name)
         run: PluginModelBase = plugin.model.get(id=run_id)
         old_status = run.status
@@ -434,6 +441,24 @@ class TestRunService:
 
         for run in all_stuck_runs:
             LOGGER.info("Will set %s as ABORTED", run.id)
-            self.change_run_status(test_id=run.test_id, run_id=run.id, new_status=TestStatus.ABORTED)
-        
+            old_status = run.status
+            run.status = TestStatus.ABORTED.value
+            run.save()
+
+            self.create_run_event(
+                kind=ArgusEventTypes.TestRunStatusChanged,
+                body={
+                    "message": "Run was automatically terminated due to not responding for more than 45 minutes "
+                               "(Status changed from {old_status} to {new_status}) by {username}",
+                    "old_status": old_status,
+                    "new_status": run.status,
+                    "username": g.user.username
+                },
+                user_id=g.user.id,
+                run_id=run.id,
+                release_id=run.release_id,
+                group_id=run.group_id,
+                test_id=run.test_id
+            )
+
         return len(all_stuck_runs)
