@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from cassandra.cqlengine import columns
+from cassandra.cqlengine.models import _DoesNotExist
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import ArgusRelease
 from argus.backend.plugins.core import PluginModelBase
@@ -105,7 +106,10 @@ class SCTTestRun(PluginModelBase):
         run = cls()
         run.build_id = req.job_name
         run.assign_categories()
-        run.assignee = run.get_scheduled_assignee()
+        try:
+            run.assignee = run.get_scheduled_assignee()
+        except _DoesNotExist:
+            run.assignee = None
         run.start_time = datetime.utcnow()
         run.id = UUID(req.run_id)  # pylint: disable=invalid-name
         run.scm_revision_id = req.commit_id
