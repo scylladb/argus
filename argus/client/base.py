@@ -59,9 +59,10 @@ class ArgusClient:
         response_data: JSON = response.json()
         LOGGER.debug("API Response: %s", response_data)
         if response_data.get("status") != "ok":
+            exc_args = response_data["response"]["arguments"]
             raise ArgusClientError(
                 f"API Error encountered using endpoint: {response.request.method} {response.request.path_url}",
-                response_data["response"]["arguments"][0],
+                exc_args[0] if len(exc_args) > 0 else response_data.get("response", {}).get("exception", "#NoMessage"),
             )
 
     def get_url_for_endpoint(self, endpoint: str, location_params: dict[str, str] | None) -> str:
