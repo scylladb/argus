@@ -1,4 +1,5 @@
 <script>
+    import queryString from "query-string";
     import ReleaseStats from "../Stats/ReleaseStats.svelte";
     import ReleaseActivity from "./ReleaseActivity.svelte";
     import GithubIssues from "../Github/GithubIssues.svelte";
@@ -7,7 +8,7 @@
     import TestDashboard from "./TestDashboard.svelte";
     export let releaseData = {};
     let clickedTests = {};
-    let productVersion = "";
+    let productVersion = queryString.parse(document.location.search)?.productVersion;
 
     const handleTestClick = function (e) {
         console.log(e);
