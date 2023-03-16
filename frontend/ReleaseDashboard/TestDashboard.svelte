@@ -1,5 +1,6 @@
 <script>
     import { createEventDispatcher, onDestroy, onMount } from "svelte";
+    import queryString from "query-string";
     import Fa from "svelte-fa";
     import {
         faSearch,
@@ -64,7 +65,7 @@
 
 
     const fetchStats = async function () {
-        let params = new URLSearchParams({
+        let params = queryString.stringify({
             release: releaseName,
             limited: new Number(false),
             force: new Number(true),
@@ -103,6 +104,9 @@
 
     const handleVersionClick = function(versionString) {
         productVersion = versionString;
+        let params = queryString.parse(document.location.search);
+        params.productVersion = versionString;
+        history.pushState(undefined, "", `?${queryString.stringify(params, { arrayFormat: "bracket" })}`);
         fetchStats();
         dispatch("versionChange", { version: productVersion });
     };
@@ -142,7 +146,7 @@
     };
 
     const fetchGroupAssignees = async function(releaseId) {
-        let params = new URLSearchParams({
+        let params = queryString.stringify({
             releaseId: releaseId,
         });
         let result = await apiMethodCall("/api/v1/release/assignees/groups?" + params, undefined, "GET");
@@ -152,7 +156,7 @@
     };
 
     const fetchTestAssignees = async function(groupId) {
-        let params = new URLSearchParams({
+        let params = queryString.stringify({
             groupId: groupId,
         });
         let result = await apiMethodCall("/api/v1/release/assignees/tests?" + params, undefined, "GET");
