@@ -1,5 +1,6 @@
 <script>
-    import { onDestroy, onMount } from "svelte";
+    import { onMount } from "svelte";
+    import queryString from "query-string";
     import { stateEncoder, stateDecoder } from "../Common/StateManagement";
     import TestRunsPanel from "./TestRunsPanel.svelte";
     import RunRelease from "./RunRelease.svelte";
@@ -29,26 +30,27 @@
 
     const onTestRunRequest = function (event) {
         if (testRuns.find(v => v == event.detail.testId)) return;
-        testRuns.push(event.detail.testId)
+        testRuns.push(event.detail.testId);
         testRuns = testRuns;
         let state = stateEncoder(testRuns);
-        history.pushState({}, "", `?${state}`);
+        let params = queryString.parse(document.location.search, {arrayFormat: "bracket"});
+        params.state = state;
+        history.pushState({}, "", `?${queryString.stringify(params, {arrayFormat: "bracket"})}`);
     };
 
     const onTestRunRemove = function (event) {
         let id = event.detail.testId;
         testRuns = testRuns.filter(v => v != id);
         let state = stateEncoder(testRuns);
-        history.pushState({}, "", `?${state}`);
+        let params = queryString.parse(document.location.search, {arrayFormat: "bracket"});
+        params.state = state;
+        history.pushState({}, "", `?${queryString.stringify(params, {arrayFormat: "bracket"})}`);
     };
 
     onMount(() => {
         testRuns = stateDecoder();
     });
 
-    onDestroy(() => {
-
-    });
 </script>
 
 <svelte:window
