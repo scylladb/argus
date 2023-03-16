@@ -123,6 +123,24 @@ class PluginModelBase(Model):
         return list(rows)
 
     @classmethod
+    def get_run_meta_by_build_id(cls, build_id: str, limit: int = 10):
+        cluster = ScyllaCluster.get()
+        query = cluster.prepare("SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, "
+                                f"assignee, end_time, investigation_status, heartbeat FROM {cls.table_name()} WHERE build_id = ? LIMIT ?")
+        rows = cluster.session.execute(query=query, parameters=(build_id, limit))
+
+        return list(rows)
+
+    @classmethod
+    def get_run_meta_by_run_id(cls, run_id: UUID | str):
+        cluster = ScyllaCluster.get()
+        query = ("SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, "
+                 f"assignee, end_time, investigation_status, heartbeat FROM {cls.table_name()} WHERE id = ?")
+        rows = cluster.session.execute(query=query, parameters=(run_id,))
+
+        return list(rows)
+
+    @classmethod
     def load_test_run(cls, run_id: UUID) -> 'PluginModelBase':
         raise NotImplementedError()
 

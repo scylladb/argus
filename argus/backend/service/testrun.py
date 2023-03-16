@@ -68,14 +68,14 @@ class TestRunService:
         if not plugin:
             return []
 
-        last_runs: list[PluginModelBase] = list(plugin.model.filter(build_id=test.build_system_id).limit(limit).all())
-        last_runs_ids = [run.id for run in last_runs]
+        last_runs: list[dict] = plugin.model.get_run_meta_by_build_id(build_id=test.build_system_id, limit=limit)
+        last_runs_ids = [run["id"] for run in last_runs]
         for added_run in additional_runs:
             if added_run not in last_runs_ids:
-                last_runs.append(plugin.model.get(id=added_run))
+                last_runs.append(plugin.model.get_run_meta_by_run_id(run_id=added_run))
 
         for row in last_runs:
-            setattr(row, "build_number", get_build_number(build_job_url=row.build_job_url))
+            row["build_number"] = get_build_number(build_job_url=row["build_job_url"])
 
         return last_runs
 
