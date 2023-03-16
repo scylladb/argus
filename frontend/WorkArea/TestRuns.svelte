@@ -1,5 +1,6 @@
 <script>
     import { createEventDispatcher, onMount, onDestroy } from "svelte";
+    import queryString from "query-string";
     import { v4 as uuidv4 } from "uuid";
     import { StatusBackgroundCSSClassMap } from "../Common/TestStatus";
     import { titleCase } from "../Common/TextUtils";
@@ -22,6 +23,7 @@
      */
     let runRefreshInterval;
     let runs = [];
+    let runLimit = 10;
     let testInfo;
 
     const states = {
@@ -109,9 +111,9 @@
 
     const fetchTestInfo = async function () {
         try {
-            let params = new URLSearchParams({
+            let params = queryString.stringify({
                 testId: testId,
-            });
+            }, { arrayFormat: "bracket" });
             let res = await fetch("/api/v1/test-info?" + params);
             if (res.status != 200) {
                 throw new Error(`Network error: ${res.status}`);
@@ -135,8 +137,11 @@
 
     const fetchTestRuns = async function () {
         try {
-            let additionals = additionalRuns.map(v => `additionalRuns[]=${v}`).join("&");
-            let res = await fetch(`/api/v1/test/${testId}/runs?` + additionals);
+            let params = queryString.stringify({
+                additionalRuns,
+                limit: runLimit,
+            }, { arrayFormat: "bracket" });
+            let res = await fetch(`/api/v1/test/${testId}/runs?` + params);
             if (res.status != 200) {
                 throw new Error(`Network error: ${res.status}`);
             }
@@ -159,6 +164,11 @@
             }
             setState(states.FETCH_FAILED);
         }
+    };
+
+    const handleIncreaseLimit = function () {
+        runLimit += 10;
+        fetchTestRuns();
     };
 
     const handleTestRunClick = function (e) {
@@ -289,6 +299,7 @@
                     bind:clickedTestRuns={clickedTestRuns}
                     on:runClick={handleTestRunClick}
                     on:closeRun={handleTestRunClose}
+                    on:increaseLimit={handleIncreaseLimit}
                 />
                 {#each runs as run (run.id)}
                     <div class:show={clickedTestRuns[run.id]} class="collapse mb-2" id="collapse{run.id}">
