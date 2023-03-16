@@ -1,7 +1,7 @@
 <script>
     import { createEventDispatcher, onMount } from "svelte";
     import Fa from "svelte-fa";
-    import { faTimes } from "@fortawesome/free-solid-svg-icons";
+    import { faPlus, faTimes } from "@fortawesome/free-solid-svg-icons";
     import { extractBuildNumber } from "../Common/RunUtils";
     import { StatusButtonCSSClassMap } from "../Common/TestStatus";
 
@@ -38,7 +38,7 @@
         </div>
     {/if}
     {#each runs as run (run.id)}
-        <div class="me-2 d-inline-block">
+        <div class="me-2 mb-2 d-inline-block">
             <div class="btn-group">
                 <button
                     class:active={clickedTestRuns[run.id]}
@@ -62,6 +62,16 @@
             </div>
         </div>
     {/each}
+    <div class="me-2 mb-2 d-inline-block">
+        <button
+            class="btn btn-light"
+            on:click={() => {
+                dispatch("increaseLimit");
+            }}
+        >
+            <Fa icon={faPlus}/>
+        </button>
+    </div>
 </div>
 
 <style>
