@@ -1,5 +1,5 @@
 <script>
-    import { createEventDispatcher } from "svelte";
+    import { createEventDispatcher, onMount, onDestroy } from "svelte";
     import { v4 as uuidv4 } from "uuid";
     import { StatusBackgroundCSSClassMap } from "../Common/TestStatus";
     import { titleCase } from "../Common/TextUtils";
@@ -10,7 +10,7 @@
     import { isPluginSupported } from "../Common/PluginDispatch";
     import { AVAILABLE_PLUGINS } from "../Common/PluginDispatch";
     import { sendMessage } from "../Stores/AlertStore";
-    import { applicationCurrentUser } from "../argus";
+    import TestRunsMessage from "./TestRunsMessage.svelte";
 
     export let testId;
     export let listId = uuidv4();
@@ -20,7 +20,83 @@
     /**
      * @type {{roles: string[]}}
      */
-    const currentUser = applicationCurrentUser;
+    let runRefreshInterval;
+    let runs = [];
+    let testInfo;
+
+    const states = {
+        INIT: "INIT",
+        INIT_RUNS: "INIT_RUNS",
+        FETCH_FAILED: "FETCH_FAILED",
+        FETCH_EMPTY: "FETCH_EMPTY",
+        FETCH_SUCCESS: "FETCH_SUCCESS",
+        FETCH_TEST_INFO_FAILED: "FETCH_TEST_INFO_FAILED",
+    };
+    let currentState = states.INIT;
+
+    const stateMap = {
+        [states.INIT]: {
+            nextStates: [states.INIT_RUNS, states.FETCH_TEST_INFO_FAILED],
+            inProgress: true,
+            classes: ["text-muted"],
+            message: "Loading test information...",
+            onEnter: function() {
+                //empty
+            },
+        },
+        [states.INIT_RUNS]: {
+            nextStates: [states.FETCH_EMPTY, states.FETCH_FAILED, states.FETCH_SUCCESS],
+            inProgress: true,
+            classes: ["text-muted"],
+            message: "Loading...",
+            onEnter: function() {
+                //empty
+            },
+        },
+        [states.FETCH_EMPTY]: {
+            nextStates: [states.FETCH_FAILED, states.FETCH_SUCCESS],
+            inProgress: false,
+            classes: ["text-muted"],
+            message: "No test runs have been submitted for this test so far!",
+            onEnter: function() {
+                //empty
+            },
+        },
+        [states.FETCH_FAILED]: {
+            nextStates: [states.FETCH_SUCCESS, states.FETCH_EMPTY],
+            inProgress: false,
+            classes: ["alert-danger"],
+            message: "Failed fetching runs for this test, retrying...",
+            onEnter: function() {
+                //empty
+            },
+        },
+        [states.FETCH_SUCCESS]: {
+            nextStates: [],
+            inProgress: false,
+            classes: [],
+            message: "",
+            onEnter: function() {
+                //empty
+            },
+        },
+        [states.FETCH_TEST_INFO_FAILED]: {
+            nextStates: [],
+            inProgress: false,
+            classes: ["alert-danger"],
+            message: "Unable to fetch test info.",
+            onEnter: function() {
+                //empty
+            },
+        },
+    };
+
+    const setState = function(newState) {
+        let curState = stateMap[currentState];
+        if (!curState.nextStates.includes(newState)) return;
+        currentState = newState;
+        stateMap[currentState].onEnter();
+    };
 
     const dispatch = createEventDispatcher();
     let selectedPlugin = "";
@@ -32,32 +108,57 @@
     }, {});
 
     const fetchTestInfo = async function () {
-        let params = new URLSearchParams({
-            testId: testId,
-        });
-        let res = await fetch("/api/v1/test-info?" + params);
-        if (res.status != 200) {
-            return Promise.reject("API Error");
+        try {
+            let params = new URLSearchParams({
+                testId: testId,
+            });
+            let res = await fetch("/api/v1/test-info?" + params);
+            if (res.status != 200) {
+                throw new Error(`Network error: ${res.status}`);
+            }
+            let json = await res.json();
+            if (json.status != "ok") {
+                throw json.response;
+            }
+
+            testInfo = json.response;
+            setState(states.INIT_RUNS);
+        } catch (error) {
+            if (error?.exception) {
+                sendMessage("error", `Failed fetching test info: ${error.exception}\n${error.arguments.join(" ")}`);
+            } else if (error instanceof Error) {
+                sendMessage("error", error.message);
+            }
+            setState(states.FETCH_TEST_INFO_FAILED);
         }
-        let json = await res.json();
-        if (json.status != "ok") {
-            return Promise.reject(json.exception);
-        }
-        return json.response;
     };
 
     const fetchTestRuns = async function () {
-        let additionals = additionalRuns.map(v => `additionalRuns[]=${v}`).join("&");
-        let res = await fetch(`/api/v1/test/${testId}/runs?` + additionals);
-        if (res.status != 200) {
-            return Promise.reject("API Error");
-        }
-        let json = await res.json();
-        if (json.status != "ok") {
-            return Promise.reject(json.exception);
-        }
+        try {
+            let additionals = additionalRuns.map(v => `additionalRuns[]=${v}`).join("&");
+            let res = await fetch(`/api/v1/test/${testId}/runs?` + additionals);
+            if (res.status != 200) {
+                throw new Error(`Network error: ${res.status}`);
+            }
+            let json = await res.json();
+            if (json.status != "ok") {
+                throw json.response;
+            }
 
-        return json.response;
+            runs = json.response;
+            if (runs.length == 0) {
+                setState(states.FETCH_EMPTY);
+            } else {
+                setState(states.FETCH_SUCCESS);
+            }
+        } catch (error) {
+            if (error?.exception) {
+                sendMessage("error", `Failed fetching runs: ${error.exception}\n${error.arguments.join(" ")}`);
+            } else if (error instanceof Error) {
+                sendMessage("error", error.message);
+            }
+            setState(states.FETCH_FAILED);
+        }
     };
 
     const handleTestRunClick = function (e) {
@@ -99,15 +200,26 @@
         }
         pluginFixed = true;
     };
+
+    onMount(async () => {
+        await fetchTestInfo();
+        if (testInfo) {
+            fetchTestRuns();
+            runRefreshInterval = setInterval(async () => {
+                fetchTestRuns();
+            }, 120 * 1000);
+        }
+    });
+
+    onDestroy(() => {
+        if (runRefreshInterval) {
+            clearInterval(runRefreshInterval);
+        }
+    });
 </script>
 
 <div class:d-none={filtered} class="accordion-item border-none  bg-main mb-1">
-{#await Promise.all([fetchTestInfo(), fetchTestRuns()])}
-    <div class="d-flex rounded shadow justify-content-center align-items-center bg-light-two p-4">
-        <div class="spinner-border"></div>
-        <div class="ms-2">Loading test information...</div>
-    </div>
-{:then [testInfo, runs]}
+{#if testInfo}
     <h4
         class="accordion-header border-none"
         id="heading{listId}"
@@ -142,9 +254,7 @@
         </button>
     </h4>
     <div class="accordion-collapse collapse show" id="collapse{listId}">
-        {#await fetchTestRuns()}
-            <div class="text-muted text-center m-3"><span class="spinner-border spinner-border-sm"></span> Loading...</div>
-        {:then runs}
+        {#if runs.length > 0}
             <div class="p-2" bind:this={runsBody}>
                 {#if !isPluginSupported(testInfo.test.plugin_name)}
                     <div class="rounded shadow-sm bg-white p-2 text-center">
@@ -195,9 +305,31 @@
                     </div>
                 {/each}
             </div>
-        {/await}
+        {:else}
+            <TestRunsMessage state={stateMap[currentState]} />
+        {/if}
     </div>
-{/await}
+{:else}
+    <div class="d-flex">
+        <div class="flex-fill">
+            <TestRunsMessage state={stateMap[currentState]}>
+                <div>
+                    Test ID: {testId}
+                </div>
+                {#if removableRuns}
+                <div class="mx-2 p-2">
+                    <button
+                        class="d-inline-block btn btn-secondary"
+                        on:click={() => { dispatch("testRunRemove", { testId: testId }); }}
+                    >
+                        Close
+                    </button>
+                </div>
+                {/if}
+            </TestRunsMessage>
+        </div>
+    </div>
+{/if}
 </div>
 
 <style>
