@@ -27,6 +27,7 @@
     let testRun = undefined;
     let runRefreshInterval;
     let activityOpen = false;
+    let eventsOpen = false;
     let commentsOpen = false;
     let issuesOpen = false;
     let artifactTabOpened = false;
@@ -145,6 +146,7 @@
                         data-bs-target="#nav-events-{runId}"
                         type="button"
                         role="tab"
+                        on:click={() => (eventsOpen = true)}
                         ><i class="fas fa-rss-square" /> Events</button
                     >
                     <button
@@ -226,7 +228,9 @@
                     </div>
                 </div>
                 <div class="tab-pane fade" id="nav-events-{runId}" role="tabpanel">
-                    <EventsTab {testRun} />
+                    {#if eventsOpen}
+                        <EventsTab {testRun} />
+                    {/if}
                 </div>
                 <div
                     class="tab-pane fade"
