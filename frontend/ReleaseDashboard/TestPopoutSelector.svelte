@@ -16,7 +16,7 @@
     import { faGithub } from "@fortawesome/free-brands-svg-icons";
     export let tests = {};
     export let releaseName = "";
-    let encodedState = "state=e30";
+    let encodedState = "e30";
     $: encodedState = stateEncoder(
         Object.values(tests).map(v => v.id)
     );
@@ -138,7 +138,7 @@
                 {/each}
             </ul>
             <a
-                href="/workspace?{encodedState}"
+                href="/workspace?state={encodedState}"
                 class="btn btn-primary"
                 >Investigate selected <Fa icon={faExternalLinkSquareAlt} /></a
             >
