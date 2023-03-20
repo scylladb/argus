@@ -264,35 +264,35 @@
         </button>
     </h4>
     <div class="accordion-collapse collapse show" id="collapse{listId}">
+        {#if !isPluginSupported(testInfo.test.plugin_name)}
+            <div class="rounded shadow-sm bg-white p-2 text-center">
+                <span class="fw-bold">Unsupported plugin</span> <span class="d-inline-block text-danger bg-light-one rounded p-1">{testInfo.test.plugin_name ? testInfo.test.plugin_name : "#empty-test-name"}</span>
+            </div>
+                <div>
+                    {#if !pluginFixed}
+                        <div class="p-2 alert alert-warning my-2">This looks like a newly added test and it will need to have its plugin name specified. If you know which plugin this test should use, select it from the list below and click save.</div>
+                        <div class="form-group mb-2">
+                            <label for="" class="form-label">Plugin</label>
+                            <select id="" class="form-select" bind:value={selectedPlugin}>
+                                {#each Object.keys(AVAILABLE_PLUGINS) as plugin}
+                                    <option value={plugin}
+                                        >{plugin}</option
+                                    >
+                                {/each}
+                            </select>
+                        </div>
+                        <div>
+                            <button class="btn btn-success w-100" on:click={handlePluginFixup}>Save</button>
+                        </div>
+                    {:else}
+                        <div>
+                            Refresh the page to see updated changes.
+                        </div>
+                    {/if}
+                </div>
+        {/if}
         {#if runs.length > 0}
             <div class="p-2" bind:this={runsBody}>
-                {#if !isPluginSupported(testInfo.test.plugin_name)}
-                    <div class="rounded shadow-sm bg-white p-2 text-center">
-                        <span class="fw-bold">Unsupported plugin</span> <span class="d-inline-block text-danger bg-light-one rounded p-1">{testInfo.test.plugin_name ? testInfo.test.plugin_name : "#empty-test-name"}</span>
-                    </div>
-                        <div>
-                            {#if !pluginFixed}
-                                <div class="p-2 alert alert-warning my-2">This looks like a newly added test and it will need to have its plugin name specified. If you know which plugin this test should use, select it from the list below and click save.</div>
-                                <div class="form-group mb-2">
-                                    <label for="" class="form-label">Plugin</label>
-                                    <select id="" class="form-select" bind:value={selectedPlugin}>
-                                        {#each Object.keys(AVAILABLE_PLUGINS) as plugin}
-                                            <option value={plugin}
-                                                >{plugin}</option
-                                            >
-                                        {/each}
-                                    </select>
-                                </div>
-                                <div>
-                                    <button class="btn btn-success w-100" on:click={handlePluginFixup}>Save</button>
-                                </div>
-                            {:else}
-                                <div>
-                                    Refresh the page to see updated changes.
-                                </div>
-                            {/if}
-                        </div>
-                {/if}
                 <TestRunsSelector
                     {runs}
                     {testInfo}
