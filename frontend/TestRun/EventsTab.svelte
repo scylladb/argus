@@ -1,5 +1,7 @@
 <script>
+    import { faCheck, faTimes } from "@fortawesome/free-solid-svg-icons";
     import { onMount } from "svelte";
+    import Fa from "svelte-fa";
     import RawEvent from "./RawEvent.svelte";
     import StructuredEvent from "./StructuredEvent.svelte";
     export let testRun;
@@ -8,11 +10,31 @@
     let filterString = "";
 
     const displayCategories = {
-        CRITICAL: true,
-        ERROR: true,
-        WARNING: false,
-        NORMAL: false,
-        DEBUG: false,
+        CRITICAL: {
+            show: true,
+            totalEvents: 0,
+            eventsSubmitted: 0,
+        },
+        ERROR: {
+            show: true,
+            totalEvents: 0,
+            eventsSubmitted: 0,
+        },
+        WARNING: {
+            show: false,
+            totalEvents: 0,
+            eventsSubmitted: 0,
+        },
+        NORMAL: {
+            show: false,
+            totalEvents: 0,
+            eventsSubmitted: 0,
+        },
+        DEBUG: {
+            show: false,
+            totalEvents: 0,
+            eventsSubmitted: 0,
+        },
     };
 
     /* OH GDO */
@@ -71,10 +93,12 @@
     };
 
     /**
-     * @param {{last_events: string[]}[]} events
+     * @param {{last_events: string[], event_amount: int, severity: string }[]} events
      */
     const prepareEvents = function (events) {
         let flatEvents = events.reduce((acc, val) => {
+            displayCategories[val.severity].totalEvents = val.event_amount;
+            displayCategories[val.severity].eventsSubmitted = val.last_events.length;
             return [...acc, ...val.last_events];
         }, []);
 
@@ -104,12 +128,20 @@
 {#if parsedEvents.length > 0}
     <div class="p-2 event-container">
         <div class="d-flex justify-content-end mb-2 rounded bg-light p-1">
-            {#each Object.keys(displayCategories) as category}
+            {#each Object.entries(displayCategories) as [category, info]}
                 <!-- svelte-ignore a11y-label-has-associated-control -->
-                <div class="ms-2 p-1 rounded border severity-{category.toLowerCase()}">
-                    <input class="form-check-input me-1" type="checkbox" bind:checked={displayCategories[category]}>
-                    <label class="form-check-label">{category}</label>
-                </div>
+                <button
+                    class="ms-2 px-2 py-1 btn severity-{category.toLowerCase()}"
+                    on:click={() => (info.show = !info.show)}
+                >
+                    {#if info.show}
+                        <Fa icon={faCheck}/>
+                    {:else}
+                        <Fa icon={faTimes}/>
+                    {/if}
+                    {category}
+                    (<span class="pointer-help" title="Shown">{info.eventsSubmitted}</span> / <span class="pointer-help" title="Happened during the test">{info.totalEvents}</span>)
+                </button>
             {/each}
         </div>
         <div class="p-2">
@@ -122,7 +154,7 @@
         </div>
         {#each parsedEvents as event}
             {#if event.parsed}
-                <StructuredEvent bind:filterString={filterString} display={displayCategories[event.severity] ?? true} {event} />
+                <StructuredEvent bind:filterString={filterString} display={displayCategories[event.severity].show ?? true} {event} />
             {:else}
                 <RawEvent eventText={event.text} errorMessage={event.error} />
             {/if}
@@ -135,6 +167,9 @@
 {/if}
 
 <style>
+    .pointer-help {
+        cursor: help;
+    }
 
     .event-container {
         max-height: 768px;
@@ -142,21 +177,27 @@
     }
 
     .severity-warning {
-        background-color: #ffc830;
+        background-color: #ffd416;
+        color: black;
     }
     .severity-normal {
-        background-color: #33b4e7;
+        background-color: #2d98c2;
+        color: white;
     }
     .severity-debug {
         background-color: #7e6262;
+        color: white;
     }
     .severity-info {
-        background-color: #bdbdbd;
+        background-color: #777777;
+        color: white;
     }
     .severity-error {
-        background-color: #e91f1f;
+        background-color: #ff0000;
+        color: white;
     }
     .severity-critical {
-        background-color: #ff033a;
+        background-color: #692121;
+        color: white;
     }
 </style>
