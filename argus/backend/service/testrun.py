@@ -391,7 +391,7 @@ class TestRunService:
             response = []
             for issue in all_issues:
                 runs = runs_by_issue.get(issue, [])
-                runs.append(issue.run_id)
+                runs.append({"test_id": issue.test_id, "run_id": issue.run_id})
                 runs_by_issue[issue] = runs
 
             for issue, runs in runs_by_issue.items():
