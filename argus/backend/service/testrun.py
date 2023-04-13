@@ -72,7 +72,7 @@ class TestRunService:
         last_runs_ids = [run["id"] for run in last_runs]
         for added_run in additional_runs:
             if added_run not in last_runs_ids:
-                last_runs.append(plugin.model.get_run_meta_by_run_id(run_id=added_run))
+                last_runs.extend(plugin.model.get_run_meta_by_run_id(run_id=added_run))
 
         for row in last_runs:
             row["build_number"] = get_build_number(build_job_url=row["build_job_url"])
