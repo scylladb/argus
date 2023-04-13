@@ -209,7 +209,7 @@
                     <div class="d-flex justify-content-end">
                         <div class="ms-1">Runs:</div>
                         {#each issue.runs as run, idx}
-                            <a class="ms-1" href="/test/{issue.test_id}/runs?additionalRuns[]={run}">[{idx + 1}]</a>
+                            <a class="ms-1" href="/test/{run.test_id}/runs?additionalRuns[]={run.run_id}">[{idx + 1}]</a>
                         {/each}
                     </div>
                 {/if}
