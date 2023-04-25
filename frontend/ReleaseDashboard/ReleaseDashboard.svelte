@@ -81,6 +81,7 @@
             <ReleaseStats
                 releaseName={releaseData.release.name}
                 horizontal={false}
+                displayExtendedStats={true}
                 {productVersion}
             />
         </div>
