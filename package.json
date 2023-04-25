@@ -37,6 +37,7 @@
   },
   "devDependencies": {
     "@tsconfig/svelte": "^3.0.0",
+    "@types/bootstrap": "^5.2.6",
     "@types/humanize-duration": "^3.27.1",
     "@types/node": "^17.0.40",
     "@types/query-string": "^6.3.0",

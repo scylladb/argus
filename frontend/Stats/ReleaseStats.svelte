@@ -7,6 +7,7 @@
     export let showTestMap = false;
     export let showReleaseStats = true;
     export let horizontal = false;
+    export let displayExtendedStats = false;
     const dispatch = createEventDispatcher();
     const fetchStats = async function () {
         let params = new URLSearchParams({
@@ -62,7 +63,7 @@
     {#if releaseStats?.total > 0}
         {#if showReleaseStats}
             <div class="w-100 mb-2">
-                <svelte:component this={DisplayItem} stats={releaseStats} />
+                <svelte:component this={DisplayItem} stats={releaseStats} displayNumber={displayExtendedStats} displayInvestigations={displayExtendedStats}/>
             </div>
         {/if}
     {:else if releaseStats?.total == -1}

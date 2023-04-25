@@ -3,6 +3,7 @@ import logging
 from datetime import datetime
 from typing import TypedDict
 from uuid import UUID
+
 from argus.backend.plugins.loader import all_plugin_models
 from argus.backend.util.common import get_build_number
 from argus.backend.util.enums import TestStatus, TestInvestigationStatus
@@ -92,16 +93,28 @@ class ReleaseStats:
         self.all_tests = []
 
     def to_dict(self) -> dict:
+        converted_groups = {str(group.group.id): group.to_dict() for group in self.groups}
+        aggregated_investigation_status = {}
+        for group in converted_groups.values():
+            for investigation_status in TestInvestigationStatus:
+                current_status = aggregated_investigation_status.get(investigation_status.value, {})
+                result = {
+                    status.value: current_status.get(status.value, 0) + group.get(investigation_status.value, {}).get(status, 0)
+                    for status in TestStatus
+                }
+                aggregated_investigation_status[investigation_status.value] = result
+
         return {
             "release": dict(self.release.items()),
-            "groups": {str(group.group.id): group.to_dict() for group in self.groups},
+            "groups": converted_groups,
             "total": self.total_tests,
             **self.status_map,
             "disabled": not self.release.enabled,
             "perpetual": self.release.perpetual,
             "lastStatus": self.last_investigation_status,
             "lastInvestigationStatus": self.last_investigation_status,
-            "hasBugReport": self.has_bug_report
+            "hasBugReport": self.has_bug_report,
+            **aggregated_investigation_status
         }
 
     def collect(self, rows: list[TestRunStatRow], limited=False, force=False) -> None:
@@ -144,6 +157,15 @@ class GroupStats:
         self.tests: list[TestStats] = []
 
     def to_dict(self) -> dict:
+        converted_tests = {str(test.test.id): test.to_dict() for test in self.tests}
+        investigation_progress = {}
+        for test in converted_tests.values():
+            progress_for_status = investigation_progress.get(test["investigation_status"], {})
+            status_count = progress_for_status.get(test["status"], 0)
+            status_count += 1
+            progress_for_status[test["status"]] = status_count
+            investigation_progress[test["investigation_status"]] = progress_for_status
+
         return {
             "group": dict(self.group.items()),
             "total": self.total_tests,
@@ -151,7 +173,8 @@ class GroupStats:
             "lastStatus": self.last_status,
             "lastInvestigationStatus": self.last_investigation_status,
             "disabled": self.disabled,
-            "tests": {str(test.test.id): test.to_dict() for test in self.tests}
+            "tests": converted_tests,
+            **investigation_progress
         }
 
     def collect(self, limited=False):
