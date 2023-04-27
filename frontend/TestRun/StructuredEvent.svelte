@@ -27,8 +27,13 @@
 >
     <div class="event-header d-flex align-items-start flex-wrap">
         <div class="ms-2 mb-2 bg-dark text-light rounded px-2">{event.eventType}</div>
-        <div class="ms-2 mb-2 me-auto rounded px-2 severity-{event.severity.toLowerCase()}">{event.severity}</div>
-        <div class="ms-2 mb-2 rounded px-2">
+        <div class="ms-2 mb-2 rounded px-2 severity-{event.severity.toLowerCase()}">{event.severity}</div>
+        {#if event.nemesis}
+            <div class="ms-2 mb-2 rounded px-2 status-{event.nemesis.status.toLowerCase()}">{event.nemesis.name}</div>
+        {:else}
+            <div class="ms-2 mb-2 rounded px-2 status-skipped">no nemesis</div>
+        {/if}
+        <div class="ms-auto mb-2 rounded px-2">
             <button
                 class="btn btn-light"
                 on:click={() => {
@@ -111,6 +116,18 @@
     }
     .severity-critical {
         background-color: #692121;
+        color: white;
+    }
+    .status-succeeded {
+        background-color: #198754;
+        color: white;
+    }
+    .status-failed {
+        background-color: #dc3545;
+        color: white;
+    }
+    .status-skipped {
+        background-color: #1c1f23;
         color: white;
     }
 </style>

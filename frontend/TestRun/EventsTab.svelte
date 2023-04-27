@@ -95,7 +95,7 @@
     /**
      * @param {{last_events: string[], event_amount: int, severity: string }[]} events
      */
-    const prepareEvents = function (events) {
+    const prepareEvents = function (events, nemesisData) {
         let flatEvents = events.reduce((acc, val) => {
             displayCategories[val.severity].totalEvents = val.event_amount;
             displayCategories[val.severity].eventsSubmitted = val.last_events.length;
@@ -117,11 +117,27 @@
             return parsed;
         });
 
+        let sortedNemesises = nemesisData.sort((a, b) => a.start_time - b.start_time);
+        let nemesisIndex = 0;
+        for (let event of parsedEvents.sort((a, b) => a.time - b.time)) {
+            event.nemesis = undefined;
+            while(sortedNemesises[nemesisIndex]) {
+                if (event.time.getTime() < sortedNemesises[nemesisIndex].start_time * 1000) {
+                    break;
+                } else if(event.time.getTime() <= sortedNemesises[nemesisIndex].end_time * 1000) {
+                    event.nemesis = sortedNemesises[nemesisIndex];
+                    break;
+                }
+                nemesisIndex++;
+            }
+
+        }
+
         return parsedEvents.sort((a, b) => b.time - a.time);
     };
 
     onMount(() => {
-        parsedEvents = prepareEvents(testRun?.events ?? []);
+        parsedEvents = prepareEvents(testRun?.events ?? [], testRun?.nemesis_data ?? []);
     });
 </script>
 
