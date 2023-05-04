@@ -3,6 +3,8 @@
     import { newIssueDestinations } from "../Common/IssueDestinations";
     import GithubIssue from "./GithubIssue.svelte";
     import { sendMessage } from "../Stores/AlertStore";
+    import { faCopy } from "@fortawesome/free-solid-svg-icons";
+    import Fa from "svelte-fa";
     export let id = "";
     export let testId;
     export let filter_key = "run_id";
@@ -72,6 +74,11 @@
         return issues.sort((a,b) => new Date(b.added_on) - new Date(a.added_on));
     };
 
+    const exportIssueAsFormattedList = function(issues) {
+        let issueFormattedList = issues.map(val => ` * ${val.owner}/${val.repo}#${val.issue_number} - ${val.url}`);
+        navigator.clipboard.writeText(`Current Issues\n${issueFormattedList.join("\n")}`);
+    };
+
     onMount(() => {
         fetchIssues();
     });
@@ -126,7 +133,10 @@
     {/if}
     <div class="container-fluid mb-2">
         {#if issues.length > 0}
-            <h6>Issues</h6>
+            <h6 class="d-flex">
+                <div>Issues</div>
+                <div class="ms-auto"><button class="btn btn-success" on:click={() => exportIssueAsFormattedList(issues)}><Fa icon={faCopy}/></button></div>
+            </h6>
         {/if}
         {#each sortIssuesByDate(issues) as issue}
             <GithubIssue {issue} aggregated={aggregateByIssue} deleteEnabled={!submitDisabled} on:issueDeleted={fetchIssues} />
