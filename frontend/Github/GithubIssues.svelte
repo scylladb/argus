@@ -75,7 +75,9 @@
     };
 
     const exportIssueAsFormattedList = function(issues) {
-        let issueFormattedList = issues.map(val => ` * ${val.owner}/${val.repo}#${val.issue_number} - ${val.url}`);
+        let issueFormattedList = issues
+            .sort((a, b) => a.issue_number - b.issue_number)
+            .map(val => ` * ${val.owner}/${val.repo}#${val.issue_number}: ${val.title} - ${val.url}`);
         navigator.clipboard.writeText(`Current Issues\n${issueFormattedList.join("\n")}`);
     };
 
