@@ -1,0 +1,44 @@
+{
+  "time": "2023-05-10 16:00:02.435821+00:00",
+  "statuses": [
+    {
+      "status": 200,
+      "response": {
+        "response": { "commit_id": "2109caa56fe7d7b239ab760b5c77a8f289742ea3" },
+        "status": "ok"
+      },
+      "node_type": "argus",
+      "ip": "10.0.2.112"
+    },
+    {
+      "status": 200,
+      "response": [
+        { "key": "10.0.1.247", "value": "UP" },
+        { "key": "10.0.2.153", "value": "UP" },
+        { "key": "10.0.2.59", "value": "UP" }
+      ],
+      "node_type": "scylla",
+      "ip": "10.0.2.59"
+    },
+    {
+      "status": 200,
+      "response": [
+        { "key": "10.0.1.247", "value": "UP" },
+        { "key": "10.0.2.153", "value": "UP" },
+        { "key": "10.0.2.59", "value": "UP" }
+      ],
+      "node_type": "scylla",
+      "ip": "10.0.2.153"
+    },
+    {
+      "status": 200,
+      "response": [
+        { "key": "10.0.1.247", "value": "UP" },
+        { "key": "10.0.2.153", "value": "UP" },
+        { "key": "10.0.2.59", "value": "UP" }
+      ],
+      "node_type": "scylla",
+      "ip": "10.0.1.247"
+    }
+  ]
+}
