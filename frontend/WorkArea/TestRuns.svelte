@@ -235,8 +235,8 @@
         id="heading{listId}"
     >
         <button
-            class="accordion-button rounded shadow d-flex align-items-center"
-            data-bs-toggle="collapse"
+            class="accordion-button rounded d-flex align-items-center { removableRuns ? "shadow" : "p-2"}"
+            data-bs-toggle="{ removableRuns ? "collapse" : ""}"
             data-bs-target="#collapse{listId}"
         >
             {#if runs.length > 0}

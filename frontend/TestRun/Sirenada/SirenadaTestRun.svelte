@@ -13,6 +13,7 @@
     import RunInvestigationStatusButton from "../RunInvestigationStatusButton.svelte";
     import RunAssigneeSelector from "../RunAssigneeSelector.svelte";
     import SirenadaRunInfo from "./SirenadaRunInfo.svelte";
+    import SirenadaTestBreakdown from "./SirenadaTestBreakdown.svelte";
 
     export let runId = "";
     export let buildNumber = -1;
@@ -115,12 +116,12 @@
                     >
                     <button
                         class="nav-link"
-                        id="nav-debug-dump-tab-{runId}"
+                        id="nav-results-tab-{runId}"
                         data-bs-toggle="tab"
-                        data-bs-target="#nav-debug-dump-{runId}"
+                        data-bs-target="#nav-results-{runId}"
                         type="button"
                         role="tab"
-                        ><i class="fas fa-box" /> Dump</button
+                        ><i class="fas fa-clipboard" /> Results</button
                     >
                     <button
                         class="nav-link"
@@ -167,12 +168,10 @@
                 </div>
                 <div
                     class="tab-pane fade"
-                    id="nav-debug-dump-{runId}"
+                    id="nav-results-{runId}"
                     role="tabpanel"
                 >
-                    <div class="bg-light-three p-2">
-                        <pre class="font-monospace bg-white rounded p-2" style="height: 768px">{JSON.stringify(testRun, undefined, 1)}</pre>
-                    </div>
+                    <SirenadaTestBreakdown {testRun} />
                 </div>
                 <div
                     class="tab-pane fade"

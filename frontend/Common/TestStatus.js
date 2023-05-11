@@ -45,10 +45,26 @@ export const StatusBackgroundCSSClassMap = {
     "unknown": "bg-dark"
 };
 
+export const StatusTableBackgroundCSSClassMap = {
+    "created": "table-info",
+    "running": "table-warning",
+    "failed": "table-danger",
+    "error": "table-danger",
+    "skipped": "table-dark",
+    "passed": "table-success",
+    "aborted": "table-dark",
+    "not_run": "table-secondary",
+    "not_planned": "table-not-planned",
+    "unknown": "table-dark"
+};
+
+
 export const StatusCSSClassMap = {
     "created": "text-info",
     "running": "text-warning",
     "failed": "text-danger",
+    "error": "table-danger",
+    "skipped": "table-dark",
     "passed": "text-success",
     "aborted": "text-dark",
     "not_run": "text-secondary",
@@ -69,14 +85,16 @@ export const StatusButtonCSSClassMap = {
 
 export const StatusSortPriority = {
     failed: 0,
-    aborted: 1,
-    passed: 2,
-    running: 3,
-    created: 4,
-    none: 5,
-    not_run: 5,
-    not_planned: 5,
-    unknown: 5,
+    error: 1,
+    aborted: 2,
+    skipped: 3,
+    passed: 4,
+    running: 5,
+    created: 6,
+    none: 7,
+    not_run: 10,
+    not_planned: 20,
+    unknown: 999,
 };
 
 export const InProgressStatuses = [

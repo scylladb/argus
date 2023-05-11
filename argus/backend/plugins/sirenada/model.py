@@ -78,7 +78,7 @@ class SirenadaRun(PluginModelBase):
             run = cls.get(id=UUID(request_data["run_id"]))
         except cls.DoesNotExist:
             run = cls()
-            run.id = request_data["run_id"]
+            run.id = request_data["run_id"] # FIXME: Validate pls
             run.build_id = request_data["build_id"]
             run.start_time = datetime.utcnow()
             run.assign_categories()
