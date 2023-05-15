@@ -85,7 +85,7 @@
 
         parsedEvent.fields = parsedFields;
         parsedEvent.logLine = logLine.trim();
-        parsedEvent.time = new Date(Date.parse(parsedEvent?.eventTimestamp ?? "1970-01-01" + " UTC"));
+        parsedEvent.time = new Date(Date.parse((parsedEvent?.eventTimestamp ?? "1970-01-01") + " UTC"));
         parsedEvent.parsed = true;
         parsedEvent.eventText = event;
 
