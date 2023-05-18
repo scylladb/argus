@@ -33,6 +33,11 @@ class ClientService:
         run.save()
         return run.heartbeat
 
+    def get_run_status(self, run_type: str, run_id: str) -> str:
+        model = self.get_model(run_type)
+        run = model.load_test_run(UUID(run_id))
+        return run.status
+
     def update_run_status(self, run_type: str, run_id: str, new_status: str) -> str:
         model = self.get_model(run_type)
         run = model.load_test_run(UUID(run_id))
