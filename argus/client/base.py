@@ -24,6 +24,7 @@ class ArgusClient:
         # pylint: disable=too-few-public-methods
         SUBMIT = "/testrun/$type/submit"
         HEARTBEAT = "/testrun/$type/$id/heartbeat"
+        GET_STATUS = "/testrun/$type/$id/get_status"
         SET_STATUS = "/testrun/$type/$id/set_status"
         SET_PRODUCT_VERSION = "/testrun/$type/$id/update_product_version"
         SUBMIT_LOGS = "/testrun/$type/$id/logs/submit"
@@ -121,6 +122,23 @@ class ArgusClient:
             **self.generic_body,
             **run_body
         })
+    
+    def get_status(self, run_type: str = None, run_id: UUID = None) -> TestStatus:
+        if not run_type and hasattr(self, "test_type"):
+            run_type = self.test_type
+
+        if not run_id and hasattr(self, "run_id"):
+            run_id = self.run_id
+
+        if not (run_type and run_id):
+            raise ValueError("run_type and run_id must be set in func params or object attributes")
+
+        response = self.get(
+            endpoint=self.Routes.GET_STATUS,
+            location_params={"type": run_type, "id": str(run_id)},
+        )
+        self.check_response(response)
+        return TestStatus(response.json()["response"])
 
     def set_status(self, run_type: str, run_id: UUID, new_status: TestStatus) -> requests.Response:
         return self.post(

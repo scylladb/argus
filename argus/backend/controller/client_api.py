@@ -34,6 +34,16 @@ def run_heartbeat(run_type: str, run_id: str):
     }
 
 
+@bp.route("/testrun/<string:run_type>/<string:run_id>/get_status")
+@api_login_required
+def run_get_status(run_type: str, run_id: str):
+    result = ClientService().get_run_status(run_type=run_type, run_id=run_id)
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
 @bp.route("/testrun/<string:run_type>/<string:run_id>/set_status", methods=["POST"])
 @api_login_required
 def run_set_status(run_type: str, run_id: str):
