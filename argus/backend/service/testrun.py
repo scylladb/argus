@@ -8,6 +8,9 @@ from uuid import UUID
 
 import requests
 from flask import g
+from cassandra.query import BatchStatement, ConsistencyLevel
+from cassandra.cqlengine.query import BatchQuery
+from argus.backend.db import ScyllaCluster
 
 from argus.backend.models.web import (
     ArgusEvent,
@@ -462,3 +465,46 @@ class TestRunService:
             )
 
         return len(all_stuck_runs)
+
+    def ignore_jobs(self, test_id: UUID, reason: str):
+        test: ArgusTest = ArgusTest.get(id=test_id)
+        plugin = self.get_plugin(plugin_name=test.plugin_name)
+
+        if not reason:
+            raise TestRunServiceException("Reason for ignore cannot be empty")
+
+        cluster = ScyllaCluster.get()
+        batch = BatchStatement(consistency_level=ConsistencyLevel.QUORUM)
+        event_batch = BatchQuery()
+        jobs_affected = 0
+        for job in plugin.model.get_jobs_meta_by_test_id(test.id):
+            if job["status"] != TestStatus.PASSED and job["investigation_status"] == TestInvestigationStatus.NOT_INVESTIGATED:
+                batch.add(
+                    plugin.model.prepare_investigation_status_update_query(
+                        build_id=job["build_id"],
+                        start_time=job["start_time"],
+                        new_status=TestInvestigationStatus.IGNORED
+                    )
+                )
+
+                ArgusEvent.batch(event_batch).create(
+                    release_id = job["release_id"],
+                    group_id = job["group_id"],
+                    test_id = test_id,
+                    user_id = g.user.id,
+                    run_id = job["id"],
+                    body = json.dumps({
+                        "message": "Run was marked as ignored by {username} due to the following reason: {reason}",
+                        "username": g.user.username,
+                        "reason": reason,
+                    }, ensure_ascii=True, separators=(',', ':')),
+                    kind = ArgusEventTypes.TestRunBatchInvestigationStatusChange.value,
+                    created_at = datetime.utcnow(),
+                )
+
+                jobs_affected += 1
+
+        cluster.session.execute(batch)
+        event_batch.execute()
+
+        return jobs_affected

@@ -24,6 +24,7 @@ class TestInvestigationStatus(str, Enum):
     NOT_INVESTIGATED = "not_investigated"
     IN_PROGRESS = "in_progress"
     INVESTIGATED = "investigated"
+    IGNORED = "ignored"
 
 
 class ResourceState(str, Enum):

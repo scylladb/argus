@@ -7,7 +7,7 @@ from uuid import UUID
 from cassandra.util import uuid_from_time  # pylint: disable=no-name-in-module
 from flask import current_app
 from argus.backend.db import ScyllaCluster
-from argus.backend.plugins.loader import all_plugin_models
+from argus.backend.plugins.loader import AVAILABLE_PLUGINS, all_plugin_models
 from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.service.notification_manager import NotificationManagerService
 from argus.backend.models.web import (
@@ -425,12 +425,16 @@ class ArgusService:
         full_schedule["assignees"] = [assignee.assignee for assignee in assignees]
 
         schedule_user = User.get(id=assignees[0].assignee)
-
-        jobs_for_schedule = self.get_jobs_for_user(user=schedule_user, ignore_time=True, schedules=[full_schedule])
-
         service = TestRunService()
-        for job in jobs_for_schedule:
-            service.change_run_assignee(test_id=job["test_id"], run_id=job["id"], new_assignee=None)
+
+        for model in all_plugin_models():
+            for run in model.get_jobs_assigned_to_user(schedule_user):
+                if run["release_id"] != release.id:
+                    continue
+                if run["test_id"] not in full_schedule["tests"]:
+                    continue
+                if schedule.period_start < run["start_time"] < schedule.period_end:
+                    service.change_run_assignee(test_id=run["test_id"], run_id=run["id"], new_assignee=None)
 
         for entities in [tests, groups, assignees]:
             for entity in entities:
@@ -531,33 +535,13 @@ class ArgusService:
 
         return response
 
-    def get_jobs_for_user(self, user: User, ignore_time: bool = False, schedules: list[dict] = None):
-        runs = [run for plugin in all_plugin_models() for run in plugin.get_jobs_assigned_to_user(user=user)]
-        schedules = self.get_schedules_for_user(user) if not schedules else schedules
-        valid_runs = []
+    def get_jobs_for_user(self, user: User):
         today = datetime.datetime.now()
-        month_ago = today - datetime.timedelta(days=30)
-        for run in runs:
-            run_date = run["start_time"]
-            if user.id == run["assignee"] and run_date >= month_ago and not ignore_time:
-                valid_runs.append(run)
-                continue
-            for schedule in schedules:
-                if not run["release_id"] == schedule["release_id"]:
-                    continue
-                if not schedule["period_start"] < run_date < schedule["period_end"]:
-                    continue
-                if run["assignee"] in schedule["assignees"]:
-                    valid_runs.append(run)
-                    break
-                if run["group_id"] in schedule["groups"]:
-                    valid_runs.append(run)
-                    break
-                filtered_tests = [test for test in schedule["tests"] if test == run["test_id"]]
-                if len(filtered_tests) > 0:
-                    valid_runs.append(run)
-                    break
-        return valid_runs
+        validity_period = today - datetime.timedelta(days=current_app.config.get("JOB_VALIDITY_PERIOD_DAYS", 30))
+        for plugin in all_plugin_models():
+            for run in plugin.get_jobs_assigned_to_user(user=user):
+                if run["start_time"] >= validity_period:
+                    yield run
 
     def get_schedules_for_user(self, user: User) -> list[dict]:
         all_assigned_schedules = ArgusScheduleAssignee.filter(assignee=user.id).all()

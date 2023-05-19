@@ -269,3 +269,19 @@ def sct_terminate_stuck_runs():
             "total": result
         }
     }
+
+
+@bp.route("/ignore_jobs", methods=["POST"])
+@api_login_required
+def ignore_jobs():
+    payload = get_payload(request)
+    service = TestRunService()
+
+    result = service.ignore_jobs(test_id=payload["testId"], reason=payload["reason"])
+
+    return {
+        "status": "ok",
+        "response": {
+            "affectedJobs": result
+        }
+    }

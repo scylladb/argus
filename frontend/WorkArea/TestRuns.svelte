@@ -100,14 +100,19 @@
         stateMap[currentState].onEnter();
     };
 
+    const loadAdditionalRuns = function(additionalRuns) {
+        return additionalRuns.reduce((acc, val) => {
+            acc[val] = true;
+            return acc;
+        }, {});
+    };
+
     const dispatch = createEventDispatcher();
     let selectedPlugin = "";
     let pluginFixed = false;
     let runsBody = undefined;
-    let clickedTestRuns = additionalRuns.reduce((acc, val) => {
-        acc[val] = true;
-        return acc;
-    }, {});
+    let clickedTestRuns = {};
+    $: clickedTestRuns = loadAdditionalRuns(additionalRuns);
 
     const fetchTestInfo = async function () {
         try {
@@ -211,6 +216,41 @@
         pluginFixed = true;
     };
 
+    const handleIgnoreRuns = async function(e) {
+        let testId = e.detail.testId;
+        let reason = e.detail.reason;
+
+        let response = await fetch("/api/v1/ignore_jobs", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                testId: testId,
+                reason: reason,
+            })
+        });        
+        
+        if (response.status != 200) {
+            sendMessage("error", "Failed to ignore runs for this test");
+            return;
+        }
+
+        try {
+            let json = await response.json();
+            if (json.status != "ok") {
+                sendMessage("error", "Failed to ignore runs for this test");
+                console.log(json);
+            }
+            sendMessage("success", `Runs successfully ignored. Affected amount: ${json.response.affectedJobs}`);
+            fetchTestRuns();
+            dispatch("batchIgnoreDone");
+        } catch(e) {
+            sendMessage("error", "Error parsing response json, check console for details.");
+            console.log(e);
+        }
+    };
+
     onMount(async () => {
         await fetchTestInfo();
         if (testInfo) {
@@ -300,6 +340,7 @@
                     on:runClick={handleTestRunClick}
                     on:closeRun={handleTestRunClose}
                     on:increaseLimit={handleIncreaseLimit}
+                    on:ignoreRuns={handleIgnoreRuns}
                 />
                 {#each runs as run (run.id)}
                     <div class:show={clickedTestRuns[run.id]} class="collapse mb-2" id="collapse{run.id}">
@@ -310,6 +351,7 @@
                                     {testInfo}
                                     buildNumber={extractBuildNumber(run)}
                                     on:closeRun={handleTestRunClose}
+                                    on:investigationStatusChange
                                 />
                             {/if}
                         </div>

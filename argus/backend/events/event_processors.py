@@ -30,4 +30,5 @@ EVENT_PROCESSORS = {
     ArgusEventTypes.TestRunIssueAdded: event_process_issue_added,
     ArgusEventTypes.TestRunIssueRemoved: event_process_issue_added,
     ArgusEventTypes.TestRunInvestigationStatusChanged: event_process_investigation_status_changed,
+    ArgusEventTypes.TestRunBatchInvestigationStatusChange: event_process_investigation_status_changed,
 }

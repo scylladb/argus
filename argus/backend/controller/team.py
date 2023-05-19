@@ -107,7 +107,7 @@ def user_teams(user_id: str):
 @api_login_required
 def user_jobs(user_id: str):
     user = User.get(id=UUID(user_id))
-    result = ArgusService().get_jobs_for_user(user)
+    result = list(ArgusService().get_jobs_for_user(user))
 
     return {
         "status": "ok",

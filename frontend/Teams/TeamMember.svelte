@@ -144,7 +144,7 @@
 </div>
 <div id="showAllJobs-{member.id}" class="collapse">
     {#if requestedDetail && userJobs}
-        <ProfileJobs runs={userJobs} />
+        <ProfileJobs jobs={userJobs} userId={member.id} />
     {/if}
 </div>
 

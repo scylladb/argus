@@ -99,8 +99,9 @@
                         <RunStatusButton {testRun} on:statusUpdate={(e) => {
                             testRun.status = e.detail.status;
                         }} />
-                        <RunInvestigationStatusButton {testRun} on:statusUpdate={(e) => {
+                        <RunInvestigationStatusButton {testRun} on:investigationStatusChange={(e) => {
                             testRun.investigation_status = e.detail.status;
+                            dispatch("investigationStatusChange", e.detail);
                         }} />
                     </div>
                 </div>

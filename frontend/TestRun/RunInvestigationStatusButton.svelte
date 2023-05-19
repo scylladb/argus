@@ -1,19 +1,12 @@
 <script>
-    import { faEye, faEyeSlash, faSearch } from "@fortawesome/free-solid-svg-icons";
     import { createEventDispatcher } from "svelte";
     import Fa from "svelte-fa";
-    import { InvestigationButtonCSSClassMap, TestInvestigationStatus, TestInvestigationStatusStrings } from "../Common/TestStatus";
+    import { InvestigationButtonCSSClassMap, InvestigationStatusIcon, TestInvestigationStatus, TestInvestigationStatusStrings } from "../Common/TestStatus";
     import { sendMessage } from "../Stores/AlertStore";
 
     export let testRun;
     const dispatch = createEventDispatcher();
     let disableButtons = false;
-
-    const investigationStatusIcon = {
-        in_progress: faSearch,
-        not_investigated: faEyeSlash,
-        investigated: faEye,
-    };
 
     const handleInvestigationStatus = async function (newInvestigationStatus) {
         disableButtons = true;
@@ -33,7 +26,7 @@
             let apiJson = await apiResponse.json();
             console.log(apiJson);
             if (apiJson.status === "ok") {
-                dispatch("statusUpdate", { status: newInvestigationStatus });
+                dispatch("investigationStatusChange", { runId: testRun.id, status: newInvestigationStatus });
             } else {
                 throw apiJson;
             }
@@ -64,7 +57,7 @@
         data-bs-toggle="dropdown"
     >
         <Fa
-            icon={investigationStatusIcon[
+            icon={InvestigationStatusIcon[
                 testRun.investigation_status
             ]}
         />

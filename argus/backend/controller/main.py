@@ -241,9 +241,7 @@ def update_password():
 @bp.route("/profile/jobs", methods=["GET"])
 @login_required
 def profile_jobs():
-    service = ArgusService()
-    jobs = service.get_jobs_for_user(g.user)
-    return render_template("profile_jobs.html.j2", runs=jobs)
+    return render_template("profile_jobs.html.j2")
 
 
 @bp.route("/profile/schedules", methods=["GET"])
