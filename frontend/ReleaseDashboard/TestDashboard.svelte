@@ -3,9 +3,6 @@
     import queryString from "query-string";
     import Fa from "svelte-fa";
     import {
-        faSearch,
-        faEyeSlash,
-        faEye,
         faBug,
         faComment,
         faArrowDown,
@@ -13,6 +10,7 @@
     } from "@fortawesome/free-solid-svg-icons";
 
     import {
+        InvestigationStatusIcon,
         StatusBackgroundCSSClassMap,
         TestInvestigationStatus,
         TestInvestigationStatusStrings,
@@ -38,12 +36,6 @@
         tests: {
 
         }
-    };
-
-    const investigationStatusIcon = {
-        in_progress: faSearch,
-        not_investigated: faEyeSlash,
-        investigated: faEye,
     };
 
     const dispatch = createEventDispatcher();
@@ -313,7 +305,7 @@
                                             >
                                                 <Fa
                                                     color="#000"
-                                                    icon={investigationStatusIcon[
+                                                    icon={InvestigationStatusIcon[
                                                         testStats.investigation_status
                                                     ]}
                                                 />

@@ -1,9 +1,11 @@
 <script>
     import { createEventDispatcher, onMount } from "svelte";
     import Fa from "svelte-fa";
-    import { faPlus, faTimes } from "@fortawesome/free-solid-svg-icons";
+    import { faBan, faPlus, faTimes } from "@fortawesome/free-solid-svg-icons";
     import { extractBuildNumber } from "../Common/RunUtils";
     import { StatusButtonCSSClassMap } from "../Common/TestStatus";
+    import { Modal } from "bootstrap";
+    import { sendMessage } from "../Stores/AlertStore";
 
     export let testInfo = {};
     export let runs = [];
@@ -12,6 +14,8 @@
     const dispatch = createEventDispatcher();
     let sticky = false;
     let header;
+    let ignoreReason = "";
+    let modal;
 
     onMount(() => {
         let observer = new IntersectionObserver((entries) => {
@@ -71,6 +75,65 @@
         >
             <Fa icon={faPlus}/>
         </button>
+    </div>    
+    <div class="me-2 mb-2 d-inline-block">
+        <button
+            class="btn btn-light"
+            title="Ignore failed runs"
+            on:click={() => {
+                modal = new Modal(`#modalIgnoreRuns-${testInfo.test.id}`);
+                modal.show();
+            }}
+        >
+            <Fa icon={faBan}/>
+        </button>
+    </div>
+</div>
+
+<div class="modal" id="modalIgnoreRuns-{testInfo.test.id}" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Ignore runs</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>You have chosen to ignore failed and not investigated runs for {testInfo.test.name}. 
+                    To finish the process, please provide a reason</p>
+                <textarea rows="10" bind:value={ignoreReason} style="width: 100%"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button 
+                    type="button" 
+                    class="btn btn-secondary" 
+                    on:click={() => {
+                        modal.hide();
+                        ignoreReason = "";
+                    }}
+                >
+                    Cancel
+                </button>
+                <button 
+                    type="button"
+                    class="btn btn-danger"
+                    on:click={() => {
+                        if (!ignoreReason) {
+                            sendMessage("error", "Ignore reason cannot be empty");
+                            return;
+                        }
+                        modal.hide();
+
+                        dispatch("ignoreRuns", {
+                            testId: testInfo.test.id,
+                            reason: ignoreReason,
+                        });
+                        ignoreReason = "";
+                    }}
+                >
+                    Submit
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 

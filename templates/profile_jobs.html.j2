@@ -5,16 +5,13 @@ My Jobs
 {% endblock %}
 
 {% block javascripts %}
-<script>
-    var globalRuns = {{ runs | tojson }};
-</script>
 {{super()}}
 <script defer src="/s/dist/profileJobs.bundle.js"></script>
 {% endblock javascripts %}
 
 {% block body %}
 {% if g.user %}
-<div class="container"  id="jobsContainer">
+<div id="jobsContainer">
 
 </div>
 {% else %}

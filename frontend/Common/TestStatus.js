@@ -1,3 +1,5 @@
+import { faBan, faEye, faEyeSlash, faSearch } from "@fortawesome/free-solid-svg-icons";
+
 export const TestStatus = {
     PASSED: "passed",
     FAILED: "failed",
@@ -21,18 +23,36 @@ export const TestInvestigationStatus = {
     INVESTIGATED: "investigated",
     NOT_INVESTIGATED: "not_investigated",
     IN_PROGRESS: "in_progress",
+    IGNORED: "ignored",
+};
+
+export const InvestigationStatusIcon = {
+    in_progress: faSearch,
+    not_investigated: faEyeSlash,
+    investigated: faEye,
+    ignored: faBan,
 };
 
 export const InvestigationButtonCSSClassMap = {
     "in_progress": "btn-warning",
     "not_investigated": "btn-danger",
     "investigated": "btn-success",
+    "ignored": "btn-dark"
 };
+
+export const InvestigationBackgroundCSSClassMap = {
+    "in_progress": "bg-warning",
+    "not_investigated": "bg-danger",
+    "investigated": "bg-success",
+    "ignored": "bg-dark"
+};
+
 
 export const TestInvestigationStatusStrings = {
     "in_progress": "In progress",
     "not_investigated": "Not Investigated",
     "investigated": "Investigated",
+    "ignored": "Ignored",
 };
 
 export const StatusBackgroundCSSClassMap = {

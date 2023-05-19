@@ -109,10 +109,26 @@ class PluginModelBase(Model):
     def get_jobs_assigned_to_user(cls, user: User):
         cluster = ScyllaCluster.get()
         query = cluster.prepare("SELECT build_id, start_time, release_id, group_id, assignee, "
-                                f"test_id, id, status, investigation_status, build_job_url FROM {cls.table_name()} WHERE assignee = ?")
+                                f"test_id, id, status, investigation_status, build_job_url, scylla_version FROM {cls.table_name()} WHERE assignee = ?")
         rows = cluster.session.execute(query=query, parameters=(user.id,))
 
         return list(rows)
+
+    @classmethod
+    def get_jobs_meta_by_test_id(cls, test_id: UUID):
+        cluster = ScyllaCluster.get()
+        query = cluster.prepare(f"SELECT build_id, start_time, id, test_id, release_id, group_id, status, investigation_status FROM {cls.table_name()} WHERE test_id = ?")
+        rows = cluster.session.execute(query=query, parameters=(test_id,))
+
+        return list(rows)
+
+    @classmethod
+    def prepare_investigation_status_update_query(cls, build_id: str, start_time: datetime, new_status: TestInvestigationStatus):
+        cluster = ScyllaCluster.get()
+        query = cluster.prepare(f"UPDATE {cls.table_name()} SET investigation_status = ? WHERE build_id = ? AND start_time = ?")
+        bound_query = query.bind(values=(new_status.value, build_id, start_time))
+
+        return bound_query
 
     @classmethod
     def get_stats_for_release(cls, release: ArgusRelease):

@@ -1,8 +1,7 @@
 <script>
     import Fa from "svelte-fa";
-    import { TestStatus, StatusBackgroundCSSClassMap, TestInvestigationStatus, TestInvestigationStatusStrings, StatusCSSClassMap } from "../Common/TestStatus";
+    import { TestStatus, StatusBackgroundCSSClassMap, TestInvestigationStatus, TestInvestigationStatusStrings, StatusCSSClassMap, InvestigationStatusIcon } from "../Common/TestStatus";
     import { titleCase, subUnderscores } from "../Common/TextUtils";
-    import { faEye, faEyeSlash, faSearch } from "@fortawesome/free-solid-svg-icons";
     import { Collapse } from "bootstrap";
     export let displayNumber = false;
     export let displayInvestigations = false;
@@ -17,12 +16,6 @@
 
     let shortBlock;
     let extendedBlock;
-
-    const investigationStatusMapping = {
-        [TestInvestigationStatus.INVESTIGATED]: faEye,
-        [TestInvestigationStatus.NOT_INVESTIGATED]: faEyeSlash,
-        [TestInvestigationStatus.IN_PROGRESS]: faSearch,
-    };
 
     const normalize = function(val, max, min) {
         return (val - min) / (max - min);
@@ -70,7 +63,7 @@
                         class="flex-fill text-center {idx > 0 ? "border-start" : ""} px-3 py-2"
                         role="button"
                     >
-                        <Fa icon={investigationStatusMapping[investigationStatus]}/>
+                        <Fa icon={InvestigationStatusIcon[investigationStatus]}/>
                         {Object.values(stats?.[investigationStatus] ?? {}).reduce((acc, val) => acc + val, 0)}
                     </div>
                 {/each} 
@@ -82,7 +75,7 @@
                     {#each Object.values(TestInvestigationStatus) as investigationStatus, idx}
                         <div class="{idx > 0 ? "ms-2" : ""} rounded bg-white">
                             <h6 class="p-2 border-bottom">
-                                <Fa icon={investigationStatusMapping[investigationStatus]}/>
+                                <Fa icon={InvestigationStatusIcon[investigationStatus]}/>
                                 {TestInvestigationStatusStrings[investigationStatus]}
                                 <span class="d-inline-block ms-3 text-end">{Object.values(stats?.[investigationStatus] ?? {}).reduce((acc, val) => acc + val, 0)}</span>
                             </h6>

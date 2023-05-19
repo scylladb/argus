@@ -7,4 +7,4 @@
 
 </script>
 
-<svelte:component this={AVAILABLE_PLUGINS?.[testInfo.test.plugin_name] ?? AVAILABLE_PLUGINS.unknown} {runId} {testInfo} {buildNumber} on:closeRun />
+<svelte:component this={AVAILABLE_PLUGINS?.[testInfo.test.plugin_name] ?? AVAILABLE_PLUGINS.unknown} {runId} {testInfo} {buildNumber} on:closeRun on:investigationStatusChange />

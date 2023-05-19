@@ -472,3 +472,15 @@ def resolve_artifact_size():
             "artifactSize": length,
         }
     }
+
+
+@bp.route("/user/jobs")
+@api_login_required
+def user_jobs():
+    service = ArgusService()
+    result = list(service.get_jobs_for_user(user=g.user))
+
+    return {
+        "status": "ok",
+        "response": result
+    }
