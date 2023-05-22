@@ -191,6 +191,7 @@ Logs and commands
 {/each}
 
 [Jenkins job URL]({test_run.build_job_url})
+[Argus]({document.location.origin}/test/{test_run.test_id}/runs?additionalRuns[]={test_run.id})
 &lt;/details&gt;
 
                             </pre>
