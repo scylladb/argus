@@ -57,7 +57,7 @@ class PluginModelBase(Model):
             self.release_id = test.release_id
             self.group_id = test.group_id
             self.test_id = test.id
-            if not test.plugin_name:
+            if not test.plugin_name or test.plugin_name != self._plugin_name:
                 test.plugin_name = self._plugin_name
                 test.save()
         except ArgusTest.DoesNotExist:
