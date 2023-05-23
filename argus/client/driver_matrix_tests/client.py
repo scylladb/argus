@@ -185,9 +185,6 @@ class ArgusDriverMatrixClient(ArgusClient):
         results = self.get_results(result_path, test_type)
 
         self.submit_driver_matrix_run(job_name=build_id, job_url=build_url, test_environment=env, results=results)
-        failures = reduce(lambda total, coll: (coll["failures"] + coll["errors"]) + total, results, 0)
-        status = TestStatus.FAILED if failures > 0 else TestStatus.PASSED
-        self.set_matrix_status(status)
 
     def submit_driver_matrix_run(self, job_name: str, job_url: str,
                                  results: list[RawMatrixTestResult], test_environment: dict[str, str]) -> None:

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
+from functools import reduce
 from uuid import UUID
 from cassandra.cqlengine import columns
 from argus.backend.db import ScyllaCluster
@@ -7,6 +8,11 @@ from argus.backend.models.web import ArgusRelease
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.driver_matrix_tests.udt import TestCollection, TestSuite, TestCase, EnvironmentInfo
 from argus.backend.plugins.driver_matrix_tests.raw_types import RawMatrixTestResult
+from argus.backend.util.enums import TestStatus
+
+
+class DriverMatrixPluginError(Exception):
+    pass
 
 
 @dataclass(init=True, repr=True, frozen=True)
@@ -96,6 +102,7 @@ class DriverTestRun(PluginModelBase):
                 collection.suites.append(suite)
             run.test_collection.append(collection)
 
+        run.status = run._determine_run_status()
         run.save()
         return run
 
@@ -104,6 +111,23 @@ class DriverTestRun(PluginModelBase):
 
     def get_nemeses(self) -> list:
         return []
+
+    def _determine_run_status(self):
+        if len(self.test_collection) < 2:
+            return TestStatus.FAILED
+
+        driver_types = {collection.driver for collection in self.test_collection}
+        if not ('datastax' in driver_types and 'scylla' in driver_types):
+            return TestStatus.FAILED
+
+        failure_count = reduce(lambda acc, val: acc + (val.failures + val.errors), self.test_collection, 0)
+        if failure_count > 0:
+            return TestStatus.FAILED
+
+        return TestStatus.PASSED
+
+    def change_status(self, new_status: TestStatus):
+        raise DriverMatrixPluginError("This method is obsolete. Status is now determined on submission.")
 
     def get_events(self) -> list:
         return []
