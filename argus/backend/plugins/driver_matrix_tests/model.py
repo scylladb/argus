@@ -58,7 +58,7 @@ class DriverTestRun(PluginModelBase):
             env_info.value = value
             run.environment_info.append(env_info)
 
-        run.scylla_version = req.test_environment.get("scylla-version").replace("~", ".")
+        run.scylla_version = req.test_environment.get("scylla-version")
         run.test_collection = []
 
         for result in req.matrix_results:
