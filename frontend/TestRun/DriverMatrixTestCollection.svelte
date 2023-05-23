@@ -7,7 +7,7 @@
     export let testId: string;
 
     const calculateCollectionStatus = function(collection: TestCollection): string {
-        return collection.failures > 0 ? "danger" : "success";
+        return collection.failures > 0 || collection.errors > 0 ? "danger" : "success";
     };
 </script>
 
