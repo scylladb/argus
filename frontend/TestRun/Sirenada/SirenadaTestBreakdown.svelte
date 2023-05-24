@@ -16,11 +16,12 @@
 
     const prepareResults = function(testRun) {
         return testRun.results.reduce((acc, val) => {
-            const classNameCollection = acc[val.browser_type] ?? {};
+            let key = `${val.browser_type} [${val.cluster_type}]`;
+            const classNameCollection = acc[key] ?? {};
             const classNameResults = classNameCollection[val.file_name] ?? [];
             classNameResults.push(val);
             classNameCollection[val.file_name] = classNameResults;
-            acc[val.browser_type] = classNameCollection;
+            acc[key] = classNameCollection;
             return acc;
         }, {});
     };
@@ -69,7 +70,7 @@
         {@const tableHash = sha1(`${browserType}-${firstResult.cluster_type}`).substring(0, 10)}
         <div class="rounded p-2 m-2 bg-light-one">
             <div class="mb-2 bg-white rounded p-2 d-flex align-items-center">
-                <h6 class="m-0">{browserType} [{firstResult.cluster_type}]</h6>
+                <h6 class="m-0">{browserType}</h6>
                 {#if failingTest}
                     <div class="ms-auto">
                         <a
