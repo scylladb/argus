@@ -10,7 +10,6 @@
     import TestRunInfo from "./TestRunInfo.svelte";
     import Screenshots from "./Screenshots.svelte";
     import TestRunComments from "./TestRunComments.svelte";
-    import GithubIssues from "../Github/GithubIssues.svelte";
     import IssueTemplate from "./IssueTemplate.svelte";
     import { sendMessage } from "../Stores/AlertStore";
     import { fetchRun } from "../Common/RunUtils";
@@ -20,6 +19,7 @@
     import HeartbeatIndicator from "./HeartbeatIndicator.svelte";
     import EventsTab from "./EventsTab.svelte";
     import ArtifactTab from "./ArtifactTab.svelte";
+    import IssueTab from "./IssueTab.svelte";
     export let runId = "";
     export let buildNumber = -1;
     export let testInfo = {};
@@ -259,7 +259,7 @@
                 <div class="tab-pane fade" id="nav-issues-{runId}" role="tabpanel">
                     <IssueTemplate test_run={testRun} test={testInfo.test} />
                     {#if issuesOpen}
-                        <GithubIssues id={runId} testId={testInfo.test.id} />
+                        <IssueTab {testInfo} {runId} />
                     {/if}
                 </div>
                 <div

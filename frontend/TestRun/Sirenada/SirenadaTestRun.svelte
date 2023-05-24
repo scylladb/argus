@@ -6,7 +6,6 @@
     } from "@fortawesome/free-solid-svg-icons";
     import ActivityTab from "../ActivityTab.svelte";
     import TestRunComments from "../TestRunComments.svelte";
-    import GithubIssues from "../../Github/GithubIssues.svelte";
     import { sendMessage } from "../../Stores/AlertStore";
     import { fetchRun } from "../../Common/RunUtils";
     import RunStatusButton from "../RunStatusButton.svelte";
@@ -14,6 +13,7 @@
     import RunAssigneeSelector from "../RunAssigneeSelector.svelte";
     import SirenadaRunInfo from "./SirenadaRunInfo.svelte";
     import SirenadaTestBreakdown from "./SirenadaTestBreakdown.svelte";
+    import IssueTab from "../IssueTab.svelte";
 
     export let runId = "";
     export let buildNumber = -1;
@@ -185,7 +185,7 @@
                 <div class="tab-pane fade" id="nav-issues-{runId}" role="tabpanel">
                     <div class="py-2 bg-white">
                         {#if issuesOpen}
-                            <GithubIssues id={runId} testId={testInfo.test.id} />
+                            <IssueTab {testInfo} {runId} />
                         {/if}
                     </div>
                 </div>
