@@ -123,8 +123,10 @@ class UserService:
             github_token.token = oauth_data.get('access_token')
             github_token.save()
 
+        redirect_target = session.get("redirect_target")
         session.clear()
         session["user_id"] = str(user.id)
+        session["redirect_target"] = redirect_target
         if temp_password:
             return {
                 "password": temp_password,
@@ -191,6 +193,7 @@ def login_required(view: FlaskView):
     def wrapped_view(*args, **kwargs):
         if g.user is None and not getattr(view, "api_view", False):
             flash(message='Unauthorized, please login', category='error')
+            session["redirect_target"] = request.full_path
             return redirect(url_for('auth.login'))
         elif g.user is None and getattr(view, "api_view", True):
             return {

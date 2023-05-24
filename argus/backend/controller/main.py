@@ -136,6 +136,8 @@ def profile_oauth_github_callback():
     if first_run_info:
         session["first_run_info"] = first_run_info
 
+    if path := session.pop("redirect_target"):
+        return redirect(path)
     return redirect(url_for("main.profile"))
 
 
