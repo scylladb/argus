@@ -59,7 +59,7 @@ def generate_api_token():
 @bp.route('/logout', methods=("POST",))
 def logout():
     session.clear()
-    return redirect(url_for('main.home'))
+    return redirect(url_for('auth.login'))
 
 
 bp.before_app_request(load_logged_in_user)
