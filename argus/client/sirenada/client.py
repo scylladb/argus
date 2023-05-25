@@ -39,7 +39,7 @@ class ArgusSirenadaClient(ArgusClient):
     _bucket_url_template = "https://sirenada-results.s3.us-east-1.amazonaws.com/{s3_id}/{test_results_dir}/{filename}"
     TEST_TAG_MAPPING = {
         "failure": "failed",
-        "error": "aborted",
+        "error": "error",
         "skipped": "skipped"
     }
 
