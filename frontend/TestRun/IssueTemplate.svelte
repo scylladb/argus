@@ -162,7 +162,7 @@ Scylla Nodes used in this run:
     **No resources left at the end of the run**
 {/each}
 
-OS / Image: `{test_run.cloud_setup.db_node.image_id}` ({test_run.sct_runner_host.provider}: {test_run.sct_runner_host.region})
+OS / Image: `{test_run.cloud_setup.db_node.image_id}` ({test_run?.sct_runner_host?.provider ?? "NO RUNNER"}: {test_run?.sct_runner_host?.region ?? "NO RUNNER"})
 
 Test: `{test?.name}`
 Test id: `{test_run.id}`
