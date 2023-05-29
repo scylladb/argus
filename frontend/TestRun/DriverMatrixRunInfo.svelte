@@ -98,7 +98,7 @@
         <div class="col-6 p-2">
             <div class="btn-group">
                 <a
-                    href="/dashboard/{testRun.release_name}"
+                    href="/dashboard/{testInfo.release.name}"
                     class="btn btn-outline-success"
                     ><Fa icon={faBusinessTime} /> Release Dashboard</a
                 >
