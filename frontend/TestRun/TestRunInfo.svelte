@@ -238,7 +238,7 @@
                     {/if}
                 {/if}
                 <a
-                    href="/dashboard/{test_run.release_name}"
+                    href="/dashboard/{release.name}"
                     class="btn btn-outline-success"
                     ><Fa icon={faBusinessTime} /> Release Dashboard</a
                 >
