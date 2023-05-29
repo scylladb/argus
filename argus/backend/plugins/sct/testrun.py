@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Optional
 from uuid import UUID
 
 from cassandra.cqlengine import columns
@@ -39,9 +40,9 @@ class SCTTestRunSubmissionRequest():
     job_url: str
     started_by: str
     commit_id: str
-    runner_public_ip: str
-    runner_private_ip: str
     sct_config: dict
+    runner_public_ip: Optional[str] = field(default=None)
+    runner_private_ip: Optional[str] = field(default=None)
 
 
 class SCTTestRun(PluginModelBase):
@@ -122,14 +123,15 @@ class SCTTestRun(PluginModelBase):
         regions = raw_regions.split() if isinstance(raw_regions, str) else raw_regions
         primary_region = regions[0]
 
-        run.cloud_setup = ResourceSetup.get_resource_setup(backend=backend, sct_config=req.sct_config)
+        if req.runner_public_ip:
+            run.sct_runner_host = CloudInstanceDetails(
+                public_ip=req.runner_public_ip,
+                private_ip=req.runner_private_ip,
+                provider=backend,
+                region=primary_region,
+            )
 
-        run.sct_runner_host = CloudInstanceDetails(
-            public_ip=req.runner_public_ip,
-            private_ip=req.runner_private_ip,
-            provider=backend,
-            region=primary_region,
-        )
+        run.cloud_setup = ResourceSetup.get_resource_setup(backend=backend, sct_config=req.sct_config)
 
         run.config_files = req.sct_config.get("config_files")
         run.region_name = regions

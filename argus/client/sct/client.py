@@ -14,6 +14,7 @@ class ArgusSCTClient(ArgusClient):
         SUBMIT_SCREENSHOTS = "/sct/$id/screenshots/submit"
         CREATE_RESOURCE = "/sct/$id/resource/create"
         TERMINATE_RESOURCE = "/sct/$id/resource/$name/terminate"
+        SET_SCT_RUNNER  = "/sct/$id/sct_runner/set"
         UPDATE_SHARDS_FOR_RESOURCE = "/sct/$id/resource/$name/shards"
         SUBMIT_NEMESIS = "/sct/$id/nemesis/submit"
         FINALIZE_NEMESIS = "/sct/$id/nemesis/finalize"
@@ -23,8 +24,7 @@ class ArgusSCTClient(ArgusClient):
         super().__init__(auth_token, base_url, api_version)
         self.run_id = run_id
 
-    def submit_sct_run(self, job_name: str, job_url: str, started_by: str, commit_id: str,
-                       runner_public_ip: str, runner_private_ip: str, sct_config: dict) -> None:
+    def submit_sct_run(self, job_name: str, job_url: str, started_by: str, commit_id: str, sct_config: dict) -> None:
         """
             Submits an SCT run to argus.
         """
@@ -34,8 +34,6 @@ class ArgusSCTClient(ArgusClient):
             "job_url": job_url,
             "started_by": started_by,
             "commit_id": commit_id,
-            "runner_public_ip": runner_public_ip,
-            "runner_private_ip": runner_private_ip,
             "sct_config": sct_config,
         })
 
@@ -46,6 +44,23 @@ class ArgusSCTClient(ArgusClient):
             Sets an SCT run's status.
         """
         response = super().set_status(run_type=self.test_type, run_id=self.run_id, new_status=new_status)
+        self.check_response(response)
+
+    def set_sct_runner(self, public_ip: str, private_ip: str, region: str, backend: str) -> None:
+        """
+            Sets runner information for an SCT run.
+        """
+        response = self.post(
+            endpoint=self.Routes.SET_SCT_RUNNER,
+            location_params={"id": str(self.run_id)},
+            body={
+                **self.generic_body,
+                "public_ip": public_ip,
+                "private_ip": private_ip,
+                "region": region,
+                "backend": backend,
+            }
+        )
         self.check_response(response)
 
     def update_scylla_version(self, version: str) -> None:
