@@ -60,6 +60,24 @@ class SCTService:
 
         return "added"
 
+
+    @staticmethod
+    def set_sct_runner(run_id: str, public_ip: str, private_ip: str, region: str, backend: str):
+        try:
+            run: SCTTestRun = SCTTestRun.get(id=run_id)
+            run.sct_runner_host = CloudInstanceDetails(
+                public_ip=public_ip,
+                private_ip=private_ip,
+                provider=backend,
+                region=region,
+            )
+            run.save()
+        except SCTTestRun.DoesNotExist as exception:
+            LOGGER.error("Run %s not found for SCTTestRun", run_id)
+            raise SCTServiceException("Run not found", run_id) from exception
+
+        return "updated"
+
     @staticmethod
     def submit_screenshots(run_id: str, screenshot_links: list[str]) -> str:
         try:

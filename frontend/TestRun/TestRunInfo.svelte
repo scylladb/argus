@@ -176,29 +176,31 @@
     <div class="row">
         <div class="col-6 p-2">
             {#if InProgressStatuses.includes(test_run.status)}
-                <div class="mb-1">
-                    <div class="input-group">
-                        <span class="input-group-text fw-bold">SCT Runner</span>
-                        <input
-                            type="text"
-                            class="form-control user-select-all"
-                            disabled
-                            value="ssh -i ~/.ssh/scylla-qa-ec2 ubuntu@{test_run
-                                .sct_runner_host.public_ip}"
-                        />
-                        <button
-                            class="btn btn-success"
-                            type="button"
-                            on:click={() => {
-                                navigator.clipboard.writeText(
-                                    `ssh -i ~/.ssh/scylla-qa-ec2 ubuntu@${test_run.sct_runner_host.public_ip}`
-                                );
-                            }}
-                        >
-                            <Fa icon={faCopy} />
-                        </button>
+                {#if test_run.sct_runner_host}
+                    <div class="mb-1">
+                        <div class="input-group">
+                            <span class="input-group-text fw-bold">SCT Runner</span>
+                            <input
+                                type="text"
+                                class="form-control user-select-all"
+                                disabled
+                                value="ssh -i ~/.ssh/scylla-qa-ec2 ubuntu@{test_run
+                                    .sct_runner_host.public_ip}"
+                            />
+                            <button
+                                class="btn btn-success"
+                                type="button"
+                                on:click={() => {
+                                    navigator.clipboard.writeText(
+                                        `ssh -i ~/.ssh/scylla-qa-ec2 ubuntu@${test_run.sct_runner_host.public_ip}`
+                                    );
+                                }}
+                            >
+                                <Fa icon={faCopy} />
+                            </button>
+                        </div>
                     </div>
-                </div>
+                {/if}
             {/if}
             <div class="btn-group">
                 {#if InProgressStatuses.includes(test_run.status) && locateGrafanaNode()}

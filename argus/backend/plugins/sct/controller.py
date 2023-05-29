@@ -31,6 +31,23 @@ def sct_submit_screenshots(run_id: str):
     }
 
 
+@bp.route("/<string:run_id>/sct_runner/set", methods=["POST"])
+@api_login_required
+def sct_set_runner(run_id: str):
+    payload = get_payload(request)
+    result = SCTService.set_sct_runner(
+        run_id=run_id,
+        public_ip=payload["public_ip"],
+        private_ip=payload["private_ip"],
+        region=payload["region"],
+        backend=payload["backend"]
+    )
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
 @bp.route("/<string:run_id>/resource/create", methods=["POST"])
 @api_login_required
 def sct_resource_create(run_id: str):
