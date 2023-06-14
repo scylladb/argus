@@ -1,5 +1,6 @@
 <script>
     import { onDestroy, onMount } from "svelte";
+    import { sanitizeSelector } from  "../Common/TextUtils";
     import NumberStats from "../Stats/NumberStats.svelte";
     import { apiMethodCall } from "../Common/ApiUtils";
     import RunGroup from "./RunGroup.svelte";
@@ -24,10 +25,6 @@
             return false;
         }
         return !RegExp(filterString.toLowerCase()).test(name.toLowerCase());
-    };
-
-    const removeDots = function (str) {
-        return str.replaceAll(".", "_");
     };
 
     const handleReleaseClick = async function (e) {
@@ -94,12 +91,12 @@
 </script>
 
 <div class="accordion-item" class:d-none={filtered}>
-    <h2 class="accordion-header" id="heading{removeDots(release.name)}">
+    <h2 class="accordion-header" id="heading{sanitizeSelector(release.name)}">
         <button
             class="accordion-button collapsed"
             data-argus-release={release.name}
             data-bs-toggle="collapse"
-            data-bs-target="#collapse{removeDots(release.name)}"
+            data-bs-target="#collapse{sanitizeSelector(release.name)}"
             on:click={handleReleaseClick}
             >
                 <div class="d-flex flex-column">
@@ -125,7 +122,7 @@
     </h2>
     <div
         class="accordion-collapse collapse"
-        id="collapse{removeDots(release.name)}"
+        id="collapse{sanitizeSelector(release.name)}"
     >
         <div class="p-2">
             <a href="/dashboard/{release.name}" class="btn btn-sm btn-dark"
@@ -146,7 +143,7 @@
         <div class="bg-light">
             <div
                 class="accordion accordion-flush accordion-release-groups border-start bg-white"
-                id="accordionGroups{removeDots(release.name)}"
+                id="accordionGroups{sanitizeSelector(release.name)}"
             >
             {#if releaseClicked}
                 {#await fetchGroups()}

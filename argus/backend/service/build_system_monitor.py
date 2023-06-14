@@ -78,7 +78,7 @@ class JenkinsMonitor(ArgusTestsMonitor):
     def collect(self):
         click.echo("Collecting new tests from jenkins")
         all_jobs = self._jenkins.get_all_jobs()
-        all_monitored_folders = [job for job in all_jobs if job["name"] in self._monitored_releases]
+        all_monitored_folders = [job for job in all_jobs if job["fullname"] in self._monitored_releases]
         for release in all_monitored_folders:
             LOGGER.info("Processing release %s", release["name"])
             try:
@@ -89,8 +89,23 @@ class JenkinsMonitor(ArgusTestsMonitor):
                 saved_release = self.create_release(release["name"])
                 self._existing_releases.append(saved_release)
 
-            groups = self.collect_groups_for_release(release["jobs"])
+            try:
+                groups = self.collect_groups_for_release(release["jobs"])
+            except KeyError:
+                LOGGER.error("Empty release!\n %s", release)
+                continue
             folder_stack = [dict(parent_name="", parent_display_name="", group=g) for g in reversed(groups)]
+            root_folder = {
+                "parent_name": "",
+                "parent_display_name": "",
+                "group":  {
+                    "name": f"{release['fullname']}-root",
+                    "displayName": "-- root directory --",
+                    "fullname": release["fullname"],
+                    "jobs": self.collect_root_folder_jobs(release["jobs"]),
+                }
+            }
+            folder_stack.append(root_folder)
             while len(folder_stack) != 0:
                 group_dict = folder_stack.pop()
                 group = group_dict["group"]
@@ -104,7 +119,7 @@ class JenkinsMonitor(ArgusTestsMonitor):
                     LOGGER.warning(
                         "Group %s for release %s doesn't exist, creating...", group_name, saved_release.name)
                     try:
-                        display_name = self._jenkins.get_job_info(name=group["fullname"])["displayName"]
+                        display_name = group.get("displayName", self._jenkins.get_job_info(name=group["fullname"])["displayName"])
                         display_name = display_name if not group_dict[
                             "parent_display_name"] else f"{group_dict['parent_display_name']} - {display_name}"
                     except Exception:
@@ -138,3 +153,6 @@ class JenkinsMonitor(ArgusTestsMonitor):
         groups = [group for group in groups if self.check_filter(group["name"])]
 
         return groups
+
+    def collect_root_folder_jobs(self, jobs):
+        return [job for job in jobs if "WorkflowJob" in job["_class"]]

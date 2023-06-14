@@ -37,4 +37,8 @@ export const determineLuma = function(col) {
  */
 export const subUnderscores = function(str) {
     return str.replace("_", " ");
-}
+};
+
+export const sanitizeSelector = function (str) {
+    return str.replaceAll(/[/.]/g, "_");
+};

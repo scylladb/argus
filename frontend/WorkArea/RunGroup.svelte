@@ -4,7 +4,7 @@
     import NumberStats from "../Stats/NumberStats.svelte";
     import AssigneeList from "./AssigneeList.svelte";
     import Test from "./Test.svelte";
-    import { onMount } from "svelte";
+    import { sanitizeSelector } from "../Common/TextUtils";
     export let release = "";
     export let group = {
         name: "",
@@ -83,21 +83,14 @@
         groupClicked = !groupClicked;
     };
 
-    const removeDots = function (str) {
-        return str.replaceAll(".", "_");
-    };
-
-    onMount(() => {
-
-    });
 </script>
 
 <div class="accordion-item" class:d-none={filtered}>
-    <h2 class="accordion-header" id="heading{removeDots(`${release}_${group.name}`)}">
+    <h2 class="accordion-header" id="heading{sanitizeSelector(`${release}_${group.name}`)}">
         <button
             class="accordion-button collapsed"
             data-bs-toggle="collapse"
-            data-bs-target="#collapse{removeDots(`${release}_${group.name}`)}"
+            data-bs-target="#collapse{sanitizeSelector(`${release}_${group.name}`)}"
             on:click={handleGroupClick}
         >
             <div class="d-flex flex-column w-100">
@@ -125,7 +118,7 @@
     </h2>
     <div
         class="accordion-collapse collapse"
-        id="collapse{removeDots(`${release}_${group.name}`)}"
+        id="collapse{sanitizeSelector(`${release}_${group.name}`)}"
     >
     {#if groupClicked}
         {#await fetchTests()}
