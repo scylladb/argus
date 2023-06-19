@@ -102,7 +102,7 @@ class DriverTestRun(PluginModelBase):
                 collection.suites.append(suite)
             run.test_collection.append(collection)
 
-        run.status = run._determine_run_status()
+        run.status = run._determine_run_status().value
         run.save()
         return run
 
