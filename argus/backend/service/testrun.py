@@ -31,6 +31,7 @@ from argus.backend.plugins.core import PluginInfoBase, PluginModelBase
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS
 from argus.backend.events.event_processors import EVENT_PROCESSORS
 from argus.backend.service.notification_manager import NotificationManagerService
+from argus.backend.service.stats import ComparableTestStatus
 from argus.backend.util.common import get_build_number, strip_html_tags
 from argus.backend.util.enums import TestInvestigationStatus, TestStatus
 
@@ -79,6 +80,8 @@ class TestRunService:
 
         for row in last_runs:
             row["build_number"] = get_build_number(build_job_url=row["build_job_url"])
+
+        last_runs = sorted(last_runs, reverse=True, key=lambda run: (run["build_number"], ComparableTestStatus(TestStatus(run["status"]))))
 
         return last_runs
 

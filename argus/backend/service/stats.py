@@ -76,6 +76,70 @@ class ComparableTestStatus:
         return self._get_prio() <= __o._get_prio()
 
 
+class ComparableTestInvestigationStatus:
+    PRIORITY_MAP = {
+        TestInvestigationStatus.NOT_INVESTIGATED: 10,
+        TestInvestigationStatus.IN_PROGRESS: 9,
+        TestInvestigationStatus.INVESTIGATED: 8,
+        TestInvestigationStatus.IGNORED: 7,
+    }
+
+    def __init__(self, status: TestInvestigationStatus):
+        self._status = status
+
+    def _get_prio(self):
+        return self.PRIORITY_MAP.get(self._status, 0)
+
+    def __eq__(self, __o: object) -> bool:
+        if not isinstance(__o, ComparableTestInvestigationStatus):
+            return False
+        return self._get_prio() == __o._get_prio()
+
+    def __ne__(self, __o: object) -> bool:
+        if not isinstance(__o, ComparableTestInvestigationStatus):
+            return False
+        return not self.__eq__(__o)
+
+    def __lt__(self, __o: object) -> bool:
+        if not isinstance(__o, ComparableTestInvestigationStatus):
+            return False
+        return self._get_prio() < __o._get_prio()
+
+    def __gt__(self, __o: object) -> bool:
+        if not isinstance(__o, ComparableTestInvestigationStatus):
+            return False
+        return self._get_prio() > __o._get_prio()
+
+    def __ge__(self, __o: object) -> bool:
+        if not isinstance(__o, ComparableTestInvestigationStatus):
+            return False
+        return self._get_prio() >= __o._get_prio()
+
+    def __le__(self, __o: object) -> bool:
+        if not isinstance(__o, ComparableTestInvestigationStatus):
+            return False
+        return self._get_prio() <= __o._get_prio()
+
+
+def generate_field_status_map(
+        last_runs: list[TestRunStatRow],
+        field_name = "status",
+        container_class = TestStatus,
+        cmp_class = ComparableTestStatus
+    ) -> dict[int, str]:
+
+    status_map = {}
+    for run in last_runs:
+        run_number = get_build_number(run["build_job_url"])
+        match status := status_map.get(run_number):
+            case str():
+                if cmp_class(container_class(status)) < cmp_class(container_class(run[field_name])):
+                    status_map[run_number] = run[field_name]
+            case _:
+                status_map[run_number] = run[field_name]
+    return status_map
+
+
 class ReleaseStats:
     def __init__(self, release: ArgusRelease) -> None:
         self.release = release
@@ -227,18 +291,6 @@ class TestStats:
             "hasComments": self.has_comments
         }
 
-    def _generate_status_map(self, last_runs: list[TestRunStatRow]) -> dict[int, str]:
-        status_map = {}
-        for run in last_runs:
-            run_number = get_build_number(run["build_job_url"])
-            match status := status_map.get(run_number):
-                case str():
-                    if ComparableTestStatus(TestStatus(status)) < ComparableTestStatus(TestStatus(run["status"])):
-                        status_map[run_number] = run["status"]
-                case _:
-                    status_map[run_number] = run["status"]
-        return status_map
-
     def collect(self, limited=False):
 
         # TODO: Parametrize run limit
@@ -252,10 +304,12 @@ class TestStats:
             self.status = TestStatus.NOT_RUN if self.is_scheduled else TestStatus.NOT_PLANNED
             self.parent_group.increment_status(status=self.status)
             return
-        status_map = self._generate_status_map(last_runs)
+        status_map = generate_field_status_map(last_runs)
+        investigation_status_map = generate_field_status_map(
+            last_runs, "investigation_status", TestInvestigationStatus, ComparableTestInvestigationStatus)
 
         self.status = status_map.get(get_build_number(last_run["build_job_url"]))
-        self.investigation_status = TestInvestigationStatus(last_run["investigation_status"])
+        self.investigation_status = investigation_status_map.get(get_build_number(last_run["build_job_url"]))
         self.start_time = last_run["start_time"]
 
         self.parent_group.increment_status(status=self.status)
