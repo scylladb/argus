@@ -58,6 +58,10 @@ class DriverTestRun(PluginModelBase):
         run.build_id = req.job_name
         run.build_job_url = req.job_url
         run.assign_categories()
+        try:
+            run.assignee = run.get_scheduled_assignee()
+        except Exception:  # pylint: disable=broad-except
+            run.assignee = None
         for key, value in req.test_environment.items():
             env_info = EnvironmentInfo()
             env_info.key = key
