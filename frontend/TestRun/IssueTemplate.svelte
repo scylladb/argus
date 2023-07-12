@@ -5,7 +5,7 @@
     import { faCopy } from "@fortawesome/free-solid-svg-icons";
     import { parse } from "marked";
     import { onMount } from "svelte";
-    import { getScyllaPackage, getKernelPackage, getRelocatableScyllaPackage,
+    import { getScyllaPackage, getKernelPackage, getUpgradedScyllaPackage, getRelocatableScyllaPackage,
         getOperatorPackage, getOperatorHelmPackage, getOperatorHelmRepoPackage,
     } from "../Common/RunUtils";
     import { markdownRendererOptions } from "../markdownOptions";
@@ -26,9 +26,11 @@
     let scyllaServerPackage = getScyllaPackage(test_run.packages);
     let kernelPackage = getKernelPackage(test_run.packages);
     let relocatablePackage = getRelocatableScyllaPackage(test_run.packages);
+    let upgradedPackage = getUpgradedScyllaPackage(test_run.packages);
     $: scyllaServerPackage = getScyllaPackage(test_run.packages);
     $: kernelPackage = getKernelPackage(test_run.packages);
     $: relocatablePackage = getRelocatableScyllaPackage(test_run.packages);
+    $: upgradedPackage = getUpgradedScyllaPackage(test_run.packages);
 
     let operatorPackage = getOperatorPackage(test_run.packages);
     $: operatorPackage = getOperatorPackage(test_run.packages);
@@ -140,6 +142,9 @@ Kernel Version: {kernelPackage.version}
 {/if}
 {#if scyllaServerPackage}
 Scylla version (or git commit hash): `{scyllaServerPackage.version}-{scyllaServerPackage.date}.{scyllaServerPackage.revision_id}` with build-id `{scyllaServerPackage.build_id}`
+{/if}
+{#if upgradedPackage}
+Target Scylla version (or git commit hash): `{upgradedPackage.version}-{upgradedPackage.date}.{upgradedPackage.revision_id}` with build-id `{upgradedPackage.build_id}`
 {/if}
 {#if relocatablePackage}
 Relocatable Package: {relocatablePackage.version}
