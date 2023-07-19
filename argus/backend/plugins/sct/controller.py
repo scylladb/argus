@@ -114,6 +114,17 @@ def sct_events_submit(run_id: str):
     }
 
 
+@bp.route("/<string:run_id>/gemini/submit", methods=["POST"])
+@api_login_required
+def sct_gemini_results_submit(run_id: str):
+    payload = get_payload(request)
+    result = SCTService.submit_gemini_results(run_id=run_id, gemini_data=payload["gemini_data"])
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
 @bp.route("/release/<string:release_name>/kernels", methods=["GET"])
 @api_login_required
 def sct_get_kernel_report(release_name: str):

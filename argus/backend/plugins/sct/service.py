@@ -1,7 +1,10 @@
 from dataclasses import dataclass
 import logging
 from time import time
-from argus.backend.plugins.sct.testrun import SCTTestRun
+from flask import g
+from argus.backend.models.web import ArgusEventTypes
+from argus.backend.plugins.sct.testrun import SCTTestRun, SubtestType
+from argus.backend.plugins.sct.types import GeminiResultsRequest
 from argus.backend.plugins.sct.udt import (
     CloudInstanceDetails,
     CloudResource,
@@ -10,7 +13,8 @@ from argus.backend.plugins.sct.udt import (
     NodeDescription,
     PackageVersion,
 )
-from argus.backend.util.enums import NemesisStatus, ResourceState
+from argus.backend.service.event_service import EventService
+from argus.backend.util.enums import NemesisStatus, ResourceState, TestStatus
 
 LOGGER = logging.getLogger(__name__)
 
@@ -85,6 +89,40 @@ class SCTService:
             for link in screenshot_links:
                 run.add_screenshot(link)
             run.save()
+        except SCTTestRun.DoesNotExist as exception:
+            LOGGER.error("Run %s not found for SCTTestRun", run_id)
+            raise SCTServiceException("Run not found", run_id) from exception
+
+        return "submitted"
+
+    @staticmethod
+    def submit_gemini_results(run_id: str, gemini_data: GeminiResultsRequest) -> str:
+        try:
+            run: SCTTestRun = SCTTestRun.get(id=run_id)
+            run.subtest_name = SubtestType.GEMINI.value
+            run.oracle_nodes_count = gemini_data.get("oracle_nodes_count")
+            run.oracle_node_ami_id = gemini_data.get("oracle_node_ami_id")
+            run.oracle_node_instance_type = gemini_data.get("oracle_node_instance_type")
+            run.oracle_node_scylla_version = gemini_data.get("oracle_node_scylla_version")
+            run.gemini_command = gemini_data.get("gemini_command")
+            run.gemini_version = gemini_data.get("gemini_version")
+            run.gemini_status = gemini_data.get("gemini_status")
+            run.gemini_seed = str(gemini_data.get("gemini_seed"))
+            run.gemini_write_ops = gemini_data.get("gemini_write_ops")
+            run.gemini_write_errors = gemini_data.get("gemini_write_errors")
+            run.gemini_read_ops = gemini_data.get("gemini_read_ops")
+            run.gemini_read_errors = gemini_data.get("gemini_read_errors")
+            run.save()
+
+            if run.gemini_status != "PASSED":
+                run.status = TestStatus.FAILED
+                EventService.create_run_event(kind=ArgusEventTypes.TestRunStatusChanged, body={
+                        "message": "[{username}] Setting run status to {status} due to Gemini reporting following status: {gemini_status}",
+                        "username": g.user.username,
+                        "status": TestStatus.FAILED.value,
+                        "gemini_status": run.gemini_status,
+                }, user_id=g.user.id, run_id=run_id, release_id=run.release_id, test_id=run.test_id)
+                run.save()
         except SCTTestRun.DoesNotExist as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
             raise SCTServiceException("Run not found", run_id) from exception

@@ -1,5 +1,6 @@
 from uuid import UUID
 from dataclasses import asdict
+from argus.backend.plugins.sct.types import GeminiResultsRequest
 from argus.backend.util.enums import ResourceState, TestStatus
 from argus.client.base import ArgusClient
 from argus.client.sct.types import EventsInfo, LogLink, Package
@@ -17,6 +18,7 @@ class ArgusSCTClient(ArgusClient):
         SET_SCT_RUNNER  = "/sct/$id/sct_runner/set"
         UPDATE_SHARDS_FOR_RESOURCE = "/sct/$id/resource/$name/shards"
         SUBMIT_NEMESIS = "/sct/$id/nemesis/submit"
+        SUBMIT_GEMINI_RESULTS = "/sct/$id/gemini/submit"
         FINALIZE_NEMESIS = "/sct/$id/nemesis/finalize"
         SUBMIT_EVENTS = "/sct/$id/events/submit"
 
@@ -109,6 +111,20 @@ class ArgusSCTClient(ArgusClient):
             body={
                 **self.generic_body,
                 "screenshot_links": screenshot_links,
+            }
+        )
+        self.check_response(response)
+
+    def submit_gemini_results(self, gemini_data: GeminiResultsRequest) -> None:
+        """
+            Submits gemini results such as oracle node information and gemini command & its results
+        """
+        response = self.post(
+            endpoint=self.Routes.SUBMIT_GEMINI_RESULTS,
+            location_params={"id": str(self.run_id)},
+            body={
+                **self.generic_body,
+                "gemini_data": gemini_data,
             }
         )
         self.check_response(response)

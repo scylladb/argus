@@ -20,6 +20,7 @@
     import EventsTab from "./EventsTab.svelte";
     import ArtifactTab from "./ArtifactTab.svelte";
     import IssueTab from "./IssueTab.svelte";
+    import { SubtestTabBodyComponents, SubtestTabComponents, Subtests } from "./SCTSubTests/Subtest";
     export let runId = "";
     export let buildNumber = -1;
     export let testInfo = {};
@@ -123,6 +124,9 @@
                         role="tab"
                         ><i class="fas fa-info-circle" /> Details</button
                     >
+                    {#if testRun.subtest_name && Object.values(Subtests).includes(testRun.subtest_name)}
+                        <svelte:component this={SubtestTabComponents[testRun.subtest_name]} {testRun}/>
+                    {/if}
                     <button
                         class="nav-link"
                         id="nav-screenshots-tab-{runId}"
@@ -210,6 +214,9 @@
                 >
                     <TestRunInfo test_run={testRun} release={testInfo.release} group={testInfo.group} test={testInfo.test}/>
                 </div>
+                {#if testRun.subtest_name && Object.values(Subtests).includes(testRun.subtest_name)}
+                    <svelte:component this={SubtestTabBodyComponents[testRun.subtest_name]} {testRun}/>
+                {/if}
                 <div
                     class="tab-pane fade"
                     id="nav-screenshots-{runId}"
