@@ -1,3 +1,4 @@
+from enum import Enum
 import logging
 from datetime import datetime
 from dataclasses import dataclass, field
@@ -30,6 +31,10 @@ SCT_REGION_PROPERTY_MAP = {
     "azure": "azure_region_name",
     "default": "region_name",
 }
+
+
+class SubtestType(str, Enum):
+    GEMINI = "gemini"
 
 
 @dataclass(init=True, repr=True, frozen=True)
@@ -69,6 +74,23 @@ class SCTTestRun(PluginModelBase):
     events = columns.List(value_type=columns.UserDefinedType(user_type=EventsBySeverity))
     nemesis_data = columns.List(value_type=columns.UserDefinedType(user_type=NemesisRunInfo))
     screenshots = columns.List(value_type=columns.Text())
+
+    # Subtest
+    subtest_name = columns.Text()
+
+    # Gemini-related fields
+    oracle_nodes_count = columns.Integer()
+    oracle_node_ami_id = columns.Text()
+    oracle_node_instance_type = columns.Text()
+    oracle_node_scylla_version = columns.Text()
+    gemini_command = columns.Text()
+    gemini_version = columns.Text()
+    gemini_status = columns.Text()
+    gemini_seed = columns.Text()
+    gemini_write_ops = columns.Integer()
+    gemini_write_errors = columns.Integer()
+    gemini_read_ops = columns.Integer()
+    gemini_read_errors = columns.Integer()
 
     @classmethod
     def _stats_query(cls) -> str:

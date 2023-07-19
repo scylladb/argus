@@ -30,6 +30,7 @@ from argus.backend.plugins.core import PluginInfoBase, PluginModelBase
 
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS
 from argus.backend.events.event_processors import EVENT_PROCESSORS
+from argus.backend.service.event_service import EventService
 from argus.backend.service.notification_manager import NotificationManagerService
 from argus.backend.service.stats import ComparableTestStatus
 from argus.backend.util.common import get_build_number, strip_html_tags
@@ -111,7 +112,7 @@ class TestRunService:
         run.status = new_status.value
         run.save()
 
-        self.create_run_event(
+        EventService.create_run_event(
             kind=ArgusEventTypes.TestRunStatusChanged,
             body={
                 "message": "Status was changed from {old_status} to {new_status} by {username}",
@@ -139,7 +140,7 @@ class TestRunService:
         run.investigation_status = new_status.value
         run.save()
 
-        self.create_run_event(
+        EventService.create_run_event(
             kind=ArgusEventTypes.TestRunStatusChanged,
             body={
                 "message": "Investigation status was changed from {old_status} to {new_status} by {username}",
@@ -178,7 +179,7 @@ class TestRunService:
                 LOGGER.warning("Non existent assignee was present on the run %s for test %s: %s",
                                run_id, test_id, old_assignee)
                 old_assignee = None
-        self.create_run_event(
+        EventService.create_run_event(
             kind=ArgusEventTypes.AssigneeChanged,
             body={
                 "message": "Assignee was changed from \"{old_user}\" to \"{new_user}\" by {username}",
@@ -247,7 +248,7 @@ class TestRunService:
                 content_params=params
             )
 
-        self.create_run_event(kind=ArgusEventTypes.TestRunCommentPosted, body={
+        EventService.create_run_event(kind=ArgusEventTypes.TestRunCommentPosted, body={
             "message": "A comment was posted by {username}",
             "username": g.user.username
         }, user_id=g.user.id, run_id=run_id, release_id=release.id, test_id=test.id)
@@ -260,7 +261,7 @@ class TestRunService:
             raise Exception("Unable to delete other user comments")
         comment.delete()
 
-        self.create_run_event(kind=ArgusEventTypes.TestRunCommentDeleted, body={
+        EventService.create_run_event(kind=ArgusEventTypes.TestRunCommentDeleted, body={
             "message": "A comment was deleted by {username}",
             "username": g.user.username
         }, user_id=g.user.id, run_id=run_id, release_id=comment.release_id, test_id=test_id)
@@ -276,24 +277,12 @@ class TestRunService:
         comment.mentions = mentions
         comment.save()
 
-        self.create_run_event(kind=ArgusEventTypes.TestRunCommentUpdated, body={
+        EventService.create_run_event(kind=ArgusEventTypes.TestRunCommentUpdated, body={
             "message": "A comment was edited by {username}",
             "username": g.user.username
         }, user_id=g.user.id, run_id=run_id, release_id=comment.release_id, test_id=test_id)
 
         return self.get_run_comments(run_id=run_id)
-
-    def create_run_event(self, kind: ArgusEventTypes, body: dict, user_id=None, run_id=None, release_id=None, group_id=None, test_id=None):
-        event = ArgusEvent()
-        event.release_id = release_id
-        event.group_id = group_id
-        event.test_id = test_id
-        event.user_id = user_id
-        event.run_id = run_id
-        event.body = json.dumps(body, ensure_ascii=True, separators=(',', ':'))
-        event.kind = kind.value
-        event.created_at = datetime.utcnow()
-        event.save()
 
     def get_run_events(self, run_id: UUID):
         response = {}
@@ -361,7 +350,7 @@ class TestRunService:
         new_issue.last_status = issue_state.get("state")
         new_issue.save()
 
-        self.create_run_event(
+        EventService.create_run_event(
             kind=ArgusEventTypes.TestRunIssueAdded,
             body={
                 "message": "An issue titled \"{title}\" was added by {username}",
@@ -412,7 +401,7 @@ class TestRunService:
     def delete_github_issue(self, issue_id: UUID) -> dict:
         issue: ArgusGithubIssue = ArgusGithubIssue.get(id=issue_id)
 
-        self.create_run_event(
+        EventService.create_run_event(
             kind=ArgusEventTypes.TestRunIssueRemoved,
             body={
                 "message": "An issue titled \"{title}\" was removed by {username}",
@@ -451,7 +440,7 @@ class TestRunService:
             run.status = TestStatus.ABORTED.value
             run.save()
 
-            self.create_run_event(
+            EventService.create_run_event(
                 kind=ArgusEventTypes.TestRunStatusChanged,
                 body={
                     "message": "Run was automatically terminated due to not responding for more than 45 minutes "
