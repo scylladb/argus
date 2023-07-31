@@ -1,6 +1,6 @@
 from uuid import UUID
 from dataclasses import asdict
-from argus.backend.plugins.sct.types import GeminiResultsRequest
+from argus.backend.plugins.sct.types import GeminiResultsRequest, PerformanceResultsRequest
 from argus.backend.util.enums import ResourceState, TestStatus
 from argus.client.base import ArgusClient
 from argus.client.sct.types import EventsInfo, LogLink, Package
@@ -19,6 +19,7 @@ class ArgusSCTClient(ArgusClient):
         UPDATE_SHARDS_FOR_RESOURCE = "/sct/$id/resource/$name/shards"
         SUBMIT_NEMESIS = "/sct/$id/nemesis/submit"
         SUBMIT_GEMINI_RESULTS = "/sct/$id/gemini/submit"
+        SUBMIT_PERFORMANCE_RESULTS = "/sct/$id/performance/submit"
         FINALIZE_NEMESIS = "/sct/$id/nemesis/finalize"
         SUBMIT_EVENTS = "/sct/$id/events/submit"
 
@@ -125,6 +126,20 @@ class ArgusSCTClient(ArgusClient):
             body={
                 **self.generic_body,
                 "gemini_data": gemini_data,
+            }
+        )
+        self.check_response(response)
+
+    def submit_performance_results(self, performance_results: PerformanceResultsRequest) -> None:
+        """
+            Submits results of a performance run. Things such as throughput stats, overall and per op
+        """
+        response = self.post(
+            endpoint=self.Routes.SUBMIT_PERFORMANCE_RESULTS,
+            location_params={"id": str(self.run_id)},
+            body={
+                **self.generic_body,
+                "performance_results": performance_results,
             }
         )
         self.check_response(response)

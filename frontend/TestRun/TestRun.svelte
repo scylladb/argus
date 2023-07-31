@@ -58,6 +58,7 @@
                     "error",
                     "A backend error occurred during test run data fetch"
                 );
+                console.log(error);
             }
         }
     };

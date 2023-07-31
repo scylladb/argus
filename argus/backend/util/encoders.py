@@ -1,10 +1,13 @@
 from datetime import datetime
+import logging
 from json.encoder import JSONEncoder
 from uuid import UUID
 
 import cassandra.cqlengine.usertype as ut
 import cassandra.cqlengine.models as m
 
+
+LOGGER = logging.getLogger(__name__)
 
 class ArgusJSONEncoder(JSONEncoder):
     def default(self, o):

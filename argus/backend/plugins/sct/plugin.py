@@ -12,6 +12,7 @@ from argus.backend.plugins.sct.udt import (
     NemesisRunInfo,
     NodeDescription,
     PackageVersion,
+    PerformanceHDRHistogram,
 )
 
 
@@ -31,5 +32,6 @@ class PluginInfo(PluginInfoBase):
         CloudSetupDetails,
         CloudNodesInfo,
         CloudInstanceDetails,
-        PackageVersion
+        PackageVersion,
+        PerformanceHDRHistogram,
     ]

@@ -124,6 +124,25 @@ def sct_gemini_results_submit(run_id: str):
         "response": result
     }
 
+@bp.route("/<string:run_id>/performance/submit", methods=["POST"])
+@api_login_required
+def sct_performance_results_submit(run_id: str):
+    payload = get_payload(request)
+    result = SCTService.submit_performance_results(run_id=run_id, performance_results=payload["performance_results"])
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+@bp.route("/<string:run_id>/performance/history", methods=["GET"])
+@api_login_required
+def sct_get_performance_history(run_id: str):
+    result = SCTService.get_performance_history_for_test(run_id=run_id)
+    return {
+        "status": "ok",
+        "response": result
+    }
+
 
 @bp.route("/release/<string:release_name>/kernels", methods=["GET"])
 @api_login_required
