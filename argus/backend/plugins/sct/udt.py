@@ -78,3 +78,16 @@ class NemesisRunInfo(UserType):
     start_time = columns.Integer()
     end_time = columns.Integer()
     stack_trace = columns.Text()
+
+
+class PerformanceHDRHistogram(UserType):
+    start_time = columns.Integer()
+    percentile_90 = columns.Float()
+    percentile_50 = columns.Float()
+    percentile_99_999 = columns.Float()
+    percentile_95 = columns.Float()
+    end_time = columns.Float()
+    percentile_99_99 = columns.Float()
+    percentile_99 = columns.Float()
+    stddev = columns.Float()
+    percentile_99_9 = columns.Float()

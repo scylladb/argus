@@ -1,10 +1,12 @@
 from dataclasses import dataclass
+from functools import reduce
 import logging
+import math
 from time import time
 from flask import g
 from argus.backend.models.web import ArgusEventTypes
 from argus.backend.plugins.sct.testrun import SCTTestRun, SubtestType
-from argus.backend.plugins.sct.types import GeminiResultsRequest
+from argus.backend.plugins.sct.types import GeminiResultsRequest, PerformanceResultsRequest
 from argus.backend.plugins.sct.udt import (
     CloudInstanceDetails,
     CloudResource,
@@ -12,8 +14,10 @@ from argus.backend.plugins.sct.udt import (
     NemesisRunInfo,
     NodeDescription,
     PackageVersion,
+    PerformanceHDRHistogram,
 )
 from argus.backend.service.event_service import EventService
+from argus.backend.util.common import get_build_number
 from argus.backend.util.enums import NemesisStatus, ResourceState, TestStatus
 
 LOGGER = logging.getLogger(__name__)
@@ -128,6 +132,120 @@ class SCTService:
             raise SCTServiceException("Run not found", run_id) from exception
 
         return "submitted"
+
+    @staticmethod
+    def submit_performance_results(run_id: str, performance_results: PerformanceResultsRequest):
+        # pylint: disable=too-many-statements
+        try:
+            run: SCTTestRun = SCTTestRun.get(id=run_id)
+            run.subtest_name = SubtestType.PERFORMANCE.value
+            run.perf_op_rate_average = performance_results.get("perf_op_rate_average")
+            run.perf_op_rate_total = performance_results.get("perf_op_rate_total")
+            run.perf_avg_latency_99th = performance_results.get("perf_avg_latency_99th")
+            run.perf_avg_latency_mean = performance_results.get("perf_avg_latency_mean")
+            run.perf_total_errors = performance_results.get("perf_total_errors")
+            run.stress_cmd = performance_results.get("stress_cmd")
+            run.test_name = performance_results.get("test_name")
+            run.save()
+
+            is_latency_test = "latency" in run.test_name
+            threshold_negative = -10
+
+            def cmp(lhs, rhs):
+                delta = rhs - lhs
+                change = int(math.fabs(delta) * 100 / rhs)
+                return change if delta >= 0 else change * -1
+
+            previous_runs = SCTTestRun.get_perf_results_for_test_name(run.build_id, run.start_time, run.test_name)
+            metrics_to_check = ["perf_avg_latency_99th", "perf_avg_latency_mean"] if is_latency_test else ["perf_op_rate_total"]
+
+            older_runs_by_version = {}
+            for prev_run in previous_runs:
+                if not older_runs_by_version.get(prev_run["scylla_version"]):
+                    older_runs_by_version[prev_run["scylla_version"]] = []
+                older_runs_by_version[prev_run["scylla_version"]].append(prev_run)
+
+            regression_found = False
+            regression_info = {
+                "version": None,
+                "delta": None,
+                "id": None,
+                "metric": None,
+                "job_url": None,
+            }
+
+            if performance_results["histograms"]:
+                for histogram in performance_results["histograms"]:
+                    run.histograms = { k: PerformanceHDRHistogram(**v) for k, v in histogram.items() }
+
+            for version, runs in older_runs_by_version.items():
+                for metric in metrics_to_check:
+                    # pylint: disable=cell-var-from-loop
+                    best_run = sorted(runs, reverse=(not is_latency_test), key=lambda v: v[metric])[0]
+                    last_run = runs[0]
+
+                    metric_to_best = cmp(run[metric], best_run[metric])
+                    metric_to_last = cmp(run[metric], last_run[metric])
+                    if metric_to_last < threshold_negative:
+                        regression_found = True
+                        regression_info["metric"] = metric
+                        regression_info["version"] = version
+                        regression_info["job_url"] = last_run["build_job_url"]
+                        regression_info["id"] = str(last_run["id"])
+                        regression_info["delta"] = metric_to_last
+                        break
+
+                    if metric_to_best < threshold_negative:
+                        regression_found = True
+                        regression_info["metric"] = metric
+                        regression_info["version"] = version
+                        regression_info["job_url"] = best_run["build_job_url"]
+                        regression_info["id"] = str(best_run["id"])
+                        regression_info["delta"] = metric_to_best
+                        break
+
+                if regression_found:
+                    break
+
+            if regression_found:
+                run.status = TestStatus.FAILED.value
+                run.save()
+                EventService.create_run_event(kind=ArgusEventTypes.TestRunStatusChanged, body={
+                        "message": "[{username}] Setting run status to {status} due to performance metric '{metric}' falling "
+                                   "below allowed threshold ({threshold_negative}): {delta}% compared to "
+                                   "<a href='/test/{test_id}/runs?additionalRuns[]={base_run_id}&additionalRuns[]={previous_run_id}'>This {version} (#{build_number}) run</a>",
+                        "username": g.user.username,
+                        "status": TestStatus.FAILED.value,
+                        "metric": regression_info["metric"],
+                        "threshold_negative": threshold_negative,
+                        "delta": regression_info["delta"],
+                        "test_id": str(run.test_id),
+                        "base_run_id": str(run.id),
+                        "previous_run_id": regression_info["id"],
+                        "version": regression_info["version"],
+                        "build_number": get_build_number(regression_info["job_url"])
+                }, user_id=g.user.id, run_id=run_id, release_id=run.release_id, test_id=run.test_id)
+            else:
+                # NOTE: This will override status set by SCT Events.
+                run.status = TestStatus.PASSED.value
+                run.save()
+
+        except SCTTestRun.DoesNotExist as exception:
+            LOGGER.error("Run %s not found for SCTTestRun", run_id)
+            raise SCTServiceException("Run not found", run_id) from exception
+
+        return "submitted"
+
+    @staticmethod
+    def get_performance_history_for_test(run_id: str):
+        try:
+            run: SCTTestRun = SCTTestRun.get(id=run_id)
+            rows = run.get_perf_results_for_test_name(build_id=run.build_id, start_time=run.start_time, test_name=run.test_name)
+            return rows
+        except SCTTestRun.DoesNotExist as exception:
+            LOGGER.error("Run %s not found for SCTTestRun", run_id)
+            raise SCTServiceException("Run not found", run_id) from exception
+
 
     @staticmethod
     def create_resource(run_id: str, resource_details: dict) -> str:

@@ -59,7 +59,7 @@
                         class="img-profile"
                         src={getPictureForId(event.user_id)}
                         alt=""
-                    /> {activity.events[event.id]}
+                    /> {@html activity.events[event.id]}
                     <small class="text-muted"
                         >{new Date(
                             event.created_at

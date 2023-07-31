@@ -18,6 +18,7 @@ from argus.backend.plugins.sct.udt import (
     EventsBySeverity,
     NemesisRunInfo,
     PackageVersion,
+    PerformanceHDRHistogram
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ SCT_REGION_PROPERTY_MAP = {
 
 class SubtestType(str, Enum):
     GEMINI = "gemini"
+    PERFORMANCE = "performance"
 
 
 @dataclass(init=True, repr=True, frozen=True)
@@ -55,6 +57,7 @@ class SCTTestRun(PluginModelBase):
     _plugin_name = "scylla-cluster-tests"
 
     # Test Details
+    test_name = columns.Text()
     scm_revision_id = columns.Text()
     started_by = columns.Text()
     config_files = columns.List(value_type=columns.Text())
@@ -92,6 +95,16 @@ class SCTTestRun(PluginModelBase):
     gemini_read_ops = columns.Integer()
     gemini_read_errors = columns.Integer()
 
+    # Performance fields
+    perf_op_rate_average = columns.Double()
+    perf_op_rate_total = columns.Double()
+    perf_avg_latency_99th = columns.Double()
+    perf_avg_latency_mean = columns.Double()
+    perf_total_errors = columns.Double()
+    stress_cmd = columns.Text()
+
+    histograms = columns.List(value_type=columns.Map(key_type=columns.Text(), value_type=columns.UserDefinedType(user_type=PerformanceHDRHistogram)))
+
     @classmethod
     def _stats_query(cls) -> str:
         return ("SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, "
@@ -121,6 +134,16 @@ class SCTTestRun(PluginModelBase):
         release = ArgusRelease.get(name=release_name)
         query = cluster.prepare(f"SELECT scylla_version, packages, status FROM {cls.table_name()} WHERE release_id = ?")
         rows = cluster.session.execute(query=query, parameters=(release.id,))
+
+        return list(rows)
+
+    @classmethod
+    def get_perf_results_for_test_name(cls, build_id: str, start_time: float, test_name: str):
+        cluster = ScyllaCluster.get()
+        query = cluster.prepare(f"SELECT build_id, packages, scylla_version, test_name, perf_op_rate_average, perf_op_rate_total, "
+                                "perf_avg_latency_99th, perf_avg_latency_mean, perf_total_errors, id, start_time, build_job_url"
+                                f" FROM {cls.table_name()} WHERE build_id = ? AND start_time < ? AND test_name = ? ALLOW FILTERING")
+        rows = cluster.session.execute(query=query, parameters=(build_id, start_time, test_name))
 
         return list(rows)
 
