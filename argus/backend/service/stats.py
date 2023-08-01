@@ -354,7 +354,7 @@ class ReleaseStatsCollector:
 
         if self.release_version:
             self.release_rows = list(
-                filter(lambda row: row["scylla_version"] == self.release_version, self.release_rows))
+                filter(lambda row: row["scylla_version"] == self.release_version or not row["scylla_version"], self.release_rows))
 
         self.release_stats = ReleaseStats(release=self.release)
         self.release_stats.collect(rows=self.release_rows, limited=limited, force=force)
