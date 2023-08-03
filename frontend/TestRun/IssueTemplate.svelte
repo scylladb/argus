@@ -158,7 +158,7 @@ Operator Helm Version: {operatorHelmPackage.version}
 {#if operatorHelmRepoPackage}
 Operator Helm Repository: {operatorHelmRepoPackage.version}
 {/if}
-Cluster size: {test_run.cloud_setup.db_node.node_amount} nodes ({test_run.cloud_setup.db_node.instance_type})
+Cluster size: {test_run?.cloud_setup?.db_node?.node_amount ?? "Unknown amount of"} nodes ({test_run?.cloud_setup?.db_node?.instance_type ?? "Unknown instance type"})
 
 Scylla Nodes used in this run:
 {#each filterDbNodes(test_run.allocated_resources) as resource}
@@ -167,14 +167,14 @@ Scylla Nodes used in this run:
     **No resources left at the end of the run**
 {/each}
 
-OS / Image: `{test_run.cloud_setup.db_node.image_id}` ({test_run?.sct_runner_host?.provider ?? "NO RUNNER"}: {test_run?.sct_runner_host?.region ?? "NO RUNNER"})
+OS / Image: `{test_run?.cloud_setup?.db_node?.image_id ?? "No image"}` ({test_run?.sct_runner_host?.provider ?? "NO RUNNER"}: {test_run?.sct_runner_host?.region ?? "NO RUNNER"})
 
 Test: `{test?.name}`
 Test id: `{test_run.id}`
 Test name: `{test_run.build_id}`
 Test config file(s):
 
-- [{test_run.config_files[0].split("/").reverse()[0]}](https://github.com/scylladb/scylla-cluster-tests/blob/{test_run.scm_revision_id}/{test_run.config_files[0]})
+- [{(test_run.config_files?.[0] ?? "None").split("/").reverse()[0]}](https://github.com/scylladb/scylla-cluster-tests/blob/{test_run.scm_revision_id}/{test_run.config_files[0]})
 
 
 &lt;details&gt;
