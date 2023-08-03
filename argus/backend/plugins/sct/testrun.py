@@ -45,7 +45,7 @@ class SCTTestRunSubmissionRequest():
     job_url: str
     started_by: str
     commit_id: str
-    sct_config: dict
+    sct_config: dict | None
     runner_public_ip: Optional[str] = field(default=None)
     runner_private_ip: Optional[str] = field(default=None)
 
@@ -125,7 +125,7 @@ class SCTTestRun(PluginModelBase):
         return list(rows)
 
     @classmethod
-    def from_sct_config(cls, req: SCTTestRunSubmissionRequest):
+    def init_sct_run(cls, req: SCTTestRunSubmissionRequest):
         run = cls()
         run.build_id = req.job_name
         run.assign_categories()
@@ -139,25 +139,35 @@ class SCTTestRun(PluginModelBase):
         run.started_by = req.started_by
         run.build_job_url = req.job_url
 
-        backend = req.sct_config.get("cluster_backend")
-        region_key = SCT_REGION_PROPERTY_MAP.get(backend, SCT_REGION_PROPERTY_MAP["default"])
-        raw_regions = req.sct_config.get(region_key) or "undefined_region"
-        regions = raw_regions.split() if isinstance(raw_regions, str) else raw_regions
-        primary_region = regions[0]
+        return run
 
-        if req.runner_public_ip:
-            run.sct_runner_host = CloudInstanceDetails(
-                public_ip=req.runner_public_ip,
-                private_ip=req.runner_private_ip,
-                provider=backend,
-                region=primary_region,
-            )
+    @classmethod
+    def from_sct_config(cls, req: SCTTestRunSubmissionRequest):
+        try:
+            run = cls.get(id=req.run_id)
+        except cls.DoesNotExist:
+            run = cls.init_sct_run(req)
+            run.save()
 
-        run.cloud_setup = ResourceSetup.get_resource_setup(backend=backend, sct_config=req.sct_config)
+        if req.sct_config:
+            backend = req.sct_config.get("cluster_backend")
+            region_key = SCT_REGION_PROPERTY_MAP.get(backend, SCT_REGION_PROPERTY_MAP["default"])
+            raw_regions = req.sct_config.get(region_key) or "undefined_region"
+            regions = raw_regions.split() if isinstance(raw_regions, str) else raw_regions
+            primary_region = regions[0]
+            if req.runner_public_ip:  # NOTE: Legacy support, not needed otherwise
+                run.sct_runner_host = CloudInstanceDetails(
+                    public_ip=req.runner_public_ip,
+                    private_ip=req.runner_private_ip,
+                    provider=backend,
+                    region=primary_region,
+                )
+            run.cloud_setup = ResourceSetup.get_resource_setup(backend=backend, sct_config=req.sct_config)
 
-        run.config_files = req.sct_config.get("config_files")
-        run.region_name = regions
-        run.save()
+            run.config_files = req.sct_config.get("config_files")
+            run.region_name = regions
+            run.save()
+
         return run
 
     def get_resources(self) -> list[CloudResource]:

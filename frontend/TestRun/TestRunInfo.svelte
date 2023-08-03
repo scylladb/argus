@@ -101,15 +101,15 @@
             <ul class="list-unstyled border-start ps-2">
                 <li>
                     <span class="fw-bold">Backend:</span>
-                    {test_run.cloud_setup.backend}
+                    {test_run.cloud_setup?.backend ?? "Unknown"}
                 </li>
                 <li>
                     <span class="fw-bold">Region:</span>
-                    {test_run.region_name.join(", ")}
+                    {test_run.region_name.join(", ") || "Unknown region"}
                 </li>
                 <li>
                     <span class="fw-bold">Image id:</span>
-                    {test_run.cloud_setup.db_node.image_id}
+                    {test_run.cloud_setup?.db_node.image_id ?? "Unknown"}
                 </li>
                 <!-- Scylla v4.5.3-0.20211223.c8f14886d (ami-0df0fbe3daf5ad63d) -->
                 {#if test_run.packages}
@@ -164,11 +164,11 @@
                 {/if}
                 <li>
                     <span class="fw-bold">Instance type:</span>
-                    {test_run.cloud_setup.db_node.instance_type}
+                    {test_run.cloud_setup?.db_node?.instance_type ?? "Unknown"}
                 </li>
                 <li>
                     <span class="fw-bold">Node amount:</span>
-                    {test_run.cloud_setup.db_node.node_amount}
+                    {test_run.cloud_setup?.db_node?.node_amount ?? "Unknown"}
                 </li>
             </ul>
         </div>
