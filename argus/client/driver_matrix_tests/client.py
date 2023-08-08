@@ -16,6 +16,7 @@ from argus.backend.plugins.driver_matrix_tests.raw_types import RawMatrixTestRes
 
 LOGGER = logging.getLogger(__name__)
 
+TestTypeType = Literal['java', 'cpp', 'python', 'gocql']
 
 class AdaptedXUnitData(TypedDict):
     timestamp: str
@@ -52,6 +53,14 @@ def cpp_driver_matrix_adapter(xml: ElementTree.ElementTree) -> AdaptedXUnitData:
     }
 
 
+def gocql_driver_matrix_adapter(xml: ElementTree.ElementTree) -> AdaptedXUnitData:
+    testsuites = list(xml.getroot().iter("testsuite"))
+
+    return {
+        "timestamp": testsuites[0].attrib.get("timestamp"),
+    }
+
+
 def generic_adapter(xml: ElementTree.ElementTree) -> AdaptedXUnitData:
     return {
         "timestamp": datetime.utcnow().isoformat()
@@ -66,6 +75,7 @@ class ArgusDriverMatrixClient(ArgusClient):
         "java": java_driver_matrix_adapter,
         "cpp": cpp_driver_matrix_adapter,
         "python": python_driver_matrix_adapter,
+        "gocql": gocql_driver_matrix_adapter,
     }
 
     def __init__(self, run_id: UUID, auth_token: str, base_url: str, api_version="v1") -> None:
@@ -124,7 +134,7 @@ class ArgusDriverMatrixClient(ArgusClient):
 
         return total - errors - skipped - failures
 
-    def parse_result_xml(self, xml_path: Path, test_type:  Literal['java', 'cpp', 'python']) -> RawMatrixTestResult:
+    def parse_result_xml(self, xml_path: Path, test_type:  TestTypeType) -> RawMatrixTestResult:
         with xml_path.open(mode="rt", encoding="utf-8") as xml_file:
             xml = ElementTree.parse(source=xml_file)
             LOGGER.info("%s", pformat(xml))
@@ -171,7 +181,7 @@ class ArgusDriverMatrixClient(ArgusClient):
             "suites": all_suites
         }
 
-    def get_results(self, result_path: str, test_type: Literal['java', 'cpp', 'python']) -> list[RawMatrixTestResult]:
+    def get_results(self, result_path: str, test_type: TestTypeType) -> list[RawMatrixTestResult]:
         xmls = glob(f"{result_path}/**/*.xml", recursive=True)
         LOGGER.info("Will use following XMLs: %s", pformat(xmls))
         results = []
@@ -180,7 +190,7 @@ class ArgusDriverMatrixClient(ArgusClient):
             results.append(result)
         return results
 
-    def submit(self, build_id: str, build_url: str, env_path: str, result_path: str, test_type: Literal['java', 'cpp', 'python']):
+    def submit(self, build_id: str, build_url: str, env_path: str, result_path: str, test_type: TestTypeType):
         env = self.parse_build_environment(env_path)
         results = self.get_results(result_path, test_type)
 
