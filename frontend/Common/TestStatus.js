@@ -64,7 +64,8 @@ export const StatusBackgroundCSSClassMap = {
     "aborted": "bg-dark",
     "not_run": "bg-secondary",
     "not_planned": "bg-not-planned",
-    "unknown": "bg-dark"
+    "unknown": "bg-dark",
+    "skipped": "bg-dark"
 };
 
 export const StatusTableBackgroundCSSClassMap = {
