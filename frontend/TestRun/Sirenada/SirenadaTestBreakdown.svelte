@@ -3,8 +3,8 @@
     import sha1 from "js-sha1";
     import hljs from "highlight.js";
     import humanizeDuration from "humanize-duration";
-    import { StatusSortPriority, TestStatus, StatusTableBackgroundCSSClassMap, StatusCSSClassMap } from "../../Common/TestStatus";
-    import { titleCase } from "../../Common/TextUtils";
+    import { StatusSortPriority, TestStatus, StatusTableBackgroundCSSClassMap, StatusCSSClassMap, StatusBackgroundCSSClassMap } from "../../Common/TestStatus";
+    import { titleCase, subUnderscores } from "../../Common/TextUtils";
     import Fa from "svelte-fa";
     import { faBucket, faCircleExclamation } from "@fortawesome/free-solid-svg-icons";
     import { Collapse } from "bootstrap";
@@ -13,6 +13,10 @@
 
 
     let resultsByBrowser = {};
+
+    const normalize = function(val, max, min) {
+        return (val - min) / (max - min);
+    };
 
     const prepareResults = function(testRun) {
         return testRun.results.reduce((acc, val) => {
@@ -26,7 +30,7 @@
         }, {});
     };
 
-    const calculateStatus = function(resultList) {
+    const sortedStatusMap = function(resultList) {
         if (resultList.length == 0) return TestStatus.UNKNOWN;
 
         let statusMap = resultList
@@ -43,7 +47,11 @@
                 return lhs - rhs;
             }
         );
-        return sortedStatus[0];
+        return sortedStatus
+    }
+
+    const calculateStatus = function(resultList) {
+        return sortedStatusMap(resultList)[0];
     };
 
     const findTestWithS3Bucket = function(testsByClass) {
@@ -62,7 +70,24 @@
         resultsByBrowser = prepareResults(testRun);
     });
 </script>
-
+<div class="p-3">
+<div
+        class="flex-fill d-flex shadow-sm overflow-hidden border rounded cursor-question"
+        title="Total: {testRun.results.length}"
+    >
+        {#each sortedStatusMap(testRun.results) as status_map}
+                <div
+                    class="d-flex align-items-center justify-content-center flex-fill {StatusBackgroundCSSClassMap[status_map[0]]}"
+                    style="width: {Math.max(Math.round(normalize(status_map[1], testRun.results.length, 0) * 100), 10)}%"
+                    title="{subUnderscores(titleCase(status_map[0]))} ({status_map[1]})"
+                >
+                    <div class="p-1 text-small text-light text-outline">
+                            {status_map[1]}
+                    </div>
+                </div>
+        {/each}
+    </div>
+</div>
 <div class="p-2">
     {#each Object.entries(resultsByBrowser) as [browserType, testsByClass], idx (browserType)}
         {@const firstResult = Object.values(testsByClass)[0][0]}
@@ -106,7 +131,11 @@
                             >
                                 {fileName}
                             </td>
-                            <td class="{StatusTableBackgroundCSSClassMap[status[0]]}">{titleCase(status[0])}</td>
+                            {#if hasErrors}
+                                <td class="{StatusTableBackgroundCSSClassMap[status[0]]}">{titleCase(status[0])} ({status[1]} tests)</td>
+                            {:else}
+                                <td class="{StatusTableBackgroundCSSClassMap[status[0]]}">{titleCase(status[0])}</td>
+                            {/if}
                         </tr>
                         <tr class="collapse bg-white {hasErrors ? `has-errors-${tableHash}` : ""}" id="result-{blockHash}">
                             <td colspan="2" class="table-active">
