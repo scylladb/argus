@@ -4,6 +4,10 @@ export const newIssueDestinations = [
         "url": "https://github.com/scylladb/scylla",
     },
     {
+        "name": "Scylla Enterprise",
+        "url": "https://github.com/scylladb/scylla-enterprise",
+    },
+    {
         "name": "Scylla Cluster Tests",
         "url": "https://github.com/scylladb/scylla-cluster-tests",
     },
