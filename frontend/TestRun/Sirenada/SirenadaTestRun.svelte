@@ -14,6 +14,7 @@
     import SirenadaRunInfo from "./SirenadaRunInfo.svelte";
     import SirenadaTestBreakdown from "./SirenadaTestBreakdown.svelte";
     import IssueTab from "../IssueTab.svelte";
+    import SirenadaIssueTemplate from "./SirenadaIssueTemplate.svelte";
 
     export let runId = "";
     export let buildNumber = -1;
@@ -184,6 +185,7 @@
                     {/if}
                 </div>
                 <div class="tab-pane fade" id="nav-issues-{runId}" role="tabpanel">
+                    <SirenadaIssueTemplate test_run={testRun} test={testInfo.test} />
                     <div class="py-2 bg-white">
                         {#if issuesOpen}
                             <IssueTab {testInfo} {runId} />

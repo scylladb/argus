@@ -5,7 +5,7 @@
     export let testInfo;
 </script>
 
-<GithubIssues id={runId} testId={testInfo.test.id} />
+<GithubIssues id={runId} testId={testInfo.test.id} pluginName={testInfo.test.plugin_name}/>
 <div class="accordion accordion-flush border-top" id="allIssuesContainer-{testInfo.test.id}-{runId}">
     <div class="accordion-item">
         <h2 class="accordion-header">

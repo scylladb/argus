@@ -1,5 +1,6 @@
 <script>
     import { onMount } from "svelte";
+    import { PLUGIN_NAMES } from "../Common/PluginNames";
     import { newIssueDestinations } from "../Common/IssueDestinations";
     import GithubIssue from "./GithubIssue.svelte";
     import { sendMessage } from "../Stores/AlertStore";
@@ -7,6 +8,7 @@
     import Fa from "svelte-fa";
     export let id = "";
     export let testId;
+    export let pluginName;
     export let filter_key = "run_id";
     export let submitDisabled = false;
     export let aggregateByIssue = false;
@@ -103,7 +105,7 @@
                             <li>
                                 <h6 class="dropdown-header">Repositories</h6>
                             </li>
-                            {#each newIssueDestinations as destination}
+                            {#each newIssueDestinations[pluginName] ??  newIssueDestinations[PLUGIN_NAMES.SCT] as destination}
                                 <li>
                                     <a
                                         target="_blank"
