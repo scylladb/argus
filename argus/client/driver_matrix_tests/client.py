@@ -117,8 +117,11 @@ class ArgusDriverMatrixClient(ArgusClient):
 
         return raw_cases
 
-    def get_driver_info(self, xml_name: str) -> dict[str, str]:
-        filename_re = r"(?P<name>[\w]*)\.(?P<driver_name>[\w]*)\.(?P<proto>v\d)\.(?P<version>[\d\.]*)\.xml"
+    def get_driver_info(self, xml_name: str, test_type: TestTypeType) -> dict[str, str]:
+        if test_type == "cpp":
+            filename_re = r"TEST-(?P<driver_name>[\w]*)-(?P<version>[\d\.]*)\.xml"
+        else:
+            filename_re = r"(?P<name>[\w]*)\.(?P<driver_name>[\w]*)\.(?P<proto>v\d)\.(?P<version>[\d\.]*)\.xml"
 
         match = re.match(filename_re, xml_name)
 
@@ -141,7 +144,7 @@ class ArgusDriverMatrixClient(ArgusClient):
         testsuites = xml.getroot()
         adapted_data = self.TEST_ADAPTERS.get(test_type, generic_adapter)(xml)
 
-        driver_info = self.get_driver_info(xml_path.name)
+        driver_info = self.get_driver_info(xml_path.name, test_type)
         test_collection = {
             "timestamp": adapted_data["timestamp"],
             "name": xml_path.stem,
