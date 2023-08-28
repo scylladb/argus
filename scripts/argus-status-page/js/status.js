@@ -47,6 +47,10 @@ const TEMPLATE_SCYLLA_REPORT = `
 <div>{{node}}: {{status}} <i class="fa-solid fa-circle text-{{statusColor}}"></i></div>
 `;
 
+const TEMPLATE_ERROR_MESSAGE = `
+<div class="my-2 rounded p-2" style="background-color: #f0f0f0"><pre style='white-space: pre-wrap; max-height: 512px; max-width: 256px; overflow-y: scroll'>{{message}}</pre></div>
+`;
+
 /**
  * @param {string} template
  * @param {{ [string]: any }} substitutions
@@ -145,13 +149,18 @@ const StatusPage = {
         let renderedStatuses = statuses.map((status) => {
             /** @type {ScyllaStatusResponse[]} */
             let response = status.response;
-            let renderedResponses = response.map((val) => {
-                return format(TEMPLATE_SCYLLA_REPORT, {
-                    node: val.key,
-                    status: val.value,
-                    statusColor: this.resolveNodeStatus(val.value),
-                })
-            });
+            let renderedResponses = [];
+            if (typeof response == "object" && response.map) {
+                renderedResponses = response.map((val) => {
+                    return format(TEMPLATE_SCYLLA_REPORT, {
+                        node: val.key,
+                        status: val.value,
+                        statusColor: this.resolveNodeStatus(val.value),
+                    });
+                });
+            } else {
+                renderedResponses = [format(TEMPLATE_ERROR_MESSAGE, { message: typeof response == "string" ? response : JSON.stringify(response, undefined, 1) })];
+            }
             let renderedStatus = format(TEMPLATE_SCYLLA_NODE, {
                 ip: status.ip,
                 status: this.resolveTextStatus(status.status),
