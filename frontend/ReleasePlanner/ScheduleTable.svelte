@@ -140,7 +140,7 @@
                             on:click={() => {onAssigneeCellClick(group.schedules[date.dateKey], group, date)}}
                         >
                             {#if group.schedules[date.dateKey]}
-                                {users[group.schedules[date.dateKey].assignees[0]]?.full_name}
+                                {users[group.schedules[date.dateKey].assignees[0]]?.full_name ?? "#EMPTY"}
                             {/if}
                             {#if clickedCell == `${group.name}/${date.dateKey}`}
                             <Schedule

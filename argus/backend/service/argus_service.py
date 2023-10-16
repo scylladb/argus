@@ -223,13 +223,12 @@ class ArgusService:
         tests = ArgusTest.filter(group_id=group_id).all()
         build_ids = [test.build_system_id for test in tests]
         affected_rows: list[SCTTestRun] = list(SCTTestRun.filter(
-            build_id__in=build_ids,
             start_time__gte=schedule.period_start,
             start_time__lte=schedule.period_end
         ).all()
         )
         for row in affected_rows:
-            if row.assignee != new_assignee:
+            if row.build_id in build_ids and row.assignee != new_assignee:
                 row.assignee = new_assignee
                 row.save()
 
@@ -424,17 +423,18 @@ class ArgusService:
         full_schedule["groups"] = [group.group_id for group in groups]
         full_schedule["assignees"] = [assignee.assignee for assignee in assignees]
 
-        schedule_user = User.get(id=assignees[0].assignee)
-        service = TestRunService()
+        if len(assignees) > 0:
+            schedule_user = User.get(id=assignees[0].assignee)
+            service = TestRunService()
 
-        for model in all_plugin_models():
-            for run in model.get_jobs_assigned_to_user(schedule_user):
-                if run["release_id"] != release.id:
-                    continue
-                if run["test_id"] not in full_schedule["tests"]:
-                    continue
-                if schedule.period_start < run["start_time"] < schedule.period_end:
-                    service.change_run_assignee(test_id=run["test_id"], run_id=run["id"], new_assignee=None)
+            for model in all_plugin_models():
+                for run in model.get_jobs_assigned_to_user(schedule_user):
+                    if run["release_id"] != release.id:
+                        continue
+                    if run["test_id"] not in full_schedule["tests"]:
+                        continue
+                    if schedule.period_start < run["start_time"] < schedule.period_end:
+                        service.change_run_assignee(test_id=run["test_id"], run_id=run["id"], new_assignee=None)
 
         for entities in [tests, groups, assignees]:
             for entity in entities:
