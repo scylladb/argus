@@ -172,7 +172,7 @@
                     id="nav-tests-{runId}"
                     role="tabpanel"
                 >
-                    <DriverMatrixTestCollection testCollection={testRun.test_collection} testId={testRun.id}/>
+                    <DriverMatrixTestCollection collections={testRun.test_collection} testId={testRun.id}/>
                 </div>
                 <div
                     class="tab-pane fade"
