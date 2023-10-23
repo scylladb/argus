@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from functools import reduce
+import re
 from uuid import UUID
 from cassandra.cqlengine import columns
 from argus.backend.db import ScyllaCluster
@@ -32,6 +33,14 @@ class DriverTestRun(PluginModelBase):
     test_collection = columns.List(value_type=columns.UserDefinedType(user_type=TestCollection))
     environment_info = columns.List(value_type=columns.UserDefinedType(user_type=EnvironmentInfo))
 
+
+    _artifact_fnames = {
+        "cpp": r"TEST-(?P<driver_name>[\w]*)-(?P<version>[\d\.-]*)",
+        "gocql": r"xunit\.(?P<driver_name>[\w]*)\.(?P<proto>v\d)\.(?P<version>[v\d\.]*)",
+        "python": r"pytest\.(?P<driver_name>[\w]*)\.(?P<proto>v\d)\.(?P<version>[\d\.]*)",
+        "java": r"TEST-(?P<version>[\d\.\w-]*)",
+    }
+
     @classmethod
     def _stats_query(cls) -> str:
         return ("SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, "
@@ -49,6 +58,21 @@ class DriverTestRun(PluginModelBase):
     @classmethod
     def load_test_run(cls, run_id: UUID) -> 'DriverTestRun':
         return cls.get(id=run_id)
+
+    @classmethod
+    def parse_driver_name(cls, raw_file_name: str) -> str:
+        for test, pattern in cls._artifact_fnames.items():
+            match = re.match(pattern, raw_file_name)
+            if not match:
+                continue
+            driver_info = match.groupdict()
+            if test == "java":
+                version = driver_info["version"]
+                return "scylla" if len(version.split(".")) > 3 or "scylla" in version else "datastax"
+            else:
+                return driver_info["driver_name"]
+        return "unknown_driver"
+
 
     @classmethod
     def submit_run(cls, request_data: dict) -> 'DriverTestRun':
@@ -74,7 +98,7 @@ class DriverTestRun(PluginModelBase):
         for result in req.matrix_results:
             collection = TestCollection()
             collection.name = result.get("name")
-            collection.driver = result.get("driver_name")
+            collection.driver = cls.parse_driver_name(collection.name)
             collection.tests_total = result.get("tests")
             collection.failures = result.get("failures")
             collection.errors = result.get("errors")
@@ -121,7 +145,7 @@ class DriverTestRun(PluginModelBase):
             return TestStatus.FAILED
 
         driver_types = {collection.driver for collection in self.test_collection}
-        if not ('datastax' in driver_types and 'scylla' in driver_types):
+        if len(driver_types) <= 1:
             return TestStatus.FAILED
 
         failure_count = reduce(lambda acc, val: acc + (val.failures + val.errors), self.test_collection, 0)
