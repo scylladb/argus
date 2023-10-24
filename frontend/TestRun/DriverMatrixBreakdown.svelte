@@ -62,6 +62,7 @@
     const expandedCases: ICaseExpansionInfo = {};
 
     const toggleStatus = function(status: string) {
+        if (!statusInfo[status]) status = "disabled";
         statusInfo[status].show = !statusInfo[status].show;
     };
 
@@ -69,9 +70,13 @@
         return !!(caseExpansionInfo[`${testCase.name}+${testCase.classname}`]);
     };
 
-    const handleExpandButtonClick = function (caseName: string, className: string) {
+    const handleExpandButtonClick = function (caseName: string, className: string, force = false) {
         const key = `${caseName}+${className}`;
-        expandedCases[key] = !expandedCases[key];
+        if (!force) {
+            expandedCases[key] = !expandedCases[key];
+        } else {
+            expandedCases[key] = true;
+        }
     };
 
     const handleCopyButtonClick = function(testCase: TestCase) {
@@ -88,7 +93,9 @@
     };
 
     const displayStatus = function (testCase: TestCase, filteredStatuses: IStatusDisplayInfo) {
-        return filteredStatuses[testCase.status].show;
+        let status = testCase.status;
+        if (!statusInfo[status]) status = "disabled";
+        return filteredStatuses[status].show;
     };
 
     const aggregateSuites = function(suites: TestSuite[], statusInfo: IStatusDisplayInfo, filterString: string): TestCase[] {
@@ -106,9 +113,11 @@
     const aggregateCaseCounts = function(suites: TestSuite[]) {
         suites.forEach((suite) => {
             suite.cases.forEach((testCase) => {
-                statusInfo[testCase.status].testCount++;
-                if (testCase.status == "failure" || testCase.status == "error") {
-                    handleExpandButtonClick(testCase.name, testCase.classname);
+                let status = testCase.status;
+                if (!statusInfo[status]) status = "disabled";
+                statusInfo[status].testCount++;
+                if (status == "failure" || status == "error") {
+                    handleExpandButtonClick(testCase.name, testCase.classname, true);
                 }
             });
         });
@@ -145,7 +154,7 @@
                         {testCase.name}
                         <div class="text-small text-secondary">{testCase.classname}</div>
                     </div>
-                    <div class="ms-auto rounded p-2 text-white {statusInfo[testCase.status].class}">
+                    <div class="ms-auto rounded p-2 text-white {statusInfo[testCase.status]?.class ?? statusInfo.disabled.class}">
                         {testCase.status.toUpperCase()}
                     </div>
                     {#if testCase.message}
