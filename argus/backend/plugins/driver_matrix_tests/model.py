@@ -106,7 +106,10 @@ class DriverTestRun(PluginModelBase):
             collection.passed = result.get("passed")
             collection.disabled = result.get("disabled")
             collection.time = result.get("time")
-            collection.timestamp = datetime.fromisoformat(result.get("timestamp"))
+            timestamp = result.get("timestamp")
+            # TODO: Not needed once python>=3.11
+            timestamp = timestamp[0:-1] if timestamp[-1] == "Z" else timestamp
+            collection.timestamp = datetime.fromisoformat(timestamp)
             for raw_suite in result.get("suites"):
                 suite = TestSuite()
                 suite.name = raw_suite.get("name")
