@@ -114,7 +114,7 @@ class ArgusRelease(Model):
     assignee = columns.List(value_type=columns.UUID)
     picture_id = columns.UUID()
     enabled = columns.Boolean(default=lambda: True)
-    perpetual = columns.Boolean(default=lambda: True)
+    perpetual = columns.Boolean(default=lambda: False)
     dormant = columns.Boolean(default=lambda: False)
 
     def __eq__(self, other):
