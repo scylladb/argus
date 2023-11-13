@@ -5,6 +5,7 @@
     import { Collapse } from "bootstrap";
     export let displayNumber = false;
     export let displayInvestigations = false;
+    export let hiddenStatuses = [];
     export let stats = {
         created: 0,
         running: 0,
@@ -24,6 +25,30 @@
     const toggleExtendedInvestigations = function () {
         new Collapse(shortBlock, { toggle: true });
         new Collapse(extendedBlock, {toggle: true });
+    };
+
+    const calculateStatusStats = function(stats, investigationStatus, allowedStatuses) {
+        const statusStats = stats?.[investigationStatus];
+        if (!statusStats) return {
+            total: 0,
+            counts: [],
+        };
+        const filtered = Object.entries(statusStats)
+            .filter(v => allowedStatuses.includes(v[0]) && v[1] > 0);
+        const total = filtered.reduce((acc, val) => acc + val[1], 0);
+        const statusStatsPerStatus = filtered
+            .map(v => [...v, (v[1] / total * 100).toFixed(1)])
+            .reduce((acc, v) => {
+                acc[v[0]] = {
+                    amount: v[1],
+                    percentage: v[2],
+                };
+                return acc;
+            }, {});
+        return {
+            total: total,
+            counts: statusStatsPerStatus,
+        };
     };
 </script>
 
@@ -50,6 +75,7 @@
         {/each}
     </div>
     {#if stats.release && displayInvestigations}
+        {@const allowedStatuses = Object.values(TestStatus).filter(v => !hiddenStatuses.includes(v))}
         <div 
             class="mt-2 collapse show"
             bind:this={shortBlock}
@@ -59,12 +85,13 @@
                 on:click={toggleExtendedInvestigations}
             >
                 {#each Object.values(TestInvestigationStatus) as investigationStatus, idx}
+                    {@const statusStats = calculateStatusStats(stats, investigationStatus, allowedStatuses)}
                     <div 
                         class="flex-fill text-center {idx > 0 ? "border-start" : ""} px-3 py-2"
                         role="button"
                     >
                         <Fa icon={InvestigationStatusIcon[investigationStatus]}/>
-                        {Object.values(stats?.[investigationStatus] ?? {}).reduce((acc, val) => acc + val, 0)}
+                        {statusStats?.total}
                     </div>
                 {/each} 
             </div>
@@ -73,18 +100,21 @@
             <div class="d-inline-flex flex-column">
                 <div class="d-flex bg-light-one p-2 rounded">
                     {#each Object.values(TestInvestigationStatus) as investigationStatus, idx}
+                        {@const statusStats = calculateStatusStats(stats, investigationStatus, allowedStatuses)}
                         <div class="{idx > 0 ? "ms-2" : ""} rounded bg-white">
                             <h6 class="p-2 border-bottom">
                                 <Fa icon={InvestigationStatusIcon[investigationStatus]}/>
                                 {TestInvestigationStatusStrings[investigationStatus]}
-                                <span class="d-inline-block ms-3 text-end">{Object.values(stats?.[investigationStatus] ?? {}).reduce((acc, val) => acc + val, 0)}</span>
+                                <span class="d-inline-block ms-3 text-end">
+                                    {statusStats?.total}
+                                </span>
                             </h6>
                             <div class="p-2 d-flex flex-column">
-                                {#each Object.values(TestStatus) as status}
-                                    {#if stats[investigationStatus]?.[status]}
+                                {#each allowedStatuses as status}
+                                    {#if statusStats.counts?.[status]}
                                         <div class="flex-fill d-flex">
                                             <div class="me-4">{subUnderscores(titleCase(status))}</div>
-                                            <div class="ms-auto fw-bold {StatusCSSClassMap[status]}">{stats[investigationStatus]?.[status]}</div>
+                                            <div class="ms-auto fw-bold {StatusCSSClassMap[status]}">{statusStats.counts[status].amount} ({statusStats.counts[status].percentage}%)</div>
                                         </div>
                                     {/if}
                                 {/each}

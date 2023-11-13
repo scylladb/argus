@@ -6,6 +6,7 @@
     import TestPopoutSelector from "./TestPopoutSelector.svelte";
     import { sendMessage } from "../Stores/AlertStore";
     import TestDashboard from "./TestDashboard.svelte";
+    import { TestStatus } from "../Common/TestStatus";
     export let releaseData = {};
     let clickedTests = {};
     let productVersion = queryString.parse(document.location.search)?.productVersion;
@@ -82,6 +83,7 @@
                 releaseName={releaseData.release.name}
                 horizontal={false}
                 displayExtendedStats={true}
+                hiddenStatuses={[TestStatus.NOT_PLANNED, TestStatus.NOT_RUN]}
                 {productVersion}
             />
         </div>
