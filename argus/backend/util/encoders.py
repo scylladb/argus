@@ -19,6 +19,6 @@ class ArgusJSONEncoder(JSONEncoder):
             case m.Model():
                 return dict(o.items())
             case datetime():
-                return o.strftime("%Y-%m-%d %H:%M:%S UTC")
+                return o.strftime("%Y-%m-%dT%H:%M:%SZ")
             case _:
                 return super().default(o)
