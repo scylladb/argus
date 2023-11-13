@@ -128,7 +128,6 @@
             unknown: -1,
 
         };
-        console.log(testStats);
         let tests = Object.values(testStats)
             .sort((a, b) => testPriorities[b.status] - testPriorities[a.status] || a.test.name.localeCompare(b.test.name))
             .reduce((tests, testStats) => {

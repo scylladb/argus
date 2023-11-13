@@ -43,7 +43,6 @@
             if (apiJson.status === "ok") {
                 activity = apiJson.response;
                 fetching = false;
-                console.log(activity);
             }
         } catch (error) {
             console.log(error);
