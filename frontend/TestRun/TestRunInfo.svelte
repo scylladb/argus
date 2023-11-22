@@ -111,6 +111,10 @@
                     <span class="fw-bold">Image id:</span>
                     {test_run.cloud_setup?.db_node.image_id ?? "Unknown"}
                 </li>
+                <li>
+                    <span class="fw-bold">SCT Commit SHA:</span>
+                    {test_run.scm_revision_id ?? "Unknown"}
+                </li>
                 <!-- Scylla v4.5.3-0.20211223.c8f14886d (ami-0df0fbe3daf5ad63d) -->
                 {#if test_run.packages}
                     {#if kernelPackage}
