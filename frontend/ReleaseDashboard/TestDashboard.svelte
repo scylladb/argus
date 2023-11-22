@@ -21,6 +21,7 @@
     import AssigneeList from "../WorkArea/AssigneeList.svelte";
     import { userList } from "../Stores/UserlistSubscriber";
     import { getPicture } from "../Common/UserUtils";
+    import NumberStats from "../Stats/NumberStats.svelte";
     export let releaseName = "";
     export let releaseId = "";
     export let clickedTests = {};
@@ -218,8 +219,11 @@
             {#if !groupStats.disabled}
                 <div class="p-2 shadow mb-2 rounded bg-main">
                     <h5 class="mb-2 d-flex">
-                        <div>
+                        <div class="flex-fill">
                             <div class="mb-2">{groupStats.group.pretty_name || groupStats.group.name}</div>
+                            <div class="mb-2">
+                                <NumberStats displayInvestigations={true} stats={groupStats} displayPercentage={true}/>
+                            </div>
                             {#if Object.keys(assigneeList.groups).length > 0 && Object.keys(users).length > 0}
                                 <div class="shadow-sm bg-main rounded d-inline-block p-2">
                                     <div class="d-flex align-items-center">
