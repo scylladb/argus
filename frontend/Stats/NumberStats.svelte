@@ -4,6 +4,7 @@
     import { titleCase, subUnderscores } from "../Common/TextUtils";
     import { Collapse } from "bootstrap";
     export let displayNumber = false;
+    export let displayPercentage = false;
     export let displayInvestigations = false;
     export let hiddenStatuses = [];
     export let stats = {
@@ -25,6 +26,16 @@
     const toggleExtendedInvestigations = function () {
         new Collapse(shortBlock, { toggle: true });
         new Collapse(extendedBlock, {toggle: true });
+    };
+
+    const calcPercentageForStatus = function(status, stats) {
+        const allowedStatuses = Object.values(TestStatus).filter(v => !hiddenStatuses.includes(v));
+        const filteredTotal = Object
+            .entries(stats)
+            .filter(v => allowedStatuses.includes(v[0]) && typeof v[1] === "number")
+            .reduce((acc, v) => acc + v[1], 0);
+        const statusCount = stats?.[status] ?? 0;
+        return (statusCount / filteredTotal * 100).toFixed(1);
     };
 
     const calculateStatusStats = function(stats, investigationStatus, allowedStatuses) {
@@ -65,16 +76,19 @@
                     style="width: {Math.max(Math.round(normalize(stats[status], stats.total, 0) * 100), 10)}%"
                     title="{subUnderscores(titleCase(status))} ({stats[status]})"
                 >
-                    <div class="p-1 text-small text-light text-outline">
+                    <div class="p-1 text-small text-light text-center text-outline">
                         {#if displayNumber}
                             {stats[status]}
+                        {/if}
+                        {#if displayPercentage}
+                            {displayNumber ? "(" : ""}{calcPercentageForStatus(status, stats)}%{displayNumber ? ")" : ""}
                         {/if}
                     </div>
                 </div>
             {/if}
         {/each}
     </div>
-    {#if stats.release && displayInvestigations}
+    {#if stats.total != -1 && displayInvestigations}
         {@const allowedStatuses = Object.values(TestStatus).filter(v => !hiddenStatuses.includes(v))}
         <div 
             class="mt-2 collapse show"
