@@ -359,7 +359,11 @@
                 {/each}
             </div>
         {:else}
-            <TestRunsMessage state={stateMap[currentState]} />
+            <TestRunsMessage state={stateMap[currentState]}>
+                <div>
+                    <a class="link link-primary" href="{testInfo.test.build_system_url}">Jenkins</a>
+                </div>
+            </TestRunsMessage>
         {/if}
     </div>
 {:else}
