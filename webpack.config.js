@@ -22,6 +22,10 @@ module.exports = {
             import: "./frontend/flashDebug.js",
             dependOn: "globalAlert"
         },
+        login: {
+            import: "./frontend/login.js",
+            dependOn: "globalAlert"
+        },
         workArea: {
             import: "./frontend/work-area.js",
             dependOn: "globalAlert"

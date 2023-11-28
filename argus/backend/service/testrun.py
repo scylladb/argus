@@ -341,7 +341,7 @@ class TestRunService:
             }
         )
         if issue_request.status_code != 200:
-            raise Exception(f"Error getting issue state: Response: HTTP {issue_request.status_code}", issue_request)
+            raise Exception(f"Error getting issue state: Response: HTTP {issue_request.status_code}", issue_request.json())
 
         issue_state: dict[str, Any] = issue_request.json()
 
