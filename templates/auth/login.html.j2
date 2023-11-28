@@ -4,34 +4,21 @@
   Login
 {% endblock %}
 
+{% block javascripts %}
+{{ super() }}
+<script defer src="/s/dist/login.bundle.js"></script>
+<script>
+  const GITHUB_SCOPES = "{{ github_scopes }}";
+  const GITHUB_CLIENT_ID = "{{ github_cid }}";
+  const CSRF_TOKEN = "{{ csrf_token }}";
+</script>
+{% endblock javascripts %}
+
 {% block user_header %}
 <a href="{{ url_for('main.home') }}">Home</a>
 {% endblock user_header %}
 
 {% block body %}
-<div class="container">
-  <div class="row justify-content-center">
-    <div class="col-4 text-end">
-      <form method="post">
-        <div class="mb-3">
-          <label class="form-label" for="username">Username</label>
-          <input class="form-control" name="username" id="username" required>
-        </div>
-        <div class="mb-3">
-          <label class="form-label" for="password">Password</label>
-          <input class="form-control" type="password" name="password" id="password" required>
-        </div>
-        <div class="mb-3">
-          <input class="btn btn-primary" type="submit" value="Log In">
-        </div>
-      </form>
-      <form action="https://github.com/login/oauth/authorize" method="get">
-        <input type="hidden" name="scope" value="{{ github_scopes }}">
-        <input type="hidden" name="client_id" value="{{ github_cid }}">
-        <input type="hidden" name="state" value="{{ csrf_token }}">
-        <button class="btn btn-dark" type="submit"><i class="fab fa-github"></i> Sign In with GitHub</button>
-      </form>
-    </div>
-  </div>
+<div id="loginContainer">
 </div>
 {% endblock %}
