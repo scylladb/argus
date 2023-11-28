@@ -47,6 +47,8 @@ class SCTTestRunSubmissionRequest():
     job_url: str
     started_by: str
     commit_id: str
+    origin_url: str | None
+    branch_name: str | None
     sct_config: dict | None
     runner_public_ip: Optional[str] = field(default=None)
     runner_private_ip: Optional[str] = field(default=None)
@@ -59,6 +61,8 @@ class SCTTestRun(PluginModelBase):
     # Test Details
     test_name = columns.Text()
     scm_revision_id = columns.Text()
+    branch_name = columns.Text()
+    origin_url = columns.Text()
     started_by = columns.Text()
     config_files = columns.List(value_type=columns.Text())
     packages = columns.List(value_type=columns.UserDefinedType(user_type=PackageVersion))
@@ -159,6 +163,9 @@ class SCTTestRun(PluginModelBase):
         run.start_time = datetime.utcnow()
         run.id = UUID(req.run_id)  # pylint: disable=invalid-name
         run.scm_revision_id = req.commit_id
+        if req.origin_url:
+            run.origin_url = req.origin_url
+            run.branch_name = req.branch_name
         run.started_by = req.started_by
         run.build_job_url = req.job_url
 

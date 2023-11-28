@@ -112,8 +112,16 @@
                     {test_run.cloud_setup?.db_node.image_id ?? "Unknown"}
                 </li>
                 <li>
-                    <span class="fw-bold">SCT Commit SHA:</span>
+                    <span class="fw-bold">SCT commit sha:</span>
                     {test_run.scm_revision_id ?? "Unknown"}
+                </li>
+                <li>
+                    <span class="fw-bold">SCT repository:</span>
+                    {test_run.origin_url ?? "Unset"}
+                </li>
+                <li>
+                    <span class="fw-bold">SCT branch name:</span>
+                    {test_run.branch_name ?? "Unset"}
                 </li>
                 <!-- Scylla v4.5.3-0.20211223.c8f14886d (ami-0df0fbe3daf5ad63d) -->
                 {#if test_run.packages}
