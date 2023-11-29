@@ -47,8 +47,8 @@ class SCTTestRunSubmissionRequest():
     job_url: str
     started_by: str
     commit_id: str
-    origin_url: str | None
-    branch_name: str | None
+    origin_url: Optional[str] = field(default=None)
+    branch_name: Optional[str] = field(default=None)
     sct_config: dict | None
     runner_public_ip: Optional[str] = field(default=None)
     runner_private_ip: Optional[str] = field(default=None)
