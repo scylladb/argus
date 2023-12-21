@@ -9,7 +9,7 @@ from argus.backend.models.web import ArgusRelease
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.driver_matrix_tests.udt import TestCollection, TestSuite, TestCase, EnvironmentInfo
 from argus.backend.plugins.driver_matrix_tests.raw_types import RawMatrixTestResult
-from argus.backend.util.enums import TestStatus
+from argus.backend.util.enums import TestInvestigationStatus, TestStatus
 
 
 class DriverMatrixPluginError(Exception):
@@ -134,6 +134,8 @@ class DriverTestRun(PluginModelBase):
             run.test_collection.append(collection)
 
         run.status = run._determine_run_status().value
+        if run.status == TestStatus.PASSED:
+            run.investigation_status = TestInvestigationStatus.INVESTIGATED.value
         run.save()
         return run
 
@@ -158,7 +160,7 @@ class DriverTestRun(PluginModelBase):
         return TestStatus.PASSED
 
     def change_status(self, new_status: TestStatus):
-        raise DriverMatrixPluginError("This method is obsolete. Status is now determined on submission.")
+        self.status = new_status.value
 
     def get_events(self) -> list:
         return []

@@ -7,7 +7,7 @@ from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import ArgusRelease
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.sirenada.types import RawSirenadaRequest, SirenadaPluginException
-from argus.backend.util.enums import TestStatus
+from argus.backend.util.enums import TestInvestigationStatus, TestStatus
 
 
 class SirenadaTest(UserType):
@@ -108,6 +108,8 @@ class SirenadaRun(PluginModelBase):
             if (case.s3_folder_id, case.sirenada_test_id) not in run.s3_folder_ids and case.s3_folder_id:
                 run.s3_folder_ids.append((case.s3_folder_id, case.sirenada_test_id))
 
+        if run.status == TestStatus.PASSED:
+            run.investigation_status = TestInvestigationStatus.INVESTIGATED.value
         run.save()
 
         return run

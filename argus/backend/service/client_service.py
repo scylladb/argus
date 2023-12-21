@@ -2,7 +2,7 @@ from uuid import UUID
 from argus.backend.db import ScyllaCluster
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS
-from argus.backend.util.enums import TestStatus
+from argus.backend.util.enums import TestInvestigationStatus, TestStatus
 
 
 class ClientException(Exception):
@@ -41,7 +41,10 @@ class ClientService:
     def update_run_status(self, run_type: str, run_id: str, new_status: str) -> str:
         model = self.get_model(run_type)
         run = model.load_test_run(UUID(run_id))
-        run.change_status(new_status=TestStatus(new_status))
+        status = TestStatus(new_status)
+        run.change_status(new_status=status)
+        if status == TestStatus.PASSED:
+            run.investigation_status = TestInvestigationStatus.INVESTIGATED.value
         run.save()
 
         return run.status
