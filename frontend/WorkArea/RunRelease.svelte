@@ -12,7 +12,7 @@
     export let filtered = false;
     export let runs = [];
     let releaseStats;
-    let releaseStatsRefreshInterval;
+    let statsFetched = false;
 
     let releaseClicked = false;
     let releaseGroups = [];
@@ -29,6 +29,12 @@
 
     const handleReleaseClick = async function (e) {
         releaseClicked = !releaseClicked;
+        if (!releaseStats) fetchStats();
+    };
+
+    export const refreshReleaseStats = function (e) {
+        statsFetched = false;
+        fetchStats(true);
     };
 
     const fetchGroupAssignees = async function () {
@@ -62,32 +68,21 @@
         fetchGroupAssignees();
     };
 
-    const fetchStats = async function () {
+    const fetchStats = async function (forceFetch = false) {
         let params = new URLSearchParams({
             release: release.name,
             limited: new Number(false),
             force: new Number(false),
         });
-        let response = await fetch("/api/v1/release/stats/v2?" + params);
+        let opts = forceFetch ? {cache: "reload"} : {};
+        let response = await fetch("/api/v1/release/stats/v2?" + params, opts);
         let json = await response.json();
         if (json.status != "ok") {
             return false;
         }
         releaseStats = json.response;
+        statsFetched = true;
     };
-
-    onMount(() => {
-        let refreshInterval = 600 + 15 + Math.round((Math.random() * 10));
-        releaseStatsRefreshInterval = setInterval(() => {
-            fetchStats();
-        }, refreshInterval * 1000);
-    });
-
-    onDestroy(() => {
-        if (releaseStatsRefreshInterval) {
-            clearInterval(releaseStatsRefreshInterval);
-        }
-    });
 </script>
 
 <div class="accordion-item" class:d-none={filtered}>
@@ -104,17 +99,17 @@
                         {release.pretty_name || release.name}
                     </div>
                     <div>
-                        {#await fetchStats()}
-                            <span class="spinner-border spinner-border-sm" /> Loading stats.
-                        {:then}
+                        {#if releaseStats && statsFetched}
                             {#if releaseStats?.total > 0}
                                 <NumberStats stats={releaseStats} />
                             {:else if releaseStats?.total == 0}
                                 <!-- svelte-ignore empty-block -->
                             {/if}
-                        {:catch}
-                            <span>Error fetching stats.</span>
-                        {/await}
+                        {:else if !statsFetched && releaseClicked}
+                            <span class="spinner-border spinner-border-sm" /> Loading stats.
+                        {:else}
+                                <!-- svelte-ignore empty-block -->
+                        {/if}
                     </div>
                 </div>
             </button
@@ -127,6 +122,9 @@
         <div class="p-2">
             <a href="/dashboard/{release.name}" class="btn btn-sm btn-dark"
                 >Dashboard</a
+            >
+            <button class="btn btn-sm btn-dark" on:click={refreshReleaseStats}
+                >Update Stats</button
             >
         </div>
         <div class="p-2 border-bottom">

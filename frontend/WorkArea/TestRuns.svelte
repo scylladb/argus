@@ -12,6 +12,8 @@
     import { AVAILABLE_PLUGINS } from "../Common/PluginDispatch";
     import { sendMessage } from "../Stores/AlertStore";
     import TestRunsMessage from "./TestRunsMessage.svelte";
+    import { faRefresh } from "@fortawesome/free-solid-svg-icons";
+    import Fa from "svelte-fa";
 
     export let testId;
     export let listId = uuidv4();
@@ -141,6 +143,7 @@
     };
 
     const fetchTestRuns = async function () {
+        if (!document.hasFocus()) return;
         try {
             let params = queryString.stringify({
                 additionalRuns,
@@ -257,7 +260,7 @@
             fetchTestRuns();
             runRefreshInterval = setInterval(async () => {
                 fetchTestRuns();
-            }, 120 * 1000);
+            }, 1200 * 1000);
         }
     });
 
@@ -341,6 +344,7 @@
                     on:closeRun={handleTestRunClose}
                     on:increaseLimit={handleIncreaseLimit}
                     on:ignoreRuns={handleIgnoreRuns}
+                    on:fetchNewRuns={fetchTestRuns}
                 />
                 {#each runs as run (run.id)}
                     <div class:show={clickedTestRuns[run.id]} class="collapse mb-2" id="collapse{run.id}">
@@ -352,6 +356,7 @@
                                     buildNumber={extractBuildNumber(run)}
                                     on:closeRun={handleTestRunClose}
                                     on:investigationStatusChange
+                                    on:runStatusChange={fetchTestRuns}
                                 />
                             {/if}
                         </div>

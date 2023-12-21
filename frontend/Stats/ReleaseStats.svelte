@@ -1,30 +1,11 @@
 <script>
     import NumberStats from "./NumberStats.svelte";
-    import { createEventDispatcher, onDestroy, onMount } from "svelte";
-    export let releaseName = "";
-    export let productVersion = "";
     export let DisplayItem = NumberStats;
     export let showTestMap = false;
     export let showReleaseStats = true;
     export let horizontal = false;
     export let hiddenStatuses = [];
     export let displayExtendedStats = false;
-    const dispatch = createEventDispatcher();
-    const fetchStats = async function () {
-        let params = new URLSearchParams({
-            release: releaseName,
-            limited: new Number(false),
-            force: new Number(false),
-            productVersion: productVersion,
-        });
-        let response = await fetch("/api/v1/release/stats/v2?" + params);
-        let json = await response.json();
-        if (json.status != "ok") {
-            return false;
-        }
-        releaseStats = json.response;
-        dispatch("statsUpdate", { stats: releaseStats });
-    };
 
     const releaseStatsDefault = {
         created: 0,
@@ -39,24 +20,7 @@
         tests: {},
         total: -1,
     };
-
-    let statRefreshInterval;
-    let releaseStats = releaseStatsDefault;
-    $: fetchStats(productVersion);
-
-    onMount(() => {
-        fetchStats();
-        let refreshInterval = 300 + 15 + Math.round((Math.random() * 10));
-        statRefreshInterval = setInterval(() => {
-            fetchStats();
-        }, refreshInterval * 1000);
-    });
-
-    onDestroy(() => {
-        if (statRefreshInterval) {
-            clearInterval(statRefreshInterval);
-        }
-    });
+    export let releaseStats = releaseStatsDefault;
 
 </script>
 

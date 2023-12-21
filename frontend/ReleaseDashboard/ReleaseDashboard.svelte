@@ -10,6 +10,7 @@
     export let releaseData = {};
     let clickedTests = {};
     let productVersion = queryString.parse(document.location.search)?.productVersion;
+    let stats;
 
     const handleTestClick = function (e) {
         console.log(e);
@@ -80,11 +81,10 @@
     <div class="row mb-2">
         <div class="col">
             <ReleaseStats
-                releaseName={releaseData.release.name}
                 horizontal={false}
                 displayExtendedStats={true}
                 hiddenStatuses={[TestStatus.NOT_PLANNED, TestStatus.NOT_RUN]}
-                {productVersion}
+                releaseStats={stats}
             />
         </div>
     </div>
@@ -97,6 +97,7 @@
                 bind:clickedTests={clickedTests}
                 on:testClick={handleTestClick}
                 on:versionChange={handleVersionChange}
+                on:statsUpdate={(e) => (stats = e.detail)}
             />
         </div>
         <div class="col-xs-10 col-sm-6 col-md-5">

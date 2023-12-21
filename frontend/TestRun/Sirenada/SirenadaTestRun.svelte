@@ -2,6 +2,7 @@
     import { onMount, onDestroy, createEventDispatcher } from "svelte";
     import Fa from "svelte-fa";
     import {
+        faRefresh,
         faTimes,
     } from "@fortawesome/free-solid-svg-icons";
     import ActivityTab from "../ActivityTab.svelte";
@@ -28,6 +29,7 @@
     let failedToLoad = false;
 
     const fetchTestRunData = async function () {
+        if (!document.hasFocus()) return;
         try {
             let run = await fetchRun(testInfo.test.plugin_name, runId);
             testRun = run;
@@ -60,7 +62,7 @@
 
         runRefreshInterval = setInterval(() => {
             fetchTestRunData();
-        }, 1000 * 30);
+        }, 1000 * 300);
     });
 
     onDestroy(() => {
@@ -78,6 +80,13 @@
             {/if}
         </div>
         <div class="ms-auto text-end">
+            <button class="btn btn-sm btn-outline-dark" title="Refresh" on:click={() => {
+                fetchTestRunData();
+            }}
+                ><Fa icon={faRefresh} /></button
+            >
+        </div>
+        <div class="ms-2 text-end">
             <button class="btn btn-sm btn-outline-dark" title="Close" on:click={() => {
                 dispatch("closeRun", { id: runId });
             }}
@@ -92,6 +101,7 @@
                     <div class="d-flex align-items-center">
                         <RunStatusButton {testRun} on:statusUpdate={(e) => {
                             testRun.status = e.detail.status;
+                            dispatch("runStatusChange");
                         }} />
                         <RunInvestigationStatusButton {testRun} on:investigationStatusChange={(e) => {
                             testRun.investigation_status = e.detail.status;
