@@ -45,13 +45,32 @@
         return JSON.parse(window.localStorage.getItem(`releaseDashState-${releaseId}`)) || {};
     };
 
-    const toggleCollapse = function(collapseId) {
-        collapseState[collapseId] = !(collapseState[collapseId] || false);
+    const toggleCollapse = function(collapseId, force = false, forcedState = false) {
+        if (force) {
+            collapseState[collapseId] = forcedState;
+        } else {
+            collapseState[collapseId] = !(collapseState[collapseId] || false);
+        }
         window.localStorage.setItem(`releaseDashState-${releaseId}`, JSON.stringify(collapseState));
     };
 
-    const getCollapseState = function(collapseId) {
+    const getCollapseState = function(collapseId, collapseState) {
         return collapseState[collapseId] ?? false;
+    };
+
+    const toggleAllCollapses = function(state = false) {
+        for (let collapseId in stats.groups) {
+            toggleCollapse(`collapse-${collapseId}`, true, state);
+        }
+    };
+
+    const allCollapsed = function(collapseState) {
+        for (let collapseId in stats.groups) {
+            if (!getCollapseState(`collapse-${collapseId}`, collapseState)) {
+                return false;
+            }
+        }
+        return true;
     };
 
     let collapseState = loadCollapseState();
@@ -215,6 +234,23 @@
         </div>
     {/await}
     {#if stats}
+        <div class="text-end mb-2">
+            {#if allCollapsed(collapseState)}
+                <button
+                    class="btn btn-secondary btn-sm"
+                    on:click={() => toggleAllCollapses(false)}
+                >
+                    Expand All
+                </button>
+            {:else}
+                <button
+                    class="btn btn-secondary btn-sm"
+                    on:click={() => toggleAllCollapses(true)}
+                >
+                    Collapse All
+                </button>
+            {/if}
+        </div>
         {#each sortedGroups(stats.groups) as groupStats (groupStats.group.id)}
             {#if !groupStats.disabled}
                 <div class="p-2 shadow mb-2 rounded bg-main">
@@ -260,7 +296,7 @@
                             </button>
                         </div>
                     </h5>
-                    <div class="collapse" class:show={!getCollapseState(`collapse-${groupStats.group.id}`)} id="collapse-{groupStats.group.id}">
+                    <div class="collapse" class:show={!getCollapseState(`collapse-${groupStats.group.id}`, collapseState)} id="collapse-{groupStats.group.id}">
                         <div class="my-2 d-flex flex-wrap bg-lighter rounded shadow-sm">
                             {#each Object.entries(sortTestStats(groupStats.tests)) as [testId, testStats] (testId)}
                                 <div
