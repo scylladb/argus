@@ -1,7 +1,7 @@
 <script>
     import { createEventDispatcher, onMount } from "svelte";
     import Fa from "svelte-fa";
-    import { faBan, faPlus, faTimes } from "@fortawesome/free-solid-svg-icons";
+    import { faBan, faPlus, faRefresh, faTimes } from "@fortawesome/free-solid-svg-icons";
     import { extractBuildNumber } from "../Common/RunUtils";
     import { StatusButtonCSSClassMap } from "../Common/TestStatus";
     import { Modal } from "bootstrap";
@@ -75,7 +75,7 @@
         >
             <Fa icon={faPlus}/>
         </button>
-    </div>    
+    </div>
     <div class="me-2 mb-2 d-inline-block">
         <button
             class="btn btn-light"
@@ -86,6 +86,15 @@
             }}
         >
             <Fa icon={faBan}/>
+        </button>
+    </div>
+    <div class="d-inline-block">
+        <button 
+            class="btn btn-light"
+            on:click={() => dispatch("fetchNewRuns")}
+            title="Fetch Runs"
+        >
+            <Fa icon={faRefresh}/>
         </button>
     </div>
 </div>

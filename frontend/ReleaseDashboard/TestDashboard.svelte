@@ -7,6 +7,7 @@
         faComment,
         faArrowDown,
         faArrowUp,
+        faRefresh,
     } from "@fortawesome/free-solid-svg-icons";
 
     import {
@@ -76,19 +77,22 @@
     let collapseState = loadCollapseState();
 
 
-    const fetchStats = async function () {
+    const fetchStats = async function (force = false) {
+        if (!document.hasFocus()) return;
         let params = queryString.stringify({
             release: releaseName,
             limited: new Number(false),
             force: new Number(true),
             productVersion: productVersion ?? "",
         });
-        let response = await fetch("/api/v1/release/stats/v2?" + params);
+        let opts = force ? {cache: "reload"} : {};
+        let response = await fetch("/api/v1/release/stats/v2?" + params, opts);
         let json = await response.json();
         if (json.status != "ok") {
             return false;
         }
         stats = json.response;
+        dispatch("statsUpdate", stats);
 
         if (stats.release.perpetual) {
             fetchGroupAssignees(releaseId);
@@ -99,6 +103,10 @@
                 }, 25 * idx);
             });
         }
+    };
+
+    const handleDashboardRefreshClick = function() {
+        fetchStats(true);
     };
 
     const fetchVersions = async function() {
@@ -215,6 +223,11 @@
 
 </script>
 <div class="rounded bg-light-one shadow-sm p-2">
+    <div class="text-end mb-2">
+        <button title="Refresh" class="btn btn-sm btn-outline-dark" on:click={handleDashboardRefreshClick}>
+            <Fa icon={faRefresh}/>
+        </button>
+    </div>
     {#await fetchVersions()}
         <div>Loading versions...</div>
     {:then versions}
