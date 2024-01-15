@@ -84,6 +84,12 @@
                         )}
                     </li>
                 {/if}
+                {#if test_run.stress_duration}
+                    <li>
+                        <span class="fw-bold">Custom Stress Duration:</span>
+                        {test_run.stress_duration}
+                    </li>
+                {/if}
                 <li>
                     <span class="fw-bold">Started by:</span>
                     {test_run.started_by ?? "Unknown, probably jenkins"}
