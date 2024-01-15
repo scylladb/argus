@@ -60,6 +60,7 @@ class SCTTestRun(PluginModelBase):
 
     # Test Details
     test_name = columns.Text()
+    stress_duration = columns.Float()
     scm_revision_id = columns.Text()
     branch_name = columns.Text()
     origin_url = columns.Text()
@@ -181,6 +182,8 @@ class SCTTestRun(PluginModelBase):
 
         if req.sct_config:
             backend = req.sct_config.get("cluster_backend")
+            if duration_override := req.sct_config.get("stress_duration"):
+                run.stress_duration = float(duration_override)
             region_key = SCT_REGION_PROPERTY_MAP.get(backend, SCT_REGION_PROPERTY_MAP["default"])
             raw_regions = req.sct_config.get(region_key) or "undefined_region"
             regions = raw_regions.split() if isinstance(raw_regions, str) else raw_regions
