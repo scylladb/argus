@@ -9,6 +9,7 @@
     import { TestStatus } from "../Common/TestStatus";
     export let releaseData = {};
     let clickedTests = {};
+    let issuesClicked = false;
     let productVersion = queryString.parse(document.location.search)?.productVersion;
 
     const handleTestClick = function (e) {
@@ -56,6 +57,7 @@
                             type="button"
                             data-bs-toggle="collapse"
                             data-bs-target="#collapseIssues"
+                            on:click={() => issuesClicked = true}
                         >
                             All Issues
                         </button>
@@ -65,12 +67,14 @@
                         class="accordion-collapse collapse bg-light-one"
                     >
                         <div class="accordion-body">
+                            {#if issuesClicked}
                             <GithubIssues
                                 id={releaseData.release.id}
                                 filter_key="release_id"
                                 submitDisabled={true}
                                 aggregateByIssue={true}
                             />
+                            {/if}
                         </div>
                     </div>
                 </div>

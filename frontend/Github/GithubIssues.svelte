@@ -36,6 +36,45 @@
             console.log(error);
         }
     };
+/*
+    id = columns.UUID(primary_key=True, default=uuid4, partition_key=True)
+    added_on = columns.DateTime(default=datetime.utcnow)
+    release_id = columns.UUID(index=True)
+    group_id = columns.UUID(index=True)
+    test_id = columns.UUID(index=True)
+    run_id = columns.UUID(index=True)
+    user_id = columns.UUID(index=True)
+    type = columns.Text()
+    owner = columns.Text()
+    repo = columns.Text()
+    issue_number = columns.Integer()
+    last_status = columns.Text()
+    title = columns.Text()
+    url = columns.Text()
+*/
+
+    let sortCriteria = "date";
+    let reverseSort = true;
+    let currentPage = 0;
+    let filterString = "";
+
+    const SORT_ORDERS = {
+        name: {
+            field: "title",
+            friendlyString: "By title",
+            f: (lhs, rhs) => reverseSort ? rhs.title.localeCompare(lhs.title.localeCompare) : lhs.title.localeCompare(lhs.title.localeCompare)
+        },
+        repo: {
+            field: "repo",
+            friendlyString: "By repository",
+            f: (lhs, rhs) => reverseSort ? rhs.repo.localeCompare(lhs.repo.localeCompare) : lhs.repo.localeCompare(lhs.repo.localeCompare)
+        },
+        date: {
+            field: "added_on",
+            friendlyString: "By date",
+            f: (lhs, rhs) => reverseSort ? new Date(rhs.added_on) - new Date(lhs.added_on) : new Date(lhs.added_on) - new Date(rhs.added_on)
+        }
+    };
 
     const submitIssue = async function () {
         try {
@@ -72,9 +111,47 @@
         }
     };
 
-    const sortIssuesByDate = function(issues) {
-        return issues.sort((a,b) => new Date(b.added_on) - new Date(a.added_on));
+    /**
+     * 
+     * @param {{title: string, added_on: string, repo: string}} issue
+     * @param {string} filterString
+     */
+    const shouldFilter = function (issue, filterString) {
+        if (!filterString) return false;
+        if (!issue) return true;
+        const allTerms = `${issue.owner}$$${issue.title}$$${issue.repo}#${issue.issue_number}`;
+        return allTerms.toLowerCase().search(filterString) == -1;
     };
+
+    /**
+     * 
+     * @param {{title: string, added_on: string, repo: string}[]} issues
+     * @param sortCriteria
+     * @param reverse
+     */
+    const paginateIssues = function(issues, sortCriteria = "default", reverse = false, filterString = "") {
+        console.log("Issues: ", issues);
+        if (issues.length == 0) return [];
+        const sorted = Array.from(issues).sort(SORT_ORDERS[sortCriteria].f);
+        console.log("Sorted: ", sorted);
+        const filtered = sorted.filter(v => !shouldFilter(v, filterString));
+        console.log("Filtered: ", filtered);
+        const PAGE_SIZE = 10;
+        const steps = Math.max(parseInt(filtered.length / PAGE_SIZE) + 1, 1);
+        const pages = Array
+            .from({length: steps}, () => [])
+            .map((_, pageIdx) => {
+                const sliceIdx = pageIdx * PAGE_SIZE;
+                const slice = filtered.slice(sliceIdx, PAGE_SIZE + sliceIdx);
+                return [...slice];
+            });
+        console.log("Final: ", pages);
+        return pages;
+    };
+
+    let sortedIssues = paginateIssues(issues, sortCriteria, reverseSort);
+    $: sortedIssues = paginateIssues(issues, sortCriteria, reverseSort, filterString);
+
 
     const exportIssueAsFormattedList = function(issues) {
         let issueFormattedList = issues
@@ -139,11 +216,40 @@
         {#if issues.length > 0}
             <h6 class="d-flex">
                 <div>Issues</div>
-                <div class="ms-auto"><button class="btn btn-success" on:click={() => exportIssueAsFormattedList(issues)}><Fa icon={faCopy}/></button></div>
+                <div class="ms-auto"><button class="btn btn-success" on:click={() => exportIssueAsFormattedList(sortedIssues[currentPage] ?? [])}><Fa icon={faCopy}/></button></div>
             </h6>
-        {/if}
-        {#each sortIssuesByDate(issues) as issue}
-            <GithubIssue {issue} aggregated={aggregateByIssue} deleteEnabled={!submitDisabled} on:issueDeleted={fetchIssues} />
+            <div class="row">
+                <div class="col">
+                    <input class="form-control form-input" type="text" placeholder="Filter issues..." bind:value={filterString}>
+                </div>
+                <div class="col">
+                    <select class="form-select" bind:value={sortCriteria}>
+                        {#each Object.entries(SORT_ORDERS) as [sortName, meta]}
+                            <option value="{sortName}">{meta.friendlyString}</option>
+                        {/each}
+                    </select>
+                    <div>
+                        <input class="form-check-input" type="checkbox" id="sortCheckOrder" bind:checked={reverseSort}>
+                        <label class="form-check-label" for="sortCheckOrder">
+                            Descending order
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                {#each sortedIssues[currentPage] ?? [] as issue (issue.id)}
+                    <GithubIssue {issue} aggregated={aggregateByIssue} deleteEnabled={!submitDisabled} on:issueDeleted={fetchIssues} />
+                {/each}
+            </div>
+            <div class="d-flex ">
+                {#each sortedIssues as page, pageIdx}
+                    {#if page.length > 0}
+                        <div class="ms-1 p-1">
+                            <button class="btn btn-sm btn-primary" on:click={() => currentPage = pageIdx}>{pageIdx + 1}</button>
+                        </div>
+                    {/if}
+                {/each}
+            </div>
         {:else}
             <div class="row">
                 <div class="col text-center text-muted">
@@ -154,7 +260,7 @@
                     {/if}
                 </div>
             </div>
-        {/each}
+        {/if}
     </div>
 </div>
 
