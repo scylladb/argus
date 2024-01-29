@@ -8,6 +8,10 @@
         faArrowDown,
         faArrowUp,
         faRefresh,
+        faArrowLeft,
+        faEllipsisH,
+        faCheck,
+        faTimes,
     } from "@fortawesome/free-solid-svg-icons";
 
     import {
@@ -29,6 +33,8 @@
     export let productVersion;
     let stats;
     let statRefreshInterval;
+    let versionsIncludeNoVersion = JSON.parse(window.localStorage.getItem(`releaseDashIncludeNoVersions-${releaseId}`)) ?? false;
+    let versionsFilterExtraVersions = JSON.parse(window.localStorage.getItem(`releaseDashFilterExtraVersions-${releaseId}`)) ?? true;
     let users = {};
     $: users = $userList;
     let assigneeList = {
@@ -83,6 +89,7 @@
             release: releaseName,
             limited: new Number(false),
             force: new Number(true),
+            includeNoVersion: new Number(versionsIncludeNoVersion),
             productVersion: productVersion ?? "",
         });
         let opts = force ? {cache: "reload"} : {};
@@ -120,6 +127,25 @@
         }
 
         return json.response;
+    };
+
+    const shouldFilterVersion = function (version) {
+        if (!stats) return false;
+        if (!versionsFilterExtraVersions) return false;
+        try {
+            const releaseRegex = stats.release.valid_version_regex;
+            if (!releaseRegex) return false;
+            const re = RegExp(releaseRegex).test(version);
+            if (re) return false;
+
+            return true;
+        } catch (error) {
+            console.log("Failure filtering version", error);
+        }
+    };
+
+    const saveCheckboxState = function(name, state) {
+        window.localStorage.setItem(name, JSON.stringify(state));
     };
 
     const handleVersionClick = function(versionString) {
@@ -223,7 +249,7 @@
 
 </script>
 <div class="rounded bg-light-one shadow-sm p-2">
-    <div class="text-end mb-2">
+    <div class="text-end">
         <button title="Refresh" class="btn btn-sm btn-outline-dark" on:click={handleDashboardRefreshClick}>
             <Fa icon={faRefresh}/>
         </button>
@@ -237,13 +263,45 @@
                 class:btn-primary={!productVersion}
                 class:btn-light={productVersion}
                 on:click={() => { handleVersionClick(""); }}>All</button>
+            <button
+            class="btn ms-2 mb-2"
+            class:btn-success={versionsIncludeNoVersion}
+            class:btn-danger={!versionsIncludeNoVersion}
+            on:click={() => { 
+                versionsIncludeNoVersion = !versionsIncludeNoVersion;
+                saveCheckboxState(`releaseDashIncludeNoVersions-${releaseId}`, versionsIncludeNoVersion);
+                handleVersionClick(productVersion);
+            }}>{#if versionsIncludeNoVersion}
+                <Fa icon={faCheck}/>
+            {:else}
+                <Fa icon={faTimes}/>
+            {/if} No version</button>
             {#each versions as version}
-                <button
+                {#if !shouldFilterVersion(version, versionsFilterExtraVersions)}
+                    <button
                     class="btn btn-light ms-2 mb-2"
                     class:btn-primary={productVersion == version}
                     class:btn-light={productVersion != version}
                     on:click={() => { handleVersionClick(version); }}>{version}</button>
+                {/if}
             {/each}
+            {#if stats?.release?.valid_version_regex}
+                <button
+                    class="btn ms-2 mb-2"
+                    class:btn-primary={productVersion == "!noVersion"}
+                    class:btn-light={productVersion != "!noVersion"}
+                    on:click={() => {
+                            versionsFilterExtraVersions = !versionsFilterExtraVersions;
+                            saveCheckboxState(`releaseDashFilterExtraVersions-${releaseId}`, versionsFilterExtraVersions);
+                        }}
+                >
+                {#if versionsFilterExtraVersions}
+                    <Fa icon={faEllipsisH} />
+                {:else}
+                    <Fa icon={faArrowLeft} />
+                {/if}
+                </button>
+            {/if}
         </div>
     {/await}
     {#if stats}

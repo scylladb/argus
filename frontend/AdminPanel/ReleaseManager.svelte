@@ -13,12 +13,14 @@
     import ReleaseCreator from "./ReleaseCreator.svelte";
     import GroupCreator from "./GroupCreator.svelte";
     import TestCreator from "./TestCreator.svelte";
+    import ReleaseEditor from "./ReleaseEditor.svelte";
     let releases = [];
     let currentRelease;
     let currentReleaseId;
     let currentReleaseData;
     let currentGroup;
     let creatingRelease = false;
+    let editingRelease = false;
     let creatingGroup = false;
     let creatingTest = false;
     let moving = false;
@@ -38,7 +40,6 @@
                         currentRelease = releases[0];
                         currentReleaseId = currentRelease.id;
                     }
-                    ;
                 }
             } else {
                 throw apiJson;
@@ -138,7 +139,6 @@
         currentRelease = releases.find(
             (release) => release.id == currentReleaseId
         );
-        ;
     };
 
     const handleGroupChange = function (group) {
@@ -243,6 +243,33 @@
     const handleReleaseCreateCancel = function (e) {
         creatingRelease = false;
     };
+
+
+    const handleReleaseEdit = async function (e) {
+        editingRelease = false;
+        let result = await apiMethodCall(
+            "/admin/api/v1/release/edit",
+            e.detail
+        );
+        if (result.status === "ok") {
+            fetchReleases();
+        }
+    };
+
+    const handleReleaseDelete = async function (e) {
+        editingRelease = false;
+        currentRelease = undefined;
+        let result = await apiMethodCall("/admin/api/v1/release/delete", e.detail);
+        if (result.status === "ok") {
+            fetchReleases();
+        }
+    };
+
+    const handleReleaseEditCancel = function (e) {
+        editingRelease = false;
+    };
+
+
 
     const handleReleaseStateChange = async function (e) {
         let result = await apiMethodCall("/admin/api/v1/release/set_state", {
@@ -349,7 +376,25 @@
                 </div>
             {/if}
         </div>
-        <div class="col-2 text-end">
+        <div class="col-2 text-end d-flex align-items-center justify-content-end">
+            {#if currentRelease}
+                <div class="mx-2">
+                    <button
+                        class="btn btn-primary" 
+                        on:click={() => (editingRelease = true)}
+                    >
+                        Edit
+                    </button>
+                </div>
+            {/if}
+            {#if editingRelease}
+                <ReleaseEditor 
+                    releaseData={currentRelease}
+                    on:releaseEdit={handleReleaseEdit}
+                    on:releaseEditCancel={handleReleaseEditCancel}
+                    on:releaseDelete={handleReleaseDelete}
+                />
+            {/if}
             <button
                 class="btn btn-success"
                 on:click={() => (creatingRelease = true)}

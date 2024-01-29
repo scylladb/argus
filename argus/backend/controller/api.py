@@ -389,9 +389,10 @@ def release_stats_v2():
     release = request.args.get("release")
     limited = bool(int(request.args.get("limited")))
     version = request.args.get("productVersion", None)
+    include_no_version = bool(int(request.args.get("includeNoVersion", True)))
     force = bool(int(request.args.get("force")))
     stats = ReleaseStatsCollector(
-        release_name=release, release_version=version).collect(limited=limited, force=force)
+        release_name=release, release_version=version).collect(limited=limited, force=force, include_no_version=include_no_version)
 
     res = jsonify({
         "status": "ok",
