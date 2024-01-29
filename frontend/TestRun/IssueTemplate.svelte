@@ -120,6 +120,17 @@
                                 class="code"
                                 bind:this={templateElement}
                                 id="issueTemplateText-{test_run.id}">
+## Packages
+
+{#if scyllaServerPackage}{upgradedPackage ? "Base " : ""}Scylla version: `{scyllaServerPackage.version}-{scyllaServerPackage.date}.{scyllaServerPackage.revision_id}` with build-id `{scyllaServerPackage.build_id}`{/if}
+{#if upgradedPackage}Target Scylla version (or git commit hash): `{upgradedPackage.version}-{upgradedPackage.date}.{upgradedPackage.revision_id}` with build-id `{upgradedPackage.build_id}`{/if}
+{#if relocatablePackage}Relocatable Package: `{relocatablePackage.version}`{/if}
+{#if operatorPackage}Operator Image: `{operatorPackage.version}`{/if}
+{#if operatorHelmPackage}Operator Helm Version: `{operatorHelmPackage.version}`{/if}
+{#if operatorHelmRepoPackage}Operator Helm Repository: `{operatorHelmRepoPackage.version}`{/if}
+{#if kernelPackage}Kernel Version: `{kernelPackage.version}`{/if}
+
+
 ## Issue description
 
 - [ ] This issue is a regression.
@@ -137,27 +148,6 @@
 
 ## Installation details
 
-{#if kernelPackage}
-Kernel Version: {kernelPackage.version}
-{/if}
-{#if scyllaServerPackage}
-Scylla version (or git commit hash): `{scyllaServerPackage.version}-{scyllaServerPackage.date}.{scyllaServerPackage.revision_id}` with build-id `{scyllaServerPackage.build_id}`
-{/if}
-{#if upgradedPackage}
-Target Scylla version (or git commit hash): `{upgradedPackage.version}-{upgradedPackage.date}.{upgradedPackage.revision_id}` with build-id `{upgradedPackage.build_id}`
-{/if}
-{#if relocatablePackage}
-Relocatable Package: {relocatablePackage.version}
-{/if}
-{#if operatorPackage}
-Operator Image: {operatorPackage.version}
-{/if}
-{#if operatorHelmPackage}
-Operator Helm Version: {operatorHelmPackage.version}
-{/if}
-{#if operatorHelmRepoPackage}
-Operator Helm Repository: {operatorHelmRepoPackage.version}
-{/if}
 Cluster size: {test_run?.cloud_setup?.db_node?.node_amount ?? "Unknown amount of"} nodes ({test_run?.cloud_setup?.db_node?.instance_type ?? "Unknown instance type"})
 
 Scylla Nodes used in this run:
