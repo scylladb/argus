@@ -312,10 +312,11 @@
                     <div class="collapse" class:show={!getCollapseState(`collapse-${groupStats.group.id}`, collapseState)} id="collapse-{groupStats.group.id}">
                         <div class="my-2 d-flex flex-wrap bg-lighter rounded shadow-sm">
                             {#each Object.entries(sortTestStats(groupStats.tests)) as [testId, testStats] (testId)}
+                                <!-- svelte-ignore a11y-click-events-have-key-events -->
                                 <div
                                     class:status-block-active={testStats.start_time != 0}
                                     class:investigating={testStats?.investigation_status == TestInvestigationStatus.IN_PROGRESS}
-                                    class:should-be-investigated={testStats?.investigation_status == TestInvestigationStatus.NOT_INVESTIGATED && testStats?.status == TestStatus.FAILED}
+                                    class:should-be-investigated={testStats?.investigation_status == TestInvestigationStatus.NOT_INVESTIGATED && [TestStatus.FAILED, TestStatus.TEST_ERROR].includes(testStats?.status)}
                                     class="rounded bg-main status-block m-1 d-flex flex-column overflow-hidden shadow-sm"
                                     on:click={() => {
                                         handleTestClick(testStats, groupStats);
@@ -328,7 +329,7 @@
                                     >
                                         {testStats.status == "unknown"
                                             ? "Not run"
-                                            : subUnderscores(titleCase(testStats.status))}
+                                            : subUnderscores(testStats.status).split(" ").map(v => titleCase(v)).join(" ")}
                                         {#if clickedTests[testStats.test.id]}
                                             <div class="text-tiny">Selected</div>
                                         {/if}

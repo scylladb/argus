@@ -383,7 +383,7 @@ class SCTService:
                     "aborted": 0,
                 }
             )
-            if run["status"] in ["passed", "failed", "aborted"]:
+            if run["status"] in ["passed", "failed", "aborted", "test_error"]:
                 metadata[run["status"]] += 1
             kernel_metadata[kernel_package["version"]] = metadata
 
