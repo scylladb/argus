@@ -1,4 +1,5 @@
 import logging
+from typing import TypedDict
 from uuid import UUID
 from argus.backend.db import ScyllaCluster
 from argus.backend.plugins.sct.testrun import SCTTestRun
@@ -9,6 +10,16 @@ LOGGER = logging.getLogger(__name__)
 
 class ReleaseManagerException(Exception):
     pass
+
+
+class ReleaseEditPayload(TypedDict):
+    id: str
+    pretty_name: str
+    description: str
+    valid_version_regex: str | None
+    enabled: bool
+    perpetual: bool
+    dormant: bool
 
 
 class ReleaseManagerService:
@@ -154,6 +165,33 @@ class ReleaseManagerService:
         release.perpetual = perpetual
         release.save()
 
+        return True
+
+    def edit_release(self, payload: ReleaseEditPayload) -> bool:
+
+        release: ArgusRelease = ArgusRelease.get(id=payload["id"])
+        release.pretty_name = payload["pretty_name"]
+        release.perpetual = payload["perpetual"]
+        release.enabled = payload["enabled"]
+        release.dormant = payload["dormant"]
+        release.description = payload["description"]
+        release.valid_version_regex = payload["valid_version_regex"]
+
+
+        release.save()
+        return True
+
+    def delete_release(self, release_id: str) -> bool:
+
+        release: ArgusRelease = ArgusRelease.get(id=release_id)
+
+        release_groups = ArgusGroup.filter(release_id=release.id)
+        release_tests = ArgusTest.filter(release_id=release.id)
+
+        for entity in [*release_groups.all(), *release_tests.all()]:
+            entity.delete()
+
+        release.delete()
         return True
 
     def batch_move_tests(self, new_group_id: str, tests: list[str]) -> bool:

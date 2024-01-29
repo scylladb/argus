@@ -111,6 +111,7 @@ class ArgusRelease(Model):
     pretty_name = columns.Text()
     description = columns.Text()
     github_repo_url = columns.Text()
+    valid_version_regex = columns.Text()
     assignee = columns.List(value_type=columns.UUID)
     picture_id = columns.UUID()
     enabled = columns.Boolean(default=lambda: True)

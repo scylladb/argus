@@ -6,7 +6,7 @@ from flask import (
     Request,
 )
 from argus.backend.error_handlers import handle_api_exception
-from argus.backend.service.release_manager import ReleaseManagerService
+from argus.backend.service.release_manager import ReleaseEditPayload, ReleaseManagerService
 from argus.backend.service.user import api_login_required, check_roles
 from argus.backend.models.web import UserRoles
 
@@ -88,6 +88,36 @@ def set_release_dormancy():
         "status": "ok",
         "response": {
             "updated": result
+        }
+    }
+
+
+@bp.route("/release/edit", methods=["POST"])
+@check_roles(UserRoles.Admin)
+@api_login_required
+def edit_release():
+    payload: ReleaseEditPayload = get_payload(request)
+    result = ReleaseManagerService().edit_release(payload)
+
+    return {
+        "status": "ok",
+        "response": {
+            "updated": result
+        }
+    }
+
+
+@bp.route("/release/delete", methods=["POST"])
+@check_roles(UserRoles.Admin)
+@api_login_required
+def delete_release():
+    payload = get_payload(request)
+    result = ReleaseManagerService().delete_release(release_id=payload["releaseId"])
+
+    return {
+        "status": "ok",
+        "response": {
+            "deleted": result
         }
     }
 

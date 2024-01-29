@@ -343,7 +343,7 @@ class ReleaseStatsCollector:
         self.release_name = release_name
         self.release_version = release_version
 
-    def collect(self, limited=False, force=False) -> dict:
+    def collect(self, limited=False, force=False, include_no_version=False) -> dict:
         self.release: ArgusRelease = ArgusRelease.get(name=self.release_name)
         self.release_rows = [row for plugin in all_plugin_models()
                              for row in plugin.get_stats_for_release(release=self.release)]
@@ -353,8 +353,18 @@ class ReleaseStatsCollector:
             }
 
         if self.release_version:
-            self.release_rows = list(
-                filter(lambda row: row["scylla_version"] == self.release_version or not row["scylla_version"], self.release_rows))
+            if include_no_version:
+                expr = lambda row: row["scylla_version"] == self.release_version or not row["scylla_version"] 
+            elif self.release_version == "!noVersion":
+                expr = lambda row: not row["scylla_version"]
+            else:
+                expr = lambda row: row["scylla_version"] == self.release_version
+        else:
+            if include_no_version:
+                expr = lambda row: row
+            else:
+                expr = lambda row: row["scylla_version"]
+        self.release_rows = list(filter(expr, self.release_rows))
 
         self.release_stats = ReleaseStats(release=self.release)
         self.release_stats.collect(rows=self.release_rows, limited=limited, force=force)
