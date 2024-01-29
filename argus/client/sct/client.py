@@ -148,7 +148,7 @@ class ArgusSCTClient(ArgusClient):
         self.check_response(response)
 
     def create_resource(self, name: str, resource_type: str, public_ip: str, private_ip: str,
-                        region: str, provider: str, shards_amount: int, state=ResourceState.RUNNING) -> None:
+                        region: str, provider: str, dc_name: str, rack_name: str, shards_amount: int, state=ResourceState.RUNNING) -> None:
         """
             Creates a cloud resource record in argus.
         """
@@ -164,6 +164,8 @@ class ArgusSCTClient(ArgusClient):
                     "instance_details": {
                         "provider": provider,
                         "region": region,
+                        "dc_name": dc_name,
+                        "rack_name": rack_name,
                         "public_ip": public_ip,
                         "private_ip": private_ip,
                         "shards_amount": shards_amount,

@@ -6,6 +6,10 @@
         creationTime: ["instance_info", "creation_time"],
         terminationTime: ["instance_info", "termination_time"],
         terminationReason: ["instance_info", "termination_reason"],
+        region: ["instance_info", "region"],
+        dcName: ["instance_info", "dc_name"],
+        rackName: ["instance_info", "rack_name"],
+        provider: ["instance_info", "provider"],
         state: "state",
         name: "name",
         shards: ["instance_info", "shards_amount"],
@@ -45,10 +49,10 @@
     const sortResourcesByKey = function (resources, key, descending) {
         const getValue = function (resource, key) {
             let path = sortHeaders[key];
-            if (typeof path == 'string') {
+            if (typeof path == "string") {
                 let value = resource[sortHeaders[path]];
                 return value;
-            } else if (typeof path == 'object') {
+            } else if (typeof path == "object") {
                 let value = resource;
                 for (let idx = 0; idx < path.length; idx++) {
                     value = value[path[idx]];
@@ -87,6 +91,25 @@
             scope="col"
             class="text-center align-middle"
             on:click={() => {
+                sortHeader = "provider";
+                sortAscending = !sortAscending;
+            }}
+        >
+            {#if sortHeader == "provider"}
+                <span
+                    class="d-inline-block"
+                    class:invertArrow={sortAscending}
+                >
+                    &#x25B2;
+                </span>
+            {/if}
+            Provider
+        </th>
+        <th
+            role="button"
+            scope="col"
+            class="text-center align-middle"
+            on:click={() => {
                 sortHeader = "name";
                 sortAscending = !sortAscending;
             }}
@@ -100,6 +123,63 @@
                 </span>
             {/if}
             Resource name
+        </th>
+        <th
+            role="button"
+            scope="col"
+            class="text-center align-middle"
+            on:click={() => {
+                sortHeader = "region";
+                sortAscending = !sortAscending;
+            }}
+        >
+            {#if sortHeader == "region"}
+                <span
+                    class="d-inline-block"
+                    class:invertArrow={sortAscending}
+                >
+                    &#x25B2;
+                </span>
+            {/if}
+            Provider
+        </th>
+        <th
+            role="button"
+            scope="col"
+            class="text-center align-middle"
+            on:click={() => {
+                sortHeader = "dcName";
+                sortAscending = !sortAscending;
+            }}
+        >
+            {#if sortHeader == "dcName"}
+                <span
+                    class="d-inline-block"
+                    class:invertArrow={sortAscending}
+                >
+                    &#x25B2;
+                </span>
+            {/if}
+            DC Name
+        </th>
+        <th
+            role="button"
+            scope="col"
+            class="text-center align-middle"
+            on:click={() => {
+                sortHeader = "rackName";
+                sortAscending = !sortAscending;
+            }}
+        >
+            {#if sortHeader == "rackName"}
+                <span
+                    class="d-inline-block"
+                    class:invertArrow={sortAscending}
+                >
+                    &#x25B2;
+                </span>
+            {/if}
+            Rack Name
         </th>
         <th
             role="button"
@@ -238,7 +318,11 @@
     <tbody>
         {#each sortResourcesByKey(resources, sortHeader, sortAscending) as resource (resource.name)}
             <tr class:d-none={filterResource(resource)}>
+                <td>{resource.instance_info.provider}</td>
                 <td>{resource.name}</td>
+                <td>{resource.instance_info.region}</td>
+                <td>{resource.instance_info.dc_name ?? ""}</td>
+                <td>{resource.instance_info.rack_name ?? ""}</td>
                 <td>{resource.instance_info.shards_amount}</td>
                 <td>
                     {resource.instance_info.public_ip}
@@ -263,7 +347,7 @@
             </tr>
         {:else}
             <tr>
-                <td colspan="6"> No resources </td>
+                <td colspan="10"> No resources </td>
             </tr>
         {/each}
     </tbody>
