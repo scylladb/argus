@@ -9,7 +9,7 @@ export const lightenDarkenColor = function(col, amt) {
     let b = Math.max(Math.min(((num >> 8) & 0x00FF) * amt), 0);
     let newColor = g | (b << 8) | (r << 16);
     return newColor.toString(16);
-}
+};
 
 /**
  * Determines luma
@@ -25,10 +25,10 @@ export const determineLuma = function(col) {
     let b = (num >> 8) & 0x00FF;
     let luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
     if (luma >= 100) {
-        return true
+        return true;
     }
     return false;
-}
+};
 
 /**
  *

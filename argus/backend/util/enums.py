@@ -14,6 +14,7 @@ class TestStatus(str, Enum):
     CREATED = "created"
     RUNNING = "running"
     FAILED = "failed"
+    TEST_ERROR = "test_error"
     ERROR = "error"
     PASSED = "passed"
     ABORTED = "aborted"

@@ -55,6 +55,15 @@ div#argusErrors {
     background-color: #f9f9f9;
 }
 
+.bg-test-error {
+    background-color: #e65c00;
+}
+
+.text-test-error {
+    color: #e65c00;
+}
+
+
 .bg-lighter {
     background-color: #e5e5e5;
 }

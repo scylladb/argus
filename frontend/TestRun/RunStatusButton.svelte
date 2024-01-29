@@ -57,7 +57,7 @@
         )}
         data-bs-toggle="dropdown"
     >
-        {testRun.status.toUpperCase()}
+        {testRun.status.toUpperCase().replaceAll("_", "-")}
         {#if InProgressStatuses.find((status) => status == testRun.status)}
             <span
                 class="spinner-border spinner-border-sm d-inline-block"
@@ -72,7 +72,7 @@
                     disabled={disableButtons}
                     on:click={() => {
                         handleStatus(status.toLowerCase());
-                    }}>{status}</button
+                    }}>{status.replaceAll("_", "-")}</button
                 >
             </li>
         {/each}
