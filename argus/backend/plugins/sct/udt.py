@@ -20,6 +20,8 @@ class CloudInstanceDetails(UserType):
     region = columns.Text()
     public_ip = columns.Text()
     private_ip = columns.Text()
+    dc_name = columns.Text()
+    rack_name = columns.Text()
     creation_time = columns.Integer(default=lambda: int(time()))
     termination_time = columns.Integer(default=lambda: 0)
     termination_reason = columns.Text(default=lambda: "")
