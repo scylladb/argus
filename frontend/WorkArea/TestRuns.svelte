@@ -143,7 +143,7 @@
     };
 
     const fetchTestRuns = async function () {
-        if (!document.hasFocus()) return;
+        if (!document.hasFocus() && !([states.INIT, states.INIT_RUNS].includes(currentState))) return;
         try {
             let params = queryString.stringify({
                 additionalRuns,
