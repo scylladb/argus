@@ -126,7 +126,7 @@ def generate_field_status_map(
         field_name = "status",
         container_class = TestStatus,
         cmp_class = ComparableTestStatus
-    ) -> dict[int, str]:
+    ) -> dict[int, tuple[str, TestRunStatRow]]:
 
     status_map = {}
     for run in last_runs:
@@ -136,7 +136,7 @@ def generate_field_status_map(
                 if cmp_class(container_class(status)) < cmp_class(container_class(run[field_name])):
                     status_map[run_number] = run[field_name]
             case _:
-                status_map[run_number] = run[field_name]
+                status_map[run_number] = (run[field_name], run)
     return status_map
 
 
@@ -305,11 +305,10 @@ class TestStats:
             self.parent_group.increment_status(status=self.status)
             return
         status_map = generate_field_status_map(last_runs)
-        investigation_status_map = generate_field_status_map(
-            last_runs, "investigation_status", TestInvestigationStatus, ComparableTestInvestigationStatus)
 
-        self.status = status_map.get(get_build_number(last_run["build_job_url"]))
-        self.investigation_status = investigation_status_map.get(get_build_number(last_run["build_job_url"]))
+        worst_case = status_map.get(get_build_number(last_run["build_job_url"]))
+        self.status = worst_case[0]
+        self.investigation_status = worst_case[1]["investigation_status"]
         self.start_time = last_run["start_time"]
 
         self.parent_group.increment_status(status=self.status)
@@ -318,6 +317,7 @@ class TestStats:
 
         self.last_runs = [
             {
+                "id": run["id"],
                 "status": run["status"],
                 "build_number": get_build_number(run["build_job_url"]),
                 "build_job_name": run["build_id"],
@@ -328,9 +328,11 @@ class TestStats:
             }
             for run in last_runs
         ][:5]
-        self.has_bug_report = len(self.last_runs[0]["issues"]) > 0
+
+        target_run = next(run for run in self.last_runs if run["id"] == worst_case[1]["id"])
+        self.has_bug_report = len(target_run["issues"]) > 0
         self.parent_group.parent_release.has_bug_report = self.has_bug_report or self.parent_group.parent_release.has_bug_report
-        self.has_comments = len(self.last_runs[0]["comments"]) > 0
+        self.has_comments = len(target_run["comments"]) > 0
 
 
 class ReleaseStatsCollector:
