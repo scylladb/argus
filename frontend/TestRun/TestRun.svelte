@@ -22,6 +22,7 @@
     import ArtifactTab from "./ArtifactTab.svelte";
     import IssueTab from "./IssueTab.svelte";
     import { SubtestTabBodyComponents, SubtestTabComponents, Subtests } from "./SCTSubTests/Subtest";
+    import PackagesInfo from "./PackagesInfo.svelte";
     export let runId = "";
     export let buildNumber = -1;
     export let testInfo = {};
@@ -157,6 +158,14 @@
                     >
                     <button
                         class="nav-link"
+                        id="nav-packages-tab-{runId}"
+                        data-bs-toggle="tab"
+                        data-bs-target="#nav-packages-{runId}"
+                        type="button"
+                        role="tab"><i class="fas fa-box" /> Packages</button
+                    >
+                    <button
+                        class="nav-link"
                         id="nav-events-tab-{runId}"
                         data-bs-toggle="tab"
                         data-bs-target="#nav-events-{runId}"
@@ -243,6 +252,16 @@
                     <div class="p-2">
                         <ResourcesInfo
                             resources={testRun.allocated_resources}
+                        />
+                    </div>
+                </div>
+                <div
+                    class="tab-pane fade"
+                    id="nav-packages-{runId}"
+                    role="tabpanel"
+                >
+                    <div class="p-2">
+                        <PackagesInfo packages={testRun.packages}
                         />
                     </div>
                 </div>
