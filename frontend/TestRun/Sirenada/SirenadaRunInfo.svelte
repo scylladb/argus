@@ -1,6 +1,6 @@
 <script>
     import {
-        faBusinessTime,
+        faBusinessTime, faPlay,
     } from "@fortawesome/free-solid-svg-icons";
     import humanizeDuration from "humanize-duration";
     import Fa from "svelte-fa";
@@ -65,6 +65,9 @@
     <div class="row">
         <div class="col-6 p-2">
             <div class="btn-group">
+                <a class="btn btn-sm btn-outline-primary" href={`${testRun.build_job_url}rebuild/parameterized`} title="Rebuild"
+                    ><Fa icon={faPlay} /> Rebuild</a
+                >
                 <a
                     href="/dashboard/{testInfo.release.name}"
                     class="btn btn-outline-success"
