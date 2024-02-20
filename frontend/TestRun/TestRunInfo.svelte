@@ -3,13 +3,14 @@
         faBusinessTime,
         faSearch,
         faCopy,
+        faPlay,
     } from "@fortawesome/free-solid-svg-icons";
     import humanizeDuration from "humanize-duration";
     import Fa from "svelte-fa";
     import { InProgressStatuses } from "../Common/TestStatus";
     import { timestampToISODate } from "../Common/DateUtils";
     import { getScyllaPackage, getKernelPackage, getUpgradedScyllaPackage,
-             getOperatorPackage, getOperatorHelmPackage, getOperatorHelmRepoPackage,
+        getOperatorPackage, getOperatorHelmPackage, getOperatorHelmRepoPackage,
     } from "../Common/RunUtils";
     export let test_run = {};
     export let release;
@@ -235,6 +236,9 @@
                         target="_blank"
                         aria-current="page"
                         ><Fa icon={faSearch} /> Restore Monitoring Stack</a
+                    >
+                    <a class="btn btn-sm btn-outline-primary" href={`${test_run.build_job_url}rebuild/parameterized`} title="Rebuild"
+                        ><Fa icon={faPlay} /> Rebuild</a
                     >
                     {#if navigator.clipboard}
                         <button
