@@ -65,7 +65,7 @@ class SirenadaRun(PluginModelBase):
     def submit_logs(self, logs: dict[str, str]):
         raise SirenadaPluginException("Log submission is not supported for Sirenada")
 
-    def finish_run(self):
+    def finish_run(self, payload: dict = None):
         raise SirenadaPluginException("Sirenada runs do not need finalization")
 
     @classmethod

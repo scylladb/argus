@@ -166,7 +166,7 @@ class DriverTestRun(PluginModelBase):
     def submit_product_version(self, version: str):
         self.scylla_version = version
 
-    def finish_run(self):
+    def finish_run(self, payload: dict = None):
         self.end_time = datetime.utcnow()
 
     def submit_logs(self, logs: list[dict]):

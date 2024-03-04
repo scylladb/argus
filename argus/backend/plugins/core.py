@@ -183,7 +183,7 @@ class PluginModelBase(Model):
     def submit_logs(self, logs: list[dict]):
         raise NotImplementedError()
 
-    def finish_run(self):
+    def finish_run(self, payload: dict = None):
         raise NotImplementedError()
 
 

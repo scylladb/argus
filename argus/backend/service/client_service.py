@@ -62,10 +62,10 @@ class ClientService:
 
         return "Submitted"
 
-    def finish_run(self, run_type: str, run_id: str) -> str:
+    def finish_run(self, run_type: str, run_id: str, payload: dict | None = None) -> str:
         model = self.get_model(run_type)
         run = model.load_test_run(UUID(run_id))
-        run.finish_run()
+        run.finish_run(payload)
         run.save()
 
         return "Finalized"
