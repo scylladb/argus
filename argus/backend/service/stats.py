@@ -279,6 +279,7 @@ class TestStats:
         self.has_comments = False
         self.schedules = schedules if schedules else tuple()
         self.is_scheduled = len(self.schedules) > 0
+        self.tracked_run_number = None
 
     def to_dict(self) -> dict:
         return {
@@ -288,7 +289,8 @@ class TestStats:
             "last_runs": self.last_runs,
             "start_time": self.start_time,
             "hasBugReport": self.has_bug_report,
-            "hasComments": self.has_comments
+            "hasComments": self.has_comments,
+            "buildNumber": self.tracked_run_number,
         }
 
     def collect(self, limited=False):
@@ -338,6 +340,7 @@ class TestStats:
         self.parent_group.parent_release.has_bug_report = self.has_bug_report or self.parent_group.parent_release.has_bug_report
         self.has_comments = len(target_run["comments"]) > 0
         self.last_runs = self.last_runs[:5]
+        self.tracked_run_number = target_run.get("build_number", get_build_number(target_run.get("build_job_url")))
 
 
 class ReleaseStatsCollector:

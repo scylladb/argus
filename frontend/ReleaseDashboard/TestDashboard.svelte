@@ -27,6 +27,7 @@
     import { userList } from "../Stores/UserlistSubscriber";
     import { getPicture } from "../Common/UserUtils";
     import NumberStats from "../Stats/NumberStats.svelte";
+    import { timestampToISODate } from "../Common/DateUtils";
     export let releaseName = "";
     export let releaseId = "";
     export let clickedTests = {};
@@ -393,7 +394,11 @@
                                         {/if}
                                     </div>
                                     <div class="p-1 text-small d-flex align-items-center">
-                                        <div class="ms-1">{testStats.test.name}</div>
+                                        <div class="ms-1">{testStats.test.name}
+                                        {#if testStats.buildNumber}
+                                            - <span class="fw-bold">#{testStats.buildNumber}</span> <span class="text-muted">({timestampToISODate(testStats.start_time).split(" ")[0]})</span>
+                                        {/if}
+                                        </div>
                                     </div>
                                     <div class="d-flex flex-fill align-items-end justify-content-end p-1">
                                         <div class="p-1 me-auto">
