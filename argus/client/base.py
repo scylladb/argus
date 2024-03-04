@@ -170,12 +170,14 @@ class ArgusClient:
             }
         )
 
-    def finalize_run(self, run_type: str, run_id: UUID) -> requests.Response:
+    def finalize_run(self, run_type: str, run_id: UUID, body: dict = None) -> requests.Response:
+        body = body if body else {}
         return self.post(
             endpoint=self.Routes.FINALIZE,
             location_params={"type": run_type, "id": str(run_id)},
             body={
                 **self.generic_body,
+                **body,
             }
         )
 

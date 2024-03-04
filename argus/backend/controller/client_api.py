@@ -81,7 +81,11 @@ def run_submit_logs(run_type: str, run_id: str):
 @bp.route("/testrun/<string:run_type>/<string:run_id>/finalize", methods=["POST"])
 @api_login_required
 def run_finalize(run_type: str, run_id: str):
-    result = ClientService().finish_run(run_type=run_type, run_id=run_id)
+    try:
+        payload = get_payload(request)
+    except Exception:
+        payload = None
+    result = ClientService().finish_run(run_type=run_type, run_id=run_id, payload=payload)
     return {
         "status": "ok",
         "response": result
