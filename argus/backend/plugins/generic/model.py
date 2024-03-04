@@ -38,6 +38,7 @@ class GenericRun(PluginModelBase):
 
     def submit_product_version(self, version: str):
         self.scylla_version = version
+        self.set_product_version(version)
 
     @classmethod
     def load_test_run(cls, run_id: UUID) -> 'GenericRun':

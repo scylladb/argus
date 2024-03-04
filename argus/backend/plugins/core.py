@@ -38,6 +38,7 @@ class PluginModelBase(Model):
     heartbeat = columns.Integer(default=lambda: int(time()))
     end_time = columns.DateTime(default=lambda: datetime.utcfromtimestamp(0))
     build_job_url = columns.Text()
+    product_version = columns.Text(index=True)
 
     # Test Logs Collection
     logs = columns.List(value_type=columns.Tuple(columns.Text(), columns.Text()))
@@ -179,6 +180,9 @@ class PluginModelBase(Model):
 
     def submit_product_version(self, version: str):
         raise NotImplementedError()
+
+    def set_product_version(self, version: str):
+        self.product_version = version
 
     def submit_logs(self, logs: list[dict]):
         raise NotImplementedError()
