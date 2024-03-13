@@ -6,6 +6,7 @@ from flask import (
 )
 
 from argus.backend.error_handlers import handle_api_exception
+from argus.backend.service.jenkins_service import JenkinsService
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.user import api_login_required
 from argus.backend.util.common import get_payload
@@ -283,5 +284,56 @@ def ignore_jobs():
         "status": "ok",
         "response": {
             "affectedJobs": result
+        }
+    }
+
+
+@bp.route("/jenkins/params", methods=["POST"])
+@api_login_required
+def get_jenkins_job_params():
+
+    payload = get_payload(request)
+    service = JenkinsService()
+
+    result = service.retrieve_job_parameters(build_id=payload["buildId"], build_number=payload["buildNumber"])
+
+    return {
+        "status": "ok",
+        "response": {
+            "parameters": result
+        }
+    }
+
+
+@bp.route("/jenkins/build", methods=["POST"])
+@api_login_required
+def build_jenkins_job():
+
+    payload = get_payload(request)
+    service = JenkinsService()
+
+    result = service.build_job(build_id=payload["buildId"], params=payload["parameters"])
+
+    return {
+        "status": "ok",
+        "response": {
+            "queueItem": result
+        }
+    }
+
+
+@bp.route("/jenkins/queue_info")
+@api_login_required
+def get_queue_info():
+    queue_item = request.args.get("queueItem")
+    if not queue_item:
+        raise Exception("No queueItem provided")
+    service = JenkinsService()
+    result = service.get_queue_info(int(queue_item))
+
+    return {
+        "status": "ok",
+        "response": {
+            "queueItem": result
         }
     }
