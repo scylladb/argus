@@ -10,12 +10,14 @@
     import { InProgressStatuses } from "../Common/TestStatus";
     import { timestampToISODate } from "../Common/DateUtils";
     import { getScyllaPackage, getKernelPackage, getUpgradedScyllaPackage,
-        getOperatorPackage, getOperatorHelmPackage, getOperatorHelmRepoPackage,
+        getOperatorPackage, getOperatorHelmPackage, getOperatorHelmRepoPackage, extractBuildNumber,
     } from "../Common/RunUtils";
+    import JenkinsBuildModal from "./Jenkins/JenkinsBuildModal.svelte";
     export let test_run = {};
     export let release;
     export let group;
     export let test;
+    let rebuildRequested = false;
 
     let cmd_hydraInvestigateShowMonitor = `hydra investigate show-monitor ${test_run.id}`;
     let cmd_hydraInvestigateShowLogs = `hydra investigate show-logs ${test_run.id}`;
@@ -221,6 +223,14 @@
                     </div>
                 {/if}
             {/if}
+            {#if rebuildRequested}
+                <JenkinsBuildModal 
+                    buildId={test_run.build_id} 
+                    buildNumber={extractBuildNumber(test_run)} 
+                    on:rebuildCancel={() => (rebuildRequested = false)}
+                    on:rebuildComplete={() => (rebuildRequested = false)}
+                />
+            {/if}
             <div class="btn-group">
                 {#if InProgressStatuses.includes(test_run.status) && locateGrafanaNode()}
                     <a
@@ -237,8 +247,8 @@
                         aria-current="page"
                         ><Fa icon={faSearch} /> Restore Monitoring Stack</a
                     >
-                    <a class="btn btn-sm btn-outline-primary" href={`${test_run.build_job_url}rebuild/parameterized`} title="Rebuild"
-                        ><Fa icon={faPlay} /> Rebuild</a
+                    <button class="btn btn-sm btn-outline-primary" on:click={() => (rebuildRequested = true)}
+                        ><Fa icon={faPlay} /> Rebuild</button
                     >
                     {#if navigator.clipboard}
                         <button
