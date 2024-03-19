@@ -5,8 +5,11 @@
     import humanizeDuration from "humanize-duration";
     import Fa from "svelte-fa";
     import { timestampToISODate } from "../../Common/DateUtils";
+    import { extractBuildNumber } from "../../Common/RunUtils";
+    import JenkinsBuildModal from "../Jenkins/JenkinsBuildModal.svelte";
     export let testRun = {};
     export let testInfo;
+    export let rebuildRequested = false;
 
 </script>
 
@@ -63,10 +66,19 @@
         </div>
     </div>
     <div class="row">
+        {#if rebuildRequested}
+            <JenkinsBuildModal
+                buildId={testRun.build_id} 
+                buildNumber={extractBuildNumber(testRun)}
+                pluginName={testInfo.test.plugin_name}
+                on:rebuildCancel={() => (rebuildRequested = false)}
+                on:rebuildComplete={() => (rebuildRequested = false)}
+            />
+        {/if}
         <div class="col-6 p-2">
             <div class="btn-group">
-                <a class="btn btn-sm btn-outline-primary" href={`${testRun.build_job_url}rebuild/parameterized`} title="Rebuild"
-                    ><Fa icon={faPlay} /> Rebuild</a
+                <button class="btn btn-sm btn-outline-primary" on:click={() => (rebuildRequested = true)}
+                    ><Fa icon={faPlay} /> Rebuild</button
                 >
                 <a
                     href="/dashboard/{testInfo.release.name}"

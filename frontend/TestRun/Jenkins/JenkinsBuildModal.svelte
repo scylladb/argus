@@ -10,6 +10,7 @@
 
     export let buildId;
     export let buildNumber;
+    export let pluginName;
     let currentState = "none";
     const dispatch = createEventDispatcher();
 
@@ -51,6 +52,7 @@
                 setState(STATES.BUILD_START, { buildParams: event.detail.buildParams });
             },
             args: {
+                pluginName: pluginName,
                 params: {}
             },
         },
