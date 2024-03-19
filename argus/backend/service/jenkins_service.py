@@ -30,7 +30,7 @@ class JenkinsService:
         parameter_defs = config.find("*//parameterDefinitions")
         if parameter_defs:
             descriptions = {
-                define.findtext("name"): f"{define.findtext('description')} (default: <span class=\"fw-bold\">{define.findtext('defaultValue')}</span>)" 
+                define.findtext("name"): f"{define.findtext('description', '')}" + f" (default: <span class=\"fw-bold\">{define.findtext('defaultValue')}</span>)" if define.findtext('defaultValue') else ""
                 for define in parameter_defs.iterfind("hudson.model.StringParameterDefinition")
             }
         else:
