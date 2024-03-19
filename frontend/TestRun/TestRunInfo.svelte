@@ -226,7 +226,8 @@
             {#if rebuildRequested}
                 <JenkinsBuildModal 
                     buildId={test_run.build_id} 
-                    buildNumber={extractBuildNumber(test_run)} 
+                    buildNumber={extractBuildNumber(test_run)}
+                    pluginName={test.plugin_name}
                     on:rebuildCancel={() => (rebuildRequested = false)}
                     on:rebuildComplete={() => (rebuildRequested = false)}
                 />
