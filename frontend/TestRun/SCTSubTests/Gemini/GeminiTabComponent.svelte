@@ -1,4 +1,7 @@
 <script>
+    import { faEye } from "@fortawesome/free-solid-svg-icons";
+    import Fa from "svelte-fa";
+
     export let testRun;
 </script>
 
@@ -9,5 +12,5 @@
     data-bs-target="#nav-gemini-{testRun.id}"
     type="button"
     role="tab"
-    ><i class="fas fa-eye" /> Gemini</button
+    ><Fa icon={faEye}/> Gemini</button
 >

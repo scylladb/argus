@@ -1,4 +1,7 @@
 <script>
+    import { faChartSimple } from "@fortawesome/free-solid-svg-icons";
+    import Fa from "svelte-fa";
+
     export let testRun;
 </script>
 
@@ -9,5 +12,5 @@
     data-bs-target="#nav-performance-{testRun.id}"
     type="button"
     role="tab"
-    ><i class="fas fa-chart-simple" /> Performance</button
+    ><Fa icon={faChartSimple}/> Performance</button
 >
