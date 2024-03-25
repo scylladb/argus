@@ -46,7 +46,6 @@
     let failedToLoad = false;
 
     const fetchTestRunData = async function () {
-        if (!document.hasFocus()) return;
         try {
             let run = await fetchRun(testInfo.test.plugin_name, runId);
             testRun = run;

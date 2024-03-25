@@ -143,7 +143,6 @@
     };
 
     const fetchTestRuns = async function () {
-        if (!document.hasFocus() && !([states.INIT, states.INIT_RUNS].includes(currentState))) return;
         try {
             let params = queryString.stringify({
                 additionalRuns,
@@ -260,7 +259,7 @@
             fetchTestRuns();
             runRefreshInterval = setInterval(async () => {
                 fetchTestRuns();
-            }, 1200 * 1000);
+            }, 120 * 1000);
         }
     });
 
