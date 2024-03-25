@@ -2,6 +2,11 @@
     import { onMount, onDestroy, createEventDispatcher } from "svelte";
     import Fa from "svelte-fa";
     import {
+        faBoxes,
+        faCodeBranch,
+        faComments,
+        faExclamationTriangle,
+        faInfoCircle,
         faRefresh,
         faTimes,
     } from "@fortawesome/free-solid-svg-icons";
@@ -123,7 +128,7 @@
                         data-bs-target="#nav-details-{runId}"
                         type="button"
                         role="tab"
-                        ><i class="fas fa-info-circle" /> Details</button
+                        ><Fa icon={faInfoCircle}/> Details</button
                     >
                     <button
                         class="nav-link"
@@ -132,7 +137,7 @@
                         data-bs-target="#nav-tests-{runId}"
                         type="button"
                         role="tab"
-                        ><i class="fas fa-boxes" /> Tests</button
+                        ><Fa icon={faBoxes}/> Tests</button
                     >
                     <button
                         class="nav-link"
@@ -142,7 +147,7 @@
                         type="button"
                         on:click={() => (commentsOpen = true)}
                         role="tab"
-                        ><i class="fas fa-comments" /> Discussion</button
+                        ><Fa icon={faComments}/> Discussion</button
                     >
                     <button
                         class="nav-link"
@@ -152,7 +157,7 @@
                         type="button"
                         role="tab"
                         on:click={() => (issuesOpen = true)}
-                        ><i class="fas fa-code-branch" /> Issues</button
+                        ><Fa icon={faCodeBranch}/> Issues</button
                     >
                     <button
                         class="nav-link"
@@ -162,7 +167,7 @@
                         type="button"
                         on:click={() => (activityOpen = true)}
                         role="tab"
-                        ><i class="fas fa-exclamation-triangle" /> Activity</button
+                        ><Fa icon={faExclamationTriangle}/> Activity</button
                     >
                 </div>
             </nav>

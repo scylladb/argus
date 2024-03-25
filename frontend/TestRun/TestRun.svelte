@@ -2,7 +2,16 @@
     import { onMount, onDestroy, createEventDispatcher } from "svelte";
     import Fa from "svelte-fa";
     import {
+        faBox,
+        faCloud,
+        faCodeBranch,
+        faComments,
+        faExclamationTriangle,
+        faImages,
+        faInfoCircle,
         faRefresh,
+        faRssSquare,
+        faSpider,
         faTimes,
     } from "@fortawesome/free-solid-svg-icons";
     import ResourcesInfo from "./ResourcesInfo.svelte";
@@ -134,7 +143,7 @@
                         data-bs-target="#nav-details-{runId}"
                         type="button"
                         role="tab"
-                        ><i class="fas fa-info-circle" /> Details</button
+                        ><Fa icon={faInfoCircle}/> Details</button
                     >
                     {#if testRun.subtest_name && Object.values(Subtests).includes(testRun.subtest_name)}
                         <svelte:component this={SubtestTabComponents[testRun.subtest_name]} {testRun}/>
@@ -146,7 +155,7 @@
                         data-bs-target="#nav-screenshots-{runId}"
                         type="button"
                         role="tab"
-                        ><i class="fas fa-images" /> Screenshots</button
+                        ><Fa icon={faImages}/> Screenshots</button
                     >
                     <button
                         class="nav-link"
@@ -154,7 +163,7 @@
                         data-bs-toggle="tab"
                         data-bs-target="#nav-resources-{runId}"
                         type="button"
-                        role="tab"><i class="fas fa-cloud" /> Resources</button
+                        role="tab"><Fa icon={faCloud}/> Resources</button
                     >
                     <button
                         class="nav-link"
@@ -162,7 +171,7 @@
                         data-bs-toggle="tab"
                         data-bs-target="#nav-packages-{runId}"
                         type="button"
-                        role="tab"><i class="fas fa-box" /> Packages</button
+                        role="tab"><Fa icon={faBox}/> Packages</button
                     >
                     <button
                         class="nav-link"
@@ -172,7 +181,7 @@
                         type="button"
                         role="tab"
                         on:click={() => (eventsOpen = true)}
-                        ><i class="fas fa-rss-square" /> Events</button
+                        ><Fa icon={faRssSquare}/> Events</button
                     >
                     <button
                         class="nav-link"
@@ -180,7 +189,7 @@
                         data-bs-toggle="tab"
                         data-bs-target="#nav-nemesis-{runId}"
                         type="button"
-                        role="tab"><i class="fas fa-spider" /> Nemesis</button
+                        role="tab"><Fa icon={faSpider}/> Nemesis</button
                     >
                     <button
                         class="nav-link"
@@ -189,7 +198,7 @@
                         data-bs-target="#nav-logs-{runId}"
                         type="button"
                         on:click={() => (artifactTabOpened = true)}
-                        role="tab"><i class="fas fa-box" /> Logs</button
+                        role="tab"><Fa icon={faBox}/> Logs</button
                     >
                     <button
                         class="nav-link"
@@ -199,7 +208,7 @@
                         type="button"
                         on:click={() => (commentsOpen = true)}
                         role="tab"
-                        ><i class="fas fa-comments" /> Discussion</button
+                        ><Fa icon={faComments}/> Discussion</button
                     >
                     <button
                         class="nav-link"
@@ -209,7 +218,7 @@
                         type="button"
                         role="tab"
                         on:click={() => (issuesOpen = true)}
-                        ><i class="fas fa-code-branch" /> Issues</button
+                        ><Fa icon={faCodeBranch}/> Issues</button
                     >
                     <button
                         class="nav-link"
@@ -219,7 +228,7 @@
                         type="button"
                         on:click={() => (activityOpen = true)}
                         role="tab"
-                        ><i class="fas fa-exclamation-triangle" /> Activity</button
+                        ><Fa icon={faExclamationTriangle}/> Activity</button
                     >
                 </div>
             </nav>

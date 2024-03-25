@@ -1,4 +1,7 @@
 <script>
+    import { faGithub } from "@fortawesome/free-brands-svg-icons";
+    import Fa from "svelte-fa";
+
     export let csrfToken;
     export let githubCid;
     export let githubScopes;
@@ -52,7 +55,7 @@
             <input type="hidden" name="scope" value={parseScopes(githubScopes, disableRepoAccess)} />
             <input type="hidden" name="client_id" value={githubCid} />
             <input type="hidden" name="state" value={csrfToken} />
-            <button class="btn btn-dark" type="submit"><i class="fab fa-github" /> Sign In with GitHub</button>
+            <button class="btn btn-dark" type="submit"><Fa icon={faGithub}/> Sign In with GitHub</button>
         </form>
         <div class="mb-3">
             <label for="disableRepoAccess" class="form-check-label">Disable full repo access</label>
