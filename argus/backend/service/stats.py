@@ -33,6 +33,7 @@ class TestRunStatRow(TypedDict):
 class ComparableTestStatus:
     PRIORITY_MAP = {
         TestStatus.FAILED: 10,
+        TestStatus.TEST_ERROR: 10,
         TestStatus.ABORTED: 9,
         TestStatus.RUNNING: 8,
         TestStatus.CREATED: 7,
