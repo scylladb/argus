@@ -337,3 +337,103 @@ def get_queue_info():
             "queueItem": result
         }
     }
+
+
+@bp.route("/jenkins/clone/targets")
+@api_login_required
+def get_clone_targets():
+    test_id = request.args.get("testId")
+    if not test_id:
+        raise Exception("No testId provided")
+    service = JenkinsService()
+    result = service.get_releases_for_clone(test_id)
+
+    return {
+        "status": "ok",
+        "response": {
+            "targets": result
+        }
+    }
+
+
+@bp.route("/jenkins/clone/groups")
+@api_login_required
+def get_groups_for_target():
+    target_id = request.args.get("targetId")
+    if not target_id:
+        raise Exception("No targetId provided")
+    service = JenkinsService()
+    result = service.get_groups_for_release(target_id)
+
+    return {
+        "status": "ok",
+        "response": {
+            "groups": result
+        }
+    }
+
+
+@bp.route("/jenkins/clone/create", methods=["POST"])
+@api_login_required
+def clone_jenkins_job():
+
+    payload = get_payload(request)
+    service = JenkinsService()
+
+    result = service.clone_job(
+        current_test_id=payload["currentTestId"],
+        new_name=payload["newName"],
+        target=payload["target"],
+        group=payload["group"],
+        advanced_settings=payload["advancedSettings"],
+    )
+
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
+@bp.route("/jenkins/clone/build", methods=["POST"])
+@api_login_required
+def clone_build_jenkins_job():
+
+    payload = get_payload(request)
+    service = JenkinsService()
+
+    result = service.clone_build_job(build_id=payload["buildId"], params=payload["parameters"])
+
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
+@bp.route("/jenkins/clone/settings")
+@api_login_required
+def get_clone_job_advanced_settings():
+    build_id = request.args.get("buildId")
+    if not build_id:
+        raise Exception("No testId provided")
+    service = JenkinsService()
+    result = service.get_advanced_settings(build_id)
+
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
+@bp.route("/jenkins/clone/settings/validate", methods=["POST"])
+@api_login_required
+def clone_validate_new_settings():
+
+    payload = get_payload(request)
+    service = JenkinsService()
+
+    result = service.verify_job_settings(build_id=payload["buildId"], new_settings=payload["newSettings"])
+
+    return {
+        "status": "ok",
+        "response": result
+    }

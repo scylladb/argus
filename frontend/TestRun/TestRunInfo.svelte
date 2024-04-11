@@ -13,11 +13,13 @@
         getOperatorPackage, getOperatorHelmPackage, getOperatorHelmRepoPackage, extractBuildNumber,
     } from "../Common/RunUtils";
     import JenkinsBuildModal from "./Jenkins/JenkinsBuildModal.svelte";
+    import JenkinsCloneModal from "./Jenkins/JenkinsCloneModal.svelte";
     export let test_run = {};
     export let release;
     export let group;
     export let test;
     let rebuildRequested = false;
+    let cloneRequested = false;
 
     let cmd_hydraInvestigateShowMonitor = `hydra investigate show-monitor ${test_run.id}`;
     let cmd_hydraInvestigateShowLogs = `hydra investigate show-logs ${test_run.id}`;
@@ -195,7 +197,7 @@
         </div>
     </div>
     <div class="row">
-        <div class="col-6 p-2">
+        <div class="col-12 p-2">
             {#if InProgressStatuses.includes(test_run.status)}
                 {#if test_run.sct_runner_host}
                     <div class="mb-1">
@@ -232,6 +234,19 @@
                     on:rebuildComplete={() => (rebuildRequested = false)}
                 />
             {/if}
+            {#if cloneRequested}
+                <JenkinsCloneModal 
+                    buildId={test_run.build_id} 
+                    buildNumber={extractBuildNumber(test_run)}
+                    pluginName={test.plugin_name}
+                    testId={test.id}
+                    releaseId={release.id}
+                    groupId={group.id}
+                    oldTestName={test.name}
+                    on:cloneCancel={() => (cloneRequested = false)}
+                    on:cloneComplete={() => (cloneRequested = false)}
+                />
+            {/if}
             <div class="btn-group">
                 {#if InProgressStatuses.includes(test_run.status) && locateGrafanaNode()}
                     <a
@@ -250,6 +265,9 @@
                     >
                     <button class="btn btn-sm btn-outline-primary" on:click={() => (rebuildRequested = true)}
                         ><Fa icon={faPlay} /> Rebuild</button
+                    >
+                    <button class="btn btn-sm btn-outline-primary" on:click={() => (cloneRequested = true)}
+                        ><Fa icon={faCopy} /> Clone</button
                     >
                     {#if navigator.clipboard}
                         <button

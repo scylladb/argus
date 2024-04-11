@@ -1,15 +1,17 @@
 <script>
     import {
-        faBusinessTime, faPlay,
+        faBusinessTime, faCopy, faPlay,
     } from "@fortawesome/free-solid-svg-icons";
     import humanizeDuration from "humanize-duration";
     import Fa from "svelte-fa";
     import { timestampToISODate } from "../../Common/DateUtils";
     import { extractBuildNumber } from "../../Common/RunUtils";
     import JenkinsBuildModal from "../Jenkins/JenkinsBuildModal.svelte";
+    import JenkinsCloneModal from "../Jenkins/JenkinsCloneModal.svelte";
     export let testRun = {};
     export let testInfo;
     export let rebuildRequested = false;
+    let cloneRequested = false;
 
 </script>
 
@@ -75,10 +77,26 @@
                 on:rebuildComplete={() => (rebuildRequested = false)}
             />
         {/if}
+        {#if cloneRequested}
+            <JenkinsCloneModal 
+                buildId={testRun.build_id} 
+                buildNumber={extractBuildNumber(testRun)}
+                pluginName={testInfo.test.plugin_name}
+                testId={testInfo.test.id}
+                releaseId={testInfo.release.id}
+                groupId={testInfo.group.id}
+                oldTestName={testInfo.test.name}
+                on:cloneCancel={() => (cloneRequested = false)}
+                on:cloneComplete={() => (cloneRequested = false)}
+            />
+        {/if}
         <div class="col-6 p-2">
             <div class="btn-group">
                 <button class="btn btn-sm btn-outline-primary" on:click={() => (rebuildRequested = true)}
                     ><Fa icon={faPlay} /> Rebuild</button
+                >
+                <button class="btn btn-sm btn-outline-primary" on:click={() => (cloneRequested = true)}
+                    ><Fa icon={faCopy} /> Clone</button
                 >
                 <a
                     href="/dashboard/{testInfo.release.name}"
