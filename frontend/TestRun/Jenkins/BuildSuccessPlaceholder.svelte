@@ -1,16 +1,23 @@
 <script>
     import queryString from "query-string";
     import { sendMessage } from "../../Stores/AlertStore";
-    import { onDestroy, onMount } from "svelte";
+    import { createEventDispatcher, onDestroy, onMount } from "svelte";
     import { timestampToISODate } from "../../Common/DateUtils";
+    import Fa from "svelte-fa";
+    import { faArrowCircleRight } from "@fortawesome/free-solid-svg-icons";
 
     /**
-     * @type {{queueItem: number}} args
+     * @type {{
+     *  queueItem: number,
+     *  isFirst: boolean,
+     *  plugin: string,
+     * }}
      */
     export let args;
+    const dispatch = createEventDispatcher();
 
     let fetching = true;
-    let retrySeconds = 30;
+    let retrySeconds = 5;
     let buildInfo = {};
     let resultRetryTimeout;
 
@@ -77,9 +84,19 @@
         {#if buildInfo?.number}
             <div>
                 Build #{buildInfo.number} started!
-                <div>
+                <div class="mb-2">
                     <a href="{buildInfo.url}">Jenkins</a>
                 </div>
+                {#if args.isFirst}
+                    <div>
+                        This is a first build, which will require a re-run to actually start.
+                        <div class="my-2 p-2">
+                            <button class="w-100 btn btn-success" on:click={() => dispatch("exit", { firstBuildRestart: true })}>
+                                <Fa icon={faArrowCircleRight} /> Start build #2
+                            </button>
+                        </div>
+                    </div>
+                {/if}
             </div>
         {:else}
         <div>

@@ -5,14 +5,31 @@
     import BuildSuccessPlaceholder from "./BuildSuccessPlaceholder.svelte";
     import ParamFetchPlaceholder from "./ParamFetchPlaceholder.svelte";
     import ParameterEditor from "./ParameterEditor.svelte";
+    import LoadTargetsPlaceholder from "./LoadTargetsPlaceholder.svelte";
+    import CloneTargetSelector from "./CloneTargetSelector.svelte";
+    import CloneCreatePlaceholder from "./CloneCreatePlaceholder.svelte";
+    import queryString from "query-string";
+    import { startJobBuild } from "./Build";
 
     export let buildId;
     export let buildNumber;
     export let pluginName;
+    export let testId;
+    export let oldTestName;
+    export let releaseId;
+    export let groupId;
+    let newBuildId;
+
     let currentState = "none";
     const dispatch = createEventDispatcher();
 
     const STATES = {
+        LOAD_TARGETS: "load_targets",
+        CLONE_EDITOR: "clone_editor",
+        CLONE_CREATE: "clone_create",
+        JOB_FETCH: "job_fetch",
+        JOB_EDIT: "job_edit",
+        JOB_COMMIT: "job_commit",
         PARAM_FETCH: "param_fetch",
         PARAM_EDIT: "param_edit",
         BUILD_START: "build_start",
@@ -20,6 +37,67 @@
     };
 
     const STATE_MACHINE = {
+        [STATES.LOAD_TARGETS]: {
+            component: LoadTargetsPlaceholder,
+            onEnter: async function () {
+                let res = await getCloneTargets(this.args.testId);
+                setState(STATES.CLONE_EDITOR, {targets: res});
+            },
+            /**
+             * @param {CustomEvent} event
+             */
+            onExit: async function (event) {
+                //empty
+            },
+            args: {
+                testId: testId,
+            },
+        },
+        [STATES.CLONE_EDITOR]: {
+            component: CloneTargetSelector,
+            onEnter: async function () {
+                //empty
+            },
+            /**
+             * @param {CustomEvent} event
+             */
+            onExit: async function (event) {
+                setState(STATES.CLONE_CREATE, {
+                    newName: event.detail.newName,
+                    target: event.detail.target,
+                    group: event.detail.group,
+                    advancedSettings: event.detail.advancedSettings,
+                });
+            },
+            args: {
+                releaseId: releaseId,
+                groupId: groupId,
+                buildId: buildId,
+                pluginName: pluginName,
+                oldTestName: oldTestName,
+                targets: [],
+            },
+        },
+        [STATES.CLONE_CREATE]: {
+            component: CloneCreatePlaceholder,
+            onEnter: async function () {
+                //empty
+            },
+            /**
+             * @param {CustomEvent} event
+             */
+            onExit: async function (event) {
+                newBuildId = event.detail.newBuildId;
+                setState(STATES.PARAM_FETCH, {});
+            },
+            args: {
+                currentTestId: testId,
+                newName: "",
+                target: "",
+                group: "",
+                advancedSettings: false,
+            },
+        },
         [STATES.PARAM_FETCH]: {
             component: ParamFetchPlaceholder,
             onEnter: async function () {
@@ -57,7 +135,7 @@
         [STATES.BUILD_START]: {
             component: BuildStartPlaceholder,
             onEnter: async function () {
-                let queueItem = await startJobBuild(this.args.buildParams);
+                let queueItem = await startJobBuild(newBuildId, this.args.buildParams);
                 let event = new CustomEvent("exit", {detail: { queueItem }});
                 this.onExit(event);
             },
@@ -65,10 +143,11 @@
              * @param {CustomEvent} event
              */
             onExit: async function (event) {
-                setState(STATES.BUILD_CONFIRMED, {queueItem: event.detail.queueItem});
+                setState(STATES.BUILD_CONFIRMED, {queueItem: event.detail.queueItem, isFirst: !this.args.firstBuildRestart, plugin: pluginName});
             },
             args: {
                 buildParams: {},
+                firstBuildRestart: false,
             },
         },
         [STATES.BUILD_CONFIRMED]: {
@@ -80,10 +159,16 @@
              * @param {CustomEvent} event
              */
             onExit: async function (event) {
-                dispatch("rebuildComplete");
+                if (event.detail?.firstBuildRestart) {
+                    setState(STATES.BUILD_START, {firstBuildRestart: true});
+                } else {
+                    dispatch("cloneComplete");
+                }
             },
             args: {
                 queueItem: -1,
+                isFirst: false,
+                plugin: null,
             },
         },
         none: {
@@ -141,57 +226,53 @@
         }
     };
 
-    const startJobBuild = async function(buildParams) {
+    const getCloneTargets = async function(testId) {
         try {
             const params = {
-                buildId: buildId,
-                parameters: buildParams,
+                testId: testId,
             };
-            const response = await fetch("/api/v1/jenkins/build", {
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                method: "POST",
-                body: JSON.stringify(params),
-            });
+            let qs = queryString.stringify(params);
+            const response = await fetch("/api/v1/jenkins/clone/targets?" + qs);
 
             const json = await response.json();
             if (json.status != "ok") {
                 throw json;
             }
 
-            return json.response.queueItem;
+            return json.response.targets;
+
         } catch (error) {
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error when starting build.\nMessage: ${error.response.arguments[0]}`
+                    `API Error when fetching clone targets.\nMessage: ${error.response.arguments[0]}`
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred attempting to start a build"
+                    "A backend error occurred during clone target fetch"
                 );
                 console.log(error);
             }
         }
     };
 
+
     onMount(() => {
-        setState(STATES.PARAM_FETCH, {});
+        setState(STATES.LOAD_TARGETS, {});
     });
 </script>
 
-<div class="build-modal">
+<div class="clone-modal">
     <div class="d-flex align-items-center justify-content-center p-4">
         <div class="rounded bg-white p-4 h-50">
             <div class="mb-2 d-flex border-bottom pb-2">
-                <h5>Rebuilding <span class="fw-bold">{buildId}#{buildNumber}</span></h5>
+                <h5>Cloning <span class="fw-bold">{buildId}#{buildNumber}</span></h5>
                 <div class="ms-auto">
                     <button 
                         class="btn btn-close"
                         on:click={() => {
-                            dispatch("rebuildCancel");
+                            dispatch("cloneCancel");
                         }}
                     ></button>
                 </div>
@@ -205,7 +286,7 @@
     .h-50 {
         width: 50%;
     }
-    .build-modal {
+    .clone-modal {
         position: fixed;
         top: 0;
         left: 0;
