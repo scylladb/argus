@@ -110,8 +110,8 @@ class ArgusDriverMatrixClient(ArgusClient):
             raw_cases.append({
                 "name": case.attrib["name"],
                 "status": status,
-                "time": float(case.attrib["time"]),
-                "classname": case.attrib["classname"],
+                "time": float(case.attrib.get("time", 0.0)),
+                "classname": case.attrib.get("classname", ""),
                 "message": message,
             })
 
