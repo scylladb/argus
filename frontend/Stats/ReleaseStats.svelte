@@ -28,7 +28,7 @@
     {#if releaseStats?.total > 0}
         {#if showReleaseStats}
             <div class="w-100 mb-2">
-                <svelte:component this={DisplayItem} stats={releaseStats} displayNumber={displayExtendedStats} displayInvestigations={displayExtendedStats} {hiddenStatuses}/>
+                <svelte:component this={DisplayItem} stats={releaseStats} displayNumber={displayExtendedStats} displayInvestigations={displayExtendedStats} {hiddenStatuses} on:quickSelect/>
             </div>
         {/if}
     {:else if releaseStats?.total == -1}

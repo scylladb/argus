@@ -117,6 +117,30 @@
         fetchStats(true);
     };
 
+    const handleQuickSelect = function (e) {
+        let tests = e.detail.tests;
+        tests.forEach((v) => {
+            let group = stats.groups[v.test.group_id];
+            dispatch("testClick", {
+                name: v.test.name,
+                id: v.test.id,
+                assignees: [...(assigneeList.tests?.[v.test.id] ?? []), ...(assigneeList.groups?.[group.group.id] ?? [])],
+                group: group.group.name,
+                status: v.status,
+                start_time: v.start_time,
+                last_runs: v.last_runs,
+                build_system_id: v.test.build_system_id,
+            });
+        });
+    };
+
+    const quickTestFilter = function(stats, key) {
+        let allTests = Object.values(stats.groups).reduce((tests, group) => [...tests, ...Object.values(group.tests)], []);
+        let evt = new CustomEvent("quickSelect", { detail: { tests: allTests.filter(v => v[key]) } });
+        console.log(evt, allTests);
+        handleQuickSelect(evt);
+    };
+
     const fetchVersions = async function() {
         let response = await fetch(`/api/v1/release/${releaseId}/versions`);
         if (response.status != 200) {
@@ -307,19 +331,27 @@
     {/await}
     {#if stats}
         <div class="text-end mb-2">
+            <button class="btn btn-primary btn-sm" on:click={() => quickTestFilter(stats, "hasBugReport")}>
+                <Fa color="#fff" icon={faBug} />
+                Select all tests with issues
+            </button>
+            <button class="btn btn-primary btn-sm" on:click={() => quickTestFilter(stats, "hasComments")}>
+                <Fa color="#fff" icon={faComment} />
+                Select all tests with comments
+            </button>
             {#if allCollapsed(collapseState)}
                 <button
                     class="btn btn-secondary btn-sm"
                     on:click={() => toggleAllCollapses(false)}
                 >
-                    Expand All
+                    Expand all groups
                 </button>
             {:else}
                 <button
                     class="btn btn-secondary btn-sm"
                     on:click={() => toggleAllCollapses(true)}
                 >
-                    Collapse All
+                    Collapse all groups
                 </button>
             {/if}
         </div>
@@ -330,7 +362,7 @@
                         <div class="flex-fill">
                             <div class="mb-2">{groupStats.group.pretty_name || groupStats.group.name}</div>
                             <div class="mb-2">
-                                <NumberStats displayInvestigations={true} stats={groupStats} displayPercentage={true}/>
+                                <NumberStats displayInvestigations={true} stats={groupStats} displayPercentage={true} on:quickSelect={handleQuickSelect}/>
                             </div>
                             {#if Object.keys(assigneeList.groups).length > 0 && Object.keys(users).length > 0}
                                 <div class="shadow-sm bg-main rounded d-inline-block p-2">

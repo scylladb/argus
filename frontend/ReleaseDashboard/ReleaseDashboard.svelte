@@ -13,20 +13,18 @@
     let productVersion = queryString.parse(document.location.search)?.productVersion;
     let stats;
 
-    const handleTestClick = function (e) {
-        console.log(e);
-        if (e.detail.start_time == 0) {
-            sendMessage("info", `The test "${e.detail.name}" hasn't been run yet!"`);
+    const handleTestClick = function (detail) {
+        if (detail.start_time == 0) {
+            sendMessage("info", `The test "${detail.name}" hasn't been run yet!"`);
             return;
         }
-        let key = e.detail.id;
+        let key = detail.id;
         if (!clickedTests[key]) {
-            clickedTests[key] = e.detail;
+            clickedTests[key] = detail;
         } else {
             delete clickedTests[key];
             clickedTests = clickedTests;
         }
-        console.log(clickedTests);
     };
 
     const handleVersionChange = function (e) {
@@ -39,6 +37,23 @@
             delete clickedTests[key];
             clickedTests = clickedTests;
         }
+    };
+
+    const handleQuickSelect = function (e) {
+        let tests = e.detail.tests;
+        tests.forEach((v) => {
+            let group = stats.groups[v.test.group_id];
+            handleTestClick({
+                name: v.test.name,
+                id: v.test.id,
+                assignees: [],
+                group: group.group.name,
+                status: v.status,
+                start_time: v.start_time,
+                last_runs: v.last_runs,
+                build_system_id: v.test.build_system_id,
+            });
+        });
     };
 </script>
 
@@ -89,6 +104,7 @@
                 displayExtendedStats={true}
                 hiddenStatuses={[TestStatus.NOT_PLANNED, TestStatus.NOT_RUN]}
                 releaseStats={stats}
+                on:quickSelect={handleQuickSelect}
             />
         </div>
     </div>
@@ -99,7 +115,7 @@
                 releaseId={releaseData.release.id}
                 {productVersion}
                 bind:clickedTests={clickedTests}
-                on:testClick={handleTestClick}
+                on:testClick={(e) => handleTestClick(e.detail)}
                 on:versionChange={handleVersionChange}
                 on:statsUpdate={(e) => (stats = e.detail)}
             />

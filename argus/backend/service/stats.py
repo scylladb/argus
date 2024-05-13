@@ -292,6 +292,7 @@ class TestStats:
             "hasBugReport": self.has_bug_report,
             "hasComments": self.has_comments,
             "buildNumber": self.tracked_run_number,
+            "buildId": self.test.build_system_id,
         }
 
     def collect(self, limited=False):
