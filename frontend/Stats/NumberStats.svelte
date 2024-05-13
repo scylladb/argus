@@ -3,6 +3,7 @@
     import { TestStatus, StatusBackgroundCSSClassMap, TestInvestigationStatus, TestInvestigationStatusStrings, StatusCSSClassMap, InvestigationStatusIcon } from "../Common/TestStatus";
     import { titleCase, subUnderscores } from "../Common/TextUtils";
     import { Collapse } from "bootstrap";
+    import { createEventDispatcher } from "svelte";
     export let displayNumber = false;
     export let displayPercentage = false;
     export let displayInvestigations = false;
@@ -19,6 +20,7 @@
     let shortBlock;
     let extendedBlock;
 
+    const dispatch = createEventDispatcher();
     const normalize = function(val, max, min) {
         return (val - min) / (max - min);
     };
@@ -36,6 +38,13 @@
             .reduce((acc, v) => acc + v[1], 0);
         const statusCount = stats?.[status] ?? 0;
         return (statusCount / filteredTotal * 100).toFixed(1);
+    };
+
+    const getTestsForStatus = function(stats, investigationStatus, status) {
+        let tests = Object
+            .values(stats.release ? Object.values(stats.groups).reduce((tests, group) => [...tests, ...Object.values(group.tests)], []) : Object.values(stats.tests))
+            .filter(v => v.investigation_status == investigationStatus && v.status == status);
+        return tests;
     };
 
     const calculateStatusStats = function(stats, investigationStatus, allowedStatuses) {
@@ -126,8 +135,17 @@
                             <div class="p-2 d-flex flex-column">
                                 {#each allowedStatuses as status}
                                     {#if statusStats.counts?.[status]}
-                                        <div class="flex-fill d-flex">
-                                            <div class="me-4">{subUnderscores(titleCase(status))}</div>
+                                        <div class="flex-fill d-flex align-items-center">
+                                            <div class="me-4">
+                                                <button 
+                                                    class="btn btn-sm btn-light"
+                                                    on:click={() => {
+                                                        dispatch("quickSelect", { tests: getTestsForStatus(stats, investigationStatus, status) });
+                                                    }}
+                                                >
+                                                    {subUnderscores(titleCase(status))}
+                                                </button>
+                                            </div>
                                             <div class="ms-auto fw-bold {StatusCSSClassMap[status]}">{statusStats.counts[status].amount} ({statusStats.counts[status].percentage}%)</div>
                                         </div>
                                     {/if}
