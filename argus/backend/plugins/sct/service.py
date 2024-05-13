@@ -1,12 +1,14 @@
+import base64
 from dataclasses import dataclass
 from functools import reduce
 import logging
 import math
 import re
 from time import time
+from xml.etree import ElementTree
 from flask import g
 from argus.backend.models.web import ArgusEventTypes
-from argus.backend.plugins.sct.testrun import SCTTestRun, SubtestType
+from argus.backend.plugins.sct.testrun import SCTJunitReports, SCTTestRun, SubtestType
 from argus.backend.plugins.sct.types import GeminiResultsRequest, PerformanceResultsRequest
 from argus.backend.plugins.sct.udt import (
     CloudInstanceDetails,
@@ -417,3 +419,34 @@ class SCTService:
             "versions": kernels_by_version,
             "metadata": kernel_metadata
         }
+    
+    @staticmethod
+    def junit_submit(run_id: str, file_name: str, content: str) -> bool:
+        try:
+            report = SCTJunitReports.get(test_id=run_id, file_name=file_name)
+            if report:
+                raise SCTServiceException(f"Report {file_name} already exists.", file_name)
+        except SCTJunitReports.DoesNotExist:
+            pass
+        report = SCTJunitReports()
+        report.test_id = run_id
+        report.file_name = file_name
+        
+        xml_content = str(base64.decodebytes(bytes(content, encoding="utf-8")), encoding="utf-8")
+        try:
+            _ = ElementTree.fromstring(xml_content)
+        except Exception:
+            raise SCTServiceException(f"Malformed JUnit report submitted")
+
+        report.report = xml_content
+        report.save()
+
+        return True
+
+    @staticmethod
+    def junit_get_all(run_id: str) -> list[SCTJunitReports]:
+        return list(SCTJunitReports.filter(test_id=run_id).all())
+    
+    @staticmethod
+    def junit_get_single(run_id: str, file_name: str) -> SCTJunitReports:
+        return SCTJunitReports.get(test_id=run_id, file_name=file_name)

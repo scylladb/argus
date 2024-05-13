@@ -6,7 +6,7 @@ from typing import Optional
 from uuid import UUID
 
 from cassandra.cqlengine import columns
-from cassandra.cqlengine.models import _DoesNotExist
+from cassandra.cqlengine.models import _DoesNotExist, Model
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import ArgusRelease
 from argus.backend.plugins.core import PluginModelBase
@@ -248,3 +248,9 @@ class SCTTestRun(PluginModelBase):
             self._add_new_event_type(event)
 
         self._collect_event_message(event, event_message)
+
+
+class SCTJunitReports(Model):
+    test_id = columns.UUID(primary_key=True, partition_key=True, required=True)
+    file_name = columns.Text(primary_key=True, required=True)
+    report = columns.Text(required=True)
