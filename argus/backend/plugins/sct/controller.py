@@ -152,3 +152,23 @@ def sct_get_kernel_report(release_name: str):
         "status": "ok",
         "response": result
     }
+
+
+@bp.route("/<string:run_id>/junit/submit", methods=["POST"])
+@api_login_required
+def sct_submit_junit_report(run_id: str):
+    payload = get_payload(request)
+    result = SCTService.junit_submit(run_id, payload["file_name"], payload["content"])
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+@bp.route("/<string:run_id>/junit/get_all", methods=["GET"])
+@api_login_required
+def sct_get_junit_reports(run_id: str):
+    result = SCTService.junit_get_all(run_id)
+    return {
+        "status": "ok",
+        "response": result
+    }

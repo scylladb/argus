@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "argus-alm"
-version = "0.12.2"
+version = "0.12.3"
 description = "Argus"
 authors = ["Alexey Kartashov <alexey.kartashov@scylladb.com>"]
 license = "Apache-2.0"

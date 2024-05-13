@@ -1,3 +1,4 @@
+import base64
 from uuid import UUID
 from dataclasses import asdict
 from argus.backend.plugins.sct.types import GeminiResultsRequest, PerformanceResultsRequest
@@ -22,6 +23,7 @@ class ArgusSCTClient(ArgusClient):
         SUBMIT_PERFORMANCE_RESULTS = "/sct/$id/performance/submit"
         FINALIZE_NEMESIS = "/sct/$id/nemesis/finalize"
         SUBMIT_EVENTS = "/sct/$id/events/submit"
+        SUBMIT_JUNIT_REPORT = "/sct/$id/junit/submit"
 
     def __init__(self, run_id: UUID, auth_token: str, base_url: str, api_version="v1") -> None:
         super().__init__(auth_token, base_url, api_version)
@@ -265,3 +267,17 @@ class ArgusSCTClient(ArgusClient):
             Updates a heartbeat field for an already existing test.
         """
         super().heartbeat(run_type=self.test_type, run_id=self.run_id)
+
+    def sct_submit_junit_report(self, file_name: str, raw_content: str) -> None:
+        """
+            Submits a JUnit-formatted XML report to argus
+        """
+        response = self.post(
+            endpoint=self.Routes.SUBMIT_JUNIT_REPORT,
+            location_params={"id": str(self.run_id)},
+            body={
+                **self.generic_body,
+                "file_name": file_name,
+                "content": str(base64.encodebytes(bytes(raw_content, encoding="utf-8")), encoding="utf-8")
+            }
+        )

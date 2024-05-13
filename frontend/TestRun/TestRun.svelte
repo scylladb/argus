@@ -3,6 +3,7 @@
     import Fa from "svelte-fa";
     import {
         faBox,
+        faClipboard,
         faCloud,
         faCodeBranch,
         faComments,
@@ -32,6 +33,8 @@
     import IssueTab from "./IssueTab.svelte";
     import { SubtestTabBodyComponents, SubtestTabComponents, Subtests } from "./SCTSubTests/Subtest";
     import PackagesInfo from "./PackagesInfo.svelte";
+    import queryString from "query-string";
+    import JUnitResults from "./jUnitResults.svelte";
     export let runId = "";
     export let buildNumber = -1;
     export let testInfo = {};
@@ -44,6 +47,8 @@
     let issuesOpen = false;
     let artifactTabOpened = false;
     let failedToLoad = false;
+    let jUnitFetched = false;
+    let jUnitResults = [];
 
     const fetchTestRunData = async function () {
         try {
@@ -58,6 +63,7 @@
                     testRun.build_job_url.split("/").reverse()[1]
                 );
             }
+            fetchJunitReports();
         } catch (error) {
             if (error?.status === "error") {
                 sendMessage(
@@ -68,6 +74,34 @@
                 sendMessage(
                     "error",
                     "A backend error occurred during test run data fetch"
+                );
+                console.log(error);
+            }
+        }
+    };
+
+    const fetchJunitReports = async function () {
+        try {
+            let res = await fetch(`/api/v1/client/sct/${testRun.id}/junit/get_all`);
+            if (res.status != 200) {
+                throw new Error(`Network error: ${res.status}`);
+            }
+            let json = await res.json();
+            if (json.status != "ok") {
+                throw json.response;
+            }
+            jUnitFetched = true;
+            jUnitResults = json.response;
+        } catch (error) {
+            if (error?.status === "error") {
+                sendMessage(
+                    "error",
+                    `API Error when fetching test run junit results data.\nMessage: ${error.response.arguments[0]}`
+                );
+            } else {
+                sendMessage(
+                    "error",
+                    "A backend error occurred during test run junit results data fetch"
                 );
                 console.log(error);
             }
@@ -172,6 +206,18 @@
                         type="button"
                         role="tab"><Fa icon={faBox}/> Packages</button
                     >
+                    {#if jUnitFetched && jUnitResults.length > 0}
+                        <button
+                            class="nav-link"
+                            id="nav-events-tab-{runId}"
+                            data-bs-toggle="tab"
+                            data-bs-target="#nav-junit-{runId}"
+                            type="button"
+                            role="tab"
+                            on:click={() => (eventsOpen = true)}
+                            ><Fa icon={faClipboard}/> Test Results</button
+                        >
+                    {/if}
                     <button
                         class="nav-link"
                         id="nav-events-tab-{runId}"
@@ -272,6 +318,11 @@
                         <PackagesInfo packages={testRun.packages}
                         />
                     </div>
+                </div>
+                <div class="tab-pane fade" id="nav-junit-{runId}" role="tabpanel">
+                   {#if jUnitFetched}
+                        <JUnitResults results={jUnitResults}/>
+                   {/if}
                 </div>
                 <div class="tab-pane fade" id="nav-events-{runId}" role="tabpanel">
                     {#if eventsOpen}
