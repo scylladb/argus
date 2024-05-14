@@ -123,6 +123,23 @@ div#notificationCounter {
     --bs-btn-disabled-border-color: #c94b25;
 }
 
+.btn-testruns-open {
+    --bs-btn-color: #1f1f1f;
+    --bs-btn-bg: #dce2ec;
+    --bs-btn-border-color: #dce2ec;
+    --bs-btn-hover-color: #fff;
+    --bs-btn-hover-bg: #305fb6;
+    --bs-btn-hover-border-color: #305fb6;
+    --bs-btn-focus-shadow-rgb: 225, 83, 97;
+    --bs-btn-active-color: #fff;
+    --bs-btn-active-bg: #3d5f9c;
+    --bs-btn-active-border-color: #3d5f9c;
+    --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
+    --bs-btn-disabled-color: #fff;
+    --bs-btn-disabled-bg: #87aef7;
+    --bs-btn-disabled-border-color: #87aef7;
+}
+
 .table-orange {
     --bs-table-color: #000;
     --bs-table-bg: #fcddc1;

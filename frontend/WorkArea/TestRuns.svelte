@@ -12,8 +12,11 @@
     import { AVAILABLE_PLUGINS } from "../Common/PluginDispatch";
     import { sendMessage } from "../Stores/AlertStore";
     import TestRunsMessage from "./TestRunsMessage.svelte";
-    import { faRefresh } from "@fortawesome/free-solid-svg-icons";
+    import { faGear, faRefresh, faTimes } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
+    import { Collapse } from "bootstrap";
+    import JobConfigureModal from "./JobConfigureModal.svelte";
+    import { applicationCurrentUser } from "../argus";
 
     export let testId;
     export let listId = uuidv4();
@@ -111,6 +114,8 @@
 
     const dispatch = createEventDispatcher();
     let selectedPlugin = "";
+    let configureRequested = false;
+    let open = true;
     let pluginFixed = false;
     let runsBody = undefined;
     let clickedTestRuns = {};
@@ -272,14 +277,17 @@
 
 <div class:d-none={filtered} class="accordion-item border-none  bg-main mb-1">
 {#if testInfo}
-    <h4
-        class="accordion-header border-none"
-        id="heading{listId}"
+    <div
+        class="border-none mb-2"
     >
         <button
-            class="accordion-button rounded d-flex align-items-center { removableRuns ? "shadow" : "p-2"}"
-            data-bs-toggle="{ removableRuns ? "collapse" : ""}"
-            data-bs-target="#collapse{listId}"
+            class="btn w-100 rounded d-flex align-items-center { removableRuns ? "shadow-sm" : "p-2"}"
+            class:btn-light={!open}
+            class:btn-testruns-open={open}
+            on:click={() => {
+                open = !open;
+                new Collapse(`#collapse-${listId}`).toggle();
+            }}
         >
             {#if runs.length > 0}
                 <span
@@ -293,19 +301,32 @@
                 <div class="ms-auto flex-fill text-end">{timestampToISODate(runs[0].start_time)}</div>
                 <div class="mx-2">#{extractBuildNumber(runs[0])}</div>
             {/if}
+            {#if applicationCurrentUser.roles.some(v => ["ROLE_ADMIN", "ROLE_MANAGER"].includes(v)) || testInfo.release.name.includes("staging")}
+                <div>
+                    <button class="btn" on:click={(e) => {configureRequested = true; e.stopPropagation();}}><Fa icon={faGear}/></button>
+                </div>
+            {/if}
             {#if removableRuns}
-                <div class="mx-2 text-end" class:flex-fill={runs.length == 0}>
-                    <div
-                        class="d-inline-block btn btn-close"
-                        role="button"
-                        on:click={() => { dispatch("testRunRemove", { testId: testId }); }}
+                <div class="ms-1 me-2" class:flex-fill={runs.length == 0}>
+                    <button
+                        class="btn"
+                        on:click={(e) => { dispatch("testRunRemove", { testId: testId }); e.stopPropagation(); }}
                     >
-                    </div>
+                        <Fa icon={faTimes}/>
+                    </button>
                 </div>
             {/if}
         </button>
-    </h4>
-    <div class="accordion-collapse collapse show" id="collapse{listId}">
+    </div>
+    {#if configureRequested}
+        <JobConfigureModal 
+            testName={testInfo.test.pretty_name || testInfo.test.name} 
+            buildId={testInfo.test.build_system_id} 
+            on:configureCancel={() => (configureRequested = false)}
+            on:settingsFinished={() => (configureRequested = false)}
+        />
+    {/if}
+    <div class="collapse show bg-main shadow-sm rounded" id="collapse-{listId}">
         {#if !isPluginSupported(testInfo.test.plugin_name)}
             <div class="rounded shadow-sm bg-white p-2 text-center">
                 <span class="fw-bold">Unsupported plugin</span> <span class="d-inline-block text-danger bg-light-one rounded p-1">{testInfo.test.plugin_name ? testInfo.test.plugin_name : "#empty-test-name"}</span>
@@ -334,7 +355,7 @@
                 </div>
         {/if}
         {#if runs.length > 0}
-            <div class="p-2" bind:this={runsBody}>
+            <div class="" bind:this={runsBody}>
                 <TestRunsSelector
                     {runs}
                     {testInfo}
@@ -347,7 +368,7 @@
                 />
                 {#each runs as run (run.id)}
                     <div class:show={clickedTestRuns[run.id]} class="collapse mb-2" id="collapse{run.id}">
-                        <div class="container-fluid p-0 bg-light">
+                        <div class="container-fluid p-1 bg-light">
                             {#if clickedTestRuns[run.id]}
                                 <TestRunDispatcher
                                     runId={run.id}
