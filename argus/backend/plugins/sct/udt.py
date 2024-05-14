@@ -14,6 +14,12 @@ class PackageVersion(UserType):
     build_id = columns.Text()
 
 
+    def __eq__(self, other):
+        if isinstance(other, PackageVersion):
+            return all(getattr(self, a) == getattr(other, a) for a in ["name", "version", "date", "revision_id", "build_id"])
+        return super().__eq__(other)
+
+
 class CloudInstanceDetails(UserType):
     __type_name__ = "CloudInstanceDetails_v3"
     provider = columns.Text()

@@ -61,7 +61,8 @@ class SCTService:
             run: SCTTestRun = SCTTestRun.get(id=run_id)
             for package_dict in packages:
                 package = PackageVersion(**package_dict)
-                run.packages.append(package)
+                if package not in run.packages:
+                    run.packages.append(package)
             run.save()
         except SCTTestRun.DoesNotExist as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
