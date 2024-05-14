@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from functools import reduce
 import logging
 import math
+import re
 from time import time
 from flask import g
 from argus.backend.models.web import ArgusEventTypes
@@ -348,12 +349,36 @@ class SCTService:
                 wrapper = EventsBySeverity(severity=event.severity,
                                            event_amount=event.total_events, last_events=event.messages)
                 run.get_events().append(wrapper)
+            coredumps = SCTService.locate_coredumps(run, run.get_events())
+            run.submit_logs(coredumps)
             run.save()
         except SCTTestRun.DoesNotExist as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
             raise SCTServiceException("Run not found", run_id) from exception
 
         return "added"
+
+    @staticmethod
+    def locate_coredumps(run: SCTTestRun, events: list[EventsBySeverity]) -> list[dict]:
+        flat_messages: list[str] = []
+        links = []
+        for es in events:
+            flat_messages.extend(es.last_events)
+        coredump_events = filter(lambda v: "coredumpevent" in v.lower(), flat_messages)
+        for idx, event in enumerate(coredump_events):
+            core_pattern = r"corefile_url=(?P<url>.+)$"
+            node_name_pattern = r"node=(?P<name>.+)$"
+            core_url_match = re.search(core_pattern, event, re.MULTILINE)
+            node_name_match = re.search(node_name_pattern, event, re.MULTILINE)
+            if core_url_match:
+                node_name = node_name_match.group("name") if node_name_match else f"unknown-node-{idx}"
+                url = core_url_match.group("url")
+                log_link = {
+                    "log_name": f"COREDUMP-{node_name}",
+                    "log_link": url
+                }
+                links.append(log_link)
+        return links
 
     @staticmethod
     def get_scylla_version_kernels_report(release_name: str):
