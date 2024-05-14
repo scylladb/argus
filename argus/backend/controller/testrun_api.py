@@ -6,6 +6,7 @@ from flask import (
 )
 
 from argus.backend.error_handlers import handle_api_exception
+from argus.backend.models.web import ArgusTest
 from argus.backend.service.jenkins_service import JenkinsService
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.user import api_login_required
@@ -417,6 +418,20 @@ def get_clone_job_advanced_settings():
         raise Exception("No testId provided")
     service = JenkinsService()
     result = service.get_advanced_settings(build_id)
+
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
+@bp.route("/jenkins/clone/settings/change", methods=["POST"])
+@api_login_required
+def set_job_settings():
+    payload = get_payload(request)
+    service = JenkinsService()
+    test = ArgusTest.get(build_system_id=payload["buildId"])
+    result = service.adjust_job_settings(build_id=test.build_system_id, plugin_name=test.plugin_name, settings=payload["settings"])
 
     return {
         "status": "ok",
