@@ -24,7 +24,7 @@ argus-client-generic = 'argus.client.generic.cli:cli'
 
 [tool.poetry.group.web-backend.dependencies]
 PyYAML = "^5.4.1"
-scylla-driver = "^3.24.8"
+scylla-driver = "^3.26.8"
 Flask = "2.0.2"
 Flask-WTF = "1.0.0"
 Flask-Login = "0.5.0"
