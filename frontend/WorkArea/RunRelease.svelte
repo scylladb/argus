@@ -154,6 +154,7 @@
                     {#each releaseGroups ?? [] as group (group.id)}
                         <RunGroup
                             release={release.name}
+                            releaseObject={release}
                             {group}
                             filtered={isFiltered(group.pretty_name || group.name)}
                             parent="#accordionGroups{release.name}"

@@ -15,6 +15,7 @@
     export let assigneeList = [];
     export let runs = [];
     export let groupStats;
+    export let releaseObject;
 
     let groupClicked = false;
     let testAssignees = {};
@@ -104,6 +105,8 @@
                         {:else if groupStats?.disabled ?? false}
                             <!-- svelte-ignore empty-block -->
                         {:else if groupStats?.total == 0}
+                            <!-- svelte-ignore empty-block -->
+                        {:else if !releaseObject.enabled || releaseObject.dormant}
                             <!-- svelte-ignore empty-block -->
                         {:else}
                             <span class="spinner-border spinner-border-sm" />
