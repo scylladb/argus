@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+from math import ceil
 from uuid import UUID
 from time import time
 
@@ -132,13 +133,18 @@ class PluginModelBase(Model):
         return bound_query
 
     @classmethod
-    def get_stats_for_release(cls, release: ArgusRelease):
+    def get_stats_for_release(cls, release: ArgusRelease, build_ids=list[str]):
         cluster = ScyllaCluster.get()
         query = cluster.prepare(cls._stats_query())
-        rows = cluster.session.execute(query=query, parameters=(release.id,))
+        futures = []
+        step_size = 90
 
-        return list(rows)
+        for step in range(0, ceil(len(build_ids) / step_size)):
+            start_pos = step*step_size
+            next_slice = build_ids[start_pos:start_pos+step_size]
+            futures.append(cluster.session.execute_async(query=query, parameters=(next_slice,)))
 
+        return futures
     @classmethod
     def get_run_meta_by_build_id(cls, build_id: str, limit: int = 10):
         cluster = ScyllaCluster.get()
