@@ -487,8 +487,17 @@ class ArgusService:
         groups = ArgusGroup.filter(release_id=release_id).all()
         group_ids = [group.id for group in groups if group.enabled]
 
-        scheduled_groups = ArgusScheduleGroup.filter(release_id=release.id, group_id__in=group_ids).all()
-        schedule_ids = {schedule.schedule_id for schedule in scheduled_groups}
+        total_ids = len(group_ids)
+        schedule_ids = set()
+        step = 0
+        step_size = 60
+        while total_ids > 0:
+            group_slice = group_ids[step:step+step_size]
+            scheduled_groups = ArgusScheduleGroup.filter(release_id=release.id, group_id__in=group_slice).all()
+            batch_ids = {schedule.schedule_id for schedule in scheduled_groups}
+            schedule_ids.union(batch_ids)
+            total_ids = max(0, total_ids - step_size)
+            step += step_size
 
         schedules = ArgusSchedule.filter(release_id=release.id, id__in=tuple(schedule_ids)).all()
 
