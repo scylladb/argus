@@ -34,6 +34,7 @@
     export let productVersion;
     let stats;
     let statRefreshInterval;
+    let statsFetchedOnce = false;
     let versionsIncludeNoVersion = JSON.parse(window.localStorage.getItem(`releaseDashIncludeNoVersions-${releaseId}`)) ?? false;
     let versionsFilterExtraVersions = JSON.parse(window.localStorage.getItem(`releaseDashFilterExtraVersions-${releaseId}`)) ?? true;
     let users = {};
@@ -85,7 +86,7 @@
 
 
     const fetchStats = async function (force = false) {
-        if (!document.hasFocus()) return;
+        if (!document.hasFocus() && statsFetchedOnce) return;
         let params = queryString.stringify({
             release: releaseName,
             limited: new Number(false),
@@ -101,6 +102,7 @@
         }
         stats = json.response;
         dispatch("statsUpdate", stats);
+        statsFetchedOnce = true;
 
         if (stats.release.perpetual) {
             fetchGroupAssignees(releaseId);

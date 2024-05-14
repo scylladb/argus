@@ -1,3 +1,5 @@
+from collections import defaultdict
+from functools import reduce
 import logging
 
 from datetime import datetime
@@ -152,7 +154,7 @@ class ReleaseStats:
         self.has_bug_report = False
         self.issues: list[ArgusGithubIssue] = []
         self.comments: list[ArgusTestRunComment] = []
-        self.test_schedules: list[ArgusScheduleTest] = []
+        self.test_schedules: dict[UUID, ArgusScheduleTest] = {}
         self.forced_collection = False
         self.rows = []
         self.all_tests = []
@@ -182,21 +184,32 @@ class ReleaseStats:
             **aggregated_investigation_status
         }
 
-    def collect(self, rows: list[TestRunStatRow], limited=False, force=False) -> None:
+    def collect(self, rows: list[TestRunStatRow], limited=False, force=False, dict: dict | None = None, tests=None) -> None:
         self.forced_collection = force
         if not self.release.enabled and not force:
             return
 
         if not self.release.perpetual and not limited:
-            self.test_schedules = list(ArgusScheduleTest.filter(
-                release_id=self.release.id
-            ).all())
+            self.test_schedules = reduce(
+                lambda acc, row: acc[row["test_id"]].append(row) or acc,
+                ArgusScheduleTest.filter(release_id=self.release.id).all(), 
+                defaultdict(list)
+            )
 
         self.rows = rows
+        self.dict = dict
         if not limited or force:
-            self.issues = ArgusGithubIssue.filter(release_id=self.release.id).all()
-            self.comments = ArgusTestRunComment.filter(release_id=self.release.id).all()
-        self.all_tests = ArgusTest.filter(release_id=self.release.id).all()
+            self.issues = reduce(
+                lambda acc, row: acc[row["run_id"]].append(row) or acc,
+                ArgusGithubIssue.filter(release_id=self.release.id).all(),
+                defaultdict(list)
+            )
+            self.comments = reduce(
+                lambda acc, row: acc[row["test_run_id"]].append(row) or acc,
+                ArgusTestRunComment.filter(release_id=self.release.id).all(),
+                defaultdict(list)
+            )
+        self.all_tests = ArgusTest.filter(release_id=self.release.id).all() if not tests else tests
         groups: list[ArgusGroup] = ArgusGroup.filter(release_id=self.release.id).all()
         for group in groups:
             if group.enabled:
@@ -250,8 +263,7 @@ class GroupStats:
                 stats = TestStats(
                     test=test,
                     parent_group=self,
-                    schedules=tuple(
-                        schedule for schedule in self.parent_release.test_schedules if schedule.test_id == test.id)
+                    schedules=self.parent_release.test_schedules.get(test.id, [])
                 )
                 stats.collect(limited=limited)
                 self.tests.append(stats)
@@ -299,7 +311,10 @@ class TestStats:
 
         # TODO: Parametrize run limit
         # FIXME: This is only a mitigation, build_number overflows on the build system side.
-        last_runs = [r for r in self.parent_group.parent_release.rows if r["build_id"] == self.test.build_system_id][:15]
+        if not self.parent_group.parent_release.dict:
+            last_runs = [r for r in self.parent_group.parent_release.rows if r["build_id"] == self.test.build_system_id]
+        else:
+            last_runs = self.parent_group.parent_release.dict.get(self.test.build_system_id, [])
         last_runs: list[TestRunStatRow] = sorted(
             last_runs, reverse=True, key=lambda r: get_build_number(r["build_job_url"]))
         try:
@@ -327,8 +342,8 @@ class TestStats:
                 "build_job_name": run["build_id"],
                 "start_time": run["start_time"],
                 "assignee": run["assignee"],
-                "issues": [dict(i.items()) for i in self.parent_group.parent_release.issues if i.run_id == run["id"]],
-                "comments": [dict(i.items()) for i in self.parent_group.parent_release.comments if i.test_run_id == run["id"]],
+                "issues": [dict(issue.items()) for issue in self.parent_group.parent_release.issues[run["id"]]],
+                "comments": [dict(comment.items()) for comment in self.parent_group.parent_release.comments[run["id"]]],
             }
             for run in last_runs
         ]
@@ -336,8 +351,8 @@ class TestStats:
             target_run = next(run for run in self.last_runs if run["id"] == worst_case[1]["id"])
         except StopIteration:
             target_run = worst_case[1]
-            target_run["issues"] = [dict(i.items()) for i in self.parent_group.parent_release.issues if i.run_id == target_run["id"]]
-            target_run["comments"] = [dict(i.items()) for i in self.parent_group.parent_release.comments if i.test_run_id == target_run["id"]]
+            target_run["issues"] = [dict(issue.items()) for issue in self.parent_group.parent_release.issues[target_run["id"]]]
+            target_run["comments"] = [dict(comment.items()) for comment in self.parent_group.parent_release.comments[target_run["id"]]]
         self.has_bug_report = len(target_run["issues"]) > 0
         self.parent_group.parent_release.has_bug_report = self.has_bug_report or self.parent_group.parent_release.has_bug_report
         self.has_comments = len(target_run["comments"]) > 0
@@ -357,13 +372,15 @@ class ReleaseStatsCollector:
 
     def collect(self, limited=False, force=False, include_no_version=False) -> dict:
         self.release: ArgusRelease = ArgusRelease.get(name=self.release_name)
-        self.release_rows = [row for plugin in all_plugin_models()
-                             for row in plugin.get_stats_for_release(release=self.release)]
+        all_tests: list[ArgusTest] = list(ArgusTest.filter(release_id=self.release.id).all())
+        build_ids = reduce(lambda acc, test: acc[test.plugin_name or "unknown"].append(test.build_system_id) or acc, all_tests, defaultdict(list))
+        self.release_rows = [futures for plugin in all_plugin_models()
+                             for futures in plugin.get_stats_for_release(release=self.release, build_ids=build_ids.get(plugin._plugin_name, []))]
+        self.release_rows = [row for future in self.release_rows for row in future.result()]
         if self.release.dormant and not force:
             return {
                 "dormant": True
             }
-
         if self.release_version:
             if include_no_version:
                 expr = lambda row: row["scylla_version"] == self.release_version or not row["scylla_version"] 
@@ -377,7 +394,12 @@ class ReleaseStatsCollector:
             else:
                 expr = lambda row: row["scylla_version"]
         self.release_rows = list(filter(expr, self.release_rows))
+        self.release_dict = {}
+        for row in self.release_rows:
+            runs = self.release_dict.get(row["build_id"], [])
+            runs.append(row)
+            self.release_dict[row["build_id"]] = runs
 
         self.release_stats = ReleaseStats(release=self.release)
-        self.release_stats.collect(rows=self.release_rows, limited=limited, force=force)
+        self.release_stats.collect(rows=self.release_rows, limited=limited, force=force, dict=self.release_dict, tests=all_tests)
         return self.release_stats.to_dict()
