@@ -290,7 +290,7 @@
                 </div>
                 <div class="tab-pane fade" id="nav-logs-{runId}" role="tabpanel">
                     {#if artifactTabOpened}
-                        <ArtifactTab {testRun} />
+                        <ArtifactTab {testRun} on:refreshRequest={fetchTestRunData}/>
                     {/if}
                 </div>
                 <div
