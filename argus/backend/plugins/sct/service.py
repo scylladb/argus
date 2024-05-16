@@ -9,7 +9,7 @@ from xml.etree import ElementTree
 from flask import g
 from argus.backend.models.web import ArgusEventTypes
 from argus.backend.plugins.sct.testrun import SCTJunitReports, SCTTestRun, SubtestType
-from argus.backend.plugins.sct.types import GeminiResultsRequest, PerformanceResultsRequest
+from argus.backend.plugins.sct.types import GeminiResultsRequest, PerformanceResultsRequest, ResourceUpdateRequest
 from argus.backend.plugins.sct.udt import (
     CloudInstanceDetails,
     CloudResource,
@@ -280,6 +280,33 @@ class SCTService:
             raise SCTServiceException("Run not found", run_id) from exception
 
         return "updated"
+
+    @staticmethod
+    def update_resource(run_id: str, resource_name: str, update_data: ResourceUpdateRequest) -> str:
+        try:
+            fields_updated = {}
+            run: SCTTestRun = SCTTestRun.get(id=run_id)
+            resource = next(res for res in run.get_resources() if res.name == resource_name)
+            instance_info = update_data.pop("instance_info", None)
+            resource.state = ResourceState(update_data.get("state", resource.state)).value
+            if instance_info:
+                resource_instance_info = resource.get_instance_info()
+                for k, v in instance_info.items():
+                    if k in resource_instance_info.keys():
+                        resource_instance_info[k] = v
+                        fields_updated[k] = v
+            run.save()
+        except StopIteration as exception:
+            LOGGER.error("Resource %s not found in run %s", resource_name, run_id)
+            raise SCTServiceException("Resource not found", resource_name) from exception
+        except SCTTestRun.DoesNotExist as exception:
+            LOGGER.error("Run %s not found for SCTTestRun", run_id)
+            raise SCTServiceException("Run not found", run_id) from exception
+
+        return {
+            "state": "updated",
+            "fields": fields_updated
+        }
 
     @staticmethod
     def terminate_resource(run_id: str, resource_name: str, reason: str) -> str:

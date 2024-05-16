@@ -1,4 +1,5 @@
 import base64
+from typing import Any
 from uuid import UUID
 from dataclasses import asdict
 from argus.backend.plugins.sct.types import GeminiResultsRequest, PerformanceResultsRequest
@@ -16,6 +17,7 @@ class ArgusSCTClient(ArgusClient):
         SUBMIT_SCREENSHOTS = "/sct/$id/screenshots/submit"
         CREATE_RESOURCE = "/sct/$id/resource/create"
         TERMINATE_RESOURCE = "/sct/$id/resource/$name/terminate"
+        UPDATE_RESOURCE = "/sct/$id/resource/$name/update"
         SET_SCT_RUNNER  = "/sct/$id/sct_runner/set"
         UPDATE_SHARDS_FOR_RESOURCE = "/sct/$id/resource/$name/shards"
         SUBMIT_NEMESIS = "/sct/$id/nemesis/submit"
@@ -205,6 +207,22 @@ class ArgusSCTClient(ArgusClient):
             }
         )
         self.check_response(response)
+
+
+    def update_resource(self, name: str, update_data: dict[str, Any]) -> None:
+        """
+            Update fields of the resource.
+        """
+        response = self.post(
+            endpoint=self.Routes.UPDATE_RESOURCE,
+            location_params={"id": str(self.run_id), "name": name},
+            body={
+                **self.generic_body,
+                "update_data": update_data,
+            }
+        )
+        self.check_response(response)
+
 
     def submit_nemesis(self, name: str, class_name: str, start_time: int,
                        target_name: str, target_ip: str, target_shards: int) -> None:
