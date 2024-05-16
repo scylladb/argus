@@ -36,3 +36,21 @@ class PerformanceResultsRequest(TypedDict):
     perf_total_errors: str
 
     histograms: list[dict[str, RawHDRHistogram]] | None
+
+
+class InstanceInfoUpdateRequest(TypedDict):
+    provider: str
+    region: str
+    public_ip: str
+    private_ip: str
+    dc_name: str
+    rack_name: str
+    creation_time: int
+    termination_time: int
+    termination_reason: str
+    shards_amount: int
+
+
+class ResourceUpdateRequest(TypedDict):
+    state: str
+    instance_info: InstanceInfoUpdateRequest
