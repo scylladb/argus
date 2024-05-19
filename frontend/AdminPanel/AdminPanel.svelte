@@ -4,6 +4,7 @@
     import AdminPanelWelcome from "./AdminPanelWelcome.svelte";
     import UserManager from "./UserManager.svelte";
     import ReleaseManager from "./ReleaseManager.svelte";
+    import ViewsManager from "./ViewsManager.svelte";
 
     export let currentRoute;
 
@@ -11,6 +12,7 @@
         index: AdminPanelWelcome,
         users: UserManager,
         releases: ReleaseManager,
+        views: ViewsManager,
     };
 
     const handleRouteClick = function(route, event) {
@@ -57,6 +59,16 @@
                         on:click={(e) => handleRouteClick("releases", e)}
                     >
                         Releases
+                    </button>
+                </li>
+                <li class="list-group-item">
+                    <button
+                        class:btn-primary={currentRoute == "views"}
+                        class:btn-outline-primary={currentRoute != "views"}
+                        class="btn h-100 w-100"
+                        on:click={(e) => handleRouteClick("views", e)}
+                    >
+                        Views
                     </button>
                 </li>
             </ul>

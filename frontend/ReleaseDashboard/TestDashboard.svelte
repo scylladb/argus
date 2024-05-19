@@ -30,17 +30,30 @@
     import { getPicture } from "../Common/UserUtils";
     import NumberStats from "../Stats/NumberStats.svelte";
     import { timestampToISODate } from "../Common/DateUtils";
-    export let releaseName = "";
-    export let releaseId = "";
+    export let dashboardObject;
+    export let dashboardObjectType = "release";
     export let clickedTests = {};
     export let productVersion;
-    let stats;
+    export let settings = {};
+    export let stats;
     let statRefreshInterval;
     let statsFetchedOnce = false;
-    let versionsIncludeNoVersion = JSON.parse(window.localStorage.getItem(`releaseDashIncludeNoVersions-${releaseId}`)) ?? false;
-    let versionsFilterExtraVersions = JSON.parse(window.localStorage.getItem(`releaseDashFilterExtraVersions-${releaseId}`)) ?? true;
+    let versionsIncludeNoVersion = JSON.parse(window.localStorage.getItem(`releaseDashIncludeNoVersions-${dashboardObject.id}`)) ?? false;
+    let versionsFilterExtraVersions = JSON.parse(window.localStorage.getItem(`releaseDashFilterExtraVersions-${dashboardObject.id}`)) ?? true;
     let users = {};
     $: users = $userList;
+
+    const PANEL_MODES = {
+        release: {
+            statRoute: () => "/api/v1/release/stats/v2",
+            versionRoute: (release) => `/api/v1/release/${release.id}/versions`,
+        },
+        view: {
+            statRoute: () => "/api/v1/views/stats",
+            versionRoute: (view) => `/api/v1/views/${view.id}/versions`,
+        }
+    };
+
     let assigneeList = {
         groups: {
 
@@ -53,7 +66,7 @@
     const dispatch = createEventDispatcher();
 
     const loadCollapseState = function() {
-        return JSON.parse(window.localStorage.getItem(`releaseDashState-${releaseId}`)) || {};
+        return JSON.parse(window.localStorage.getItem(`releaseDashState-${dashboardObject.id}`)) || {};
     };
 
     const toggleCollapse = function(collapseId, force = false, forcedState = false) {
@@ -62,7 +75,7 @@
         } else {
             collapseState[collapseId] = !(collapseState[collapseId] || false);
         }
-        window.localStorage.setItem(`releaseDashState-${releaseId}`, JSON.stringify(collapseState));
+        window.localStorage.setItem(`releaseDashState-${dashboardObject.id}`, JSON.stringify(collapseState));
     };
 
     const getCollapseState = function(collapseId, collapseState) {
@@ -88,16 +101,20 @@
 
 
     const fetchStats = async function (force = false) {
+        return dashboardObjectType == "release" ? fetchReleaseStats(force) : fetchViewStats(force);
+    };
+
+    const fetchReleaseStats = async function (force = false) {
         if (!document.hasFocus() && statsFetchedOnce) return;
         let params = queryString.stringify({
-            release: releaseName,
+            release: dashboardObject.name,
             limited: new Number(false),
             force: new Number(true),
             includeNoVersion: new Number(versionsIncludeNoVersion),
             productVersion: productVersion ?? "",
         });
         let opts = force ? {cache: "reload"} : {};
-        let response = await fetch("/api/v1/release/stats/v2?" + params, opts);
+        let response = await fetch(PANEL_MODES.release.statRoute() + "?" + params, opts);
         let json = await response.json();
         if (json.status != "ok") {
             return false;
@@ -107,7 +124,7 @@
         statsFetchedOnce = true;
 
         if (stats.release.perpetual) {
-            fetchGroupAssignees(releaseId);
+            fetchGroupAssignees(dashboardObject.id);
         } else {
             Object.values(stats.groups).forEach((groupStat, idx) => {
                 setTimeout(() => {
@@ -115,6 +132,32 @@
                 }, 25 * idx);
             });
         }
+    };
+
+    const fetchViewStats = async function (force = false) {
+        if (!document.hasFocus() && statsFetchedOnce) return;
+        let params = queryString.stringify({
+            viewId: dashboardObject.id,
+            limited: new Number(false),
+            force: new Number(true),
+            includeNoVersion: new Number(versionsIncludeNoVersion),
+            productVersion: productVersion ?? "",
+        });
+        let opts = force ? {cache: "reload"} : {};
+        let response = await fetch(PANEL_MODES.view.statRoute() + "?" + params, opts);
+        let json = await response.json();
+        if (json.status != "ok") {
+            return false;
+        }
+        stats = json.response;
+        dispatch("statsUpdate", stats);
+        statsFetchedOnce = true;
+
+        Object.values(stats.groups).forEach((groupStat, idx) => {
+            setTimeout(() => {
+                fetchTestAssignees(groupStat.group.id);
+            }, 25 * idx);
+        });
     };
 
     const handleDashboardRefreshClick = function() {
@@ -149,7 +192,7 @@
     };
 
     const fetchVersions = async function() {
-        let response = await fetch(`/api/v1/release/${releaseId}/versions`);
+        let response = await fetch(PANEL_MODES[dashboardObjectType].versionRoute(dashboardObject));
         if (response.status != 200) {
             return Promise.reject("API Error");
         }
@@ -165,7 +208,7 @@
         if (!stats) return false;
         if (!versionsFilterExtraVersions) return false;
         try {
-            const releaseRegex = stats.release.valid_version_regex;
+            const releaseRegex = stats?.release?.valid_version_regex;
             if (!releaseRegex) return false;
             const re = RegExp(releaseRegex).test(version);
             if (re) return false;
@@ -318,7 +361,7 @@
             class:btn-danger={!versionsIncludeNoVersion}
             on:click={() => { 
                 versionsIncludeNoVersion = !versionsIncludeNoVersion;
-                saveCheckboxState(`releaseDashIncludeNoVersions-${releaseId}`, versionsIncludeNoVersion);
+                saveCheckboxState(`releaseDashIncludeNoVersions-${dashboardObject.id}`, versionsIncludeNoVersion);
                 handleVersionClick(productVersion);
             }}>{#if versionsIncludeNoVersion}
                 <Fa icon={faCheck}/>
@@ -341,7 +384,7 @@
                     class:btn-light={productVersion != "!noVersion"}
                     on:click={() => {
                             versionsFilterExtraVersions = !versionsFilterExtraVersions;
-                            saveCheckboxState(`releaseDashFilterExtraVersions-${releaseId}`, versionsFilterExtraVersions);
+                            saveCheckboxState(`releaseDashFilterExtraVersions-${dashboardObject.id}`, versionsFilterExtraVersions);
                         }}
                 >
                 {#if versionsFilterExtraVersions}
@@ -385,7 +428,7 @@
                 <div class="p-2 shadow mb-2 rounded bg-main">
                     <h5 class="mb-2 d-flex">
                         <div class="flex-fill">
-                            <div class="mb-2">{groupStats.group.pretty_name || groupStats.group.name}</div>
+                            <div class="mb-2">{#if dashboardObjectType != "release"}<span class="d-inline-block border p-1 me-1">{stats.releases?.[groupStats.group.release_id]?.name ?? "" }</span>{/if}{groupStats.group.pretty_name || groupStats.group.name}</div>
                             <div class="mb-2">
                                 <NumberStats displayInvestigations={true} stats={groupStats} displayPercentage={true} on:quickSelect={handleQuickSelect}/>
                             </div>

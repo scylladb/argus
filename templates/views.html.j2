@@ -1,0 +1,40 @@
+{% extends "base.html.j2" %}
+
+{% block title %}
+Views
+{% endblock %}
+
+{% block javascripts %}
+{{ super() }}
+<script defer src="/s/dist/viewUserResolver.bundle.js"></script>
+{% endblock javascripts %}
+
+{% block body %}
+    <div class="container my-2 rounded overflow-hidden shadow-sm bg-light-three p-4">
+        {% for view in views %}
+            <div class="row rounded overflow-hidden shadow-sm bg-white p-1 mb-2">
+                <div class="col-10 view-card" data-argus-view-id="{{ view.id }}">
+                    <div class="card-body">
+                            <h3 class="card-title">{{ view.name if not view.display_name else view.display_name }}</h3>
+                            <p class="card-subtitle text-muted">{{ view.description if view.description else "No description provided" }}</p>
+                    </div>
+                </div>
+                <div class="col-2">
+                    <div class="d-flex align-items-center h-100">
+                        <div class="btn-group">
+                            <a href="{{ url_for('main.view_dashboard', view_name=view.name) }}" class="btn btn-primary"><i class="fas fa-tachometer-alt"></i> View Dashboard</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center justify-content-end text-end" style="font-size: 0.8em">
+                    <div class="me-2">
+                        Created at <span class="fw-bold">{{ view.created | formatted_date }}</span> by
+                    </div>
+                    <div>
+                        <span class="view-creator" data-argus-view-creator="{{ view.user_id }}"></span>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+{% endblock %}

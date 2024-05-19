@@ -17,8 +17,10 @@ from argus.backend.models.web import (
     ArgusSchedule,
     ArgusScheduleTest,
     ArgusScheduleAssignee,
+    ArgusUserView,
     User
 )
+from argus.backend.util.common import chunk
 from argus.backend.util.enums import TestInvestigationStatus, TestStatus
 
 LOGGER = logging.getLogger(__name__)
@@ -174,6 +176,21 @@ class PluginModelBase(Model):
     @classmethod
     def get_distinct_product_versions(cls, release: ArgusRelease) -> list[str]:
         raise NotImplementedError()
+
+    @classmethod
+    def get_distinct_versions_for_view(cls, tests: list[ArgusTest]) -> list[str]:
+        cluster = ScyllaCluster.get()
+        statement = cluster.prepare(f"SELECT scylla_version FROM {cls.table_name()} WHERE build_id IN ?")
+        futures = []
+        for batch in chunk(tests):
+            futures.append(cluster.session.execute_async(query=statement, parameters=([t.build_system_id for t in batch],)))
+        
+        rows = []
+        for future in futures:
+            rows.extend(future.result())
+        unique_versions = {r["scylla_version"] for r in rows if r["scylla_version"]}
+
+        return sorted(list(unique_versions), reverse=True)
 
     def update_heartbeat(self):
         self.heartbeat = int(time())

@@ -41,6 +41,7 @@
         type: "issues",
         url: "https://github.com/",
         user_id: "",
+        state: undefined,
         added_on: "Mon, 1 Jan 1970 9:00:00 GMT",
     };
 
@@ -48,6 +49,7 @@
     export let aggregated = false;
 
     let deleting = false;
+    let issueState = issue.state;
 
     const fetchGithubToken = async function() {
         let tokenRequest = await apiMethodCall("/api/v1/profile/github/token", undefined, "GET");
@@ -59,6 +61,7 @@
     };
 
     const fetchIssueState = async function() {
+        if (issueState) return issueState;
         if (!githubToken) {
             try {
                 githubToken = await fetchGithubToken();
@@ -81,7 +84,12 @@
         if (parseInt(issueStateResponse.headers.get("x-ratelimit-remaining")) === 0) {
             return Promise.reject(new Error("Rate limit exceeded"));
         }
-        return issueStateResponse.json();
+        issueState = await issueStateResponse.json();
+        dispatch("issueStateUpdate", {
+            issueId: issue.id,
+            state: issueState,
+        });
+        return issueState;
     };
 
 

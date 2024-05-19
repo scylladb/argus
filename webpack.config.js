@@ -54,6 +54,14 @@ module.exports = {
             import: "./frontend/release-dashboard.js",
             dependOn: "globalAlert"
         },
+        viewDashboard: {
+            import: "./frontend/view-dashboard.js",
+            dependOn: "globalAlert"
+        },
+        viewUserResolver: {
+            import: "./frontend/view-user-resolver.js",
+            dependOn: "globalAlert"
+        },
         releaseScheduler: {
             import: "./frontend/release-scheduler.js",
             dependOn: "globalAlert"

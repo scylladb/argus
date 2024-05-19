@@ -6,6 +6,7 @@
     import { sendMessage } from "../Stores/AlertStore";
     import { faCopy } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
+    import Color from "color";
     export let id = "";
     export let testId;
     export let pluginName;
@@ -36,27 +37,18 @@
             console.log(error);
         }
     };
-/*
-    id = columns.UUID(primary_key=True, default=uuid4, partition_key=True)
-    added_on = columns.DateTime(default=datetime.utcnow)
-    release_id = columns.UUID(index=True)
-    group_id = columns.UUID(index=True)
-    test_id = columns.UUID(index=True)
-    run_id = columns.UUID(index=True)
-    user_id = columns.UUID(index=True)
-    type = columns.Text()
-    owner = columns.Text()
-    repo = columns.Text()
-    issue_number = columns.Integer()
-    last_status = columns.Text()
-    title = columns.Text()
-    url = columns.Text()
-*/
 
     let sortCriteria = "date";
     let reverseSort = true;
     let currentPage = 0;
+    let PAGE_SIZE = 10;
     let filterString = "";
+    let availableLabels = [];
+    let selectedLabels = [];
+    const stateFilter = {
+        open: true,
+        closed: true,
+    };
 
     const SORT_ORDERS = {
         name: {
@@ -73,6 +65,24 @@
             field: "added_on",
             friendlyString: "By date",
             f: (lhs, rhs) => reverseSort ? new Date(rhs.added_on) - new Date(lhs.added_on) : new Date(lhs.added_on) - new Date(rhs.added_on)
+        }
+    };
+
+    /**
+     * 
+     * @param {number} id
+     * @param {Object[]} selectedLabels
+     */
+    const labelActive = function(id, selectedLabels) {
+        return !!selectedLabels.find(l => l.id == id);
+    };
+
+    const handleLabelClick = function(label) {
+        if (labelActive(label.id, selectedLabels)) {
+            selectedLabels = selectedLabels.filter(l => l.id != label.id);
+        } else {
+            selectedLabels.push(label);
+            selectedLabels = selectedLabels;
         }
     };
 
@@ -117,10 +127,42 @@
      * @param {string} filterString
      */
     const shouldFilter = function (issue, filterString) {
+        if (shouldFilterByState(issue, selectedLabels, stateFilter)) return true;
         if (!filterString) return false;
         if (!issue) return true;
         const allTerms = `${issue.owner}$$${issue.title}$$${issue.repo}#${issue.issue_number}`;
-        return allTerms.toLowerCase().search(filterString) == -1;
+        return allTerms.toLowerCase().search(filterString.toLowerCase()) == -1;
+    };
+
+    /**
+     * 
+     * @param {{ state: { state: ('open'|'closed'), labels: {id: number, name: string }[]}}}issue
+     * @param {{id: number, name: string }[]} selectedLabels
+     * @param {{ open: boolean, closed: boolean }} stateFilter
+     */
+    const shouldFilterByState = function(issue, selectedLabels, stateFilter) {
+        if (!issue.state) return false;
+        if (!stateFilter[issue.state.state]) return true;
+        if (selectedLabels.length == 0) return false;
+        return !issue.state.labels.map(label => !!selectedLabels.find(selectedLabel => label.id == selectedLabel.id)).includes(true);
+    };
+
+    /**
+     * 
+     * @param {CustomEvent} e
+     */
+    const onStateUpdate = function (e) {
+        const issueId = e.detail.issueId;
+        const state = e.detail.state;
+        let issue = issues.find(i => i.id == issueId);
+        issue.state = state;
+        issues = issues;
+        state.labels.forEach((label) => {
+            if (availableLabels.findIndex((v) => v.id == label.id) == -1)  {
+                availableLabels.push(label);
+                availableLabels = availableLabels;
+            }
+        });
     };
 
     /**
@@ -130,13 +172,9 @@
      * @param reverse
      */
     const paginateIssues = function(issues, sortCriteria = "default", reverse = false, filterString = "") {
-        console.log("Issues: ", issues);
         if (issues.length == 0) return [];
         const sorted = Array.from(issues).sort(SORT_ORDERS[sortCriteria].f);
-        console.log("Sorted: ", sorted);
         const filtered = sorted.filter(v => !shouldFilter(v, filterString));
-        console.log("Filtered: ", filtered);
-        const PAGE_SIZE = 10;
         const steps = Math.max(parseInt(filtered.length / PAGE_SIZE) + 1, 1);
         const pages = Array
             .from({length: steps}, () => [])
@@ -145,19 +183,18 @@
                 const slice = filtered.slice(sliceIdx, PAGE_SIZE + sliceIdx);
                 return [...slice];
             });
-        console.log("Final: ", pages);
         return pages;
     };
 
     let sortedIssues = paginateIssues(issues, sortCriteria, reverseSort);
-    $: sortedIssues = paginateIssues(issues, sortCriteria, reverseSort, filterString);
+    $: sortedIssues = paginateIssues(issues, sortCriteria, reverseSort, filterString, selectedLabels, stateFilter, PAGE_SIZE);
 
 
     const exportIssueAsFormattedList = function(issues) {
         let issueFormattedList = issues
             .sort((a, b) => a.issue_number - b.issue_number)
-            .map(val => ` * ${val.owner}/${val.repo}#${val.issue_number}: ${val.title} - ${val.url}`);
-        navigator.clipboard.writeText(`Current Issues\n${issueFormattedList.join("\n")}`);
+            .map(val => ` * ${val.state ? `${val.state.state.toUpperCase()} ` : " "}${val.owner}/${val.repo}#${val.issue_number}: ${val.title} - ${val.url}`);
+        navigator.clipboard.writeText(`Current Issues${selectedLabels.length > 0 ? selectedLabels.map(label => `[${label.name}]`).join(" ") : ""}\n${issueFormattedList.join("\n")}`);
     };
 
     onMount(() => {
@@ -221,6 +258,27 @@
             <div class="row">
                 <div class="col">
                     <input class="form-control form-input" type="text" placeholder="Filter issues..." bind:value={filterString}>
+                    <div class="mb-2">Options</div>
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="ms-2 form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="issueOpenCheckbox" bind:checked={stateFilter.open}>
+                            <label class="form-check-label" for="issueOpenCheckbox">
+                                Open
+                            </label>
+                        </div>
+                        <div class="ms-2 form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="issueClosedCheckbox" bind:checked={stateFilter.closed}>
+                            <label class="form-check-label" for="issueClosedCheckbox">
+                                Closed
+                            </label>
+                        </div>
+                        <div class="ms-2 form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="sortCheckOrder" bind:checked={reverseSort}>
+                            <label class="form-check-label" for="sortCheckOrder">
+                                Descending order
+                            </label>
+                        </div>
+                    </div>
                 </div>
                 <div class="col">
                     <select class="form-select" bind:value={sortCriteria}>
@@ -228,17 +286,31 @@
                             <option value="{sortName}">{meta.friendlyString}</option>
                         {/each}
                     </select>
-                    <div>
-                        <input class="form-check-input" type="checkbox" id="sortCheckOrder" bind:checked={reverseSort}>
-                        <label class="form-check-label" for="sortCheckOrder">
-                            Descending order
-                        </label>
-                    </div>
+                    <div class="mb-2">Issues per page</div>
+                    <select class="form-select mb-2" placeholder="Issues per page" on:change={(e) => PAGE_SIZE = parseInt(e.target.value)} value=10>
+                        <option value="10">10</option>
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row">
+                <div class="d-flex p-2 bg-dark rounded shadow-sm">
+                    {#each availableLabels as label}
+                        <button 
+                            class="ms-2 btn btn-sm btn-secondary" 
+                            style="border-color: #{label.color}; color: #{label.color}; background-color: {labelActive(label.id, selectedLabels) ? Color(`#${label.color}`).darken(0.75) : "rgba(1,1,1,0)"}"
+                            on:click={() => handleLabelClick(label)}
+                        >
+                            {label.name}
+                        </button>
+                    {/each}
                 </div>
             </div>
             <div class="row">
                 {#each sortedIssues[currentPage] ?? [] as issue (issue.id)}
-                    <GithubIssue {issue} aggregated={aggregateByIssue} deleteEnabled={!submitDisabled} on:issueDeleted={fetchIssues} />
+                    <GithubIssue bind:issue={issue} aggregated={aggregateByIssue} deleteEnabled={!submitDisabled} on:issueDeleted={fetchIssues} on:issueStateUpdate={onStateUpdate}/>
                 {/each}
             </div>
             <div class="d-flex ">
