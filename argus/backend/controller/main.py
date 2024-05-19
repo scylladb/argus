@@ -1,3 +1,5 @@
+import datetime
+import json
 import logging
 from uuid import UUID
 from flask import (
@@ -8,6 +10,7 @@ from argus.backend.controller.team_ui import bp as teams_bp
 from argus.backend.service.argus_service import ArgusService
 from argus.backend.models.web import WebFileStorage
 from argus.backend.service.user import UserService, login_required
+from argus.backend.service.views import UserViewService
 
 LOGGER = logging.getLogger(__name__)
 
@@ -53,6 +56,24 @@ def releases():
     service = ArgusService()
     all_releases = service.get_releases()
     return render_template("releases.html.j2", releases=all_releases)
+
+
+@bp.route("/views")
+@login_required
+def views():
+    service = UserViewService()
+    all_views = service.get_all_views()
+    return render_template("views.html.j2", views=sorted(all_views, key=lambda view: view.created or datetime.datetime.fromtimestamp(0), reverse=True))
+
+
+@bp.route("/view/<string:view_name>")
+@login_required
+def view_dashboard(view_name: str):
+    service = UserViewService()
+    view = service.get_view_by_name(view_name=view_name)
+    data_json = view
+    view["widget_settings"] = json.loads(view["widget_settings"])
+    return render_template("view_dashboard.html.j2", data=data_json)
 
 
 @bp.route("/alert_debug")

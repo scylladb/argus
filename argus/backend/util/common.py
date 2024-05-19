@@ -1,8 +1,11 @@
+from itertools import islice
 import logging
-from typing import Callable
+from typing import Callable, Iterable
 from uuid import UUID
 
-from flask import Request, Response
+from flask import Request, Response, g
+
+from argus.backend.models.web import User
 
 
 LOGGER = logging.getLogger(__name__)
@@ -18,6 +21,11 @@ def first(iterable, value, key: Callable = None, predicate: Callable = None):
         elif elem == value:
             return elem
     return None
+
+
+def chunk(iterable: Iterable, slice_size = 90):
+    it = iter(iterable)
+    return iter(lambda: list(islice(it, slice_size)), [])
 
 
 def check_scheduled_test(test, group, testname):
@@ -41,6 +49,10 @@ def get_payload(client_request: Request) -> dict:
     request_payload = client_request.get_json()
 
     return request_payload
+
+
+def current_user() -> User:
+    return g.user
 
 
 def get_build_number(build_job_url: str) -> int | None:

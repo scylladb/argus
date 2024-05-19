@@ -111,8 +111,7 @@
     <div class="row mb-2">
         <div class="col-xs-2 col-sm-6 col-md-7">
             <TestDashboard
-                releaseName={releaseData.release.name}
-                releaseId={releaseData.release.id}
+                dashboardObject={releaseData.release}
                 {productVersion}
                 bind:clickedTests={clickedTests}
                 on:testClick={(e) => handleTestClick(e.detail)}

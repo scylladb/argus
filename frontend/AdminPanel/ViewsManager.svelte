@@ -1,0 +1,401 @@
+<script>
+    import { onMount } from "svelte";
+    import { sendMessage } from "../Stores/AlertStore";
+    import Fa from "svelte-fa";
+    import { faPlus, faTrash } from "@fortawesome/free-solid-svg-icons";
+    import ViewWidget from "./ViewWidget.svelte";
+    import { ADD_ALL_ID, Widget } from "../Common/ViewTypes";
+    import queryString from "query-string";
+    import * as urlSlug from "url-slug";
+    import Select from "svelte-select";
+    import ViewSelectItem from "./ViewSelectItem.svelte";
+    import { titleCase } from "../Common/TextUtils";
+    import ViewListItem from "./ViewListItem.svelte";
+
+    let allViews = [];
+
+    const VIEW_CREATE_TEMPLATE = {
+        name: "",
+        description: "",
+        displayName: "",
+        settings: "{}",
+        items: [],
+    };
+
+    /**
+     * @type {Widget[]}
+     */
+    let newWidgets = [];
+    let lastHits = [];
+    let newView = Object.assign({}, VIEW_CREATE_TEMPLATE);
+    let selectedItems = [];
+    let lockForm = false;
+    let editingExistingView = false;
+    let testSearcherValue;
+
+    const fetchAllViews = async function() {
+        try {
+            const response = await fetch("/api/v1/views/all");
+
+            const json = await response.json();
+            if (json.status != "ok") {
+                throw json;
+            }
+
+            allViews = json.response;
+
+        } catch (error) {
+            if (error?.status === "error") {
+                sendMessage(
+                    "error",
+                    `API Error when fetching views.\nMessage: ${error.response.arguments[0]}`
+                );
+            } else {
+                sendMessage(
+                    "error",
+                    "A backend error occurred during view fetch"
+                );
+                console.log(error);
+            }
+        }
+    };
+
+    const handleViewUpdateRequest = function(e) {
+        resetForm();
+        let viewForUpdate = e.detail;
+        newWidgets = JSON.parse(viewForUpdate.widget_settings);
+        newView = {
+            id: viewForUpdate.id,
+            name: viewForUpdate.name,
+            description: viewForUpdate.description,
+            displayName: viewForUpdate.display_name,
+            settings: viewForUpdate.widget_settings,
+            items: viewForUpdate.items,
+        };
+        editingExistingView = true;
+    };
+
+    const viewActionDispatch = async function (e) {
+        return editingExistingView ? updateView(e) : createView(e);
+    };
+
+    const updateView = async function (e) {
+        try {
+            lockForm = true;
+            const params = {
+                viewId: newView.id,
+                updateData: {
+                    name: newView.name,
+                    description: newView.description,
+                    display_name: newView.displayName,
+                    items: newView.items.map(item => `${item.type}:${item.id}`),
+                    widget_settings: JSON.stringify(newWidgets),
+                }
+            };
+            const response = await fetch("/api/v1/views/update", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(params),
+            });
+
+            const json = await response.json();
+            if (json.status != "ok") {
+                throw json;
+            }
+
+            resetForm();
+            await fetchAllViews();
+
+        } catch (error) {
+            if (error?.status === "error") {
+                sendMessage(
+                    "error",
+                    `API Error when updating a view.\nMessage: ${error.response.arguments[0]}`
+                );
+            } else {
+                sendMessage(
+                    "error",
+                    "A backend error occurred during view update"
+                );
+                console.log(error);
+            }
+        } finally {
+            lockForm = false;
+        }
+    };
+
+
+    const createView = async function (e) {
+        try {
+            lockForm = true;
+            const params = {
+                name: newView.name,
+                description: newView.description,
+                displayName: newView.displayName,
+                items: newView.items.map(item => `${item.type}:${item.id}`),
+                settings: JSON.stringify(newWidgets),
+            };
+            validateViewParams(params);
+            const response = await fetch("/api/v1/views/create", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(params),
+            });
+
+            const json = await response.json();
+            if (json.status != "ok") {
+                throw json;
+            }
+
+            resetForm();
+            await fetchAllViews();
+
+        } catch (error) {
+            if (error?.status === "error") {
+                sendMessage(
+                    "error",
+                    `API Error when creating a view.\nMessage: ${error.response.arguments[0]}`
+                );
+            } else if (error?.cause == "validation") {
+                console.log("Validation failed...");
+            } else {
+                sendMessage(
+                    "error",
+                    "A backend error occurred during view creation"
+                );
+                console.log(error);
+            }
+        } finally {
+            lockForm = false;
+        }
+    };
+
+    const deleteView = async function (viewId) {
+        try {
+            lockForm = true;
+            const params = {
+                viewId: viewId
+            };
+            const response = await fetch("/api/v1/views/delete", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(params),
+            });
+
+            const json = await response.json();
+            if (json.status != "ok") {
+                throw json;
+            }
+
+            resetForm();
+            await fetchAllViews();
+
+        } catch (error) {
+            if (error?.status === "error") {
+                sendMessage(
+                    "error",
+                    `API Error when deleting a view.\nMessage: ${error.response.arguments[0]}`
+                );
+            } else {
+                sendMessage(
+                    "error",
+                    "A backend error occurred during view deletion"
+                );
+                console.log(error);
+            }
+        } finally {
+            lockForm = false;
+        }
+    };
+
+    /**
+     * @param {string} query
+     */
+    const testLookup = async function (query) {
+        try {
+            const params = {
+                query: query
+            };
+            const qs = queryString.stringify(params);
+            const response = await fetch("/api/v1/views/search?" + qs);
+
+            const json = await response.json();
+            if (json.status != "ok") {
+                throw json;
+            }
+            lastHits = json.response.hits;
+            return json.response.hits.slice(0, 100);
+
+        } catch (error) {
+            console.log(error);
+        }
+    };
+
+    const handleAllItemSelect = function() {
+        newView.items = [
+            ...newView.items, 
+            ...lastHits
+                .filter(i => i.id != ADD_ALL_ID
+                ).map(item => {
+                    return {
+                        name: item.pretty_name || item.name,
+                        release: item.release?.name,
+                        group: item.group?.pretty_name || item.group?.name,
+                        type: item.type,
+                        id: item.id,
+                    };
+                })];
+        testSearcherValue = undefined;
+    };
+
+    const handleItemSelect = function(e) {
+        const item = e.detail;
+        if (item.id == ADD_ALL_ID) return handleAllItemSelect();
+        newView.items = [...newView.items, {
+            name: item.pretty_name || item.name,
+            release: item.release?.name,
+            group: item.group?.pretty_name || item.group?.name,
+            type: item.type,
+            id: item.id,
+        }];
+        testSearcherValue = undefined;
+    };
+
+    const removeSelectedItem = function(id, key) {
+        newView.items = newView.items.filter(v => v.id != id);
+        selectedItems = selectedItems.filter(v => v != key);
+    };
+
+    const createNewWidget = function () {
+        let widget = new Widget(newWidgets.length + 1);
+        newWidgets = [...newWidgets, widget];
+    };
+
+    const reflowWidgetPositions = function () {
+        newWidgets.forEach((v, idx) => {
+            v.position = idx + 1;
+        });
+    };
+
+    const validateViewParams = function (params) {
+        const REQUIRED_PARAMS = ["name", "tests", "settings"];
+        Object.entries(params).forEach((([name, value]) => {
+            if (REQUIRED_PARAMS.includes(name)) {
+                if (!value) {
+                    const message = `${titleCase(name)} cannot be empty!`;
+                    onValidationError(message);
+                    throw new Error(message, { cause: "validation" });
+                }
+            }
+        }));
+    };
+
+    const onValidationError = function(message) {
+        sendMessage("error", message);
+    };
+
+    const resetForm = function () {
+        newWidgets = [];
+        selectedItems = [];
+        editingExistingView = false;
+        newView = Object.assign({}, VIEW_CREATE_TEMPLATE);
+    };
+
+    /**
+     * @param {CustomEvent} e
+     */
+    const removeWidget = function(e) {
+        /**
+         * @type {Widget}
+         */
+        let widget = e.detail;
+        newWidgets = newWidgets.filter(v => v.position != widget.position);
+        reflowWidgetPositions();
+    };
+
+
+    onMount(() => {
+        fetchAllViews();
+    });
+</script>
+
+<div class="bg-white rounded p-2 shadow-sm my-2">
+    <div>
+        <h4>View Manager</h4>
+    </div>
+    <div class="position-relative">
+        <div class:d-none={!lockForm} class="position-absolute w-100 h-100" style="background-color: rgba(0,0,0,0.6); z-index: 9999"></div>
+        <div class="rounded m-2 shadow-sm bg-white">
+            Create new
+            <div class="d-flex flex-column flex-fill p-2">
+                <input class="form-control mb-2" type="text" placeholder="Name (internal)" disabled bind:value={newView.name}>
+                <input class="form-control mb-2" type="text" placeholder="Display name" on:change={() => newView.name = urlSlug.convert(newView.displayName)} bind:value={newView.displayName}>
+                <textarea class="form-control mb-2" type="text" placeholder="Description (optional)" bind:value={newView.description}/>
+                <div class="mb-2">
+                    <Select
+                        id="viewSelectComponent"
+                        inputAttributes={{ class: "form-control" }}
+                        bind:value={testSearcherValue}
+                        placeholder="Search for tests..."
+                        noOptionsMessage="Type to search. Can be: Test name, Release name, Group name."
+                        labelIdentifier="name"
+                        optionIdentifier="id"
+                        Item={ViewSelectItem}
+                        loadOptions={testLookup}
+                        on:select={handleItemSelect}
+                    />
+                </div>
+                <select class="form-select mb-2" size=10 multiple bind:value={selectedItems}>
+                    {#each newView.items as item}
+                        <option value="{item.type}:{item.id}" on:dblclick={() => removeSelectedItem(item.id, `${item.type}:${item.id}`)}>
+                            [{titleCase(item.type).at(0)}] {item.pretty_name || item.display_name || item.name}
+                            {#if item.release}
+                                    - {item.release}
+                            {/if}
+                            {#if item.group}
+                                    - {item.group}
+                            {/if}
+                        </option>
+                    {:else}
+                        <option value="!!">No tests selected.</option>
+                    {/each}
+                </select>
+                <button class="btn mb-2" class:btn-danger={newView.items.length} class:btn-secondary={!newView.items.length} disabled={newView.items.length == 0} on:click={() => (newView.items = [])}><Fa icon={faTrash}/> Remove all</button>
+                <div class="p-2">
+                    <div>Widget builder</div>
+                    <div class="rounded bg-light-one p-2" style="min-height: 256px; max-height: 512px; overflow-y: scroll">
+                        <div class="text-end mb-3">
+                            <button
+                                class="btn btn-success"
+                                on:click={() => createNewWidget()}
+                            >
+                                <Fa icon={faPlus} />
+                            </button>
+                        </div>
+                        {#each newWidgets as widget (widget.position)}
+                            <ViewWidget bind:widgetSettings={widget} on:removeWidget={removeWidget}/>
+                        {/each}
+                    </div>
+                </div>
+                <button class="btn mb-2" class:btn-success={!editingExistingView} class:btn-warning={editingExistingView} on:click={viewActionDispatch}>{editingExistingView ? "Update" : "Create"} view</button>
+                <button class="btn btn-secondary" on:click={resetForm}>Reset</button>
+            </div>
+        </div>
+    </div>
+    <div class="rounded p-2 m-2 shadow-sm">
+        All Views
+        <div>
+            {#each allViews as view (view.id)}
+                <ViewListItem {view} on:viewUpdateRequested={handleViewUpdateRequest} on:delete={(e) => deleteView(e.detail)}/>
+            {:else}
+                <div>No views created.</div>
+            {/each}
+        </div>
+    </div>
+</div>

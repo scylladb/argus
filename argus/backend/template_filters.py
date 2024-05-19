@@ -18,3 +18,10 @@ def safe_user(user: User):
     user_dict = dict(user.items())
     del user_dict["password"]
     return user_dict
+
+
+@is_filter("formatted_date")
+def formatted_date(date: datetime | None):
+    if date:
+        return date.strftime("%d/%m/%Y %H:%M:%S")
+    return "#unknown"

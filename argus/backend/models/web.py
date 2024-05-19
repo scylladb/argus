@@ -146,6 +146,20 @@ class ArgusGroup(Model):
             return super().__eq__(other)
 
 
+class ArgusUserView(Model):
+    id = columns.UUID(primary_key=True, partition_key=True, default=uuid4)
+    name = columns.Text(required=True, index=True)
+    display_name = columns.Text()
+    description = columns.Text()
+    user_id = columns.UUID(required=True, index=True)
+    tests = columns.List(value_type=columns.UUID, default=lambda: [])
+    release_ids = columns.List(value_type=columns.UUID, default=lambda: [])
+    group_ids = columns.List(value_type=columns.UUID, default=lambda: [])
+    created = columns.DateTime(default=datetime.utcnow)
+    last_updated = columns.DateTime(default=datetime.utcnow)
+    widget_settings = columns.Text(required=True)
+
+
 class ArgusTest(Model):
     __table_name__ = "argus_test_v2"
     id = columns.UUID(primary_key=True, default=uuid4)
@@ -350,6 +364,7 @@ USED_MODELS: list[Model] = [
     Team,
     WebFileStorage,
     ArgusRelease,
+    ArgusUserView,
     ArgusGroup,
     ArgusTest,
     ArgusTestRunComment,

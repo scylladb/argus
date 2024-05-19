@@ -6,11 +6,12 @@ from datetime import datetime
 from typing import TypedDict
 from uuid import UUID
 
+from cassandra.cqlengine.models import Model
 from argus.backend.plugins.loader import all_plugin_models
-from argus.backend.util.common import get_build_number
+from argus.backend.util.common import chunk, get_build_number
 from argus.backend.util.enums import TestStatus, TestInvestigationStatus
 from argus.backend.models.web import ArgusGithubIssue, ArgusRelease, ArgusGroup, ArgusTest,\
-    ArgusScheduleTest, ArgusTestRunComment
+    ArgusScheduleTest, ArgusTestRunComment, ArgusUserView
 from argus.backend.db import ScyllaCluster
 
 LOGGER = logging.getLogger(__name__)
@@ -141,6 +142,96 @@ def generate_field_status_map(
             case _:
                 status_map[run_number] = (run[field_name], run)
     return status_map
+
+class ViewStats:
+    def __init__(self, release: ArgusUserView) -> None:
+        self.release = release
+        self.groups: list[GroupStats] = []
+        self.status_map = {status: 0 for status in TestStatus}
+        self.total_tests = 0
+        self.last_status = TestStatus.NOT_PLANNED
+        self.last_investigation_status = TestInvestigationStatus.NOT_INVESTIGATED
+        self.has_bug_report = False
+        self.issues: list[ArgusGithubIssue] = []
+        self.comments: list[ArgusTestRunComment] = []
+        self.test_schedules: dict[UUID, ArgusScheduleTest] = {}
+        self.forced_collection = False
+        self.rows = []
+        self.releases = {}
+        self.all_tests = []
+
+    def to_dict(self) -> dict:
+        converted_groups = {str(group.group.id): group.to_dict() for group in self.groups}
+        aggregated_investigation_status = {}
+        for group in converted_groups.values():
+            for investigation_status in TestInvestigationStatus:
+                current_status = aggregated_investigation_status.get(investigation_status.value, {})
+                result = {
+                    status.value: current_status.get(status.value, 0) + group.get(investigation_status.value, {}).get(status, 0)
+                    for status in TestStatus
+                }
+                aggregated_investigation_status[investigation_status.value] = result
+
+        return {
+            "release": dict(self.release.items()),
+            "releases": self.releases,
+            "groups": converted_groups,
+            "total": self.total_tests,
+            **self.status_map,
+            "disabled": False,
+            "perpetual": False,
+            "lastStatus": self.last_investigation_status,
+            "lastInvestigationStatus": self.last_investigation_status,
+            "hasBugReport": self.has_bug_report,
+            **aggregated_investigation_status
+        }
+
+    def _fetch_multiple_release_queries(self, entity: Model, releases: list[str]):
+        result_set = []
+        for release_id in releases:
+            result_set.extend(entity.filter(release_id=release_id).all())
+        return result_set
+
+    def collect(self, rows: list[TestRunStatRow], limited=False, force=False, dict: dict[str, TestRunStatRow] | None = None, tests: list[ArgusTest] = None) -> None:
+        self.forced_collection = force
+        all_release_ids = list({t.release_id for t in tests})
+        if not limited:
+            self.test_schedules = reduce(
+                lambda acc, row: acc[row["test_id"]].append(row) or acc,
+                self._fetch_multiple_release_queries(ArgusScheduleTest, all_release_ids),
+                defaultdict(list)
+            )
+
+        self.rows = rows
+        self.dict = dict
+        if not limited or force:
+            self.issues = reduce(
+                lambda acc, row: acc[row["run_id"]].append(row) or acc,
+                self._fetch_multiple_release_queries(ArgusGithubIssue, all_release_ids),
+                defaultdict(list)
+            )
+            self.comments = reduce(
+                lambda acc, row: acc[row["test_run_id"]].append(row) or acc,
+                self._fetch_multiple_release_queries(ArgusTestRunComment, all_release_ids),
+                defaultdict(list)
+            )
+        self.all_tests = tests
+        groups = []
+        for slice in chunk(list({t.release_id for t in tests})):
+            self.releases.update({str(release.id): release for release in ArgusRelease.filter(id__in=slice).all()})
+
+        for slice in chunk(list({t.group_id for t in tests})):
+            groups.extend(ArgusGroup.filter(id__in=slice).all())
+        for group in groups:
+            if group.enabled:
+                stats = GroupStats(group=group, parent_release=self)
+                stats.collect(limited=limited)
+                self.groups.append(stats)
+
+    def increment_status(self, status=TestStatus.NOT_PLANNED):
+        self.total_tests += 1
+        self.status_map[TestStatus(status)] += 1
+        self.last_status = TestStatus(status)
 
 
 class ReleaseStats:
@@ -403,3 +494,47 @@ class ReleaseStatsCollector:
         self.release_stats = ReleaseStats(release=self.release)
         self.release_stats.collect(rows=self.release_rows, limited=limited, force=force, dict=self.release_dict, tests=all_tests)
         return self.release_stats.to_dict()
+
+
+class ViewStatsCollector:
+    def __init__(self, view_id: UUID, filter: str | None = None) -> None:
+        self.database = ScyllaCluster.get()
+        self.session = self.database.get_session()
+        self.view = None
+        self.view_stats = None
+        self.view_rows = []
+        self.runs_by_build_id = {}
+        self.view_id = view_id
+        self.filter = filter
+
+    def collect(self, limited=False, force=False, include_no_version=False) -> dict:
+        self.view: ArgusUserView = ArgusUserView.get(id=self.view_id)
+        all_tests: list[ArgusTest] = []
+        for slice in chunk(self.view.tests):
+            all_tests.extend(ArgusTest.filter(id__in=slice).all())
+        build_ids = reduce(lambda acc, test: acc[test.plugin_name or "unknown"].append(test.build_system_id) or acc, all_tests, defaultdict(list))
+        self.view_rows = [futures for plugin in all_plugin_models()
+                             for futures in plugin.get_stats_for_release(release=self.view, build_ids=build_ids.get(plugin._plugin_name, []))]
+        self.view_rows = [row for future in self.view_rows for row in future.result()]
+
+        if self.filter:
+            if include_no_version:
+                expr = lambda row: row["scylla_version"] == self.filter or not row["scylla_version"] 
+            elif self.filter == "!noVersion":
+                expr = lambda row: not row["scylla_version"]
+            else:
+                expr = lambda row: row["scylla_version"] == self.filter
+        else:
+            if include_no_version:
+                expr = lambda row: row
+            else:
+                expr = lambda row: row["scylla_version"]
+        self.view_rows = list(filter(expr, self.view_rows))
+        for row in self.view_rows:
+            runs = self.runs_by_build_id.get(row["build_id"], [])
+            runs.append(row)
+            self.runs_by_build_id[row["build_id"]] = runs
+
+        self.view_stats = ViewStats(release=self.view)
+        self.view_stats.collect(rows=self.view_rows, limited=limited, force=force, dict=self.runs_by_build_id, tests=all_tests)
+        return self.view_stats.to_dict()

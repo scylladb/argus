@@ -22,6 +22,7 @@ from argus.backend.models.web import (
     ArgusRelease,
     ArgusTest,
     ArgusTestRunComment,
+    ArgusUserView,
     User,
     UserOauthToken,
 )
@@ -33,7 +34,7 @@ from argus.backend.events.event_processors import EVENT_PROCESSORS
 from argus.backend.service.event_service import EventService
 from argus.backend.service.notification_manager import NotificationManagerService
 from argus.backend.service.stats import ComparableTestStatus
-from argus.backend.util.common import get_build_number, strip_html_tags
+from argus.backend.util.common import chunk, get_build_number, strip_html_tags
 from argus.backend.util.enums import TestInvestigationStatus, TestStatus
 
 LOGGER = logging.getLogger(__name__)
@@ -374,13 +375,23 @@ class TestRunService:
 
         return response
 
-    def get_github_issues(self, filter_key: str, filter_id: UUID, aggregate_by_issue: bool = False) -> dict:
-        if filter_key not in ["release_id", "group_id", "test_id", "run_id", "user_id"]:
-            raise Exception(
-                "filter_key can only be one of: \"release_id\", \"group_id\", \"test_id\", \"run_id\", \"user_id\""
-            )
+    def _get_github_issues_for_view(self, view_id: UUID | str) -> list[ArgusGithubIssue]:
+        view: ArgusUserView = ArgusUserView.get(id=view_id)
+        issues = []
+        for batch in chunk(view.tests):
+            issues.extend(ArgusGithubIssue.filter(test_id__in=batch).allow_filtering().all())
+        
+        return issues
 
-        all_issues = ArgusGithubIssue.filter(**{filter_key: filter_id}).all()
+    def get_github_issues(self, filter_key: str, filter_id: UUID, aggregate_by_issue: bool = False) -> dict:
+        if filter_key not in ["release_id", "group_id", "test_id", "run_id", "user_id", "view_id"]:
+            raise Exception(
+                "filter_key can only be one of: \"release_id\", \"group_id\", \"test_id\", \"run_id\", \"user_id\", \"view_id\""
+            )
+        if filter_key == "view_id":
+            all_issues = self._get_github_issues_for_view(filter_id)
+        else:
+            all_issues = ArgusGithubIssue.filter(**{filter_key: filter_id}).all()
         if aggregate_by_issue:
             runs_by_issue = {}
             response = []
