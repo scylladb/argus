@@ -32,8 +32,8 @@ def plugin_loader() -> dict[str, PluginInfoBase]:
 AVAILABLE_PLUGINS = plugin_loader()
 
 
-def all_plugin_models() -> list[PluginModelBase]:
-    return [model for plugin in AVAILABLE_PLUGINS.values() for model in plugin.all_models if issubclass(model, PluginModelBase)]
+def all_plugin_models(include_all=False) -> list[PluginModelBase]:
+    return [model for plugin in AVAILABLE_PLUGINS.values() for model in plugin.all_models if issubclass(model, PluginModelBase) or include_all]
 
 
 def all_plugin_types():
