@@ -22,7 +22,7 @@ def sync_models_command():
         LOGGER.info("Synchronizing plugin type %s...", user_type.__name__)
         sync_type(ks_name=cluster.config["SCYLLA_KEYSPACE_NAME"], type_model=user_type)
     LOGGER.info("Synchronizing plugin models...")
-    for model in all_plugin_models():
+    for model in all_plugin_models(True):
         LOGGER.info("Synchronizing plugin model %s...", model.__name__)
         sync_table(model=model, keyspaces=[cluster.config["SCYLLA_KEYSPACE_NAME"]])
 
