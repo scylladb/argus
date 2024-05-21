@@ -141,7 +141,7 @@
                     &#x25B2;
                 </span>
             {/if}
-            Provider
+            Region
         </th>
         <th
             role="button"
