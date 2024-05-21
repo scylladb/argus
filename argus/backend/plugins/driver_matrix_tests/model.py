@@ -33,12 +33,14 @@ class DriverTestRun(PluginModelBase):
     test_collection = columns.List(value_type=columns.UserDefinedType(user_type=TestCollection))
     environment_info = columns.List(value_type=columns.UserDefinedType(user_type=EnvironmentInfo))
 
+    _no_upstream = ["rust"]
 
     _artifact_fnames = {
         "cpp": r"TEST-(?P<driver_name>[\w]*)-(?P<version>[\d\.-]*)",
         "gocql": r"xunit\.(?P<driver_name>[\w]*)\.(?P<proto>v\d)\.(?P<version>[v\d\.]*)",
         "python": r"pytest\.(?P<driver_name>[\w]*)\.(?P<proto>v\d)\.(?P<version>[\d\.]*)",
         "java": r"TEST-(?P<version>[\d\.\w-]*)",
+        "rust": r"(?P<driver_name>rust)_results_v(?P<version>[\d\w\-.]*)",
     }
 
     @classmethod
@@ -148,7 +150,7 @@ class DriverTestRun(PluginModelBase):
             return TestStatus.FAILED
 
         driver_types = {collection.driver for collection in self.test_collection}
-        if len(driver_types) <= 1:
+        if len(driver_types) <= 1 and not any(driver for driver in self._no_upstream if driver in driver_types):
             return TestStatus.FAILED
 
         failure_count = reduce(lambda acc, val: acc + (val.failures + val.errors), self.test_collection, 0)
