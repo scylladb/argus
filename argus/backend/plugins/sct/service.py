@@ -1,5 +1,6 @@
 import base64
 from dataclasses import dataclass
+from datetime import datetime
 from functools import reduce
 import logging
 import math
@@ -397,14 +398,25 @@ class SCTService:
         coredump_events = filter(lambda v: "coredumpevent" in v.lower(), flat_messages)
         for idx, event in enumerate(coredump_events):
             core_pattern = r"corefile_url=(?P<url>.+)$"
+            ts_pattern = r"^(?P<ts>\d{4}-\d{2}-\d{2} ([\d:]*)\.\d{3})"
             node_name_pattern = r"node=(?P<name>.+)$"
             core_url_match = re.search(core_pattern, event, re.MULTILINE)
             node_name_match = re.search(node_name_pattern, event, re.MULTILINE)
+            ts_match = re.search(ts_pattern, event)
             if core_url_match:
                 node_name = node_name_match.group("name") if node_name_match else f"unknown-node-{idx}"
+                split_name = node_name.split(" ")
+                node_name = split_name[1] if len(split_name) >= 2 else node_name
                 url = core_url_match.group("url")
+                timestamp_component = ""
+                if ts_match:
+                    try:
+                        timestamp = datetime.fromisoformat(ts_match.group("ts"))
+                        timestamp_component = timestamp.strftime("-%Y-%m-%d_%H-%M-%S")
+                    except ValueError:
+                        pass
                 log_link = {
-                    "log_name": f"COREDUMP-{node_name}",
+                    "log_name": f"core.scylla-{node_name}{timestamp_component}.gz",
                     "log_link": url
                 }
                 links.append(log_link)
