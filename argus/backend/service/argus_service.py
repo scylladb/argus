@@ -1,3 +1,4 @@
+from math import ceil
 import subprocess
 import json
 import logging
@@ -487,17 +488,17 @@ class ArgusService:
         groups = ArgusGroup.filter(release_id=release_id).all()
         group_ids = [group.id for group in groups if group.enabled]
 
-        total_ids = len(group_ids)
         schedule_ids = set()
-        step = 0
-        step_size = 60
-        while total_ids > 0:
-            group_slice = group_ids[step:step+step_size]
-            scheduled_groups = ArgusScheduleGroup.filter(release_id=release.id, group_id__in=group_slice).all()
-            batch_ids = {schedule.schedule_id for schedule in scheduled_groups}
-            schedule_ids.union(batch_ids)
-            total_ids = max(0, total_ids - step_size)
-            step += step_size
+        group_schedules =[]
+        step_size = 90
+
+        for step in range(0, ceil(len(group_ids) / step_size)):
+            start_pos = step*step_size
+            next_slice = group_ids[start_pos:start_pos+step_size]
+            group_batch = list(ArgusScheduleGroup.filter(release_id=release.id, group_id__in=next_slice).all())
+            group_schedules.extend(group_batch)
+            batch_ids = {schedule.schedule_id for schedule in group_batch}
+            schedule_ids = schedule_ids.union(batch_ids)
 
         schedules = ArgusSchedule.filter(release_id=release.id, id__in=tuple(schedule_ids)).all()
 
@@ -510,7 +511,7 @@ class ArgusService:
         for schedule in valid_schedules:
             assignees = ArgusScheduleAssignee.filter(schedule_id=schedule.id).all()
             assignees_uuids = [assignee.assignee for assignee in assignees]
-            schedule_groups = filter(lambda g: g.schedule_id == schedule.id, scheduled_groups)
+            schedule_groups = filter(lambda g: g.schedule_id == schedule.id, group_schedules)
             groups = {str(group.group_id): assignees_uuids for group in schedule_groups}
             response = {**groups, **response}
 
@@ -525,8 +526,18 @@ class ArgusService:
 
         test_ids = [test.id for test in tests if test.enabled]
 
-        scheduled_tests = ArgusScheduleTest.filter(release_id=release.id, test_id__in=tuple(test_ids)).all()
-        schedule_ids = {test.schedule_id for test in scheduled_tests}
+        schedule_ids = set()
+        test_schedules = []
+        step_size = 90
+
+        for step in range(0, ceil(len(test_ids) / step_size)):
+            start_pos = step*step_size
+            next_slice = test_ids[start_pos:start_pos+step_size]
+            test_batch = ArgusScheduleTest.filter(release_id=release.id, test_id__in=next_slice).all()
+            test_schedules.extend(test_batch)
+            batch_ids = {schedule.schedule_id for schedule in test_batch}
+            schedule_ids = schedule_ids.union(batch_ids)
+
         schedules: list[ArgusSchedule] = list(ArgusSchedule.filter(
             release_id=release.id, id__in=tuple(schedule_ids)).all())
 
@@ -538,7 +549,7 @@ class ArgusService:
         for schedule in schedules:
             assignees = ArgusScheduleAssignee.filter(schedule_id=schedule.id).all()
             assignees_uuids = [assignee.assignee for assignee in assignees]
-            schedule_tests = filter(lambda t: t.schedule_id == schedule.id, scheduled_tests)
+            schedule_tests = filter(lambda t: t.schedule_id == schedule.id, test_schedules)
             tests = {str(test.test_id): assignees_uuids for test in schedule_tests}
             response = {**tests, **response}
 
