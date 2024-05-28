@@ -187,7 +187,7 @@ class PluginModelBase(Model):
     def submit_product_version(self, version: str):
         raise NotImplementedError()
 
-    def set_product_version(self, version: str):
+    def set_full_version(self, version: str):
         self.product_version = version
 
     def submit_logs(self, logs: list[dict]):

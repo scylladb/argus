@@ -1,4 +1,5 @@
 from datetime import datetime
+import re
 from uuid import UUID
 from cassandra.cqlengine import columns
 from cassandra.cqlengine.models import Model
@@ -37,8 +38,10 @@ class GenericRun(PluginModelBase):
         return sorted(list(unique_versions), reverse=True)
 
     def submit_product_version(self, version: str):
-        self.scylla_version = version
-        self.set_product_version(version)
+        pattern = re.compile(r"((?P<short>[\w.~]+)-(?P<build>(0\.)?(?P<date>[0-9]{8,8})\.(?P<commit>\w+).*))")
+        if match := pattern.search(version):
+            self.scylla_version = match.group("short")
+            self.set_full_version(version)
 
     @classmethod
     def load_test_run(cls, run_id: UUID) -> 'GenericRun':
