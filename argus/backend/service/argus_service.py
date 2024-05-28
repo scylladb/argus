@@ -481,6 +481,15 @@ class ArgusService:
 
         return response
 
+    def _batch_get_schedules_from_ids(self, release_id: UUID, schedule_ids: list[UUID]) -> list[ArgusSchedule]:
+        schedules = []
+        step_size = 90
+        for step in range(0, ceil(len(schedule_ids) / step_size)):
+            start_pos = step*step_size
+            next_slice = schedule_ids[start_pos:start_pos+step_size]
+            schedules.extend(ArgusSchedule.filter(release_id=release_id, id__in=next_slice).all())
+        return schedules
+
     def get_groups_assignees(self, release_id: UUID | str):
         release_id = UUID(release_id) if isinstance(release_id, str) else release_id
         release = ArgusRelease.get(id=release_id)
@@ -500,7 +509,7 @@ class ArgusService:
             batch_ids = {schedule.schedule_id for schedule in group_batch}
             schedule_ids = schedule_ids.union(batch_ids)
 
-        schedules = ArgusSchedule.filter(release_id=release.id, id__in=tuple(schedule_ids)).all()
+        schedules = self._batch_get_schedules_from_ids(release.id, list(schedule_ids))
 
         valid_schedules = schedules
         if release.perpetual:
@@ -538,8 +547,7 @@ class ArgusService:
             batch_ids = {schedule.schedule_id for schedule in test_batch}
             schedule_ids = schedule_ids.union(batch_ids)
 
-        schedules: list[ArgusSchedule] = list(ArgusSchedule.filter(
-            release_id=release.id, id__in=tuple(schedule_ids)).all())
+        schedules = self._batch_get_schedules_from_ids(release.id, list(schedule_ids))
 
         if release.perpetual:
             today = datetime.datetime.utcnow()
