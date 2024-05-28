@@ -4,6 +4,7 @@
     import { titleCase, subUnderscores } from "../Common/TextUtils";
     import { Collapse } from "bootstrap";
     import { createEventDispatcher } from "svelte";
+    import { faChevronRight } from "@fortawesome/free-solid-svg-icons";
     export let displayNumber = false;
     export let displayPercentage = false;
     export let displayInvestigations = false;
@@ -138,11 +139,12 @@
                                         <div class="flex-fill d-flex align-items-center">
                                             <div class="me-4">
                                                 <button 
-                                                    class="btn btn-sm btn-light"
+                                                    class="btn btn-sm btn-light mb-1"
                                                     on:click={() => {
                                                         dispatch("quickSelect", { tests: getTestsForStatus(stats, investigationStatus, status) });
                                                     }}
                                                 >
+                                                    <Fa icon={faChevronRight} />
                                                     {subUnderscores(titleCase(status))}
                                                 </button>
                                             </div>

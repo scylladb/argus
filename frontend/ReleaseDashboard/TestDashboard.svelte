@@ -12,6 +12,8 @@
         faEllipsisH,
         faCheck,
         faTimes,
+        faEyeSlash,
+        faQuestion,
     } from "@fortawesome/free-solid-svg-icons";
 
     import {
@@ -136,10 +138,13 @@
         });
     };
 
+    /**
+     * @param {Object} stats
+     * @param {(v: Object) => boolean} key
+     */
     const quickTestFilter = function(stats, key) {
         let allTests = Object.values(stats.groups).reduce((tests, group) => [...tests, ...Object.values(group.tests)], []);
-        let evt = new CustomEvent("quickSelect", { detail: { tests: allTests.filter(v => v[key]) } });
-        console.log(evt, allTests);
+        let evt = new CustomEvent("quickSelect", { detail: { tests: allTests.filter(key) } });
         handleQuickSelect(evt);
     };
 
@@ -276,22 +281,39 @@
 
 </script>
 <div class="rounded bg-light-one shadow-sm p-2">
-    <div class="text-end">
+    <div class="text-end mb-2">
         <button title="Refresh" class="btn btn-sm btn-outline-dark" on:click={handleDashboardRefreshClick}>
             <Fa icon={faRefresh}/>
         </button>
+        {#if stats}
+            {#if allCollapsed(collapseState)}
+                <button
+                    class="btn btn-outline-dark btn-sm"
+                    on:click={() => toggleAllCollapses(false)}
+                >
+                    Expand all groups
+                </button>
+            {:else}
+                <button
+                    class="btn btn-outline-dark btn-sm"
+                    on:click={() => toggleAllCollapses(true)}
+                >
+                    Collapse all groups
+                </button>
+            {/if}
+        {/if}
     </div>
     {#await fetchVersions()}
         <div>Loading versions...</div>
     {:then versions}
-        <div class="d-flex flex-wrap p-2">
+        <div class="d-inline-flex flex-wrap mb-2 rounded bg-white p-2" style="flex-basis: 10%; row-gap: 0.75em">
             <button
-                class="btn ms-2 mb-2"
+                class="btn me-2"
                 class:btn-primary={!productVersion}
                 class:btn-light={productVersion}
                 on:click={() => { handleVersionClick(""); }}>All</button>
             <button
-            class="btn ms-2 mb-2"
+            class="btn me-2"
             class:btn-success={versionsIncludeNoVersion}
             class:btn-danger={!versionsIncludeNoVersion}
             on:click={() => { 
@@ -306,7 +328,7 @@
             {#each versions as version}
                 {#if !shouldFilterVersion(version, versionsFilterExtraVersions)}
                     <button
-                    class="btn btn-light ms-2 mb-2"
+                    class="btn btn-light me-2"
                     class:btn-primary={productVersion == version}
                     class:btn-light={productVersion != version}
                     on:click={() => { handleVersionClick(version); }}>{version}</button>
@@ -314,7 +336,7 @@
             {/each}
             {#if stats?.release?.valid_version_regex}
                 <button
-                    class="btn ms-2 mb-2"
+                    class="btn me-2 flex-grow-1 flex-shrink-0"
                     class:btn-primary={productVersion == "!noVersion"}
                     class:btn-light={productVersion != "!noVersion"}
                     on:click={() => {
@@ -330,32 +352,33 @@
                 </button>
             {/if}
         </div>
+        <br>
     {/await}
     {#if stats}
-        <div class="text-end mb-2">
-            <button class="btn btn-primary btn-sm" on:click={() => quickTestFilter(stats, "hasBugReport")}>
-                <Fa color="#fff" icon={faBug} />
-                Select all tests with issues
-            </button>
-            <button class="btn btn-primary btn-sm" on:click={() => quickTestFilter(stats, "hasComments")}>
-                <Fa color="#fff" icon={faComment} />
-                Select all tests with comments
-            </button>
-            {#if allCollapsed(collapseState)}
-                <button
-                    class="btn btn-secondary btn-sm"
-                    on:click={() => toggleAllCollapses(false)}
-                >
-                    Expand all groups
-                </button>
-            {:else}
-                <button
-                    class="btn btn-secondary btn-sm"
-                    on:click={() => toggleAllCollapses(true)}
-                >
-                    Collapse all groups
-                </button>
-            {/if}
+        <div class="mb-2 d-inline-flex align-items-start flex-column rounded bg-white">
+            <div class="p-2">
+                Quick filters
+            </div>
+            <div class="p-2">
+                <div class="btn-group" role="group">
+                    <button class="btn btn-primary btn-sm" on:click={() => quickTestFilter(stats, (v) => v?.investigation_status == TestInvestigationStatus.NOT_INVESTIGATED && [TestStatus.FAILED, TestStatus.TEST_ERROR].includes(v?.status))}>
+                        <Fa color="#fff" icon={faEyeSlash} />
+                        Failed and Not Investigated
+                    </button>
+                    <button class="btn btn-primary btn-sm" on:click={() => quickTestFilter(stats, (v) => v?.investigation_status == TestInvestigationStatus.INVESTIGATED && [TestStatus.FAILED, TestStatus.TEST_ERROR].includes(v?.status) && (!v.hasBugReport || !v.hasComments))}>
+                        <Fa color="#fff" icon={faQuestion} />
+                        Investigated w/o Issues
+                    </button>
+                    <button class="btn btn-primary btn-sm" on:click={() => quickTestFilter(stats, (v) => v["hasBugReport"])}>
+                        <Fa color="#fff" icon={faBug} />
+                        All w/ Issues
+                    </button>
+                    <button class="btn btn-primary btn-sm" on:click={() => quickTestFilter(stats, (v) => v["hasComments"])}>
+                        <Fa color="#fff" icon={faComment} />
+                        All w/ Comments
+                    </button>
+                </div>
+            </div>
         </div>
         {#each sortedGroups(stats.groups) as groupStats (groupStats.group.id)}
             {#if !groupStats.disabled}
