@@ -365,7 +365,7 @@
                         <Fa color="#fff" icon={faEyeSlash} />
                         Failed and Not Investigated
                     </button>
-                    <button class="btn btn-primary btn-sm" on:click={() => quickTestFilter(stats, (v) => v?.investigation_status == TestInvestigationStatus.INVESTIGATED && [TestStatus.FAILED, TestStatus.TEST_ERROR].includes(v?.status) && (!v.hasBugReport || !v.hasComments))}>
+                    <button class="btn btn-primary btn-sm" on:click={() => quickTestFilter(stats, (v) => v?.investigation_status == TestInvestigationStatus.INVESTIGATED && [TestStatus.FAILED, TestStatus.TEST_ERROR].includes(v?.status) && !v.hasBugReport)}>
                         <Fa color="#fff" icon={faQuestion} />
                         Investigated w/o Issues
                     </button>
