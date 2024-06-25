@@ -194,6 +194,7 @@ class ArgusTestRunComment(Model):
     test_run_id = columns.UUID(required=True, index=True)
     user_id = columns.UUID(required=True, index=True)
     release_id = columns.UUID(required=True, index=True)
+    test_id = columns.UUID(required=True, index=True)
     posted_at = columns.Integer(
         required=True, clustering_order="desc", primary_key=True)
     message = columns.Text(min_length=1, max_length=65535)
