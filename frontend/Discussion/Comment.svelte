@@ -23,6 +23,7 @@
         posted_at: new Date(),
     };
     export let hideReplyButton = false;
+    export let hideUserActions = false;
     marked.use({
         extensions: [MarkdownUserMention]
     });
@@ -97,8 +98,8 @@
                 </button>
             </div>
         {/if}
-        {#if applicationCurrentUser.id == commentBody.user_id}
-            <div class="ms-1">
+        {#if applicationCurrentUser.id == commentBody.user_id && !hideUserActions}
+            <div class:ms-1={!hideReplyButton} class:ms-auto={hideReplyButton}>
                 <button
                     class="btn btn-light bg-editor"
                     title="Edit"
