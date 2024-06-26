@@ -41,7 +41,13 @@
             </h2>
             <div id="collapseTestCollection-{testId}-{idx}" class="accordion-collapse collapse">
                 <div class="accordion-body" >
-                    <DriverMatrixBreakdown suites={collection.suites}/>
+                    {#if collection.failure_message}
+                        <div>
+                            <pre class="rounded p-2 bg-light-one" style="white-space: pre-wrap;">{collection.failure_message}</pre>
+                        </div>
+                    {:else}
+                        <DriverMatrixBreakdown suites={collection.suites}/>
+                    {/if}
                 </div>
             </div>
         </div>
