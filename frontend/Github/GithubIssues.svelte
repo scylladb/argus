@@ -296,10 +296,10 @@
                 </div>
             </div>
             <div class="row">
-                <div class="d-flex p-2 bg-dark rounded shadow-sm">
+                <div class="d-flex p-2 bg-dark rounded shadow-sm flex-wrap">
                     {#each availableLabels as label}
                         <button 
-                            class="ms-2 btn btn-sm btn-secondary" 
+                            class="ms-2 btn btn-sm btn-secondary m-1" 
                             style="border-color: #{label.color}; color: #{label.color}; background-color: {labelActive(label.id, selectedLabels) ? Color(`#${label.color}`).darken(0.75) : "rgba(1,1,1,0)"}"
                             on:click={() => handleLabelClick(label)}
                         >
