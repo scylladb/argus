@@ -133,7 +133,7 @@ class UserViewService:
                     view.group_ids.append(entity_id)
                 case "test": 
                     view.tests.append(entity_id)
-        view.last_updated = datetime.datetime.now(datetime.UTC)
+        view.last_updated = datetime.datetime.utcnow()
         view.save()
         return True
 
@@ -185,7 +185,7 @@ class UserViewService:
         all_tests.update(test.id for test in self.batch_resolve_entity(ArgusTest, "group_id", view.group_ids))
         all_tests.update(test.id for test in self.batch_resolve_entity(ArgusTest, "release_id", view.release_ids))
         view.tests = list(all_tests)
-        view.last_updated = datetime.datetime.now(datetime.UTC)
+        view.last_updated = datetime.datetime.utcnow()
         view.save()
 
         return view
