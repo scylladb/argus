@@ -220,6 +220,7 @@ class TestRunService:
         plugin = self.get_plugin(test.plugin_name)
         release: ArgusRelease = ArgusRelease.get(id=test.release_id)
         comment = ArgusTestRunComment()
+        comment.test_id = test.id
         comment.message = message_stripped
         comment.reactions = reactions
         comment.mentions = [m.id for m in mentions]
