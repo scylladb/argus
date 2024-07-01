@@ -24,12 +24,14 @@ export const startJobBuild = async function(buildId, buildParams) {
         if (error?.status === "error") {
             sendMessage(
                 "error",
-                `API Error when starting build.\nMessage: ${error.response.arguments[0]}`
+                `API Error when starting build.\nMessage: ${error.response.arguments[0]}`,
+                "Build::startJobBuild"
             );
         } else {
             sendMessage(
                 "error",
-                "A backend error occurred attempting to start a build"
+                "A backend error occurred attempting to start a build",
+                "Build::startJobBuild"
             );
             console.log(error);
         }

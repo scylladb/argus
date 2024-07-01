@@ -36,12 +36,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `Unable to update schedule comment.\nAPI Response: ${error.response.arguments[0]}`
+                    `Unable to update schedule comment.\nAPI Response: ${error.response.arguments[0]}`,
+                    "CommentTableRow::update"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during schedule comment update"
+                    "A backend error occurred during schedule comment update",
+                    "CommentTableRow::update"
                 );
                 console.log("Error: ", error);
             }

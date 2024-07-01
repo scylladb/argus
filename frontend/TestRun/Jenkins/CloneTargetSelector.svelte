@@ -92,12 +92,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error when fetching groups.\nMessage: ${error.response.arguments[0]}`
+                    `API Error when fetching groups.\nMessage: ${error.response.arguments[0]}`,
+                    "CloneTargetSelector::fetchCategoriesForTarget"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during group fetch"
+                    "A backend error occurred during group fetch",
+                    "CloneTargetSelector::fetchCategoriesForTarget"
                 );
                 console.log(error);
             }
@@ -123,12 +125,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error when fetching settings.\nMessage: ${error.response.arguments[0]}`
+                    `API Error when fetching settings.\nMessage: ${error.response.arguments[0]}`,
+                    "CloneTargetSelector::fetchOldJobSettings"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during settings fetch"
+                    "A backend error occurred during settings fetch",
+                    "CloneTargetSelector::fetchOldJobSettings"
                 );
                 console.log(error);
             }
@@ -162,12 +166,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error when validating settings.\nMessage: ${error.response.arguments[0]}`
+                    `API Error when validating settings.\nMessage: ${error.response.arguments[0]}`,
+                    "CloneTargetSelector::handleValidation"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during settings validation"
+                    "A backend error occurred during settings validation",
+                    "CloneTargetSelector::handleValidation"
                 );
                 console.log(error);
             }

@@ -25,7 +25,7 @@
             }
         } catch (err) {
             if (err instanceof TeamManagerAPIError) {
-                sendMessage("error", "Failed fetching teams");
+                sendMessage("error", "Failed fetching teams", "TeamList::fetchUserTeams");
             }
             return [];
         }

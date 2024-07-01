@@ -127,7 +127,7 @@
                     class="btn btn-danger"
                     on:click={() => {
                         if (!ignoreReason) {
-                            sendMessage("error", "Ignore reason cannot be empty");
+                            sendMessage("error", "Ignore reason cannot be empty", "TestRuns::component");
                             return;
                         }
                         modal.hide();

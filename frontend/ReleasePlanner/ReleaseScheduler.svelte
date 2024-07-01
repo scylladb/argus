@@ -38,7 +38,7 @@
         try {
             let params = new URLSearchParams({
                 releaseId: releaseData.release.id
-            }).toString()
+            }).toString();
             let apiResponse = await fetch("/api/v1/release/planner/data?" + params, {
                 method: "GET",
             });
@@ -52,12 +52,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `Unable to fetch planner data.\nMessage: ${error.response.arguments[0]}`
+                    `Unable to fetch planner data.\nMessage: ${error.response.arguments[0]}`,
+                    "ReleasePlanner::fetchPlannerData"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during planner data fetch"
+                    "A backend error occurred during planner data fetch",
+                    "ReleasePlanner::fetchPlannerData"
                 );
             }
         }
@@ -83,12 +85,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `Unable to fetch schedules.\nMessage: ${error.response.arguments[0]}`
+                    `Unable to fetch schedules.\nMessage: ${error.response.arguments[0]}`,
+                    "ReleasePlanner::fetchSchedules"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during schedule fetch"
+                    "A backend error occurred during schedule fetch",
+                    "ReleasePlanner::fetchSchedules"
                 );
             }
         }
@@ -120,12 +124,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `Unable to submit schedule.\nAPI Response: ${error.response.arguments[0]}`
+                    `Unable to submit schedule.\nAPI Response: ${error.response.arguments[0]}`,
+                    "ReleasePlanner::submitNewSchedule"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during schedule submission"
+                    "A backend error occurred during schedule submission",
+                    "ReleasePlanner::submitNewSchedule"
                 );
             }
         }
@@ -155,12 +161,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `Unable to delete schedule.\nAPI Response: ${error.response.arguments[0]}`
+                    `Unable to delete schedule.\nAPI Response: ${error.response.arguments[0]}`,
+                    "ReleasePlanner::deleteSchedule"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during schedule deletion"
+                    "A backend error occurred during schedule deletion",
+                    "ReleasePlanner::deleteSchedule"
                 );
             }
         }
@@ -385,7 +393,9 @@
 >
     <button
         class="btn btn-success"
-        on:click={() => {window.scrollTo({behavior: "smooth", top: document.body.clientHeight })}}
+        on:click={() => {
+            window.scrollTo({behavior: "smooth", top: document.body.clientHeight }); 
+        }}
     >
         <Fa icon={faArrowDown}/>
     </button>

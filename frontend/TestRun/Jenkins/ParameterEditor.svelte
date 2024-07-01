@@ -29,7 +29,7 @@
         if (wizard && wizard.validate) {
             let [validated, errors] = wizard.validate();
             if (!validated) {
-                sendMessage("error", "Validation failed. Please verify the parameters");
+                sendMessage("error", "Validation failed. Please verify the parameters", "ParameterEditor::Validate");
                 return;
             }
         }

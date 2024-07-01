@@ -7,7 +7,7 @@
 
     const confirm = function() {
         if (releaseNameForConfirmation != releaseData.name) {
-            sendMessage("error", "Release name doesn't match.");
+            sendMessage("error", "Release name doesn't match.", "ReleaseDelete::confirm");
             return;
         }
         dispatch("deletionConfirmed");

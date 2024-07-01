@@ -51,12 +51,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error when fetching build parameters.\nMessage: ${error.response.arguments[0]}`
+                    `API Error when fetching build parameters.\nMessage: ${error.response.arguments[0]}`,
+                    "BuildSuccess::fetchBuildQueue"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during parameter fetch"
+                    "A backend error occurred during parameter fetch",
+                    "BuildSuccess::fetchBuildQueue"
                 );
                 console.log(error);
             }

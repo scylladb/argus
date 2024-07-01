@@ -41,12 +41,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `Unable to fetch comments.\nMessage: ${error.response.arguments[0]}`
+                    `Unable to fetch comments.\nMessage: ${error.response.arguments[0]}`,
+                    "TestRunComments::fetchComments"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during comments fetch"
+                    "A backend error occurred during comments fetch",
+                    "TestRunComments::fetchComments"
                 );
             }
         }
@@ -79,12 +81,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error during comment submission.\nMessage: ${error.response.arguments[0]}`
+                    `API Error during comment submission.\nMessage: ${error.response.arguments[0]}`,
+                    "TestRunComments::handleCommentSubmit"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during comment submission"
+                    "A backend error occurred during comment submission",
+                    "TestRunComments::handleCommentSubmit"
                 );
             }
         } finally {
@@ -118,12 +122,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error during comment update.\nMessage: ${error.response.arguments[0]}`
+                    `API Error during comment update.\nMessage: ${error.response.arguments[0]}`,
+                    "TestRunComments::handleCommentUpdate"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during comment update."
+                    "A backend error occurred during comment update.",
+                    "TestRunComments::handleCommentUpdate"
                 );
             }
         }
@@ -156,12 +162,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error during comment deletion.\nMessage: ${error.response.arguments[0]}`
+                    `API Error during comment deletion.\nMessage: ${error.response.arguments[0]}`,
+                    "TestRunComments::handleCommentDelete"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during release comment deletion."
+                    "A backend error occurred during release comment deletion.",
+                    "TestRunComments::handleCommentDelete"
                 );
             }
         }

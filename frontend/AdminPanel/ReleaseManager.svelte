@@ -48,12 +48,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error when fetching releases.\nMessage: ${error.response.arguments[0]}`
+                    `API Error when fetching releases.\nMessage: ${error.response.arguments[0]}`,
+                    "ReleaseManager::fetch"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during releases fetch"
+                    "A backend error occurred during releases fetch",
+                    "ReleaseManager::fetch"
                 );
             }
         } finally {
@@ -121,12 +123,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error.\nMessage: ${error.response.arguments[0]}`
+                    `API Error.\nMessage: ${error.response.arguments[0]}`,
+                    "ReleaseManager::apiMethodCall"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "Unhandled API Error occured. \nCheck response for details."
+                    "Unhandled API Error occured. \nCheck response for details.",
+                    "ReleaseManager::apiMethodCall"
                 );
             }
         } finally {

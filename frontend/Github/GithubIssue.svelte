@@ -66,7 +66,7 @@
             try {
                 githubToken = await fetchGithubToken();
             } catch (error) {
-                sendMessage("error", "Github Oauth token not found.");
+                sendMessage("error", "Github Oauth token not found.", "GithubIssue::fetchIssueState");
                 return;
             }
         }
@@ -117,12 +117,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `Unable to delete an issue.\nAPI Response: ${error.response.arguments[0]}`
+                    `Unable to delete an issue.\nAPI Response: ${error.response.arguments[0]}`,
+                    "GithubIssue::delete"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during issue deletiong"
+                    "A backend error occurred during issue deleting",
+                    "GithubIssue::delete"
                 );
             }
         }

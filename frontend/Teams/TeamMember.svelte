@@ -29,7 +29,7 @@
                 throw new TeamManagerAPIError(json.response);
             }
         } catch (error) {
-            sendMessage(`Failed to fetch jobs for a user ${member.full_name}`);
+            sendMessage(`Failed to fetch jobs for a user ${member.full_name}`, "TeamMember::fetchUserJobs");
             console.log(error);
             failed = true;
         }

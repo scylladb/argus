@@ -31,12 +31,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error updating test run status.\nMessage: ${error.response.arguments[0]}`
+                    `API Error updating test run status.\nMessage: ${error.response.arguments[0]}`,
+                    "RunStatusButton::handleStatus"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during test run status update"
+                    "A backend error occurred during test run status update",
+                    "RunStatusButton::handleStatus"
                 );
             }
         } finally {

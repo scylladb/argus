@@ -8,7 +8,7 @@
 
     const handleTestClick = function (detail) {
         if (detail.start_time == 0) {
-            sendMessage("info", `The test "${detail.name}" hasn't been run yet!"`);
+            sendMessage("info", `The test "${detail.name}" hasn't been run yet!"`, "ViewDashboard::handleTestClick");
             return;
         }
         let key = detail.id;

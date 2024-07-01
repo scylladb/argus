@@ -36,7 +36,7 @@
         } catch (error) {
             if (error instanceof TeamManagerAPIError)
             {
-                sendMessage("error", `${error.arguments[0]}`);
+                sendMessage("error", `${error.arguments[0]}`, "TeamShort::handleDelete");
             }
             console.log(error);
             

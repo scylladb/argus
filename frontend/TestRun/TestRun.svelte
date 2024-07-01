@@ -68,12 +68,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error when fetching test run data.\nMessage: ${error.response.arguments[0]}`
+                    `API Error when fetching test run data.\nMessage: ${error.response.arguments[0]}`,
+                    "SCTTestRun::fetchTestRunData"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during test run data fetch"
+                    "A backend error occurred during test run data fetch",
+                    "SCTTestRun::fetchTestRunData"
                 );
                 console.log(error);
             }
@@ -96,12 +98,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error when fetching test run junit results data.\nMessage: ${error.response.arguments[0]}`
+                    `API Error when fetching test run junit results data.\nMessage: ${error.response.arguments[0]}`,
+                    "SCTTestRun::fetchJunitReports"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during test run junit results data fetch"
+                    "A backend error occurred during test run junit results data fetch",
+                    "SCTTestRun::fetchJunitReports"
                 );
                 console.log(error);
             }
