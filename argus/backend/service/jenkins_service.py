@@ -195,7 +195,8 @@ class JenkinsService:
         LOGGER.info(old_config)
         xml = ET.fromstring(old_config)
         display_name = xml.find("displayName")
-        display_name.text = new_name
+        if display_name:
+            display_name.text = new_name
         new_config = ET.tostring(xml, encoding="unicode")
         self._jenkins.create_job(name=jenkins_new_build_id, config_xml=new_config)
         new_job_info = self._jenkins.get_job_info(name=jenkins_new_build_id)
