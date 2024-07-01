@@ -50,12 +50,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error when fetching test run data.\nMessage: ${error.response.arguments[0]}`
+                    `API Error when fetching test run data.\nMessage: ${error.response.arguments[0]}`,
+                    "SirenadaTestRun::fetchTestRunData"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during test run data fetch"
+                    "A backend error occurred during test run data fetch",
+                    "SirenadaTestRun::fetchTestRunData"
                 );
             }
         }

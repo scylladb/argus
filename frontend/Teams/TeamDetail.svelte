@@ -54,7 +54,7 @@
         } catch (error) {
             if (error instanceof TeamManagerAPIError)
             {
-                sendMessage("error", `${error.arguments[0]}`);
+                sendMessage("error", `${error.arguments[0]}`, "TeamDetail::handleUpdateMotd");
             }
             console.log(error);
         } finally {
@@ -86,7 +86,7 @@
         } catch (error) {
             if (error instanceof TeamManagerAPIError)
             {
-                sendMessage("error", `${error.arguments[0]}`);
+                sendMessage("error", `${error.arguments[0]}`, "TeamDetail::handleUpdateMembers");
             }
             console.log(error);
         }
@@ -94,7 +94,7 @@
 
     const handleUpdateTeamName = async function() {
         if (!newName) {
-            sendMessage("error", "Name cannot be empty");
+            sendMessage("error", "Name cannot be empty", "TeamDetail::handleUpdateTeamName");
             newName = team.name;
             return;
         }
@@ -120,7 +120,7 @@
         } catch (error) {
             if (error instanceof TeamManagerAPIError)
             {
-                sendMessage("error", `${error.arguments[0]}`);
+                sendMessage("error", `${error.arguments[0]}`, "TeamDetail::handleUpdateTeamName");
             }
             console.log(error);
         } finally {

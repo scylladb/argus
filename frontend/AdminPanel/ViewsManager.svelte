@@ -48,12 +48,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error when fetching views.\nMessage: ${error.response.arguments[0]}`
+                    `API Error when fetching views.\nMessage: ${error.response.arguments[0]}`,
+                    "ViewManager::fetchAll"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during view fetch"
+                    "A backend error occurred during view fetch",
+                    "ViewManager::fetchAll"
                 );
                 console.log(error);
             }
@@ -112,12 +114,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error when updating a view.\nMessage: ${error.response.arguments[0]}`
+                    `API Error when updating a view.\nMessage: ${error.response.arguments[0]}`,
+                    "ViewManager::update"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during view update"
+                    "A backend error occurred during view update",
+                    "ViewManager::update"
                 );
                 console.log(error);
             }
@@ -158,14 +162,16 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error when creating a view.\nMessage: ${error.response.arguments[0]}`
+                    `API Error when creating a view.\nMessage: ${error.response.arguments[0]}`,
+                    "ViewManager::create"
                 );
             } else if (error?.cause == "validation") {
                 console.log("Validation failed...");
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during view creation"
+                    "A backend error occurred during view creation",
+                    "ViewManager::create"
                 );
                 console.log(error);
             }
@@ -200,12 +206,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error when deleting a view.\nMessage: ${error.response.arguments[0]}`
+                    `API Error when deleting a view.\nMessage: ${error.response.arguments[0]}`,
+                    "ViewManager::delete"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during view deletion"
+                    "A backend error occurred during view deletion",
+                    "ViewManager::delete"
                 );
                 console.log(error);
             }
@@ -297,7 +305,7 @@
     };
 
     const onValidationError = function(message) {
-        sendMessage("error", message);
+        sendMessage("error", message, "ViewManager::validateNewView");
     };
 
     const resetForm = function () {

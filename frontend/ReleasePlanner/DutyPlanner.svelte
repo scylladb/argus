@@ -60,12 +60,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `Unable to fetch schedules.\nMessage: ${error.response.arguments[0]}`
+                    `Unable to fetch schedules.\nMessage: ${error.response.arguments[0]}`,
+                    "DutyPlanner::fetchSchedules"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during schedule fetch"
+                    "A backend error occurred during schedule fetch",
+                    "DutyPlanner::fetchSchedules"
                 );
             }
         }
@@ -93,13 +95,15 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `Unable to submit schedule.\nAPI Response: ${error.response.arguments[0]}`
+                    `Unable to submit schedule.\nAPI Response: ${error.response.arguments[0]}`,
+                    "DutyPlanner::submitNewSchedule"
                 );
             } else {
                 console.log(error);
                 sendMessage(
                     "error",
-                    "A backend error occurred during schedule submission"
+                    "A backend error occurred during schedule submission",
+                    "DutyPlanner::submitNewSchedule"
                 );
             }
         }
@@ -131,12 +135,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `Unable to delete schedule.\nAPI Response: ${error.response.arguments[0]}`
+                    `Unable to delete schedule.\nAPI Response: ${error.response.arguments[0]}`,
+                    "DutyPlanner::deleteSchedule"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during schedule deletion"
+                    "A backend error occurred during schedule deletion",
+                    "DutyPlanner::deleteSchedule"
                 );
             }
         }

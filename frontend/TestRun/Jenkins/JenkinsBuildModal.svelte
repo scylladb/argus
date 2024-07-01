@@ -1,10 +1,10 @@
 <script>
     import { createEventDispatcher, onMount } from "svelte";
-    import { sendMessage } from "../../Stores/AlertStore";
     import BuildStartPlaceholder from "./BuildStartPlaceholder.svelte";
     import BuildSuccessPlaceholder from "./BuildSuccessPlaceholder.svelte";
     import ParamFetchPlaceholder from "./ParamFetchPlaceholder.svelte";
     import ParameterEditor from "./ParameterEditor.svelte";
+    import ModalError from "./ModalError.svelte";
 
     export let buildId;
     export let buildNumber;
@@ -17,14 +17,20 @@
         PARAM_EDIT: "param_edit",
         BUILD_START: "build_start",
         BUILD_CONFIRMED: "build_confirmed",
+        ERROR: "error",
     };
 
     const STATE_MACHINE = {
         [STATES.PARAM_FETCH]: {
             component: ParamFetchPlaceholder,
             onEnter: async function () {
-                let res = await fetchLastBuildParams(this.args.buildId, this.args.buildNumber);
-                setState(STATES.PARAM_EDIT, {params: res});
+                try {
+                    let res = await fetchLastBuildParams(this.args.buildId, this.args.buildNumber);
+                    setState(STATES.PARAM_EDIT, {params: res});
+                } catch (error) {
+                    setState(STATES.ERROR, { message: error.message });
+                    console.log(error);
+                }
             },
             /**
              * @param {CustomEvent} event
@@ -57,9 +63,14 @@
         [STATES.BUILD_START]: {
             component: BuildStartPlaceholder,
             onEnter: async function () {
-                let queueItem = await startJobBuild(this.args.buildParams);
-                let event = new CustomEvent("exit", {detail: { queueItem }});
-                this.onExit(event);
+                try {
+                    let queueItem = await startJobBuild(this.args.buildParams);
+                    let event = new CustomEvent("exit", {detail: { queueItem }});
+                    this.onExit(event);
+                } catch (error) {
+                    setState(STATES.ERROR, { message: error.message });
+                    console.log(error);
+                }
             },
             /**
              * @param {CustomEvent} event
@@ -86,6 +97,21 @@
                 queueItem: -1,
             },
         },
+        [STATES.ERROR]: {
+            component: ModalError,
+            onEnter: async function () {
+                //empty
+            },
+            /**
+             * @param {CustomEvent} event
+             */
+            onExit: async function (event) {
+                //empty
+            },
+            args: {
+                message: "",
+            },
+        },
         none: {
             component: undefined,
             onEnter: () => {
@@ -105,76 +131,45 @@
     };
 
     const fetchLastBuildParams = async function() {
-        try {
-            const params = {
-                buildId: buildId,
-                buildNumber: Number.parseInt(buildNumber),
-            };
-            const response = await fetch("/api/v1/jenkins/params", {
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                method: "POST",
-                body: JSON.stringify(params),
-            });
+        const params = {
+            buildId: buildId,
+            buildNumber: Number.parseInt(buildNumber),
+        };
+        const response = await fetch("/api/v1/jenkins/params", {
+            headers: {
+                "Content-Type": "application/json",
+            },
+            method: "POST",
+            body: JSON.stringify(params),
+        });
 
-            const json = await response.json();
-            if (json.status != "ok") {
-                throw json;
-            }
-
-            return json.response.parameters;
-
-        } catch (error) {
-            if (error?.status === "error") {
-                sendMessage(
-                    "error",
-                    `API Error when fetching build parameters.\nMessage: ${error.response.arguments[0]}`
-                );
-            } else {
-                sendMessage(
-                    "error",
-                    "A backend error occurred during parameter fetch"
-                );
-                console.log(error);
-            }
+        const json = await response.json();
+        if (json.status != "ok") {
+            throw new Error(json.response.arguments[0]);
         }
+
+        return json.response.parameters;
     };
 
     const startJobBuild = async function(buildParams) {
-        try {
-            const params = {
-                buildId: buildId,
-                parameters: buildParams,
-            };
-            const response = await fetch("/api/v1/jenkins/build", {
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                method: "POST",
-                body: JSON.stringify(params),
-            });
+        const params = {
+            buildId: buildId,
+            parameters: buildParams,
+        };
+        const response = await fetch("/api/v1/jenkins/build", {
+            headers: {
+                "Content-Type": "application/json",
+            },
+            method: "POST",
+            body: JSON.stringify(params),
+        });
 
-            const json = await response.json();
-            if (json.status != "ok") {
-                throw json;
-            }
-
-            return json.response.queueItem;
-        } catch (error) {
-            if (error?.status === "error") {
-                sendMessage(
-                    "error",
-                    `API Error when starting build.\nMessage: ${error.response.arguments[0]}`
-                );
-            } else {
-                sendMessage(
-                    "error",
-                    "A backend error occurred attempting to start a build"
-                );
-                console.log(error);
-            }
+        const json = await response.json();
+        if (json.status != "ok") {
+            throw new Error(json.response.arguments[0]);
         }
+
+        return json.response.queueItem;
     };
 
     onMount(() => {

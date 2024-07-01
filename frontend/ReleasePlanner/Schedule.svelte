@@ -62,7 +62,7 @@
     const handleReassign = async function () {
         updating = true;
         if (!reassigned || reassigned.length == 0) {
-            sendMessage("error", "Assignee list is empty!");
+            sendMessage("error", "Assignee list is empty!", "Schedule::handleReassign");
             updating = false;
             return;
         }
@@ -87,7 +87,7 @@
                 reassigned = [];
                 scheduleData.assignees = apiJson.response.newAssignees;
                 scheduleData = scheduleData;
-                dispatch("refreshSchedules")
+                dispatch("refreshSchedules");
             } else {
                 throw apiJson;
             }
@@ -95,12 +95,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `Unable to reassign the schedule.\nAPI Response: ${error.response.arguments[0]}`
+                    `Unable to reassign the schedule.\nAPI Response: ${error.response.arguments[0]}`,
+                    "Schedule::handleReassign"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during schedule reassignment"
+                    "A backend error occurred during schedule reassignment",
+                    "Schedule::handleReassign"
                 );
             }
         } finally {

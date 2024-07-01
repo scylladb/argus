@@ -34,18 +34,20 @@ const fetchAssignees = async function (set) {
         if (error?.status === "error") {
             sendMessage(
                 "error",
-                `API Error when fetching release groups.\nMessage: ${error.response.arguments[0]}`
+                `API Error during fetching assignees.\nMessage: ${error.response.arguments[0]}`,
+                "AssigneeSubscriber::fetchAssignees"
             );
         } else {
             sendMessage(
                 "error",
-                "An error occurred refreshing assignees"
+                "An error occurred refreshing assignees",
+                "AssigneeSubscriber::fetchAssignees"
             );
             console.log(error);
         }
     }
     fetching = false;
-}
+};
 
 export const requestAssigneesForReleaseGroups = function (release, groups) {
     assigneeRequests.update((value) => {
@@ -59,7 +61,7 @@ export const requestAssigneesForReleaseGroups = function (release, groups) {
     setTimeout(() => {
         fetchAssignees((value) => assigneeStore.update(() => value));
     }, 250);
-}
+};
 
 export const requestAssigneesForReleaseTests = function (release, tests) {
     tests = tests.map((test) => test.build_system_id);
@@ -74,7 +76,7 @@ export const requestAssigneesForReleaseTests = function (release, tests) {
     setTimeout(() => {
         fetchAssignees((value) => assigneeStore.update(() => value));
     }, 250);
-}
+};
 
 
 export const assigneeStore = writable({}, (set) => {

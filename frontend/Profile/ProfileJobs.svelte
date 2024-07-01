@@ -27,9 +27,9 @@
             prepareJobs(json.response);
         } catch (e) {
             if (e instanceof Error) {
-                sendMessage("error", `Error fetching user jobs\n${e.message}`);
+                sendMessage("error", `Error fetching user jobs\n${e.message}`, "ProfileJob::testInfo");
             } else {
-                sendMessage("error", "Error fetching user jobs\nUnknown error. Check console for details");
+                sendMessage("error", "Error fetching user jobs\nUnknown error. Check console for details", "ProfileJobs::testInfo");
             }
             console.log(e);
         }

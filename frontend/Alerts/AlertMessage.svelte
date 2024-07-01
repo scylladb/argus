@@ -1,6 +1,6 @@
 <script>
     import { createEventDispatcher, onMount } from "svelte";
-	import { fade, fly } from 'svelte/transition';
+    import { fly } from "svelte/transition";
     import Fa from "svelte-fa";
     import { faTimes } from "@fortawesome/free-solid-svg-icons";
     export let message = {
@@ -9,6 +9,8 @@
         message: "No error",
     };
     const dispatch = createEventDispatcher();
+
+    let messageTimeout;
 
     const classMap = {
         error: "bg-danger",
@@ -24,9 +26,10 @@
         dispatch("deleteMessage", {
             id: message.id,
         });
+        if (messageTimeout) clearTimeout(messageTimeout);
     };
     onMount(() => {
-        setTimeout(() => {
+        messageTimeout = setTimeout(() => {
             handleClose();
         }, 8000);
     });
@@ -44,10 +47,16 @@
             </button>
         </h4>
         <div>{message.message}</div>
+        {#if message.source}
+            <div class="text-end text-sm">Source: <span class="fw-bold">{message.source}</span></div>
+        {/if}
     </div>
 </div>
 
 <style>
+    .text-sm {
+        font-size: 0.75em;
+    }
     .argus-message {
         padding: 24px;
         border-radius: 8px;

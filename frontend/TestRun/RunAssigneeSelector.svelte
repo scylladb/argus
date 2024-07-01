@@ -98,12 +98,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error assigning person to the test run.\nMessage: ${error.response.arguments[0]}`
+                    `API Error assigning person to the test run.\nMessage: ${error.response.arguments[0]}`,
+                    "RunAssigneeSelector::handleAssign"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during assignment call"
+                    "A backend error occurred during assignment call",
+                    "RunAssigneeSelector::handleAssign"
                 );
             }
         }

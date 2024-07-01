@@ -10,6 +10,8 @@
     import CloneCreatePlaceholder from "./CloneCreatePlaceholder.svelte";
     import queryString from "query-string";
     import { startJobBuild } from "./Build";
+    import ModalError from "./ModalError.svelte";
+    import CloneSuccess from "./CloneSuccess.svelte";
 
     export let buildId;
     export let buildNumber;
@@ -27,6 +29,7 @@
         LOAD_TARGETS: "load_targets",
         CLONE_EDITOR: "clone_editor",
         CLONE_CREATE: "clone_create",
+        CLONE_SUCCESS: "clone_success",
         JOB_FETCH: "job_fetch",
         JOB_EDIT: "job_edit",
         JOB_COMMIT: "job_commit",
@@ -34,6 +37,7 @@
         PARAM_EDIT: "param_edit",
         BUILD_START: "build_start",
         BUILD_CONFIRMED: "build_confirmed",
+        ERROR: "error",
     };
 
     const STATE_MACHINE = {
@@ -81,7 +85,13 @@
         [STATES.CLONE_CREATE]: {
             component: CloneCreatePlaceholder,
             onEnter: async function () {
-                //empty
+                try {
+                    let res = await cloneJob(this);
+                    setState(STATES.CLONE_SUCCESS, {result: res});
+                } catch (error) {
+                    setState(STATES.ERROR, { message: error.message });
+                    console.log(error);
+                }
             },
             /**
              * @param {CustomEvent} event
@@ -98,11 +108,32 @@
                 advancedSettings: false,
             },
         },
+        [STATES.CLONE_SUCCESS]: {
+            component: CloneSuccess,
+            onEnter: async function () {
+                //empty
+            },
+            /**
+             * @param {CustomEvent} event
+             */
+            onExit: async function (event) {
+                newBuildId = event.detail.newBuildId;
+                setState(STATES.PARAM_FETCH, {});
+            },
+            args: {
+                result: undefined,
+            },
+        },
         [STATES.PARAM_FETCH]: {
             component: ParamFetchPlaceholder,
             onEnter: async function () {
-                let res = await fetchLastBuildParams(this.args.buildId, this.args.buildNumber);
-                setState(STATES.PARAM_EDIT, {params: res});
+                try {
+                    let res = await fetchLastBuildParams(this.args.buildId, this.args.buildNumber);
+                    setState(STATES.PARAM_EDIT, {params: res});
+                } catch (error) {
+                    setState(STATES.ERROR, { message: error.message });
+                    console.log(error);
+                }
             },
             /**
              * @param {CustomEvent} event
@@ -135,9 +166,14 @@
         [STATES.BUILD_START]: {
             component: BuildStartPlaceholder,
             onEnter: async function () {
-                let queueItem = await startJobBuild(newBuildId, this.args.buildParams);
-                let event = new CustomEvent("exit", {detail: { queueItem }});
-                this.onExit(event);
+                try {
+                    let queueItem = await startJobBuild(this.args.buildParams);
+                    let event = new CustomEvent("exit", {detail: { queueItem }});
+                    this.onExit(event);
+                } catch (error) {
+                    setState(STATES.ERROR, { message: error.message });
+                    console.log(error);
+                }
             },
             /**
              * @param {CustomEvent} event
@@ -171,6 +207,21 @@
                 plugin: null,
             },
         },
+        [STATES.ERROR]: {
+            component: ModalError,
+            onEnter: async function () {
+                //empty
+            },
+            /**
+             * @param {CustomEvent} event
+             */
+            onExit: async function (event) {
+                //empty
+            },
+            args: {
+                message: "",
+            },
+        },
         none: {
             component: undefined,
             onEnter: () => {
@@ -190,71 +241,68 @@
     };
 
     const fetchLastBuildParams = async function() {
-        try {
-            const params = {
-                buildId: buildId,
-                buildNumber: Number.parseInt(buildNumber),
-            };
-            const response = await fetch("/api/v1/jenkins/params", {
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                method: "POST",
-                body: JSON.stringify(params),
-            });
+        const params = {
+            buildId: buildId,
+            buildNumber: Number.parseInt(buildNumber),
+        };
+        const response = await fetch("/api/v1/jenkins/params", {
+            headers: {
+                "Content-Type": "application/json",
+            },
+            method: "POST",
+            body: JSON.stringify(params),
+        });
 
-            const json = await response.json();
-            if (json.status != "ok") {
-                throw json;
-            }
-
-            return json.response.parameters;
-
-        } catch (error) {
-            if (error?.status === "error") {
-                sendMessage(
-                    "error",
-                    `API Error when fetching build parameters.\nMessage: ${error.response.arguments[0]}`
-                );
-            } else {
-                sendMessage(
-                    "error",
-                    "A backend error occurred during parameter fetch"
-                );
-                console.log(error);
-            }
+        const json = await response.json();
+        if (json.status != "ok") {
+            throw new Error(json.response.arguments[0]);
         }
+
+        return json.response.parameters;
     };
 
     const getCloneTargets = async function(testId) {
-        try {
-            const params = {
-                testId: testId,
-            };
-            let qs = queryString.stringify(params);
-            const response = await fetch("/api/v1/jenkins/clone/targets?" + qs);
+        const params = {
+            testId: testId,
+        };
+        let qs = queryString.stringify(params);
+        const response = await fetch("/api/v1/jenkins/clone/targets?" + qs);
 
-            const json = await response.json();
-            if (json.status != "ok") {
-                throw json;
-            }
-
-            return json.response.targets;
-
-        } catch (error) {
-            if (error?.status === "error") {
-                sendMessage(
-                    "error",
-                    `API Error when fetching clone targets.\nMessage: ${error.response.arguments[0]}`
-                );
-            } else {
-                sendMessage(
-                    "error",
-                    "A backend error occurred during clone target fetch"
-                );
-                console.log(error);
-            }
+        const json = await response.json();
+        if (json.status != "ok") {
+            throw new Error(json.response.arguments[0]);
         }
+
+        return json.response.targets;
+    };
+
+    /**
+     * 
+     * @param {{
+     * args: {
+     *  currentTestId: string,
+     *  newName: string,
+     *  target: string,
+     *  group: string,
+     *  advancedSettings: boolean | { [string]: string },
+     * }
+     * }} state
+     */
+    const cloneJob = async function(state) {
+        const response = await fetch("/api/v1/jenkins/clone/create", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(state.args),
+        });
+
+        const json = await response.json();
+        if (json.status != "ok") {
+            throw new Error(json.response.arguments[0]);
+        }
+
+        return json.response;
     };
 
 

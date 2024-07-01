@@ -139,9 +139,9 @@
             setState(states.INIT_RUNS);
         } catch (error) {
             if (error?.exception) {
-                sendMessage("error", `Failed fetching test info: ${error.exception}\n${error.arguments.join(" ")}`);
+                sendMessage("error", `Failed fetching test info: ${error.exception}\n${error.arguments.join(" ")}`, "TestRuns::fetchTestInfo");
             } else if (error instanceof Error) {
-                sendMessage("error", error.message);
+                sendMessage("error", error.message, "TestRuns::fetchTestInfo");
             }
             setState(states.FETCH_TEST_INFO_FAILED);
         }
@@ -170,9 +170,9 @@
             }
         } catch (error) {
             if (error?.exception) {
-                sendMessage("error", `Failed fetching runs: ${error.exception}\n${error.arguments.join(" ")}`);
+                sendMessage("error", `Failed fetching runs: ${error.exception}\n${error.arguments.join(" ")}`, "TestRuns::fetchTestRuns");
             } else if (error instanceof Error) {
-                sendMessage("error", error.message);
+                sendMessage("error", error.message, "TestRuns::fetchTestRuns");
             }
             setState(states.FETCH_FAILED);
         }
@@ -213,11 +213,11 @@
             })
         });
         if (response.status != 200) {
-            sendMessage("error", "Failed adjusting plugin for this test");
+            sendMessage("error", "Failed adjusting plugin for this test", "TestRuns::handlePluginFixup");
         }
         let json = await response.json();
         if (json.status != "ok") {
-            sendMessage("error", "Failed adjusting plugin for this test");
+            sendMessage("error", "Failed adjusting plugin for this test", "TestRuns::handlePluginFixup");
             console.log(json);
         }
         pluginFixed = true;
@@ -239,7 +239,7 @@
         });        
         
         if (response.status != 200) {
-            sendMessage("error", "Failed to ignore runs for this test");
+            sendMessage("error", "Failed to ignore runs for this test", "TestRuns::handleIgnoreRuns");
             return;
         }
 
@@ -249,11 +249,11 @@
                 sendMessage("error", "Failed to ignore runs for this test");
                 console.log(json);
             }
-            sendMessage("success", `Runs successfully ignored. Affected amount: ${json.response.affectedJobs}`);
+            sendMessage("success", `Runs successfully ignored. Affected amount: ${json.response.affectedJobs}`, "TestRuns::handleIgnoreRuns");
             fetchTestRuns();
             dispatch("batchIgnoreDone");
         } catch(e) {
-            sendMessage("error", "Error parsing response json, check console for details.");
+            sendMessage("error", "Error parsing response json, check console for details.", "TestRuns::handleIgnoreRuns");
             console.log(e);
         }
     };

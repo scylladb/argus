@@ -18,11 +18,11 @@
 
     const handleSubmitNewTeam = async function() {
         if (!newTeamName) {
-            sendMessage("error", "Team name cannot be empty!");
+            sendMessage("error", "Team name cannot be empty!", "TeamCreateForm::handleSubmitNewTeam");
             return;
         }
         if (!selectedUsers) {
-            sendMessage("error", "No members selected");
+            sendMessage("error", "No members selected", "TeamCreateForm::handleSubmitNewTeam");
             return;
         }
         let members = selectedUsers.map(u => u.user_id);
@@ -43,7 +43,7 @@
             }
             const json: RawTeamCreateResponse = await response.json();
             if (json.status === "ok") {
-                sendMessage("success", "Team created!");
+                sendMessage("success", "Team created!", "TeamCreateForm::handleSubmitNewTeam");
                 dispatch("teamCreated", json);
                 newTeamName = "";
                 selectedUsers = undefined;
@@ -52,7 +52,7 @@
             }
         } catch (err) {
             if (err instanceof TeamManagerAPIError) {
-                sendMessage("error", `Failed to create a team!\nAPI Error: ${err.exception}`);
+                sendMessage("error", `Failed to create a team!\nAPI Error: ${err.exception}`, "TeamCreateForm::handleSubmitNewTeam");
                 return;
             }
             console.log(err);

@@ -37,12 +37,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error when fetching settings.\nMessage: ${error.response.arguments[0]}`
+                    `API Error when fetching settings.\nMessage: ${error.response.arguments[0]}`,
+                    "JobConfigureModal::fetchOldJobSettings"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during settings fetch"
+                    "A backend error occurred during settings fetch",
+                    "JobConfigureModal::fetchOldJobSettings"
                 );
                 console.log(error);
             }
@@ -76,12 +78,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error when validating settings.\nMessage: ${error.response.arguments[0]}`
+                    `API Error when validating settings.\nMessage: ${error.response.arguments[0]}`,
+                    "JobConfigureModal::handleValidation"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during settings validation"
+                    "A backend error occurred during settings validation",
+                    "JobConfigureModal::handleValidation"
                 );
                 console.log(error);
             }
@@ -109,7 +113,7 @@
                 throw json;
             }
 
-            sendMessage("success", `Settings changed successfuly for job ${buildId}!`);
+            sendMessage("success", `Settings changed successfuly for job ${buildId}!`, "JobConfigureModal::handleSettingsChange");
             dispatch("settingsFinished");
 
             return json.response;
@@ -119,12 +123,14 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error when fetching settings.\nMessage: ${error.response.arguments[0]}`
+                    `API Error when fetching settings.\nMessage: ${error.response.arguments[0]}`,
+                    "JobConfigureModal::handleSettingsChange"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during settings fetch"
+                    "A backend error occurred during settings fetch",
+                    "JobConfigureModal::handleSettingsChange"
                 );
                 console.log(error);
             }

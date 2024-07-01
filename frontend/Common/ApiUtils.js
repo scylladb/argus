@@ -19,12 +19,14 @@ export const apiMethodCall = async function (endpoint, body, method = "POST") {
         if (error?.status === "error") {
             sendMessage(
                 "error",
-                `API Error.\nMessage: ${error.response.arguments[0]}`
+                `API Error.\nMessage: ${error.response.arguments[0]}`,
+                "apiMethodCall"
             );
         } else {
             sendMessage(
                 "error",
-                "Unhandled API Error occured. \nCheck console for details."
+                "Unhandled API Error occured. \nCheck console for details.",
+                "apiMethodCall"
             );
             console.log(error);
         }
