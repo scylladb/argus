@@ -1,0 +1,18 @@
+api_address: 127.0.0.1
+api_doc_dir: /opt/scylladb/api/api-doc/
+api_ui_dir: /opt/scylladb/swagger-ui/dist/
+authenticator: org.apache.cassandra.auth.PasswordAuthenticator
+authorizer: org.apache.cassandra.auth.CassandraAuthorizer
+batch_size_fail_threshold_in_kb: 1024
+batch_size_warn_threshold_in_kb: 128
+cluster_name: argus
+commitlog_segment_size_in_mb: 32
+experimental: true
+num_tokens: 256
+saslauthd_socket_path: /run/saslauthd/mux
+developer_mode: true
+consistent_cluster_management: true
+force_schema_commit_log: true
+experimental_features:
+  - alternator-streams
+  - udf
