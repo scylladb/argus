@@ -1,0 +1,19 @@
+services:
+  alpha:
+    image: "scylladb/scylla:5.4.6"
+    networks:
+      scylla_bridge:
+        ipv4_address: 172.18.0.2
+        aliases:
+          - argus-alpha
+    command: --smp 1 --overprovisioned 1 --io-setup 0
+    volumes:
+      - ./dev-db/alpha-data:/var/lib/scylla/data:rw
+      - ./dev-db/alpha-config:/etc/scylla:rw
+networks:
+  scylla_bridge:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.18.0.0/24
+          gateway: 172.18.0.1
