@@ -1,10 +1,12 @@
 <script>
     import { createEventDispatcher } from "svelte";
+    import Color from "color";
     import Fa from "svelte-fa";
     import { faGithub } from "@fortawesome/free-brands-svg-icons";
     import {
         faCheckCircle,
         faDotCircle,
+        faExternalLinkSquareAlt,
         faTrash,
     } from "@fortawesome/free-solid-svg-icons";
     import { sendMessage } from "../Stores/AlertStore";
@@ -12,6 +14,7 @@
     import { timestampToISODate } from "../Common/DateUtils";
     import { apiMethodCall } from "../Common/ApiUtils";
     import { determineLuma } from "../Common/TextUtils";
+    import { stateEncoder } from "../Common/StateManagement";
 
     const dispatch = createEventDispatcher();
     let users = {};
@@ -49,7 +52,31 @@
     export let aggregated = false;
 
     let deleting = false;
+    let showRuns = false;
     let issueState = issue.state;
+
+    let resolvedRuns;
+
+
+    const resolveRuns = async function(runs) {
+        if (resolvedRuns) return resolvedRuns;
+        let response = await fetch("/api/v1/get_runs_by_test_id_run_id",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(runs.map(v => [v.test_id, v.run_id]))
+            }
+        );
+
+        let data = await response.json();
+        if (data.status !== "ok") {
+            throw new Error(data.response.arguments[0]);
+        }
+        resolvedRuns = data.response.runs;
+        return data.response.runs;
+    };
 
     const fetchGithubToken = async function() {
         let tokenRequest = await apiMethodCall("/api/v1/profile/github/token", undefined, "GET");
@@ -160,12 +187,15 @@
                 </div>
                 <div class="ms-2 me-2">
                     {#each issueState.labels as label (label.id)}
-                        <div
-                            class="d-inline-block align-items-center me-1 px-2 rounded-pill label-text"
-                            style="color: {determineLuma(label.color) ? '#ffffff' : 'black'}; background-color: #{label.color};"
+                        <button
+                            class="align-items-center me-1 px-2 label-text border border-dark cursor-pointer"
+                            style="color: {Color(`#${label.color}`).isDark() ? 'white' : 'black'}; background-color: #{label.color};"
+                            on:click={() => {
+                                dispatch("labelClick", label);
+                            }}
                         >
                             <div>{label.name}</div>
-                        </div>
+                        </button>
                     {/each}
                 </div>
             {:catch error}
@@ -214,17 +244,64 @@
                     </div>
                 {/if}
                 {#if aggregated}
-                    <div class="d-flex justify-content-end">
-                        <div class="ms-1">Runs:</div>
-                        {#each issue.runs as run, idx}
-                            <a class="ms-1" href="/test/{run.test_id}/runs?additionalRuns[]={run.run_id}">[{idx + 1}]</a>
-                        {/each}
+                    <div class="text-end my-2">
+                        <button class="btn btn-primary" on:click={() => (showRuns = true)}>View {issue.runs.length} runs</button>
                     </div>
                 {/if}
             </div>
         </div>
     </div>
 </div>
+
+{#if showRuns}
+    <div class="issue-run-list-modal">
+        <div class="d-flex align-items-center justify-content-center p-4">
+            <div class="rounded bg-white p-4 h-50">
+                <div class="mb-2 d-flex border-bottom pb-2">
+                    <h5>Runs for <span class="fw-bold">{issue.title}</span></h5>
+                    <div class="ms-auto">
+                        <button 
+                            class="btn btn-close"
+                            on:click={() => {
+                                showRuns = false;
+                            }}
+                        ></button>
+                    </div>
+                </div>
+                <div>
+                </div>
+                    {#await resolveRuns(issue.runs)}
+                        <div class="mb-2 text-center p-2">
+                            <span class="spinner-border spinner-border-sm"></span> Loading runs...
+                        </div>
+                        <div class="list-group mb-2">
+                            {#each issue.runs as run, idx}
+                                <a class="list-group-item list-group-item-action" href="/test/{run.test_id}/runs?additionalRuns[]={run.run_id}"><Fa icon={faExternalLinkSquareAlt} /> Run#{idx+1}</a>
+                            {/each}
+                        </div>
+                    {:then resolved}
+                        <div class="list-group mb-2">
+                            {#each issue.runs as run, idx}
+                                <a class="list-group-item list-group-item-action" href="/test/{run.test_id}/runs?additionalRuns[]={run.run_id}"><Fa icon={faExternalLinkSquareAlt} /> {resolved[run.run_id].build_id}#{resolved[run.run_id].build_number}</a>
+                            {/each}
+                        </div>
+                    {:catch error}
+                        <div class="alert alert-danger mb-2">
+                            {error.message}
+                        </div>
+                        <div class="list-group mb-2">
+                            {#each issue.runs as run, idx}
+                                <a class="list-group-item list-group-item-action" href="/test/{run.test_id}/runs?additionalRuns[]={run.run_id}"><Fa icon={faExternalLinkSquareAlt} /> Run#{idx+1}</a>
+                            {/each}
+                        </div>
+                    {/await}
+                <div>
+                    <a class="w-100 btn btn-primary w-75 me-1" href="/workspace?state={stateEncoder([...new Set(issue.runs.map(run => run.test_id))])}">Investigate selected <Fa icon={faExternalLinkSquareAlt} /></a>
+                </div>
+            </div>
+        </div>
+    </div>
+{/if}
 
 <div class="modal" tabindex="-1" id="modalIssueConfirmDelete-{issue.id}">
     <div class="modal-dialog">
@@ -268,6 +345,12 @@
     .label-text {
         font-size: 0.9em;
         font-weight: 500;
+        border-radius: 12px;
+    }
+
+    .label-text:hover {
+        background-color: black !important;
+        color: white !important;
     }
 
     .issue-open {
@@ -280,5 +363,22 @@
         background-color: #8256d0;
     }
 
+    .h-50 {
+        width: 50%;
+    }
 
+    .cursor-pointer {
+        cursor: pointer;
+    }
+
+    .issue-run-list-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        overflow-y: scroll;
+        background-color: rgba(0, 0, 0, 0.55);
+        z-index: 9999;
+    }
 </style>

@@ -9,6 +9,6 @@ let decodedState = state ? Base64.decode(state) : "{}";
 const app = new TestRunsPanel({
     target: document.querySelector("div#testRunsBreakout"),
     props: {
-        test_runs: JSON.parse(decodedState)
+        testRuns: JSON.parse(decodedState)
     }
 });
