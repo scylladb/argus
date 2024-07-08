@@ -4,7 +4,7 @@
     import { newIssueDestinations } from "../Common/IssueDestinations";
     import GithubIssue from "./GithubIssue.svelte";
     import { sendMessage } from "../Stores/AlertStore";
-    import { faCopy } from "@fortawesome/free-solid-svg-icons";
+    import { faChevronDown, faChevronUp, faCopy } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
     import Color from "color";
     export let id = "";
@@ -16,6 +16,7 @@
     let newIssueUrl = "";
     let issues = [];
     let fetching = false;
+    let showAllLabels = false;
     const fetchIssues = async function () {
         issues = [];
         fetching = true;
@@ -296,21 +297,26 @@
                 </div>
             </div>
             <div class="row">
-                <div class="d-flex p-2 bg-dark rounded shadow-sm flex-wrap">
-                    {#each availableLabels as label}
-                        <button 
-                            class="ms-2 btn btn-sm btn-secondary m-1" 
-                            style="border-color: #{label.color}; color: #{label.color}; background-color: {labelActive(label.id, selectedLabels) ? Color(`#${label.color}`).darken(0.75) : "rgba(1,1,1,0)"}"
-                            on:click={() => handleLabelClick(label)}
-                        >
-                            {label.name}
-                        </button>
-                    {/each}
+                <div class="rounded border p-2 bg-light-one">
+                    <div role="button" tabindex="0" class="mb-1 w-100" on:keypress={() => (showAllLabels = !showAllLabels)} on:click={() => (showAllLabels = !showAllLabels)}>All Labels <Fa icon={showAllLabels ? faChevronUp : faChevronDown}/></div>
+                    <div class="collapse" class:show={showAllLabels}>
+                        <div class="d-flex p-2 bg-dark rounded shadow-sm flex-wrap">
+                            {#each availableLabels as label}
+                                <button 
+                                    class="ms-2 btn btn-sm btn-secondary m-1" 
+                                    style="border-color: #{label.color}; color: #{label.color}; background-color: {labelActive(label.id, selectedLabels) ? Color(`#${label.color}`).darken(0.75) : "rgba(1,1,1,0)"}"
+                                    on:click={() => handleLabelClick(label)}
+                                >
+                                    {label.name}
+                                </button>
+                            {/each}
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="row">
                 {#each sortedIssues[currentPage] ?? [] as issue (issue.id)}
-                    <GithubIssue bind:issue={issue} aggregated={aggregateByIssue} deleteEnabled={!submitDisabled} on:issueDeleted={fetchIssues} on:issueStateUpdate={onStateUpdate}/>
+                    <GithubIssue bind:issue={issue} aggregated={aggregateByIssue} deleteEnabled={!submitDisabled} on:issueDeleted={fetchIssues} on:issueStateUpdate={onStateUpdate} on:labelClick={(e) => handleLabelClick(e.detail)}/>
                 {/each}
             </div>
             <div class="d-flex ">

@@ -1,4 +1,6 @@
+from collections import defaultdict
 from datetime import datetime, timedelta
+from functools import reduce
 import json
 import logging
 import re
@@ -409,6 +411,25 @@ class TestRunService:
         else:
             response = [dict(issue.items()) for issue in all_issues]
         return response
+
+    def resolve_run_build_id_and_number_multiple(self, runs: list[tuple[UUID, UUID]]) -> dict[UUID, dict[str, Any]]:
+        test_ids = [r[0] for r in runs]
+        all_tests: list = []
+        for id_slice in chunk(test_ids):
+            all_tests.extend(ArgusTest.filter(id__in=id_slice).all())
+
+        tests: dict[str, ArgusTest] = {str(t.id): t for t in all_tests}
+        runs_by_plugin = reduce(lambda acc, val: acc[tests[val[0]].plugin_name].append(val[1]) or acc, runs, defaultdict(list))
+        all_runs = {}
+        for plugin, run_ids in runs_by_plugin.items():
+            model = AVAILABLE_PLUGINS.get(plugin).model
+            model_runs = []
+            for run_id in run_ids:
+                model_runs.append(model.filter(id=run_id).only(["build_id", "start_time", "build_job_url", "id", "test_id"]).get())
+            all_runs.update({ str(run["id"]): {**run, "build_number": get_build_number(run["build_job_url"])} for run in model_runs })
+
+        return all_runs
+
 
     def delete_github_issue(self, issue_id: UUID) -> dict:
         issue: ArgusGithubIssue = ArgusGithubIssue.get(id=issue_id)

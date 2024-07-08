@@ -289,6 +289,22 @@ def ignore_jobs():
     }
 
 
+@bp.route("/get_runs_by_test_id_run_id", methods=["POST"])
+@api_login_required
+def get_runs_by_test_id_run_id():
+    payload: list[tuple[UUID, UUID]] = get_payload(request)
+    service = TestRunService()
+
+    result = service.resolve_run_build_id_and_number_multiple(payload)
+
+    return {
+        "status": "ok",
+        "response": {
+            "runs": result
+        }
+    }
+
+
 @bp.route("/jenkins/params", methods=["POST"])
 @api_login_required
 def get_jenkins_job_params():
