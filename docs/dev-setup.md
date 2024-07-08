@@ -141,7 +141,7 @@ FLASK_DEBUG=1 FLASK_ENV=development FLASK_APP=argus_backend:argus_app poetry run
 #### Get sample data
 1. From S3
 ```bash
-aws s3 cp s3:....  # todo
+aws s3 cp s3://argus-utilities/sample_data.tar.zst .
 ```
 2. From prod db
    1. Configure prod db (setup argus.local.yaml) by creating a ssh tunnel:
@@ -157,7 +157,7 @@ aws s3 cp s3:....  # todo
       - 127.0.0.12
       # get db details from the tribe
    ```
-Modify `release` variable in `dev-db/export_data.py` to your need.
+Modify `release` variable in `dev-db/export_data.py` and glob paths to your need.
 Run multiple times to download all the releases you need.
 ```bash
 python dev-db/export_data.py
