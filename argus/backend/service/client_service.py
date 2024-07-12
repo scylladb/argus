@@ -1,5 +1,6 @@
 from uuid import UUID
 from argus.backend.db import ScyllaCluster
+from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS
 from argus.backend.util.enums import TestStatus
@@ -69,3 +70,20 @@ class ClientService:
         run.save()
 
         return "Finalized"
+
+    def submit_results(self, run_type: str, run_id: str, results: dict) -> str:
+        model = self.get_model(run_type)
+        run = model.load_test_run(UUID(run_id))
+        ArgusGenericResultMetadata(test_id=run.test_id, **results["meta"]).save()
+        if results.get("sut_timestamp", 0) == 0:
+            results["sut_timestamp"] = run.sut_timestamp()  # automatic sut_timestamp
+        table_name = results["meta"]["name"]
+        sut_timestamp = results["sut_timestamp"]
+        for cell in results["results"]:
+            ArgusGenericResultData(test_id=run.test_id,
+                                   run_id=run.id,
+                                   name=table_name,
+                                   sut_timestamp=sut_timestamp,
+                                   **cell
+                                   ).save()
+        return "Submitted"

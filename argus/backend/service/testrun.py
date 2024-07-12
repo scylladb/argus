@@ -13,6 +13,7 @@ from flask import g
 from cassandra.query import BatchStatement, ConsistencyLevel
 from cassandra.cqlengine.query import BatchQuery
 from argus.backend.db import ScyllaCluster
+from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData
 
 from argus.backend.models.web import (
     ArgusEvent,
@@ -305,6 +306,24 @@ class TestRunService:
             for event in all_events
         }
         return response
+
+    def fetch_results(self, test_id: UUID, run_id: UUID) -> dict:
+        query_fields = ["column", "row", "value", "status"]
+        tables_meta = ArgusGenericResultMetadata.filter(test_id=test_id)
+        tables = []
+        for table in tables_meta:
+            cells = ArgusGenericResultData.objects.filter(test_id=test_id, run_id=run_id, name=table.name).only(query_fields)
+            if not cells:
+                continue
+            tables.append({'meta': {
+                'name': table.name,
+                'description': table.description,
+                'columns_meta': table.columns_meta,
+                'rows_meta': table.rows_meta
+            },
+                'cells': [{k:v for k,v in cell.items() if k in query_fields} for cell in cells]})
+
+        return tables
 
     def submit_github_issue(self, issue_url: str, test_id: UUID, run_id: UUID):
         user_tokens = UserOauthToken.filter(user_id=g.user.id).all()
