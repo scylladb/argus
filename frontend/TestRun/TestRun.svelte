@@ -13,6 +13,7 @@
         faRefresh,
         faRssSquare,
         faSpider,
+        faTable,
         faTimes,
     } from "@fortawesome/free-solid-svg-icons";
     import ResourcesInfo from "./ResourcesInfo.svelte";
@@ -35,6 +36,7 @@
     import PackagesInfo from "./PackagesInfo.svelte";
     import queryString from "query-string";
     import JUnitResults from "./jUnitResults.svelte";
+    import ResultsTab from "./ResultsTab.svelte";
     export let runId = "";
     export let buildNumber = -1;
     export let testInfo = {};
@@ -42,6 +44,7 @@
     let testRun = undefined;
     let runRefreshInterval;
     let activityOpen = false;
+    let resultsOpen = false;
     let eventsOpen = false;
     let commentsOpen = false;
     let issuesOpen = false;
@@ -224,6 +227,16 @@
                     {/if}
                     <button
                         class="nav-link"
+                        id="nav-results-tab-{runId}"
+                        data-bs-toggle="tab"
+                        data-bs-target="#nav-results-{runId}"
+                        type="button"
+                        on:click={() => (resultsOpen = true)}
+                        role="tab"
+                        ><Fa icon={faTable}/> Results</button
+                    >
+                    <button
+                        class="nav-link"
                         id="nav-events-tab-{runId}"
                         data-bs-toggle="tab"
                         data-bs-target="#nav-events-{runId}"
@@ -370,6 +383,15 @@
                 >
                     {#if activityOpen}
                         <ActivityTab id={runId} />
+                    {/if}
+                </div>
+                <div
+                    class="tab-pane fade"
+                    id="nav-results-{runId}"
+                    role="tabpanel"
+                >
+                    {#if resultsOpen}
+                        <ResultsTab id={runId} test_id={testInfo.test.id} />
                     {/if}
                 </div>
             </div>

@@ -249,6 +249,13 @@ class SCTTestRun(PluginModelBase):
 
         self._collect_event_message(event, event_message)
 
+    def sut_timestamp(self) -> float:
+        """converts scylla-server date to timestamp and adds revision in subseconds precision to diffirentiate
+        scylla versions from the same day. It's not perfect, but we don't know exact version time."""
+        scylla_package = [package for package in self.packages if package.name == "scylla-server"][0]
+        return (datetime.strptime(scylla_package.date, '%Y%m%d').timestamp()
+                + int(scylla_package.revision_id, 16) % 1000000 / 1000000)
+
 
 class SCTJunitReports(Model):
     test_id = columns.UUID(primary_key=True, partition_key=True, required=True)

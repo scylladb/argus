@@ -8,8 +8,8 @@ services:
           - argus-alpha
     command: --smp 1 --overprovisioned 1 --io-setup 0
     volumes:
-      - ./dev-db/alpha-data:/var/lib/scylla/data:rw
-      - ./dev-db/alpha-config:/etc/scylla:rw
+      - ./alpha-data:/var/lib/scylla/data:rw
+      - ./alpha-config:/etc/scylla:rw
 networks:
   scylla_bridge:
     driver: bridge

@@ -90,3 +90,14 @@ def run_finalize(run_type: str, run_id: str):
         "status": "ok",
         "response": result
     }
+
+
+@bp.route("/testrun/<string:run_type>/<string:run_id>/submit_results", methods=["POST"])
+@api_login_required
+def submit_results(run_type: str, run_id: str):
+    payload = get_payload(request)
+    result = ClientService().submit_results(run_type=run_type, run_id=run_id, results=payload)
+    return {
+        "status": "ok",
+        "response": result
+    }

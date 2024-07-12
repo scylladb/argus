@@ -213,6 +213,8 @@ class PluginModelBase(Model):
     def finish_run(self, payload: dict = None):
         raise NotImplementedError()
 
+    def sut_timestamp(self) -> float:
+        raise NotImplementedError()
 
 class PluginInfoBase:
     # pylint: disable=too-few-public-methods

@@ -63,6 +63,17 @@ def test_run_activity(run_id: str):
     }
 
 
+
+@bp.route("/run/<string:test_id>/<string:run_id>/fetch_results", methods=["GET"])
+@api_login_required
+def fetch_results(test_id: str, run_id: str):
+    tables = TestRunService().fetch_results(test_id=UUID(test_id), run_id=UUID(run_id))
+    return {
+        "status": "ok",
+        "tables": tables
+    }
+
+
 @bp.route("/test/<string:test_id>/run/<string:run_id>/status/set", methods=["POST"])
 @api_login_required
 def set_testrun_status(test_id: str, run_id: str):

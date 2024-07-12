@@ -7,6 +7,7 @@ from uuid import UUID
 import requests
 
 from argus.backend.util.enums import TestStatus
+from argus.client.generic_result import GenericResultTable
 from argus.client.sct.types import LogLink
 
 JSON = dict[str, Any] | list[Any] | int | str | float | bool | Type[None]
@@ -28,6 +29,8 @@ class ArgusClient:
         SET_STATUS = "/testrun/$type/$id/set_status"
         SET_PRODUCT_VERSION = "/testrun/$type/$id/update_product_version"
         SUBMIT_LOGS = "/testrun/$type/$id/logs/submit"
+        SUBMIT_RESULTS = "/testrun/$type/$id/submit_results"
+        FETCH_RESULTS = "/testrun/$type/$id/fetch_results"
         FINALIZE = "/testrun/$type/$id/finalize"
 
     def __init__(self, auth_token: str, base_url: str, api_version="v1") -> None:
@@ -190,3 +193,16 @@ class ArgusClient:
             }
         )
         self.check_response(response)
+
+    def submit_results(self, result: GenericResultTable) -> None:
+        response = self.post(
+            endpoint=self.Routes.SUBMIT_RESULTS,
+            location_params={"type": self.test_type, "id": str(self.run_id)},
+            body={
+                **self.generic_body,
+                "run_id": str(self.run_id),
+                ** result.as_dict(),
+            }
+        )
+        self.check_response(response)
+
