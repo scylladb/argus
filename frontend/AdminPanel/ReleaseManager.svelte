@@ -26,6 +26,9 @@
     let moving = false;
     let fetching = false;
 
+    let groups = [];
+    let tests = [];
+
     const fetchReleases = async function () {
         try {
             fetching = true;
@@ -73,6 +76,7 @@
             );
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
+                groups = apiJson.response;
                 return Promise.resolve(apiJson.response);
             } else {
                 return Promise.reject(new Error(apiJson.message));
@@ -93,6 +97,7 @@
             );
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
+                tests = apiJson.response;
                 return Promise.resolve(apiJson.response);
             } else {
                 return Promise.reject(new Error(apiJson.message));
@@ -297,6 +302,16 @@
         }
     };
 
+    const handleVisibilityToggle = async function(entity, type, state) {
+        let result = await apiMethodCall(
+            `/admin/api/v1/release/${type}/state/toggle`,
+            {
+                entityId: entity,
+                state: state,
+            }
+        );
+    };
+
     const handleReleasePerpetualityChange = async function (e) {
         let result = await apiMethodCall(
             "/admin/api/v1/release/set_perpetual",
@@ -466,6 +481,9 @@
                                     groups={releaseGroups}
                                     on:groupDelete={handleGroupDelete}
                                     on:groupUpdate={handleGroupUpdate}
+                                    on:visibilityToggleGroup={(e) => {
+                                        handleVisibilityToggle(e.detail.groupId, "group", e.detail.enabled);
+                                    }}
                                 />
                             </li>
                         {/each}
@@ -519,6 +537,9 @@
                                         groups={releaseGroups}
                                         on:testUpdate={handleTestUpdate}
                                         on:testDelete={handleTestDelete}
+                                        on:visibilityToggleTest={(e) => {
+                                            handleVisibilityToggle(e.detail.testId, "test", e.detail.enabled);
+                                        }}
                                     />
                                 {/each}
                             </ul>

@@ -44,6 +44,20 @@ class ReleaseManagerService:
     def get_tests(self, group_id: UUID) -> list[ArgusTest]:
         return list(ArgusTest.filter(group_id=group_id).all())
 
+    def toggle_test_enabled(self, test_id: UUID, new_state: bool) -> bool:
+        test: ArgusTest = ArgusTest.get(id=test_id)
+        test.enabled = new_state
+        test.save()
+
+        return test
+
+    def toggle_group_enabled(self, group_id: UUID, new_state: bool) -> bool:
+        test: ArgusGroup = ArgusGroup.get(id=group_id)
+        test.enabled = new_state
+        test.save()
+
+        return test
+
     def create_release(self, release_name: str, pretty_name: str, perpetual: bool) -> ArgusRelease:
         try:
             release = ArgusRelease.get(name=release_name)

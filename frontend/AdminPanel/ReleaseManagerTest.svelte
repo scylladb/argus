@@ -26,6 +26,14 @@
         });
     };
 
+    const handleVisibilityToggle = function(e) {
+        e.stopPropagation();
+        dispatch("visibilityToggleTest", {
+            testId: test.id,
+            enabled: !test.enabled,
+        });
+    };
+
     const handleTestDelete = function () {
         editing = false;
         dispatch("testDelete", {
@@ -45,6 +53,11 @@
         <div class="text-muted text-small">{test.build_system_id}</div>
     </div>
     <div class="ms-auto">
+        <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" role="switch" bind:checked={test.enabled} on:click={handleVisibilityToggle}>
+        </div>
+    </div>
+    <div class="ms-2">
         <button
             class="btn btn-light"
             title="Edit"

@@ -32,6 +32,14 @@
         });
     };
 
+    const handleVisibilityToggle = function(e) {
+        e.stopPropagation();
+        dispatch("visibilityToggleGroup", {
+            groupId: group.id,
+            enabled: !group.enabled,
+        });
+    };
+
     onMount(() => {
         newGroupId = groups?.[0]?.id ?? "";
     });
@@ -44,6 +52,11 @@
         {/if}
     </div>
     <div class="ms-auto">
+        <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" role="switch" on:click={handleVisibilityToggle} bind:checked={group.enabled}>
+        </div>
+    </div>
+    <div class="ms-2">
         <button
             class="btn btn-light"
             title="Edit"
