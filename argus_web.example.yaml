@@ -31,14 +31,10 @@ GITHUB_REQUIRED_ORGANIZATIONS:
   # at least one is required for user to successfully authenticate
   - myorg
   - otherorg
-BUILD_SYSTEM_FILTERED_PREFIXES:
-  - prefixToExclude
 JENKINS_URL: https://your_jenkins_hostname
 JENKINS_USER: user
 JENKINS_API_TOKEN_NAME: Optional
 JENKINS_API_TOKEN: hex-token
-JENKINS_MONITORED_RELEASES:
-  - toplevel-folder-name
 
 EMAIL_SENDER: "qabot@scylladb.com"
 EMAIL_SENDER_USER: ""

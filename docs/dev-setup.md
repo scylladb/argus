@@ -47,50 +47,12 @@ GITHUB_CLIENT_SECRET: <>
 GITHUB_ACCESS_TOKEN: unknown
 # List of required organization names (Comment out to disable organization requirement)
 #GITHUB_REQUIRED_ORGANIZATIONS:
-BUILD_SYSTEM_FILTERED_PREFIXES:
-  - prefixToExclude
+
 JENKINS_URL: https://jenkins.scylladb.com
 JENKINS_USER: <your username>
 JENKINS_API_TOKEN_NAME: argus-dev
 JENKINS_API_TOKEN: <jenkins api token>
-JENKINS_MONITORED_RELEASES:
-  - scylla-master
-  - scylla-staging
-  - scylla-4.6
-  - scylla-5.0
-  - scylla-5.1
-  - scylla-5.2
-  - scylla-5.3
-  - scylla-5.4
-  - scylla-5.5
-  - scylla-6.0
-  - scylla-6.1
-  - scylla-6.2
-  - scylla-6.3
-  - scylla-6.4
-  - scylla-7.0
-  - manager-3.1
-  - manager-3.2
-  - manager-3.3
-  - scylla-operator/operator-master
-  - scylla-operator/operator-1.8
-  - scylla-operator/operator-1.9
-  - scylla-operator/operator-1.10
-  - scylla-operator/operator-1.11
-  - scylla-operator/operator-1.12
-  - scylla-operator/operator-1.13
-  - scylla-operator/operator-1.14
-  - scylla-operator/operator-1.15
-  - scylla-enterprise
-  - enterprise-2022.1
-  - enterprise-2022.2
-  - enterprise-2023.1
-  - enterprise-2023.2
-  - enterprise-2023.3
-  - enterprise-2024.1
-  - enterprise-2025.1
-  - enterprise-2026.1
-  - siren-tests
+
 
 EMAIL_SENDER: "qabot@scylladb.com"
 EMAIL_SENDER_USER: ""
