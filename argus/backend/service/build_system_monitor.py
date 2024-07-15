@@ -2,6 +2,7 @@ import logging
 from abc import ABC, abstractmethod
 import jenkins
 import click
+import re
 from flask import current_app
 from flask.cli import with_appcontext
 
@@ -13,12 +14,16 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ArgusTestsMonitor(ABC):
+    BUILD_SYSTEM_FILTERED_PREFIXES = [
+
+    ]
+
     def __init__(self) -> None:
         self._cluster = ScyllaCluster.get()
         self._existing_releases = list(ArgusRelease.all())
         self._existing_groups = list(ArgusGroup.all())
         self._existing_tests = list(ArgusTest.all())
-        self._filtered_groups: list[str] = current_app.config["BUILD_SYSTEM_FILTERED_PREFIXES"]
+        self._filtered_groups: list[str] = self.BUILD_SYSTEM_FILTERED_PREFIXES
 
     def create_release(self, release_name):
         # pylint: disable=no-self-use
@@ -68,17 +73,39 @@ class ArgusTestsMonitor(ABC):
 
 
 class JenkinsMonitor(ArgusTestsMonitor):
+
+    BUILD_SYSTEM_FILTERED_PREFIXES = [
+        "releng",
+    ]
+
+    JENKINS_MONITORED_RELEASES = [
+        r"^scylla-master$",
+        r"^scylla-staging$",
+        r"^scylla-\d+\.\d+$",
+        r"^manager-3.\d+$",
+        r"^scylla-operator/operator-master$",
+        r"^scylla-operator/operator-\d+.\d+$",
+        r"^scylla-enterprise$",
+        r"^enterprise-20\d{2}\.\d+$",
+        r"^siren-tests$",
+    ]
+
     def __init__(self) -> None:
         super().__init__()
         self._jenkins = jenkins.Jenkins(url=current_app.config["JENKINS_URL"],
                                         username=current_app.config["JENKINS_USER"],
                                         password=current_app.config["JENKINS_API_TOKEN"])
-        self._monitored_releases = current_app.config["JENKINS_MONITORED_RELEASES"]
+        self._monitored_releases = self.JENKINS_MONITORED_RELEASES
+
+    def _check_release_name(self, release_name: str):
+        return any(re.match(pattern, release_name, re.IGNORECASE) for pattern in self._monitored_releases)
 
     def collect(self):
         click.echo("Collecting new tests from jenkins")
         all_jobs = self._jenkins.get_all_jobs()
-        all_monitored_folders = [job for job in all_jobs if job["fullname"] in self._monitored_releases]
+        all_monitored_folders = [job for job in all_jobs if self._check_release_name(job["fullname"])]
+        LOGGER.info("Will collect %s", [f["fullname"] for f in all_monitored_folders])
+
         for release in all_monitored_folders:
             LOGGER.info("Processing release %s", release["name"])
             try:
