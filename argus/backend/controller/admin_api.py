@@ -261,3 +261,29 @@ def get_tests_for_group():
         "status": "ok",
         "response": tests
     }
+
+
+@bp.route("/release/test/state/toggle", methods=["POST"])
+@check_roles(UserRoles.Admin)
+@api_login_required
+def quick_toggle_test_enabled():
+    
+    payload = get_payload(request)
+    res = ReleaseManagerService().toggle_test_enabled(test_id=payload["entityId"], new_state=payload["state"])
+    return {
+        "status": "ok",
+        "response": res
+    }
+
+
+@bp.route("/release/group/state/toggle", methods=["POST"])
+@check_roles(UserRoles.Admin)
+@api_login_required
+def quick_toggle_group_enabled():
+    
+    payload = get_payload(request)
+    res = ReleaseManagerService().toggle_group_enabled(group_id=payload["entityId"], new_state=payload["state"])
+    return {
+        "status": "ok",
+        "response": res
+    }
