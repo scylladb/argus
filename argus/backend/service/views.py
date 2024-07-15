@@ -64,10 +64,14 @@ class UserViewService:
 
     def test_lookup(self, query: str):
         def facet_extraction(query: str) -> str:
-            extractor = re.compile(r"(?:(?P<name>(?:release|group)):(?P<value>\"?[\w\d\.\-]*\"?))")
+            extractor = re.compile(r"(?:(?P<name>(?:release|group|type)):(?P<value>\"?[\w\d\.\-]*\"?))")
             facets = re.findall(extractor, query)
 
             return (re.sub(extractor, "", query).strip(), facets)
+
+        def type_facet_filter(item: dict, key: str, facet_query: str):
+            entity_type: str = item[key]
+            return facet_query.lower() == entity_type
 
         def facet_filter(item: dict, key: str, facet_query: str):
             if entity := item.get(key):
@@ -77,16 +81,21 @@ class UserViewService:
 
         def facet_wrapper(query_func: Callable[[dict], bool], facet_query: str, facet_type: str) -> bool:
             def inner(item: dict, query: str):
-                return query_func(item, query) and facet_filter(item, facet_type, facet_query)
+                return query_func(item, query) and facet_funcs[facet_type](item, facet_type, facet_query)
             return inner
 
+        facet_funcs = {
+            "type": type_facet_filter,
+            "release": facet_filter,
+            "group": facet_filter,
+        }
 
         def index_searcher(item, query: str):
             name: str = item["pretty_name"] or item["name"]
             return unquote(query).lower() in name.lower() if query else True
 
 
-        supported_facets = ["release", "group"]
+        supported_facets = ["release", "group", "type"]
 
         text_query, facets = facet_extraction(query)
         search_func = index_searcher
