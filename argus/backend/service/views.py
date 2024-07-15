@@ -63,6 +63,15 @@ class UserViewService:
         return mapped
 
     def test_lookup(self, query: str):
+        def check_visibility(entity: dict):
+            if not entity["enabled"]:
+                return False
+            if entity.get("group") and not entity["group"]["enabled"]:
+                return False
+            if entity.get("release") and not entity["release"]["enabled"]:
+                return False
+            return True
+
         def facet_extraction(query: str) -> str:
             extractor = re.compile(r"(?:(?P<name>(?:release|group|type)):(?P<value>\"?[\w\d\.\-]*\"?))")
             facets = re.findall(extractor, query)
@@ -94,13 +103,10 @@ class UserViewService:
             name: str = item["pretty_name"] or item["name"]
             return unquote(query).lower() in name.lower() if query else True
 
-
-        supported_facets = ["release", "group", "type"]
-
         text_query, facets = facet_extraction(query)
         search_func = index_searcher
         for facet, value in facets:
-            if facet in supported_facets:
+            if facet in facet_funcs.keys():
                 search_func = facet_wrapper(query_func=search_func, facet_query=value, facet_type=facet)
 
 
@@ -117,7 +123,7 @@ class UserViewService:
 
         results = filter(partial(search_func, query=text_query), index)
 
-        return [{ "id": self.ADD_ALL_ID, "name": "Add all...", "type": "special" }, *list(results)]
+        return [{ "id": self.ADD_ALL_ID, "name": "Add all...", "type": "special" }, *list(res for res in results if check_visibility(res))]
 
     def update_view(self, view_id: str | UUID, update_data: ViewUpdateRequest) -> bool:
         view: ArgusUserView = ArgusUserView.get(id=view_id)
