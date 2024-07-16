@@ -13,7 +13,7 @@ from argus.backend.controller.client_api import bp as client_bp
 from argus.backend.controller.testrun_api import bp as testrun_bp
 from argus.backend.controller.team import bp as team_bp
 from argus.backend.controller.view_api import bp as view_bp
-from argus.backend.service.argus_service import ArgusService
+from argus.backend.service.argus_service import ArgusService, ScheduleUpdateRequest
 from argus.backend.service.user import UserService, api_login_required
 from argus.backend.service.stats import ReleaseStatsCollector
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, User, UserOauthToken
@@ -229,6 +229,8 @@ def release_schedules_submit():
         groups=payload["groups"],
         assignees=payload["assignees"],
         tag=payload["tag"],
+        comments=payload.get("comments"),
+        group_ids=payload.get("groupIds"),
     )
 
     return jsonify({
@@ -250,6 +252,27 @@ def release_schedules_delete():
     return jsonify({
         "status": "ok",
         "response": schedule_delete_result
+    })
+
+
+@bp.route("/release/schedules/update", methods=["POST"])
+@api_login_required
+def release_schedule_update():
+    payload = get_payload(request)
+    req = ScheduleUpdateRequest(**payload)
+    service = ArgusService()
+    update_result = service.update_schedule(
+        release_id=req.release_id,
+        schedule_id=req.schedule_id,
+        old_tests=req.old_tests,
+        new_tests=req.new_tests,
+        comments=req.comments,
+        assignee=req.assignee
+    )
+
+    return jsonify({
+        "status": "ok",
+        "response": update_result
     })
 
 

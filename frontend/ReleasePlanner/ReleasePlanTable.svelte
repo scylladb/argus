@@ -1,44 +1,39 @@
 <script>
     import Fa from "svelte-fa";
-    import { faCircle } from "@fortawesome/free-solid-svg-icons";
     import { createEventDispatcher, onDestroy, onMount } from "svelte";
     import { getPicture } from "../Common/UserUtils";
-    import { StatusCSSClassMap } from "../Common/TestStatus";
-    import Schedule from "./Schedule.svelte";
-    import CommentTableRow from "./CommentTableRow.svelte";
+    import { StatusBackgroundCSSClassMap } from "../Common/TestStatus";
+    import { subUnderscores, titleCase } from "../Common/TextUtils";
+    import { timestampToISODate } from "../Common/DateUtils";
+    import { faArrowDown, faArrowUp } from "@fortawesome/free-solid-svg-icons";
 
     export let schedules = [];
     export let users = {};
     export let plannerData = {};
     export let releaseData = {};
     export let clickedTests = {};
-    let selectedSchedule = "";
     let releaseStats;
     let releaseStatsRefreshInterval;
-    let autocompleteVersions = [];
 
-    const getAllComments = function () {
-        return plannerData.tests
-            .map((test) => {
-                return test.comment;
-            })
-            .filter((comment) => comment);
+
+    const loadCollapseState = function() {
+        return JSON.parse(window.localStorage.getItem(`releasePlanState-${releaseData.id}`)) || {};
     };
 
-    /**
-     *
-     * @param {Array<string>} autocompleteList
-     */
-    const uniqueAutocompleteTokens = function(autocompleteList) {
-        return autocompleteList.reduce((acc, val) => {
-            if (!acc.includes(val)) {
-                acc.push(val);
-            }
-            return acc;
-        }, []);
+    const toggleCollapse = function(collapseId, force = false, forcedState = false) {
+        if (force) {
+            collapseState[collapseId] = forcedState;
+        } else {
+            collapseState[collapseId] = !(collapseState[collapseId] || false);
+        }
+        window.localStorage.setItem(`releasePlanState-${releaseData.id}`, JSON.stringify(collapseState));
     };
 
-    let autocompleteComments = getAllComments();
+    const getCollapseState = function(collapseId, collapseState) {
+        return collapseState[collapseId] ?? false;
+    };
+
+    let collapseState = loadCollapseState();
 
     const fetchStats = async function () {
         let params = new URLSearchParams({
@@ -54,20 +49,6 @@
         releaseStats = json.response;
     };
 
-    const fetchVersions = async function() {
-        let response = await fetch(`/api/v1/release/${plannerData.release.id}/versions`);
-        if (response.status != 200) {
-            return Promise.reject("API Error");
-        }
-        let json = await response.json();
-        if (json.status !== "ok") {
-            return Promise.reject(json.exception);
-        }
-
-        autocompleteVersions = json.response;
-    };
-
-
     let schedulesByTest = {};
     const dispatch = createEventDispatcher();
 
@@ -76,6 +57,13 @@
             acc[test.id] = test;
             return acc;
         }, {});
+    };
+
+    const sortFunc = function(lhs, rhs, invert = false) {
+        let sign = invert ? -1 : 1;
+        if (lhs > rhs) return 1 * sign;
+        if (lhs < rhs) return -1 * sign;
+        if (lhs == rhs) return 0;
     };
 
     const sortSchedulesByTest = function (schedules) {
@@ -98,21 +86,22 @@
         return users[id];
     };
 
-    const onCellClick = function (test, group, schedule, cellIndex) {
-        if (
-            schedule &&
-            selectedSchedule == `${schedule.id}-${cellIndex}`
-        ) {
-            selectedSchedule = "";
-            return;
-        } else if (schedule) {
-            selectedSchedule = `${schedule.id}-${cellIndex}`;
-            return;
-        }
-        selectedSchedule = "";
-        dispatch("cellClick", {
+    const onTestClick = function (test) {
+        dispatch("testClick", {
             test: test,
-            group: group,
+        });
+    };
+
+    const onScheduledTestClick = function (schedule, test) {
+        dispatch("scheduledTestClick", {
+            schedule: schedule,
+            test: test,
+        });
+    };
+
+    const onSelectAllClick = function(tests) {
+        dispatch("selectAllClick", {
+            tests: tests,
         });
     };
 
@@ -120,7 +109,6 @@
 
     onMount(() => {
         fetchStats();
-        fetchVersions();
         releaseStatsRefreshInterval = setInterval(() => {
             fetchStats();
         }, 60 * 1000);
@@ -132,156 +120,111 @@
     });
 </script>
 
-<div class="my-2">
+<div class="my-2 bg-light-one p-2 shadow-sm rounded">
     {#if plannerData.release && releaseStats}
-        <table class="table border table-bordered table-hover">
-            <thead>
-                <th>Group</th>
-                <th>Test</th>
-                <th>Comment</th>
-                <th>Assignee</th>
-            </thead>
-            <tbody>
-                {#each Object.entries(plannerData.tests_by_group) as [groupName, tests] (groupName)}
-                    {#each tests as test, idx}
-                        <tr>
-                            {#if idx == 0}
-                                <td
-                                    class="group-cell fs-2 fw-bold align-middle"
-                                    rowspan={tests.length}
-                                >
-                                    {tests[0].pretty_group_name || groupName}
-                                </td>
-                            {/if}
-                            <td
-                                class="test-cell position-relative align-middle"
-                                class:table-success={clickedTests[
-                                    `${groupName}/${test.name}`
-                                ]}
-                                class:table-warning={schedulesByTest?.[
-                                    groupName
-                                ]?.[test.name]}
+        <div>
+            {#each Object.entries(plannerData.tests_by_group).sort((a, b) => sortFunc(a[0].toLowerCase(), b[0].toLowerCase())) as [groupName, tests] (groupName)}
+            {@const prettyName = tests[0].pretty_group_name}
+            {@const groupStats = releaseStats?.groups[tests[0].group_id]}
+                <div class="mb-2 rounded bg-white p-2">
+                    <div
+                        class="fw-bold align-items-center d-flex mb-2"
+                    >
+                        <div>{prettyName || groupName}</div>
+                        <div
+                            class:d-none={getCollapseState(`collapse-${groupStats.group.id}`, collapseState)}
+                            class:ms-auto={!getCollapseState(`collapse-${groupStats.group.id}`, collapseState)}
+                        >
+                            <button class="btn btn-dark btn-sm" on:click={() => onSelectAllClick(tests)}>Select All</button>
+                        </div>
+                        <div 
+                            class:ms-2={!getCollapseState(`collapse-${groupStats.group.id}`, collapseState)}
+                            class:ms-auto={getCollapseState(`collapse-${groupStats.group.id}`, collapseState)}
+                        >
+                            <button
+                                class="btn btn-sm"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#collapse-{groupStats.group.id}"
+                                on:click={() => toggleCollapse(`collapse-${groupStats.group.id}`)}
                             >
-                                <div class="d-flex align-items-between">
+                            {#if getCollapseState(`collapse-${groupStats.group.id}`, collapseState)}
+                                <Fa icon={faArrowDown}/>
+                            {:else}
+                                <Fa icon={faArrowUp}/>
+                            {/if}
+                            </button>
+                        </div>
+                    </div>
+                    <div class="collapse" class:show={!getCollapseState(`collapse-${groupStats.group.id}`, collapseState)} id="collapse-{groupStats.group.id}">
+                        <div class="bg-light-two rounded p-2 mb-2 d-flex flex-wrap">
+                        {#each tests as test (test.id)}
+                        {@const testStats = releaseStats?.["groups"]?.[test.group_id]?.["tests"]?.[test.id] ?? {}}
+                        {@const testSchedule = schedulesByTest?.[groupName]?.[test.name]}
+                                <div
+                                    class="rounded bg-main status-block m-1 d-flex flex-column overflow-hidden shadow-sm position-relative"
+                                    class:border-assigned={testSchedule}
+                                    role="button"
+                                    tabindex="0"
+                                    on:keypress={() => {
+                                        testSchedule ? onScheduledTestClick(testSchedule, test) : onTestClick(test);
+                                    }}
+                                    on:click={() => {
+                                        testSchedule ? onScheduledTestClick(testSchedule, test) : onTestClick(test);
+                                    }}
+                                >
                                     <div
-                                        class="border rounded p-1 px-2 cursor-pointer"
-                                        on:click={() => {
-                                            onCellClick(
-                                                test,
-                                                groupName,
-                                                schedulesByTest?.[groupName]?.[
-                                                    test.name
-                                                ],
-                                                idx
-                                            );
-                                        }}
+                                        class="{StatusBackgroundCSSClassMap[testStats.status]} text-center text-light p-1 border-bottom"
                                     >
-                                        <div class="d-flex align-items-center">
-                                            <div
-                                                class={StatusCSSClassMap[
-                                                    releaseStats?.["groups"]?.[
-                                                        test.group_id
-                                                    ]?.["tests"]?.[test.id]
-                                                        ?.status ?? "unknown"
-                                                ]}
-                                                title={releaseStats?.[
-                                                    "groups"
-                                                ]?.[test.group_id]?.["tests"]?.[
-                                                    test.id
-                                                ].status ?? "unknown / not run"}
-                                            >
-                                                <Fa icon={faCircle} />
-                                            </div>
-                                            <div class="ms-2">
-                                                {test.name}
+                                        {testStats.status == "unknown"
+                                            ? "Not run"
+                                            : subUnderscores(testStats.status).split(" ").map(v => titleCase(v)).join(" ")}
+                                        {#if clickedTests[test.id]}
+                                            <div class="text-tiny">Selected</div>
+                                        {/if}
+                                    </div>
+                                    <div class="d-flex flex-fill flex-column">
+                                        <div class="p-1 text-small d-flex align-items-center">
+                                            <div class="ms-1">{testStats.test.name}
+                                            {#if testStats.buildNumber}
+                                                - <span class="fw-bold">#{testStats.buildNumber}</span> <span class="text-muted">({timestampToISODate(testStats.start_time).split(" ")[0]})</span>
+                                            {/if}
                                             </div>
                                         </div>
+                                        <div class="text-end d-flex flex-fill align-items-end justify-content-end">
+                                            {#if testSchedule}
+                                                {#each testSchedule.assignees as assignee}
+                                                    {#if retrieveUser(assignee)}
+                                                        <div class="p-1" title={retrieveUser(assignee).full_name}>
+                                                            <span>{retrieveUser(assignee).full_name}</span>
+                                                            <img
+                                                                class="img-thumb"
+                                                                src={getPicture(retrieveUser(assignee).picture_id)}
+                                                                alt={retrieveUser(assignee).full_name}
+                                                            />
+                                                        </div>
+                                                    {/if}
+                                                {/each}
+                                            {:else}
+                                                <!-- Empty -->
+                                            {/if}
+                                        </div>
                                     </div>
-                                    {#if test.build_system_url}
-                                        <div class="ms-auto">
-                                            <a
-                                                href={test.build_system_url}
-                                                class="btn btn-sm btn-outline-dark"
-                                                target="_blank"
-                                            >
-                                                Jenkins URL
-                                            </a>
+                                    {#if test.comment}
+                                        <div class="border-top text-center">
+                                            <span class="text-muted text-small">{test.comment}</span>
                                         </div>
                                     {/if}
                                 </div>
-                                {#if `${schedulesByTest?.[groupName]?.[test.name]?.id}-${idx}` == selectedSchedule}
-                                    <Schedule
-                                        scheduleData={schedulesByTest[
-                                            groupName
-                                        ][test.name]}
-                                        {releaseData}
-                                        {users}
-                                        on:deleteSchedule
-                                        on:refreshSchedules
-                                        on:closeSchedule={(e) => {
-                                            selectedSchedule = "";
-                                        }}
-                                    />
-                                {/if}
-                            </td>
-                            <td>
-                                <CommentTableRow
-                                    bind:commentText={test.comment}
-                                    autocompleteList={uniqueAutocompleteTokens([...autocompleteVersions, ...autocompleteComments])}
-                                    release={releaseData.release.id}
-                                    group={test.group_id}
-                                    test={test.id}
-                                />
-                            </td>
-                            <td
-                                class:table-secondary={!schedulesByTest?.[
-                                    groupName
-                                ]?.[test.name]}
-                            >
-                                {#if schedulesByTest?.[groupName]?.[test.name]}
-                                    <div class="d-flex">
-                                        {#each schedulesByTest[groupName][test.name].assignees as assignee}
-                                            {#if retrieveUser(assignee)}
-                                                <div
-                                                    class="d-flex align-items-center border rounded mb-2 p-2 me-2"
-                                                >
-                                                    <img
-                                                        class="profile-thumbnail"
-                                                        src={getPicture(
-                                                            retrieveUser(
-                                                                assignee
-                                                            ).picture_id
-                                                        )}
-                                                        alt={retrieveUser(
-                                                            assignee
-                                                        ).full_name}
-                                                    />
-                                                    <div class="ms-2">
-                                                        {retrieveUser(assignee)
-                                                            .full_name}
-                                                        <div class="text-muted">
-                                                            {retrieveUser(
-                                                                assignee
-                                                            ).username}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            {/if}
-                                        {/each}
-                                    </div>
-                                {:else}
-                                    <!-- Empty -->
-                                {/if}
-                            </td>
-                        </tr>
-                    {/each}
-                {/each}
-            </tbody>
-        </table>
+                        {/each}
+                        </div>
+                    </div>
+                </div>
+            {/each}
+        </div>
     {:else}
         <div class="col d-flex align-items-center justify-content-center">
             <div class="spinner-border me-3 text-muted" />
-            <div class="display-6 text-muted">Loading table...</div>
+            <div class="display-6 text-muted">Loading...</div>
         </div>
     {/if}
 </div>
@@ -295,6 +238,29 @@
         width: 32px;
         height: auto;
         border-radius: 50%;
+    }
+
+    .img-thumb {
+        border-radius: 50%;
+        width: 32px;
+    }
+
+    .text-small {
+        font-size: 0.8em;
+    }
+
+    .text-tiny {
+        font-size: 0.6em;
+    }
+    .status-block {
+        width: 178px;
+        max-height: 196px;
+        box-sizing: border-box;
+        cursor: pointer;
+    }
+
+    .border-assigned {
+        border: 3px solid #42ffd0 !important;
     }
 
     .group-cell {

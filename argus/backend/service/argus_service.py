@@ -1,4 +1,5 @@
 from math import ceil
+from dataclasses import dataclass
 import subprocess
 import json
 import logging
@@ -26,8 +27,19 @@ from argus.backend.models.web import (
 )
 from argus.backend.events.event_processors import EVENT_PROCESSORS
 from argus.backend.service.testrun import TestRunService
+from argus.backend.util.common import chunk
 
 LOGGER = logging.getLogger(__name__)
+
+@dataclass(init=True, frozen=True)
+class ScheduleUpdateRequest:
+    release_id: UUID
+    schedule_id: UUID
+    assignee: UUID
+    new_tests: list[UUID]
+    old_tests: list[UUID]
+    comments: dict[UUID, str]
+
 
 
 class ArgusService:
@@ -234,7 +246,7 @@ class ArgusService:
                 row.save()
 
     def submit_new_schedule(self, release: str | UUID, start_time: str, end_time: str, tests: list[str | UUID],
-                            groups: list[str | UUID], assignees: list[str | UUID], tag: str) -> dict:
+                            groups: list[str | UUID], assignees: list[str | UUID], tag: str, comments: dict[str, str] | None, group_ids: dict[str, str] | None) -> dict:
         release = UUID(release) if isinstance(release, str) else release
         if len(assignees) == 0:
             raise Exception("Assignees not specified in the new schedule")
@@ -283,6 +295,19 @@ class ArgusService:
             assignee_entity.release_id = release
             assignee_entity.save()
             response["assignees"].append(assignee_id)
+
+        if comments:
+            for test_id, new_comment in comments.items():
+                try:
+                    comment = ReleasePlannerComment.get(release=release, group=group_ids[test_id], test=test_id)
+                except ReleasePlannerComment.DoesNotExist:
+                    comment = ReleasePlannerComment()
+                    comment.release = release
+                    comment.group = group_ids[test_id]
+                    comment.test = test_id
+
+                comment.comment = new_comment
+                comment.save()
 
         return response
 
@@ -398,11 +423,52 @@ class ArgusService:
             "newComment": new_comment,
         }
 
+    def update_schedule(self, release_id: UUID | str, schedule_id: UUID | str, old_tests: list[UUID | str], new_tests: list[UUID | str], comments: dict[str, str], assignee: UUID | str):
+        schedule: ArgusSchedule = ArgusSchedule.get(release_id=release_id, id=schedule_id)
+        new_tests: set[UUID] = {UUID(id) for id in new_tests}
+        old_tests: set[UUID] = {UUID(id) for id in old_tests}
+
+        all_test_ids = old_tests.union(new_tests)
+        tests = []
+        for batch in chunk(all_test_ids):
+            tests.extend(ArgusTest.filter(id__in=batch).all())
+        tests_by_id: dict[UUID, ArgusTest] = { test.id: test for test in tests }
+
+        all_scheduled_tests: list[ArgusScheduleTest] = list(ArgusScheduleTest.filter(schedule_id=schedule_id).all())
+        tests_to_remove = all_test_ids.difference(new_tests)
+        for scheduled_test in all_scheduled_tests:
+            if scheduled_test.test_id in tests_to_remove:
+                test = tests_by_id.get(scheduled_test.test_id)
+                scheduled_test.delete()
+                if test:
+                    self.update_schedule_comment({"newComment": "", "releaseId": test.release_id, "groupId": test.group_id, "testId": test.id})
+
+        tests_to_add = new_tests.difference(old_tests)
+        for test_id in tests_to_add:
+            entity = ArgusScheduleTest()
+            entity.id = uuid_from_time(schedule.period_start)
+            entity.schedule_id = schedule.id
+            entity.test_id = UUID(test_id) if isinstance(test_id, str) else test_id
+            entity.release_id = release_id
+            entity.save()
+            self.assign_runs_for_scheduled_test(schedule, entity.test_id, assignee)
+
+        for test_id, comment in comments.items():
+            test = tests_by_id.get(UUID(test_id))
+            if test:
+                self.update_schedule_comment({"newComment": comment, "releaseId": test.release_id, "groupId": test.group_id, "testId": test.id})
+
+        schedule_assignee: ArgusScheduleAssignee = ArgusScheduleAssignee.get(schedule_id=schedule_id)
+        schedule_assignee.assignee = assignee
+        schedule_assignee.save()
+        return True
+
     def delete_schedule(self, payload: dict) -> dict:
         """
         {
             "release": hex-uuid,
-            "schedule_id": uuid1
+            "schedule_id": uuid1,
+            "deleteComments": bool
         }
         """
         release_id = payload.get("releaseId")
@@ -412,6 +478,8 @@ class ArgusService:
         schedule_id = payload.get("scheduleId")
         if not schedule_id:
             raise Exception("Schedule id not specified in the request")
+
+        delete_comments = payload.get("deleteComments", False)
 
         release = ArgusRelease.get(id=release_id)
         schedule = ArgusSchedule.get(release_id=release.id, id=schedule_id)
@@ -442,6 +510,15 @@ class ArgusService:
                 entity.delete()
 
         schedule.delete()
+
+        if delete_comments:
+            tests = []
+            for batch in chunk(full_schedule["tests"]):
+                tests.extend(ArgusTest.filter(id__in=batch).all())
+
+            for test in tests:
+                self.update_schedule_comment({"newComment": "", "releaseId": test.release_id, "groupId": test.group_id, "testId": test.id})
+
         return {
             "releaseId": release.id,
             "scheduleId": schedule_id,

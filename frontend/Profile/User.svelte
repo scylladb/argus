@@ -19,12 +19,12 @@
             <div
                 class="img-profile"
                 style="background-image: url({getPicture(item.picture_id)});"
-                title={item.label}
+                title={item.label || item.username}
             />
         </div>
         <div class="ms-2 text-start">
             <div>{item.full_name ?? item.label}</div>
-            <div class="text-muted user-label">{item.label}</div>
+            <div class="text-muted user-label">{item.label || item.username}</div>
         </div>
     </div>
 </div>
