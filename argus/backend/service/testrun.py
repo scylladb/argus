@@ -166,6 +166,12 @@ class TestRunService:
     def change_run_assignee(self, test_id: UUID, run_id: UUID, new_assignee: UUID | None):
         test = ArgusTest.get(id=test_id)
         plugin = self.get_plugin(plugin_name=test.plugin_name)
+        if not plugin:
+            return {
+                "test_run_id": run.id,
+                "assignee": None
+            }
+
         run: PluginModelBase = plugin.model.get(id=run_id)
         old_assignee = run.assignee
         run.assignee = new_assignee
