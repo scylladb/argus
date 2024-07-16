@@ -7,7 +7,7 @@ from flask import current_app
 from flask.cli import with_appcontext
 
 from argus.backend.db import ScyllaCluster
-from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest
+from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, ArgusTestException
 from argus.backend.service.release_manager import ReleaseManagerService
 
 LOGGER = logging.getLogger(__name__)
@@ -170,9 +170,12 @@ class JenkinsMonitor(ArgusTestsMonitor):
                         except StopIteration:
                             LOGGER.warning("Test %s for release %s (group %s) doesn't exist, creating...",
                                            job["name"], saved_release.name, saved_group.name)
-                            saved_test = self.create_test(
-                                saved_release, saved_group, job["name"], job["fullname"], job["url"])
-                            self._existing_tests.append(saved_test)
+                            try:
+                                saved_test = self.create_test(
+                                    saved_release, saved_group, job["name"], job["fullname"], job["url"])
+                                self._existing_tests.append(saved_test)
+                            except ArgusTestException:
+                                LOGGER.error("Unable to create test for build_id %s", job["fullname"], exc_info=True)
 
     def collect_groups_for_release(self, jobs):
         # pylint: disable=no-self-use
