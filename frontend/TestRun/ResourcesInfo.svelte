@@ -1,7 +1,14 @@
 <script>
     export let resources;
+    export let backend;
+    export let run_id;
     import { timestampToISODate } from "../Common/DateUtils";
     import { titleCase } from "../Common/TextUtils";
+    import Fa from "svelte-fa";
+    import {
+        faCopy,
+        faPlay,
+    } from "@fortawesome/free-solid-svg-icons";
     let sortHeaders = {
         creationTime: ["instance_info", "creation_time"],
         terminationTime: ["instance_info", "termination_time"],
@@ -71,8 +78,28 @@
         });
     };
 </script>
-
-
+<div class="row">
+    <div class="p-1 m-2 d-flex align-items-center">
+        <button
+            type="button"
+            class="btn btn-outline-success me-2"
+            on:click={() => {
+                let regions = "SCT_REGION_NAME= SCT_GCE_DATACENTER= SCT_AZURE_REGION_NAME= ";
+                navigator.clipboard.writeText(
+                    `${regions} hydra clean-resources --backend ${backend} --test-id ${run_id}`
+                );
+            }}>
+            <Fa icon={faCopy} /> Hydra Clean Resources
+        </button>
+        <a
+            href="https://jenkins.scylladb.com/view/QA/job/QA-tools/job/hydra-clean-test-resources/parambuild/?test_id={run_id}&backend={backend}"
+            class="btn btn-outline-primary"
+            target="_blank"
+            aria-current="page">
+            <Fa icon={faPlay} /> Clean with jenkins
+        </a>
+    </div>
+</div>
 <div class="form-group mb-2">
     <input
         class="form-control"
