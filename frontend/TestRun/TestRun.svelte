@@ -310,6 +310,8 @@
                     <div class="p-2">
                         <ResourcesInfo
                             resources={testRun.allocated_resources}
+                            backend={testRun.cloud_setup?.backend}
+                            run_id="{testRun.id}"
                         />
                     </div>
                 </div>
