@@ -105,7 +105,7 @@ class PluginModelBase(Model):
             assignees = ArgusScheduleAssignee.filter(
                 schedule_id=schedule.id
             ).all()
-            assignees_uuids.append(*[assignee.assignee for assignee in assignees])
+            assignees_uuids.extend([assignee.assignee for assignee in assignees])
 
         return assignees_uuids[0] if len(assignees_uuids) > 0 else None
 
