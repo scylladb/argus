@@ -92,7 +92,10 @@ class UserService:
         except User.DoesNotExist:
             user = User()
             user.username = user_info.get("login")
-            user.email = email_info[-1].get("email")
+            # pick only scylladb.com emails
+            scylla_email = next(iter([email.get("email") for email in email_info if email.get["email"].endswith("@scylladb.com")]), None)
+            primary_email = next(iter([email.get("email") for email in email_info if email.get["primary"] and email.get["verified"]]), None)
+            user.email = scylla_email or primary_email
             user.full_name = user_info.get("name", user_info.get("login"))
             user.registration_date = datetime.utcnow()
             user.roles = ["ROLE_USER"]

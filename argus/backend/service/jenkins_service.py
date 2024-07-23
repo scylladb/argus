@@ -220,7 +220,9 @@ class JenkinsService:
     def build_job(self, build_id: str, params: dict, user_override: str = None):
         queue_number = self._jenkins.build_job(build_id, {
             **params,
-            self.RESERVED_PARAMETER_NAME: g.user.username if not user_override else user_override
+            # use the user's email as the default value for the requested by user parameter,
+            # so it would align with how SCT default works, on runs not trigger by argus
+            self.RESERVED_PARAMETER_NAME: g.user.email.split('@')[0] if not user_override else user_override
         })
         return queue_number
 
