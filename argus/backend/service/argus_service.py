@@ -459,8 +459,13 @@ class ArgusService:
                 self.update_schedule_comment({"newComment": comment, "releaseId": test.release_id, "groupId": test.group_id, "testId": test.id})
 
         schedule_assignee: ArgusScheduleAssignee = ArgusScheduleAssignee.get(schedule_id=schedule_id)
-        schedule_assignee.assignee = assignee
-        schedule_assignee.save()
+        new_assignee = ArgusScheduleAssignee()
+        new_assignee.assignee = assignee
+        new_assignee.release_id = schedule_assignee.release_id
+        new_assignee.schedule_id = schedule_assignee.schedule_id
+        new_assignee.save()
+        schedule_assignee.delete()
+
         return True
 
     def delete_schedule(self, payload: dict) -> dict:
