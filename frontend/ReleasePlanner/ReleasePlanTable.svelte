@@ -167,7 +167,7 @@
                     </div>
                     <div class="collapse" class:show={!getCollapseState(`collapse-${groupStats.group.id}`, collapseState)} id="collapse-{groupStats.group.id}">
                         <div class="bg-light-two rounded p-2 mb-2 d-flex flex-wrap">
-                        {#each tests as test (test.id)}
+                        {#each tests.sort((a, b) => sortFunc(a.name, b.name)) as test (test.id)}
                         {@const testStats = releaseStats?.["groups"]?.[test.group_id]?.["tests"]?.[test.id] ?? {}}
                         {@const testSchedule = schedulesByTest?.[groupName]?.[test.name]}
                                 <div
