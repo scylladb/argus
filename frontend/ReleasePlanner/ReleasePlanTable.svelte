@@ -41,7 +41,7 @@
             limited: new Number(false),
             force: new Number(false),
         });
-        let response = await fetch("/api/v1/release/stats/v2?" + params);
+        let response = await fetch("/api/v1/release/stats/v2?" + params, { cache: "reload" });
         let json = await response.json();
         if (json.status != "ok") {
             return false;
@@ -194,7 +194,7 @@
                                     </div>
                                     <div class="d-flex flex-fill flex-column">
                                         <div class="p-1 text-small d-flex align-items-center">
-                                            <div class="ms-1">{testStats.test.name}
+                                            <div class="ms-1">{testStats?.test?.name ?? test.name}
                                             {#if testStats.buildNumber}
                                                 - <span class="fw-bold">#{testStats.buildNumber}</span> <span class="text-muted">({timestampToISODate(testStats.start_time).split(" ")[0]})</span>
                                             {/if}
