@@ -86,6 +86,12 @@
         return users[id];
     };
 
+    const retrieveGroupName = function(groupName, tests) {
+        const firstTest = tests[0];
+
+        return firstTest ? firstTest.pretty_group_name || groupName : groupName;
+    };
+
     const onTestClick = function (test) {
         dispatch("testClick", {
             test: test,
@@ -123,8 +129,12 @@
 <div class="my-2 bg-light-one p-2 shadow-sm rounded">
     {#if plannerData.release && releaseStats}
         <div>
-            {#each Object.entries(plannerData.tests_by_group).sort((a, b) => sortFunc(a[0].toLowerCase(), b[0].toLowerCase())) as [groupName, tests] (groupName)}
-            {@const prettyName = tests[0].pretty_group_name}
+            {#each Object
+                .entries(plannerData.tests_by_group)
+                .sort(
+                    ([leftGroupName, leftTests], [rightGroupName, rightTests]) => sortFunc(retrieveGroupName(leftGroupName, leftTests).toLowerCase(), retrieveGroupName(rightGroupName, rightTests).toLowerCase())
+                ) as [groupName, tests] (groupName)}
+            {@const prettyName = tests[0]?.pretty_group_name ?? groupName}
             {@const groupStats = releaseStats?.groups[tests[0].group_id]}
                 <div class="mb-2 rounded bg-white p-2">
                     <div
