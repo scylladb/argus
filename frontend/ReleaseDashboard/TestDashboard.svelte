@@ -488,7 +488,7 @@
                                     >
                                         {testStats.status == "unknown"
                                             ? "Not run"
-                                            : subUnderscores(testStats.status).split(" ").map(v => titleCase(v)).join(" ")}
+                                            : subUnderscores(testStats.status ?? "Unknown").split(" ").map(v => titleCase(v)).join(" ")}
                                         {#if clickedTests[testStats.test.id]}
                                             <div class="text-tiny">Selected</div>
                                         {/if}
