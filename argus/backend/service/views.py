@@ -110,9 +110,9 @@ class UserViewService:
                 search_func = facet_wrapper(query_func=search_func, facet_query=value, facet_type=facet)
 
 
-        all_tests = ArgusTest.all()
-        all_releases = ArgusRelease.all()
-        all_groups = ArgusGroup.all()
+        all_tests = ArgusTest.objects().limit(None)
+        all_releases = ArgusRelease.objects().limit(None)
+        all_groups = ArgusGroup.objects().limit(None)
         release_by_id = {release.id: partial(self.index_mapper, type="release")(release) for release in all_releases}
         group_by_id = {group.id: partial(self.index_mapper, type="group")(group) for group in all_groups}
         index = [self.index_mapper(t) for t in all_tests]

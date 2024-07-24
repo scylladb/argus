@@ -20,9 +20,9 @@ class ArgusTestsMonitor(ABC):
 
     def __init__(self) -> None:
         self._cluster = ScyllaCluster.get()
-        self._existing_releases = list(ArgusRelease.all())
-        self._existing_groups = list(ArgusGroup.all())
-        self._existing_tests = list(ArgusTest.all())
+        self._existing_releases = list(ArgusRelease.objects().limit(None))
+        self._existing_groups = list(ArgusGroup.objects().limit(None))
+        self._existing_tests = list(ArgusTest.objects().limit(None))
         self._filtered_groups: list[str] = self.BUILD_SYSTEM_FILTERED_PREFIXES
 
     def create_release(self, release_name):
