@@ -29,6 +29,8 @@ class UserService:
 
     @staticmethod
     def check_roles(roles: list[UserRoles] | UserRoles, user: User) -> bool:
+        if not user:
+            return False
         if isinstance(roles, str):
             return roles in user.roles
         elif isinstance(roles, list):
