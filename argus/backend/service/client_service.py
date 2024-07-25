@@ -74,7 +74,11 @@ class ClientService:
     def submit_results(self, run_type: str, run_id: str, results: dict) -> str:
         model = self.get_model(run_type)
         run = model.load_test_run(UUID(run_id))
-        ArgusGenericResultMetadata(test_id=run.test_id, **results["meta"]).save()
+        existing_table = ArgusGenericResultMetadata.objects(test_id=run.test_id, name=results["meta"]["name"]).first()
+        if existing_table:
+            existing_table.update_if_changed(results["meta"])
+        else:
+            ArgusGenericResultMetadata(test_id=run.test_id, **results["meta"]).save()
         if results.get("sut_timestamp", 0) == 0:
             results["sut_timestamp"] = run.sut_timestamp()  # automatic sut_timestamp
         table_name = results["meta"]["name"]
