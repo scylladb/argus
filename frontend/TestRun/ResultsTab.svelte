@@ -1,10 +1,70 @@
 <script>
     import {onMount} from "svelte";
+    import {ResultCellStatusStyleMap} from "../Common/TestStatus";
 
     let fetching = true;
     export let id = "";
     export let test_id = "";
     let results = [];
+
+    const transformToTable = (tableData) => {
+        // Transform table data to a more usable format for rendering: {table_name: {description, table_data, columns, rows}}
+        // where table_data: {row_name: {column_name: {value, status, type}}}
+        let transformedData = {};
+
+        tableData.forEach((table) => {
+            const tableName = table.meta.name;
+            const tableDescription = table.meta.description;
+            const columnTypesMap = table.meta.columns_meta.reduce((map, colMeta) => {
+                map[colMeta.name] = colMeta.type;
+                return map;
+            }, {});
+            const columnNames = table.meta.columns_meta.map(colMeta => colMeta.name);
+
+            transformedData[tableName] = {
+                description: tableDescription,
+                table_data: {},
+                columns: [],
+                rows: []
+            };
+
+            let presentColumns = new Set();
+            let presentRows = new Set();
+
+            // Filter out non-existent rows and columns while keeping order
+            table.cells.forEach(cell => {
+                presentColumns.add(cell.column);
+                presentRows.add(cell.row);
+            });
+
+            transformedData[tableName].columns = table.meta.columns_meta.filter(colMeta => presentColumns.has(colMeta.name));
+            transformedData[tableName].rows = table.meta.rows_meta.filter(row => presentRows.has(row));
+
+            // building data structure (table_data)
+            transformedData[tableName].rows.forEach(row => {
+                transformedData[tableName].table_data[row] = {};
+            });
+
+            table.cells.forEach(cell => {
+                const column = cell.column;
+                const row = cell.row;
+                const value = cell.value;
+                const status = cell.status;
+
+                // Only add the cell if the column and row are present in the table (in metadata and in cells)
+                if (columnNames.includes(column) && transformedData[tableName]["rows"].includes(row)) {
+                    transformedData[tableName].table_data[row][column] = {
+                        value: value,
+                        status: status,
+                        type: columnTypesMap[column]
+                    };
+                }
+            });
+        });
+
+        console.log(transformedData);
+        return transformedData;
+    };
 
 
     const fetchResults = async function () {
@@ -13,10 +73,8 @@
             let apiResponse = await fetch(`/api/v1/run/${test_id}/${id}/fetch_results`);
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
-
                 fetching = false;
-                results = apiJson.tables;
-                console.log(results);
+                results = transformToTable(apiJson.tables);
             }
         } catch (error) {
             console.log(error);
@@ -43,21 +101,11 @@
         }
     };
 
-    const getColumnType = (result, columnName) => {
-        return result.meta.columns_meta.find((col) => col.name === columnName).type;
-    };
-
     onMount(() => {
         fetchResults();
     });
 
-    const styleMap = {
-        "PASS": "table-success",
-        "ERROR": "table-danger",
-        "WARNING": "table-warning"
-    };
-
-</script>
+    </script>
 
 <style>
     th, td {
@@ -78,29 +126,27 @@
 
 {#if !fetching}
     <div class="p-2">
-        {#each results as result}
+        {#each Object.entries(results) as [table_name, result]}
             <div class="">
-                <h3>{result.meta.name}</h3>
-                <span>{result.meta.description}</span>
+                <h3>{table_name}</h3>
+                <span>{result.description}</span>
                 <table class="table table-bordered">
                     <thead class="thead-dark">
                     <tr>
                         <th></th>
-                        {#each result.meta.columns_meta as col}
+                        {#each result.columns as col}
                             <th>{col.name} <span class="unit">[{col.unit}]</span></th>
                         {/each}
                     </tr>
                     </thead>
                     <tbody>
-                    {#each result.meta.rows_meta as row}
+                    {#each result.rows as row}
                         <tr>
                             <td>{row}</td>
-                            {#each result.meta.columns_meta as col}
-                                {#each result.cells as cell}
-                                    {#if cell.column === col.name && cell.row === row}
-                                        <td class="{styleMap[cell.status]}">{formatValue(cell.value, getColumnType(result, cell.column))}</td>
-                                    {/if}
-                                {/each}
+                            {#each result.columns as col}
+                                <td class="{ResultCellStatusStyleMap[result.table_data[row][col.name]?.status || 'NULL']}">
+                                    {formatValue(result.table_data[row][col.name]?.value || "", result.table_data[row][col.name]?.type || "NULL")}
+                                </td>
                             {/each}
                         </tr>
                     {/each}

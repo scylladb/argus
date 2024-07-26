@@ -157,3 +157,10 @@ export const NemesisStatusBackgrounds = {
     "skipped": "table-dark",
     "succeeded": "table-success",
 };
+
+export const ResultCellStatusStyleMap = {
+    "PASS": "table-success",
+    "ERROR": "table-danger",
+    "WARNING": "table-warning",
+    "NULL": "table-secondary"
+};
