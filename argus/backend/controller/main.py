@@ -152,6 +152,7 @@ def profile_oauth_github_callback():
     try:
         first_run_info = service.github_callback(req_code)
     except Exception as exc:  # pylint: disable=broad-except
+        LOGGER.error("An error occured in callback", exc_info=True)
         flash(message=exc.args[0], category="error")
         return redirect(url_for("main.error", type=403))
     if first_run_info:
