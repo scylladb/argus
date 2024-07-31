@@ -7,6 +7,7 @@ const app = new Login({
         csrfToken: CSRF_TOKEN,
         githubCid: GITHUB_CLIENT_ID,
         githubScopes: GITHUB_SCOPES,
+        methods: LOGIN_METHODS,
     }
 });
 

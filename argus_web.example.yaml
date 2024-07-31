@@ -14,6 +14,11 @@ SCYLLA_KEYSPACE_NAME: mykeyspacename
 # Replication factor used - if set, will override contact_points as amount of nodes for replication
 # SCYLLA_REPLICATION_FACTOR: 3
 
+# Which login methods to enable
+LOGIN_METHODS:
+  - password
+  - gh
+
 # Application log level
 APP_LOG_LEVEL: INFO
 # Secret key used to match session data

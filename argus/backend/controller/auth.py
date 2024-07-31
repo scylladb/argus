@@ -5,7 +5,7 @@ from flask import (
 )
 from werkzeug.security import check_password_hash
 from argus.backend.models.web import User
-from argus.backend.service.user import UserService, load_logged_in_user, login_required
+from argus.backend.service.user import UserService, UserServiceException, load_logged_in_user, login_required
 
 bp = Blueprint('auth', __name__, url_prefix='/auth')
 
@@ -21,24 +21,26 @@ def login():
     session["csrf_token"] = token
 
     if request.method == 'POST':
-        username = request.form["username"]
-        password = request.form["password"]
-        error = None
         try:
-            user = User.get(username=username)
-        except User.DoesNotExist:
-            user = None
+            if "password" not in current_app.config.get("LOGIN_METHODS", []):
+                raise UserServiceException("Password Login is disabled")
+            username = request.form["username"]
+            password = request.form["password"]
 
-        if not user:
-            error = "User not found"
-        elif not check_password_hash(user.password, password):
-            error = "Incorrect Password"
+            try:
+                user: User = User.get(username=username)
+            except User.DoesNotExist:
+                raise UserServiceException("User not found")
 
-        if not error:
+            if not check_password_hash(user.password, password):
+                raise UserServiceException("Incorrect Password")
+
             session.clear()
             session["user_id"] = str(user.id)
             session["csrf_token"] = token
-        flash(error, category="error")
+        except UserServiceException as exc:
+            flash(next(iter(exc.args), "No message"), category="error")
+        
         return redirect(url_for('main.home'))
 
     return render_template('auth/login.html.j2',

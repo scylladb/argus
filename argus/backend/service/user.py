@@ -17,6 +17,9 @@ from argus.backend.models.web import User, UserOauthToken, UserRoles, WebFileSto
 from argus.backend.util.common import FlaskView
 
 
+class UserServiceException(Exception):
+    pass
+
 class GithubOrganizationMissingError(Exception):
     pass
 
@@ -40,6 +43,8 @@ class UserService:
         return False
 
     def github_callback(self, req_code: str) -> dict | None:
+        if "gh" not in current_app.config.get("LOGIN_METHODS", []):
+            raise UserServiceException("Github Login is disabled")
         # pylint: disable=too-many-locals
         oauth_response = requests.post(
             "https://github.com/login/oauth/access_token",
@@ -142,6 +147,15 @@ class UserService:
     def get_users(self) -> dict:
         users = User.all()
         return {str(user.id): user.to_json() for user in users}
+    
+    def get_users_privileged(self) -> dict:
+        users = User.all()
+        users = {str(user.id): dict(user.items()) for user in users}
+        for user in users.values():
+            user.pop("password")
+            user.pop("api_token")
+
+        return users
 
     def generate_token(self, user: User):
         token_digest = f"{user.username}-{int(time())}-{base64.encodebytes(os.urandom(128)).decode(encoding='utf-8')}"
@@ -155,12 +169,50 @@ class UserService:
         user.email = new_email
         user.save()
 
-    def update_password(self, user: User, old_password: str, new_password: str):
-        if check_password_hash(user.password, old_password):
-            raise Exception("Incorrect old password")
+        return True
+
+    def toggle_admin(self, user_id: str):
+        user: User = User.get(id=user_id)
+
+        if user.id == g.user.id:
+            raise UserServiceException("Cannot toggle admin role from yourself.")
+
+        is_admin = UserService.check_roles(UserRoles.Admin, user)
+
+        if is_admin:
+            user.roles.remove(UserRoles.Admin)
+        else:
+            user.set_as_admin()
+
+        user.save()
+        return True
+
+    def delete_user(self, user_id: str):
+        user: User = User.get(id=user_id)
+        if user.id == g.user.id:
+            raise UserServiceException("Cannot delete user that you are logged in as.")
+
+        if user.is_admin():
+            raise UserServiceException("Cannot delete admin users. Unset admin flag before deleting")
+
+        user.delete()
+
+        return True
+
+    def update_password(self, user: User, old_password: str, new_password: str, force = False):
+        if not check_password_hash(user.password, old_password) and not force:
+            raise UserServiceException("Incorrect old password")
+
+        if not new_password:
+            raise UserServiceException("Empty new password")
+
+        if len(new_password) < 5:
+            raise UserServiceException("New password is too short")
 
         user.password = generate_password_hash(new_password)
         user.save()
+
+        return True
 
     def update_name(self, user: User, new_name: str):
         user.full_name = new_name

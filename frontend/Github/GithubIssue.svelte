@@ -219,7 +219,7 @@
                         class="text-muted d-flex align-items-center"
                         title={new Date(issue.added_on).toISOString()}
                     >
-                        <div>Added by <span class="fw-bold">@{users[issue.user_id].username}</span> on {timestampToISODate(new Date(issue.added_on))}</div>
+                        <div>Added by <span class="fw-bold">@{users?.[issue.user_id]?.username ?? "ghost"}</span> on {timestampToISODate(new Date(issue.added_on))}</div>
                         {#if deleteEnabled && !aggregated}
                             <div class="ms-2 text-muted">
                                 {#if deleting}

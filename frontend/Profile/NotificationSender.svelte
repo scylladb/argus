@@ -4,10 +4,10 @@
 </script>
 
 <div class="d-flex align-items-center px-2">
-    <div class="img-profile" style="background-image: url({getPicture(user.picture_id)})"></div>
+    <div class="img-profile" style="background-image: url({getPicture(user?.picture_id)})"></div>
     <div class="ms-3">
-        <div class="">{user.full_name}</div>
-        <div class="text-muted">{user.username}</div>
+        <div class="">{user?.full_name ?? "Ghost"}</div>
+        <div class="text-muted">{user?.username ?? "ghost"}</div>
     </div>
 </div>
 

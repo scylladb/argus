@@ -110,11 +110,11 @@ class PluginModelBase(Model):
         return assignees_uuids[0] if len(assignees_uuids) > 0 else None
 
     @classmethod
-    def get_jobs_assigned_to_user(cls, user: User):
+    def get_jobs_assigned_to_user(cls, user_id: str | UUID):
         cluster = ScyllaCluster.get()
         query = cluster.prepare("SELECT build_id, start_time, release_id, group_id, assignee, "
                                 f"test_id, id, status, investigation_status, build_job_url, scylla_version FROM {cls.table_name()} WHERE assignee = ?")
-        rows = cluster.session.execute(query=query, parameters=(user.id,))
+        rows = cluster.session.execute(query=query, parameters=(user_id,))
 
         return list(rows)
 
