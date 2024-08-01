@@ -162,6 +162,9 @@ OS / Image: `{test_run?.cloud_setup?.db_node?.image_id ?? "No image"}` ({test_ru
 Test: `{test?.name}`
 Test id: `{test_run.id}`
 Test name: `{test_run.build_id}`
+{#if test_run.test_method}
+    Test method: `{test_run.test_method}`
+{/if}
 Test config file(s):
 
 - [{(test_run.config_files?.[0] ?? "None").split("/").reverse()[0]}](https://github.com/scylladb/scylla-cluster-tests/blob/{test_run.scm_revision_id}/{test_run.config_files[0]})

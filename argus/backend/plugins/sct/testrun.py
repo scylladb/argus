@@ -109,6 +109,7 @@ class SCTTestRun(PluginModelBase):
     stress_cmd = columns.Text()
 
     histograms = columns.List(value_type=columns.Map(key_type=columns.Text(), value_type=columns.UserDefinedType(user_type=PerformanceHDRHistogram)))
+    test_method = columns.Ascii()
 
     @classmethod
     def _stats_query(cls) -> str:
@@ -199,6 +200,7 @@ class SCTTestRun(PluginModelBase):
 
             run.config_files = req.sct_config.get("config_files")
             run.region_name = regions
+            run.test_method = req.sct_config.get("test_method")
             run.save()
 
         return run
