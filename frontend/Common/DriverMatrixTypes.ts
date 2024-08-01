@@ -21,6 +21,7 @@ export interface TestSuite {
 export interface TestCollection {
     name: string;
     driver: string;
+    failure_message: string;
     tests_total: number;
     failures: number;
     disabled: number;

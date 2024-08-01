@@ -30,7 +30,7 @@ class PluginModelBase(Model):
     _plugin_name = "unknown"
     # Metadata
     build_id = columns.Text(required=True, partition_key=True)
-    start_time = columns.DateTime(required=True, primary_key=True, clustering_order="DESC", default=datetime.now, custom_index=True)
+    start_time = columns.DateTime(required=True, primary_key=True, clustering_order="DESC", default=datetime.utcnow, custom_index=True)
     id = columns.UUID(index=True, required=True)
     release_id = columns.UUID(index=True)
     group_id = columns.UUID(index=True)

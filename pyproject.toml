@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "argus-alm"
-version = "0.12.5"
+version = "0.12.4b3"
 description = "Argus"
 authors = ["Alexey Kartashov <alexey.kartashov@scylladb.com>"]
 license = "Apache-2.0"
@@ -21,6 +21,7 @@ click = "^8.1.3"
 
 [tool.poetry.scripts]
 argus-client-generic = 'argus.client.generic.cli:cli'
+argus-driver-matrix-client = 'argus.client.driver_matrix_tests.cli:cli'
 
 [tool.poetry.group.web-backend.dependencies]
 PyYAML = "^6.0.0"
