@@ -63,6 +63,12 @@
                     <span class="fw-bold">Test:</span>
                     {(test?.pretty_name || test?.name) ?? "#NO_TEST"}
                 </li>
+                {#if test_run.test_method}
+                    <li>
+                        <span class="fw-bold">Test Method:</span>
+                        {test_run.test_method}
+                    </li>
+                {/if}
                 <li>
                     <span class="fw-bold">Id:</span>
                     {test_run.id}
