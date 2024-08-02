@@ -1,7 +1,7 @@
 <script>
     import { createEventDispatcher, onMount } from "svelte";
     import Fa from "svelte-fa";
-    import { faBan, faPlus, faRefresh, faTimes } from "@fortawesome/free-solid-svg-icons";
+    import {faBan, faChartLine, faPlus, faRefresh, faTimes} from "@fortawesome/free-solid-svg-icons";
     import { extractBuildNumber } from "../Common/RunUtils";
     import { StatusButtonCSSClassMap } from "../Common/TestStatus";
     import { Modal } from "bootstrap";
@@ -41,6 +41,16 @@
             {testInfo.test.name} ({testInfo.release.name}/{testInfo.group.name})
         </div>
     {/if}
+    <div class="me-2 mb-2 d-inline-block">
+        <button
+            class="btn btn-light"
+            on:click={() => {
+                dispatch("showGraph");
+            }}
+        >
+            <Fa icon={faChartLine}/>
+        </button>
+    </div>
     {#each runs as run (run.id)}
         <div class="me-2 mb-2 d-inline-block">
             <div class="btn-group">

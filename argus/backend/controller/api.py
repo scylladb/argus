@@ -14,6 +14,7 @@ from argus.backend.controller.testrun_api import bp as testrun_bp
 from argus.backend.controller.team import bp as team_bp
 from argus.backend.controller.view_api import bp as view_bp
 from argus.backend.service.argus_service import ArgusService, ScheduleUpdateRequest
+from argus.backend.service.results_service import ResultsService
 from argus.backend.service.user import UserService, api_login_required
 from argus.backend.service.stats import ReleaseStatsCollector
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, User, UserOauthToken
@@ -381,6 +382,19 @@ def test_info():
         "response": info
     }
 
+@bp.route("/test-results", methods=["GET"])
+@api_login_required
+def test_results():
+    test_id = request.args.get("testId")
+    if not test_id:
+        raise Exception("No testId provided")
+    service = ResultsService()
+    info = service.get_results(test_id=UUID(test_id))
+
+    return {
+        "status": "ok",
+        "response": info
+    }
 
 @bp.route("/test_run/comment/get", methods=["GET"])  # TODO: remove
 @api_login_required

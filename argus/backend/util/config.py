@@ -12,6 +12,8 @@ class Config:
     CONFIG_PATHS = [
         Path("./config/argus_web.yaml"),
         Path("argus_web.yaml"),
+        Path("../config/argus_web.yaml"),
+
     ]
 
     @classmethod

@@ -1,4 +1,4 @@
-import { faBan, faEye, faEyeSlash, faSearch } from "@fortawesome/free-solid-svg-icons";
+import {faBan, faEye, faEyeSlash, faSearch} from "@fortawesome/free-solid-svg-icons";
 
 export const TestStatus = {
     PASSED: "passed",
