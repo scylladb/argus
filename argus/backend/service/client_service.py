@@ -26,6 +26,14 @@ class ClientService:
         model = self.get_model(run_type)
         model.submit_run(request_data=request_data)
         return "Created"
+    
+    def get_run(self, run_type: str, run_id: str):
+        model = self.get_model(run_type)
+        try:
+            run = model.get(id=run_id)
+        except model.DoesNotExist:
+            return None
+        return run
 
     def heartbeat(self, run_type: str, run_id: str) -> int:
         model = self.get_model(run_type)
