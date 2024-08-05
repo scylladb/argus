@@ -223,7 +223,7 @@ class TestRunService:
         mentions = set(mentions)
         for potential_mention in re.findall(self.RE_MENTION, message_stripped):
             if user := User.exists_by_name(potential_mention.lstrip("@")):
-                mentions.add(user)
+                mentions.add(user) if user.id != g.user.id else None
 
         test: ArgusTest = ArgusTest.get(id=test_id)
         plugin = self.get_plugin(test.plugin_name)
