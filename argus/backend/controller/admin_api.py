@@ -7,8 +7,8 @@ from flask import (
 )
 from argus.backend.error_handlers import handle_api_exception
 from argus.backend.service.release_manager import ReleaseEditPayload, ReleaseManagerService
-from argus.backend.service.user import api_login_required, check_roles
-from argus.backend.models.web import UserRoles
+from argus.backend.service.user import UserService, api_login_required, check_roles
+from argus.backend.models.web import User, UserRoles
 
 bp = Blueprint('admin_api', __name__, url_prefix='/api/v1')
 LOGGER = logging.getLogger(__name__)
@@ -286,4 +286,69 @@ def quick_toggle_group_enabled():
     return {
         "status": "ok",
         "response": res
+    }
+
+
+@bp.route("/users", methods=["GET"])
+@check_roles(UserRoles.Admin)
+@api_login_required
+def user_info():
+    result = UserService().get_users_privileged()
+
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
+@bp.route("/user/<string:user_id>/email/set", methods=["POST"])
+@check_roles(UserRoles.Admin)
+@api_login_required
+def user_change_email(user_id: str):
+    payload = get_payload(request)
+
+    user = User.get(id=user_id)
+    result = UserService().update_email(user=user, new_email=payload["newEmail"])
+
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
+@bp.route("/user/<string:user_id>/delete", methods=["POST"])
+@check_roles(UserRoles.Admin)
+@api_login_required
+def user_delete(user_id: str):
+    result = UserService().delete_user(user_id=user_id)
+
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
+@bp.route("/user/<string:user_id>/password/set", methods=["POST"])
+@check_roles(UserRoles.Admin)
+@api_login_required
+def user_change_password(user_id: str):
+    payload = get_payload(request)
+
+    user = User.get(id=user_id)
+    result = UserService().update_password(user=user, old_password="", new_password=payload["newPassword"], force=True)
+
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+@bp.route("/user/<string:user_id>/admin/toggle", methods=["POST"])
+@check_roles(UserRoles.Admin)
+@api_login_required
+def user_toggle_admin(user_id: str):
+    result = UserService().toggle_admin(user_id=user_id)
+
+    return {
+        "status": "ok",
+        "response": result
     }

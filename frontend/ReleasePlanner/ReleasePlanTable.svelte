@@ -203,16 +203,14 @@
                                         <div class="text-end d-flex flex-fill align-items-end justify-content-end">
                                             {#if testSchedule}
                                                 {#each testSchedule.assignees as assignee}
-                                                    {#if retrieveUser(assignee)}
-                                                        <div class="p-1" title={retrieveUser(assignee).full_name}>
-                                                            <span>{retrieveUser(assignee).full_name}</span>
-                                                            <img
-                                                                class="img-thumb"
-                                                                src={getPicture(retrieveUser(assignee).picture_id)}
-                                                                alt={retrieveUser(assignee).full_name}
-                                                            />
-                                                        </div>
-                                                    {/if}
+                                                    <div class="p-1" title={retrieveUser(assignee)?.full_name ?? "Ghost"}>
+                                                        <span>{retrieveUser(assignee)?.full_name ?? "Ghost"}</span>
+                                                        <img
+                                                            class="img-thumb"
+                                                            src={getPicture(retrieveUser(assignee)?.picture_id)}
+                                                            alt={retrieveUser(assignee)?.full_name ?? "Ghost"}
+                                                        />
+                                                    </div>
                                                 {/each}
                                             {:else}
                                                 <!-- Empty -->

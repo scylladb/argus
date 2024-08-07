@@ -11,6 +11,7 @@
   const GITHUB_SCOPES = "{{ github_scopes }}";
   const GITHUB_CLIENT_ID = "{{ github_cid }}";
   const CSRF_TOKEN = "{{ csrf_token }}";
+  const LOGIN_METHODS = {{ config["LOGIN_METHODS"] or [] | tojson }};
 </script>
 {% endblock javascripts %}
 

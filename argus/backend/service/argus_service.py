@@ -498,11 +498,16 @@ class ArgusService:
         full_schedule["assignees"] = [assignee.assignee for assignee in assignees]
 
         if len(assignees) > 0:
-            schedule_user = User.get(id=assignees[0].assignee)
+            try:
+                schedule_user = User.get(id=assignees[0].assignee)
+            except User.DoesNotExist:
+                schedule_user = User()
+                schedule_user.id = assignees[0].assignee
+                LOGGER.warning("Deleting orphaned user assignments")
             service = TestRunService()
 
             for model in all_plugin_models():
-                for run in model.get_jobs_assigned_to_user(schedule_user):
+                for run in model.get_jobs_assigned_to_user(schedule_user.id):
                     if run["release_id"] != release.id:
                         continue
                     if run["test_id"] not in full_schedule["tests"]:
@@ -649,7 +654,7 @@ class ArgusService:
         today = datetime.datetime.now()
         validity_period = today - datetime.timedelta(days=current_app.config.get("JOB_VALIDITY_PERIOD_DAYS", 30))
         for plugin in all_plugin_models():
-            for run in plugin.get_jobs_assigned_to_user(user=user):
+            for run in plugin.get_jobs_assigned_to_user(user_id=user.id):
                 if run["start_time"] >= validity_period:
                     yield run
 

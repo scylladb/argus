@@ -29,7 +29,7 @@
                 throw new TeamManagerAPIError(json.response);
             }
         } catch (error) {
-            sendMessage(`Failed to fetch jobs for a user ${member.full_name}`, "TeamMember::fetchUserJobs");
+            sendMessage("error", `Failed to fetch jobs for a user ${member.full_name}`, "TeamMember::fetchUserJobs");
             console.log(error);
             failed = true;
         }
@@ -126,9 +126,9 @@
         </div>
     {:else}
         {#if failed}
-            <div>Fetching jobs failure.</div>
+            <div class="ms-auto">Fetching jobs failure.</div>
         {:else}
-            <div>
+            <div class="ms-auto">
                 Fetching...
             </div>
         {/if}
