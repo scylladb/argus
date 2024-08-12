@@ -10,7 +10,7 @@ LOGGER = logging.getLogger(__name__)
 class Config:
     CONFIG = None
     CONFIG_PATHS = [
-        Path("./config/argus_web.yaml"),
+        Path(__file__).parents[3] / "config" / "argus_web.yaml",
         Path("argus_web.yaml"),
     ]
 
