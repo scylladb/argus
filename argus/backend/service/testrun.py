@@ -13,7 +13,7 @@ from flask import g
 from cassandra.query import BatchStatement, ConsistencyLevel
 from cassandra.cqlengine.query import BatchQuery
 from argus.backend.db import ScyllaCluster
-from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData
+from argus.backend.models.result import ArgusGenericResultMetadata
 
 from argus.backend.models.web import (
     ArgusEvent,
@@ -307,23 +307,28 @@ class TestRunService:
         }
         return response
 
-    def fetch_results(self, test_id: UUID, run_id: UUID) -> dict:
+    def fetch_results(self, test_id: UUID, run_id: UUID) -> list[dict]:
+        cluster = ScyllaCluster.get()
         query_fields = ["column", "row", "value", "status"]
+        raw_query = (f"SELECT {','.join(query_fields)},WRITETIME(value) as ordering "
+                     f"FROM generic_result_data_v1 WHERE test_id = ? AND run_id = ? AND name = ?")
+        query = cluster.prepare(raw_query)
         tables_meta = ArgusGenericResultMetadata.filter(test_id=test_id)
         tables = []
         for table in tables_meta:
-            cells = ArgusGenericResultData.objects.filter(test_id=test_id, run_id=run_id, name=table.name).only(query_fields)
+            cells = cluster.session.execute(query=query, parameters=(test_id, run_id, table.name))
             if not cells:
                 continue
+            cells = [dict(cell.items()) for cell in cells]
             tables.append({'meta': {
                 'name': table.name,
                 'description': table.description,
                 'columns_meta': table.columns_meta,
-                'rows_meta': table.rows_meta
+                'rows_meta': table.rows_meta,
             },
-                'cells': [{k:v for k,v in cell.items() if k in query_fields} for cell in cells]})
-
-        return tables
+                'cells': [{k: v for k, v in cell.items() if k in query_fields} for cell in cells],
+                'order': min([cell['ordering'] for cell in cells] or [0])})
+        return sorted(tables, key=lambda x: x['order'])
 
     def submit_github_issue(self, issue_url: str, test_id: UUID, run_id: UUID):
         user_tokens = UserOauthToken.filter(user_id=g.user.id).all()
