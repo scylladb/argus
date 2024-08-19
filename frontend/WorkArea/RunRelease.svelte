@@ -91,7 +91,7 @@
             class="accordion-button collapsed"
             data-argus-release={release.name}
             data-bs-toggle="collapse"
-            data-bs-target="#collapse{sanitizeSelector(release.name)}"
+            data-bs-target="#collapse-{release.id}"
             on:click={handleReleaseClick}
             >
                 <div class="d-flex flex-column">
@@ -117,7 +117,7 @@
     </h2>
     <div
         class="accordion-collapse collapse"
-        id="collapse{sanitizeSelector(release.name)}"
+        id="collapse-{release.id}"
     >
         <div class="p-2">
             <a href="/dashboard/{release.name}" class="btn btn-sm btn-dark"
