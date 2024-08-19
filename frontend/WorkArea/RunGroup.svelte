@@ -91,7 +91,7 @@
         <button
             class="accordion-button collapsed"
             data-bs-toggle="collapse"
-            data-bs-target="#collapse{sanitizeSelector(`${release}_${group.name}`)}"
+            data-bs-target="#collapse-{group.id}"
             on:click={handleGroupClick}
         >
             <div class="d-flex flex-column w-100">
@@ -121,7 +121,7 @@
     </h2>
     <div
         class="accordion-collapse collapse"
-        id="collapse{sanitizeSelector(`${release}_${group.name}`)}"
+        id="collapse-{group.id}"
     >
     {#if groupClicked}
         {#await fetchTests()}
