@@ -1,5 +1,6 @@
     <script>
     import { onMount, onDestroy, createEventDispatcher } from "svelte";
+    import { Chart, registerables } from "chart.js";
     import Fa from "svelte-fa";
     import {
         faBox,

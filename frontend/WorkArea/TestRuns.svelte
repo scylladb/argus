@@ -17,6 +17,7 @@
     import { Collapse } from "bootstrap";
     import JobConfigureModal from "./JobConfigureModal.svelte";
     import { applicationCurrentUser } from "../argus";
+    import ResultsGraphs from "../TestRun/ResultsGraphs.svelte";
 
     export let testId;
     export let listId = uuidv4();
@@ -119,6 +120,7 @@
     let pluginFixed = false;
     let runsBody = undefined;
     let clickedTestRuns = {};
+    let clickedGraph = false;
     $: clickedTestRuns = loadAdditionalRuns(additionalRuns);
 
     const fetchTestInfo = async function () {
@@ -183,9 +185,16 @@
         fetchTestRuns();
     };
 
-    const handleTestRunClick = function (e) {
+    const handleTestRunClick = async function (e) {
         let runId = e.detail.runId;
         let collapse = runsBody.querySelector(`#collapse${runId}`);
+        if (!collapse) {
+            additionalRuns.push(runId);
+            await fetchTestRuns();
+            loadAdditionalRuns(additionalRuns);
+            collapse = runsBody.querySelector(`#collapse${runId}`);
+        }
+
         if (clickedTestRuns[runId]) {
             collapse.scrollIntoView({ behaviour: "smooth" });
             return;
@@ -200,6 +209,10 @@
         let collapse = runsBody.querySelector(`#collapse${id}`);
         collapse.classList.remove("show");
         clickedTestRuns[id] = false;
+    };
+
+    const handleShowGraph = function (e) {
+        clickedGraph = !clickedGraph;
     };
 
     const handlePluginFixup = async function () {
@@ -365,7 +378,17 @@
                     on:increaseLimit={handleIncreaseLimit}
                     on:ignoreRuns={handleIgnoreRuns}
                     on:fetchNewRuns={fetchTestRuns}
+                    on:showGraph={handleShowGraph}
                 />
+                {#if clickedGraph}
+                <div class="collapse mb-2 show" id="collapse-graphs" >
+                        <div class="container-fluid p-1 bg-light" >
+                            <ResultsGraphs test_id={testInfo.test.id}
+                                           bind:clickedTestRuns={clickedTestRuns}
+                                           on:runClick={handleTestRunClick}/>
+                        </div>
+                    </div>
+                    {/if}
                 {#each runs as run (run.id)}
                     <div class:show={clickedTestRuns[run.id]} class="collapse mb-2" id="collapse{run.id}">
                         <div class="container-fluid p-1 bg-light">

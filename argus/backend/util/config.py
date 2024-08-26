@@ -12,6 +12,8 @@ class Config:
     CONFIG_PATHS = [
         Path(__file__).parents[3] / "config" / "argus_web.yaml",
         Path("argus_web.yaml"),
+        Path("../config/argus_web.yaml"),
+
     ]
 
     @classmethod
