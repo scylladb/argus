@@ -6,6 +6,9 @@
     export let id = "";
     export let test_id = "";
     let results = [];
+    let filters = [];
+    let selectedFilters = [];
+    let filteredTables = [];
 
     const transformToTable = (tableData) => {
         // Transform table data to a more usable format for rendering: {table_name: {description, table_data, columns, rows}}
@@ -44,7 +47,7 @@
             transformedData[tableName].rows.forEach(row => {
                 transformedData[tableName].table_data[row] = {};
             });
-
+            let table_status = "PASS";
             table.cells.forEach(cell => {
                 const column = cell.column;
                 const row = cell.row;
@@ -59,13 +62,15 @@
                         type: columnTypesMap[column]
                     };
                 }
+
+                table_status = table_status === "PASS" ? status : table_status;
             });
+            transformedData[tableName].table_status = table_status;
         });
 
         console.log(transformedData);
         return transformedData;
     };
-
 
     const fetchResults = async function () {
         fetching = true;
@@ -75,6 +80,8 @@
             if (apiJson.status === "ok") {
                 fetching = false;
                 results = transformToTable(apiJson.tables);
+                extractFilters();
+                filterTables();
             }
         } catch (error) {
             console.log(error);
@@ -85,27 +92,81 @@
         const hours = Math.floor(seconds / 3600);
         const minutes = Math.floor((seconds % 3600) / 60);
         const secs = seconds % 60;
-        return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, '0')}`;
+        return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
     };
 
     const formatValue = (value, type) => {
         switch (type) {
-        case "FLOAT":
-            return value.toFixed(2);
-        case "INTEGER":
-            return value.toLocaleString();
-        case "DURATION":
-            return durationToStr(value);
-        default:
-            return value;
+            case "FLOAT":
+                return value.toFixed(2);
+            case "INTEGER":
+                return value.toLocaleString();
+            case "DURATION":
+                return durationToStr(value);
+            default:
+                return value;
         }
+    };
+
+    const extractFilters = () => {
+        // Extract filters from the table names by splitting by "-" and grouping by level
+        let fltrs = new Map();
+        Object.keys(results).forEach(name => {
+            const parts = name.split("-");
+            parts.forEach((part, index) => {
+                const level = index + 1;
+                if (!fltrs.has(level)) {
+                    fltrs.set(level, new Set());
+                }
+                fltrs.get(level).add(part.trim());
+            });
+        });
+        filters = Array.from(fltrs.entries()).sort((a, b) => a[0] - b[0]).map(entry => ({
+            level: entry[0],
+            items: Array.from(entry[1])
+        }))
+            .filter(entry => entry.items.length > 1);  // Filter out filters with only one item
+        filters = filters;
+    };
+
+    const toggleFilter = (filterName, level) => {
+        // Toggle filter by level - one filter per level can be applied
+        const currentFilter = selectedFilters.find(f => f.level === level);
+        if (currentFilter && currentFilter.name === filterName) {
+            selectedFilters = selectedFilters.filter(f => f.level !== level);
+        } else {
+            selectedFilters = selectedFilters.filter(f => f.level !== level);
+            selectedFilters = [...selectedFilters, {name: filterName, level}];
+        }
+        filterTables();
+    };
+
+    const filterTables = () => {
+        // Filter tables by selected filters - only tables that contain all selected filters are shown
+        const filteredTableNames = Object.keys(results)
+            .filter(title => {
+                const parts = title.split("-").map(part => part.trim());
+                return selectedFilters.every(filter => parts.includes(filter.name));
+            });
+        filteredTables = Object.keys(results)
+            .filter(key => filteredTableNames.includes(key))
+            .reduce((obj, key) => {
+                obj[key] = results[key];
+                return obj;
+            }, {});
+    };
+
+    const getFilterColor = (level) => {
+        const filterColors = ["#7fbfff", "#ff7f7f", "#ffbf7f", "#bf7fff", "#bf7f7f", "#7fffff", "#ffff7f"];
+        return filterColors[(level-2) % filterColors.length];
     };
 
     onMount(() => {
         fetchResults();
     });
 
-    </script>
+
+</script>
 
 <style>
     th, td {
@@ -122,46 +183,116 @@
         color: gray;
         vertical-align: top;
     }
+
+    /* Custom styles for improved margins and vertical line */
+    ul.result-list {
+        list-style-type: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    li.result-item {
+        margin-bottom: 2rem; /* Space between result tables */
+        display: flex;
+    }
+
+    li.result-item::before {
+        content: "";
+        display: block;
+        width: 5px;
+        background-color: #ddd; /* Color of the vertical line */
+        margin-right: 1rem;
+        border-radius: 2px;
+    }
+
+    li.result-item.PASS::before {
+        background-color: var(--bs-success) !important;
+    }
+
+    li.result-item.ERROR::before {
+        background-color: var(--bs-danger) !important;
+    }
+
+    .result-content {
+        flex-grow: 1;
+    }
+
+    .filters-container {
+        display: flex;
+        justify-content: flex-start;
+        align-items: center;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+
+    .filters-container button {
+        margin: 5px;
+        padding: 10px 15px;
+        cursor: pointer;
+        border: none;
+        border-radius: 5px;
+    }
+
+    .filters-container button:hover {
+        background-color: #e0e0e0;
+    }
+
+    .filters-container button.selected {
+        border: 2px solid #333;
+    }
 </style>
 
-{#if !fetching}
+{#if !fetching }
     <div class="p-2">
-        {#each Object.entries(results) as [table_name, result]}
-            <div class="">
-                <h3>{table_name}</h3>
-                <span>{result.description}</span>
-                <table class="table table-bordered">
-                    <thead class="thead-dark">
-                    <tr>
-                        <th></th>
-                        {#each result.columns as col}
-                            <th>{col.name} <span class="unit">[{col.unit}]</span></th>
-                        {/each}
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {#each result.rows as row}
-                        <tr>
-                            <td>{row}</td>
-                            {#each result.columns as col}
-                                <td class="{ResultCellStatusStyleMap[result.table_data[row][col.name]?.status || 'NULL']}">
-                                    {formatValue(result.table_data[row][col.name]?.value || "", result.table_data[row][col.name]?.type || "NULL")}
-                                </td>
+        <div class="filters-container {Object.keys(filters).length < 2 ? 'd-none' : ''}">
+            <button on:click={() => { selectedFilters = []; filterTables();  }}>Show All</button>
+            {#each filters as filterGroup}
+                {#each filterGroup.items as filter}
+                    <button
+                            on:click={() => toggleFilter(filter, filterGroup.level)}
+                            class:selected={selectedFilters.some(f => f.name === filter)}
+                            style="background-color: {getFilterColor(filterGroup.level)}"
+                    >
+                        {filter}
+                    </button>
+                {/each}
+            {/each}
+        </div>
+        <ul class="result-list">
+            {#each Object.entries(filteredTables) as [table_name, result]}
+                <li class="result-item {result.table_status}">
+                    <div class="result-content">
+                        <h4>{table_name}</h4>
+                        <span>{result.description}</span>
+                        <table class="table table-bordered">
+                            <thead class="thead-dark">
+                            <tr>
+                                <th></th>
+                                {#each result.columns as col}
+                                    <th>{col.name} <span class="unit">[{col.unit}]</span></th>
+                                {/each}
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {#each result.rows as row}
+                                <tr>
+                                    <td>{row}</td>
+                                    {#each result.columns as col}
+                                        <td class="{ResultCellStatusStyleMap[result.table_data[row][col.name]?.status || 'NULL']}">
+                                            {formatValue(result.table_data[row][col.name]?.value || "", result.table_data[row][col.name]?.type || "NULL")}
+                                        </td>
+                                    {/each}
+                                </tr>
                             {/each}
-                        </tr>
-                    {/each}
-                    </tbody>
-                </table>
-            </div>
-        {:else}
-            <div class="row">
-                <div class="col text-center p-1 text-muted">No results for this run.</div>
-            </div>
-        {/each}
+                            </tbody>
+                        </table>
+                    </div>
+                </li>
+            {/each}
+        </ul>
     </div>
 {:else}
     <div class="mb-2 text-center p-2">
         <span class="spinner-border spinner-border-sm"></span> Loading results...
     </div>
 {/if}
-
