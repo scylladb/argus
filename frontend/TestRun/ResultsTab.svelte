@@ -96,6 +96,9 @@
     };
 
     const formatValue = (value, type) => {
+        if (value === null || value === undefined) {
+            return "N/A";
+        }
         switch (type) {
             case "FLOAT":
                 return value.toFixed(2);
@@ -279,7 +282,7 @@
                                     <td>{row}</td>
                                     {#each result.columns as col}
                                         <td class="{ResultCellStatusStyleMap[result.table_data[row][col.name]?.status || 'NULL']}">
-                                            {formatValue(result.table_data[row][col.name]?.value || "", result.table_data[row][col.name]?.type || "NULL")}
+                                            {formatValue(result.table_data[row][col.name]?.value, result.table_data[row][col.name]?.type || "NULL")}
                                         </td>
                                     {/each}
                                 </tr>
