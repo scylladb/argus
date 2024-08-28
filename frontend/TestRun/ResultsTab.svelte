@@ -1,6 +1,9 @@
 <script>
     import {onMount} from "svelte";
     import {ResultCellStatusStyleMap} from "../Common/TestStatus";
+    import {faMarkdown} from "@fortawesome/free-brands-svg-icons";
+    import {sendMessage} from "../Stores/AlertStore.js";
+    import Fa from "svelte-fa";
 
     let fetching = true;
     export let id = "";
@@ -9,6 +12,55 @@
     let filters = [];
     let selectedFilters = [];
     let filteredTables = [];
+
+    const tableStyleToColor = {
+        "table-success": "green",
+        "table-danger": "red",
+        "table-warning": "yellow",
+        "table-secondary": "gray",
+    };
+
+    function styleToColor(classList) {
+        const classes = classList.split(" ");
+        for (let className of classes) {
+            if (className.startsWith("table-") && tableStyleToColor[className]) {
+                return tableStyleToColor[className];
+            }
+        }
+        return "";
+    }
+    async function copyResultTableAsMarkdown(event) {
+        const table = event.currentTarget.closest("table");
+        let markdown = "";
+
+        if (table) {
+            const rows = Array.from(table.querySelectorAll("tr"));
+            rows.forEach((row, rowIndex) => {
+                const cells = Array.from(row.querySelectorAll("th, td"));
+                const markdownRow = cells.map(cell => {
+                    let cellText = cell.innerText.trim();
+                    // Escape all '#' characters to prevent issue linking in GitHub
+                    cellText = cellText.replace(/#/g, "#&#8203;");
+                    const color = styleToColor(cell.className);
+                    if (color) {
+                        cellText = `$$\{\\color{${color}}${cellText}}$$`;
+                    }
+                    return cellText;
+                }).join(" | ");
+                markdown += `| ${markdownRow} |\n`;
+                if (rowIndex === 0) {
+                    const separator = cells.map(() => "---").join(" | ");
+                    markdown += `| ${separator} |\n`;
+                }
+            });
+            try {
+                await navigator.clipboard.writeText(markdown);
+                sendMessage("info", "Table copied to clipboard in Markdown format!");
+            } catch (err) {
+                sendMessage("error", "Failed to copy: ", err);
+            }
+        }
+    }
 
     const transformToTable = (tableData) => {
         // Transform table data to a more usable format for rendering: {table_name: {description, table_data, columns, rows}}
@@ -100,14 +152,14 @@
             return "N/A";
         }
         switch (type) {
-            case "FLOAT":
-                return value.toFixed(2);
-            case "INTEGER":
-                return value.toLocaleString();
-            case "DURATION":
-                return durationToStr(value);
-            default:
-                return value;
+        case "FLOAT":
+            return value.toFixed(2);
+        case "INTEGER":
+            return value.toLocaleString();
+        case "DURATION":
+            return durationToStr(value);
+        default:
+            return value;
         }
     };
 
@@ -270,7 +322,11 @@
                         <table class="table table-bordered">
                             <thead class="thead-dark">
                             <tr>
-                                <th></th>
+                                <th>
+                                    <button class="btn btn-outline-success" on:click={copyResultTableAsMarkdown}>
+                                        <Fa icon={faMarkdown}/>
+                                    </button>
+                                </th>
                                 {#each result.columns as col}
                                     <th>{col.name} <span class="unit">[{col.unit}]</span></th>
                                 {/each}
