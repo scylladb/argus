@@ -8,6 +8,7 @@
     import { sendMessage } from "../Stores/AlertStore";
 
     export let testInfo = {};
+    export let testId;
     export let runs = [];
     export let clickedTestRuns = {};
 
@@ -16,8 +17,23 @@
     let header;
     let ignoreReason = "";
     let modal;
+    let showGraphButton = false;
+
+    const showGraphsButtonIfResultsExist = async function () {
+        try {
+            let res = await fetch(`/api/v1/test-results?testId=${testId}`, {
+                method: "HEAD"
+            });
+            if (res.status === 200) {
+                showGraphButton = true;
+            }
+        } catch (error) {
+            console.error("Error while finding if results are present:", error);
+        }
+    };
 
     onMount(() => {
+        showGraphsButtonIfResultsExist();
         let observer = new IntersectionObserver((entries) => {
             let entry = entries[0];
             if (!entry) return;
@@ -41,16 +57,18 @@
             {testInfo.test.name} ({testInfo.release.name}/{testInfo.group.name})
         </div>
     {/if}
-    <div class="me-2 mb-2 d-inline-block">
-        <button
-            class="btn btn-light"
-            on:click={() => {
+    {#if showGraphButton}
+        <div class="me-2 mb-2 d-inline-block">
+            <button
+                    class="btn btn-light"
+                    on:click={() => {
                 dispatch("showGraph");
             }}
-        >
-            <Fa icon={faChartLine}/>
-        </button>
-    </div>
+            >
+                <Fa icon={faChartLine}/>
+            </button>
+        </div>
+    {/if}
     {#each runs as run (run.id)}
         <div class="me-2 mb-2 d-inline-block">
             <div class="btn-group">

@@ -372,6 +372,7 @@
                 <TestRunsSelector
                     {runs}
                     {testInfo}
+                    {testId}
                     bind:clickedTestRuns={clickedTestRuns}
                     on:runClick={handleTestRunClick}
                     on:closeRun={handleTestRunClose}
