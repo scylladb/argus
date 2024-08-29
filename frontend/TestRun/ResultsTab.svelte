@@ -272,7 +272,7 @@
                             <tr>
                                 <th></th>
                                 {#each result.columns as col}
-                                    <th>{col.name} <span class="unit">[{col.unit}]</span></th>
+                                    <th>{col.name} <span class="unit">{col.unit ? `[${col.unit}]` : ''}</span></th>
                                 {/each}
                             </tr>
                             </thead>

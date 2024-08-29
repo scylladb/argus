@@ -118,7 +118,7 @@ def create_chartjs(table, data):
             continue
         options = copy.deepcopy(default_options)
         options["plugins"]["title"]["text"] = f"{table.name} - {column.name}"
-        options["scales"]["y"]["title"]["text"] = f"[{column.unit}]"
+        options["scales"]["y"]["title"]["text"] = f"[{column.unit}]" if column.unit else ""
         options["scales"]["y"]["min"] = min_y
         options["scales"]["y"]["max"] = max_y
         graphs.append({"options": options, "data":
