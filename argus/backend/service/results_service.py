@@ -138,3 +138,7 @@ class ResultsService:
             data = ArgusGenericResultData.objects(test_id=test_id, name=table.name).all()
             graphs.extend(create_chartjs(table, data))
         return graphs
+
+    def is_results_exist(self, test_id: UUID):
+        """Verify if results for given test id exist at all."""
+        return bool(ArgusGenericResultMetadata.objects(test_id=test_id).only(["name"]).limit(1))

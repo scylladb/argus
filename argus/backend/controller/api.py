@@ -4,7 +4,7 @@ import requests
 from flask import (
     Blueprint,
     g,
-    request
+    request, Response
 )
 from flask.json import jsonify
 from argus.backend.error_handlers import handle_api_exception
@@ -382,13 +382,16 @@ def test_info():
         "response": info
     }
 
-@bp.route("/test-results", methods=["GET"])
+@bp.route("/test-results", methods=["GET", "HEAD"])
 @api_login_required
 def test_results():
     test_id = request.args.get("testId")
     if not test_id:
         raise Exception("No testId provided")
     service = ResultsService()
+    if request.method == 'HEAD':
+        exists = service.is_results_exist(test_id=UUID(test_id))
+        return Response(status=200 if exists else 404)
     info = service.get_results(test_id=UUID(test_id))
 
     return {
