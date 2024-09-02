@@ -26,7 +26,7 @@
 
     const locateGrafanaNode = function () {
         return test_run.allocated_resources.find((node) => {
-            return new RegExp(/\-monitor\-node\-/).test(node.name);
+            return new RegExp(/\-monitor\-node\-/).test(node.name) && node.state === "running";
         });
     };
 
@@ -254,14 +254,15 @@
                 />
             {/if}
             <div class="btn-group">
-                {#if InProgressStatuses.includes(test_run.status) && locateGrafanaNode()}
+                {#if locateGrafanaNode()}
                     <a
                         target="_blank"
                         href="http://{locateGrafanaNode().instance_info
-                            .public_ip}:3000/"
+                        .public_ip}:3000/"
                         class="btn btn-outline-warning">Open Grafana</a
                     >
-                {:else}
+                {/if}
+                {#if !InProgressStatuses.includes(test_run.status)}
                     <a
                         href="https://jenkins.scylladb.com/view/QA/job/QA-tools/job/hydra-show-monitor/parambuild/?test_id={test_run.id}"
                         class="btn btn-outline-primary"
