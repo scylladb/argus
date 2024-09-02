@@ -22,6 +22,7 @@
                 }
             }
         };
+        graph.options.animation = false;
         graph.options.plugins.tooltip = {
             callbacks: {
                 label: function (tooltipItem) {
