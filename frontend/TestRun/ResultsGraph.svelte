@@ -1,9 +1,10 @@
 <script>
     import {Chart, registerables} from "chart.js";
-    import {createEventDispatcher, onDestroy, onMount} from "svelte";
+    import {createEventDispatcher, onMount} from "svelte";
     import "chartjs-adapter-date-fns";
 
     export let graph = {};
+    export let ticks = {};
     export let index = 0;
     export let test_id = "";
     export let width = 500;
@@ -22,6 +23,7 @@
                 }
             }
         };
+        const xTicks = [...new Set(graph.data.datasets[0].data.map(point => point.x.slice(0, 10)))];
         graph.options.animation = false;
         graph.options.plugins.tooltip = {
             callbacks: {
@@ -31,6 +33,19 @@
                     const ori = tooltipItem.raw.ori;
                     return `${x}: ${ori? ori : y}`;
                 }
+            }
+        };
+        graph.options.scales.x.min = ticks["min"];
+        graph.options.scales.x.max = ticks["max"];
+        graph.options.scales.x.ticks = {
+            stepSize: 1,
+            minRotation: 45,
+            maxTicksLimit: 12,
+            callback: function (value, index) {
+                if (value == ticks["min"] || value == ticks["max"] || xTicks.includes(value)) {
+                    return value;
+                }
+                return null;
             }
         };
         chart = new Chart(

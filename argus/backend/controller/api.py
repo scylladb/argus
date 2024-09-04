@@ -392,11 +392,11 @@ def test_results():
     if request.method == 'HEAD':
         exists = service.is_results_exist(test_id=UUID(test_id))
         return Response(status=200 if exists else 404)
-    info = service.get_results(test_id=UUID(test_id))
+    graphs, ticks = service.get_results(test_id=UUID(test_id))
 
     return {
         "status": "ok",
-        "response": info
+        "response": {"graphs": graphs, "ticks": ticks}
     }
 
 @bp.route("/test_run/comment/get", methods=["GET"])  # TODO: remove
