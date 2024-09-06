@@ -67,12 +67,12 @@ colors = [
 ]
 
 
-def get_sorted_data_for_column_and_row(data: List[Dict[str, Any]], column: str, row: str) -> List[Dict[str, Any]]:
+def get_sorted_data_for_column_and_row(data: List[ArgusGenericResultData], column: str, row: str) -> List[Dict[str, Any]]:
     return sorted([{"x": entry.sut_timestamp.strftime('%Y-%m-%dT%H:%M:%SZ'),
                     "y": entry.value,
                     "id": entry.run_id}
-                   for entry in data if entry['column'] == column and entry['row'] == row],
-                  key=lambda x: x['x'])
+                   for entry in data if entry.column == column and entry.row == row],
+                  key=lambda point: point["x"])
 
 
 def get_min_max_y(datasets: List[Dict[str, Any]]) -> (float, float):
@@ -105,6 +105,9 @@ def round_datasets_to_min_max(datasets: List[Dict[str, Any]], min_y: float, max_
 def create_chartjs(table, data):
     graphs = []
     for column in table.columns_meta:
+        if column.type == "TEXT":
+            # skip text columns
+            continue
         datasets = [
             {"label": row,
              "borderColor": colors[idx % len(colors)],
@@ -143,15 +146,52 @@ def calculate_graph_ticks(graphs: List[Dict]) -> dict[str, str]:
 
 
 class ResultsService:
+    
+    def __init__(self):
+        self.cluster = ScyllaCluster.get()
+    
+    def _get_tables_metadata(self, test_id: UUID) -> list[ArgusGenericResultMetadata]:
+        query_fields = ["name", "description", "columns_meta", "rows_meta"]
+        raw_query = (f"SELECT {','.join(query_fields)}"
+                     f" FROM generic_result_metadata_v1 WHERE test_id = ?")
+        query = self.cluster.prepare(raw_query)
+        tables_meta = self.cluster.session.execute(query=query, parameters=(test_id,))
+        return [ArgusGenericResultMetadata(**table) for table in tables_meta]
 
-    def __init__(self, database_session=None):
-        self.session = database_session if database_session else ScyllaCluster.get_session()
+    def get_run_results(self, test_id: UUID, run_id: UUID) -> list[dict]:
+        query_fields = ["column", "row", "value", "value_text", "status"]
+        raw_query = (f"SELECT {','.join(query_fields)},WRITETIME(status) as ordering"
+                     f" FROM generic_result_data_v1 WHERE test_id = ? AND run_id = ? AND name = ?")
+        query = self.cluster.prepare(raw_query)
+        tables_meta = self._get_tables_metadata(test_id=test_id)
+        tables = []
+        for table in tables_meta:
+            cells = self.cluster.session.execute(query=query, parameters=(test_id, run_id, table.name))
+            if not cells:
+                continue
+            cells = [dict(cell.items()) for cell in cells]
+            tables.append({'meta': {
+                'name': table.name,
+                'description': table.description,
+                'columns_meta': table.columns_meta,
+                'rows_meta': table.rows_meta,
+            },
+                'cells': [{k: v for k, v in cell.items() if k in query_fields} for cell in cells],
+                'order': min([cell['ordering'] for cell in cells] or [0])})
+        return sorted(tables, key=lambda x: x['order'])
 
-    def get_results(self, test_id: UUID):
+    def get_test_graphs(self, test_id: UUID):
+        query_fields = ["run_id", "column", "row", "value", "status", "sut_timestamp"]
+        raw_query = (f"SELECT {','.join(query_fields)}"
+                     f" FROM generic_result_data_v1 WHERE test_id = ? AND name = ? LIMIT 2147483647")
+        query = self.cluster.prepare(raw_query)
+        tables_meta = self._get_tables_metadata(test_id=test_id)
         graphs = []
-        res = ArgusGenericResultMetadata.objects(test_id=test_id).all()
-        for table in res:
-            data = ArgusGenericResultData.objects(test_id=test_id, name=table.name).all()
+        for table in tables_meta:
+            data = self.cluster.session.execute(query=query, parameters=(test_id, table.name))
+            data = [ArgusGenericResultData(**cell) for cell in data]
+            if not data:
+                continue
             graphs.extend(create_chartjs(table, data))
         ticks = calculate_graph_ticks(graphs)
         return graphs, ticks

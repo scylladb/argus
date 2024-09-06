@@ -392,7 +392,7 @@ def test_results():
     if request.method == 'HEAD':
         exists = service.is_results_exist(test_id=UUID(test_id))
         return Response(status=200 if exists else 404)
-    graphs, ticks = service.get_results(test_id=UUID(test_id))
+    graphs, ticks = service.get_test_graphs(test_id=UUID(test_id))
 
     return {
         "status": "ok",

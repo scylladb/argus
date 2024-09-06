@@ -4,6 +4,8 @@
     import {faMarkdown} from "@fortawesome/free-brands-svg-icons";
     import {sendMessage} from "../Stores/AlertStore.js";
     import Fa from "svelte-fa";
+    import ScreenshotModal from "./Components/ScreenshotModal.svelte";
+    import Cell from "./Components/Cell.svelte";
 
     let fetching = true;
     export let id = "";
@@ -12,6 +14,7 @@
     let filters = [];
     let selectedFilters = [];
     let filteredTables = [];
+    let selectedScreenshot = "";
 
     const tableStyleToColor = {
         "table-success": "green",
@@ -29,6 +32,7 @@
         }
         return "";
     }
+
     async function copyResultTableAsMarkdown(event) {
         const table = event.currentTarget.closest("table");
         let markdown = "";
@@ -103,7 +107,7 @@
             table.cells.forEach(cell => {
                 const column = cell.column;
                 const row = cell.row;
-                const value = cell.value;
+                const value = cell.value || cell.value_text;
                 const status = cell.status;
 
                 // Only add the cell if the column and row are present in the table (in metadata and in cells)
@@ -137,29 +141,6 @@
             }
         } catch (error) {
             console.log(error);
-        }
-    };
-
-    const durationToStr = (seconds) => {
-        const hours = Math.floor(seconds / 3600);
-        const minutes = Math.floor((seconds % 3600) / 60);
-        const secs = seconds % 60;
-        return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-    };
-
-    const formatValue = (value, type) => {
-        if (value === null || value === undefined) {
-            return "N/A";
-        }
-        switch (type) {
-        case "FLOAT":
-            return value.toFixed(2);
-        case "INTEGER":
-            return value.toLocaleString();
-        case "DURATION":
-            return durationToStr(value);
-        default:
-            return value;
         }
     };
 
@@ -213,7 +194,7 @@
 
     const getFilterColor = (level) => {
         const filterColors = ["#7fbfff", "#ff7f7f", "#ffbf7f", "#bf7fff", "#bf7f7f", "#7fffff", "#ffff7f"];
-        return filterColors[(level-2) % filterColors.length];
+        return filterColors[(level - 2) % filterColors.length];
     };
 
     onMount(() => {
@@ -337,9 +318,11 @@
                                 <tr>
                                     <td>{row}</td>
                                     {#each result.columns as col}
-                                        <td class="{ResultCellStatusStyleMap[result.table_data[row][col.name]?.status || 'NULL']}">
-                                            {formatValue(result.table_data[row][col.name]?.value, result.table_data[row][col.name]?.type || "NULL")}
-                                        </td>
+                                        {#key result.table_data[row][col.name]}
+                                            <td class="{ResultCellStatusStyleMap[result.table_data[row][col.name]?.status || 'NULL']}">
+                                                <Cell cell={result.table_data[row][col.name]} bind:selectedScreenshot/>
+                                            </td>
+                                        {/key}
                                     {/each}
                                 </tr>
                             {/each}
@@ -350,6 +333,7 @@
             {/each}
         </ul>
     </div>
+    <ScreenshotModal bind:selectedScreenshot />
 {:else}
     <div class="mb-2 text-center p-2">
         <span class="spinner-border spinner-border-sm"></span> Loading results...

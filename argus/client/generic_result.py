@@ -7,6 +7,7 @@ class Status(Enum):
     PASS = auto()
     WARNING = auto()
     ERROR = auto()
+    UNSET = auto()
 
     def __str__(self):
         return self.name
@@ -16,6 +17,7 @@ class ResultType(Enum):
     INTEGER = auto()
     FLOAT = auto()
     DURATION = auto()
+    TEXT = auto()
 
     def __str__(self):
         return self.name
@@ -44,7 +46,7 @@ class ResultTableMeta(type):
             cls_instance.name = meta.name
             cls_instance.description = meta.description
             cls_instance.columns = meta.Columns
-            cls_instance.column_names = {column.name for column in cls_instance.columns}
+            cls_instance.column_types = {column.name: column.type for column in cls_instance.columns}
             cls_instance.rows = []
         return cls_instance
 
@@ -57,12 +59,13 @@ class Cell:
     status: Status
 
     def as_dict(self) -> dict:
-        return {
+        cell = {"value_text": self.value} if isinstance(self.value, str) else {"value": self.value}
+        cell.update({
             "column": self.column,
             "row": self.row,
-            "value": self.value,
             "status": str(self.status)
-        }
+        })
+        return cell
 
 
 @dataclass
@@ -94,6 +97,8 @@ class GenericResultTable(metaclass=ResultTableMeta):
         }
 
     def add_result(self, column: str, row: str, value: Union[int, float, str], status: Status):
-        if column not in self.column_names:
+        if column not in self.column_types:
             raise ValueError(f"Column {column} not found in the table")
+        if isinstance(value, str) and self.column_types[column] != ResultType.TEXT:
+            raise ValueError(f"Column {column} is not of type TEXT")
         self.results.append(Cell(column=column, row=row, value=value, status=status))
