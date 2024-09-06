@@ -1,0 +1,79 @@
+<script lang="ts">
+    import {faFileDownload, faTimes} from "@fortawesome/free-solid-svg-icons";
+    import Fa from "svelte-fa";
+    import {onMount, onDestroy} from "svelte";
+
+    export let selectedScreenshot: string;
+    console.log("clicked screenshot", selectedScreenshot);
+    function handleKeyDown(event: KeyboardEvent) {
+        if (event.key === "Escape") {
+            selectedScreenshot = "";
+        }
+    }
+
+    onMount(() => {
+        window.addEventListener("keydown", handleKeyDown);
+    });
+
+    onDestroy(() => {
+        window.removeEventListener("keydown", handleKeyDown);
+    });
+</script>
+
+
+{#if selectedScreenshot}
+    <div class="screenshot-modal">
+        <div class="text-end">
+            <div class="d-inline-block screenshot-button">
+                <a href={selectedScreenshot} target="_blank">
+                    <Fa color="#a0a0a0" icon={faFileDownload}/>
+                </a>
+            </div>
+            <div
+                    class="d-inline-block screenshot-button"
+                    on:click={() => {
+                selectedScreenshot = "";
+            }}
+            >
+                <Fa icon={faTimes}/>
+            </div>
+        </div>
+        <div class="d-flex align-items-center justify-content-center my-2">
+            <img
+                    class="screenshot-modal-image"
+                    src={selectedScreenshot}
+                    alt="Screenshot"
+            />
+        </div>
+    </div>
+{/if}
+
+
+<style>
+    .screenshot-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        overflow-y: scroll;
+        background-color: rgba(0, 0, 0, 0.55);
+        z-index: 9999;
+    }
+
+    .screenshot-button {
+        font-size: 32pt;
+        padding: 0 0.25rem;
+        color: rgb(138, 138, 138);
+        cursor: pointer;
+    }
+
+    .screenshot-button:hover {
+        color: white;
+    }
+
+    .screenshot-button:last-child {
+        padding-right: 1rem;
+    }
+
+</style>

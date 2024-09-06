@@ -1,6 +1,5 @@
 <script>
-    import Fa from "svelte-fa";
-    import { faTimes, faFileDownload } from "@fortawesome/free-solid-svg-icons";
+    import ScreenshotModal from "./Components/ScreenshotModal.svelte";
     export let screenshots = [];
 
     let selectedScreenshot = undefined;
@@ -20,33 +19,7 @@
     <div class="text-muted text-center py-2">No screenshots submitted!</div>
 {/each}
 </div>
-
-{#if selectedScreenshot}
-    <div class="screenshot-modal">
-        <div class="text-end">
-            <div class="d-inline-block screenshot-button">
-                <a href={selectedScreenshot} target="_blank"
-                    ><Fa color="#a0a0a0" icon={faFileDownload} /></a
-                >
-            </div>
-            <div
-                class="d-inline-block screenshot-button"
-                on:click={() => {
-                    selectedScreenshot = undefined;
-                }}
-            >
-                <Fa icon={faTimes} />
-            </div>
-        </div>
-        <div class="d-flex align-items-center justify-content-center my-2">
-            <img
-                class="screenshot-modal-image"
-                src={selectedScreenshot}
-                alt=""
-            />
-        </div>
-    </div>
-{/if}
+<ScreenshotModal bind:selectedScreenshot />
 
 <style>
     .screenshot-thumb {
@@ -62,31 +35,7 @@
         border: solid 2px rgb(209, 209, 209);
     }
 
-    .screenshot-modal {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        overflow-y: scroll;
-        background-color: rgba(0, 0, 0, 0.55);
-        z-index: 9999;
-    }
 
-    .screenshot-button {
-        font-size: 32pt;
-        padding: 0 0.25rem;
-        color: rgb(138, 138, 138);
-        cursor: pointer;
-    }
-
-    .screenshot-button:hover {
-        color: white;
-    }
-
-    .screenshot-button:last-child {
-        padding-right: 1rem;
-    }
 
     .screenshots-holder {
         flex-wrap: wrap;
