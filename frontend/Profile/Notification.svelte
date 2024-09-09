@@ -3,6 +3,7 @@
     import { apiMethodCall } from "../Common/ApiUtils";
     import NotificationCommentWrapper from "./NotificationCommentWrapper.svelte";
     import { ArgusNotification, ArgusShortSummary, NotificationSource, NotificationsState } from "../Common/ArgusNotification";
+    import NotificationTestRunWrapper from "./NotificationTestRunWrapper.svelte";
     export let summary: ArgusShortSummary;
 
     let notification: ArgusNotification;
@@ -15,6 +16,7 @@
 
     const ComponentSourceMap: ComponentSourceType = {
         [NotificationSource.Comment]: NotificationCommentWrapper,
+        [NotificationSource.TestRun]: NotificationTestRunWrapper,
     };
 
     const SupportDataFetch = {
@@ -27,8 +29,11 @@
                 supportDataReady = true;
                 supportData = result.response;
             }
-        }
-    }
+        },
+        [NotificationSource.TestRun]: async () => {
+            return {};
+        },
+    };
 
     const setNotificationAsRead = async function() {
         let params = {
@@ -36,7 +41,7 @@
         };
         let result = await apiMethodCall("/api/v1/notifications/read", params, "POST");
         if (result.status === "ok") {
-
+            //empty
         }
     };
 
