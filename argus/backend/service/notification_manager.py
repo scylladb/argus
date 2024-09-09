@@ -93,7 +93,8 @@ class NotificationSenderBase:
 
 class ArgusDBNotificationSaver(NotificationSenderBase):
     CONTENT_TEMPLATES = {
-        ArgusNotificationTypes.Mention: lambda p: render_template("notifications/mention.html.j2", **p if p else {})
+        ArgusNotificationTypes.Mention: lambda p: render_template("notifications/mention.html.j2", **p if p else {}),
+        ArgusNotificationTypes.AssigneeChange: lambda p: render_template("notifications/assigned.html.j2", **p if p else {}),
     }
 
     def send_notification(self, receiver: UUID, sender: UUID, notification_type: ArgusNotificationTypes, source_type: ArgusNotificationSourceTypes,
@@ -117,7 +118,8 @@ class ArgusDBNotificationSaver(NotificationSenderBase):
 class EmailNotificationServiceSender(NotificationSenderBase):
     CONTENT_TEMPLATES = {
         ArgusNotificationTypes.Mention: lambda p: render_template(
-            "notifications/email_mention.html.j2", **p if p else {})
+            "notifications/email_mention.html.j2", **p if p else {}),
+        ArgusNotificationTypes.AssigneeChange: lambda p: render_template("notifications/assigned_email.html.j2", **p if p else {}),
     }
 
     def __init__(self):

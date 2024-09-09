@@ -1,4 +1,5 @@
 from uuid import UUID
+
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData
 from argus.backend.plugins.core import PluginModelBase
@@ -25,6 +26,7 @@ class ClientService:
     def submit_run(self, run_type: str, request_data: dict) -> str:
         model = self.get_model(run_type)
         model.submit_run(request_data=request_data)
+
         return "Created"
     
     def get_run(self, run_type: str, run_id: str):
