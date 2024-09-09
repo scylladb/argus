@@ -5,6 +5,7 @@
 
     export let test_id = "";
     let graphs = [];
+    let ticks = {};
     let tableFilters = [];
     let columnFilters = [];
     let selectedTableFilters = [];
@@ -28,7 +29,9 @@
             if (results.status != "ok") {
                 return Promise.reject(`API Error: ${results.message}, while trying to fetch test results`);
             }
-            graphs = results["response"].map((graph) => ({...graph, id: generateRandomHash()}));
+            const response = results["response"];
+            graphs = response["graphs"].map((graph) => ({...graph, id: generateRandomHash()}));
+            ticks = response["ticks"];
             extractTableFilters();
             extractColumnFilters();
             filterGraphs();
@@ -160,8 +163,8 @@
 
 <div class="charts-container">
     {#each filteredGraphs as graph (graph.id)}
-        <div class="chart-container {filteredGraphs.length<3? 'big-size': ''}">
-            <ResultsGraph {graph} {width} {height} test_id={test_id} index={graph.id} on:runClick={dispatch_run_click}/>
+        <div class="chart-container {filteredGraphs.length<2? 'big-size': ''}">
+            <ResultsGraph {graph} {ticks} {width} {height} test_id={test_id} index={graph.id} on:runClick={dispatch_run_click}/>
         </div>
     {/each}
 </div>
@@ -182,7 +185,7 @@
     }
 
     .big-size {
-        width: 45%;
+        width: 90%;
     }
 
     .filters-container {

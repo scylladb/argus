@@ -105,8 +105,4 @@ def run_finalize(run_type: str, run_id: str):
 @api_login_required
 def submit_results(run_type: str, run_id: str):
     payload = get_payload(request)
-    result = ClientService().submit_results(run_type=run_type, run_id=run_id, results=payload)
-    return {
-        "status": "ok",
-        "response": result
-    }
+    return ClientService().submit_results(run_type=run_type, run_id=run_id, results=payload)

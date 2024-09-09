@@ -126,6 +126,22 @@ def create_chartjs(table, data):
     return graphs
 
 
+def calculate_graph_ticks(graphs: List[Dict]) -> dict[str, str]:
+    min_x, max_x = None, None
+
+    for graph in graphs:
+        for dataset in graph["data"]["datasets"]:
+            if not dataset["data"]:
+                continue
+            first_x = dataset["data"][0]["x"]
+            last_x = dataset["data"][-1]["x"]
+            if min_x is None or first_x < min_x:
+                min_x = first_x
+            if max_x is None or last_x > max_x:
+                max_x = last_x
+    return {"min": min_x[:10], "max": max_x[:10]}
+
+
 class ResultsService:
 
     def __init__(self, database_session=None):
@@ -137,7 +153,8 @@ class ResultsService:
         for table in res:
             data = ArgusGenericResultData.objects(test_id=test_id, name=table.name).all()
             graphs.extend(create_chartjs(table, data))
-        return graphs
+        ticks = calculate_graph_ticks(graphs)
+        return graphs, ticks
 
     def is_results_exist(self, test_id: UUID):
         """Verify if results for given test id exist at all."""

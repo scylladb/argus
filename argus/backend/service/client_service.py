@@ -79,9 +79,15 @@ class ClientService:
 
         return "Finalized"
 
-    def submit_results(self, run_type: str, run_id: str, results: dict) -> str:
+    def submit_results(self, run_type: str, run_id: str, results: dict) -> dict[str, str]:
         model = self.get_model(run_type)
-        run = model.load_test_run(UUID(run_id))
+        try:
+            run = model.load_test_run(UUID(run_id))
+        except model.DoesNotExist:
+            return {"status": "error", "response": {
+            "exception": "DoesNotExist",
+            "arguments": [run_id]
+        }}
         existing_table = ArgusGenericResultMetadata.objects(test_id=run.test_id, name=results["meta"]["name"]).first()
         if existing_table:
             existing_table.update_if_changed(results["meta"])
@@ -98,4 +104,4 @@ class ClientService:
                                    sut_timestamp=sut_timestamp,
                                    **cell
                                    ).save()
-        return "Submitted"
+        return {"status": "ok", "message": "Results submitted"}
