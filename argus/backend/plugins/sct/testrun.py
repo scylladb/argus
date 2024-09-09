@@ -1,6 +1,6 @@
 from enum import Enum
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import Optional
 from uuid import UUID
@@ -254,8 +254,12 @@ class SCTTestRun(PluginModelBase):
     def sut_timestamp(self) -> float:
         """converts scylla-server date to timestamp and adds revision in subseconds precision to diffirentiate
         scylla versions from the same day. It's not perfect, but we don't know exact version time."""
-        scylla_package = [package for package in self.packages if package.name == "scylla-server"][0]
-        return (datetime.strptime(scylla_package.date, '%Y%m%d').timestamp()
+        try:
+            scylla_package_upgraded = [package for package in self.packages if package.name == "scylla-server-upgraded"][0]
+        except IndexError:
+            scylla_package_upgraded = None
+        scylla_package = scylla_package_upgraded or [package for package in self.packages if package.name == "scylla-server"][0]
+        return (datetime.strptime(scylla_package.date, '%Y%m%d').replace(tzinfo=timezone.utc).timestamp()
                 + int(scylla_package.revision_id, 16) % 1000000 / 1000000)
 
 
