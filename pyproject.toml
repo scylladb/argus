@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "argus-alm"
-version = "0.12.7"
+version = "0.12.8"
 description = "Argus"
-authors = ["Alexey Kartashov <alexey.kartashov@scylladb.com>"]
+authors = ["Alexey Kartashov <alexey.kartashov@scylladb.com>", "Łukasz Sójka <lukasz.sojka@scylladb.com>"]
 license = "Apache-2.0"
 repository = "https://github.com/scylladb/argus"
 readme = "README.md"

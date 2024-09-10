@@ -1,13 +1,6 @@
 from cassandra.cqlengine import columns
 from cassandra.cqlengine.models import Model
 from cassandra.cqlengine.usertype import UserType
-from enum import Enum
-
-
-class Status(Enum):
-    PASS = 0
-    WARNING = 1
-    ERROR = 2
 
 
 class ColumnMetadata(UserType):
@@ -60,4 +53,5 @@ class ArgusGenericResultData(Model):
     row = columns.Ascii(primary_key=True, index=True)
     sut_timestamp = columns.DateTime()  # for sorting
     value = columns.Double()
+    value_text = columns.Text()
     status = columns.Ascii()

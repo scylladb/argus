@@ -8,6 +8,7 @@ from flask import (
 from argus.backend.error_handlers import handle_api_exception
 from argus.backend.models.web import ArgusTest
 from argus.backend.service.jenkins_service import JenkinsService
+from argus.backend.service.results_service import ResultsService
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.user import api_login_required
 from argus.backend.util.common import get_payload
@@ -67,7 +68,7 @@ def test_run_activity(run_id: str):
 @bp.route("/run/<string:test_id>/<string:run_id>/fetch_results", methods=["GET"])
 @api_login_required
 def fetch_results(test_id: str, run_id: str):
-    tables = TestRunService().fetch_results(test_id=UUID(test_id), run_id=UUID(run_id))
+    tables = ResultsService().get_run_results(test_id=UUID(test_id), run_id=UUID(run_id))
     return {
         "status": "ok",
         "tables": tables
