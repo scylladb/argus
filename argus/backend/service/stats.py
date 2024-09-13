@@ -7,11 +7,12 @@ from typing import TypedDict
 from uuid import UUID
 
 from cassandra.cqlengine.models import Model
+from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.plugins.loader import all_plugin_models
 from argus.backend.util.common import chunk, get_build_number
 from argus.common.enums import TestStatus, TestInvestigationStatus
 from argus.backend.models.web import ArgusGithubIssue, ArgusRelease, ArgusGroup, ArgusTest,\
-    ArgusScheduleTest, ArgusTestRunComment, ArgusUserView
+    ArgusTestRunComment, ArgusUserView
 from argus.backend.db import ScyllaCluster
 
 LOGGER = logging.getLogger(__name__)
@@ -154,7 +155,7 @@ class ViewStats:
         self.has_bug_report = False
         self.issues: list[ArgusGithubIssue] = []
         self.comments: list[ArgusTestRunComment] = []
-        self.test_schedules: dict[UUID, ArgusScheduleTest] = {}
+        self.plans: list[ArgusReleasePlan] = []
         self.forced_collection = False
         self.rows = []
         self.releases = {}
@@ -192,15 +193,16 @@ class ViewStats:
             result_set.extend(entity.filter(release_id=release_id).all())
         return result_set
 
-    def collect(self, rows: list[TestRunStatRow], limited=False, force=False, dict: dict[str, TestRunStatRow] | None = None, tests: list[ArgusTest] = None) -> None:
+    def collect(self, rows: list[TestRunStatRow], limited=False, force=False, dict: dict[str, TestRunStatRow] | None = None, tests: list[ArgusTest] = None, version_filter: str = None) -> None:
         self.forced_collection = force
         all_release_ids = list({t.release_id for t in tests})
         if not limited:
-            self.test_schedules = reduce(
-                lambda acc, row: acc[row["test_id"]].append(row) or acc,
-                self._fetch_multiple_release_queries(ArgusScheduleTest, all_release_ids),
-                defaultdict(list)
-            )
+            if self.release.plan_id:
+                plan = ArgusReleasePlan.get(id=self.release.plan_id)
+                self.plans = [plan]
+            else:
+                plans: list[ArgusReleasePlan] = [plan for release_id in all_release_ids for results in ArgusReleasePlan.filter(release_id=release_id).all() for plan in results]
+                self.plans = plans if not version_filter else [plan for plan in plans if version_filter == plan.target_version]
 
         self.rows = rows
         self.dict = dict
@@ -245,7 +247,7 @@ class ReleaseStats:
         self.has_bug_report = False
         self.issues: list[ArgusGithubIssue] = []
         self.comments: list[ArgusTestRunComment] = []
-        self.test_schedules: dict[UUID, ArgusScheduleTest] = {}
+        self.plans: list[ArgusReleasePlan] = []
         self.forced_collection = False
         self.rows = []
         self.all_tests = []
@@ -275,17 +277,14 @@ class ReleaseStats:
             **aggregated_investigation_status
         }
 
-    def collect(self, rows: list[TestRunStatRow], limited=False, force=False, dict: dict | None = None, tests=None) -> None:
+    def collect(self, rows: list[TestRunStatRow], limited=False, force=False, dict: dict | None = None, tests=None, version_filter: str = None) -> None:
         self.forced_collection = force
         if not self.release.enabled and not force:
             return
 
         if not self.release.perpetual and not limited:
-            self.test_schedules = reduce(
-                lambda acc, row: acc[row["test_id"]].append(row) or acc,
-                ArgusScheduleTest.filter(release_id=self.release.id).all(), 
-                defaultdict(list)
-            )
+            plans: list[ArgusReleasePlan] = list(ArgusReleasePlan.filter(release_id=self.release.id).all())
+            self.plans = plans if not filter else [plan for plan in plans if version_filter == plan.target_version]
 
         self.rows = rows
         self.dict = dict
@@ -351,10 +350,18 @@ class GroupStats:
 
         for test in tests:
             if test.enabled:
+                is_scheduled = False
+                for plan in self.parent_release.plans:
+                    if test.id in plan.tests:
+                        is_scheduled = True
+                        break
+                    if self.group.id in plan.groups:
+                        is_scheduled = True
+                        break
                 stats = TestStats(
                     test=test,
                     parent_group=self,
-                    schedules=self.parent_release.test_schedules.get(test.id, [])
+                    scheduled=is_scheduled
                 )
                 stats.collect(limited=limited)
                 self.tests.append(stats)
@@ -371,7 +378,7 @@ class TestStats:
         self,
         test: ArgusTest,
         parent_group: GroupStats,
-        schedules: list[ArgusScheduleTest] | None = None
+        scheduled: bool = False
     ) -> None:
         self.test = test
         self.parent_group = parent_group
@@ -381,8 +388,7 @@ class TestStats:
         self.last_runs: list[dict] = []
         self.has_bug_report = False
         self.has_comments = False
-        self.schedules = schedules if schedules else tuple()
-        self.is_scheduled = len(self.schedules) > 0
+        self.is_scheduled = scheduled
         self.tracked_run_number = None
 
     def to_dict(self) -> dict:
@@ -492,7 +498,7 @@ class ReleaseStatsCollector:
             self.release_dict[row["build_id"]] = runs
 
         self.release_stats = ReleaseStats(release=self.release)
-        self.release_stats.collect(rows=self.release_rows, limited=limited, force=force, dict=self.release_dict, tests=all_tests)
+        self.release_stats.collect(rows=self.release_rows, limited=limited, force=force, dict=self.release_dict, tests=all_tests, version_filter=self.release_version)
         return self.release_stats.to_dict()
 
 
@@ -536,5 +542,5 @@ class ViewStatsCollector:
             self.runs_by_build_id[row["build_id"]] = runs
 
         self.view_stats = ViewStats(release=self.view)
-        self.view_stats.collect(rows=self.view_rows, limited=limited, force=force, dict=self.runs_by_build_id, tests=all_tests)
+        self.view_stats.collect(rows=self.view_rows, limited=limited, force=force, dict=self.runs_by_build_id, tests=all_tests, version_filter=self.filter)
         return self.view_stats.to_dict()

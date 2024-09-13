@@ -13,6 +13,7 @@ from argus.backend.controller.client_api import bp as client_bp
 from argus.backend.controller.testrun_api import bp as testrun_bp
 from argus.backend.controller.team import bp as team_bp
 from argus.backend.controller.view_api import bp as view_bp
+from argus.backend.controller.planner_api import bp as planner_bp
 from argus.backend.service.argus_service import ArgusService, ScheduleUpdateRequest
 from argus.backend.service.results_service import ResultsService
 from argus.backend.service.user import UserService, api_login_required
@@ -26,6 +27,7 @@ bp.register_blueprint(client_bp)
 bp.register_blueprint(testrun_bp)
 bp.register_blueprint(team_bp)
 bp.register_blueprint(view_bp)
+bp.register_blueprint(planner_bp)
 bp.register_error_handler(Exception, handle_api_exception)
 LOGGER = logging.getLogger(__name__)
 
@@ -188,10 +190,12 @@ def release_schedules_assignee_update():
 @api_login_required
 def group_assignees():
     release_id = request.args.get("releaseId")
+    version = request.args.get("version")
+    plan_id = request.args.get("planId")
     if not release_id:
         raise Exception("Missing releaseId")
     service = ArgusService()
-    group_assignees_list = service.get_groups_assignees(release_id)
+    group_assignees_list = service.get_groups_assignees(release_id, version, plan_id)
 
     return jsonify({
         "status": "ok",
@@ -203,10 +207,12 @@ def group_assignees():
 @api_login_required
 def tests_assignees():
     group_id = request.args.get("groupId")
+    version = request.args.get("version")
+    plan_id = request.args.get("planId")
     if not group_id:
         raise Exception("Missing groupId")
     service = ArgusService()
-    tests_assignees_list = service.get_tests_assignees(group_id)
+    tests_assignees_list = service.get_tests_assignees(group_id, version, plan_id)
 
     return jsonify({
         "status": "ok",

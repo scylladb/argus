@@ -6,6 +6,7 @@ from cassandra.cqlengine.usertype import UserType
 from cassandra.cqlengine import columns
 from cassandra.util import uuid_from_time, unix_time_from_uuid1  # pylint: disable=no-name-in-module
 
+from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ArgusBestResultData
 
 
@@ -154,6 +155,7 @@ class ArgusUserView(Model):
     display_name = columns.Text()
     description = columns.Text()
     user_id = columns.UUID(required=True, index=True)
+    plan_id = columns.UUID(index=True)
     tests = columns.List(value_type=columns.UUID, default=lambda: [])
     release_ids = columns.List(value_type=columns.UUID, default=lambda: [])
     group_ids = columns.List(value_type=columns.UUID, default=lambda: [])
@@ -382,6 +384,7 @@ USED_MODELS: list[Model] = [
     ArgusGenericResultMetadata,
     ArgusGenericResultData,
     ArgusBestResultData,
+    ArgusReleasePlan,
 ]
 
 USED_TYPES: list[UserType] = [

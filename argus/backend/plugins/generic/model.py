@@ -41,6 +41,9 @@ class GenericRun(PluginModelBase):
         pattern = re.compile(r"((?P<short>[\w.~]+)-(?P<build>(0\.)?(?P<date>[0-9]{8,8})\.(?P<commit>\w+).*))")
         if match := pattern.search(version):
             self.scylla_version = match.group("short")
+            new_assignee = self.get_assignment(match.group("short"))
+            if new_assignee:
+                self.assignee = new_assignee
             self.set_full_version(version)
 
     @classmethod

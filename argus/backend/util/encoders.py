@@ -27,14 +27,28 @@ class ArgusJSONEncoder(JSONEncoder):
 
 class ArgusJSONProvider(DefaultJSONProvider):
 
-    def default(self, o):
+    @staticmethod
+    def process_nested_dicts(o: dict):
+        for k, v in o.items():
+            if isinstance(v, dict):
+                o[k] = { str(key): val for key, val in v.items() }
+        return o
+
+    @classmethod
+    def default(cls, o):
         match o:
             case UUID():
                 return str(o)
             case ut.UserType():
-                return dict(o.items())
+                o = { str(k): v for k, v in o.items() }
+                o = cls.process_nested_dicts(o)
+                return o
             case m.Model():
-                return dict(o.items())
+                o = { str(k): v for k, v in o.items() }
+                o = cls.process_nested_dicts(o)
+                return o
+            case dict():
+                return { str(k): v for k, v in o.items() }
             case datetime():
                 return o.strftime("%Y-%m-%dT%H:%M:%SZ")
             case _:

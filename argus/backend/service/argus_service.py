@@ -26,6 +26,7 @@ from argus.backend.models.web import (
     User,
 )
 from argus.backend.events.event_processors import EVENT_PROCESSORS
+from argus.backend.service.planner_service import PlanningService
 from argus.backend.service.testrun import TestRunService
 from argus.backend.util.common import chunk
 
@@ -577,9 +578,11 @@ class ArgusService:
             schedules.extend(ArgusSchedule.filter(release_id=release_id, id__in=next_slice).all())
         return schedules
 
-    def get_groups_assignees(self, release_id: UUID | str):
+    def get_groups_assignees(self, release_id: UUID | str, version: str = None, plan_id: UUID = None):
         release_id = UUID(release_id) if isinstance(release_id, str) else release_id
         release = ArgusRelease.get(id=release_id)
+        if not release.perpetual:
+            return PlanningService().get_assignments_for_groups(release_id, version, plan_id)
 
         groups = ArgusGroup.filter(release_id=release_id).all()
         group_ids = [group.id for group in groups if group.enabled]
@@ -613,11 +616,14 @@ class ArgusService:
 
         return response
 
-    def get_tests_assignees(self, group_id: UUID | str):
+    def get_tests_assignees(self, group_id: UUID | str, version: str = None, plan_id: UUID = None):
         group_id = UUID(group_id) if isinstance(group_id, str) else group_id
         group = ArgusGroup.get(id=group_id)
 
         release = ArgusRelease.get(id=group.release_id)
+        if not release.perpetual:
+            return PlanningService().get_assignments_for_tests(group_id, version, plan_id)
+
         tests = ArgusTest.filter(group_id=group_id).all()
 
         test_ids = [test.id for test in tests if test.enabled]

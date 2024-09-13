@@ -7,7 +7,7 @@
 {% block javascripts %}
 {{ super() }}
 <script>
-    globalThis.ARGUS_VIEW_DATA = JSON.parse('{{ data | tojson | safe }}');
+    globalThis.ARGUS_VIEW_DATA = {{ data | tojson | safe }};
 </script>
 <script defer src="/s/dist/viewDashboard.bundle.js"></script>
 {% endblock javascripts %}
