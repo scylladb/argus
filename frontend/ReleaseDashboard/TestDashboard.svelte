@@ -38,7 +38,7 @@
     export let stats;
     let statRefreshInterval;
     let statsFetchedOnce = false;
-    let versionsIncludeNoVersion = JSON.parse(window.localStorage.getItem(`releaseDashIncludeNoVersions-${dashboardObject.id}`)) ?? true;
+    let versionsIncludeNoVersion = JSON.parse(window.localStorage.getItem(`releaseDashIncludeNoVersions-${dashboardObject.id}`)) ?? (settings.versionsIncludeNoVersion || true);
     let versionsFilterExtraVersions = JSON.parse(window.localStorage.getItem(`releaseDashFilterExtraVersions-${dashboardObject.id}`)) ?? true;
     let users = {};
     $: users = $userList;
@@ -111,7 +111,7 @@
             limited: new Number(false),
             force: new Number(true),
             includeNoVersion: new Number(versionsIncludeNoVersion),
-            productVersion: productVersion ?? "",
+            productVersion: productVersion ?? (settings.productVersion || ""),
         });
         let opts = force ? {cache: "reload"} : {};
         let response = await fetch(PANEL_MODES.release.statRoute() + "?" + params, opts);
@@ -126,6 +126,7 @@
         if (stats.release.perpetual) {
             fetchGroupAssignees(dashboardObject.id);
         } else {
+            fetchGroupAssignees(dashboardObject.id);
             Object.values(stats.groups).forEach((groupStat, idx) => {
                 setTimeout(() => {
                     fetchTestAssignees(groupStat.group.id);
@@ -269,6 +270,8 @@
     const fetchGroupAssignees = async function(releaseId) {
         let params = queryString.stringify({
             releaseId: releaseId,
+            version: productVersion || settings.productVersion,
+            planId: dashboardObject.plan_id ?? null,
         });
         let result = await apiMethodCall("/api/v1/release/assignees/groups?" + params, undefined, "GET");
         if (result.status === "ok") {
@@ -279,6 +282,8 @@
     const fetchTestAssignees = async function(groupId) {
         let params = queryString.stringify({
             groupId: groupId,
+            version: productVersion || settings.productVersion,
+            planId: dashboardObject.plan_id ?? null,
         });
         let result = await apiMethodCall("/api/v1/release/assignees/tests?" + params, undefined, "GET");
         if (result.status === "ok") {
@@ -346,57 +351,63 @@
             {/if}
         {/if}
     </div>
-    {#await fetchVersions()}
-        <div>Loading versions...</div>
-    {:then versions}
-        <div class="d-inline-flex flex-wrap mb-2 rounded bg-white p-2" style="flex-basis: 10%; row-gap: 0.75em">
-            <button
-                class="btn me-2"
-                class:btn-primary={!productVersion}
-                class:btn-light={productVersion}
-                on:click={() => { handleVersionClick(""); }}>All</button>
-            <button
-            class="btn me-2"
-            class:btn-success={versionsIncludeNoVersion}
-            class:btn-danger={!versionsIncludeNoVersion}
-            on:click={() => { 
-                versionsIncludeNoVersion = !versionsIncludeNoVersion;
-                saveCheckboxState(`releaseDashIncludeNoVersions-${dashboardObject.id}`, versionsIncludeNoVersion);
-                handleVersionClick(productVersion);
-            }}>{#if versionsIncludeNoVersion}
-                <Fa icon={faCheck}/>
-            {:else}
-                <Fa icon={faTimes}/>
-            {/if} No version</button>
-            {#each versions as version}
-                {#if !shouldFilterVersion(version, versionsFilterExtraVersions)}
-                    <button
-                    class="btn btn-light me-2"
-                    class:btn-primary={productVersion == version}
-                    class:btn-light={productVersion != version}
-                    on:click={() => { handleVersionClick(version); }}>{version}</button>
-                {/if}
-            {/each}
-            {#if stats?.release?.valid_version_regex}
+    {#if !settings.targetVersion}
+        {#await fetchVersions()}
+            <div>Loading versions...</div>
+        {:then versions}
+            <div class="d-inline-flex flex-wrap mb-2 rounded bg-white p-2" style="flex-basis: 10%; row-gap: 0.75em">
                 <button
-                    class="btn me-2 flex-grow-1 flex-shrink-0"
-                    class:btn-primary={productVersion == "!noVersion"}
-                    class:btn-light={productVersion != "!noVersion"}
-                    on:click={() => {
-                            versionsFilterExtraVersions = !versionsFilterExtraVersions;
-                            saveCheckboxState(`releaseDashFilterExtraVersions-${dashboardObject.id}`, versionsFilterExtraVersions);
-                        }}
-                >
-                {#if versionsFilterExtraVersions}
-                    <Fa icon={faEllipsisH} />
+                    class="btn me-2"
+                    class:btn-primary={!productVersion}
+                    class:btn-light={productVersion}
+                    on:click={() => { handleVersionClick(""); }}>All</button>
+                <button
+                class="btn me-2"
+                class:btn-success={versionsIncludeNoVersion}
+                class:btn-danger={!versionsIncludeNoVersion}
+                on:click={() => { 
+                    versionsIncludeNoVersion = !versionsIncludeNoVersion;
+                    saveCheckboxState(`releaseDashIncludeNoVersions-${dashboardObject.id}`, versionsIncludeNoVersion);
+                    handleVersionClick(productVersion);
+                }}>{#if versionsIncludeNoVersion}
+                    <Fa icon={faCheck}/>
                 {:else}
-                    <Fa icon={faArrowLeft} />
+                    <Fa icon={faTimes}/>
+                {/if} No version</button>
+                {#each versions as version}
+                    {#if !shouldFilterVersion(version, versionsFilterExtraVersions)}
+                        <button
+                        class="btn btn-light me-2"
+                        class:btn-primary={productVersion == version}
+                        class:btn-light={productVersion != version}
+                        on:click={() => { handleVersionClick(version); }}>{version}</button>
+                    {/if}
+                {/each}
+                {#if stats?.release?.valid_version_regex}
+                    <button
+                        class="btn me-2 flex-grow-1 flex-shrink-0"
+                        class:btn-primary={productVersion == "!noVersion"}
+                        class:btn-light={productVersion != "!noVersion"}
+                        on:click={() => {
+                                versionsFilterExtraVersions = !versionsFilterExtraVersions;
+                                saveCheckboxState(`releaseDashFilterExtraVersions-${dashboardObject.id}`, versionsFilterExtraVersions);
+                            }}
+                    >
+                    {#if versionsFilterExtraVersions}
+                        <Fa icon={faEllipsisH} />
+                    {:else}
+                        <Fa icon={faArrowLeft} />
+                    {/if}
+                    </button>
                 {/if}
-                </button>
-            {/if}
+            </div>
+            <br>
+        {/await}
+    {:else}
+        <div class="text center text-muted">
+            Version pre-selected: {productVersion || settings.productVersion}
         </div>
-        <br>
-    {/await}
+    {/if}
     {#if stats}
         <div class="mb-2 d-inline-flex align-items-start flex-column rounded bg-white">
             <div class="p-2">

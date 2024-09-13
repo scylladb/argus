@@ -10,6 +10,7 @@ from argus.backend.controller.team_ui import bp as teams_bp
 from argus.backend.service.argus_service import ArgusService
 from argus.backend.models.web import WebFileStorage
 from argus.backend.service.testrun import TestRunService
+from argus.backend.service.planner_service import PlanningService
 from argus.backend.service.user import UserService, login_required
 from argus.backend.service.views import UserViewService
 
@@ -119,6 +120,14 @@ def release_scheduler(name: str):
         "tests": [dict(test.items()) for test in release_tests],
     }
     return render_template("release_schedule.html.j2", release_name=name, data=data_json)
+
+
+@bp.route("/release/<string:name>/planner")
+@login_required
+def release_planner(name: str):
+    service = PlanningService()
+    planner_data = service.release_planner(name)
+    return render_template("release_planner.html.j2", release_name=planner_data["release"]["name"], planner_data=planner_data)
 
 
 @bp.route("/release/<string:name>/duty")

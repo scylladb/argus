@@ -412,6 +412,9 @@ class DriverTestRun(PluginModelBase):
 
     def submit_product_version(self, version: str):
         self.scylla_version = version
+        new_assignee = self.get_assignment(version)
+        if new_assignee:
+            self.assignee = new_assignee
 
     def finish_run(self, payload: dict = None):
         self.end_time = datetime.utcnow()

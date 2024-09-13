@@ -2,11 +2,14 @@
     import { createEventDispatcher } from "svelte";
 
     const dispatch = createEventDispatcher();
+
+    export let widthClass = "h-50";
+
 </script>
 
 <div class="modal-window">
     <div class="d-flex align-items-center justify-content-center p-4">
-        <div class="rounded bg-white p-4 h-50">
+        <div class="rounded bg-white p-4 {widthClass}">
             <div class="mb-2 d-flex border-bottom pb-2">
                 <h5>
                     <slot name="title"><!-- optional fallback --></slot>
@@ -30,6 +33,10 @@
 <style>
     .h-50 {
         width: 50%;
+    }
+
+    .w-75 {
+        width: 75%;
     }
     .modal-window {
         position: fixed;
