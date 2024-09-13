@@ -61,6 +61,9 @@ class SirenadaRun(PluginModelBase):
 
     def submit_product_version(self, version: str):
         self.scylla_version = version
+        new_assignee = self.get_assignment(version)
+        if new_assignee:
+            self.assignee = new_assignee
 
     def submit_logs(self, logs: dict[str, str]):
         raise SirenadaPluginException("Log submission is not supported for Sirenada")

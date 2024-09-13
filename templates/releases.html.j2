@@ -27,7 +27,7 @@ Releases
                             {% if release.perpetual %}
                             <a href="{{ url_for('main.duty_planner', name=release.name) }}" class="btn btn-primary"><i class="fas fa-calendar-alt"></i> Duty Planning</a>
                             {% else %}
-                            <a href="{{ url_for('main.release_scheduler', name=release.name) }}" class="btn btn-primary"><i class="fas fa-calendar-alt"></i> Duty Planning</a>
+                            <a href="{{ url_for('main.release_planner', name=release.name) }}" class="btn btn-primary"><i class="fas fa-calendar-alt"></i> Duty Planning</a>
                             {% endif %}
                         </div>
                     </div>
