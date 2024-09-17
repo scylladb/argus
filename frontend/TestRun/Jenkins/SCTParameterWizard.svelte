@@ -218,7 +218,7 @@
                     validated: true,
                     validationHelpText: "Incorrect version string: Use branch:timestamp format (or branch:latest) OR short version string such as 5.3.0~rc0",
                     validate: function (params) {
-                        const VERSION_RE = /^((?<branch>[\w\d\-.]+:((?<latest>latest)|(?<build_no>\d+)|(?<date>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)))$)|(?<version>(\d+\.\d+\.\d+))(?<rc>(~rc\d))?$/;
+                        const VERSION_RE = /^((?<branch>[\w\d\-.]+:((?<latest>latest)|(?<build_no>\d+)|(?<date>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)))$)|(?<version>(\d+\.\d+\.\d+))(?<rc>((~|-)rc\d))?$/;
                         return !!params[this.internalName] && VERSION_RE.test(params[this.internalName]);
                     },
                     condition: (params, defs) => (defs.scyllaVersion.currentSource == "scylla_version"),
