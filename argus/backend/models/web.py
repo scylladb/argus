@@ -6,7 +6,7 @@ from cassandra.cqlengine.usertype import UserType
 from cassandra.cqlengine import columns
 from cassandra.util import uuid_from_time, unix_time_from_uuid1  # pylint: disable=no-name-in-module
 
-from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData
+from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ArgusBestResultData
 
 
 def uuid_now():
@@ -381,6 +381,7 @@ USED_MODELS: list[Model] = [
     ArgusScheduleTest,
     ArgusGenericResultMetadata,
     ArgusGenericResultData,
+    ArgusBestResultData,
 ]
 
 USED_TYPES: list[UserType] = [

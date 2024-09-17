@@ -14,9 +14,13 @@ Generic results are stored in 2 tables: `ArgusGenericResultMetadata` `ArgusGener
 
 This table stores information what results are available for given `test_id` (Jenkins job in terms of Argus). Contain information about each
 result: name, description, columns, and rows.
-Columns are described by set of attributes: `name`, `unit` and `type`. `type` can be one of `ResultType` enum values (FLOAT, INTEGER,
-DURATION, TEXT).
+Columns are described by set of attributes: `name`, `unit`, `type` and `higher_is_better`. `type` can be one of `ResultType` enum values (FLOAT, INTEGER,DURATION, TEXT). `higher_is_better` is used for finding best value for given cell across all runs in given test.
+Besides Columns metadata, user might supply also `validation_rules` which are used to validate data before storing it in Argus. `ValidationRules` are defined by map between column name and `ValidationRule` object that defines 3 fields: 
+- `best_pct` - defines max value limit relative to best result in percent unit
+- `best_abs` - defines max value limit relative to best result in absolute unit
+- `fixed_limit` - defines fixed value limit above/below which result is considered as ERROR
 
+`TEXT` type columns are not validated.
 ### ArgusGenericResultData
 
 This table stores actual data for each result. Each row in this table is a cell in the result table. Its location is defined by `column` and
@@ -36,7 +40,8 @@ and send it using `ArgusClient` class (or it's child class like `ArgusSCTClient`
 
 Child class of `GenericResultTable` needs to define `Meta` class with `name` and `description` fields. It also needs to define `Columns`
 field that will describe available columns details for given result: as a list of `ColumnMetadata` objects. Each `ColumnMetadata` object
-needs to have `name`, `unit` and `type` fields. `type` field can be one of `ResultType` enum values.
+needs to have `name`, `unit` and `type` and optionally `higher_is_better` fields. `type` field can be one of `ResultType` enum values.
+In order to make Argus validate results against fixed limit or relatively to best result, one can define `validation_rules` map field in `Meta`. Also for validation to happen, set result status to `UNSET` (default value) when adding result to table and each validated column must have `higher_is_better` field specified.
 
 See example:
 
@@ -44,28 +49,32 @@ See example:
 from uuid import UUID
 
 from argus.client.sct.client import ArgusSCTClient
-from argus.client.generic_result import GenericResultTable, ColumnMetadata, ResultType, Status
+from argus.client.generic_result import GenericResultTable, ColumnMetadata, ResultType, Status, ValidationRule
 
 
 class LatencyResultTable(GenericResultTable):
     class Meta:
         name = "Write Latency"
         description = "Latency for write operations"
-        Columns = [ColumnMetadata(name="latency", unit="ms", type=ResultType.FLOAT),
-                   ColumnMetadata(name="op_rate", unit="ops", type=ResultType.INTEGER),
-                   ColumnMetadata(name="duration", unit="HH:MM:SS", type=ResultType.DURATION)
+        Columns = [ColumnMetadata(name="latency", unit="ms", type=ResultType.FLOAT, higher_is_better=False),
+                   ColumnMetadata(name="op_rate", unit="ops", type=ResultType.INTEGER, higher_is_better=True),
+                   ColumnMetadata(name="duration", unit="HH:MM:SS", type=ResultType.DURATION, higher_is_better=False),
                    ColumnMetadata(name="overview", unit="ms", type=ResultType.TEXT),
                    ]
+        ValidationRules = {"write": ValidationRule(best_abs=10), # 10ms margin from best
+                           "read": ValidationRule(best_pct=50, best_abs=5), # 50% and 5ms margin from best
+                           "duration": ValidationRule(best_abs=600)  # 10 minutes margin from best
+                           }
 
 
 result_table = LatencyResultTable()
 
-result_table.add_result(column="latency", row="mean", value=1.1, status=Status.WARNING)
-result_table.add_result(column="op_rate", row="mean", value=59988, status=Status.ERROR)
-result_table.add_result(column="latency", row="p99", value=2.7, status=Status.PASS)
-result_table.add_result(column="op_rate", row="p99", value=59988, status=Status.WARNING)
-result_table.add_result(column="duration", row="p99", value=8888, status=Status.ERROR)
-result_table.add_result(column="duration", row="mean", value=332, status=Status.PASS)
+result_table.add_result(column="latency", row="mean", value=1.1, status=Status.ERROR)
+result_table.add_result(column="op_rate", row="mean", value=59988, status=Status.PASS)
+result_table.add_result(column="latency", row="p99", value=2.7, status=Status.UNSET)
+result_table.add_result(column="op_rate", row="p99", value=59988, status=Status.UNSET)
+result_table.add_result(column="duration", row="p99", value=8888, status=Status.UNSET)
+result_table.add_result(column="duration", row="mean", value=332, status=Status.UNSET)
 result_table.add_result(column="overview", row="p99", value="<link_to_screenshot>", status=Status.UNSET)
 result_table.add_result(column="overview", row="mean", value="<link_to_screenshot>", status=Status.UNSET)
 

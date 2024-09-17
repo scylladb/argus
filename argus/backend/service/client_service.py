@@ -1,9 +1,14 @@
+import operator
+from dataclasses import asdict, is_dataclass
+from datetime import datetime, timezone
+from functools import partial
 from uuid import UUID
 
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS
+from argus.backend.service.results_service import ResultsService, Cell
 from argus.backend.util.enums import TestStatus
 
 
@@ -28,7 +33,7 @@ class ClientService:
         model.submit_run(request_data=request_data)
 
         return "Created"
-    
+
     def get_run(self, run_type: str, run_id: str):
         model = self.get_model(run_type)
         try:
@@ -87,23 +92,31 @@ class ClientService:
             run = model.load_test_run(UUID(run_id))
         except model.DoesNotExist:
             return {"status": "error", "response": {
-            "exception": "DoesNotExist",
-            "arguments": [run_id]
-        }}
-        existing_table = ArgusGenericResultMetadata.objects(test_id=run.test_id, name=results["meta"]["name"]).first()
-        if existing_table:
-            existing_table.update_if_changed(results["meta"])
+                "exception": "DoesNotExist",
+                "arguments": [run_id]
+            }}
+        table_name = results["meta"]["name"]
+        results_service = ResultsService()
+        cells = [Cell(**cell) for cell in results["results"]]
+        table_metadata = results_service.get_table_metadata(test_id=run.test_id, table_name=table_name)
+        if table_metadata:
+            table_metadata = table_metadata.update_if_changed(results["meta"])
         else:
-            ArgusGenericResultMetadata(test_id=run.test_id, **results["meta"]).save()
+            table_metadata = ArgusGenericResultMetadata(test_id=run.test_id, **results["meta"])
+            table_metadata.save()
         if results.get("sut_timestamp", 0) == 0:
             results["sut_timestamp"] = run.sut_timestamp()  # automatic sut_timestamp
+        results["sut_timestamp"] = datetime.fromtimestamp(results["sut_timestamp"])
+        best_results = results_service.update_best_results(test_id=run.test_id, table_name=table_name, table_metadata=table_metadata,
+                                                           cells=cells, run_id=run_id)
         table_name = results["meta"]["name"]
         sut_timestamp = results["sut_timestamp"]
-        for cell in results["results"]:
+        for cell in cells:
+            cell.update_cell_status_based_on_rules(table_metadata, best_results)
             ArgusGenericResultData(test_id=run.test_id,
                                    run_id=run.id,
                                    name=table_name,
                                    sut_timestamp=sut_timestamp,
-                                   **cell
+                                   **asdict(cell)
                                    ).save()
         return {"status": "ok", "message": "Results submitted"}

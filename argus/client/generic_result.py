@@ -28,14 +28,29 @@ class ColumnMetadata:
     name: str
     unit: str
     type: ResultType
+    higher_is_better: bool = None
 
     def as_dict(self) -> dict:
         return {
             "name": self.name,
             "unit": self.unit,
-            "type": str(self.type)
+            "type": str(self.type),
+            "higher_is_better": self.higher_is_better
         }
 
+
+@dataclass
+class ValidationRule:
+    best_pct: float | None = None  # max value limit relative to best result in percent unit
+    best_abs: float | None = None  # max value limit relative to best result in absolute unit
+    fixed_limit: float | None = None
+
+    def as_dict(self) -> dict:
+        return {
+            "best_pct": self.best_pct,
+            "best_abs": self.best_abs,
+            "fixed_limit": self.fixed_limit
+        }
 
 class ResultTableMeta(type):
     def __new__(cls, name, bases, dct):
@@ -48,6 +63,14 @@ class ResultTableMeta(type):
             cls_instance.columns = meta.Columns
             cls_instance.column_types = {column.name: column.type for column in cls_instance.columns}
             cls_instance.rows = []
+            for col_name, rule in meta.ValidationRules.items():
+                if col_name not in cls_instance.column_types:
+                    raise ValueError(f"ValidationRule column {col_name} not found in the table")
+                if cls_instance.column_types[col_name] == ResultType.TEXT:
+                    raise ValueError(f"Validation rules don't apply to TEXT columns")
+                if not isinstance(rule, ValidationRule):
+                    raise ValueError(f"Validation rule for column {col_name} is not of type ValidationRule")
+            cls_instance.validation_rules = meta.ValidationRules
         return cls_instance
 
 
@@ -87,7 +110,8 @@ class GenericResultTable(metaclass=ResultTableMeta):
             "name": self.name,
             "description": self.description,
             "columns_meta": [column.as_dict() for column in self.columns],
-            "rows_meta": rows
+            "rows_meta": rows,
+            "validation_rules": {k: v.as_dict() for k, v in self.validation_rules.items()}
         }
         return {
             "meta": meta_info,
