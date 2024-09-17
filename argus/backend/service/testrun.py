@@ -203,21 +203,22 @@ class TestRunService:
             group_id=test.group_id,
             test_id=test.id
         )
-        self.notification_manager.send_notification(
-            receiver=new_assignee_user.id,
-            sender=g.user.id,
-            notification_type=ArgusNotificationTypes.AssigneeChange,
-            source_type=ArgusNotificationSourceTypes.TestRun,
-            source_id=run.id,
-            source_message=str(run.test_id),
-            content_params={
-                "username": g.user.username,
-                "run_id": run.id,
-                "test_id": test.id,
-                "build_id": run.build_id,
-                "build_number": get_build_number(run.build_job_url),
-            }
-        )
+        if new_assignee_user.id != g.user.id:
+            self.notification_manager.send_notification(
+                receiver=new_assignee_user.id,
+                sender=g.user.id,
+                notification_type=ArgusNotificationTypes.AssigneeChange,
+                source_type=ArgusNotificationSourceTypes.TestRun,
+                source_id=run.id,
+                source_message=str(run.test_id),
+                content_params={
+                    "username": g.user.username,
+                    "run_id": run.id,
+                    "test_id": test.id,
+                    "build_id": run.build_id,
+                    "build_number": get_build_number(run.build_job_url),
+                }
+            )
         return {
             "test_run_id": run.id,
             "assignee": str(new_assignee_user.id) if new_assignee_user else None
