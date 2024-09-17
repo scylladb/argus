@@ -258,7 +258,10 @@ class SCTTestRun(PluginModelBase):
             scylla_package_upgraded = [package for package in self.packages if package.name == "scylla-server-upgraded"][0]
         except IndexError:
             scylla_package_upgraded = None
-        scylla_package = scylla_package_upgraded or [package for package in self.packages if package.name == "scylla-server"][0]
+        try:
+            scylla_package = [package for package in self.packages if package.name == "scylla-server"][0]
+        except IndexError:
+            raise ValueError("Scylla package not found in packages - cannot determine SUT timestamp")
         return (datetime.strptime(scylla_package.date, '%Y%m%d').replace(tzinfo=timezone.utc).timestamp()
                 + int(scylla_package.revision_id, 16) % 1000000 / 1000000)
 
