@@ -118,8 +118,9 @@
                         type: columnTypesMap[column]
                     };
                 }
-
-                table_status = table_status === "PASS" ? status : table_status;
+                if (status !== "UNSET" && status !== "PASS" && table_status !== "ERROR") {
+                    table_status = status;
+                }
             });
             transformedData[tableName].table_status = table_status;
         });
