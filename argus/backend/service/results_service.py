@@ -26,8 +26,9 @@ class BestResult:
 class Cell:
     column: str
     row: str
-    value: Any
     status: str
+    value: Any | None = None
+    value_text: str | None = None
 
     def update_cell_status_based_on_rules(self, table_metadata: ArgusGenericResultMetadata, best_results: dict[str, BestResult],
                                           ) -> None:

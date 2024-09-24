@@ -16,7 +16,7 @@
         const secs = seconds % 60;
         return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
     };
-    if (cell?.value === undefined) {
+    if (cell?.value === undefined || cell?.value === null) {
         type = "TEXT";
         value = "N/A";
     } else if (typeof cell.value === "string") {
