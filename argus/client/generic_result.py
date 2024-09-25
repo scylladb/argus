@@ -63,14 +63,15 @@ class ResultTableMeta(type):
             cls_instance.columns = meta.Columns
             cls_instance.column_types = {column.name: column.type for column in cls_instance.columns}
             cls_instance.rows = []
-            for col_name, rule in meta.ValidationRules.items():
+            validation_rules = getattr(meta, 'ValidationRules', {})
+            for col_name, rule in validation_rules.items():
                 if col_name not in cls_instance.column_types:
                     raise ValueError(f"ValidationRule column {col_name} not found in the table")
                 if cls_instance.column_types[col_name] == ResultType.TEXT:
                     raise ValueError(f"Validation rules don't apply to TEXT columns")
                 if not isinstance(rule, ValidationRule):
                     raise ValueError(f"Validation rule for column {col_name} is not of type ValidationRule")
-            cls_instance.validation_rules = meta.ValidationRules
+            cls_instance.validation_rules = validation_rules
         return cls_instance
 
 
