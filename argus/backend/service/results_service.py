@@ -253,13 +253,17 @@ class ResultsService:
         """Verify if results for given test id exist at all."""
         return bool(ArgusGenericResultMetadata.objects(test_id=test_id).only(["name"]).limit(1))
 
-    def get_best_results(self, test_id: UUID, name: str) -> List[BestResult]:
+    def get_best_results(self, test_id: UUID, name: str) -> dict[str, BestResult]:
         query_fields = ["key", "value", "result_date", "run_id"]
         raw_query = (f"SELECT {','.join(query_fields)}"
-                     f" FROM generic_result_best_v1 WHERE test_id = ? and name = ?")
+                     f" FROM generic_result_best_v2 WHERE test_id = ? and name = ?")
         query = self.cluster.prepare(raw_query)
-        best_results = self.cluster.session.execute(query=query, parameters=(test_id, name))
-        return [BestResult(**best) for best in best_results]
+        best_results = [BestResult(**best) for best in self.cluster.session.execute(query=query, parameters=(test_id, name))]
+        best_results_map = {}
+        for best in best_results:
+            if best.key not in best_results_map:
+                best_results_map[best.key] = best
+        return best_results_map
 
     @staticmethod
     def _update_best_value(best_results: dict[str, list[dict]], higher_is_better_map: dict[str, bool | None], cells: list[dict],
@@ -293,11 +297,7 @@ class ResultsService:
                             table_metadata: ArgusGenericResultMetadata, run_id: str) -> dict[str, BestResult]:
         """update best results for given test_id and table_name based on cells values - if any value is better than current best"""
         higher_is_better_map = {meta["name"]: meta.higher_is_better for meta in table_metadata.columns_meta}
-        best_results = {}
-        for best in self.get_best_results(test_id=test_id, name=table_name):
-            if best.key not in best_results:
-                best_results[best.key] = best
-
+        best_results = self.get_best_results(test_id=test_id, name=table_name)
         for cell in cells:
             if cell.value is None:
                 # textual value, skip
