@@ -129,10 +129,10 @@ class ArgusGenericResultData(Model):
     status = columns.Ascii()
 
 class ArgusBestResultData(Model):
-    __table_name__ = "generic_result_best_v1"
+    __table_name__ = "generic_result_best_v2"
     test_id = columns.UUID(partition_key=True)
     name = columns.Text(partition_key=True)
-    key = columns.Ascii(primary_key=True)  # represents pair column:row
     result_date = columns.DateTime(primary_key=True, clustering_order="DESC")
+    key = columns.Ascii(primary_key=True)  # represents pair column:row
     value = columns.Double()
     run_id = columns.UUID()
