@@ -43,20 +43,39 @@
                 const cells = Array.from(row.querySelectorAll("th, td"));
                 const markdownRow = cells.map(cell => {
                     let cellText = cell.innerText.trim();
+                    let link = "";
+
+                    const linkElement = cell.querySelector("a");
+                    const buttonElement = cell.querySelector("button");
+
+                    if (linkElement) {
+                        link = linkElement.href;
+                    } else if (buttonElement) {
+                        link = buttonElement.getAttribute("data-link");
+                    }
+
                     // Escape all '#' characters to prevent issue linking in GitHub
                     cellText = cellText.replace(/#/g, "#&#8203;");
+
+                    if (link) {
+                        cellText = `[${cellText}](${link})`;
+                    }
+
                     const color = styleToColor(cell.className);
                     if (color) {
                         cellText = `$$\{\\color{${color}}${cellText}}$$`;
                     }
+
                     return cellText;
                 }).join(" | ");
                 markdown += `| ${markdownRow} |\n`;
+
                 if (rowIndex === 0) {
                     const separator = cells.map(() => "---").join(" | ");
                     markdown += `| ${separator} |\n`;
                 }
             });
+
             try {
                 await navigator.clipboard.writeText(markdown);
                 sendMessage("info", "Table copied to clipboard in Markdown format!");
