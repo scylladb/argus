@@ -52,6 +52,6 @@
 {:else if type === "LINK"}
     <a href="{value}" target="_blank" rel="noopener noreferrer">link</a>
 {:else if type === "IMAGE"}
-    <button class="btn btn-primary btn-sm py-0" on:click={() => selectedScreenshot = value}>view</button>
+    <button class="btn btn-primary btn-sm py-0" on:click={() => selectedScreenshot = value} data-link="{value}">view</button>
 {/if}
 
