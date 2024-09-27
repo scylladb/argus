@@ -213,7 +213,7 @@
                                 type="text"
                                 class="form-control user-select-all"
                                 disabled
-                                value="ssh -i ~/.ssh/scylla-qa-ec2 ubuntu@{test_run
+                                value="ssh -i ~/.ssh/scylla_test_id_ed25519 ubuntu@{test_run
                                     .sct_runner_host.public_ip}"
                             />
                             <button
@@ -221,7 +221,7 @@
                                 type="button"
                                 on:click={() => {
                                     navigator.clipboard.writeText(
-                                        `ssh -i ~/.ssh/scylla-qa-ec2 ubuntu@${test_run.sct_runner_host.public_ip}`
+                                        `ssh -i ~/.ssh/scylla_test_id_ed25519 ubuntu@${test_run.sct_runner_host.public_ip}`
                                     );
                                 }}
                             >
