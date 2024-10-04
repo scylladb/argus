@@ -340,24 +340,25 @@ files = [
 
 [[package]]
 name = "docker"
-version = "4.4.4"
+version = "7.1.0"
 description = "A Python library for the Docker Engine API."
 optional = false
-python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
+python-versions = ">=3.8"
 files = [
-    {file = "docker-4.4.4-py2.py3-none-any.whl", hash = "sha256:f3607d5695be025fa405a12aca2e5df702a57db63790c73b927eb6a94aac60af"},
-    {file = "docker-4.4.4.tar.gz", hash = "sha256:d3393c878f575d3a9ca3b94471a3c89a6d960b35feb92f033c0de36cc9d934db"},
+    {file = "docker-7.1.0-py3-none-any.whl", hash = "sha256:c96b93b7f0a746f9e77d325bcfb87422a3d8bd4f03136ae8a85b37f1898d5fc0"},
+    {file = "docker-7.1.0.tar.gz", hash = "sha256:ad8c70e6e3f8926cb8a92619b832b4ea5299e2831c14284663184e200546fa6c"},
 ]
 
 [package.dependencies]
-pywin32 = {version = "227", markers = "sys_platform == \"win32\""}
-requests = ">=2.14.2,<2.18.0 || >2.18.0"
-six = ">=1.4.0"
-websocket-client = ">=0.32.0"
+pywin32 = {version = ">=304", markers = "sys_platform == \"win32\""}
+requests = ">=2.26.0"
+urllib3 = ">=1.26.0"
 
 [package.extras]
-ssh = ["paramiko (>=2.4.2)"]
-tls = ["cryptography (>=1.3.4)", "idna (>=2.0.0)", "pyOpenSSL (>=17.5.0)"]
+dev = ["coverage (==7.2.7)", "pytest (==7.4.2)", "pytest-cov (==4.1.0)", "pytest-timeout (==2.1.0)", "ruff (==0.1.8)"]
+docs = ["myst-parser (==0.18.0)", "sphinx (==5.1.1)"]
+ssh = ["paramiko (>=2.4.3)"]
+websockets = ["websocket-client (>=1.3.0)"]
 
 [[package]]
 name = "exceptiongroup"
@@ -1050,23 +1051,25 @@ unidecode = ["Unidecode (>=1.1.1)"]
 
 [[package]]
 name = "pywin32"
-version = "227"
+version = "306"
 description = "Python for Window Extensions"
 optional = false
 python-versions = "*"
 files = [
-    {file = "pywin32-227-cp27-cp27m-win32.whl", hash = "sha256:371fcc39416d736401f0274dd64c2302728c9e034808e37381b5e1b22be4a6b0"},
-    {file = "pywin32-227-cp27-cp27m-win_amd64.whl", hash = "sha256:4cdad3e84191194ea6d0dd1b1b9bdda574ff563177d2adf2b4efec2a244fa116"},
-    {file = "pywin32-227-cp35-cp35m-win32.whl", hash = "sha256:f4c5be1a293bae0076d93c88f37ee8da68136744588bc5e2be2f299a34ceb7aa"},
-    {file = "pywin32-227-cp35-cp35m-win_amd64.whl", hash = "sha256:a929a4af626e530383a579431b70e512e736e9588106715215bf685a3ea508d4"},
-    {file = "pywin32-227-cp36-cp36m-win32.whl", hash = "sha256:300a2db938e98c3e7e2093e4491439e62287d0d493fe07cce110db070b54c0be"},
-    {file = "pywin32-227-cp36-cp36m-win_amd64.whl", hash = "sha256:9b31e009564fb95db160f154e2aa195ed66bcc4c058ed72850d047141b36f3a2"},
-    {file = "pywin32-227-cp37-cp37m-win32.whl", hash = "sha256:47a3c7551376a865dd8d095a98deba954a98f326c6fe3c72d8726ca6e6b15507"},
-    {file = "pywin32-227-cp37-cp37m-win_amd64.whl", hash = "sha256:31f88a89139cb2adc40f8f0e65ee56a8c585f629974f9e07622ba80199057511"},
-    {file = "pywin32-227-cp38-cp38-win32.whl", hash = "sha256:7f18199fbf29ca99dff10e1f09451582ae9e372a892ff03a28528a24d55875bc"},
-    {file = "pywin32-227-cp38-cp38-win_amd64.whl", hash = "sha256:7c1ae32c489dc012930787f06244426f8356e129184a02c25aef163917ce158e"},
-    {file = "pywin32-227-cp39-cp39-win32.whl", hash = "sha256:c054c52ba46e7eb6b7d7dfae4dbd987a1bb48ee86debe3f245a2884ece46e295"},
-    {file = "pywin32-227-cp39-cp39-win_amd64.whl", hash = "sha256:f27cec5e7f588c3d1051651830ecc00294f90728d19c3bf6916e6dba93ea357c"},
+    {file = "pywin32-306-cp310-cp310-win32.whl", hash = "sha256:06d3420a5155ba65f0b72f2699b5bacf3109f36acbe8923765c22938a69dfc8d"},
+    {file = "pywin32-306-cp310-cp310-win_amd64.whl", hash = "sha256:84f4471dbca1887ea3803d8848a1616429ac94a4a8d05f4bc9c5dcfd42ca99c8"},
+    {file = "pywin32-306-cp311-cp311-win32.whl", hash = "sha256:e65028133d15b64d2ed8f06dd9fbc268352478d4f9289e69c190ecd6818b6407"},
+    {file = "pywin32-306-cp311-cp311-win_amd64.whl", hash = "sha256:a7639f51c184c0272e93f244eb24dafca9b1855707d94c192d4a0b4c01e1100e"},
+    {file = "pywin32-306-cp311-cp311-win_arm64.whl", hash = "sha256:70dba0c913d19f942a2db25217d9a1b726c278f483a919f1abfed79c9cf64d3a"},
+    {file = "pywin32-306-cp312-cp312-win32.whl", hash = "sha256:383229d515657f4e3ed1343da8be101000562bf514591ff383ae940cad65458b"},
+    {file = "pywin32-306-cp312-cp312-win_amd64.whl", hash = "sha256:37257794c1ad39ee9be652da0462dc2e394c8159dfd913a8a4e8eb6fd346da0e"},
+    {file = "pywin32-306-cp312-cp312-win_arm64.whl", hash = "sha256:5821ec52f6d321aa59e2db7e0a35b997de60c201943557d108af9d4ae1ec7040"},
+    {file = "pywin32-306-cp37-cp37m-win32.whl", hash = "sha256:1c73ea9a0d2283d889001998059f5eaaba3b6238f767c9cf2833b13e6a685f65"},
+    {file = "pywin32-306-cp37-cp37m-win_amd64.whl", hash = "sha256:72c5f621542d7bdd4fdb716227be0dd3f8565c11b280be6315b06ace35487d36"},
+    {file = "pywin32-306-cp38-cp38-win32.whl", hash = "sha256:e4c092e2589b5cf0d365849e73e02c391c1349958c5ac3e9d5ccb9a28e017b3a"},
+    {file = "pywin32-306-cp38-cp38-win_amd64.whl", hash = "sha256:e8ac1ae3601bee6ca9f7cb4b5363bf1c0badb935ef243c4733ff9a393b1690c0"},
+    {file = "pywin32-306-cp39-cp39-win32.whl", hash = "sha256:e25fd5b485b55ac9c057f67d94bc203f3f6595078d1fb3b458c9c28b7153a802"},
+    {file = "pywin32-306-cp39-cp39-win_amd64.whl", hash = "sha256:39b61c15272833b5c329a2989999dcae836b1eed650252ab1b7bfbe1d59f30f4"},
 ]
 
 [[package]]
@@ -1094,6 +1097,7 @@ files = [
     {file = "PyYAML-6.0.1-cp311-cp311-win_amd64.whl", hash = "sha256:bf07ee2fef7014951eeb99f56f39c9bb4af143d8aa3c21b1677805985307da34"},
     {file = "PyYAML-6.0.1-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:855fb52b0dc35af121542a76b9a84f8d1cd886ea97c84703eaa6d88e37a2ad28"},
     {file = "PyYAML-6.0.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:40df9b996c2b73138957fe23a16a4f0ba614f4c0efce1e9406a184b6d07fa3a9"},
+    {file = "PyYAML-6.0.1-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:a08c6f0fe150303c1c6b71ebcd7213c2858041a7e01975da3a99aed1e7a378ef"},
     {file = "PyYAML-6.0.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:6c22bec3fbe2524cde73d7ada88f6566758a8f7227bfbf93a408a9d86bcc12a0"},
     {file = "PyYAML-6.0.1-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:8d4e9c88387b0f5c7d5f281e55304de64cf7f9c0021a3525bd3b1c542da3b0e4"},
     {file = "PyYAML-6.0.1-cp312-cp312-win32.whl", hash = "sha256:d483d2cdf104e7c9fa60c544d92981f12ad66a457afae824d146093b8c294c54"},
@@ -1157,14 +1161,17 @@ optional = false
 python-versions = "*"
 files = [
     {file = "scylla-driver-3.26.8.tar.gz", hash = "sha256:20a4d18a69e710bf0ce41db77249097761806356f58a2a6792fe55418a753ad5"},
+    {file = "scylla_driver-3.26.8-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e33f410f7ba1034acd2559cfbceca9c51722ff665e344c0bd04d4c95e99ff3d9"},
     {file = "scylla_driver-3.26.8-cp310-cp310-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:062e77352dc694cd6465a3e09436eebfb0ee2254806e75db5ebf65140355c26d"},
     {file = "scylla_driver-3.26.8-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:146b080e79ea11e3ae0753ae9b06c8005bf53e958697caeec9eb3f77666a570d"},
     {file = "scylla_driver-3.26.8-cp310-cp310-win32.whl", hash = "sha256:4982b3d3acbf75f8247f1eda5cfb4fda2ed8630f3861cc77dd9b80c75ec49fc0"},
     {file = "scylla_driver-3.26.8-cp310-cp310-win_amd64.whl", hash = "sha256:4be6b21a536e04bb4c773aaa662ec2a9f781987394db95bd73e49753cdc830ae"},
+    {file = "scylla_driver-3.26.8-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:2193ba6ef01cd713c81ce722a38601a12f4b7dd9dca16e15609127d93cab3167"},
     {file = "scylla_driver-3.26.8-cp311-cp311-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:0b47bc799e8d89b874f999fac4c5f60421d569d512cf3604ac97a35022af3a79"},
     {file = "scylla_driver-3.26.8-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5524dc80bd47a6f8395478dee9fb1a6ee092fe8b915e9b1dc3c089ebb61caef0"},
     {file = "scylla_driver-3.26.8-cp311-cp311-win32.whl", hash = "sha256:74565836561208c5106165fec6248c1b3a0e13a1fecbb8fbdea77ed4db2d20d0"},
     {file = "scylla_driver-3.26.8-cp311-cp311-win_amd64.whl", hash = "sha256:2433beb87519599830c4471de61c6429d7f1a1b32be515aea8dc83dd8b3d1d0c"},
+    {file = "scylla_driver-3.26.8-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:0a5ffd21e93af7f6f9620e7a8cf487d21bd0b638e41251e8563fd851d6f71a48"},
     {file = "scylla_driver-3.26.8-cp312-cp312-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:0faf834985af19a80e4fbb8503e91351c6419651821e705ec98a2bc2849a9548"},
     {file = "scylla_driver-3.26.8-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f3af534619ecadfce4fdd9ee3ba34f4764a431c976c2a79cac09e4527d557007"},
     {file = "scylla_driver-3.26.8-cp312-cp312-win32.whl", hash = "sha256:f196bc61feebd5bde0707f876241c9e96a9c70a2bcae91cdae3a28599147662c"},
@@ -1175,15 +1182,18 @@ files = [
     {file = "scylla_driver-3.26.8-cp37-cp37m-win32.whl", hash = "sha256:cd4a384d3fdf0f1b110d7a249bdd3c2a68b16c2ed63c3dec3c85b32ee9fa2273"},
     {file = "scylla_driver-3.26.8-cp37-cp37m-win_amd64.whl", hash = "sha256:b1bef1b12a8d77600ff10e5cd39a8cd66f742b1f9b9a852a18fe9fd245ad1919"},
     {file = "scylla_driver-3.26.8-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:d3bc4cd9e40ba74f38d607161aa39ba6ed8d0af28bc989d373c2bce5ca8f6175"},
+    {file = "scylla_driver-3.26.8-cp38-cp38-macosx_11_0_arm64.whl", hash = "sha256:593527ba7a4b684ea9f28a50f205642aac6f3c3b913a54f39c41583b0a2f893b"},
     {file = "scylla_driver-3.26.8-cp38-cp38-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:7ddd3e8df44609bf7f6dd2d403f7cb6845f3b90180d9d1fc8eff17d91b8d47e2"},
     {file = "scylla_driver-3.26.8-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5ccf0a7c2b880093083adfe5d4e2ac66a45bd5008396da00e6e8ccaa0a4e9103"},
     {file = "scylla_driver-3.26.8-cp38-cp38-win32.whl", hash = "sha256:8bb0f741bf7d8ad9cba1ee1bb52511654ea771c7aa67661482204c185201eff4"},
     {file = "scylla_driver-3.26.8-cp38-cp38-win_amd64.whl", hash = "sha256:57c388298e5520004f4e46794578ccdf655b1873c313a2240b24747daac7edec"},
+    {file = "scylla_driver-3.26.8-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:be99bc3b4c33ee26c84d756d9c2e5e4f4ae1d6b0f2c9a1e49a38836129b13afd"},
     {file = "scylla_driver-3.26.8-cp39-cp39-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:870a0fd86644b50a0688496a2c6b0d00b72152a108011c80381f95a448485c13"},
     {file = "scylla_driver-3.26.8-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:d9c03f7ac60badf63cfeac3fa02e07d2b2bf9b76f426ab13b3dae5cc6891a453"},
     {file = "scylla_driver-3.26.8-cp39-cp39-win32.whl", hash = "sha256:444ad2e16879b1a8d09feda5316846b849b19a14a9057f6a83b3591f8c255030"},
     {file = "scylla_driver-3.26.8-cp39-cp39-win_amd64.whl", hash = "sha256:3ee479330cc79f1f73036e4d32fd9838f6934e9bfa0f4f4cb2f93c6c44aedfdb"},
     {file = "scylla_driver-3.26.8-pp310-pypy310_pp73-macosx_10_9_x86_64.whl", hash = "sha256:e75d16a710b512707da96a74b3250749468b5067dd1f9ad852df57875a63df0a"},
+    {file = "scylla_driver-3.26.8-pp310-pypy310_pp73-macosx_11_0_arm64.whl", hash = "sha256:c7f71d6db04da42b15fb5c602c3410560df992c046df486938345fcb996bd151"},
     {file = "scylla_driver-3.26.8-pp310-pypy310_pp73-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:51a7a63c5d297006ef9a3726486195fe42e48d1ceacbbb0885d02c94da8dde0f"},
     {file = "scylla_driver-3.26.8-pp310-pypy310_pp73-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:4a4f6147d790e4d30ab1e4eade127dddc814f3f81d7efbf0a4408f850a51bbdb"},
     {file = "scylla_driver-3.26.8-pp310-pypy310_pp73-win_amd64.whl", hash = "sha256:0797cb40f4a93ae14132fef524cf3d7cd2b6644085a2de4ed740bf067e4bce45"},
@@ -1192,10 +1202,12 @@ files = [
     {file = "scylla_driver-3.26.8-pp37-pypy37_pp73-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:94525445588d6e1982bb624460d1e53f32ea854f288dd15696ba655e30df0cb8"},
     {file = "scylla_driver-3.26.8-pp37-pypy37_pp73-win_amd64.whl", hash = "sha256:c25298a52c115f2cb345cd9ca0f71e2a4c9584f386fbb57373cb8de46f1b7e0d"},
     {file = "scylla_driver-3.26.8-pp38-pypy38_pp73-macosx_10_9_x86_64.whl", hash = "sha256:8c44af37b76a6ab878f4959fc27f5da6b674d4eccf3df1c936c829c3bca1a3fa"},
+    {file = "scylla_driver-3.26.8-pp38-pypy38_pp73-macosx_11_0_arm64.whl", hash = "sha256:76e5370fac089421f13621471b8ebcf381e6b8fa230d8ffce0aa36ad344bf3de"},
     {file = "scylla_driver-3.26.8-pp38-pypy38_pp73-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:9070b2cd4aacc725149af9db9fab6f1ca71bcc067fcadd01c422582aa05b6c8e"},
     {file = "scylla_driver-3.26.8-pp38-pypy38_pp73-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:d93ebfe445173e9675e52906cc55bab6bd051cc6442cf9594e7e1578e23e8d8b"},
     {file = "scylla_driver-3.26.8-pp38-pypy38_pp73-win_amd64.whl", hash = "sha256:93b9be781c1f4883f75ec954b23a548b66c535edc119483ca025a4679c2af3c6"},
     {file = "scylla_driver-3.26.8-pp39-pypy39_pp73-macosx_10_9_x86_64.whl", hash = "sha256:15380a4c5038d79456e34e7fe6db2e4a7de9f32aea1b2156fee8753324d979fd"},
+    {file = "scylla_driver-3.26.8-pp39-pypy39_pp73-macosx_11_0_arm64.whl", hash = "sha256:851039bb9421120efd97c08631355d4421508599324e8c15b5a0b0c6365a1ea4"},
     {file = "scylla_driver-3.26.8-pp39-pypy39_pp73-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:2db6847d75bd6f5d26ec211f092e65c22d83012a2fe8c9b344ed4247e68d29de"},
     {file = "scylla_driver-3.26.8-pp39-pypy39_pp73-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:51b37667176d8ec775baac219e0e1d9344d9bc493e4b3d2887efee5661279368"},
     {file = "scylla_driver-3.26.8-pp39-pypy39_pp73-win_amd64.whl", hash = "sha256:7677a217a70352c0c53eef96b4be9fdfd6395c29f6c0940dd143a9c4749011dc"},
@@ -1343,13 +1355,13 @@ files = [
 
 [[package]]
 name = "urllib3"
-version = "2.2.1"
+version = "2.2.3"
 description = "HTTP library with thread-safe connection pooling, file post, and more."
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "urllib3-2.2.1-py3-none-any.whl", hash = "sha256:450b20ec296a467077128bff42b73080516e71b56ff59a60a02bef2232c4fa9d"},
-    {file = "urllib3-2.2.1.tar.gz", hash = "sha256:d0570876c61ab9e520d776c38acbbb5b05a776d3f9ff98a5c8fd5162a444cf19"},
+    {file = "urllib3-2.2.3-py3-none-any.whl", hash = "sha256:ca899ca043dcb1bafa3e262d73aa25c465bfb49e0bd9dd5d59f1d0acba2f8fac"},
+    {file = "urllib3-2.2.3.tar.gz", hash = "sha256:e7d814a81dad81e6caf2ec9fdedb284ecc9c73076b62654547cc64ccdcae26e9"},
 ]
 
 [package.extras]
@@ -1398,22 +1410,6 @@ files = [
     {file = "wcwidth-0.2.13-py2.py3-none-any.whl", hash = "sha256:3da69048e4540d84af32131829ff948f1e022c1c6bdb8d6102117aac784f6859"},
     {file = "wcwidth-0.2.13.tar.gz", hash = "sha256:72ea0c06399eb286d978fdedb6923a9eb47e1c486ce63e9b4e64fc18303972b5"},
 ]
-
-[[package]]
-name = "websocket-client"
-version = "1.8.0"
-description = "WebSocket client for Python with low level API options"
-optional = false
-python-versions = ">=3.8"
-files = [
-    {file = "websocket_client-1.8.0-py3-none-any.whl", hash = "sha256:17b44cc997f5c498e809b22cdf2d9c7a9e71c02c8cc2b6c56e7c2d1239bfa526"},
-    {file = "websocket_client-1.8.0.tar.gz", hash = "sha256:3239df9f44da632f96012472805d40a23281a991027ce11d2f45a6f24ac4c3da"},
-]
-
-[package.extras]
-docs = ["Sphinx (>=6.0)", "myst-parser (>=2.0.0)", "sphinx-rtd-theme (>=1.1.0)"]
-optional = ["python-socks", "wsaccel"]
-test = ["websockets"]
 
 [[package]]
 name = "werkzeug"
@@ -1531,4 +1527,4 @@ email = ["email-validator"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "5c18f1f6377ba76be542f0050bf1bae482edaa67b33aa2f123254f6bec8c2fd2"
+content-hash = "8335d42eb7590747cac26172abf8268ba429f20f4df71e5bbd37c004d2f71d9a"
