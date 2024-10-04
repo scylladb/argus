@@ -15,6 +15,9 @@ LOGGER = logging.getLogger(__name__)
 @click.command('sync-models')
 @with_appcontext
 def sync_models_command():
+    sync_models()
+
+def sync_models():
     cluster = ScyllaCluster.get()
     cluster.sync_core_tables()
     LOGGER.info("Synchronizing plugin types...")

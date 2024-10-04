@@ -40,7 +40,7 @@ supervisor = "^4.2.4"
 
 [tool.poetry.dev-dependencies]
 coverage = "5.5"
-docker = "4.4.4"
+docker = "7.1.0"
 pytest = "6.2.5"
 ipython = "^8.1"
 pylint = "^2.12.0"

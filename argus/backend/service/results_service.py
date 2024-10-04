@@ -265,34 +265,6 @@ class ResultsService:
                 best_results_map[best.key] = best
         return best_results_map
 
-    @staticmethod
-    def _update_best_value(best_results: dict[str, list[dict]], higher_is_better_map: dict[str, bool | None], cells: list[dict],
-                           sut_timestamp: float, run_id: str
-                           ) -> dict[str, list[dict]]:
-
-        for cell in cells:
-            if "column" not in cell or "row" not in cell or "value" not in cell:
-                continue
-            column, row, value = cell["column"], cell["row"], cell["value"]
-            key_name = f"{column}_{row}"
-            if higher_is_better_map[column] is None:
-                # skipping updating best value when higher_is_better is not set (not enabled by user)
-                return best_results
-            if key_name not in best_results:
-                best_results[key_name] = []
-                current_best = None
-            else:
-                current_best = best_results[key_name][-1]
-                if current_best["sut_timestamp"].timestamp() > sut_timestamp:
-                    # skip updating best value when testing older version than current best
-                    # as would have to update all values between these dates to make cells statuses to be consistent
-                    return best_results
-
-            is_better = partial(operator.gt, value) if higher_is_better_map[column] else partial(operator.lt, value)
-            if current_best is None or is_better(current_best["value"]):
-                best_results[key_name].append({"sut_timestamp": sut_timestamp, "value": value, "run_id": run_id})
-        return best_results
-
     def update_best_results(self, test_id: UUID, table_name: str, cells: list[Cell],
                             table_metadata: ArgusGenericResultMetadata, run_id: str) -> dict[str, BestResult]:
         """update best results for given test_id and table_name based on cells values - if any value is better than current best"""
