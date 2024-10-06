@@ -8,9 +8,14 @@ LOGGER = logging.getLogger(__name__)
 class APIException(Exception):
     pass
 
+class DataValidationError(APIException):
+    pass
 
 def handle_api_exception(exception: Exception):
-    LOGGER.error("Exception in %s\n%s", request.endpoint, "".join(format_exception(exception)))
+    if issubclass(exception.__class__, APIException):
+        LOGGER.info("Endpoint %s responded with error %s: %s", request.endpoint, exception.__class__.__name__, str(exception))
+    else:
+        LOGGER.error("Exception in %s\n%s", request.endpoint, "".join(format_exception(exception)))
 
     return {
         "status": "error",
