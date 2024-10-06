@@ -3,6 +3,9 @@ from dataclasses import asdict, dataclass
 from typing import Any
 from uuid import UUID
 
+import pytest
+
+from argus.backend.error_handlers import DataValidationError
 from argus.backend.tests.conftest import get_fake_test_run, fake_test
 from argus.client.generic_result import GenericResultTable, ColumnMetadata, ResultType, ValidationRule, Status
 
@@ -85,7 +88,8 @@ def test_can_track_validation_rules_changes(fake_test, client_service, results_s
     for cell in sample_data:
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
     client_service.submit_run(run_type, asdict(run))
-    client_service.submit_results(run_type, run.run_id, results.as_dict())
+    with pytest.raises(DataValidationError):
+        client_service.submit_results(run_type, run.run_id, results.as_dict())
     run_results = results_service.get_run_results(fake_test.id, UUID(run.run_id))
     actual_cells = results_to_dict(run_results[0])
     for cell in sample_data:
@@ -143,7 +147,8 @@ def test_can_track_validation_rules_changes(fake_test, client_service, results_s
     for cell in sample_data:
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
     client_service.submit_run(run_type, asdict(run))
-    client_service.submit_results(run_type, run.run_id, results.as_dict())
+    with pytest.raises(DataValidationError):
+        client_service.submit_results(run_type, run.run_id, results.as_dict())
     run_results = results_service.get_run_results(fake_test.id, UUID(run.run_id))
     actual_cells = results_to_dict(run_results[0])
     for cell in sample_data:
