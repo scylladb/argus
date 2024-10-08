@@ -49,10 +49,10 @@ def test_can_track_best_result(fake_test, client_service, results_service, relea
     # all results should be tracked as best - first submission
     for cell in sample_data:
         key = f"{cell.column}:{cell.row}"
-        assert best_results[key].value == cell.value
-        assert str(best_results[key].run_id) == run.run_id
-    result_date_h = best_results["h_is_better:row"].result_date  # save the result date for later comparison
-    result_date_duration = best_results["duration col name:row"].result_date
+        assert best_results[key][-1].value == cell.value
+        assert str(best_results[key][-1].run_id) == run.run_id
+    result_date_h = best_results["h_is_better:row"][-1].result_date  # save the result date for later comparison
+    result_date_duration = best_results["duration col name:row"][-1].result_date
     # second submission with better results
     run_type, run = get_fake_test_run(test=fake_test)
     results = SampleTable()
@@ -68,11 +68,11 @@ def test_can_track_best_result(fake_test, client_service, results_service, relea
     client_service.submit_results(run_type, run.run_id, results.as_dict())
     best_results = results_service.get_best_results(fake_test.id, results.name)
     # best results should be updated
-    assert best_results["h_is_better:row"].value == 15
-    assert best_results["h_is_better:row"].result_date > result_date_h  # result date should be updated
-    assert best_results["l_is_better:row"].value == 5
-    assert best_results["duration col name:row"].value == 10
-    assert best_results["duration col name:row"].result_date == result_date_duration  # result date should not change as was not updated
+    assert best_results["h_is_better:row"][-1].value == 15
+    assert best_results["h_is_better:row"][-1].result_date > result_date_h  # result date should be updated
+    assert best_results["l_is_better:row"][-1].value == 5
+    assert best_results["duration col name:row"][-1].value == 10
+    assert best_results["duration col name:row"][-1].result_date == result_date_duration  # result date should not change as was not updated
 
 
 def test_can_enable_best_results_tracking(fake_test, client_service, results_service, release, group):
@@ -127,8 +127,8 @@ def test_can_enable_best_results_tracking(fake_test, client_service, results_ser
     client_service.submit_run(run_type, asdict(run))
     client_service.submit_results(run_type, run.run_id, results.as_dict())
     best_results = results_service.get_best_results(fake_test.id, results.name)
-    assert best_results["h_is_better:row"].value == 15
-    assert best_results["l_is_better:row"].value == 5
-    assert best_results["duration col name:row"].value == 10
-    assert best_results["non tracked col name:row"].value == 10
+    assert best_results["h_is_better:row"][-1].value == 15
+    assert best_results["l_is_better:row"][-1].value == 5
+    assert best_results["duration col name:row"][-1].value == 10
+    assert best_results["non tracked col name:row"][-1].value == 10
     assert 'text col name:row' not in best_results  # text column should not be tracked

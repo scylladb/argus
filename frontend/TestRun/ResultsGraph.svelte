@@ -28,10 +28,11 @@
         graph.options.plugins.tooltip = {
             callbacks: {
                 label: function (tooltipItem) {
-                    const y = tooltipItem.parsed.y;
+                    const y = tooltipItem.parsed.y.toFixed(2);
                     const x = new Date(tooltipItem.parsed.x).toLocaleDateString("sv-SE");
                     const ori = tooltipItem.raw.ori;
-                    return `${x}: ${ori? ori : y}`;
+                    const limit = tooltipItem.raw.limit;
+                    return `${x}: ${ori? ori : y} (limit: ${limit?.toFixed(2)||"N/A"})`;
                 }
             }
         };

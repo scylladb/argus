@@ -2,6 +2,7 @@ import copy
 import logging
 import math
 import operator
+from collections import defaultdict
 from datetime import datetime, timezone
 from functools import partial
 from typing import List, Dict, Any
@@ -30,7 +31,7 @@ class Cell:
     value: Any | None = None
     value_text: str | None = None
 
-    def update_cell_status_based_on_rules(self, table_metadata: ArgusGenericResultMetadata, best_results: dict[str, BestResult],
+    def update_cell_status_based_on_rules(self, table_metadata: ArgusGenericResultMetadata, best_results: dict[str, List[BestResult]],
                                           ) -> None:
         column_validation_rules = table_metadata.validation_rules.get(self.column)
         rules = column_validation_rules[-1] if column_validation_rules else {}
@@ -44,7 +45,7 @@ class Cell:
             limits.append(rules.fixed_limit)
 
         if best_result := best_results.get(key):
-            best_value = best_result.value
+            best_value = best_result[-1].value
             if (best_pct := rules.best_pct) is not None:
                 multiplier = 1 - best_pct / 100 if higher_is_better else 1 + best_pct / 100
                 limits.append(best_value * multiplier)
@@ -149,18 +150,76 @@ def round_datasets_to_min_max(datasets: List[Dict[str, Any]], min_y: float, max_
     return datasets
 
 
-def create_chartjs(table, data):
+def calculate_limits(points: List[dict], best_results: List, validation_rules_list: List, higher_is_better: bool) -> List[dict]:
+    """Calculate limits for points based on best results and validation rules"""
+    for point in points:
+        point_date = datetime.strptime(point["x"], '%Y-%m-%dT%H:%M:%SZ')
+        validation_rule = next(
+            (rule for rule in reversed(validation_rules_list) if rule.valid_from <= point_date),
+            validation_rules_list[0]
+        )
+        best_result = next(
+            (result for result in reversed(best_results) if result.result_date <= point_date),
+            best_results[0]
+        )
+        limit_values = []
+        if validation_rule.fixed_limit is not None:
+            limit_values.append(validation_rule.fixed_limit)
+        best_value = best_result.value
+        if validation_rule.best_pct is not None:
+            multiplier = 1 - validation_rule.best_pct / 100 if higher_is_better else 1 + validation_rule.best_pct / 100
+            limit_values.append(best_value * multiplier)
+        if validation_rule.best_abs is not None:
+            limit_values.append(best_value - validation_rule.best_abs if higher_is_better else best_value + validation_rule.best_abs)
+        if limit_values:
+            limit_value = max(limit_values) if higher_is_better else min(limit_values)
+            point['limit'] = limit_value
+
+    return points
+
+def create_chartjs(table, data, best_results):
     graphs = []
     for column in table.columns_meta:
         if column.type == "TEXT":
-            # skip text columns
             continue
-        datasets = [
-            {"label": row,
-             "borderColor": colors[idx % len(colors)],
-             "borderWidth": 3,
-             "showLine": True,
-             "data": get_sorted_data_for_column_and_row(data, column.name, row)} for idx, row in enumerate(table.rows_meta)]
+        datasets = []
+        is_fixed_limit_drawn = False
+        for idx, row in enumerate(table.rows_meta):
+            color = colors[idx % len(colors)]
+            points = get_sorted_data_for_column_and_row(data, column.name, row)
+            if not points:
+                continue
+            datasets.append({
+                "label": row,
+                "borderColor": color,
+                "borderWidth": 3,
+                "showLine": True,
+                "data": points,
+            })
+            key = f"{column.name}:{row}"
+            higher_is_better = column.higher_is_better
+            if higher_is_better is None:
+                continue
+            best_result_list = best_results.get(key, [])
+            validation_rules_list = table.validation_rules.get(column.name, [])
+            if validation_rules_list and best_result_list:
+                points = calculate_limits(points, best_result_list, validation_rules_list, higher_is_better)
+                limit_points = [{"x": point["x"], "y": point["limit"]} for point in points if 'limit' in point]
+                if limit_points and not is_fixed_limit_drawn:
+                    datasets.append({
+                        "label": "limit",
+                        "borderColor": color,
+                        "borderWidth": 2,
+                        "borderDash": [5, 5],
+                        "fill": False,
+                        "data": limit_points,
+                        "showLine": True,
+                        "pointRadius": 0,
+                        "pointHitRadius": 0,
+                    })
+                    is_fixed_limit_drawn = any(rule.fixed_limit is not None for rule in validation_rules_list)
+
+
         min_y, max_y = get_min_max_y(datasets)
         datasets = round_datasets_to_min_max(datasets, min_y, max_y)
         if not min_y + max_y:
@@ -171,10 +230,8 @@ def create_chartjs(table, data):
         options["scales"]["y"]["title"]["text"] = f"[{column.unit}]" if column.unit else ""
         options["scales"]["y"]["min"] = min_y
         options["scales"]["y"]["max"] = max_y
-        graphs.append({"options": options, "data":
-            {"datasets": datasets}})
+        graphs.append({"options": options, "data": {"datasets": datasets}})
     return graphs
-
 
 def calculate_graph_ticks(graphs: List[Dict]) -> dict[str, str]:
     min_x, max_x = None, None
@@ -198,7 +255,7 @@ class ResultsService:
         self.cluster = ScyllaCluster.get()
 
     def _get_tables_metadata(self, test_id: UUID) -> list[ArgusGenericResultMetadata]:
-        query_fields = ["name", "description", "columns_meta", "rows_meta"]
+        query_fields = ["name", "description", "columns_meta", "rows_meta", "validation_rules"]
         raw_query = (f"SELECT {','.join(query_fields)}"
                      f" FROM generic_result_metadata_v1 WHERE test_id = ?")
         query = self.cluster.prepare(raw_query)
@@ -245,28 +302,28 @@ class ResultsService:
             data = [ArgusGenericResultData(**cell) for cell in data]
             if not data:
                 continue
-            graphs.extend(create_chartjs(table, data))
-        ticks = calculate_graph_ticks(graphs)
+            best_results = self.get_best_results(test_id=test_id, name=table.name)
+            graphs.extend(create_chartjs(table, data, best_results))
+            ticks = calculate_graph_ticks(graphs)
         return graphs, ticks
 
     def is_results_exist(self, test_id: UUID):
         """Verify if results for given test id exist at all."""
         return bool(ArgusGenericResultMetadata.objects(test_id=test_id).only(["name"]).limit(1))
 
-    def get_best_results(self, test_id: UUID, name: str) -> dict[str, BestResult]:
+    def get_best_results(self, test_id: UUID, name: str) -> dict[str, List[BestResult]]:
         query_fields = ["key", "value", "result_date", "run_id"]
         raw_query = (f"SELECT {','.join(query_fields)}"
                      f" FROM generic_result_best_v2 WHERE test_id = ? and name = ?")
         query = self.cluster.prepare(raw_query)
         best_results = [BestResult(**best) for best in self.cluster.session.execute(query=query, parameters=(test_id, name))]
-        best_results_map = {}
-        for best in best_results:
-            if best.key not in best_results_map:
-                best_results_map[best.key] = best
+        best_results_map = defaultdict(list)
+        for best in sorted(best_results, key=lambda x: x.result_date):
+            best_results_map.setdefault(best.key, []).append(best)
         return best_results_map
 
     def update_best_results(self, test_id: UUID, table_name: str, cells: list[Cell],
-                            table_metadata: ArgusGenericResultMetadata, run_id: str) -> dict[str, BestResult]:
+                            table_metadata: ArgusGenericResultMetadata, run_id: str) -> dict[str, List[BestResult]]:
         """update best results for given test_id and table_name based on cells values - if any value is better than current best"""
         higher_is_better_map = {meta["name"]: meta.higher_is_better for meta in table_metadata.columns_meta}
         best_results = self.get_best_results(test_id=test_id, name=table_name)
@@ -278,12 +335,12 @@ class ResultsService:
             if higher_is_better_map[cell.column] is None:
                 # skipping updating best value when higher_is_better is not set (not enabled by user)
                 continue
-            current_best = best_results.get(key)
+            current_best = best_results.get(key)[-1] if key in best_results else None
             is_better = partial(operator.gt, cell.value) if higher_is_better_map[cell.column] \
                 else partial(operator.lt, cell.value)
             if current_best is None or is_better(current_best.value):
                 result_date = datetime.now(timezone.utc)
-                best_results[key] = BestResult(key=key, value=cell.value, result_date=result_date, run_id=run_id)
+                best_results[key].append(BestResult(key=key, value=cell.value, result_date=result_date, run_id=run_id))
                 ArgusBestResultData(test_id=test_id, name=table_name, key=key, value=cell.value, result_date=result_date,
                                     run_id=run_id).save()
         return best_results
