@@ -1,14 +1,14 @@
 import datetime
 import logging
-import re
 from functools import partial, reduce
-from typing import Any, Callable, TypedDict
-from urllib.parse import unquote
+from typing import TypedDict
 from uuid import UUID
 
 from cassandra.cqlengine.models import Model
+from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, ArgusUserView, User
 from argus.backend.plugins.loader import all_plugin_models
+from argus.backend.service.test_lookup import TestLookup
 from argus.backend.util.common import chunk, current_user
 
 LOGGER = logging.getLogger(__name__)
@@ -27,8 +27,7 @@ class ViewUpdateRequest(TypedDict):
 
 
 class UserViewService:
-    ADD_ALL_ID = UUID("db6f33b2-660b-4639-ba7f-79725ef96616")
-    def create_view(self, name: str, items: list[str], widget_settings: str, description: str = None, display_name: str = None) -> ArgusUserView:
+    def create_view(self, name: str, items: list[str], widget_settings: str, description: str = None, display_name: str = None, plan_id: UUID = None) -> ArgusUserView:
         try:
             name_check = ArgusUserView.get(name=name)
             raise UserViewException(f"View with name {name} already exists: {name_check.id}", name, name_check, name_check.id)
@@ -39,6 +38,7 @@ class UserViewService:
         view.display_name = display_name or name
         view.description = description
         view.widget_settings = widget_settings
+        view.plan_id = plan_id
         view.tests = []
         for entity in items:
             entity_type, entity_id = entity.split(":")
@@ -56,74 +56,8 @@ class UserViewService:
         view.save()
         return view
 
-    @staticmethod
-    def index_mapper(item: Model, type = "test"):
-        mapped = dict(item)
-        mapped["type"] = type
-        return mapped
-
     def test_lookup(self, query: str):
-        def check_visibility(entity: dict):
-            if not entity["enabled"]:
-                return False
-            if entity.get("group") and not entity["group"]["enabled"]:
-                return False
-            if entity.get("release") and not entity["release"]["enabled"]:
-                return False
-            return True
-
-        def facet_extraction(query: str) -> str:
-            extractor = re.compile(r"(?:(?P<name>(?:release|group|type)):(?P<value>\"?[\w\d\.\-]*\"?))")
-            facets = re.findall(extractor, query)
-
-            return (re.sub(extractor, "", query).strip(), facets)
-
-        def type_facet_filter(item: dict, key: str, facet_query: str):
-            entity_type: str = item[key]
-            return facet_query.lower() == entity_type
-
-        def facet_filter(item: dict, key: str, facet_query: str):
-            if entity := item.get(key):
-                name: str = entity.get("pretty_name") or entity.get("name")
-                return facet_query.lower() in name.lower() if name else False
-            return False
-
-        def facet_wrapper(query_func: Callable[[dict], bool], facet_query: str, facet_type: str) -> bool:
-            def inner(item: dict, query: str):
-                return query_func(item, query) and facet_funcs[facet_type](item, facet_type, facet_query)
-            return inner
-
-        facet_funcs = {
-            "type": type_facet_filter,
-            "release": facet_filter,
-            "group": facet_filter,
-        }
-
-        def index_searcher(item, query: str):
-            name: str = item["pretty_name"] or item["name"]
-            return unquote(query).lower() in name.lower() if query else True
-
-        text_query, facets = facet_extraction(query)
-        search_func = index_searcher
-        for facet, value in facets:
-            if facet in facet_funcs.keys():
-                search_func = facet_wrapper(query_func=search_func, facet_query=value, facet_type=facet)
-
-
-        all_tests = ArgusTest.objects().limit(None)
-        all_releases = ArgusRelease.objects().limit(None)
-        all_groups = ArgusGroup.objects().limit(None)
-        release_by_id = {release.id: partial(self.index_mapper, type="release")(release) for release in all_releases}
-        group_by_id = {group.id: partial(self.index_mapper, type="group")(group) for group in all_groups}
-        index = [self.index_mapper(t) for t in all_tests]
-        index = [*release_by_id.values(), *group_by_id.values(), *index]
-        for item in index:
-            item["group"] = group_by_id.get(item.get("group_id"))
-            item["release"] = release_by_id.get(item.get("release_id"))
-
-        results = filter(partial(search_func, query=text_query), index)
-
-        return [{ "id": self.ADD_ALL_ID, "name": "Add all...", "type": "special" }, *list(res for res in results if check_visibility(res))]
+        return TestLookup.test_lookup(query)
 
     def update_view(self, view_id: str | UUID, update_data: ViewUpdateRequest) -> bool:
         view: ArgusUserView = ArgusUserView.get(id=view_id)
@@ -195,7 +129,15 @@ class UserViewService:
         return result
 
     def refresh_stale_view(self, view: ArgusUserView):
-        view.tests = [test.id for test in self.resolve_view_tests(view.id)]
+        if view.plan_id:
+            try:
+                view.tests = [test.id for test in self.resolve_tests_by_id(ArgusReleasePlan.get(id=view.plan_id).tests)]
+                view.group_ids = ArgusReleasePlan.get(id=view.plan_id).groups
+            except ArgusReleasePlan.DoesNotExist:
+                LOGGER.warning("Dangling view %s from non-existent release plan %s", view.id, view.plan_id)
+                return view
+        else:
+            view.tests = [test.id for test in self.resolve_view_tests(view.id)]
         all_tests = set(view.tests)
         all_tests.update(test.id for test in self.batch_resolve_entity(ArgusTest, "group_id", view.group_ids))
         all_tests.update(test.id for test in self.batch_resolve_entity(ArgusTest, "release_id", view.release_ids))
@@ -234,10 +176,10 @@ class UserViewService:
         view_groups = self.batch_resolve_entity(ArgusGroup, "id", view.group_ids)
         view_releases = self.batch_resolve_entity(ArgusRelease, "id", view.release_ids)
         view_tests = self.resolve_view_tests(view.id)
-        all_groups = { group.id: partial(self.index_mapper, type="group")(group) for group in self.resolve_releases_for_tests(view_tests) }
-        all_releases ={ release.id: partial(self.index_mapper, type="release")(release) for release in self.resolve_releases_for_tests(view_tests) }
+        all_groups = { group.id: partial(TestLookup.index_mapper, type="group")(group) for group in self.resolve_releases_for_tests(view_tests) }
+        all_releases ={ release.id: partial(TestLookup.index_mapper, type="release")(release) for release in self.resolve_releases_for_tests(view_tests) }
         entities_by_id = {
-            entity.id: partial(self.index_mapper, type="release" if isinstance(entity, ArgusRelease) else "group")(entity)
+            entity.id: partial(TestLookup.index_mapper, type="release" if isinstance(entity, ArgusRelease) else "group")(entity)
             for container in [view_releases, view_groups]
             for entity in container
         }

@@ -1,0 +1,19 @@
+{% extends "base.html.j2" %}
+
+{% block title %}
+Release Planner for {{ release_name }}
+{% endblock %}
+
+{% block javascripts %}
+{{ super() }}
+<script>
+    window.releaseData = JSON.parse('{{ planner_data | tojson | safe }}');
+</script>
+<script defer src="/s/dist/releasePlanner.bundle.js"></script>
+{% endblock javascripts %}
+
+{% block body %}
+    <div class="container-fluid">
+        <div id="releasePlanner"></div>
+    </div>
+{% endblock %}
