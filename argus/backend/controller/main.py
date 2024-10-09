@@ -9,6 +9,7 @@ from argus.backend.controller.notifications import bp as notifications_bp
 from argus.backend.controller.team_ui import bp as teams_bp
 from argus.backend.service.argus_service import ArgusService
 from argus.backend.models.web import WebFileStorage
+from argus.backend.service.testrun import TestRunService
 from argus.backend.service.user import UserService, login_required
 from argus.backend.service.views import UserViewService
 
@@ -36,6 +37,13 @@ def test_run(run_id: UUID):
 def runs(test_id: UUID):
     additional_runs = request.args.getlist("additionalRuns[]")
     return render_template("standalone_test_with_runs.html.j2", test_id=test_id, additional_runs=additional_runs)
+
+
+@bp.route("/tests/<string:plugin_name>/<string:run_id>")
+@login_required
+def get_run_by_plugin(plugin_name: str, run_id: UUID | str):
+    run = TestRunService().get_run(plugin_name, run_id)
+    return render_template("run_view_by_plugin.html.j2", run=run)
 
 
 @bp.route("/")

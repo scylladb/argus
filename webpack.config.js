@@ -46,6 +46,10 @@ module.exports = {
             import: "./frontend/test-runs-standalone.js",
             dependOn: "globalAlert"
         },
+        runByPlugin: {
+            import: "./frontend/run-by-plugin.js",
+            dependOn: "globalAlert"
+        },
         testRuns: {
             import: "./frontend/test-runs-breakout.js",
             dependOn: "globalAlert"

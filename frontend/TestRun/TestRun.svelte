@@ -133,7 +133,7 @@
     <div class="d-flex px-2 py-2 mb-1 border-bottom bg-white ">
         <div class="p-1">
             {#if testRun}
-                <a class="link-dark" href="/test/{testRun.test_id}/runs?additionalRuns[]={testRun.id}">
+                <a class="link-dark" href="/tests/{testInfo.test.plugin_name}/{testRun.id}">
                     {testRun.build_id}#{buildNumber}
                 </a>
             {/if}
