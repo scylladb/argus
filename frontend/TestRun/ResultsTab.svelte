@@ -15,6 +15,7 @@
     let selectedFilters = [];
     let filteredTables = [];
     let selectedScreenshot = "";
+    let showFilters = false;
 
     const tableStyleToColor = {
         "table-success": "green",
@@ -177,13 +178,19 @@
                 fltrs.get(level).add(part.trim());
             });
         });
-        filters = Array.from(fltrs.entries()).sort((a, b) => a[0] - b[0]).map(entry => ({
-            level: entry[0],
-            items: Array.from(entry[1])
-        }))
+
+        filters = Array.from(fltrs.entries())
+            .sort(([left], [right]) => left - right)
+            .map(([level, items]) => ({
+                level,
+                items: Array.from(items)
+            }))
             .filter(entry => entry.items.length > 1);  // Filter out filters with only one item
-        filters = filters;
+
+        // show filters only if any group contains at least 2 filters
+        showFilters = filters.some(entry => entry.items.length >= 2);
     };
+
 
     const toggleFilter = (filterName, level) => {
         // Toggle filter by level - one filter per level can be applied
@@ -300,7 +307,7 @@
 
 {#if !fetching }
     <div class="p-2">
-        <div class="filters-container {Object.keys(filters).length < 2 ? 'd-none' : ''}">
+        <div class="filters-container" class:d-none={!showFilters}>
             <button on:click={() => { selectedFilters = []; filterTables();  }}>Show All</button>
             {#each filters as filterGroup}
                 {#each filterGroup.items as filter}
