@@ -5,6 +5,8 @@ import uuid
 from cassandra.auth import PlainTextAuthProvider
 from docker import DockerClient
 
+from argus.backend.util.config import Config
+
 os.environ['DOCKER_HOST'] = ""
 from _pytest.fixtures import fixture
 from docker.errors import NotFound
@@ -23,11 +25,6 @@ logging.getLogger('cassandra').setLevel(logging.WARNING)
 logging.getLogger('cassandra.connection').setLevel(logging.WARNING)
 logging.getLogger('cassandra.pool').setLevel(logging.WARNING)
 logging.getLogger('cassandra.cluster').setLevel(logging.WARNING)
-
-
-def truncate_all_tables(session):
-    for table in session.cluster.metadata.keyspaces[session.keyspace].tables:
-        session.execute(f"TRUNCATE {table}")
 
 
 @fixture(scope='session')
@@ -84,17 +81,23 @@ def argus_db():
              WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1};
          """)
     config = {"SCYLLA_KEYSPACE_NAME": "test_argus","SCYLLA_CONTACT_POINTS": [container_ip],
-              "SCYLLA_USERNAME": "cassandra", "SCYLLA_PASSWORD": "cassandra"}
-
+              "SCYLLA_USERNAME": "cassandra", "SCYLLA_PASSWORD": "cassandra", "APP_LOG_LEVEL": "INFO",
+              "EMAIL_SENDER": "unit tester", "EMAIL_SENDER_PASS": "pass", "EMAIL_SENDER_USER": "qa",
+              "EMAIL_SERVER": "fake", "EMAIL_SERVER_PORT": 25}
+    Config.CONFIG = config  # patch config for whole test to avoid using Config.load_yaml_config() required by app context
     database = ScyllaCluster.get(config)
     if need_sync_models:
         sync_models()
-    # truncate_all_tables(database.session)
-    session = database.cluster.connect(keyspace=config["SCYLLA_KEYSPACE_NAME"])
-    ScyllaCluster.get_session = lambda: session  # monkey patching to escape need for flask app context
 
     yield database
     database.shutdown()
+
+
+@fixture(scope='session', autouse=True)
+def app_context(argus_db):
+    from argus_backend import argus_app
+    with argus_app.app_context():
+        yield
 
 
 @fixture(scope='session')
