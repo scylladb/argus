@@ -4,13 +4,14 @@ import math
 import operator
 from collections import defaultdict
 from datetime import datetime, timezone
-from functools import partial
+from functools import partial, cache
 from typing import List, Dict, Any
 from uuid import UUID
 
 from dataclasses import dataclass
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ArgusBestResultData
+from argus.backend.service.testrun import TestRunService
 
 LOGGER = logging.getLogger(__name__)
 
@@ -254,6 +255,17 @@ class ResultsService:
     def __init__(self):
         self.cluster = ScyllaCluster.get()
 
+    @cache
+    def _ignored_results(self, test_id: UUID) -> list[str]:
+        plugin_query = self.cluster.prepare("SELECT id, plugin_name FROM argus_test_v2 WHERE id = ?")
+        plugin_name = self.cluster.session.execute(plugin_query, parameters=(test_id,)).one()['plugin_name']
+        plugin = TestRunService().get_plugin(plugin_name)
+        ignored_runs_query = self.cluster.prepare(f"SELECT id, investigation_status FROM {plugin.model.table_name()} WHERE test_id = ?")
+        ignored_runs = [run["id"] for run in self.cluster.session.execute(ignored_runs_query, parameters=(test_id,)).all()
+                        if run["investigation_status"].lower() == "ignored"]
+        LOGGER.debug(f"Ignored runs for test {test_id}: {ignored_runs}")
+        return ignored_runs
+
     def _get_tables_metadata(self, test_id: UUID) -> list[ArgusGenericResultMetadata]:
         query_fields = ["name", "description", "columns_meta", "rows_meta", "validation_rules"]
         raw_query = (f"SELECT {','.join(query_fields)}"
@@ -291,6 +303,7 @@ class ResultsService:
         return sorted(tables, key=lambda x: x['order'])
 
     def get_test_graphs(self, test_id: UUID):
+        ignored_results = self._ignored_results(test_id)
         query_fields = ["run_id", "column", "row", "value", "status", "sut_timestamp"]
         raw_query = (f"SELECT {','.join(query_fields)}"
                      f" FROM generic_result_data_v1 WHERE test_id = ? AND name = ? LIMIT 2147483647")
@@ -299,12 +312,12 @@ class ResultsService:
         graphs = []
         for table in tables_meta:
             data = self.cluster.session.execute(query=query, parameters=(test_id, table.name))
-            data = [ArgusGenericResultData(**cell) for cell in data]
+            data = [ArgusGenericResultData(**cell) for cell in data if cell["run_id"] not in ignored_results]
             if not data:
                 continue
             best_results = self.get_best_results(test_id=test_id, name=table.name)
             graphs.extend(create_chartjs(table, data, best_results))
-            ticks = calculate_graph_ticks(graphs)
+        ticks = calculate_graph_ticks(graphs)
         return graphs, ticks
 
     def is_results_exist(self, test_id: UUID):
@@ -312,11 +325,13 @@ class ResultsService:
         return bool(ArgusGenericResultMetadata.objects(test_id=test_id).only(["name"]).limit(1))
 
     def get_best_results(self, test_id: UUID, name: str) -> dict[str, List[BestResult]]:
+        ignored_results = self._ignored_results(test_id)
         query_fields = ["key", "value", "result_date", "run_id"]
         raw_query = (f"SELECT {','.join(query_fields)}"
                      f" FROM generic_result_best_v2 WHERE test_id = ? and name = ?")
         query = self.cluster.prepare(raw_query)
-        best_results = [BestResult(**best) for best in self.cluster.session.execute(query=query, parameters=(test_id, name))]
+        best_results = [BestResult(**best) for best in self.cluster.session.execute(query=query, parameters=(test_id, name))
+                        if best["run_id"] not in ignored_results]
         best_results_map = defaultdict(list)
         for best in sorted(best_results, key=lambda x: x.result_date):
             best_results_map.setdefault(best.key, []).append(best)
