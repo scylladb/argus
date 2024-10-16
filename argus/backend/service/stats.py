@@ -9,7 +9,7 @@ from uuid import UUID
 from cassandra.cqlengine.models import Model
 from argus.backend.plugins.loader import all_plugin_models
 from argus.backend.util.common import chunk, get_build_number
-from argus.backend.util.enums import TestStatus, TestInvestigationStatus
+from argus.common.enums import TestStatus, TestInvestigationStatus
 from argus.backend.models.web import ArgusGithubIssue, ArgusRelease, ArgusGroup, ArgusTest,\
     ArgusScheduleTest, ArgusTestRunComment, ArgusUserView
 from argus.backend.db import ScyllaCluster

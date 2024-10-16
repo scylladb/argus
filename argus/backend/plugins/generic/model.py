@@ -7,7 +7,7 @@ from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import ArgusRelease
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.generic.types import GenericRunFinishRequest, GenericRunSubmitRequest
-from argus.backend.util.enums import TestStatus
+from argus.common.enums import TestStatus
 
 
 class GenericPluginException(Exception):

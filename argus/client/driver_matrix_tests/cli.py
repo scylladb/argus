@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import click
 import logging
-from argus.backend.util.enums import TestStatus
+from argus.common.enums import TestStatus
 
 from argus.client.driver_matrix_tests.client import ArgusDriverMatrixClient
 

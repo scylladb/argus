@@ -6,7 +6,7 @@ from uuid import UUID
 
 import requests
 
-from argus.backend.util.enums import TestStatus
+from argus.common.enums import TestStatus
 from argus.client.generic_result import GenericResultTable
 from argus.client.sct.types import LogLink
 
