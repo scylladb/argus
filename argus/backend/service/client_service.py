@@ -1,7 +1,5 @@
-import operator
-from dataclasses import asdict, is_dataclass
-from datetime import datetime, timezone
-from functools import partial
+from dataclasses import asdict
+from datetime import datetime
 from uuid import UUID
 
 from argus.backend.db import ScyllaCluster
@@ -9,7 +7,7 @@ from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGeneric
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS
 from argus.backend.service.results_service import ResultsService, Cell
-from argus.backend.util.enums import TestStatus
+from argus.common.enums import TestStatus
 
 
 class ClientException(Exception):

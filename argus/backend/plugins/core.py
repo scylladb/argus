@@ -16,12 +16,10 @@ from argus.backend.models.web import (
     ArgusScheduleGroup,
     ArgusSchedule,
     ArgusScheduleTest,
-    ArgusScheduleAssignee,
-    ArgusUserView,
-    User
+    ArgusScheduleAssignee
 )
 from argus.backend.util.common import chunk
-from argus.backend.util.enums import TestInvestigationStatus, TestStatus
+from argus.common.enums import TestInvestigationStatus, TestStatus
 
 LOGGER = logging.getLogger(__name__)
 

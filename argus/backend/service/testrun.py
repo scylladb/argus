@@ -13,7 +13,6 @@ from flask import g
 from cassandra.query import BatchStatement, ConsistencyLevel
 from cassandra.cqlengine.query import BatchQuery
 from argus.backend.db import ScyllaCluster
-from argus.backend.models.result import ArgusGenericResultMetadata
 
 from argus.backend.models.web import (
     ArgusEvent,
@@ -38,7 +37,7 @@ from argus.backend.service.event_service import EventService
 from argus.backend.service.notification_manager import NotificationManagerService
 from argus.backend.service.stats import ComparableTestStatus
 from argus.backend.util.common import chunk, get_build_number, strip_html_tags
-from argus.backend.util.enums import TestInvestigationStatus, TestStatus
+from argus.common.enums import TestInvestigationStatus, TestStatus
 
 LOGGER = logging.getLogger(__name__)
 

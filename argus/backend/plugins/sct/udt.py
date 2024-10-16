@@ -2,7 +2,7 @@ from time import time
 from cassandra.cqlengine.usertype import UserType
 from cassandra.cqlengine import columns
 
-from argus.backend.util.enums import ResourceState
+from argus.common.enums import ResourceState
 
 
 class PackageVersion(UserType):

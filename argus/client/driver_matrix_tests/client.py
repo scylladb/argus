@@ -1,5 +1,5 @@
 from uuid import UUID
-from argus.backend.util.enums import TestStatus
+from argus.common.enums import TestStatus
 from argus.client.base import ArgusClient
 
 

@@ -1,7 +1,6 @@
 import base64
 from dataclasses import dataclass
 from datetime import datetime
-from functools import reduce
 import logging
 import math
 import re
@@ -10,7 +9,7 @@ from xml.etree import ElementTree
 from flask import g
 from argus.backend.models.web import ArgusEventTypes
 from argus.backend.plugins.sct.testrun import SCTJunitReports, SCTTestRun, SubtestType
-from argus.backend.plugins.sct.types import GeminiResultsRequest, PerformanceResultsRequest, ResourceUpdateRequest
+from argus.common.sct_types import GeminiResultsRequest, PerformanceResultsRequest, ResourceUpdateRequest
 from argus.backend.plugins.sct.udt import (
     CloudInstanceDetails,
     CloudResource,
@@ -22,7 +21,7 @@ from argus.backend.plugins.sct.udt import (
 )
 from argus.backend.service.event_service import EventService
 from argus.backend.util.common import get_build_number
-from argus.backend.util.enums import NemesisStatus, ResourceState, TestStatus
+from argus.common.enums import NemesisStatus, ResourceState, TestStatus
 
 LOGGER = logging.getLogger(__name__)
 

@@ -1,7 +1,7 @@
 import click
 import logging
-from argus.backend.util.enums import TestStatus
 
+from argus.client.base import TestStatus
 from argus.client.generic.client import ArgusGenericClient
 
 LOGGER = logging.getLogger(__name__)

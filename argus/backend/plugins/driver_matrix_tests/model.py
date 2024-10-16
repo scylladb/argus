@@ -13,7 +13,7 @@ from argus.backend.models.web import ArgusRelease
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.driver_matrix_tests.udt import TestCollection, TestSuite, TestCase, EnvironmentInfo
 from argus.backend.plugins.driver_matrix_tests.raw_types import RawMatrixTestResult
-from argus.backend.util.enums import TestStatus
+from argus.common.enums import TestStatus
 
 
 LOGGER = logging.getLogger(__name__)

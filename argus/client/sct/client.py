@@ -2,8 +2,8 @@ import base64
 from typing import Any
 from uuid import UUID
 from dataclasses import asdict
-from argus.backend.plugins.sct.types import GeminiResultsRequest, PerformanceResultsRequest
-from argus.backend.util.enums import ResourceState, TestStatus
+from argus.common.sct_types import GeminiResultsRequest, PerformanceResultsRequest
+from argus.common.enums import ResourceState, TestStatus
 from argus.client.base import ArgusClient
 from argus.client.sct.types import EventsInfo, LogLink, Package
 

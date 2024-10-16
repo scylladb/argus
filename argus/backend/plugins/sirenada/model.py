@@ -1,13 +1,13 @@
 from datetime import datetime
-from uuid import UUID, uuid4
+from uuid import UUID
 from cassandra.cqlengine import columns
 from cassandra.cqlengine.usertype import UserType
 from cassandra.cqlengine.models import Model
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import ArgusRelease
 from argus.backend.plugins.core import PluginModelBase
-from argus.backend.plugins.sirenada.types import RawSirenadaRequest, SirenadaPluginException
-from argus.backend.util.enums import TestStatus
+from argus.common.sirenada_types import RawSirenadaRequest, SirenadaPluginException
+from argus.common.enums import TestStatus
 
 
 class SirenadaTest(UserType):

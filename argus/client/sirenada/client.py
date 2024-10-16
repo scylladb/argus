@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import TypedDict
 from xml.etree import ElementTree
 
-from argus.backend.plugins.sirenada.types import RawSirenadaRequest, RawSirenadaTestCase
+from argus.common.sirenada_types import RawSirenadaRequest, RawSirenadaTestCase
 
 from argus.client.base import ArgusClient
 

@@ -12,7 +12,7 @@ from argus.backend.service.results_service import ResultsService
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.user import api_login_required
 from argus.backend.util.common import get_payload
-from argus.backend.util.enums import TestInvestigationStatus, TestStatus
+from argus.common.enums import TestInvestigationStatus, TestStatus
 
 bp = Blueprint('testrun_api', __name__, 'testrun')
 bp.register_error_handler(Exception, handle_api_exception)
