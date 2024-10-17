@@ -2,6 +2,9 @@ import logging
 from dataclasses import asdict, dataclass
 from typing import Any
 
+import pytest
+
+from argus.backend.error_handlers import DataValidationError
 from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.tests.conftest import get_fake_test_run, fake_test
 from argus.common.enums import TestInvestigationStatus
@@ -155,7 +158,8 @@ def test_ignored_runs_are_not_considered_in_best_results(fake_test, client_servi
     for cell in sample_data:
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
     client_service.submit_run(run_type, asdict(run2))
-    client_service.submit_results(run_type, run2.run_id, results.as_dict())
+    with pytest.raises(DataValidationError):
+        client_service.submit_results(run_type, run2.run_id, results.as_dict())
 
     # ignore the second run
     run_model = SCTTestRun.get(id=run2.run_id)

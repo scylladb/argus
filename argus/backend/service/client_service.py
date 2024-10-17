@@ -3,6 +3,7 @@ from datetime import datetime
 from uuid import UUID
 
 from argus.backend.db import ScyllaCluster
+from argus.backend.error_handlers import DataValidationError
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS
@@ -109,12 +110,17 @@ class ClientService:
                                                            cells=cells, run_id=run_id)
         table_name = results["meta"]["name"]
         sut_timestamp = results["sut_timestamp"]
+        result_failed = False
         for cell in cells:
             cell.update_cell_status_based_on_rules(table_metadata, best_results)
+            if cell.status == "ERROR":
+                result_failed = True
             ArgusGenericResultData(test_id=run.test_id,
                                    run_id=run.id,
                                    name=table_name,
                                    sut_timestamp=sut_timestamp,
                                    **asdict(cell)
                                    ).save()
+        if result_failed:
+            raise DataValidationError()
         return {"status": "ok", "message": "Results submitted"}
