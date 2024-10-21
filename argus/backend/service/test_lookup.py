@@ -4,11 +4,14 @@
 from functools import partial
 import re
 from urllib.parse import unquote
-from typing import Callable
+from typing import Any, Callable
 from uuid import UUID
 
 from cassandra.cqlengine.models import Model
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest
+from argus.backend.plugins.core import PluginModelBase
+from argus.backend.plugins.loader import all_plugin_models
+from argus.backend.util.common import get_build_number
 
 
 class TestLookup:
@@ -37,7 +40,71 @@ class TestLookup:
         return exploded
 
     @classmethod
+    def find_run(self, run_id: UUID) -> PluginModelBase | None:
+        for model in all_plugin_models():
+            try:
+                return model.get(id=run_id)
+            except model.DoesNotExist:
+                pass
+        return None
+
+
+    @classmethod
+    def query_to_uuid(cls, query: str) -> UUID | None:
+        try:
+            uuid = UUID(query.strip())
+            return uuid
+        except ValueError:
+            return None
+
+    @classmethod
+    def resolve_run_test(cls, test_id: UUID) -> ArgusTest:
+        try:
+            test = ArgusTest.get(id=test_id)
+            return test
+        except ArgusTest.DoesNotExist:
+            return None
+
+    @classmethod
+    def resolve_run_group(cls, group_id: UUID) -> ArgusGroup:
+        try:
+            group = ArgusGroup.get(id=group_id)
+            return group
+        except ArgusGroup.DoesNotExist:
+            return None
+
+    @classmethod
+    def resolve_run_release(cls, run_test_id: UUID) -> ArgusRelease:
+        try:
+            release = ArgusRelease.get(id=run_test_id)
+            return release
+        except ArgusRelease.DoesNotExist:
+            return None
+
+    @classmethod
+    def make_single_run_response(cls, run_id: UUID) -> list[dict[str, Any]]:
+        run = cls.find_run(run_id)
+        if run:
+            run = dict(run.items())
+            run["type"] = "run"
+            run["test"] = dict(cls.resolve_run_test(run["test_id"]).items()) if run["test_id"] else None
+            if run["test"]:
+                name = run["test"]["name"]
+            run["group"] = dict(cls.resolve_run_group(run["group_id"]).items())if run["group_id"] else None
+            run["release"] = dict(cls.resolve_run_release(run["release_id"]).items()) if run["release_id"] else None
+            run["build_number"] = get_build_number(run["build_job_url"])
+            run["name"] = f"{name}#{run['build_number']}"
+
+            return [run]
+
+
+        return []
+
+    @classmethod
     def test_lookup(cls, query: str, release_id: UUID | str = None):
+        if uuid := cls.query_to_uuid(query):
+            return cls.make_single_run_response(uuid)
+
         def check_visibility(entity: dict):
             if entity["type"] == "release" and release_id:
                 return False
