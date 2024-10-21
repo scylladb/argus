@@ -9,6 +9,7 @@
 
     export let release = {};
     export let mode = "multi";
+    export let format = "list";
     export let groupOnly = false;
     export let existingPlans = [];
     export let selectingFor;
@@ -77,7 +78,7 @@
 
     const retrieveGroupName = function(groupId) {
         const group = gridView.groups[groupId];
-        return (group.pretty_name || group.name) ?? "#NO_GROUP";
+        return (group?.pretty_name || group?.name) ?? "#NO_GROUP";
     };
 
     const onTestClick = function (test) {
@@ -97,10 +98,17 @@
             .entries(clickedTests)
             .filter(([_, selected]) => selected)
             .map(([tid, _]) => gridView.tests[tid]);
-        let items = [...selectedGroups, ...selectedTests];
-        dispatch("gridViewConfirmed", {
-            items: items,
-        });
+        if (format == "list") {
+            let items = [...selectedGroups, ...selectedTests];
+            dispatch("gridViewConfirmed", {
+                items: items,
+            });
+        } else if (format == "map") {
+            dispatch("gridViewConfirmed", {
+                tests: selectedTests,
+                groups: selectedGroups,
+            });
+        }
     };
 
     const planned = (plans) => {
@@ -240,9 +248,10 @@
                 .sort(
                     ([leftGroupId], [rightGroupId]) => sortFunc(retrieveGroupName(leftGroupId).toLowerCase(), retrieveGroupName(rightGroupId).toLowerCase())
                 ) as [groupId, tests] (groupId)}
-            {@const group = gridView.groups[groupId]}
-            {@const prettyName = group.pretty_name ?? group.name}
-            {@const groupStats = releaseStats?.groups[group.id]}
+            {@const group = gridView.groups[groupId] ?? {}}
+            {@const prettyName = group?.pretty_name ?? group?.name}
+            {@const groupStats = releaseStats?.groups[group?.id]}
+            {#if group && groupStats}
                 <div 
                     class="mb-2 rounded bg-white p-2 border-success" 
                     class:border={clickedGroups[group.id]} 
@@ -332,6 +341,7 @@
                         </div>
                     {/if}
                 </div>
+            {/if}
             {/each}
         </div>
     {:else}

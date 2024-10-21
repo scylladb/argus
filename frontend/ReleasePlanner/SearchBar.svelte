@@ -21,7 +21,7 @@
         try {
             const params = {
                 query: query,
-                releaseId: release.id,
+                releaseId: release ?  release.id : null,
             };
             const qs = queryString.stringify(params);
             const response = await fetch("/api/v1/planning/search?" + qs);
@@ -66,8 +66,13 @@
             name: item.pretty_name || item.name,
             release: item.release?.name,
             group: item.group?.pretty_name || item.group?.name,
+            test: item.test?.name,
+            testId: item.test?.id,
+            groupId: item.group?.id,
+            releaseId: item.release?.id,
             type: item.type,
             id: item.id,
+
         }];
         testSearcherValue = undefined;
         if (mode == "single") handleFinishSearch();
@@ -77,6 +82,7 @@
         dispatch("selected", {
             items: items,
         });
+        items = [];
     };
 
 </script>
@@ -86,8 +92,8 @@
         id="viewSelectComponent"
         inputAttributes={{ class: "form-control" }}
         bind:value={testSearcherValue}
-        placeholder="Search for tests..."
-        noOptionsMessage="Type to search. Can be: Test name, Release name, Group name."
+        placeholder="Type to search. Can be: Test name, Release name, Group name."
+        noOptionsMessage='Examples: "release:5.4 artifacts" (any test or group inside 5.4 named artifacts), "group:artifacts centos release:5.3" (tests that contain centos substring inside 5.3 in the artifacts groups), "<test_uuid>" (specific test run id)'
         labelIdentifier="name"
         optionIdentifier="id"
         Item={ViewSelectItem}

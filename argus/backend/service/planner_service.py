@@ -208,7 +208,7 @@ class PlanningService:
         tests_by_group = reduce(lambda acc, test: acc[str(test.group_id)].append(test) or acc, tests, defaultdict(list))
 
         res = {
-            "tests": { str(t.id): TestLookup.index_mapper(t) for t in tests if t.enabled and groups[str(t.group_id)]["enabled"] },
+            "tests": { str(t.id): TestLookup.index_mapper(t) for t in tests if t.enabled and groups.get(str(t.group_id), {}).get("enabled", False) },
             "groups": groups,
             "testByGroup": tests_by_group
         }
