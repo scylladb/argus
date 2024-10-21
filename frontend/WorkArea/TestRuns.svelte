@@ -12,7 +12,7 @@
     import { AVAILABLE_PLUGINS } from "../Common/PluginDispatch";
     import { sendMessage } from "../Stores/AlertStore";
     import TestRunsMessage from "./TestRunsMessage.svelte";
-    import { faGear, faRefresh, faTimes } from "@fortawesome/free-solid-svg-icons";
+    import { faGear, faTimes } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
     import { Collapse } from "bootstrap";
     import JobConfigureModal from "./JobConfigureModal.svelte";
@@ -234,6 +234,7 @@
             console.log(json);
         }
         pluginFixed = true;
+        main();
     };
 
     const handleIgnoreRuns = async function(e) {
@@ -271,7 +272,7 @@
         }
     };
 
-    onMount(async () => {
+    const main = async () => {
         await fetchTestInfo();
         if (testInfo) {
             fetchTestRuns();
@@ -279,7 +280,9 @@
                 fetchTestRuns();
             }, 120 * 1000);
         }
-    });
+    };
+
+    onMount(main);
 
     onDestroy(() => {
         if (runRefreshInterval) {
@@ -320,7 +323,7 @@
                 </div>
             {/if}
             {#if removableRuns}
-                <div class="ms-1 me-2" class:flex-fill={runs.length == 0}>
+                <div class="me-2" class:ms-1={runs.length > 0} class:ms-auto={runs.length == 0} >
                     <button
                         class="btn"
                         on:click={(e) => { dispatch("testRunRemove", { testId: testId }); e.stopPropagation(); }}
