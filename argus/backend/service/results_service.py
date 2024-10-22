@@ -10,10 +10,14 @@ from uuid import UUID
 
 from dataclasses import dataclass
 from argus.backend.db import ScyllaCluster
-from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ArgusBestResultData
+from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ArgusBestResultData, ColumnMetadata
+from argus.backend.plugins.sct.udt import PackageVersion
 from argus.backend.service.testrun import TestRunService
 
 LOGGER = logging.getLogger(__name__)
+
+type RunId = str
+type ReleasesMap = dict[str, list[RunId]]
 
 
 @dataclass
@@ -58,6 +62,12 @@ class Cell:
             self.status = "ERROR"
 
 
+@dataclass
+class RunsDetails:
+    ignored: list[RunId]
+    packages: dict[RunId, list[PackageVersion]]
+
+
 default_options = {
     "scales": {
         "y": {
@@ -98,22 +108,23 @@ default_options = {
 }
 
 colors = [
-    'rgba(255, 0, 0, 1.0)',  # Red
-    'rgba(0, 255, 0, 1.0)',  # Green
-    'rgba(0, 0, 255, 1.0)',  # Blue
-    'rgba(0, 255, 255, 1.0)',  # Cyan
-    'rgba(255, 0, 255, 1.0)',  # Magenta
-    'rgba(255, 255, 0, 1.0)',  # Yellow
-    'rgba(255, 165, 0, 1.0)',  # Orange
-    'rgba(128, 0, 128, 1.0)',  # Purple
-    'rgba(50, 205, 50, 1.0)',  # Lime
-    'rgba(255, 192, 203, 1.0)',  # Pink
-    'rgba(0, 128, 128, 1.0)',  # Teal
-    'rgba(165, 42, 42, 1.0)',  # Brown
-    'rgba(0, 0, 128, 1.0)',  # Navy
-    'rgba(128, 128, 0, 1.0)',  # Olive
-    'rgba(255, 127, 80, 1.0)'  # Coral
+    'rgba(220, 53, 69, 1.0)',    # Soft Red
+    'rgba(40, 167, 69, 1.0)',    # Soft Green
+    'rgba(0, 123, 255, 1.0)',    # Soft Blue
+    'rgba(23, 162, 184, 1.0)',   # Soft Cyan
+    'rgba(108, 117, 125, 1.0)',  # Soft Magenta
+    'rgba(255, 193, 7, 1.0)',    # Soft Yellow
+    'rgba(255, 133, 27, 1.0)',   # Soft Orange
+    'rgba(102, 16, 242, 1.0)',   # Soft Purple
+    'rgba(111, 207, 151, 1.0)',  # Soft Lime
+    'rgba(255, 182, 193, 1.0)',  # Soft Pink
+    'rgba(32, 201, 151, 1.0)',   # Soft Teal
+    'rgba(134, 83, 78, 1.0)',    # Soft Brown
+    'rgba(0, 84, 153, 1.0)',     # Soft Navy
+    'rgba(128, 128, 0, 1.0)',    # Soft Olive
+    'rgba(255, 159, 80, 1.0)'    # Soft Coral
 ]
+shapes = ["circle", "triangle", "rect", "star", "dash", "crossRot", "line"]
 
 
 def get_sorted_data_for_column_and_row(data: List[ArgusGenericResultData], column: str, row: str) -> List[Dict[str, Any]]:
@@ -137,7 +148,7 @@ def get_min_max_y(datasets: List[Dict[str, Any]]) -> (float, float):
     return math.floor(0.5 * y_min), math.ceil(1.5 * y_max)
 
 
-def round_datasets_to_min_max(datasets: List[Dict[str, Any]], min_y: float, max_y: float) -> List[Dict[str, Any]]:
+def coerce_values_to_axis_boundaries(datasets: List[Dict[str, Any]], min_y: float, max_y: float) -> List[Dict[str, Any]]:
     """Round values to min/max and provide original value for tooltip"""
     for dataset in datasets:
         for entry in dataset['data']:
@@ -178,61 +189,98 @@ def calculate_limits(points: List[dict], best_results: List, validation_rules_li
 
     return points
 
-def create_chartjs(table, data, best_results):
-    graphs = []
-    for column in table.columns_meta:
-        if column.type == "TEXT":
-            continue
-        datasets = []
-        is_fixed_limit_drawn = False
-        for idx, row in enumerate(table.rows_meta):
-            color = colors[idx % len(colors)]
-            points = get_sorted_data_for_column_and_row(data, column.name, row)
-            if not points:
-                continue
-            datasets.append({
-                "label": row,
-                "borderColor": color,
-                "borderWidth": 3,
+
+def create_datasets_for_column(table: ArgusGenericResultMetadata, data: list[ArgusGenericResultData],
+                               best_results: dict[str, List[BestResult]], releases_map: ReleasesMap, column: ColumnMetadata) -> List[Dict]:
+    """
+    Create datasets (series) for a specific column, splitting by version and showing limit lines.
+    """
+    datasets = []
+    is_fixed_limit_drawn = False
+
+    for idx, row in enumerate(table.rows_meta):
+        line_color = colors[idx % len(colors)]
+        points = get_sorted_data_for_column_and_row(data, column.name, row)
+
+        datasets.extend(create_release_datasets(points, row, releases_map, line_color))
+
+        limit_dataset = create_limit_dataset(points, column, row, best_results, table, line_color, is_fixed_limit_drawn)
+        if limit_dataset:
+            datasets.append(limit_dataset)
+            is_fixed_limit_drawn = True
+
+    return datasets
+
+
+def create_release_datasets(points: list[Dict], row: str, releases_map: ReleasesMap, line_color: str) -> List[Dict]:
+    """
+    Create datasets separately for each release.
+    """
+    release_datasets = []
+
+    for v_idx, (release, run_ids) in enumerate(releases_map.items()):
+        release_points = [point for point in points if point["id"] in run_ids]
+
+        if release_points:
+            release_datasets.append({
+                "label": f"{release} - {row}",
+                "borderColor": line_color,
+                "borderWidth": 2,
+                "pointRadius": 2,
                 "showLine": True,
-                "data": points,
+                "data": release_points,
+                "pointStyle": shapes[v_idx % len(shapes)]
             })
-            key = f"{column.name}:{row}"
-            higher_is_better = column.higher_is_better
-            if higher_is_better is None:
-                continue
-            best_result_list = best_results.get(key, [])
-            validation_rules_list = table.validation_rules.get(column.name, [])
-            if validation_rules_list and best_result_list:
-                points = calculate_limits(points, best_result_list, validation_rules_list, higher_is_better)
-                limit_points = [{"x": point["x"], "y": point["limit"]} for point in points if 'limit' in point]
-                if limit_points and not is_fixed_limit_drawn:
-                    datasets.append({
-                        "label": "limit",
-                        "borderColor": color,
-                        "borderWidth": 2,
-                        "borderDash": [5, 5],
-                        "fill": False,
-                        "data": limit_points,
-                        "showLine": True,
-                        "pointRadius": 0,
-                        "pointHitRadius": 0,
-                    })
-                    is_fixed_limit_drawn = any(rule.fixed_limit is not None for rule in validation_rules_list)
+
+    return release_datasets
 
 
-        min_y, max_y = get_min_max_y(datasets)
-        datasets = round_datasets_to_min_max(datasets, min_y, max_y)
-        if not min_y + max_y:
-            # filter out those without data
-            continue
-        options = copy.deepcopy(default_options)
-        options["plugins"]["title"]["text"] = f"{table.name} - {column.name}"
-        options["scales"]["y"]["title"]["text"] = f"[{column.unit}]" if column.unit else ""
-        options["scales"]["y"]["min"] = min_y
-        options["scales"]["y"]["max"] = max_y
-        graphs.append({"options": options, "data": {"datasets": datasets}})
-    return graphs
+def create_limit_dataset(points: list[Dict], column: ColumnMetadata, row: str, best_results: dict[str, List[BestResult]],
+                         table: ArgusGenericResultMetadata, line_color: str, is_fixed_limit_drawn: bool) -> Dict | None:
+    """
+    Create a dataset for limit lines if applicable.
+    """
+    key = f"{column.name}:{row}"
+    higher_is_better = column.higher_is_better
+
+    if higher_is_better is None:
+        return None
+
+    best_result_list = best_results.get(key, [])
+    validation_rules_list = table.validation_rules.get(column.name, [])
+
+    if validation_rules_list and best_result_list:
+        points = calculate_limits(points, best_result_list, validation_rules_list, higher_is_better)
+        limit_points = [{"x": point["x"], "y": point["limit"]} for point in points if 'limit' in point]
+
+        if limit_points and not is_fixed_limit_drawn:
+            return {
+                "label": "limit",
+                "borderColor": line_color,
+                "borderWidth": 2,
+                "borderDash": [5, 5],
+                "fill": False,
+                "data": limit_points,
+                "showLine": True,
+                "pointRadius": 0,
+                "pointHitRadius": 0,
+            }
+
+    return None
+
+
+def create_chart_options(table: ArgusGenericResultMetadata, column: ColumnMetadata, min_y: float, max_y: float) -> Dict:
+    """
+    Create options for Chart.js, including title and y-axis configuration.
+    """
+    options = copy.deepcopy(default_options)
+    options["plugins"]["title"]["text"] = f"{table.name} - {column.name}"
+    options["scales"]["y"]["title"]["text"] = f"[{column.unit}]" if column.unit else ""
+    options["scales"]["y"]["min"] = min_y
+    options["scales"]["y"]["max"] = max_y
+
+    return options
+
 
 def calculate_graph_ticks(graphs: List[Dict]) -> dict[str, str]:
     min_x, max_x = None, None
@@ -250,21 +298,64 @@ def calculate_graph_ticks(graphs: List[Dict]) -> dict[str, str]:
     return {"min": min_x[:10], "max": max_x[:10]}
 
 
+def _identify_most_changed_package(packages_list: list[PackageVersion]) -> str:
+    version_date_changes: dict[str, set[tuple[str, str]]] = defaultdict(set)
+
+    for package_version in packages_list:
+        version_date_changes[package_version.name].add((package_version.version, package_version.date))
+
+    return max(version_date_changes, key=lambda k: len(version_date_changes[k]))
+
+
+def _split_results_by_release(packages: dict[str, list[PackageVersion]], main_package: str) -> ReleasesMap:
+    releases_map = defaultdict(list)
+    for run_id, package_versions in packages.items():
+        for package in package_versions:
+            if package.name == main_package:
+                if "dev" in package.version:
+                    major_version = 'dev'
+                else:
+                    major_version = '.'.join(package.version.split('.')[:2])
+                releases_map[major_version].append(run_id)
+    return releases_map
+
+
+def create_chartjs(table: ArgusGenericResultMetadata, data: list[ArgusGenericResultData], best_results: dict[str, List[BestResult]],
+                   releases_map: ReleasesMap) -> List[Dict]:
+    """
+    Create Chart.js-compatible graph for each column in the table.
+    """
+    graphs = []
+    columns = [column for column in table.columns_meta if column.type != "TEXT"]
+
+    for column in columns:
+        datasets = create_datasets_for_column(table, data, best_results, releases_map, column)
+
+        if datasets:
+            min_y, max_y = get_min_max_y(datasets)
+            datasets = coerce_values_to_axis_boundaries(datasets, min_y, max_y)
+            options = create_chart_options(table, column, min_y, max_y)
+            graphs.append({"options": options, "data": {"datasets": datasets}})
+
+    return graphs
+
+
 class ResultsService:
 
     def __init__(self):
         self.cluster = ScyllaCluster.get()
 
     @cache
-    def _ignored_results(self, test_id: UUID) -> list[str]:
+    def _get_runs_details(self, test_id: UUID) -> RunsDetails:
         plugin_query = self.cluster.prepare("SELECT id, plugin_name FROM argus_test_v2 WHERE id = ?")
         plugin_name = self.cluster.session.execute(plugin_query, parameters=(test_id,)).one()['plugin_name']
         plugin = TestRunService().get_plugin(plugin_name)
-        ignored_runs_query = self.cluster.prepare(f"SELECT id, investigation_status FROM {plugin.model.table_name()} WHERE test_id = ?")
-        ignored_runs = [run["id"] for run in self.cluster.session.execute(ignored_runs_query, parameters=(test_id,)).all()
-                        if run["investigation_status"].lower() == "ignored"]
-        LOGGER.debug(f"Ignored runs for test {test_id}: {ignored_runs}")
-        return ignored_runs
+        runs_details_query = self.cluster.prepare(
+            f"SELECT id, investigation_status, packages FROM {plugin.model.table_name()} WHERE test_id = ?")
+        rows = self.cluster.session.execute(runs_details_query, parameters=(test_id,)).all()
+        ignored_runs = [row["id"] for row in rows if row["investigation_status"].lower() == "ignored"]
+        packages = {row["id"]: row["packages"] for row in rows if row["packages"] and row["id"] not in ignored_runs}
+        return RunsDetails(ignored=ignored_runs, packages=packages)
 
     def _get_tables_metadata(self, test_id: UUID) -> list[ArgusGenericResultMetadata]:
         query_fields = ["name", "description", "columns_meta", "rows_meta", "validation_rules"]
@@ -273,6 +364,14 @@ class ResultsService:
         query = self.cluster.prepare(raw_query)
         tables_meta = self.cluster.session.execute(query=query, parameters=(test_id,))
         return [ArgusGenericResultMetadata(**table) for table in tables_meta]
+
+    def _get_tables_data(self, test_id: UUID, table_name: str, ignored_runs: list[RunId]) -> list[ArgusGenericResultData]:
+        query_fields = ["run_id", "column", "row", "value", "status", "sut_timestamp"]
+        raw_query = (f"SELECT {','.join(query_fields)}"
+                     f" FROM generic_result_data_v1 WHERE test_id = ? AND name = ? LIMIT 2147483647")
+        query = self.cluster.prepare(raw_query)
+        data = self.cluster.session.execute(query=query, parameters=(test_id, table_name))
+        return [ArgusGenericResultData(**cell) for cell in data if cell["run_id"] not in ignored_runs]
 
     def get_table_metadata(self, test_id: UUID, table_name: str) -> ArgusGenericResultMetadata:
         raw_query = ("SELECT * FROM generic_result_metadata_v1 WHERE test_id = ? AND name = ?")
@@ -303,35 +402,35 @@ class ResultsService:
         return sorted(tables, key=lambda x: x['order'])
 
     def get_test_graphs(self, test_id: UUID):
-        ignored_results = self._ignored_results(test_id)
-        query_fields = ["run_id", "column", "row", "value", "status", "sut_timestamp"]
-        raw_query = (f"SELECT {','.join(query_fields)}"
-                     f" FROM generic_result_data_v1 WHERE test_id = ? AND name = ? LIMIT 2147483647")
-        query = self.cluster.prepare(raw_query)
+        runs_details = self._get_runs_details(test_id)
         tables_meta = self._get_tables_metadata(test_id=test_id)
         graphs = []
+        releases_filters = set()
         for table in tables_meta:
-            data = self.cluster.session.execute(query=query, parameters=(test_id, table.name))
-            data = [ArgusGenericResultData(**cell) for cell in data if cell["run_id"] not in ignored_results]
+            data = self._get_tables_data(test_id=test_id, table_name=table.name, ignored_runs=runs_details.ignored)
             if not data:
                 continue
             best_results = self.get_best_results(test_id=test_id, name=table.name)
-            graphs.extend(create_chartjs(table, data, best_results))
+            main_package = _identify_most_changed_package([pkg for sublist in runs_details.packages.values() for pkg in sublist])
+            releases_map = _split_results_by_release(runs_details.packages, main_package=main_package)
+            graphs.extend(create_chartjs(table, data, best_results,
+                                         releases_map=releases_map))
+            releases_filters.update(releases_map.keys())
         ticks = calculate_graph_ticks(graphs)
-        return graphs, ticks
+        return graphs, ticks, list(releases_filters)
 
     def is_results_exist(self, test_id: UUID):
         """Verify if results for given test id exist at all."""
         return bool(ArgusGenericResultMetadata.objects(test_id=test_id).only(["name"]).limit(1))
 
     def get_best_results(self, test_id: UUID, name: str) -> dict[str, List[BestResult]]:
-        ignored_results = self._ignored_results(test_id)
+        runs_details = self._get_runs_details(test_id)
         query_fields = ["key", "value", "result_date", "run_id"]
         raw_query = (f"SELECT {','.join(query_fields)}"
                      f" FROM generic_result_best_v2 WHERE test_id = ? and name = ?")
         query = self.cluster.prepare(raw_query)
         best_results = [BestResult(**best) for best in self.cluster.session.execute(query=query, parameters=(test_id, name))
-                        if best["run_id"] not in ignored_results]
+                        if best["run_id"] not in runs_details.ignored]
         best_results_map = defaultdict(list)
         for best in sorted(best_results, key=lambda x: x.result_date):
             best_results_map.setdefault(best.key, []).append(best)
