@@ -4,7 +4,6 @@
     import {onMount, onDestroy} from "svelte";
 
     export let selectedScreenshot: string;
-    console.log("clicked screenshot", selectedScreenshot);
     function handleKeyDown(event: KeyboardEvent) {
         if (event.key === "Escape") {
             selectedScreenshot = "";
