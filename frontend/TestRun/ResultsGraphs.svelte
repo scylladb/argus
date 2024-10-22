@@ -6,6 +6,7 @@
     export let test_id = "";
     let graphs = [];
     let ticks = {};
+    let releasesFilters = {};
     let tableFilters = [];
     let columnFilters = [];
     let selectedTableFilters = [];
@@ -32,6 +33,7 @@
             const response = results["response"];
             graphs = response["graphs"].map((graph) => ({...graph, id: generateRandomHash()}));
             ticks = response["ticks"];
+            releasesFilters = Object.fromEntries(response["releases_filters"].map(key => [key, true]));
             extractTableFilters();
             extractColumnFilters();
             filterGraphs();
@@ -128,8 +130,20 @@
     };
 
     const getTableFilterColor = (level) => {
-        const intermediateColors = ["#ff7f7f", "#7fbfff", "#ffbf7f", "#bf7fff", "#ffff7f", "#7fffff", "#bf7f7f"];
-        return intermediateColors[level % intermediateColors.length];
+        const intermediateColors = [
+            "#B8EFFF",
+            "#FECBA1",
+            "#D6B3E6",
+            "#FFE699",
+            "#F0A5C5",
+            "#C4C8CA",
+        ];
+        return intermediateColors[level - 1 % intermediateColors.length];
+    };
+
+    const toggleReleaseFilter = (filterName) => {
+        releasesFilters[filterName] = !releasesFilters[filterName];
+        filterGraphs();
     };
 
     onMount(() => {
@@ -153,18 +167,38 @@
         <button
                 on:click={() => toggleColumnFilter(filter)}
                 class:selected={selectedColumnFilters.some(f => f === filter)}
-                style="background-color: #7fff7f"
+                style="background-color: #a3e2cc"
         >
             {filter}
         </button>
     {/each}
     <button on:click={() => { selectedTableFilters = []; selectedColumnFilters = []; filterGraphs(); }}>Show All</button>
-</div>
 
+</div>
+<div class="filters-container">
+    {#each Object.keys(releasesFilters) as release}
+        <button
+                on:click={() => toggleReleaseFilter(release)}
+                class:selected={releasesFilters[release]}
+                class="m-2"
+        >
+            {release}
+        </button>
+    {/each}
+</div>
 <div class="charts-container">
     {#each filteredGraphs as graph (graph.id)}
-        <div class="chart-container {filteredGraphs.length<2? 'big-size': ''}">
-            <ResultsGraph {graph} {ticks} {width} {height} test_id={test_id} index={graph.id} on:runClick={dispatch_run_click}/>
+        <div class="chart-container {filteredGraphs.length < 2 ? 'big-size' : ''}">
+            <ResultsGraph
+                    {graph}
+                    {ticks}
+                    height={filteredGraphs.length === 1 ? 600 : height}
+                    width={filteredGraphs.length === 1 ? 1000 : width}
+                    test_id={test_id}
+                    index={graph.id}
+                    releasesFilters={releasesFilters}
+                    on:runClick={dispatch_run_click}
+            />
         </div>
     {/each}
 </div>
