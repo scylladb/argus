@@ -8,7 +8,8 @@
         test: "T",
         group: "G",
         release: "R",
-        special: "S"
+        special: "S",
+        run: "R",
     };
 </script>
 
@@ -23,8 +24,13 @@
         <div class="me-2"><span class="fw-bold">{ITEM_TYPES[item.type]}</span></div>
         <div>{item.pretty_name || item.name}</div>
         <div class="ms-auto d-flex justify-content-end align-items-center text-sm">
-            {#if item.release}
+            {#if item.test}
                 <div>
+                    <span class="fw-bold">{item.test?.name}</span>
+                </div>
+            {/if}
+            {#if item.release}
+                <div class="ms-2">
                     <span class="fw-bold">{item.release?.name}</span>
                 </div>
             {/if}
