@@ -3,6 +3,7 @@ import ViewReleaseStats from "../Views/Widgets/ViewReleaseStats.svelte";
 import ViewTestDashboard from "../Views/Widgets/ViewTestDashboard.svelte";
 import CheckValue from "../Views/WidgetSettingTypes/CheckValue.svelte";
 import MultiSelectValue from "../Views/WidgetSettingTypes/MultiSelectValue.svelte";
+import StringValue from "../Views/WidgetSettingTypes/StringValue.svelte";
 import { TestStatus } from "./TestStatus";
 import { subUnderscores, titleCase } from "./TextUtils";
 
@@ -20,7 +21,24 @@ export const WIDGET_TYPES = {
         type: ViewTestDashboard,
         friendlyName: "Test Dashboard",
         settingDefinitions: {
-
+            targetVersion: {
+                type: CheckValue,
+                default: false,
+                help: "Enable fixed version for this widget.",
+                displayName: "Fixed version"
+            },
+            versionsIncludeNoVersion: {
+                type: CheckValue,
+                default: true,
+                help: "Include No Version results for stat fetches",
+                displayName: "Include No Version"
+            },
+            productVersion: {
+                type: StringValue,
+                default: "",
+                help: "Target Version to Fetch with Stats",
+                displayName: "Target Version"
+            }
         },
     },
     releaseStats: {

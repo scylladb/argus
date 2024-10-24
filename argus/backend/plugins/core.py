@@ -9,6 +9,7 @@ from cassandra.cqlengine.models import Model
 from cassandra.cqlengine.usertype import UserType
 from flask import Blueprint
 from argus.backend.db import ScyllaCluster
+from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.web import (
     ArgusTest,
     ArgusGroup,
@@ -65,13 +66,34 @@ class PluginModelBase(Model):
         except ArgusTest.DoesNotExist:
             LOGGER.warning("Test entity missing for key \"%s\", run won't be visible until this is corrected", key)
 
+    def get_assignment(self, version: str | None = None) -> UUID | None:
+        associated_test: ArgusTest = ArgusTest.get(build_system_id=self.build_id)
+        associated_release: ArgusRelease = ArgusRelease.get(id=associated_test.release_id)
+        if associated_release.perpetual:
+            return self._legacy_get_scheduled_assignee(associated_test=associated_test, associated_release=associated_release)
+
+        plans: list[ArgusReleasePlan] = list(ArgusReleasePlan.filter(release_id=associated_release.id))
+
+        if version:
+            plans = [plan for plan in plans if plan.target_version == version]
+
+        for plan in plans:
+            if associated_test.group_id in plan.groups:
+                return plan.assignee_mapping.get(associated_test.group_id, plan.owner)
+            if associated_test.id in plan.tests:
+                return plan.assignee_mapping.get(associated_test.id, plan.owner)
+
+        return None
+    
+
     def get_scheduled_assignee(self) -> UUID:
+        return self.get_assignment()
+
+    def _legacy_get_scheduled_assignee(self, associated_test: ArgusTest, associated_release: ArgusRelease) -> UUID:
         """
             Iterate over all schedules (groups and tests) and return first available assignee
         """
-        associated_test = ArgusTest.get(build_system_id=self.build_id)
         associated_group = ArgusGroup.get(id=associated_test.group_id)
-        associated_release = ArgusRelease.get(id=associated_test.release_id)
 
         scheduled_groups = ArgusScheduleGroup.filter(
             release_id=associated_release.id,

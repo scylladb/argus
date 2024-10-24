@@ -70,6 +70,10 @@ module.exports = {
             import: "./frontend/release-scheduler.js",
             dependOn: "globalAlert"
         },
+        releasePlanner: {
+            import: "./frontend/release-planner.js",
+            dependOn: "globalAlert"
+        },
         dutyPlanner: {
             import: "./frontend/duty-planner.js",
             dependOn: "globalAlert"

@@ -2,8 +2,8 @@
     import { WIDGET_TYPES } from "../Common/ViewTypes";
     import { sendMessage } from "../Stores/AlertStore";
     export let view;
-    let stats = undefined;
-    let productVersion;
+    export let stats = undefined;
+    export let productVersion;
     let clickedTests = {};
 
     const handleTestClick = function (detail) {
