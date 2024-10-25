@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 from uuid import UUID
 import requests
 from flask import (
@@ -386,13 +387,21 @@ def test_info():
 @api_login_required
 def test_results():
     test_id = request.args.get("testId")
+    start_date_str = request.args.get("startDate")
+    end_date_str = request.args.get("endDate")
+
     if not test_id:
         raise Exception("No testId provided")
+
+    start_date = datetime.fromisoformat(start_date_str).astimezone(timezone.utc) if start_date_str else None
+    end_date = datetime.fromisoformat(end_date_str).astimezone(timezone.utc) if end_date_str else None
+
     service = ResultsService()
     if request.method == 'HEAD':
         exists = service.is_results_exist(test_id=UUID(test_id))
         return Response(status=200 if exists else 404)
-    graphs, ticks, releases_filters = service.get_test_graphs(test_id=UUID(test_id))
+
+    graphs, ticks, releases_filters = service.get_test_graphs(test_id=UUID(test_id), start_date=start_date, end_date=end_date)
 
     return {
         "status": "ok",
