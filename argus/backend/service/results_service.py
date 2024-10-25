@@ -295,7 +295,10 @@ def calculate_graph_ticks(graphs: List[Dict]) -> dict[str, str]:
                 min_x = first_x
             if max_x is None or last_x > max_x:
                 max_x = last_x
+    if not max_x or not min_x:
+        return {}  # no data
     return {"min": min_x[:10], "max": max_x[:10]}
+
 
 
 def _identify_most_changed_package(packages_list: list[PackageVersion]) -> str:
@@ -365,12 +368,25 @@ class ResultsService:
         tables_meta = self.cluster.session.execute(query=query, parameters=(test_id,))
         return [ArgusGenericResultMetadata(**table) for table in tables_meta]
 
-    def _get_tables_data(self, test_id: UUID, table_name: str, ignored_runs: list[RunId]) -> list[ArgusGenericResultData]:
+    def _get_tables_data(self, test_id: UUID, table_name: str, ignored_runs: list[RunId],
+                         start_date: datetime | None = None, end_date: datetime | None = None) -> list[ArgusGenericResultData]:
         query_fields = ["run_id", "column", "row", "value", "status", "sut_timestamp"]
         raw_query = (f"SELECT {','.join(query_fields)}"
-                     f" FROM generic_result_data_v1 WHERE test_id = ? AND name = ? LIMIT 2147483647")
+                     f" FROM generic_result_data_v1 WHERE test_id = ? AND name = ?")
+
+        parameters = [test_id, table_name]
+
+        if start_date:
+            raw_query += " AND sut_timestamp >= ?"
+            parameters.append(start_date)
+        if end_date:
+            raw_query += " AND sut_timestamp <= ?"
+            parameters.append(end_date)
+
+        if start_date or end_date:
+            raw_query += " ALLOW FILTERING"
         query = self.cluster.prepare(raw_query)
-        data = self.cluster.session.execute(query=query, parameters=(test_id, table_name))
+        data = self.cluster.session.execute(query=query, parameters=tuple(parameters))
         return [ArgusGenericResultData(**cell) for cell in data if cell["run_id"] not in ignored_runs]
 
     def get_table_metadata(self, test_id: UUID, table_name: str) -> ArgusGenericResultMetadata:
@@ -401,13 +417,14 @@ class ResultsService:
                 'order': min([cell['ordering'] for cell in cells] or [0])})
         return sorted(tables, key=lambda x: x['order'])
 
-    def get_test_graphs(self, test_id: UUID):
+    def get_test_graphs(self, test_id: UUID, start_date: datetime | None = None, end_date: datetime | None = None):
         runs_details = self._get_runs_details(test_id)
         tables_meta = self._get_tables_metadata(test_id=test_id)
         graphs = []
         releases_filters = set()
         for table in tables_meta:
-            data = self._get_tables_data(test_id=test_id, table_name=table.name, ignored_runs=runs_details.ignored)
+            data = self._get_tables_data(test_id=test_id, table_name=table.name, ignored_runs=runs_details.ignored,
+                                         start_date=start_date, end_date=end_date)
             if not data:
                 continue
             best_results = self.get_best_results(test_id=test_id, name=table.name)

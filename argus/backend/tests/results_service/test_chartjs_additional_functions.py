@@ -197,7 +197,7 @@ def test_calculate_limits():
         assert 'limit' in point
 
 
-def test_calculate_graph_ticks():
+def test_calculate_graph_ticks_with_data_returns_min_max_ticks():
     graphs = [
         {
             "data": {
@@ -217,3 +217,23 @@ def test_calculate_graph_ticks():
     ticks = calculate_graph_ticks(graphs)
     assert ticks["min"] == "2023-10-22"
     assert ticks["max"] == "2023-10-25"
+
+def test_calculate_graph_ticks_without_data_does_not_fail():
+    graphs = [
+        {
+            "data": {
+                "datasets": [
+                    {"data": []}
+                ]
+            }
+        },
+        {
+            "data": {
+                "datasets": [
+                    {"data": []}
+                ]
+            }
+        }
+    ]
+    ticks = calculate_graph_ticks(graphs)
+    assert ticks == {}

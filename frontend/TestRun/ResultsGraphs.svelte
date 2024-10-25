@@ -2,6 +2,8 @@
     import {createEventDispatcher, onMount} from "svelte";
     import {sendMessage} from "../Stores/AlertStore";
     import ResultsGraph from "./ResultsGraph.svelte";
+    import dayjs from "dayjs";
+    import queryString from "query-string";
 
     export let test_id = "";
     let graphs = [];
@@ -12,17 +14,20 @@
     let selectedTableFilters = [];
     let selectedColumnFilters = [];
     let filteredGraphs = [];
+    let startDate = "";
+    let endDate = "";
     let width = 500;  // default width for each chart
     let height = 300;  // default height for each chart
     const dispatch = createEventDispatcher();
 
     const dispatch_run_click = (e) => {
-        dispatch("runClick", {runId: e.detail.runId});
+        dispatch("runClick", { runId: e.detail.runId });
     };
 
     const fetchTestResults = async function (testId) {
         try {
-            let res = await fetch(`/api/v1/test-results?testId=${testId}`);
+            const params = queryString.stringify({testId, startDate, endDate});
+            let res = await fetch(`/api/v1/test-results?${params}`);
             if (res.status != 200) {
                 return Promise.reject(`HTTP Error ${res.status} trying to fetch test results`);
             }
@@ -57,6 +62,21 @@
 
     const generateRandomHash = () => {
         return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    };
+
+    const setDefaultDateRange = () => {
+        const now = dayjs();
+        endDate = now.format('YYYY-MM-DD');
+        const pastDate = now.subtract(3, 'month');
+        startDate = pastDate.format('YYYY-MM-DD');
+    };
+
+    const setDateRange = (months) => {
+        const now = dayjs();
+        endDate = now.format('YYYY-MM-DD');
+        const pastDate = now.subtract(months, 'month');
+        startDate = pastDate.format('YYYY-MM-DD');
+        fetchTestResults(test_id);
     };
 
     const extractTableFilters = () => {
@@ -147,10 +167,19 @@
     };
 
     onMount(() => {
+        setDefaultDateRange();
         fetchTestResults(test_id);
     });
 </script>
-
+<div class="filters-container">
+    <div class="input-group input-group-sm mx-2">
+        <input type="date" class="form-control date-input" bind:value={startDate} on:change={() => fetchTestResults(test_id)} />
+        <input type="date" class="form-control date-input" bind:value={endDate} on:change={() => fetchTestResults(test_id)} />
+        <button class="btn btn-info btn-sm" on:click={() => setDateRange(1)}>Last Month</button>
+        <button class="btn btn-info btn-sm" on:click={() => setDateRange(3)}>Last 3 Months</button>
+        <button class="btn btn-info btn-sm" on:click={() => setDateRange(6)}>Last 6 Months</button>
+    </div>
+</div>
 <div class="filters-container">
     {#each tableFilters as filterGroup}
         {#each filterGroup.items as filter}
@@ -244,5 +273,9 @@
 
     .filters-container button.selected {
         border: 2px solid #333;
+    }
+
+    .date-input {
+        max-width: 200px;
     }
 </style>
