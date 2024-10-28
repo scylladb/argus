@@ -10,11 +10,11 @@
     <link rel="shortcut icon" href="/s/argus.png" type="image/png">
     {% block javascripts %}
     <script>
-        var globalFlashes = JSON.parse('{{ get_flashed_messages(with_categories=true) | tojson | safe }}');
+        var globalFlashes = {{ get_flashed_messages(with_categories=true) | tojson | safe }};
     </script>
     {% if g.user %}
     <script>
-        var gArgusCurrentUser = JSON.parse('{{ g.user | safe_user | tojson | safe }}');
+        var gArgusCurrentUser = {{ g.user | safe_user | tojson | safe }};
     </script>
     {% endif %}
     <script src="/s/dist/fontAwesome.bundle.js"></script>
