@@ -16,12 +16,17 @@
     let filteredGraphs = [];
     let startDate = "";
     let endDate = "";
+    let dateRange = 3;
+    let showCustomInputs = false;
     let width = 500;  // default width for each chart
     let height = 300;  // default height for each chart
+
+    $: setDateRange(dateRange);
+
     const dispatch = createEventDispatcher();
 
     const dispatch_run_click = (e) => {
-        dispatch("runClick", { runId: e.detail.runId });
+        dispatch("runClick", {runId: e.detail.runId});
     };
 
     const fetchTestResults = async function (testId) {
@@ -72,10 +77,17 @@
     };
 
     const setDateRange = (months) => {
+        if (months === -1) {
+            startDate = "";
+            endDate = "";
+            showCustomInputs = true;
+            return;
+        }
         const now = dayjs();
         endDate = now.format('YYYY-MM-DD');
         const pastDate = now.subtract(months, 'month');
         startDate = pastDate.format('YYYY-MM-DD');
+        showCustomInputs = false;
         fetchTestResults(test_id);
     };
 
@@ -172,52 +184,91 @@
     });
 </script>
 <div class="filters-container">
-    <div class="input-group input-group-sm mx-2">
-        <input type="date" class="form-control date-input" bind:value={startDate} on:change={() => fetchTestResults(test_id)} />
-        <input type="date" class="form-control date-input" bind:value={endDate} on:change={() => fetchTestResults(test_id)} />
-        <button class="btn btn-info btn-sm" on:click={() => setDateRange(1)}>Last Month</button>
-        <button class="btn btn-info btn-sm" on:click={() => setDateRange(3)}>Last 3 Months</button>
-        <button class="btn btn-info btn-sm" on:click={() => setDateRange(6)}>Last 6 Months</button>
+    <span class="my-auto">Time range:</span>
+    <div class="input-group input-group-inline input-group-sm mx-2">
+        <button class="btn btn-outline-primary btn-sm"
+                class:active={dateRange === 1}
+                on:click={() => dateRange = 1}>
+            Last Month
+        </button>
+        <button class="btn btn-outline-primary btn-sm"
+                class:active={dateRange === 3}
+                on:click={() => dateRange = 3}>
+            Last 3 Months
+        </button>
+        <button class="btn btn-outline-primary btn-sm"
+                class:active={dateRange === 6}
+                on:click={() => dateRange = 6}>
+            Last 6 Months
+        </button>
+        <button class="btn btn-outline-primary btn-sm"
+                on:click={() => dateRange = -1}
+                class:active={showCustomInputs}>
+            Custom
+        </button>
+        {#if showCustomInputs}
+            <input type="date" class="form-control date-input" bind:value={startDate} on:change={() => fetchTestResults(test_id)}/>
+            <input type="date" class="form-control date-input" bind:value={endDate} on:change={() => fetchTestResults(test_id)}/>
+        {/if}
+    </div>
+    <span class="my-auto">Releases:</span>
+    <div class="input-group input-group-inline input-group-sm mx-2">
+        {#each Object.keys(releasesFilters) as release}
+            <button class="btn btn-sm btn-outline-dark"
+                    on:click={() => toggleReleaseFilter(release)}
+                    class:active={releasesFilters[release]}
+            >
+                {release}
+            </button>
+        {/each}
     </div>
 </div>
-<div class="filters-container">
+
+<span>Filters:</span>
+<div class="filters-container  ">
+    <div class="input-group input-group-inline input-group-sm mx-1">
+        <button class="btn btn-outline-dark colored"
+                on:click={() => { selectedTableFilters = []; filterGraphs(); }}>X
+        </button>
+    </div>
     {#each tableFilters as filterGroup}
-        {#each filterGroup.items as filter}
-            <button
-                    on:click={() => toggleTableFilter(filter, filterGroup.level)}
-                    class:selected={selectedTableFilters.some(f => f.name === filter)}
-                    style="background-color: {getTableFilterColor(filterGroup.level)}"
+        <div class="input-group input-group-inline  input-group-sm mx-1">
+            {#each filterGroup.items as filter}
+                <button class="btn btn-outline-dark colored"
+                        on:click={() => toggleTableFilter(filter, filterGroup.level)}
+                        class:selected={selectedTableFilters.some(f => f.name === filter)}
+                        style="background-color: {getTableFilterColor(filterGroup.level)}"
+                >
+                    {filter}
+                </button>
+            {/each}
+        </div>
+
+    {/each}
+</div>
+<span>Metrics:</span>
+<div class="filters-container  ">
+    <div class="input-group input-group-inline  input-group-sm mx-1">
+        <button class="btn btn-outline-dark colored"
+                on:click={() => { selectedColumnFilters = []; filterGraphs(); }}>X
+        </button>
+    </div>
+    <div class="input-group input-group-inline  input-group-sm mx-1">
+        {#each columnFilters as filter}
+            <button class="btn btn-outline-dark colored"
+                    on:click={() => toggleColumnFilter(filter)}
+                    class:selected={selectedColumnFilters.some(f => f === filter)}
+                    style="background-color: #a3e2cc"
             >
                 {filter}
             </button>
         {/each}
-    {/each}
-    {#each columnFilters as filter}
-        <button
-                on:click={() => toggleColumnFilter(filter)}
-                class:selected={selectedColumnFilters.some(f => f === filter)}
-                style="background-color: #a3e2cc"
-        >
-            {filter}
-        </button>
-    {/each}
-    <button on:click={() => { selectedTableFilters = []; selectedColumnFilters = []; filterGraphs(); }}>Show All</button>
-
-</div>
-<div class="filters-container">
-    {#each Object.keys(releasesFilters) as release}
-        <button
-                on:click={() => toggleReleaseFilter(release)}
-                class:selected={releasesFilters[release]}
-                class="m-2"
-        >
-            {release}
-        </button>
-    {/each}
+    </div>
 </div>
 <div class="charts-container">
     {#each filteredGraphs as graph (graph.id)}
-        <div class="chart-container {filteredGraphs.length < 2 ? 'big-size' : ''}">
+        <div class="chart-container"
+             class:big-size={filteredGraphs.length < 2}>
             <ResultsGraph
                     {graph}
                     {ticks}
@@ -253,26 +304,20 @@
 
     .filters-container {
         display: flex;
-        justify-content: center;
-        align-items: center;
+        flex-direction: row;
+        justify-content: flex-start;
+        align-content: flex-start;
         margin-bottom: 20px;
         flex-wrap: wrap;
     }
 
-    .filters-container button {
-        margin: 5px;
-        padding: 10px 15px;
-        cursor: pointer;
-        border: none;
-        border-radius: 5px;
+    .input-group-inline {
+        width: auto;
     }
 
-    .filters-container button:hover {
-        background-color: #e0e0e0;
-    }
 
-    .filters-container button.selected {
-        border: 2px solid #333;
+    button.colored:not(.selected):not(:hover) {
+        background-color: #f0f0f0 !important;
     }
 
     .date-input {
