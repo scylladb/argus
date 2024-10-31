@@ -101,19 +101,7 @@
     </div>
 </div>
 
-
-
 <style>
-    .img-profile {
-        width: 24px;
-        height: 24px;
-        border-radius: 50%;
-        background-color: rgb(163, 163, 163);
-        background-clip: border-box;
-        background-repeat: no-repeat;
-        background-position: center;
-        background-size: cover;
-    }
     .text-sm {
         font-size: 0.8em;
     }

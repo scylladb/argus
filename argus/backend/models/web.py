@@ -8,6 +8,7 @@ from cassandra.util import uuid_from_time, unix_time_from_uuid1  # pylint: disab
 
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ArgusBestResultData
+from argus.backend.models.view_widgets import WidgetHighlights, WidgetComment
 
 
 def uuid_now():
@@ -385,6 +386,8 @@ USED_MODELS: list[Model] = [
     ArgusGenericResultData,
     ArgusBestResultData,
     ArgusReleasePlan,
+    WidgetHighlights,
+    WidgetComment,
 ]
 
 USED_TYPES: list[UserType] = [
