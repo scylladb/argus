@@ -5,8 +5,10 @@ import ViewUnsupportedPlaceholder from "../Views/Widgets/ViewUnsupportedPlacehol
 import CheckValue from "../Views/WidgetSettingTypes/CheckValue.svelte";
 import MultiSelectValue from "../Views/WidgetSettingTypes/MultiSelectValue.svelte";
 import StringValue from "../Views/WidgetSettingTypes/StringValue.svelte";
-import { TestStatus } from "./TestStatus";
-import { subUnderscores, titleCase } from "./TextUtils";
+import {TestStatus} from "./TestStatus";
+import {subUnderscores, titleCase} from "./TextUtils";
+import ViewHighlights from "../Views/Widgets/ViewHighlights/ViewHighlights.svelte";
+import IntegerValue from "../Views/WidgetSettingTypes/IntegerValue.svelte";
 
 export class Widget {
     constructor(position = -1, type = "testDashboard", settings = {}) {
@@ -92,7 +94,19 @@ export const WIDGET_TYPES = {
                 displayName: "Aggregate Runs by Issue"
             }
         }
-    }
+    },
+    highlights: {
+        type: ViewHighlights,
+        friendlyName: "Highlights and action items for the view",
+        settingDefinitions: {
+            index: {
+                type: IntegerValue,
+                default: 0,
+                help: "Index of the highlight (for support multiple highlight widgets in one view)",
+                displayName: "Index"
+            }
+        },
+    },
 };
 
 

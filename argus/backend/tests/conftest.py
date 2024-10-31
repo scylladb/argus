@@ -1,9 +1,11 @@
 import os
 import time
 import uuid
+from unittest.mock import patch
 
 from cassandra.auth import PlainTextAuthProvider
 from docker import DockerClient
+from flask import g
 
 from argus.backend.util.config import Config
 
@@ -12,13 +14,14 @@ from _pytest.fixtures import fixture
 from docker.errors import NotFound
 from argus.backend.cli import sync_models
 from argus.backend.db import ScyllaCluster
-from argus.backend.models.web import ArgusTest, ArgusGroup, ArgusRelease
+from argus.backend.models.web import ArgusTest, ArgusGroup, ArgusRelease, User, UserRoles
 from argus.backend.plugins.sct.testrun import SCTTestRunSubmissionRequest
 from argus.backend.service.client_service import ClientService
 from argus.backend.service.release_manager import ReleaseManagerService
 from argus.backend.service.results_service import ResultsService
 import logging
 from cassandra.cluster import Cluster
+
 logging.getLogger().setLevel(logging.INFO)
 os.environ['CQLENG_ALLOW_SCHEMA_MANAGEMENT'] = '1'
 logging.getLogger('cassandra').setLevel(logging.WARNING)
@@ -80,7 +83,7 @@ def argus_db():
              CREATE KEYSPACE IF NOT EXISTS test_argus
              WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1};
          """)
-    config = {"SCYLLA_KEYSPACE_NAME": "test_argus","SCYLLA_CONTACT_POINTS": [container_ip],
+    config = {"SCYLLA_KEYSPACE_NAME": "test_argus", "SCYLLA_CONTACT_POINTS": [container_ip],
               "SCYLLA_USERNAME": "cassandra", "SCYLLA_PASSWORD": "cassandra", "APP_LOG_LEVEL": "INFO",
               "EMAIL_SENDER": "unit tester", "EMAIL_SENDER_PASS": "pass", "EMAIL_SENDER_USER": "qa",
               "EMAIL_SERVER": "fake", "EMAIL_SERVER_PORT": 25}
@@ -93,11 +96,26 @@ def argus_db():
     database.shutdown()
 
 
+@fixture(scope='session')
+def argus_app():
+    with patch('argus.backend.service.user.load_logged_in_user') as mock_load:
+        mock_load.return_value = None  # Make the function do nothing so test can override user
+        from argus_backend import argus_app
+        yield argus_app
+
+
 @fixture(scope='session', autouse=True)
-def app_context(argus_db):
-    from argus_backend import argus_app
+def app_context(argus_db, argus_app):
     with argus_app.app_context():
+        g.user = User(id=uuid.uuid4(), username='test_user', full_name='Test User',
+                      email="tester@scylladb.com",
+                      roles=[UserRoles.User, UserRoles.Admin, UserRoles.Manager])
         yield
+
+
+@fixture(scope='session')
+def flask_client(argus_app):
+    return argus_app.test_client()
 
 
 @fixture(scope='session')
