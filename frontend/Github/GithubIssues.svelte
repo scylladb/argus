@@ -300,6 +300,14 @@
                             <li>
                                 <h6 class="dropdown-header">Repositories</h6>
                             </li>
+                                <li>
+                                    <a
+                                        target="_blank"
+                                        class="dropdown-item"
+                                        href="https://github.com/scylladb/argus/issues/new/choose"
+                                        >Argus</a
+                                    >
+                                </li>
                             {#each newIssueDestinations[pluginName] ??  newIssueDestinations[PLUGIN_NAMES.SCT] as destination}
                                 <li>
                                     <a
