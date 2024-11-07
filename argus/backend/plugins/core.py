@@ -83,7 +83,8 @@ class PluginModelBase(Model):
             if associated_test.id in plan.tests:
                 return plan.assignee_mapping.get(associated_test.id, plan.owner)
 
-        return None
+        # FIXME: Legacy fallback until we fully migrate to new plans
+        return self._legacy_get_scheduled_assignee(associated_test=associated_test, associated_release=associated_release)
     
 
     def get_scheduled_assignee(self) -> UUID:
