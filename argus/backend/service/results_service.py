@@ -127,13 +127,37 @@ colors = [
 shapes = ["circle", "triangle", "rect", "star", "dash", "crossRot", "line"]
 
 
-def get_sorted_data_for_column_and_row(data: List[ArgusGenericResultData], column: str, row: str) -> List[Dict[str, Any]]:
-    return sorted([{"x": entry.sut_timestamp.strftime('%Y-%m-%dT%H:%M:%SZ'),
+def get_sorted_data_for_column_and_row(data: List[ArgusGenericResultData], column: str, row: str,
+                                       runs_details: RunsDetails, main_package: str) -> List[Dict[str, Any]]:
+    points =  sorted([{"x": entry.sut_timestamp.strftime('%Y-%m-%dT%H:%M:%SZ'),
                     "y": entry.value,
-                    "id": entry.run_id}
+                    "id": entry.run_id,
+                    }
                    for entry in data if entry.column == column and entry.row == row],
                   key=lambda point: point["x"])
-
+    if not points:
+        return points
+    packages = runs_details.packages
+    prev_versions = {pkg.name: pkg.version + (f" ({pkg.date})" if pkg.date else "") for pkg in packages.get(points[0]["id"], [])}
+    points[0]['changes'] = [f"{main_package}: {prev_versions.pop(main_package, None)}"]
+    points[0]['dep_change'] = False
+    for point in points[1:]:
+        changes = []
+        mark_dependency_change = False
+        current_versions = {pkg.name: pkg.version + (f" ({pkg.date})" if pkg.date else "") for pkg in packages.get(point["id"], [])}
+        main_package_version = current_versions.pop(main_package, None)
+        for pkg_name in current_versions.keys() | prev_versions.keys():
+            curr_ver = current_versions.get(pkg_name)
+            prev_ver = prev_versions.get(pkg_name)
+            if curr_ver != prev_ver:
+                changes.append({'name': pkg_name, 'prev_version': prev_ver, 'curr_version': curr_ver})
+                if pkg_name != main_package:
+                    mark_dependency_change = True
+        point['changes'] = [f"{main_package}: {main_package_version}"] + [
+            f"{change['name']}: {change['prev_version']} -> {change['curr_version']}" for change in changes]
+        point['dep_change'] = mark_dependency_change
+        prev_versions = current_versions
+    return points
 
 def get_min_max_y(datasets: List[Dict[str, Any]]) -> (float, float):
     """0.5 - 1.5 of min/max of 50% results"""
@@ -191,7 +215,8 @@ def calculate_limits(points: List[dict], best_results: List, validation_rules_li
 
 
 def create_datasets_for_column(table: ArgusGenericResultMetadata, data: list[ArgusGenericResultData],
-                               best_results: dict[str, List[BestResult]], releases_map: ReleasesMap, column: ColumnMetadata) -> List[Dict]:
+                               best_results: dict[str, List[BestResult]], releases_map: ReleasesMap, column: ColumnMetadata,
+                               runs_details: RunsDetails, main_package:str) -> List[Dict]:
     """
     Create datasets (series) for a specific column, splitting by version and showing limit lines.
     """
@@ -200,7 +225,7 @@ def create_datasets_for_column(table: ArgusGenericResultMetadata, data: list[Arg
 
     for idx, row in enumerate(table.rows_meta):
         line_color = colors[idx % len(colors)]
-        points = get_sorted_data_for_column_and_row(data, column.name, row)
+        points = get_sorted_data_for_column_and_row(data, column.name, row, runs_details, main_package)
 
         datasets.extend(create_release_datasets(points, row, releases_map, line_color))
 
@@ -226,7 +251,7 @@ def create_release_datasets(points: list[Dict], row: str, releases_map: Releases
                 "label": f"{release} - {row}",
                 "borderColor": line_color,
                 "borderWidth": 2,
-                "pointRadius": 2,
+                "pointRadius": 3,
                 "showLine": True,
                 "data": release_points,
                 "pointStyle": shapes[v_idx % len(shapes)]
@@ -255,7 +280,7 @@ def create_limit_dataset(points: list[Dict], column: ColumnMetadata, row: str, b
 
         if limit_points and not is_fixed_limit_drawn:
             return {
-                "label": "limit",
+                "label": "error threshold",
                 "borderColor": line_color,
                 "borderWidth": 2,
                 "borderDash": [5, 5],
@@ -324,7 +349,7 @@ def _split_results_by_release(packages: dict[str, list[PackageVersion]], main_pa
 
 
 def create_chartjs(table: ArgusGenericResultMetadata, data: list[ArgusGenericResultData], best_results: dict[str, List[BestResult]],
-                   releases_map: ReleasesMap) -> List[Dict]:
+                   releases_map: ReleasesMap, runs_details: RunsDetails, main_package: str) -> List[Dict]:
     """
     Create Chart.js-compatible graph for each column in the table.
     """
@@ -332,7 +357,7 @@ def create_chartjs(table: ArgusGenericResultMetadata, data: list[ArgusGenericRes
     columns = [column for column in table.columns_meta if column.type != "TEXT"]
 
     for column in columns:
-        datasets = create_datasets_for_column(table, data, best_results, releases_map, column)
+        datasets = create_datasets_for_column(table, data, best_results, releases_map, column, runs_details, main_package)
 
         if datasets:
             min_y, max_y = get_min_max_y(datasets)
@@ -430,8 +455,7 @@ class ResultsService:
             best_results = self.get_best_results(test_id=test_id, name=table.name)
             main_package = _identify_most_changed_package([pkg for sublist in runs_details.packages.values() for pkg in sublist])
             releases_map = _split_results_by_release(runs_details.packages, main_package=main_package)
-            graphs.extend(create_chartjs(table, data, best_results,
-                                         releases_map=releases_map))
+            graphs.extend(create_chartjs(table, data, best_results, releases_map=releases_map, runs_details=runs_details, main_package=main_package))
             releases_filters.update(releases_map.keys())
         ticks = calculate_graph_ticks(graphs)
         return graphs, ticks, list(releases_filters)

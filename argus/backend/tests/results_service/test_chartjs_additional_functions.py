@@ -14,7 +14,7 @@ from argus.backend.service.results_service import (
     create_limit_dataset,
     calculate_limits,
     calculate_graph_ticks, _identify_most_changed_package, _split_results_by_release,
-    BestResult
+    BestResult, RunsDetails
 )
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ColumnMetadata, ValidationRules
 
@@ -49,24 +49,33 @@ def test_split_results_by_versions_should_group_correctly(package_data):
 
 
 def test_get_sorted_data_for_column_and_row():
+    run_id1 = uuid4()
+    run_id2 = uuid4()
+    run_id3 = uuid4()
     data = [
-        ArgusGenericResultData(run_id=uuid4(), column="col1", row="row1", value=1.5, status="PASS", sut_timestamp=datetime(2023, 10, 23)),
-        ArgusGenericResultData(run_id=uuid4(), column="col1", row="row1", value=2.5, status="PASS", sut_timestamp=datetime(2023, 10, 24)),
-        ArgusGenericResultData(run_id=uuid4(), column="col1", row="row1", value=0.5, status="PASS", sut_timestamp=datetime(2023, 10, 22)),
-        ArgusGenericResultData(run_id=uuid4(), column="col1", row="row2", value=3.5, status="PASS", sut_timestamp=datetime(2023, 10, 25)),
-        ArgusGenericResultData(run_id=uuid4(), column="col2", row="row1", value=4.5, status="PASS", sut_timestamp=datetime(2023, 10, 26)),
+        ArgusGenericResultData(run_id=run_id2, column="col1", row="row1", value=1.5, status="PASS",
+                               sut_timestamp=datetime(2023, 10, 23)),
+        ArgusGenericResultData(run_id=run_id3, column="col1", row="row1", value=2.5, status="PASS",
+                               sut_timestamp=datetime(2023, 10, 24)),
+        ArgusGenericResultData(run_id=run_id1, column="col1", row="row1", value=0.5, status="PASS",
+                               sut_timestamp=datetime(2023, 10, 22)),
     ]
-    result = get_sorted_data_for_column_and_row(data, "col1", "row1")
+    packages = {
+        run_id1: [PackageVersion(name='pkg1', version='1.0', date='', revision_id='', build_id='')],
+        run_id2: [PackageVersion(name='pkg1', version='1.1', date='', revision_id='', build_id=''),
+                  PackageVersion(name='pkg2', version='1.0', date='', revision_id='', build_id='')],
+        run_id3: [PackageVersion(name='pkg1', version='1.1', date='', revision_id='', build_id=''),
+                  PackageVersion(name='pkg2', version='1.1', date='20241111', revision_id='', build_id='')],
+    }
+    runs_details = RunsDetails(ignored=[], packages=packages)
+    result = get_sorted_data_for_column_and_row(data, "col1", "row1", runs_details, main_package="pkg1")
     expected = [
-        {"x": "2023-10-22T00:00:00Z", "y": 0.5},
-        {"x": "2023-10-23T00:00:00Z", "y": 1.5},
-        {"x": "2023-10-24T00:00:00Z", "y": 2.5},
+        {"x": "2023-10-22T00:00:00Z", "y": 0.5, "changes": ["pkg1: 1.0"]},
+        {"x": "2023-10-23T00:00:00Z", "y": 1.5, "changes": ["pkg1: 1.1", "pkg2: None -> 1.0"]},
+        {"x": "2023-10-24T00:00:00Z", "y": 2.5, "changes": ['pkg1: 1.1', "pkg2: 1.0 -> 1.1 (20241111)"]},
     ]
-
-    result_without_id = [{"x": item["x"], "y": item["y"]} for item in result]
-
-    assert result_without_id == expected
-
+    result_data = [{"x": item["x"], "y": item["y"], "changes": item["changes"]} for item in result]
+    assert result_data == expected
 
 def test_get_min_max_y():
     datasets = [
@@ -138,7 +147,8 @@ def test_create_datasets_for_column():
     best_results = {}
     releases_map = {"2024.2": [point.run_id for point in data][:1], "2024.3": [point.run_id for point in data][2:]}
     column = table.columns_meta[0]
-    datasets = create_datasets_for_column(table, data, best_results, releases_map, column)
+    runs_details = RunsDetails(ignored=[], packages={})
+    datasets = create_datasets_for_column(table, data, best_results, releases_map, column, runs_details, main_package="pkg1")
     assert len(datasets) == 2
     labels = [dataset["label"] for dataset in datasets]
     assert "2024.2 - row1" in labels
@@ -179,7 +189,7 @@ def test_create_limit_dataset():
     is_fixed_limit_drawn = False
     limit_dataset = create_limit_dataset(points, column, row, best_results, table, line_color, is_fixed_limit_drawn)
     assert limit_dataset is not None
-    assert limit_dataset["label"] == "limit"
+    assert limit_dataset["label"] == "error threshold"
     assert limit_dataset["data"]
 
 
