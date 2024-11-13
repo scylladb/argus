@@ -2,7 +2,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from argus.backend.models.result import ArgusGenericResultMetadata, ColumnMetadata, ArgusGenericResultData, ValidationRules
-from argus.backend.service.results_service import create_chartjs, BestResult
+from argus.backend.service.results_service import create_chartjs, BestResult, RunsDetails
 
 
 def test_create_chartjs_without_validation_rules_should_create_chart_without_limits_series():
@@ -31,7 +31,8 @@ def test_create_chartjs_without_validation_rules_should_create_chart_without_lim
         'col1:row1': [BestResult(key='col1:row1', value=100.0, result_date=datetime(2021, 1, 1), run_id=str(uuid4()))]
     }
     releases_map = {"1.0": [point.run_id for point in data]}
-    graphs = create_chartjs(table, data, best_results, releases_map)
+    runs_details = RunsDetails(ignored=[], packages={})
+    graphs = create_chartjs(table, data, best_results, releases_map, runs_details, main_package="pkg1")
     assert len(graphs) == 1
     assert len(graphs[0]['data']['datasets']) == 1  # no limits series
 
@@ -59,7 +60,8 @@ def test_create_chartjs_without_best_results_should_not_fail():
     ]
     best_results = {}
     releases_map = {"1.0": [point.run_id for point in data]}
-    graphs = create_chartjs(table, data, best_results, releases_map)
+    runs_details = RunsDetails(ignored=[], packages={})
+    graphs = create_chartjs(table, data, best_results, releases_map, runs_details, main_package="pkg1")
     assert len(graphs) == 1
     assert len(graphs[0]['data']['datasets']) == 1  # no limits series
 
@@ -91,7 +93,8 @@ def test_create_chartjs_with_validation_rules_should_add_limit_series():
         'col1:row1': [BestResult(key='col1:row1', value=100.0, result_date=datetime(2021, 1, 1), run_id=str(uuid4()))]
     }
     releases_map = {"1.0": [point.run_id for point in data]}
-    graphs = create_chartjs(table, data, best_results, releases_map)
+    runs_details = RunsDetails(ignored=[], packages={})
+    graphs = create_chartjs(table, data, best_results, releases_map, runs_details, main_package="pkg1")
     assert 'limit' in graphs[0]['data']['datasets'][0]['data'][0]
 
 def test_chartjs_with_multiple_best_results_and_validation_rules_should_adjust_limits_for_each_point():
@@ -138,7 +141,8 @@ def test_chartjs_with_multiple_best_results_and_validation_rules_should_adjust_l
         ]
     }
     releases_map = {"1.0": [point.run_id for point in data]}
-    graphs = create_chartjs(table, data, best_results, releases_map)
+    runs_details = RunsDetails(ignored=[], packages={})
+    graphs = create_chartjs(table, data, best_results, releases_map, runs_details, main_package="pkg1")
     datasets = graphs[0]['data']['datasets']
     limits = [point.get('limit') for dataset in datasets for point in dataset['data'] if 'limit' in point]
     assert len(limits) == 2
@@ -156,7 +160,8 @@ def test_create_chartjs_no_data_should_not_fail():
     data = []
     best_results = {}
     releases_map = {"1.0": []}
-    graphs = create_chartjs(table, data, best_results, releases_map)
+    runs_details = RunsDetails(ignored=[], packages={})
+    graphs = create_chartjs(table, data, best_results, releases_map, runs_details, main_package="pkg1")
     assert len(graphs) == 0
 
 def test_create_chartjs_multiple_columns_and_rows():
@@ -203,7 +208,8 @@ def test_create_chartjs_multiple_columns_and_rows():
         ]
     }
     releases_map = {"1.0": [point.run_id for point in data]}
-    graphs = create_chartjs(table, data, best_results, releases_map)
+    runs_details = RunsDetails(ignored=[], packages={})
+    graphs = create_chartjs(table, data, best_results, releases_map, runs_details, main_package="pkg1")
     assert len(graphs) == 2
     assert len(graphs[0]['data']['datasets']) == 2  # should have also limits dataset
     assert len(graphs[1]['data']['datasets']) == 1  # no limits series

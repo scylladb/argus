@@ -1,5 +1,5 @@
 <script>
-    import {Chart, registerables} from "chart.js";
+    import {Chart, registerables, Tooltip} from "chart.js";
     import {createEventDispatcher, onMount} from "svelte";
     import "chartjs-adapter-date-fns";
 
@@ -13,6 +13,18 @@
     let chart;
     const ticksGapPx = 40;
     const dispatch = createEventDispatcher();
+    Tooltip.positioners.above = function (elements, eventPosition) {
+        const tooltip = this;
+        if (elements.length === 0) {
+            return false;
+        }
+        return {
+            x: elements[0].element.x,
+            y: elements[0].element.y - tooltip.height / 2 - 5,
+            xAlign: "center",
+            yAlign: "center",
+        };
+    };
 
     function calculateTickValues(xValues, width, minGapInPixels) {
         // trying to calculate the best tick values for x-axis - to be evenly distributed as possible but matching actual points
@@ -74,14 +86,21 @@
         graph.options.responsive = false;
         graph.options.lazy = true;
         graph.options.plugins.tooltip = {
+            position: "above",
+            usePointStyle: true,
+            bodyFont: {
+                size: 16,
+                family: 'sans-serif',
+            },
             callbacks: {
                 label: function (tooltipItem) {
                     const y = tooltipItem.parsed.y.toFixed(2);
                     const x = new Date(tooltipItem.parsed.x).toLocaleDateString("sv-SE");
                     const ori = tooltipItem.raw.ori;
                     const limit = tooltipItem.raw.limit;
-                    return `${x}: ${ori ? ori : y} (limit: ${limit?.toFixed(2) || "N/A"})`;
-                }
+                    const changes = tooltipItem.raw.changes;
+                    return [`${x}: ${ori ? ori : y} (error threshold: ${limit?.toFixed(2) || "N/A"})`, ...changes];
+                },
             }
         };
         graph.options.scales.x.min = ticks["min"];
@@ -94,6 +113,14 @@
                 }
             }
         };
+
+        graph.data.datasets.forEach((dataset) => {
+            const pointBackgroundColors = dataset.data.map((point) =>
+                point.dep_change ? 'white' : dataset.backgroundColor || dataset.borderColor
+            );
+            dataset.pointBackgroundColor = pointBackgroundColors;
+        });
+
         chart = new Chart(
             document.getElementById(`graph-${test_id}-${index}`),
             {type: "scatter", data: graph.data, options: {...graph.options, ...actions}}

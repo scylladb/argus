@@ -180,7 +180,6 @@
 
     onMount(() => {
         setDefaultDateRange();
-        fetchTestResults(test_id);
     });
 </script>
 <div class="filters-container">
