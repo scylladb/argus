@@ -55,7 +55,7 @@
         {#each view.widget_settings as widget}
             <div class="mb-2">
                 <svelte:component
-                    this={WIDGET_TYPES[widget.type].type}
+                    this={WIDGET_TYPES[widget.type]?.type ?? WIDGET_TYPES.UNSUPPORTED.type}
                     dashboardObject={view}
                     dashboardObjectType="view"
                     settings={widget.settings}

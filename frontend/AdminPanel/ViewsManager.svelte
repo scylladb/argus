@@ -4,13 +4,14 @@
     import Fa from "svelte-fa";
     import { faPlus, faTrash } from "@fortawesome/free-solid-svg-icons";
     import ViewWidget from "./ViewWidget.svelte";
-    import { ADD_ALL_ID, Widget } from "../Common/ViewTypes";
+    import { ADD_ALL_ID, Widget, WIDGET_TYPES } from "../Common/ViewTypes";
     import queryString from "query-string";
     import * as urlSlug from "url-slug";
     import Select from "svelte-select";
     import ViewSelectItem from "./ViewSelectItem.svelte";
     import { titleCase } from "../Common/TextUtils";
     import ViewListItem from "./ViewListItem.svelte";
+    import ModalWindow from "../Common/ModalWindow.svelte";
 
     let allViews = [];
 
@@ -32,6 +33,11 @@
     let lockForm = false;
     let editingExistingView = false;
     let testSearcherValue;
+    let errorPopup = false;
+    let errorTitle = "";
+    let errorMessage = "";
+    let errorCallback;
+
 
     const fetchAllViews = async function() {
         try {
@@ -62,10 +68,34 @@
         }
     };
 
-    const handleViewUpdateRequest = function(e) {
+    /**
+     * 
+     * @param {{type: string}[]} viewWidgets
+     */
+    const checkIfViewSupported = function(viewWidgets) {
+        for (const widget of viewWidgets) {
+            if (!WIDGET_TYPES[widget.type]) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    const handleViewUpdateRequest = function(e, force = false) {
         resetForm();
         let viewForUpdate = e.detail;
-        newWidgets = JSON.parse(viewForUpdate.widget_settings);
+        let widgets = JSON.parse(viewForUpdate.widget_settings);
+        if (!checkIfViewSupported(widgets) && !force) {
+            errorTitle = "Unsupported widget found";
+            errorMessage = "This view contains unsupported widgets. Editing said view will result in the loss of those widgets.";
+            errorPopup = true;
+            errorCallback = handleViewUpdateRequest.bind(undefined, e, true);
+            return;
+        } else if (force) {
+            widgets = widgets.filter(w => WIDGET_TYPES[w.type]);
+            widgets.forEach((w, idx) => w.position = idx + 1);
+        }
+        newWidgets = widgets;
         newView = {
             id: viewForUpdate.id,
             name: viewForUpdate.name,
@@ -332,6 +362,36 @@
         fetchAllViews();
     });
 </script>
+
+{#if errorPopup}
+    <ModalWindow on:modalClose={() => {
+        errorTitle = "";
+        errorMessage = "";
+        errorPopup = false;
+    }}>
+        <div slot="title">
+            {errorTitle}
+        </div>
+        <div slot="body">
+            <p>{errorMessage}</p>
+            <div>
+                <button class="btn btn-danger" on:click={() => {
+                    errorTitle = "";
+                    errorMessage = "";
+                    errorPopup = false;
+                    errorCallback();
+                    errorCallback = undefined;
+                }}>Edit Anyway</button>
+                <button class="btn btn-secondary" on:click={() => {
+                    errorTitle = "";
+                    errorMessage = "";
+                    errorPopup = false;
+                    errorCallback = undefined;
+                }}>Cancel</button>
+            </div>
+        </div>
+    </ModalWindow>
+{/if}
 
 <div class="bg-white rounded p-2 shadow-sm my-2">
     <div>
