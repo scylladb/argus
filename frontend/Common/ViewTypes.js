@@ -1,6 +1,7 @@
 import ViewGithubIssues from "../Views/Widgets/ViewGithubIssues.svelte";
 import ViewReleaseStats from "../Views/Widgets/ViewReleaseStats.svelte";
 import ViewTestDashboard from "../Views/Widgets/ViewTestDashboard.svelte";
+import ViewUnsupportedPlaceholder from "../Views/Widgets/ViewUnsupportedPlaceholder.svelte";
 import CheckValue from "../Views/WidgetSettingTypes/CheckValue.svelte";
 import MultiSelectValue from "../Views/WidgetSettingTypes/MultiSelectValue.svelte";
 import StringValue from "../Views/WidgetSettingTypes/StringValue.svelte";
@@ -17,6 +18,13 @@ export class Widget {
 
 
 export const WIDGET_TYPES = {
+    UNSUPPORTED: {
+        type: ViewUnsupportedPlaceholder,
+        hidden: true,
+        friendlyName: "Dummy widget",
+        settingDefinitions: {
+        }
+    },
     testDashboard: {
         type: ViewTestDashboard,
         friendlyName: "Test Dashboard",
