@@ -622,7 +622,8 @@ class ArgusService:
 
         release = ArgusRelease.get(id=group.release_id)
         if not release.perpetual:
-            return PlanningService().get_assignments_for_tests(group_id, version, plan_id)
+            if assignments := PlanningService().get_assignments_for_tests(group_id, version, plan_id):
+                return assignments
 
         tests = ArgusTest.filter(group_id=group_id).all()
 

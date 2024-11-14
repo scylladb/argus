@@ -11,7 +11,7 @@ from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.plugins.loader import all_plugin_models
 from argus.backend.util.common import chunk, get_build_number
 from argus.common.enums import TestStatus, TestInvestigationStatus
-from argus.backend.models.web import ArgusGithubIssue, ArgusRelease, ArgusGroup, ArgusTest,\
+from argus.backend.models.web import ArgusGithubIssue, ArgusRelease, ArgusGroup, ArgusScheduleTest, ArgusTest,\
     ArgusTestRunComment, ArgusUserView
 from argus.backend.db import ScyllaCluster
 
@@ -248,6 +248,7 @@ class ReleaseStats:
         self.issues: list[ArgusGithubIssue] = []
         self.comments: list[ArgusTestRunComment] = []
         self.plans: list[ArgusReleasePlan] = []
+        self.schedules  = {}
         self.forced_collection = False
         self.rows = []
         self.all_tests = []
@@ -285,6 +286,11 @@ class ReleaseStats:
         if not self.release.perpetual and not limited:
             plans: list[ArgusReleasePlan] = list(ArgusReleasePlan.filter(release_id=self.release.id).all())
             self.plans = plans if not filter else [plan for plan in plans if version_filter == plan.target_version]
+            self.test_schedules = reduce(
+                lambda acc, row: acc[row["test_id"]].append(row) or acc,
+                ArgusScheduleTest.filter(release_id=self.release.id).all(), 
+                defaultdict(list)
+            )
 
         self.rows = rows
         self.dict = dict
@@ -361,7 +367,8 @@ class GroupStats:
                 stats = TestStats(
                     test=test,
                     parent_group=self,
-                    scheduled=is_scheduled
+                    scheduled=is_scheduled,
+                    schedules=self.parent_release.test_schedules.get(test.id, []),
                 )
                 stats.collect(limited=limited)
                 self.tests.append(stats)
@@ -378,7 +385,8 @@ class TestStats:
         self,
         test: ArgusTest,
         parent_group: GroupStats,
-        scheduled: bool = False
+        scheduled: bool = False,
+        schedules: list[ArgusScheduleTest] | None = None,
     ) -> None:
         self.test = test
         self.parent_group = parent_group
@@ -389,6 +397,8 @@ class TestStats:
         self.has_bug_report = False
         self.has_comments = False
         self.is_scheduled = scheduled
+        self.schedules = schedules if schedules else tuple()
+        self.is_scheduled_legacy = len(self.schedules) > 0 # TODO: Remove once old scheduling system is removed
         self.tracked_run_number = None
 
     def to_dict(self) -> dict:
@@ -417,7 +427,7 @@ class TestStats:
         try:
             last_run = last_runs[0]
         except IndexError:
-            self.status = TestStatus.NOT_RUN if self.is_scheduled else TestStatus.NOT_PLANNED
+            self.status = TestStatus.NOT_RUN if self.is_scheduled or self.is_scheduled_legacy else TestStatus.NOT_PLANNED
             self.parent_group.increment_status(status=self.status)
             return
         status_map = generate_field_status_map(last_runs)
