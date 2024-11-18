@@ -156,6 +156,7 @@ class ViewStats:
         self.issues: list[ArgusGithubIssue] = []
         self.comments: list[ArgusTestRunComment] = []
         self.plans: list[ArgusReleasePlan] = []
+        self.test_schedules = {}
         self.forced_collection = False
         self.rows = []
         self.releases = {}
@@ -203,6 +204,12 @@ class ViewStats:
             else:
                 plans: list[ArgusReleasePlan] = [plan for release_id in all_release_ids for results in ArgusReleasePlan.filter(release_id=release_id).all() for plan in results]
                 self.plans = plans if not version_filter else [plan for plan in plans if version_filter == plan.target_version]
+            # TODO: Legacy and unconditional, will show extra data.
+            self.test_schedules = reduce(
+                lambda acc, row: acc[row["test_id"]].append(row) or acc,
+                self._fetch_multiple_release_queries(ArgusScheduleTest, all_release_ids),
+                defaultdict(list)
+            )
 
         self.rows = rows
         self.dict = dict
@@ -248,7 +255,7 @@ class ReleaseStats:
         self.issues: list[ArgusGithubIssue] = []
         self.comments: list[ArgusTestRunComment] = []
         self.plans: list[ArgusReleasePlan] = []
-        self.schedules  = {}
+        self.test_schedules = {}
         self.forced_collection = False
         self.rows = []
         self.all_tests = []
