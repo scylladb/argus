@@ -137,9 +137,10 @@ def generate_field_status_map(
     for run in last_runs:
         run_number = get_build_number(run["build_job_url"])
         match status := status_map.get(run_number):
-            case str():
-                if cmp_class(container_class(status)) < cmp_class(container_class(run[field_name])):
-                    status_map[run_number] = run[field_name]
+            case (str(), dict()):
+                last_status, _ = status
+                if cmp_class(container_class(last_status)) < cmp_class(container_class(run[field_name])):
+                    status_map[run_number] = (run[field_name], run)
             case _:
                 status_map[run_number] = (run[field_name], run)
     return status_map
