@@ -21,6 +21,8 @@
     export let releaseId;
     export let groupId;
     let newBuildId;
+    let newTestId;
+    let shouldRestartFromParams = false;
 
     let currentState = "none";
     const dispatch = createEventDispatcher();
@@ -118,7 +120,13 @@
              */
             onExit: async function (event) {
                 newBuildId = event.detail.newBuildId;
-                setState(STATES.PARAM_FETCH, {});
+                newTestId = event.detail.newTestId;
+                if (buildNumber == -1) {
+                    shouldRestartFromParams = true;
+                    setState(STATES.BUILD_START, { buildParams: {}});
+                } else {
+                    setState(STATES.PARAM_FETCH, {});
+                }
             },
             args: {
                 result: undefined,
@@ -156,7 +164,7 @@
              */
             onExit: async function (event) {
                 console.log(event.detail);
-                setState(STATES.BUILD_START, { buildParams: event.detail.buildParams });
+                setState(STATES.BUILD_START, { buildParams: event.detail.buildParams, firstBuildRestart: shouldRestartFromParams });
             },
             args: {
                 pluginName: pluginName,
@@ -167,7 +175,7 @@
             component: BuildStartPlaceholder,
             onEnter: async function () {
                 try {
-                    let queueItem = await startJobBuild(this.args.buildParams);
+                    let queueItem = await startJobBuild(newBuildId, this.args.buildParams);
                     let event = new CustomEvent("exit", {detail: { queueItem }});
                     this.onExit(event);
                 } catch (error) {
@@ -196,9 +204,13 @@
              */
             onExit: async function (event) {
                 if (event.detail?.firstBuildRestart) {
-                    setState(STATES.BUILD_START, {firstBuildRestart: true});
+                    if (shouldRestartFromParams) {
+                        setState(STATES.PARAM_FETCH, { buildId: newBuildId, buildNumber: event.detail?.buildNumber ?? 1 });
+                    } else {
+                        setState(STATES.BUILD_START, {firstBuildRestart: true});
+                    }
                 } else {
-                    dispatch("cloneComplete");
+                    dispatch("cloneComplete", { testId: newTestId });
                 }
             },
             args: {
@@ -240,7 +252,7 @@
         STATE_MACHINE[currentState].onEnter();
     };
 
-    const fetchLastBuildParams = async function() {
+    const fetchLastBuildParams = async function(buildId, buildNumber) {
         const params = {
             buildId: buildId,
             buildNumber: Number.parseInt(buildNumber),

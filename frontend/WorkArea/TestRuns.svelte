@@ -18,6 +18,8 @@
     import JobConfigureModal from "./JobConfigureModal.svelte";
     import { applicationCurrentUser } from "../argus";
     import ResultsGraphs from "../TestRun/ResultsGraphs.svelte";
+    import { faCopy } from "@fortawesome/free-regular-svg-icons";
+    import JenkinsCloneModal from "../TestRun/Jenkins/JenkinsCloneModal.svelte";
 
     export let testId;
     export let listId = uuidv4();
@@ -116,6 +118,7 @@
     const dispatch = createEventDispatcher();
     let selectedPlugin = "";
     let configureRequested = false;
+    let cloneRequested = false;
     let open = true;
     let pluginFixed = false;
     let runsBody = undefined;
@@ -317,11 +320,12 @@
                 <div class="ms-auto flex-fill text-end">{timestampToISODate(runs[0].start_time)}</div>
                 <div class="mx-2">#{extractBuildNumber(runs[0])}</div>
             {/if}
-            {#if applicationCurrentUser.roles.some(v => ["ROLE_ADMIN", "ROLE_MANAGER"].includes(v)) || testInfo.release.name.includes("staging")}
-                <div>
-                    <button class="btn" on:click={(e) => {configureRequested = true; e.stopPropagation();}}><Fa icon={faGear}/></button>
+                <div class="btn-group">
+                    {#if applicationCurrentUser.roles.some(v => ["ROLE_ADMIN", "ROLE_MANAGER"].includes(v)) || testInfo.release.name.includes("staging")}
+                        <button class="btn" on:click={(e) => {configureRequested = true; e.stopPropagation();}}><Fa icon={faGear}/></button>
+                    {/if}
+                    <button class="btn" on:click={(e) => {cloneRequested = true; e.stopPropagation();}}><Fa icon={faCopy} /></button>
                 </div>
-            {/if}
             {#if removableRuns}
                 <div class="me-2" class:ms-1={runs.length > 0} class:ms-auto={runs.length == 0} >
                     <button
@@ -340,6 +344,19 @@
             buildId={testInfo.test.build_system_id} 
             on:configureCancel={() => (configureRequested = false)}
             on:settingsFinished={() => (configureRequested = false)}
+        />
+    {/if}
+    {#if cloneRequested}
+        <JenkinsCloneModal
+            buildId={testInfo.test.build_system_id} 
+            buildNumber={runs.length > 0 ? extractBuildNumber(runs[0]) : -1}
+            pluginName={testInfo.test.plugin_name}
+            testId={testInfo.test.id}
+            releaseId={testInfo.release.id}
+            groupId={testInfo.group.id}
+            oldTestName={testInfo.test.name}
+            on:cloneCancel={() => (cloneRequested = false)}
+            on:cloneComplete={(e) => { cloneRequested = false; dispatch("cloneSelect", { testId: e.detail.testId }); }}
         />
     {/if}
     <div class="collapse show bg-main shadow-sm rounded" id="collapse-{listId}">
@@ -404,6 +421,7 @@
                                     on:closeRun={handleTestRunClose}
                                     on:investigationStatusChange
                                     on:runStatusChange={fetchTestRuns}
+                                    on:cloneComplete={(e) => dispatch("cloneSelect", { testId: e.detail.testId })}
                                 />
                             {/if}
                         </div>
