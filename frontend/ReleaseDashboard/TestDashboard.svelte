@@ -38,6 +38,7 @@
     export let stats;
     let statRefreshInterval;
     let statsFetchedOnce = false;
+    let hideNotPlanned =  JSON.parse(window.localStorage.getItem(`releaseDashHideNotPlanned-${dashboardObject.id}`)) ?? false;
     let versionsIncludeNoVersion = JSON.parse(window.localStorage.getItem(`releaseDashIncludeNoVersions-${dashboardObject.id}`)) ?? (settings.versionsIncludeNoVersion || true);
     let versionsFilterExtraVersions = JSON.parse(window.localStorage.getItem(`releaseDashFilterExtraVersions-${dashboardObject.id}`)) ?? true;
     let users = {};
@@ -330,6 +331,16 @@
 </script>
 <div class="rounded bg-light-one shadow-sm p-2">
     <div class="text-end mb-2">
+        <button title="Hide not planned tests" class="btn btn-sm btn-outline-dark" on:click={() => {
+                hideNotPlanned = !hideNotPlanned;
+                saveCheckboxState(`releaseDashHideNotPlanned-${dashboardObject.id}`, hideNotPlanned);
+            }}>
+            {#if hideNotPlanned}
+                Hide not planned tests
+            {:else}
+                Show not planned tests
+            {/if}
+        </button>
         <button title="Refresh" class="btn btn-sm btn-outline-dark" on:click={handleDashboardRefreshClick}>
             <Fa icon={faRefresh}/>
         </button>
@@ -484,6 +495,7 @@
                             {#each Object.entries(sortTestStats(groupStats.tests)) as [testId, testStats] (testId)}
                                 <!-- svelte-ignore a11y-click-events-have-key-events -->
                                 <div
+                                    class:d-none={hideNotPlanned && testStats?.status == TestStatus.NOT_PLANNED}
                                     class:status-block-active={testStats.start_time != 0}
                                     class:investigating={testStats?.investigation_status == TestInvestigationStatus.IN_PROGRESS}
                                     class:should-be-investigated={testStats?.investigation_status == TestInvestigationStatus.NOT_INVESTIGATED && [TestStatus.FAILED, TestStatus.TEST_ERROR].includes(testStats?.status)}
