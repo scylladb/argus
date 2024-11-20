@@ -109,6 +109,9 @@
             parent="#accordionTestRuns"
             removableRuns={workAreaAttached}
             on:testRunRemove
+            on:cloneSelect={(e) => {
+                testRuns = [...testRuns, e.detail.testId];
+            }}
         />
     {/each}
 </div>

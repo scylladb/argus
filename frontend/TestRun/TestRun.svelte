@@ -304,7 +304,7 @@
                     id="nav-details-{runId}"
                     role="tabpanel"
                 >
-                    <TestRunInfo test_run={testRun} release={testInfo.release} group={testInfo.group} test={testInfo.test}/>
+                    <TestRunInfo test_run={testRun} release={testInfo.release} group={testInfo.group} test={testInfo.test} on:cloneComplete/>
                 </div>
                 {#if testRun.subtest_name && Object.values(Subtests).includes(testRun.subtest_name)}
                     <svelte:component this={SubtestTabBodyComponents[testRun.subtest_name]} {testRun}/>

@@ -21,7 +21,8 @@
         <div>
             <button class="btn btn-success w-100" on:click={() => {
                 dispatch("exit", {
-                    newBuildId: args.result.new_entity.build_system_id
+                    newBuildId: args.result.new_entity.build_system_id,
+                    newTestId: args.result.new_entity.id,
                 });
             }}>Next</button>
         </div>

@@ -14,12 +14,14 @@
     } from "../Common/RunUtils";
     import JenkinsBuildModal from "./Jenkins/JenkinsBuildModal.svelte";
     import JenkinsCloneModal from "./Jenkins/JenkinsCloneModal.svelte";
+    import { createEventDispatcher } from "svelte";
     export let test_run = {};
     export let release;
     export let group;
     export let test;
     let rebuildRequested = false;
     let cloneRequested = false;
+    const dispatch = createEventDispatcher();
 
     let cmd_hydraInvestigateShowMonitor = `hydra investigate show-monitor ${test_run.id}`;
     let cmd_hydraInvestigateShowLogs = `hydra investigate show-logs ${test_run.id}`;
@@ -250,7 +252,7 @@
                     groupId={group.id}
                     oldTestName={test.name}
                     on:cloneCancel={() => (cloneRequested = false)}
-                    on:cloneComplete={() => (cloneRequested = false)}
+                    on:cloneComplete={(e) => {cloneRequested = false; dispatch("cloneComplete", { testId: e.detail.testId }); }}
                 />
             {/if}
             <div class="btn-group">

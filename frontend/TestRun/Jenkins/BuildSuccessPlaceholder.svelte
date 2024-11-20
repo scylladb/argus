@@ -93,8 +93,16 @@
                     <div>
                         This is a first build, which will require a re-run to actually start.
                         <div class="my-2 p-2">
-                            <button class="w-100 btn btn-success" on:click={() => dispatch("exit", { firstBuildRestart: true })}>
+                            <button class="w-100 btn btn-success" on:click={() => dispatch("exit", { firstBuildRestart: true, buildNumber: buildInfo.number })}>
                                 <Fa icon={faArrowCircleRight} /> Start build #2
+                            </button>
+                        </div>
+                    </div>
+                {:else}
+                    <div>
+                        <div class="my-2 p-2">
+                            <button class="w-100 btn btn-success" on:click={() => dispatch("exit", { firstBuildRestart: false, buildNumber: buildInfo.number })}>
+                                <Fa icon={faArrowCircleRight} /> Exit and add the test to workspace
                             </button>
                         </div>
                     </div>
