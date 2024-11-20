@@ -367,14 +367,16 @@ class TestRunService:
                 "Authorization": f"token {token}",
             }
         )
-        if issue_request.status_code != 200:
-            raise Exception(f"Error getting issue state: Response: HTTP {issue_request.status_code}", issue_request.json())
+        if issue_request.status_code == 200:
+            issue_state: dict[str, Any] = issue_request.json()
 
-        issue_state: dict[str, Any] = issue_request.json()
-
-        new_issue.title = issue_state.get("title")
-        new_issue.url = issue_state.get("html_url")
-        new_issue.last_status = issue_state.get("state")
+            new_issue.title = issue_state.get("title")
+            new_issue.url = issue_state.get("html_url")
+            new_issue.last_status = issue_state.get("state")
+        else:
+            new_issue.title = f"{new_issue.owner}/{new_issue.repo}#{new_issue.issue_number}"
+            new_issue.url = issue_url
+            new_issue.last_status = "open"
         new_issue.save()
 
         EventService.create_run_event(
@@ -383,8 +385,8 @@ class TestRunService:
                 "message": "An issue titled \"{title}\" was added by {username}",
                 "username": g.user.username,
                 "url": issue_url,
-                "title": issue_state.get("title"),
-                "state": issue_state.get("state"),
+                "title": new_issue.title,
+                "state": new_issue.last_status,
             },
             user_id=g.user.id,
             run_id=new_issue.run_id,
@@ -395,8 +397,8 @@ class TestRunService:
 
         response = {
             **dict(list(new_issue.items())),
-            "title": issue_state.get("title"),
-            "state": issue_state.get("state"),
+            "title": new_issue.title,
+            "state": new_issue.last_status,
         }
 
         return response
