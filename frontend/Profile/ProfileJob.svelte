@@ -3,7 +3,7 @@
     import { fade } from "svelte/transition";
     import { sendMessage } from "../Stores/AlertStore";
     import { extractBuildNumber } from "../Common/RunUtils";
-    import { InvestigationBackgroundCSSClassMap, InvestigationStatusIcon, StatusBackgroundCSSClassMap } from "../Common/TestStatus";
+    import { InvestigationStatusIcon, StatusBackgroundCSSClassMap } from "../Common/TestStatus";
     import { faChevronCircleDown, faChevronCircleUp } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
     import TestRuns from "../WorkArea/TestRuns.svelte";
@@ -12,6 +12,7 @@
     export let jobs = [];
     const dispatch = createEventDispatcher();
     let testInfo;
+    let failedFetch = false;
     let investigating = false;
 
     const fetchTestInfo = async function () {
@@ -33,6 +34,7 @@
             } else {
                 sendMessage("error", "Error fetching user jobs\nUnknown error. Check console for details", "ProfileJobs::testInfo");
             }
+            failedFetch = true;
             console.log(e);
         }
     };
@@ -87,9 +89,16 @@
             {/if}
         </div>
     {:else}
-        JobId: {jobId} <span class="spinner-grow"></span> Loading...
-        <div>
-            Total Jobs: {jobs.length}
-        </div>
+        {#if failedFetch}
+            <div>
+                Unable to load test info. The test might have been removed.
+                <div>TestId: {jobId}</div>
+            </div>
+        {:else}
+            TestId: {jobId} <div><span class="spinner-grow"></span> Loading...</div>
+            <div>
+                Total Jobs: {jobs.length}
+            </div>
+        {/if}
     {/if}
 </div>
