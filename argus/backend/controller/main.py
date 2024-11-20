@@ -44,6 +44,9 @@ def runs(test_id: UUID):
 @login_required
 def get_run_by_plugin(plugin_name: str, run_id: UUID | str):
     run = TestRunService().get_run(plugin_name, run_id)
+    if not run:
+        flash(f"Run {plugin_name}/{run_id} not found.", "error")
+        return redirect(url_for("main.error", type=404))
     return render_template("run_view_by_plugin.html.j2", run=run)
 
 
