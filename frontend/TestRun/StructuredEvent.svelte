@@ -82,6 +82,10 @@
             <div class="ms-2 mb-2 rounded px-2 bg-info fs-6 justify-self-start">{event.fields.target_node}</div>
         {/if}
         <div class="w-100"></div>
+        {#if event.fields.known_issue}
+            <div class="ms-2 mb-2 rounded px-2 bg-info fs-6 justify-self-start">Known issue: <a href="{event.fields.known_issue}" class="link-dark">{event.fields.known_issue}</a></div>
+        {/if}
+        <div class="w-100"></div>
         {#if event.fields.nemesis_name}
             <div class="ms-2 mb-2 rounded px-2 bg-dark text-light fs-6 justify-self-start">Nemesis: {event.fields.nemesis_name}</div>
         {/if}
