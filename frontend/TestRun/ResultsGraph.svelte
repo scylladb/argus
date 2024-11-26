@@ -1,7 +1,9 @@
 <script>
     import {Chart, registerables, Tooltip} from "chart.js";
-    import {createEventDispatcher, onMount} from "svelte";
+    import {createEventDispatcher, onDestroy, onMount} from "svelte";
     import "chartjs-adapter-date-fns";
+    import {faExpand} from "@fortawesome/free-solid-svg-icons";
+    import Fa from "svelte-fa";
 
     export let graph = {};
     export let ticks = {};
@@ -11,6 +13,32 @@
     export let height = 300;
     export let releasesFilters = {};
     let chart;
+    let showModal = false;
+    let modalChart;
+
+    function openModal() {
+        showModal = true;
+        window.addEventListener('keydown', handleKeydown);
+    }
+
+    function closeModal() {
+        showModal = false;
+        if (modalChart) {
+            modalChart.destroy();
+        }
+        window.removeEventListener('keydown', handleKeydown);
+    }
+
+    function handleKeydown(event) {
+        if (event.key === 'Escape') {
+            closeModal();
+        }
+    }
+
+    onDestroy(() => {
+        window.removeEventListener('keydown', handleKeydown);
+    });
+
     const ticksGapPx = 40;
     const dispatch = createEventDispatcher();
     Tooltip.positioners.above = function (elements, eventPosition) {
@@ -125,12 +153,105 @@
             document.getElementById(`graph-${test_id}-${index}`),
             {type: "scatter", data: graph.data, options: {...graph.options, ...actions}}
         );
+
         return () => {
             chart.destroy();
+            if (modalChart) {
+                modalChart.destroy();
+            }
             Chart.unregister(...registerables);
+            window.removeEventListener('keydown', handleKeydown);
         };
     });
 
+    $: if (showModal) {
+        setTimeout(() => {
+            const modalCanvas = document.getElementById(`modal-graph-${test_id}-${index}`);
+            if (modalCanvas) {
+                modalChart = new Chart(
+                    modalCanvas,
+                    {
+                        type: "scatter",
+                        data: graph.data,
+                        options: {...graph.options, responsive: true, maintainAspectRatio: false}
+                    }
+                );
+            }
+        }, 0);
+    }
+
 </script>
 
-<canvas id="graph-{test_id}-{index}" width="{width}" height="{height}"></canvas>
+<div class="graph-container">
+    <button class="enlarge-btn" on:click={openModal}>
+        <Fa icon={faExpand}/>
+    </button>
+    <canvas id="graph-{test_id}-{index}" width="{width}" height="{height}"></canvas>
+</div>
+
+{#if showModal}
+    <div class="modal" on:click={closeModal}>
+        <div class="modal-content" on:click|stopPropagation>
+            <button class="close-btn" on:click={closeModal}>&times;</button>
+            <canvas id="modal-graph-{test_id}-{index}"></canvas>
+        </div>
+    </div>
+{/if}
+
+<style>
+    .graph-container {
+        position: relative;
+    }
+
+    .enlarge-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: #888;
+        font-size: 1.2em;
+    }
+
+    .enlarge-btn:hover {
+        color: #333;
+    }
+
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.7);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
+
+    .modal-content {
+        background-color: white;
+        padding: 20px;
+        border-radius: 5px;
+        width: 90%;
+        height: 90%;
+        position: relative;
+    }
+
+    .close-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: none;
+        border: none;
+        font-size: 1.5em;
+        cursor: pointer;
+    }
+
+    canvas {
+        max-width: 100%;
+        max-height: 100%;
+    }
+</style>
