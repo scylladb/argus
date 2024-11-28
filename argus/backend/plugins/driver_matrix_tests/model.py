@@ -8,6 +8,7 @@ from typing import Literal, TypedDict
 from uuid import UUID
 from xml.etree import ElementTree
 from cassandra.cqlengine import columns
+from cassandra.cqlengine.models import Model
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import ArgusRelease
 from argus.backend.plugins.core import PluginModelBase
@@ -412,7 +413,10 @@ class DriverTestRun(PluginModelBase):
 
     def submit_product_version(self, version: str):
         self.scylla_version = version
-        new_assignee = self.get_assignment(version)
+        try:
+            new_assignee = self.get_assignment(version)
+        except Model.DoesNotExist:
+            new_assignee = None
         if new_assignee:
             self.assignee = new_assignee
 
