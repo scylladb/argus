@@ -216,7 +216,10 @@ class SCTTestRun(PluginModelBase):
 
     def submit_product_version(self, version: str):
         self.scylla_version = version
-        new_assignee = self.get_assignment(version)
+        try:
+            new_assignee = self.get_assignment(version)
+        except Model.DoesNotExist:
+            new_assignee = None
         if new_assignee:
             self.assignee = new_assignee
 
