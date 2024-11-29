@@ -37,15 +37,18 @@ class SampleCell:
 
 
 def results_to_dict(results):
-    return {
-        cell['column']: {
-            cell['row']: {
-                'value': cell['value'] if cell['value'] is not None else cell['value_text'],
-                'status': cell['status']
+    actual_cells = {}
+    table_data = results['Test Table Name']['table_data']
+
+    for row_key, row_data in table_data.items():
+        for col_name, col_data in row_data.items():
+            if col_name not in actual_cells:
+                actual_cells[col_name] = {}
+            actual_cells[col_name][row_key] = {
+                'value': col_data['value'],
+                'status': col_data['status']
             }
-        }
-        for cell in results['cells']
-    }
+    return actual_cells
 
 
 def test_can_track_validation_rules_changes(fake_test, client_service, results_service, release, group):

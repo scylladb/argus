@@ -3,7 +3,10 @@ from uuid import uuid4
 
 import pytest
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ColumnMetadata
+from argus.backend.plugins.sct.testrun import SCTTestRun
+from argus.backend.plugins.sct.udt import PackageVersion
 from argus.backend.service.results_service import ResultsService
+
 
 @pytest.fixture
 def setup_data(argus_db):
@@ -70,6 +73,7 @@ def test_results_service_should_return_results_within_date_range(setup_data):
     assert len(filtered_data) == 1
     assert filtered_data[0].value == 150.0
 
+
 def test_results_service_should_return_no_results_outside_date_range(setup_data):
     test_id, table, data = setup_data
     service = ResultsService()
@@ -87,6 +91,7 @@ def test_results_service_should_return_no_results_outside_date_range(setup_data)
 
     assert len(filtered_data) == 0
 
+
 def test_results_service_should_return_all_results_with_no_date_range(setup_data):
     test_id, table, data = setup_data
     service = ResultsService()
@@ -98,3 +103,70 @@ def test_results_service_should_return_all_results_with_no_date_range(setup_data
     )
 
     assert len(filtered_data) == 3
+
+
+def test_get_tests_by_version_groups_runs_correctly(argus_db):
+    test_id1 = uuid4()
+    test_id2 = uuid4()
+    run_id1 = uuid4()
+    run_id2 = uuid4()
+    run_id3 = uuid4()
+    run_id4 = uuid4()
+    pkg_v4_0 = PackageVersion(name='scylla', version='4.0', date='2021-01-01', revision_id='', build_id='')
+    pkg_v4_1 = PackageVersion(name='scylla', version='4.1', date='2021-02-01', revision_id='', build_id='')
+
+    SCTTestRun(
+        id=run_id1,
+        build_id='build_id1',
+        test_id=test_id1,
+        test_method='test_method1',  # Changed to 'test_method'
+        investigation_status='',
+        packages=[pkg_v4_0]
+    ).save()
+    SCTTestRun(
+        id=run_id2,
+        build_id='build_id1',
+        test_id=test_id1,
+        test_method='test_method2',  # Changed to 'test_method'
+        investigation_status='ignored',
+        packages=[pkg_v4_0]
+    ).save()
+    SCTTestRun(
+        id=run_id3,
+        build_id='build_id1',
+        test_id=test_id2,
+        test_method='test_method1',  # Changed to 'test_method'
+        investigation_status='',
+        packages=[pkg_v4_0]
+    ).save()
+    SCTTestRun(
+        id=run_id4,
+        build_id='build_id1',
+        test_id=test_id2,
+        test_method='test_method1',  # Changed to 'test_method'
+        investigation_status='',
+        packages=[pkg_v4_1]
+    ).save()
+
+    sut_package_name = 'scylla'
+    test_ids = [test_id1, test_id2]
+    service = ResultsService()
+    service._exclude_disabled_tests = lambda x: x
+    result = service.get_tests_by_version(sut_package_name, test_ids)
+
+    expected_result = {'test_info': {str(test_id1): {'build_id': 'build_id1',
+                                                     'name': None},
+                                     str(test_id2): {'build_id': 'build_id1',
+                                                     'name': None}},
+                       'versions': {'4.0-2021-01-01-': {
+                           str(test_id1): {'test_method1': {'run_id': str(run_id1),
+                                                            'started_by': None,
+                                                            'status': 'created'}},
+                           str(test_id2): {'test_method1': {'run_id': str(run_id3),
+                                                            'started_by': None,
+                                                            'status': 'created'}}},
+                           '4.1-2021-02-01-': {str(test_id2): {
+                               'test_method1': {'run_id': str(run_id4),
+                                                'started_by': None,
+                                                'status': 'created'}}}}}
+    assert result == expected_result

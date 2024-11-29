@@ -6,6 +6,7 @@ from flask import (
     request,
 )
 from argus.backend.controller.views_widgets.highlights import bp as highlights_bp
+from argus.backend.controller.views_widgets.summary import bp as summary_bp
 from argus.backend.error_handlers import handle_api_exception
 from argus.backend.models.web import User
 from argus.backend.service.stats import ViewStatsCollector
@@ -16,6 +17,7 @@ from argus.backend.util.common import get_payload
 bp = Blueprint('view_api', __name__, url_prefix='/views')
 LOGGER = logging.getLogger(__name__)
 bp.register_blueprint(highlights_bp)
+bp.register_blueprint(summary_bp)
 bp.register_error_handler(Exception, handle_api_exception)
 
 
