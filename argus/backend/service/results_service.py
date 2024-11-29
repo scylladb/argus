@@ -108,33 +108,33 @@ default_options = {
 }
 
 colors = [
-    'rgba(220, 53, 69, 1.0)',    # Soft Red
-    'rgba(40, 167, 69, 1.0)',    # Soft Green
-    'rgba(0, 123, 255, 1.0)',    # Soft Blue
-    'rgba(23, 162, 184, 1.0)',   # Soft Cyan
+    'rgba(220, 53, 69, 1.0)',  # Soft Red
+    'rgba(40, 167, 69, 1.0)',  # Soft Green
+    'rgba(0, 123, 255, 1.0)',  # Soft Blue
+    'rgba(23, 162, 184, 1.0)',  # Soft Cyan
     'rgba(108, 117, 125, 1.0)',  # Soft Magenta
-    'rgba(255, 193, 7, 1.0)',    # Soft Yellow
-    'rgba(255, 133, 27, 1.0)',   # Soft Orange
-    'rgba(102, 16, 242, 1.0)',   # Soft Purple
+    'rgba(255, 193, 7, 1.0)',  # Soft Yellow
+    'rgba(255, 133, 27, 1.0)',  # Soft Orange
+    'rgba(102, 16, 242, 1.0)',  # Soft Purple
     'rgba(111, 207, 151, 1.0)',  # Soft Lime
     'rgba(255, 182, 193, 1.0)',  # Soft Pink
-    'rgba(32, 201, 151, 1.0)',   # Soft Teal
-    'rgba(134, 83, 78, 1.0)',    # Soft Brown
-    'rgba(0, 84, 153, 1.0)',     # Soft Navy
-    'rgba(128, 128, 0, 1.0)',    # Soft Olive
-    'rgba(255, 159, 80, 1.0)'    # Soft Coral
+    'rgba(32, 201, 151, 1.0)',  # Soft Teal
+    'rgba(134, 83, 78, 1.0)',  # Soft Brown
+    'rgba(0, 84, 153, 1.0)',  # Soft Navy
+    'rgba(128, 128, 0, 1.0)',  # Soft Olive
+    'rgba(255, 159, 80, 1.0)'  # Soft Coral
 ]
 shapes = ["circle", "triangle", "rect", "star", "dash", "crossRot", "line"]
 
 
 def get_sorted_data_for_column_and_row(data: List[ArgusGenericResultData], column: str, row: str,
                                        runs_details: RunsDetails, main_package: str) -> List[Dict[str, Any]]:
-    points =  sorted([{"x": entry.sut_timestamp.strftime('%Y-%m-%dT%H:%M:%SZ'),
-                    "y": entry.value,
-                    "id": entry.run_id,
-                    }
-                   for entry in data if entry.column == column and entry.row == row],
-                  key=lambda point: point["x"])
+    points = sorted([{"x": entry.sut_timestamp.strftime('%Y-%m-%dT%H:%M:%SZ'),
+                      "y": entry.value,
+                      "id": entry.run_id,
+                      }
+                     for entry in data if entry.column == column and entry.row == row],
+                    key=lambda point: point["x"])
     if not points:
         return points
     packages = runs_details.packages
@@ -158,6 +158,7 @@ def get_sorted_data_for_column_and_row(data: List[ArgusGenericResultData], colum
         point['dep_change'] = mark_dependency_change
         prev_versions = current_versions
     return points
+
 
 def get_min_max_y(datasets: List[Dict[str, Any]]) -> (float, float):
     """0.5 - 1.5 of min/max of 50% results"""
@@ -216,7 +217,7 @@ def calculate_limits(points: List[dict], best_results: List, validation_rules_li
 
 def create_datasets_for_column(table: ArgusGenericResultMetadata, data: list[ArgusGenericResultData],
                                best_results: dict[str, List[BestResult]], releases_map: ReleasesMap, column: ColumnMetadata,
-                               runs_details: RunsDetails, main_package:str) -> List[Dict]:
+                               runs_details: RunsDetails, main_package: str) -> List[Dict]:
     """
     Create datasets (series) for a specific column, splitting by version and showing limit lines.
     """
@@ -325,7 +326,6 @@ def calculate_graph_ticks(graphs: List[Dict]) -> dict[str, str]:
     return {"min": min_x[:10], "max": max_x[:10]}
 
 
-
 def _identify_most_changed_package(packages_list: list[PackageVersion]) -> str:
     version_date_changes: dict[str, set[tuple[str, str]]] = defaultdict(set)
 
@@ -420,27 +420,73 @@ class ResultsService:
         table_meta = self.cluster.session.execute(query=query, parameters=(test_id, table_name))
         return [ArgusGenericResultMetadata(**table) for table in table_meta][0] if table_meta else None
 
-    def get_run_results(self, test_id: UUID, run_id: UUID) -> list[dict]:
+    def get_run_results(self, test_id: UUID, run_id: UUID, key_metrics: list[str] | None = None) -> list:
         query_fields = ["column", "row", "value", "value_text", "status"]
-        raw_query = (f"SELECT {','.join(query_fields)},WRITETIME(status) as ordering"
-                     f" FROM generic_result_data_v1 WHERE test_id = ? AND run_id = ? AND name = ?")
+        raw_query = (f"SELECT {','.join(query_fields)}, WRITETIME(status) as ordering "
+                     f"FROM generic_result_data_v1 WHERE test_id = ? AND run_id = ? AND name = ?")
         query = self.cluster.prepare(raw_query)
         tables_meta = self._get_tables_metadata(test_id=test_id)
-        tables = []
+        table_entries = []
         for table in tables_meta:
             cells = self.cluster.session.execute(query=query, parameters=(test_id, run_id, table.name))
+            cells = [dict(cell.items()) for cell in cells]
+            if key_metrics:
+                cells = [cell for cell in cells if cell['column'] in key_metrics]
             if not cells:
                 continue
-            cells = [dict(cell.items()) for cell in cells]
-            tables.append({'meta': {
-                'name': table.name,
-                'description': table.description,
-                'columns_meta': table.columns_meta,
-                'rows_meta': table.rows_meta,
-            },
-                'cells': [{k: v for k, v in cell.items() if k in query_fields} for cell in cells],
-                'order': min([cell['ordering'] for cell in cells] or [0])})
-        return sorted(tables, key=lambda x: x['order'])
+
+            table_name = table.name
+            table_description = table.description
+            column_types_map = {col_meta.name: col_meta.type for col_meta in table.columns_meta}
+            column_names = [col_meta.name for col_meta in table.columns_meta]
+
+            table_data = {
+                'description': table_description,
+                'table_data': {},
+                'columns': [],
+                'rows': [],
+                'table_status': 'PASS',
+            }
+
+            present_columns = {cell['column'] for cell in cells}
+            present_rows = {cell['row'] for cell in cells}
+
+            # Filter columns and rows based on the presence in cells
+            table_data['columns'] = [
+                col_meta for col_meta in table.columns_meta if col_meta.name in present_columns
+            ]
+            table_data['rows'] = [
+                row for row in table.rows_meta if row in present_rows
+            ]
+
+            for row in table_data['rows']:
+                table_data['table_data'][row] = {}
+
+            for cell in cells:
+                column = cell['column']
+                row = cell['row']
+                value = cell.get('value') or cell.get('value_text')
+                status = cell['status']
+
+                if column in column_names and row in table_data['rows']:
+                    table_data['table_data'][row][column] = {
+                        'value': value,
+                        'status': status,
+                        'type': column_types_map.get(column)
+                    }
+
+                if status not in ["UNSET", "PASS"] and table_data['table_status'] != "ERROR":
+                    table_data['table_status'] = status
+
+            table_entries.append({
+                'table_name': table_name,
+                'table_data': table_data,
+                'ordering': cells[0]['ordering']
+            })
+
+        table_entries.sort(key=lambda x: x['ordering'])
+
+        return [{entry['table_name']: entry['table_data']} for entry in table_entries]
 
     def get_test_graphs(self, test_id: UUID, start_date: datetime | None = None, end_date: datetime | None = None):
         runs_details = self._get_runs_details(test_id)
@@ -455,7 +501,8 @@ class ResultsService:
             best_results = self.get_best_results(test_id=test_id, name=table.name)
             main_package = _identify_most_changed_package([pkg for sublist in runs_details.packages.values() for pkg in sublist])
             releases_map = _split_results_by_release(runs_details.packages, main_package=main_package)
-            graphs.extend(create_chartjs(table, data, best_results, releases_map=releases_map, runs_details=runs_details, main_package=main_package))
+            graphs.extend(
+                create_chartjs(table, data, best_results, releases_map=releases_map, runs_details=runs_details, main_package=main_package))
             releases_filters.update(releases_map.keys())
         ticks = calculate_graph_ticks(graphs)
         return graphs, ticks, list(releases_filters)
@@ -499,3 +546,67 @@ class ResultsService:
                 ArgusBestResultData(test_id=test_id, name=table_name, key=key, value=cell.value, result_date=result_date,
                                     run_id=run_id).save()
         return best_results
+
+    def _exclude_disabled_tests(self, test_ids: list[UUID]) -> list[UUID]:
+        is_enabled_query = self.cluster.prepare("SELECT id, enabled FROM argus_test_v2 WHERE id = ?")
+        return [test_id for test_id in test_ids if self.cluster.session.execute(is_enabled_query, parameters=(test_id,)).one()['enabled']]
+
+    def get_tests_by_version(self, sut_package_name: str, test_ids: list[UUID]) -> dict:
+        """
+        Get the latest run details for each test method, excluding ignored runs.
+        Returns:
+            {
+                'versions': {version: {test_id: {test_method: {'run_id': run_id, 'status': status}}}},
+                'test_info': {test_id: {'name': test_name, 'build_id': build_id}}
+            }
+        Currently works only with scylla-cluster-tests plugin (due to test_method field requirement)
+        """
+        plugin = TestRunService().get_plugin("scylla-cluster-tests")
+        result = defaultdict(lambda: defaultdict(dict))
+        test_info = {}
+        test_ids = self._exclude_disabled_tests(test_ids)
+        for test_id in test_ids:
+            runs_details_query = self.cluster.prepare(
+                f"""
+                SELECT id, status, investigation_status, test_name, build_id, packages, test_method, started_by
+                FROM {plugin.model.table_name()}
+                WHERE test_id = ? LIMIT 10
+                """
+            )
+            rows = self.cluster.session.execute(runs_details_query, parameters=(test_id,)).all()
+            for row in rows:
+                if row["investigation_status"].lower() == "ignored":
+                    continue
+                packages = row['packages']
+                test_method = row['test_method']
+                if not test_method:
+                    continue
+                sut_version = next(
+                    (f"{pkg.version}-{pkg.date}-{pkg.revision_id}" for pkg in packages if pkg.name == f"{sut_package_name}-upgraded"),
+                    None
+                ) or next(
+                    (f"{pkg.version}-{pkg.date}-{pkg.revision_id}" for pkg in packages if pkg.name.startswith(sut_package_name)),
+                    None
+                )
+
+                if sut_version is None:
+                    continue
+                method_name = test_method.rsplit('.', 1)[-1]
+
+                if method_name not in result[sut_version][str(test_id)]:
+                    result[sut_version][str(test_id)][method_name] = {
+                        'run_id': str(row['id']),
+                        'status': row['status'],
+                        'started_by': row['started_by']
+                    }
+
+                if str(test_id) not in test_info:
+                    test_info[str(test_id)] = {
+                        'name': row['test_name'],
+                        'build_id': row['build_id']
+                    }
+
+        return {
+            'versions': {version: dict(tests) for version, tests in result.items()},
+            'test_info': test_info
+        }
