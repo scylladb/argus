@@ -1,153 +1,17 @@
 <script>
     import {onMount} from "svelte";
-    import {ResultCellStatusStyleMap} from "../Common/TestStatus";
-    import {faMarkdown} from "@fortawesome/free-brands-svg-icons";
-    import {sendMessage} from "../Stores/AlertStore.js";
-    import Fa from "svelte-fa";
     import ScreenshotModal from "./Components/ScreenshotModal.svelte";
-    import Cell from "./Components/Cell.svelte";
+    import ResultTable from "./Components/ResultTable.svelte";
 
     let fetching = true;
     export let id = "";
     export let test_id = "";
-    let results = [];
+    let results = {};
     let filters = [];
     let selectedFilters = [];
-    let filteredTables = [];
+    let filteredTables = {};
     let selectedScreenshot = "";
     let showFilters = false;
-
-    const tableStyleToColor = {
-        "table-success": "green",
-        "table-danger": "red",
-        "table-warning": "yellow",
-        "table-secondary": "gray",
-    };
-
-    function styleToColor(classList) {
-        const classes = classList.split(" ");
-        for (let className of classes) {
-            if (className.startsWith("table-") && tableStyleToColor[className]) {
-                return tableStyleToColor[className];
-            }
-        }
-        return "";
-    }
-
-    async function copyResultTableAsMarkdown(event) {
-        const table = event.currentTarget.closest("table");
-        let markdown = "";
-
-        if (table) {
-            const rows = Array.from(table.querySelectorAll("tr"));
-            rows.forEach((row, rowIndex) => {
-                const cells = Array.from(row.querySelectorAll("th, td"));
-                const markdownRow = cells.map(cell => {
-                    let cellText = cell.innerText.trim();
-                    let link = "";
-
-                    const linkElement = cell.querySelector("a");
-                    const buttonElement = cell.querySelector("button");
-
-                    if (linkElement) {
-                        link = linkElement.href;
-                    } else if (buttonElement) {
-                        link = buttonElement.getAttribute("data-link");
-                    }
-
-                    // Escape all '#' characters to prevent issue linking in GitHub
-                    cellText = cellText.replace(/#/g, "#&#8203;");
-
-                    if (link) {
-                        cellText = `[${cellText}](${link})`;
-                    }
-
-                    const color = styleToColor(cell.className);
-                    if (color) {
-                        cellText = `$$\{\\color{${color}}${cellText}}$$`;
-                    }
-
-                    return cellText;
-                }).join(" | ");
-                markdown += `| ${markdownRow} |\n`;
-
-                if (rowIndex === 0) {
-                    const separator = cells.map(() => "---").join(" | ");
-                    markdown += `| ${separator} |\n`;
-                }
-            });
-
-            try {
-                await navigator.clipboard.writeText(markdown);
-                sendMessage("info", "Table copied to clipboard in Markdown format!");
-            } catch (err) {
-                sendMessage("error", "Failed to copy: ", err);
-            }
-        }
-    }
-
-    const transformToTable = (tableData) => {
-        // Transform table data to a more usable format for rendering: {table_name: {description, table_data, columns, rows}}
-        // where table_data: {row_name: {column_name: {value, status, type}}}
-        let transformedData = {};
-
-        tableData.forEach((table) => {
-            const tableName = table.meta.name;
-            const tableDescription = table.meta.description;
-            const columnTypesMap = table.meta.columns_meta.reduce((map, colMeta) => {
-                map[colMeta.name] = colMeta.type;
-                return map;
-            }, {});
-            const columnNames = table.meta.columns_meta.map(colMeta => colMeta.name);
-
-            transformedData[tableName] = {
-                description: tableDescription,
-                table_data: {},
-                columns: [],
-                rows: []
-            };
-
-            let presentColumns = new Set();
-            let presentRows = new Set();
-
-            // Filter out non-existent rows and columns while keeping order
-            table.cells.forEach(cell => {
-                presentColumns.add(cell.column);
-                presentRows.add(cell.row);
-            });
-
-            transformedData[tableName].columns = table.meta.columns_meta.filter(colMeta => presentColumns.has(colMeta.name));
-            transformedData[tableName].rows = table.meta.rows_meta.filter(row => presentRows.has(row));
-
-            // building data structure (table_data)
-            transformedData[tableName].rows.forEach(row => {
-                transformedData[tableName].table_data[row] = {};
-            });
-            let table_status = "PASS";
-            table.cells.forEach(cell => {
-                const column = cell.column;
-                const row = cell.row;
-                const value = cell.value || cell.value_text;
-                const status = cell.status;
-
-                // Only add the cell if the column and row are present in the table (in metadata and in cells)
-                if (columnNames.includes(column) && transformedData[tableName]["rows"].includes(row)) {
-                    transformedData[tableName].table_data[row][column] = {
-                        value: value,
-                        status: status,
-                        type: columnTypesMap[column]
-                    };
-                }
-                if (status !== "UNSET" && status !== "PASS" && table_status !== "ERROR") {
-                    table_status = status;
-                }
-            });
-            transformedData[tableName].table_status = table_status;
-        });
-
-        console.log(transformedData);
-        return transformedData;
-    };
 
     const fetchResults = async function () {
         fetching = true;
@@ -156,7 +20,11 @@
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
                 fetching = false;
-                results = transformToTable(apiJson.tables);
+                results = apiJson.tables.reduce((acc, item) => {
+                    const table_name = Object.keys(item)[0];
+                    acc[table_name] = item[table_name];
+                    return acc;
+                }, {});
                 extractFilters();
                 filterTables();
             }
@@ -187,10 +55,9 @@
             }))
             .filter(entry => entry.items.length > 1);  // Filter out filters with only one item
 
-        // show filters only if any group contains at least 2 filters
+        // Show filters only if any group contains at least 2 filters
         showFilters = filters.some(entry => entry.items.length >= 2);
     };
-
 
     const toggleFilter = (filterName, level) => {
         // Toggle filter by level - one filter per level can be applied
@@ -211,12 +78,10 @@
                 const parts = title.split("-").map(part => part.trim());
                 return selectedFilters.every(filter => parts.includes(filter.name));
             });
-        filteredTables = Object.keys(results)
-            .filter(key => filteredTableNames.includes(key))
-            .reduce((obj, key) => {
-                obj[key] = results[key];
-                return obj;
-            }, {});
+        filteredTables = filteredTableNames.reduce((obj, key) => {
+            obj[key] = results[key];
+            return obj;
+        }, {});
     };
 
     const getFilterColor = (level) => {
@@ -227,57 +92,13 @@
     onMount(() => {
         fetchResults();
     });
-
-
 </script>
 
 <style>
-    th, td {
-        text-align: center;
-    }
-
-    table {
-        width: auto;
-        table-layout: auto;
-    }
-
-    .unit {
-        font-size: 0.8em;
-        color: gray;
-        vertical-align: top;
-    }
-
-    /* Custom styles for improved margins and vertical line */
     ul.result-list {
         list-style-type: none;
         padding: 0;
         margin: 0;
-    }
-
-    li.result-item {
-        margin-bottom: 2rem; /* Space between result tables */
-        display: flex;
-    }
-
-    li.result-item::before {
-        content: "";
-        display: block;
-        width: 5px;
-        background-color: #ddd; /* Color of the vertical line */
-        margin-right: 1rem;
-        border-radius: 2px;
-    }
-
-    li.result-item.PASS::before {
-        background-color: var(--bs-success) !important;
-    }
-
-    li.result-item.ERROR::before {
-        background-color: var(--bs-danger) !important;
-    }
-
-    .result-content {
-        flex-grow: 1;
     }
 
     .filters-container {
@@ -323,44 +144,11 @@
         </div>
         <ul class="result-list">
             {#each Object.entries(filteredTables) as [table_name, result]}
-                <li class="result-item {result.table_status}">
-                    <div class="result-content">
-                        <h4>{table_name}</h4>
-                        <span>{result.description}</span>
-                        <table class="table table-bordered">
-                            <thead class="thead-dark">
-                            <tr>
-                                <th>
-                                    <button class="btn btn-outline-success" on:click={copyResultTableAsMarkdown}>
-                                        <Fa icon={faMarkdown}/>
-                                    </button>
-                                </th>
-                                {#each result.columns as col}
-                                    <th>{col.name} <span class="unit">{col.unit ? `[${col.unit}]` : ''}</span></th>
-                                {/each}
-                            </tr>
-                            </thead>
-                            <tbody>
-                            {#each result.rows as row}
-                                <tr>
-                                    <td>{row}</td>
-                                    {#each result.columns as col}
-                                        {#key result.table_data[row][col.name]}
-                                            <td class="{ResultCellStatusStyleMap[result.table_data[row][col.name]?.status || 'NULL']}">
-                                                <Cell cell={result.table_data[row][col.name]} bind:selectedScreenshot/>
-                                            </td>
-                                        {/key}
-                                    {/each}
-                                </tr>
-                            {/each}
-                            </tbody>
-                        </table>
-                    </div>
-                </li>
+                <ResultTable table_name={table_name} result={result} bind:selectedScreenshot/>
             {/each}
         </ul>
     </div>
-    <ScreenshotModal bind:selectedScreenshot />
+    <ScreenshotModal bind:selectedScreenshot/>
 {:else}
     <div class="mb-2 text-center p-2">
         <span class="spinner-border spinner-border-sm"></span> Loading results...

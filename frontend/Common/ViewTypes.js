@@ -9,6 +9,7 @@ import {TestStatus} from "./TestStatus";
 import {subUnderscores, titleCase} from "./TextUtils";
 import ViewHighlights from "../Views/Widgets/ViewHighlights/ViewHighlights.svelte";
 import IntegerValue from "../Views/WidgetSettingTypes/IntegerValue.svelte";
+import SummaryWidget from "../Views/Widgets/SummaryWidget/SummaryWidget.svelte";
 
 export class Widget {
     constructor(position = -1, type = "testDashboard", settings = {}) {
@@ -104,6 +105,18 @@ export const WIDGET_TYPES = {
                 default: 0,
                 help: "Index of the highlight (for support multiple highlight widgets in one view)",
                 displayName: "Index"
+            }
+        },
+    },
+    summary: {
+        type: SummaryWidget,
+        friendlyName: "Per version summary for specified release",
+        settingDefinitions: {
+            packageName: {
+                type: StringValue,
+                default: "scylla-server",
+                help: "Package name (from Packages tab) to monitor",
+                displayName: "Package Name"
             }
         },
     },
