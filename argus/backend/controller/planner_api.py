@@ -176,3 +176,16 @@ def resolve_plan_entities(plan_id: str):
         "status": "ok",
         "response": result,
     }
+
+@bp.route("/plan/trigger", methods=["POST"])
+@api_login_required
+def trigger_jobs_for_plans():
+
+    payload = get_payload(request)
+    service = PlanningService()
+    result = service.trigger_jobs(payload)
+
+    return {
+        "status": "ok",
+        "response": result,
+    }
