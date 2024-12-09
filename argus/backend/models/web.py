@@ -178,6 +178,7 @@ class ArgusTest(Model):
     enabled = columns.Boolean(default=lambda: True)
     build_system_url = columns.Text()
     plugin_name = columns.Text()
+    plugin_subtype = columns.Text()
 
     def __eq__(self, other):
         if isinstance(other, ArgusTest):
