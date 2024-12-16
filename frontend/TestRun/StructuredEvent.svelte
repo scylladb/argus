@@ -1,6 +1,7 @@
 <script>
     import { faCopy, faDotCircle } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
+    import { sendMessage } from "../Stores/AlertStore";
 
 
     export let event;
@@ -38,6 +39,7 @@
                 class="btn btn-light"
                 on:click={() => {
                     navigator.clipboard.writeText(event.eventText);
+                    sendMessage("success", "Event text has been copied to your clipboard");
                 }}
             >
                 <Fa icon={faCopy} />

@@ -9,6 +9,7 @@
         faCopy,
         faPlay,
     } from "@fortawesome/free-solid-svg-icons";
+    import { sendMessage } from "../Stores/AlertStore";
     let sortHeaders = {
         creationTime: ["instance_info", "creation_time"],
         terminationTime: ["instance_info", "termination_time"],
@@ -32,6 +33,9 @@
         stopped: "table-",
         terminated: "table-danger",
     };
+
+    let regions = "SCT_REGION_NAME= SCT_GCE_DATACENTER= SCT_AZURE_REGION_NAME= ";
+    const CMD_CLEAN_RESOURCES = `${regions} hydra clean-resources --backend ${backend} --test-id ${run_id}`;
 
     const filterResource = function (resource) {
         let resourceAsString = `${resource.name}${resource.state}${
@@ -84,10 +88,10 @@
             type="button"
             class="btn btn-outline-success me-2"
             on:click={() => {
-                let regions = "SCT_REGION_NAME= SCT_GCE_DATACENTER= SCT_AZURE_REGION_NAME= ";
                 navigator.clipboard.writeText(
-                    `${regions} hydra clean-resources --backend ${backend} --test-id ${run_id}`
+                    CMD_CLEAN_RESOURCES
                 );
+                sendMessage("success", `\`${CMD_CLEAN_RESOURCES}\` has been copied to your clipboard`);
             }}>
             <Fa icon={faCopy} /> Hydra Clean Resources
         </button>
