@@ -74,15 +74,18 @@ class SCTService:
 
 
     @staticmethod
-    def set_sct_runner(run_id: str, public_ip: str, private_ip: str, region: str, backend: str):
+    def set_sct_runner(run_id: str, public_ip: str, private_ip: str, region: str, backend: str, name: str = None):
         try:
             run: SCTTestRun = SCTTestRun.get(id=run_id)
-            run.sct_runner_host = CloudInstanceDetails(
+            details = CloudInstanceDetails(
                 public_ip=public_ip,
                 private_ip=private_ip,
                 provider=backend,
                 region=region,
             )
+            run.sct_runner_host = details
+            resource = CloudResource(name=name or "sct-runner", resource_type="sct-runner", instance_info=details)
+            run.allocated_resources.append(resource)
             run.save()
         except SCTTestRun.DoesNotExist as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
@@ -312,7 +315,10 @@ class SCTService:
     def terminate_resource(run_id: str, resource_name: str, reason: str) -> str:
         try:
             run: SCTTestRun = SCTTestRun.get(id=run_id)
-            resource = next(res for res in run.get_resources() if res.name == resource_name)
+            if "sct-runner" in resource_name: # FIXME: Temp solution until sct-runner name is propagated on submit
+                resource = next(res for res in run.get_resources() if "sct-runner" in res.name)
+            else:
+                resource = next(res for res in run.get_resources() if res.name == resource_name)
             resource.get_instance_info().termination_reason = reason
             resource.get_instance_info().termination_time = int(time())
             resource.state = ResourceState.TERMINATED.value

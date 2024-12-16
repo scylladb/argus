@@ -40,7 +40,8 @@ def sct_set_runner(run_id: str):
         public_ip=payload["public_ip"],
         private_ip=payload["private_ip"],
         region=payload["region"],
-        backend=payload["backend"]
+        backend=payload["backend"],
+        name=payload.get("name")
     )
     return {
         "status": "ok",
