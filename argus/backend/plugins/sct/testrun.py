@@ -228,6 +228,8 @@ class SCTTestRun(PluginModelBase):
 
     def submit_logs(self, logs: list[dict]):
         for log in logs:
+            if any(existing[0] == log["log_name"] for existing in self.logs):
+                continue
             self.logs.append((log["log_name"], log["log_link"]))
 
     def add_screenshot(self, screenshot_link: str):
