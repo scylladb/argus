@@ -43,6 +43,11 @@ def runs(test_id: UUID):
 @bp.route("/tests/<string:plugin_name>/<string:run_id>")
 @login_required
 def get_run_by_plugin(plugin_name: str, run_id: UUID | str):
+    try:
+        run_id = UUID(run_id)
+    except ValueError:
+        flash(message=f"Invalid UUID: {run_id}", category="error")
+        return redirect(url_for("main.error", type=404))
     run = TestRunService().get_run(plugin_name, run_id)
     return render_template("run_view_by_plugin.html.j2", run=run)
 
