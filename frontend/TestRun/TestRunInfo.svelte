@@ -15,6 +15,7 @@
     import JenkinsBuildModal from "./Jenkins/JenkinsBuildModal.svelte";
     import JenkinsCloneModal from "./Jenkins/JenkinsCloneModal.svelte";
     import { createEventDispatcher } from "svelte";
+    import { sendMessage } from "../Stores/AlertStore";
     export let test_run = {};
     export let release;
     export let group;
@@ -286,6 +287,7 @@
                                 navigator.clipboard.writeText(
                                     cmd_hydraInvestigateShowMonitor
                                 );
+                                sendMessage("success", `\`${cmd_hydraInvestigateShowMonitor}\` has been copied to your clipboard`);
                             }}><Fa icon={faCopy} /> Hydra Show Monitor</button
                         >
                         <button
@@ -295,6 +297,7 @@
                                 navigator.clipboard.writeText(
                                     cmd_hydraInvestigateShowLogs
                                 );
+                                sendMessage("success", `\`${cmd_hydraInvestigateShowLogs}\` has been copied to your clipboard`);
                             }}><Fa icon={faCopy} /> Hydra Show Logs</button
                         >
                     {/if}
