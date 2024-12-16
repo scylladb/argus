@@ -9,6 +9,7 @@
         getOperatorPackage, getOperatorHelmPackage, getOperatorHelmRepoPackage,
     } from "../Common/RunUtils";
     import { markdownRendererOptions } from "../markdownOptions";
+    import { sendMessage } from "../Stores/AlertStore";
     let renderedElement;
     let templateElement;
     let issueTemplateText = "";
@@ -21,6 +22,7 @@
 
     const copyTemplateToClipboard = function () {
         navigator.clipboard.writeText(templateElement.innerText);
+        sendMessage("success", "Issue template has been copied to your clipboard");
     };
 
     let scyllaServerPackage = getScyllaPackage(test_run.packages);
