@@ -86,6 +86,13 @@
         return tickValues;
     }
 
+    function formatSecondsToHHMMSS(seconds) {
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+    }
+
     onMount(() => {
         Chart.register(...registerables);
 
@@ -122,12 +129,18 @@
             },
             callbacks: {
                 label: function (tooltipItem) {
-                    const y = tooltipItem.parsed.y.toFixed(2);
+                    const yValue = tooltipItem.parsed.y;
+                    const limitValue = tooltipItem.raw.limit;
+                    const isHHMMSS = graph.options.scales.y.title?.text?.includes("[HH:MM:SS]");
+                    const formattedY = isHHMMSS ? formatSecondsToHHMMSS(yValue) : yValue.toFixed(2);
+                    const formattedLimit = isHHMMSS && limitValue !== undefined
+                        ? formatSecondsToHHMMSS(limitValue)
+                        : limitValue?.toFixed(2) || "N/A";
+
                     const x = new Date(tooltipItem.parsed.x).toLocaleDateString("sv-SE");
                     const ori = tooltipItem.raw.ori;
-                    const limit = tooltipItem.raw.limit;
                     const changes = tooltipItem.raw.changes;
-                    return [`${x}: ${ori ? ori : y} (error threshold: ${limit?.toFixed(2) || "N/A"})`, ...changes];
+                    return [`${x}: ${ori ? ori : formattedY} (error threshold: ${formattedLimit})`, ...changes];
                 },
             }
         };
@@ -140,6 +153,15 @@
                     return value;
                 }
             }
+        };
+        graph.options.scales.y.title = graph.options.scales.y.title || {};
+        graph.options.scales.y.ticks = {
+            callback: function (value) {
+                if (graph.options.scales.y.title?.text?.includes("[HH:MM:SS]")) {
+                    return formatSecondsToHHMMSS(value);
+                }
+                return value;
+            },
         };
 
         graph.data.datasets.forEach((dataset) => {
