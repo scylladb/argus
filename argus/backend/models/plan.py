@@ -12,7 +12,7 @@ class ArgusReleasePlan(Model):
     description = columns.Text()
     owner = columns.UUID(required=True)
     participants = columns.List(value_type=columns.UUID)
-    target_version = columns.Ascii()
+    target_version = columns.Ascii(index=True)
     assignee_mapping = columns.Map(key_type=columns.UUID, value_type=columns.UUID)
     release_id = columns.UUID(index=True)
     tests = columns.List(value_type=columns.UUID)

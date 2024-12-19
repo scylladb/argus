@@ -69,6 +69,17 @@ class JenkinsService:
 
         return params
 
+    def latest_build(self, build_id: str) -> int:
+        try:
+            job_info = self._jenkins.get_job_info(name=build_id)
+            last_build = job_info.get("lastBuild")
+            if not last_build:
+                return -1
+            return last_build["number"]
+        except jenkins.JenkinsException:
+            raise JenkinsServiceError("Job doesn't exist", build_id)
+        
+
     def get_releases_for_clone(self, test_id: str):
         test_id = UUID(test_id)
         # TODO: Filtering based on origin location / user preferences
