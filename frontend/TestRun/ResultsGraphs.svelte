@@ -201,6 +201,16 @@
             Last 6 Months
         </button>
         <button class="btn btn-outline-primary btn-sm"
+                class:active={dateRange === 12}
+                on:click={() => dateRange = 12}>
+            Last year
+        </button>
+        <button class="btn btn-outline-primary btn-sm"
+                class:active={dateRange === 24}
+                on:click={() => dateRange = 24}>
+            Last 2 years
+        </button>
+        <button class="btn btn-outline-primary btn-sm"
                 on:click={() => dateRange = -1}
                 class:active={showCustomInputs}>
             Custom
