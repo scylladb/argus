@@ -24,14 +24,12 @@ Releases
                     <div class="d-flex justify-content-center flex-column">
                         <div class="btn-group">
                             <a href="{{ url_for('main.release_dashboard', release_name=release.name) }}" class="btn btn-outline-success"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
-                            {% if release.perpetual %}
-                            <a href="{{ url_for('main.duty_planner', name=release.name) }}" class="btn btn-outline-success"><i class="fas fa-calendar-alt"></i> Duty Planning</a>
-                            {% else %}
                             <a href="{{ url_for('main.release_planner', name=release.name) }}" class="btn btn-outline-success"><i class="fas fa-calendar-alt"></i> Release Planner</a>
-                            {% endif %}
                         </div>
                         {% if not release.perpetual %}
                             <a class="link-secondary" href="{{ url_for('main.release_scheduler', name=release.name) }}">Legacy Scheduler</a>
+                        {% else %}
+                            <a href="{{ url_for('main.duty_planner', name=release.name) }}" class="link-secondary">Legacy Duty Planning</a>
                         {% endif %}
                     </div>
             </div>

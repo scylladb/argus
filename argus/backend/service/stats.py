@@ -290,7 +290,7 @@ class ReleaseStats:
         if not self.release.enabled and not force:
             return
 
-        if not self.release.perpetual and not limited:
+        if not limited:
             plans: list[ArgusReleasePlan] = list(ArgusReleasePlan.filter(release_id=self.release.id).all())
             self.plans = plans if not filter else [plan for plan in plans if version_filter == plan.target_version]
             self.test_schedules = reduce(
