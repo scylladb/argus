@@ -581,8 +581,8 @@ class ArgusService:
     def get_groups_assignees(self, release_id: UUID | str, version: str = None, plan_id: UUID = None):
         release_id = UUID(release_id) if isinstance(release_id, str) else release_id
         release = ArgusRelease.get(id=release_id)
-        if not release.perpetual:
-            return PlanningService().get_assignments_for_groups(release_id, version, plan_id)
+        if assignments := PlanningService().get_assignments_for_groups(release_id, version, plan_id):
+            return assignments
 
         groups = ArgusGroup.filter(release_id=release_id).all()
         group_ids = [group.id for group in groups if group.enabled]
@@ -621,9 +621,8 @@ class ArgusService:
         group = ArgusGroup.get(id=group_id)
 
         release = ArgusRelease.get(id=group.release_id)
-        if not release.perpetual:
-            if assignments := PlanningService().get_assignments_for_tests(group_id, version, plan_id):
-                return assignments
+        if assignments := PlanningService().get_assignments_for_tests(group_id, version, plan_id):
+            return assignments
 
         tests = ArgusTest.filter(group_id=group_id).all()
 

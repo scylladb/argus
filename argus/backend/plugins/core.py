@@ -69,8 +69,6 @@ class PluginModelBase(Model):
     def get_assignment(self, version: str | None = None) -> UUID | None:
         associated_test: ArgusTest = ArgusTest.get(build_system_id=self.build_id)
         associated_release: ArgusRelease = ArgusRelease.get(id=associated_test.release_id)
-        if associated_release.perpetual:
-            return self._legacy_get_scheduled_assignee(associated_test=associated_test, associated_release=associated_release)
 
         plans: list[ArgusReleasePlan] = list(ArgusReleasePlan.filter(release_id=associated_release.id))
 
