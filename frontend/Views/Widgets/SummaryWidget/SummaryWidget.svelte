@@ -12,6 +12,7 @@
         faCheckCircle
     } from '@fortawesome/free-solid-svg-icons';
     import ResultTable from "../../../TestRun/Components/ResultTable.svelte";
+    import RunIssues from "./RunIssues.svelte";
 
     export let dashboardObject;
 
@@ -240,7 +241,7 @@
                         <Fa icon={faChevronLeft}/>
                     </button>
                     <div style="width: 380px">
-                        <Select bind:value={selectedVersionItem} items={versionItems} isClearable={false} />
+                        <Select bind:value={selectedVersionItem} items={versionItems} isClearable={false}/>
                     </div>
                     <button class="btn btn-outline-light ms-2"
                             on:click={() => selectedVersionItem = versionItems[currentVersionIndex+1]}
@@ -298,30 +299,34 @@
                                 {#each Object.entries(filteredTables[testId]) as [methodName, methodData]}
                                     <div class="test-method-column">
                                         {#each Object.entries(methodData) as [runId, results]}
-                                            <h5 class="mt-3">
-                                                <a href="/tests/scylla-cluster-tests/{runId}" target="_blank"
-                                                   class="text-decoration-none">
-                                                    {methodName}
-                                                </a>
-                                                {#if currentVersionRuns[testId]?.[methodName]?.status === 'passed'}
-                                                    <Fa icon={faCheckCircle} class="text-success ms-2"/>
-                                                {:else if currentVersionRuns[testId]?.[methodName]?.status === 'failed'}
-                                                    <Fa icon={faTimesCircle} class="text-danger ms-2"/>
-                                                {:else}
-                                                    <Fa icon={faExclamationTriangle} class="text-warning ms-2"/>
-                                                {/if}
-                                                (started by {currentVersionRuns[testId]?.[methodName]?.started_by})
-                                            </h5>
-                                            <ul class="result-list list-group">
-                                                {#each results as tableEntry}
-                                                    {#each Object.entries(tableEntry) as [table_name, result]}
-                                                        <li class="list-group-item">
-                                                            <ResultTable table_name={table_name} result={result}
-                                                                         bind:selectedScreenshot/>
-                                                        </li>
+                                            {#key runId}
+                                                <h5 class="mt-3">
+                                                    <a href="/tests/scylla-cluster-tests/{runId}" target="_blank"
+                                                       class="text-decoration-none">
+                                                        {methodName}
+                                                    </a>
+                                                    {#if currentVersionRuns[testId]?.[methodName]?.status === 'passed'}
+                                                        <Fa icon={faCheckCircle} class="text-success ms-2"/>
+                                                    {:else if currentVersionRuns[testId]?.[methodName]?.status === 'failed'}
+                                                        <Fa icon={faTimesCircle} class="text-danger ms-2"/>
+                                                    {:else}
+                                                        <Fa icon={faExclamationTriangle} class="text-warning ms-2"/>
+                                                    {/if}
+                                                    (started by {currentVersionRuns[testId]?.[methodName]?.started_by})
+                                                    <RunIssues runId={runId} runStatus={currentVersionRuns[testId]?.[methodName]?.status}/>
+                                                </h5>
+                                                <ul class="result-list list-group">
+                                                    {#each results as tableEntry}
+                                                        {#each Object.entries(tableEntry) as [table_name, result]}
+                                                            <li class="list-group-item">
+                                                                <ResultTable table_name={table_name} result={result}
+                                                                             bind:selectedScreenshot/>
+                                                            </li>
+                                                        {/each}
                                                     {/each}
-                                                {/each}
-                                            </ul>
+                                                </ul>
+                                            {/key}
+
                                         {/each}
                                     </div>
                                 {/each}
