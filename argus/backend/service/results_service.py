@@ -112,7 +112,6 @@ colors = [
     'rgba(40, 167, 69, 1.0)',  # Soft Green
     'rgba(0, 123, 255, 1.0)',  # Soft Blue
     'rgba(23, 162, 184, 1.0)',  # Soft Cyan
-    'rgba(108, 117, 125, 1.0)',  # Soft Magenta
     'rgba(255, 193, 7, 1.0)',  # Soft Yellow
     'rgba(255, 133, 27, 1.0)',  # Soft Orange
     'rgba(102, 16, 242, 1.0)',  # Soft Purple
@@ -125,7 +124,17 @@ colors = [
     'rgba(255, 159, 80, 1.0)'  # Soft Coral
 ]
 shapes = ["circle", "triangle", "rect", "star", "dash", "crossRot", "line"]
-
+dash_patterns = [
+    [0, 0],      # Solid line
+    [10, 5],     # Long dash
+    [5, 10],     # Long gap
+    [15, 5, 5, 5],  # Alternating long and short dashes
+    [5, 5, 1, 5],   # Mixed small dash and gap
+    [10, 10, 5, 5], # Alternating medium and small dashes
+    [20, 5],        # Very long dash
+    [10, 5, 2, 5],   # Long, medium, and small dashes
+    [5, 5],  # Standard dashed
+]
 
 def get_sorted_data_for_column_and_row(data: List[ArgusGenericResultData], column: str, row: str,
                                        runs_details: RunsDetails, main_package: str) -> List[Dict[str, Any]]:
@@ -226,9 +235,10 @@ def create_datasets_for_column(table: ArgusGenericResultMetadata, data: list[Arg
 
     for idx, row in enumerate(table.rows_meta):
         line_color = colors[idx % len(colors)]
+        line_dash = dash_patterns[idx % len(dash_patterns)]
         points = get_sorted_data_for_column_and_row(data, column.name, row, runs_details, main_package)
 
-        datasets.extend(create_release_datasets(points, row, releases_map, line_color))
+        datasets.extend(create_release_datasets(points, row, releases_map, line_dash))
 
         limit_dataset = create_limit_dataset(points, column, row, best_results, table, line_color, is_fixed_limit_drawn)
         if limit_dataset:
@@ -238,7 +248,7 @@ def create_datasets_for_column(table: ArgusGenericResultMetadata, data: list[Arg
     return datasets
 
 
-def create_release_datasets(points: list[Dict], row: str, releases_map: ReleasesMap, line_color: str) -> List[Dict]:
+def create_release_datasets(points: list[Dict], row: str, releases_map: ReleasesMap, line_dash: list[int]) -> List[Dict]:
     """
     Create datasets separately for each release.
     """
@@ -250,12 +260,12 @@ def create_release_datasets(points: list[Dict], row: str, releases_map: Releases
         if release_points:
             release_datasets.append({
                 "label": f"{release} - {row}",
-                "borderColor": line_color,
+                "borderColor": colors[v_idx % len(colors)],
                 "borderWidth": 2,
                 "pointRadius": 3,
                 "showLine": True,
                 "data": release_points,
-                "pointStyle": shapes[v_idx % len(shapes)]
+                "borderDash": line_dash
             })
 
     return release_datasets
