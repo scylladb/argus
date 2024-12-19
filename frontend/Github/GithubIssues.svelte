@@ -4,12 +4,10 @@
     import { newIssueDestinations } from "../Common/IssueDestinations";
     import GithubIssue from "./GithubIssue.svelte";
     import { sendMessage } from "../Stores/AlertStore";
-    import { faChevronDown, faChevronUp, faClipboard, faCopy } from "@fortawesome/free-solid-svg-icons";
+    import { faChevronDown, faChevronUp, faCopy } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
     import Color from "color";
-    import ModalWindow from "../Common/ModalWindow.svelte";
-    import { titleCase } from "../Common/TextUtils";
-    import { faHtml5, faMarkdown } from "@fortawesome/free-brands-svg-icons";
+    import GithubIssuesCopyModal from "./GithubIssuesCopyModal.svelte";
     export let id = "";
     export let testId;
     export let pluginName;
@@ -47,7 +45,6 @@
     let currentPage = 0;
     let PAGE_SIZE = 10;
     let filterString = "";
-    let issueCopy = false;
     let availableLabels = [];
     let selectedLabels = [];
     const stateFilter = {
@@ -197,92 +194,12 @@
     $: sortedIssues = paginateIssues(issues, sortCriteria, reverseSort, filterString, selectedLabels, stateFilter, PAGE_SIZE);
 
 
-    const copyIssueTableAsMarkdown = function() {
-        const issues = sortedIssues[currentPage] ?? [];
-        let issueFormattedList = issues
-            .sort((a, b) => a.issue_number - b.issue_number)
-            .map(val => `|${val.state ? `${val.state.state.toUpperCase()} ` : " "}|${val.url}|${ val.state ? val.state.labels.map(v => v.name).join("\t") : ""}|${val.state && val.state.assignee ? val.state.assignee.login : ""}|`);
-        navigator.clipboard.writeText(`Current Issues ${selectedLabels.length > 0 ? selectedLabels.map(label => `[${label.name}]`).join(" ") : ""}\n|State|Issue|Tags|Assignee|\n|---|---|---|---|\n${issueFormattedList.join("\n")}`);
-    };
-
-    const copyIssueTableAsText = function() {
-        const issues = sortedIssues[currentPage] ?? [];
-
-        const lines = issues.map(i => ` * ${i.url} (${i?.state?.state ?? ""}) [${i?.state?.assignee?.login ?? "Nobody"}]`);
-        navigator.clipboard.writeText(`Issues\n${lines.join("\n")}`);
-    };
-
-    const copyIssueTableAsHTML = async function() {
-        const table = document.querySelector("div#modalTableIssueView");
-
-        const data = table.innerHTML;
-        // Baseline: June 2024
-        // eslint-disable-next-line no-undef 
-        const clipboardItem = new ClipboardItem({ 
-            "text/html": new Blob([data], { type: "text/html" }),
-            "text/plain": new Blob([data], { type: "text/plain" }) 
-        });
-
-        await navigator.clipboard.write([clipboardItem]);
-    };
 
     onMount(() => {
         fetchIssues();
     });
 </script>
 
-{#if issueCopy}
-    <ModalWindow on:modalClose={() => issueCopy = false}>
-        <div class="" slot="title">
-            Issues
-        </div>
-        <div class="" slot="body">
-            <div class="mb-2 text-end">
-                <button class="btn btn-outline-primary" on:click={copyIssueTableAsHTML}><Fa icon={faHtml5} /> Copy as HTML</button>
-                <button class="btn btn-outline-primary" on:click={copyIssueTableAsMarkdown}><Fa icon={faMarkdown} /> Copy as Markdown</button>
-                <button class="btn btn-outline-primary" on:click={copyIssueTableAsText}><Fa icon={faClipboard} /> Copy as Text</button>
-            </div>
-            <div id="modalTableIssueView">
-                <table class="table" style="border: solid 1px black">
-                    <thead>
-                        <th style="border: solid 1px black">State</th>
-                        <th style="border: solid 1px black">Issue</th>
-                        <th style="border: solid 1px black">Title</th>
-                        <th style="border: solid 1px black">Tags</th>
-                        <th style="border: solid 1px black">Assignee</th>
-                    </thead>
-                    <tbody>
-                        {#each sortedIssues[currentPage] ?? [] as issue (issue.id)}
-                            <tr>
-                                <td style="border: solid 1px black">{titleCase(issue?.state?.state ?? "")}</td>
-                                <td style="border: solid 1px black">
-                                    <a class="link-primary" href="{issue.url}">{issue.owner}/{issue.repo}#{issue.issue_number}</a>
-                                </td>
-                                <td style="border: solid 1px black">
-                                    {issue.title}
-                                </td>
-                                <td style="border: solid 1px black">
-                                    {#if issue.state}
-                                        {#each issue.state.labels as label}
-                                            <span style="text-decoration: underline; color: {Color(`#${label.color}`).darken(0.50)}">{label.name}</span><br>
-                                        {/each}
-                                    {/if}
-                                </td>
-                                <td style="border: solid 1px black">
-                                    {#if issue.state.assignee}
-                                        <a href="{issue.state.assignee.html_url}">@{issue.state.assignee.login}</a>
-                                    {:else}
-                                        None
-                                    {/if}
-                                </td>
-                            </tr>
-                        {/each}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </ModalWindow> 
-{/if}
 <div>
     {#if !submitDisabled}
         <div class="container-fluid mb-2">
@@ -342,7 +259,11 @@
         {#if issues.length > 0}
             <h6 class="d-flex">
                 <div>Issues</div>
-                <div class="ms-auto"><button class="btn btn-success" on:click={() => issueCopy = true}><Fa icon={faCopy}/></button></div>
+                <div class="ms-auto">
+                    <GithubIssuesCopyModal sortedIssues={sortedIssues} currentPage={currentPage} selectedLabels={selectedLabels}>
+                        <Fa icon={faCopy}/>
+                    </GithubIssuesCopyModal>
+                </div>
             </h6>
             <div class="row">
                 <div class="col">
