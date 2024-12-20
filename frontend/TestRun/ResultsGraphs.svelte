@@ -28,41 +28,6 @@
         dispatch("runClick", {runId: e.detail.runId});
     };
 
-    const fetchTestResults = async function (testId) {
-        try {
-            const params = queryString.stringify({testId, startDate, endDate});
-            let res = await fetch(`/api/v1/test-results?${params}`);
-            if (res.status != 200) {
-                return Promise.reject(`HTTP Error ${res.status} trying to fetch test results`);
-            }
-            let results = await res.json();
-            if (results.status != "ok") {
-                return Promise.reject(`API Error: ${results.message}, while trying to fetch test results`);
-            }
-            const response = results["response"];
-            graphs = response["graphs"].map((graph) => ({...graph, id: generateRandomHash()}));
-            ticks = response["ticks"];
-            releasesFilters = Object.fromEntries(response["releases_filters"].map(key => [key, true]));
-            extractTableFilters();
-            extractColumnFilters();
-            filterGraphs();
-        } catch (error) {
-            if (error?.status === "error") {
-                sendMessage(
-                    "error",
-                    `API Error when fetching test run data.\nMessage: ${error.response.arguments[0]}`,
-                    "ResultsGraphs::fetchTestResults"
-                );
-            } else {
-                sendMessage(
-                    "error",
-                    "A backend error occurred during test results data fetch",
-                    "ResultsGraphs::fetchTestResults"
-                );
-                console.log(error);
-            }
-        }
-    };
 
     const generateRandomHash = () => {
         return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -97,39 +62,23 @@
         }));
     };
 
-    const extractColumnFilters = () => {
-        let fltrs = new Set();
-        graphs.forEach(graph => {
-            const title = graph.options.plugins.title.text;
-            const parts = title.split("-").slice(-1);
-            parts.forEach(part => {
-                fltrs.add(part.trim());
-            });
-        });
-        columnFilters = Array.from(fltrs);
-    };
-
-    const toggleTableFilter = (filterName, level) => {
-        const currentFilter = selectedTableFilters.find(f => f.level === level);
-        if (currentFilter && currentFilter.name === filterName) {
-            selectedTableFilters = selectedTableFilters.filter(f => f.level !== level);
-        } else {
-            selectedTableFilters = [
-                ...selectedTableFilters.filter(f => f.level !== level),
-                {name: filterName, level}
-            ];
+    async function fetchTestResults(tid: string) {
+        try {
+            const params = queryString.stringify({testId: tid, startDate, endDate})
+            const res = await fetch(`/api/v1/test-results?${params}`)
+            if (res.status !== 200) throw `HTTP Error ${res.status}`
+            const data = await res.json()
+            if (data.status !== 'ok') throw `API Error: ${data.message}`
+            graphs = data.response.graphs.map((g: any) => ({...g, id: generateRandomHash()}))
+            ticks = data.response.ticks
+            releasesFilters = Object.fromEntries(data.response.releases_filters.map((r: string) => [r, true]))
+        } catch (e) {
+            sendMessage('error', 'A backend error occurred', 'ResultsGraphs::fetchTestResults')
+            console.log(e)
         }
         filterGraphs();
     };
 
-    const toggleColumnFilter = (filterName) => {
-        if (selectedColumnFilters.includes(filterName)) {
-            selectedColumnFilters = selectedColumnFilters.filter(f => f !== filterName);
-        } else {
-            selectedColumnFilters = [...selectedColumnFilters, filterName];
-        }
-        filterGraphs();
-    };
 
     const filterGraphs = () => {
         if (selectedTableFilters.length === 0 && selectedColumnFilters.length === 0) {
@@ -178,47 +127,10 @@
         on:releaseChange={handleReleaseChange}
 />
 
-<span>Filters:</span>
-<div class="filters-container  ">
-    <div class="input-group input-group-inline input-group-sm mx-1">
-        <button class="btn btn-outline-dark colored"
-                on:click={() => { selectedTableFilters = []; filterGraphs(); }}>X
-        </button>
-    </div>
-    {#each tableFilters as filterGroup}
-        <div class="input-group input-group-inline  input-group-sm mx-1">
-            {#each filterGroup.items as filter}
-                <button class="btn btn-outline-dark colored"
-                        on:click={() => toggleTableFilter(filter, filterGroup.level)}
-                        class:selected={selectedTableFilters.some(f => f.name === filter)}
-                        style="background-color: {getTableFilterColor(filterGroup.level)}"
-                >
-                    {filter}
-                </button>
-            {/each}
-        </div>
 
-    {/each}
-</div>
-<span>Metrics:</span>
-<div class="filters-container  ">
-    <div class="input-group input-group-inline  input-group-sm mx-1">
-        <button class="btn btn-outline-dark colored"
-                on:click={() => { selectedColumnFilters = []; filterGraphs(); }}>X
-        </button>
-    </div>
-    <div class="input-group input-group-inline  input-group-sm mx-1">
-        {#each columnFilters as filter}
-            <button class="btn btn-outline-dark colored"
-                    on:click={() => toggleColumnFilter(filter)}
-                    class:selected={selectedColumnFilters.some(f => f === filter)}
-                    style="background-color: #a3e2cc"
-            >
-                {filter}
-            </button>
-        {/each}
-    </div>
-</div>
+{#key graphs}
+    <Filters {graphs} bind:filteredGraphs/>
+{/key}
 <div class="charts-container">
     {#each filteredGraphs as graph (graph.id)}
         <div class="chart-container"
@@ -238,43 +150,36 @@
 </div>
 
 <style>
+    .filters-container {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        margin-bottom: 20px
+    }
+
+    .input-group-inline {
+        width: auto
+    }
+
     .charts-container {
         display: flex;
         flex-wrap: wrap;
         justify-content: center;
-        align-items: center;
+        align-items: center
     }
 
     .chart-container {
         display: flex;
         justify-content: center;
         align-items: center;
-        margin: 10px;
+        margin: 10px
     }
 
     .big-size {
-        width: 90%;
-    }
-
-    .filters-container {
-        display: flex;
-        flex-direction: row;
-        justify-content: flex-start;
-        align-content: flex-start;
-        margin-bottom: 20px;
-        flex-wrap: wrap;
-    }
-
-    .input-group-inline {
-        width: auto;
-    }
-
-
-    button.colored:not(.selected):not(:hover) {
-        background-color: #f0f0f0 !important;
+        width: 90%
     }
 
     .date-input {
-        max-width: 200px;
+        max-width: 130px
     }
 </style>
