@@ -339,6 +339,8 @@ def calculate_graph_ticks(graphs: List[Dict]) -> dict[str, str]:
 def _identify_most_changed_package(packages_list: list[PackageVersion]) -> str:
     version_date_changes: dict[str, set[tuple[str, str]]] = defaultdict(set)
 
+    # filtering as workaround for issue https://github.com/scylladb/argus/issues/550
+    packages_list = [pkg for pkg in packages_list if pkg.name in ('scylla-server', 'scylla-manager-server')]
     for package_version in packages_list:
         version_date_changes[package_version.name].add((package_version.version, package_version.date))
 
