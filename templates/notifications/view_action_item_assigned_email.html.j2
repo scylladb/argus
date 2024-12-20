@@ -1,0 +1,4 @@
+<div>You were assigned by <span style="font-weight:bold">@{{ username }}</span> to View Action<a href='
+        {{ config["BASE_URL"] }}{{ url_for("main.view_dashboard", **{ "view_name": view_name}) }}'>{{ display_name }}</a>.
+    <p>Action: {{ action }}</p>
+</div>

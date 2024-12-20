@@ -6,6 +6,8 @@ from flask import abort
 
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.view_widgets import WidgetHighlights, WidgetComment
+from argus.backend.models.web import ArgusNotificationTypes, ArgusNotificationSourceTypes, ArgusUserView
+from argus.backend.service.notification_manager import NotificationManagerService
 
 
 @dataclass
@@ -71,12 +73,14 @@ class CommentUpdate:
     created_at: float
     content: str
 
+
 @dataclass
 class CommentDelete:
     view_id: UUID
     index: int
     highlight_created_at: float
     created_at: float
+
 
 @dataclass
 class Comment:
@@ -129,8 +133,11 @@ class HighlightSetAssignee:
     view_id: UUID
     index: int
     created_at: float
-    assignee_id: str | None = None
+    assignee_id: UUID | None = None
 
+    def __post_init__(self):
+        if self.assignee_id and not isinstance(self.assignee_id, UUID):
+            self.assignee_id = UUID(self.assignee_id)
 
 @dataclass
 class HighlightSetCompleted:
@@ -174,7 +181,7 @@ class HighlightsService:
             entry.archived_at = datetime.now(UTC)
             entry.save()
 
-    def unarchive_highlight(self,  payload: HighlightArchive):
+    def unarchive_highlight(self, payload: HighlightArchive):
         entry = WidgetHighlights.objects(
             view_id=payload.view_id,
             index=payload.index,
@@ -212,7 +219,7 @@ class HighlightsService:
         if payload.assignee_id is None:
             entry.assignee_id = None
         else:
-            entry.assignee_id = UUID(payload.assignee_id)
+            entry.assignee_id = payload.assignee_id
         entry.save()
         return ActionItem.from_db_model(entry)
 
@@ -295,3 +302,20 @@ class HighlightsService:
         highlight_created_at = datetime.fromtimestamp(highlight_created_at, tz=UTC)
         comments = WidgetComment.objects(view_id=view_id, index=index, highlight_at=highlight_created_at)
         return [Comment.from_db_model(c) for c in comments]
+
+    def send_action_notification(self, sender_id: UUID, username: str, view_id: UUID, assignee_id: UUID, action: str):
+        view = ArgusUserView.get(id=view_id)
+        NotificationManagerService().send_notification(
+            receiver=assignee_id,
+            sender=sender_id,
+            notification_type=ArgusNotificationTypes.ViewActionItemAssignee,
+            source_type=ArgusNotificationSourceTypes.ViewActionItem,
+            source_id=view_id,
+            source_message="",
+            content_params={
+                "username": username,
+                "view_name": view.name,
+                "display_name": view.display_name,
+                "action": action,
+            }
+        )

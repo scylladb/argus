@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, UTC
+from unittest.mock import patch
 from uuid import uuid4, UUID
 
 from flask import g
@@ -303,8 +304,8 @@ def test_set_completed_should_not_work_for_highlight(flask_client):
     assert response.json["status"] == "error"
     assert response.json["response"]["exception"] == "NotFound"
 
-
-def test_set_assignee_should_set_assignee_for_action_item(flask_client):
+@patch("argus.backend.controller.views_widgets.highlights.HighlightsService.send_action_notification")
+def test_set_assignee_should_set_assignee_for_action_item(notification, flask_client):
     view_id = str(uuid4())
     created_at = datetime.now(UTC)
     action_item_entry = WidgetHighlights(
@@ -333,6 +334,7 @@ def test_set_assignee_should_set_assignee_for_action_item(flask_client):
     assert response.status_code == 200
     assert response.json["status"] == "ok"
     assert response.json["response"]["assignee_id"] == new_assignee_id
+    assert notification.call_count == 1
 
     updated_entry = WidgetHighlights.objects(view_id=UUID(view_id), index=0, created_at=created_at).first()
     assert str(updated_entry.assignee_id) == new_assignee_id
