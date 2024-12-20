@@ -17,6 +17,7 @@
     const ComponentSourceMap: ComponentSourceType = {
         [NotificationSource.Comment]: NotificationCommentWrapper,
         [NotificationSource.TestRun]: NotificationTestRunWrapper,
+        [NotificationSource.ViewActionItem]: NotificationTestRunWrapper,
     };
 
     const SupportDataFetch = {
@@ -31,6 +32,9 @@
             }
         },
         [NotificationSource.TestRun]: async () => {
+            return {};
+        },
+        [NotificationSource.ViewActionItem]: async () => {
             return {};
         },
     };

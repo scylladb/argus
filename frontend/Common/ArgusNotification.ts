@@ -14,7 +14,8 @@ export enum NotificationTypes {
 
 export enum NotificationSource {
     Comment = "COMMENT",
-    TestRun = "TEST_RUN"
+    TestRun = "TEST_RUN",
+    ViewActionItem = "VIEW_ACTION_ITEM",
 }
 
 export interface ArgusNotificationJSON {

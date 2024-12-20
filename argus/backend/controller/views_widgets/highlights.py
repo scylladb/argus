@@ -1,5 +1,4 @@
-from dataclasses import dataclass, asdict
-from datetime import datetime, UTC
+from dataclasses import asdict
 from uuid import UUID
 
 from flask import Blueprint, request, g
@@ -80,6 +79,9 @@ def set_assignee():
     payload = HighlightSetAssignee(**get_payload(request))
     service = HighlightsService()
     updated_action_item = service.set_assignee(payload)
+    if payload.assignee_id:
+        service.send_action_notification(sender_id=g.user.id, username=g.user.username, view_id=payload.view_id,
+                                         assignee_id=payload.assignee_id, action=updated_action_item.content)
     return {"status": "ok", "response": asdict(updated_action_item)}
 
 
