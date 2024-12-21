@@ -6,14 +6,17 @@ from collections import defaultdict
 from copy import deepcopy
 from dataclasses import dataclass
 from functools import reduce
-from typing import Any, Optional
+from typing import Any, Optional, TypedDict
 from uuid import UUID
+from flask import g
 from slugify import slugify
 
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, ArgusUserView, User
+from argus.backend.service.jenkins_service import JenkinsService
 from argus.backend.service.test_lookup import TestLookup
 from argus.backend.service.views import UserViewService
+from argus.backend.util.common import chunk
 
 
 LOGGER = logging.getLogger(__name__)
@@ -59,6 +62,13 @@ class CopyPlanPayload:
     replacements: dict[str, str]
     targetReleaseId: str
     targetReleaseName: str
+
+class PlanTriggerPayload(TypedDict):
+    plan_id: str | None
+    release: str | None
+    version: str | None
+    common_params: dict[str, str]
+    params: list[dict[str, str]]
 
 
 class PlannerServiceException(Exception):
@@ -438,3 +448,92 @@ class PlanningService:
                 ent["group"] = group.pretty_name or group.name
 
         return mapped
+    
+    def trigger_jobs(self, payload: PlanTriggerPayload) -> bool:
+
+        release_name = payload.get("release")
+        plan_id = payload.get("plan_id")
+        version = payload.get("version")
+
+        condition_set = (bool(release_name), bool(plan_id), bool(version))
+
+        match condition_set:
+            case (True, False, False):
+                release = ArgusRelease.get(name=release_name)
+                filter_expr = { "release_id__eq": release.id }
+            case (False, True, False):
+                filter_expr = { "id__eq": plan_id }
+            case (False, False, True):
+                filter_expr = { "target_version__eq": version }
+            case (True, False, True):
+                release = ArgusRelease.get(name=release_name)
+                filter_expr = { "target_version__eq": version, "release_id__eq": release.id }
+            case _:
+                raise PlannerServiceException("No version, release name or plan id specified.", payload)
+
+        plans: list[ArgusReleasePlan] = list(ArgusReleasePlan.filter(**filter_expr).allow_filtering().all())
+
+        if len(plans) == 0:
+            return False, "No plans to trigger"
+
+        common_params = payload.get("common_params", {})
+        params = payload.get("params", [])
+        test_ids = [test_id for plan in plans for test_id in plan.tests]
+        group_ids = [group_id for plan in plans for group_id in plan.groups]
+
+        tests = []
+        for batch in chunk(test_ids):
+            tests.extend(ArgusTest.filter(id__in=batch).all())
+
+        for batch in (chunk(group_ids)):
+            tests.extend(ArgusTest.filter(group_id__in=batch).allow_filtering().all())
+
+        tests = list({test for test in tests})
+
+        LOGGER.info("Will trigger %s tests...", len(tests))
+
+        service = JenkinsService()
+        failures = []
+        successes = []
+        for test in tests:
+            try:
+                latest_build_number = service.latest_build(test.build_system_id)
+                if latest_build_number == -1:
+                    failures.append(test.build_system_id)
+                    continue
+                raw_params = service.retrieve_job_parameters(test.build_system_id, latest_build_number)
+                job_params = { param["name"]: param["value"] for param in raw_params if param.get("value") }
+                backend = job_params.get("backend")
+                match backend.split("-"):
+                    case ["aws", *_]:
+                        region_key = "region"
+                    case ["gce", *_]:
+                        region_key = "gce_datacenter"
+                    case ["azure", *_]:
+                        region_key = "azure_region_name"
+                    case _:
+                        raise PlannerServiceException(f"Unknown backend encountered: {backend}", backend)
+
+                job_params = None
+                for param_set in params:
+                    if param_set["test"] == "longevity" and backend == param_set["backend"]:
+                        job_params = dict(param_set)
+                        job_params.pop("type", None)
+                        region = job_params.pop("region", None)
+                        job_params[region_key] = region
+                        break
+                if not job_params:
+                    raise PlannerServiceException(f"Parameters not found for job {test.build_system_id}", test.build_system_id)
+                final_params = { **job_params, **common_params, **job_params}
+                queue_item = service.build_job(test.build_system_id, final_params, g.user.username)
+                info = service.get_queue_info(queue_item)
+                url = info.get("url", info.get("taskUrl", ""))
+                successes.append(url)
+            except Exception:
+                LOGGER.error("Failed to trigger %s", test.build_system_id, exc_info=True)
+                failures.append(test.build_system_id)
+
+        return {
+            "jobs": successes,
+            "failed_to_execute": failures,
+        }
