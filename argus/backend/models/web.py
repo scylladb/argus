@@ -236,12 +236,14 @@ class ArgusNotificationTypes(str, Enum):
     StatusChange = "TYPE_STATUS_CHANGE"
     AssigneeChange = "TYPE_ASSIGNEE_CHANGE"
     ScheduleChange = "TYPE_SCHEDULE_CHANGE"
+    ViewActionItemAssignee = "TYPE_VIEW_ACTION_ITEM_ASSIGNEE"
 
 
 class ArgusNotificationSourceTypes(str, Enum):
     TestRun = "TEST_RUN"
     Schedule = "SCHEDULE"
     Comment = "COMMENT"
+    ViewActionItem = "VIEW_ACTION_ITEM"
 
 
 class ArgusNotificationState(IntEnum):
