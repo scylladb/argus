@@ -6,6 +6,7 @@
     import {userList} from "../../../Stores/UserlistSubscriber";
     import HighlightItem from "./HighlightItem.svelte";
     import ActionItem from "./ActionItem.svelte";
+    import CommentEditor from "../../../Discussion/CommentEditor.svelte";
 
     export let dashboardObject;
     export let settings;
@@ -90,6 +91,7 @@
         };
     }
 
+
     const addEntry = async (type: "highlight" | "action", content: string) => {
         if (!content.trim()) return;
         const response = await fetch("/api/v1/views/widgets/highlights/create", {
@@ -115,6 +117,12 @@
                 showNewHighlight = false;
             }
         }
+    };
+    const handleHightlightCreate = function (e) {
+        addEntry("highlight", e.detail.message);
+    };
+    const handleActionItemCreate = function (e) {
+        addEntry("action", e.detail.message);
     };
 
     const handleToggleArchive = async (event) => {
@@ -314,12 +322,13 @@
                     {/each}
                     <li class="list-group-item">
                         {#if showNewHighlight}
-                            <div class="input-group">
-                                <input type="text" class="form-control" placeholder="New highlight" bind:value={newHighlight}
-                                       on:keydown={(e) => e.key === "Enter" && addEntry("highlight", newHighlight)}
-                                       bind:this={newHighlightInput}>
-                                <button class="btn btn-primary" on:click={() => addEntry("highlight", newHighlight)}>Add</button>
-                                <button class="btn btn-outline-secondary" on:click={() => showNewHighlight = false}>Cancel</button>
+                            <div class="flex-grow-1">
+                                <CommentEditor
+                                        mode="post"
+                                        entryType="highlight"
+                                        on:submitComment={handleHightlightCreate}
+                                        on:cancelEditing={() => (showNewHighlight = false)}
+                                />
                             </div>
                         {:else}
                             <button class="btn w-100 text-start text-muted" on:click={() => showNewHighlight = true}>
@@ -375,12 +384,13 @@
                     {/each}
                     <li class="list-group-item">
                         {#if showNewActionItem}
-                            <div class="input-group">
-                                <input type="text" class="form-control" placeholder="New action item" bind:value={newActionItem}
-                                       on:keydown={(e) => e.key === "Enter" && addEntry("action", newActionItem)}
-                                       bind:this={newActionInput}>
-                                <button class="btn btn-primary" on:click={() => addEntry("action", newActionItem)}>Add</button>
-                                <button class="btn btn-outline-secondary" on:click={() => showNewActionItem = false}>Cancel</button>
+                            <div class="flex-grow-1">
+                                <CommentEditor
+                                        mode="post"
+                                        entryType="action item"
+                                        on:submitComment={handleActionItemCreate}
+                                        on:cancelEditing={() => (showNewActionItem = false)}
+                                />
                             </div>
                         {:else}
                             <button class="btn w-100 text-start text-muted" on:click={() => showNewActionItem = true}>
@@ -418,3 +428,10 @@
         </div>
     {/key}
 </div>
+
+<style>
+    :global(.no-bottom-margin *:last-child) {
+    margin-bottom: 0;
+}
+
+</style>
