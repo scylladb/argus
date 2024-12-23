@@ -1,5 +1,5 @@
 <script>
-    import { createEventDispatcher } from "svelte";
+    import { createEventDispatcher, onMount } from "svelte";
     import { parse as markdownParse } from "marked";
     import Fa from "svelte-fa";
     import {
@@ -33,6 +33,11 @@
         test_run_id: "",
         posted_at: new Date(),
     };
+    export let entryType = "comment";
+
+    onMount(() => {
+        textArea?.focus();
+    });
 
     const randomTip = function () {
         const editorTips = [
@@ -332,7 +337,7 @@
             <span class="fw-bold"><Fa icon={faLightbulb} /> Tip</span>: {randomTip()}
         </div>
         <div class="ms-auto text-end">
-            {#if mode == "edit"}
+            {#if mode == "edit" || entryType != "comment"}
                 <button
                     class="btn btn-danger"
                     on:click={() => {
@@ -341,7 +346,7 @@
                 >
             {/if}
             <button class="btn btn-success" on:click={handleSubmitComment}
-                >{mode == "post" ? "Submit" : "Update"} comment</button
+            >{mode == "post" ? "Submit" : "Update"} {entryType}</button
             >
         </div>
     </div>

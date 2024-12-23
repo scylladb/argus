@@ -5,6 +5,10 @@
     import {createEventDispatcher} from 'svelte';
     import UserProfile from "../../../Discussion/UserProfile.svelte";
     import {getPicture} from "../../../Common/UserUtils";
+    import CommentEditor from "../../../Discussion/CommentEditor.svelte";
+    import * as marked from "marked";
+    import {markdownRendererOptions} from "../../../markdownOptions";
+    import {MarkdownUserMention} from "../../../Discussion/MarkedMentionExtension";
 
     export let highlight;
     export let currentUserId;
@@ -13,6 +17,20 @@
     let isEditing = false;
     let newComment = '';
     let creationTimeStr = highlight.createdAt.toLocaleDateString("en-CA");
+    let commentBody = {
+        id: '',
+        message: highlight.content,
+        release: '',
+        reactions: {},
+        mentions: [],
+        user_id: '',
+        release_id: '',
+        test_run_id: '',
+        posted_at: new Date(),
+    };
+    marked.use({
+        extensions: [MarkdownUserMention]
+    });
     const dispatch = createEventDispatcher();
 
     const toggleArchive = () => dispatch('toggleArchive', {highlight});
@@ -22,10 +40,7 @@
             dispatch('loadComments', {highlight});
         }
     };
-    const updateContent = () => {
-        dispatch('updateContent', {highlight, newContent: highlight.content});
-        isEditing = false;
-    };
+
     const addComment = () => {
         if (!newComment.trim()) return;
         dispatch('addComment', {highlight, content: newComment});
@@ -34,39 +49,49 @@
     const handleCommentKeydown = (event: KeyboardEvent) => {
         if (event.key === 'Enter') addComment();
     };
-
+    const handleCommentUpdate = function (e) {
+        commentBody.message = e.detail.message;
+        isEditing = false;
+        dispatch('updateContent', {highlight, newContent: commentBody.message});
+    };
 </script>
 
 <li class="list-group-item" class:bg-light={highlight.isArchived}>
-    <div class="d-flex justify-content-between align-items-center">
-        <div class="img-profile me-2" style="background-image: url('{getPicture(creator?.picture_id)}');" data-bs-toggle="tooltip" title="{creator?.username}" />
-        <div class="d-flex align-items-center flex-grow-1">
-            {#if isEditing}
-                <input type="text" class="form-control me-2" bind:value={highlight.content}
-                       on:keydown={(e) => { if(e.key === 'Enter') updateContent(); }}>
-                <button class="btn btn-sm btn-primary me-2" on:click={updateContent}>Save</button>
-                <button class="btn btn-sm btn-secondary me-2" on:click={() => isEditing = false}>Cancel</button>
-            {:else}
-                <span>{highlight.content}</span>
-            {/if}
-        </div>
-        <div class="d-flex align-items-center">
-            <small class="text-muted me-2">{creationTimeStr}</small>
-            <button class="btn btn-sm btn-outline-secondary me-1" on:click={toggleComments}>
-                <Fa icon={faComment}/>
-                <span class="ms-1">{highlight.comments_count}</span>
-            </button>
-            {#if !highlight.isArchived}
-                {#if highlight.creator_id === currentUserId}
-                    <button class="btn btn-sm btn-outline-secondary me-1" on:click={() => isEditing = !isEditing}>
-                        <Fa icon={faEdit}/>
-                    </button>
+    <div class="d-flex justify-content-between  align-items-center">
+        {#if !isEditing}
+            <div class="img-profile me-2" style="background-image: url('{getPicture(creator?.picture_id)}');" data-bs-toggle="tooltip"
+                 title="{creator?.username}"/>
+            <div class="d-flex align-items-center flex-grow-1 no-bottom-margin-p">
+                <span class="no-bottom-margin">{@html marked.parse(highlight.content, markdownRendererOptions)}</span>
+            </div>
+            <div class="d-flex align-items-center">
+                <small class="text-muted me-2">{creationTimeStr}</small>
+                <button class="btn btn-sm btn-outline-secondary me-1" on:click={toggleComments}>
+                    <Fa icon={faComment}/>
+                    <span class="ms-1">{highlight.comments_count}</span>
+                </button>
+                {#if !highlight.isArchived}
+                    {#if highlight.creator_id === currentUserId}
+                        <button class="btn btn-sm btn-outline-secondary me-1" on:click={() => isEditing = !isEditing}>
+                            <Fa icon={faEdit}/>
+                        </button>
+                    {/if}
                 {/if}
-            {/if}
-            <button class="btn btn-sm btn-outline-secondary" on:click={toggleArchive}>
-                <Fa icon={highlight.isArchived ? faUndo : faArchive}/>
-            </button>
-        </div>
+                <button class="btn btn-sm btn-outline-secondary" on:click={toggleArchive}>
+                    <Fa icon={highlight.isArchived ? faUndo : faArchive}/>
+                </button>
+            </div>
+        {:else}
+            <div class="flex-grow-1">
+                <CommentEditor
+                        commentBody={Object.assign({}, commentBody)}
+                        mode="edit"
+                        entryType="highlight"
+                        on:submitComment={handleCommentUpdate}
+                        on:cancelEditing={() => (isEditing = false)}
+                />
+            </div>
+        {/if}
     </div>
     {#if highlight.showComments}
         <div class="mt-2 col-md-10">
