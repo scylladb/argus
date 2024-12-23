@@ -31,6 +31,10 @@
     let showFilters = {};
     let versionItems = [];
     let selectedVersionItem = {};
+    type TestInfo = {
+        build_id: string;
+        name: string | null;
+    };
 
     $: currentVersionIndex = selectedVersionItem.value;
 
@@ -39,11 +43,36 @@
     });
     $: if (versions.length > 0) fetchRunResults(currentVersionIndex);
 
+    /**
+     * Assigns a name to each test if it is null and sorts the test info by test name.
+     *
+     * @param data - The test info data to process and sort.
+     * @returns The processed and sorted test info data.
+     */
+    function assignAndSortTestInfo(data: Record<string, TestInfo>): Record<string, TestInfo> {
+
+        Object.entries(data).forEach(([key, value]) => {
+            if (value.name === null) {
+                const parts = value.build_id.split("/");
+                value.name = parts[parts.length - 1];
+            }
+        });
+
+        const sortedEntries = Object.entries(data).sort(([, a], [, b]) => {
+            if (a.name && b.name) {
+                return a.name.localeCompare(b.name);
+            }
+            return 0;
+        });
+
+        return Object.fromEntries(sortedEntries);
+    }
+
     async function fetchResults() {
         const response = await fetch(`/api/v1/views/widgets/summary/versioned_runs?view_id=${dashboardObject.id}`);
         const responseJson = await response.json();
         versioned_runs = responseJson.response.versions;
-        test_info = responseJson.response.test_info;
+        test_info = assignAndSortTestInfo(responseJson.response.test_info);
         versions = Object.keys(versioned_runs);
         versionItems = versions.map((version, index) => ({
             value: index,
@@ -94,6 +123,9 @@
                 }
             }
         });
+        runResults = Object.fromEntries(
+            Object.keys(selectedVersionTestInfo).map(testId => [testId, runResults[testId] || {notRun: true}])
+        );
         extractFiltersPerTest();
     }
 
@@ -256,7 +288,7 @@
                 <div class="mb-4 p-3 border rounded {testData.notRun ? 'border-warning' : testData.hasFailedStatus ? 'border-danger' : 'border-success'}">
                     <h4 class="d-flex justify-content-between align-items-center">
                         <span class={testData.notRun ? 'text-warning' : testData.hasFailedStatus ? 'text-danger' : 'text-success'}>
-                            {selectedVersionTestInfo[testId]?.name || selectedVersionTestInfo[testId]?.build_id?.split("/")?.pop() || testId}
+                            {selectedVersionTestInfo[testId]?.name || testId}
                             {#if testData.notRun}
                                 <Fa icon={faExclamationTriangle} class="text-warning ms-2"/>
                             {:else if testData.hasFailedStatus}
