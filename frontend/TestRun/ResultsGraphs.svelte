@@ -1,145 +1,451 @@
 <script lang="ts">
-    import {onMount, createEventDispatcher} from 'svelte'
-    import dayjs from 'dayjs'
-    import queryString from 'query-string'
-    import {sendMessage} from '../Stores/AlertStore'
-    import ResultsGraph from './ResultsGraph.svelte'
-    import Filters from './Components/Filters.svelte'
+    import {onMount, createEventDispatcher} from "svelte";
+    import dayjs from "dayjs";
+    import queryString from "query-string";
+    import {sendMessage} from "../Stores/AlertStore";
+    import ResultsGraph from "./ResultsGraph.svelte";
+    import Filters from "./Components/Filters.svelte";
+    import {faMinus, faPlus} from "@fortawesome/free-solid-svg-icons";
+    import Fa from "svelte-fa";
 
-    export let test_id = ''
-    let graphs: any[] = []
-    let filteredGraphs: any[] = []
-    let releasesFilters: Record<string, boolean> = {}
-    let ticks: Record<string, any> = {}
-    let width = 500
-    let height = 300
-    let startDate = ''
-    let endDate = ''
-    let dateRange = 6
-    let showCustomInputs = false
-    const dispatch = createEventDispatcher()
+    export let test_id: string = "";
+    let graphs: any[] = [];
+    let filteredGraphs: any[] = [];
+    let releasesFilters: Record<string, boolean> = {};
+    let ticks: Record<string, any> = {};
+    let width = 500;
+    let height = 300;
+    let startDate = "";
+    let endDate = "";
+    let dateRange = 6;
+    let showCustomInputs = false;
+    let graphViews: {
+        test_id: string;
+        id: string;
+        name: string;
+        description: string;
+        graphs: Record<string, any>;
+    }[] = [];
+    let showModal = false;
+    let activeTab = 0;
+    let form = {name: "", description: ""};
+    let showAddGraphModal = false;
+    let showRemoveGraphModal = false;
+    let selectedGraph: any;
+    let selectedView = "";
+    let viewGraphs: any[] = [];
+
+    $: allTabs = ["Main Graphs", ...graphViews.map((v) => v.name), "+ View"];
+    const dispatch = createEventDispatcher();
+
     const dispatch_run_click = (e: CustomEvent<{ runId: string }>) => {
-        dispatch('runClick', {runId: e.detail.runId})
-    }
-    onMount(() => setDateRange(dateRange))
+        dispatch("runClick", {runId: e.detail.runId});
+    };
+
+    onMount(() => setDateRange(dateRange));
 
     function setDateRange(months: number) {
         if (months === -1) {
-            startDate = '';
-            endDate = '';
+            startDate = "";
+            endDate = "";
             showCustomInputs = true;
-            return
+            return;
         }
-        dateRange = months
-        const now = dayjs()
-        endDate = now.format('YYYY-MM-DD')
-        startDate = now.subtract(months, 'month').format('YYYY-MM-DD')
-        showCustomInputs = false
-        fetchTestResults(test_id)
+        dateRange = months;
+        const now = dayjs();
+        endDate = now.format("YYYY-MM-DD");
+        startDate = now.subtract(months, "month").format("YYYY-MM-DD");
+        showCustomInputs = false;
+        fetchTestResults(test_id);
     }
 
     async function fetchTestResults(tid: string) {
         try {
-            const params = queryString.stringify({testId: tid, startDate, endDate})
-            const res = await fetch(`/api/v1/test-results?${params}`)
-            if (res.status !== 200) throw `HTTP Error ${res.status}`
-            const data = await res.json()
-            if (data.status !== 'ok') throw `API Error: ${data.message}`
-            graphs = data.response.graphs.map((g: any) => ({...g, id: generateRandomHash()}))
-            ticks = data.response.ticks
-            releasesFilters = Object.fromEntries(data.response.releases_filters.map((r: string) => [r, true]))
+            const params = queryString.stringify({testId: tid, startDate, endDate});
+            const res = await fetch(`/api/v1/test-results?${params}`);
+            if (res.status !== 200) throw new Error(`HTTP Error ${res.status}`);
+
+            const data = await res.json();
+            if (data.status !== "ok") throw new Error(`API Error: ${data.message}`);
+
+            graphs = data.response.graphs.map((g: any) => ({
+                ...g,
+                id: generateRandomHash(),
+            }));
+            ticks = data.response.ticks;
+            graphViews = data.response.graph_views;
+            releasesFilters = Object.fromEntries(
+                data.response.releases_filters.map((r: string) => [r, true])
+            );
         } catch (e) {
-            sendMessage('error', 'A backend error occurred', 'ResultsGraphs::fetchTestResults')
-            console.log(e)
+            sendMessage("error", "A backend error occurred", "ResultsGraphs::fetchTestResults");
+            console.error(e);
         }
     }
 
-    function generateRandomHash() {
-        return Math.random().toString(36).slice(2, 15) + Math.random().toString(36).slice(2, 15)
+    function generateRandomHash(): string {
+        return (
+            Math.random().toString(36).slice(2, 15) +
+            Math.random().toString(36).slice(2, 15)
+        );
     }
 
     function toggleReleaseFilter(r: string) {
-        releasesFilters[r] = !releasesFilters[r]
-        filteredGraphs = [...filteredGraphs]
+        releasesFilters[r] = !releasesFilters[r];
+        filteredGraphs = [...filteredGraphs];
+    }
+
+    function handleTabClick(i: number) {
+        if (allTabs[i] === "+ View") showModal = true;
+        else activeTab = i;
+        viewGraphs = Object.keys(graphViews[activeTab - 1].graphs).map((g) => getGraphsByName(g)[0]);
+    }
+
+    function closeModal() {
+        showModal = false;
+    }
+
+    function getGraphsByName(graphName: string) {
+        return graphs.filter((g) => g.options?.plugins?.title?.text === graphName);
+    }
+
+    function openAddGraphModal(g: any) {
+        selectedGraph = g;
+        showAddGraphModal = true;
+    }
+
+    function openRemoveGraphModal(g: any) {
+        selectedGraph = g;
+        showRemoveGraphModal = true;
+    }
+
+    function closeAddGraphModal() {
+        showAddGraphModal = false;
+    }
+
+    function closeRemoveGraphModal() {
+        showRemoveGraphModal = false;
+    }
+
+    async function saveNewView() {
+        const payload = {
+            testId: test_id,
+            name: form.name,
+            description: form.description,
+        };
+        try {
+            const res = await fetch("/api/v1/create-graph-view", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify(payload),
+            });
+            if (!res.ok) throw new Error(`Error: ${res.status}`);
+            const data = await res.json();
+            if (data.status !== "ok") throw new Error(data.message);
+
+            graphViews = [...graphViews, data.response];
+            form = {name: "", description: ""};
+            closeModal();
+        } catch (e) {
+            sendMessage("error", "Failed to create graph view", "saveNewView");
+        }
+    }
+
+    async function updateArgusGraphView(view: {
+        id: string;
+        name: string;
+        description: string;
+        graphs: Record<string, any>;
+    }) {
+        const payload = {
+            testId: test_id,
+            id: view.id,
+            name: view.name,
+            description: view.description,
+            graphs: view.graphs,
+        };
+
+        try {
+            const res = await fetch("/api/v1/update-graph-view", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify(payload),
+            });
+            if (!res.ok) throw new Error(`Error: ${res.status}`);
+            const data = await res.json();
+            if (data.status !== "ok") throw new Error(data.message);
+
+            // Update local graphViews
+            const idx = graphViews.findIndex((v) => v.id === view.id);
+            if (idx !== -1) graphViews[idx] = data.response;
+        } catch (e) {
+            sendMessage("error", "Failed to update graph view", "updateArgusGraphView");
+        }
+    }
+
+    function addGraphToView() {
+        if (!selectedView) return;
+        const idx = graphViews.findIndex((v) => v.name === selectedView);
+        if (idx === -1) return;
+
+        graphViews[idx].graphs = {
+            ...graphViews[idx].graphs,
+            [selectedGraph.options.plugins.title.text]: "{}",
+        };
+
+        updateArgusGraphView(graphViews[idx]);
+        closeAddGraphModal();
+    }
+
+    function removeGraph() {
+        if (!selectedGraph) return;
+
+        const activeViewId = graphViews[activeTab - 1]?.id;
+        const idx = graphViews.findIndex((v) => v.id === activeViewId);
+        if (idx === -1) return;
+
+        const graphName = selectedGraph?.options?.plugins?.title?.text;
+        delete graphViews[idx].graphs[graphName];
+        viewGraphs = Object.keys(graphViews[activeTab - 1].graphs).map((g) => getGraphsByName(g)[0]);
+
+        updateArgusGraphView(graphViews[idx]);
+        closeRemoveGraphModal();
     }
 </script>
 
 <div class="filters-container">
     <span class="my-auto">Time range:</span>
     <div class="input-group input-group-inline input-group-sm mx-2">
-        <button class="btn btn-outline-primary btn-sm" class:active={dateRange===1} on:click={()=>setDateRange(1)}>Last Month</button>
-        <button class="btn btn-outline-primary btn-sm" class:active={dateRange===3} on:click={()=>setDateRange(3)}>Last 3 Months</button>
-        <button class="btn btn-outline-primary btn-sm" class:active={dateRange===6} on:click={()=>setDateRange(6)}>Last 6 Months</button>
-        <button class="btn btn-outline-primary btn-sm" class:active={dateRange===12} on:click={()=>setDateRange(12)}>Last year</button>
-        <button class="btn btn-outline-primary btn-sm" class:active={dateRange===24} on:click={()=>setDateRange(24)}>Last 2 years</button>
-        <button class="btn btn-outline-primary btn-sm" class:active={showCustomInputs} on:click={()=>setDateRange(-1)}>Custom</button>
+        <button class="btn btn-outline-primary btn-sm" class:active={dateRange === 1} on:click={() => setDateRange(1)}>Last Month</button>
+        <button class="btn btn-outline-primary btn-sm" class:active={dateRange === 3} on:click={() => setDateRange(3)}>Last 3 Months
+        </button>
+        <button class="btn btn-outline-primary btn-sm" class:active={dateRange === 6} on:click={() => setDateRange(6)}>Last 6 Months
+        </button>
+        <button class="btn btn-outline-primary btn-sm" class:active={dateRange === 12} on:click={() => setDateRange(12)}>Last year</button>
+        <button class="btn btn-outline-primary btn-sm" class:active={dateRange === 24} on:click={() => setDateRange(24)}>Last 2 years
+        </button>
+        <button class="btn btn-outline-primary btn-sm" class:active={showCustomInputs} on:click={() => setDateRange(-1)}>Custom</button>
         {#if showCustomInputs}
-            <input type="date" class="form-control date-input" bind:value={startDate} on:change={()=>fetchTestResults(test_id)}/>
-            <input type="date" class="form-control date-input" bind:value={endDate} on:change={()=>fetchTestResults(test_id)}/>
+            <input
+                    type="date"
+                    class="form-control date-input"
+                    bind:value={startDate}
+                    on:change={() => fetchTestResults(test_id)}
+            />
+            <input
+                    type="date"
+                    class="form-control date-input"
+                    bind:value={endDate}
+                    on:change={() => fetchTestResults(test_id)}
+            />
         {/if}
     </div>
     <span class="my-auto">Releases:</span>
     <div class="input-group input-group-inline input-group-sm mx-2">
         {#each Object.keys(releasesFilters) as r}
-            <button class="btn btn-sm btn-outline-dark" on:click={()=>toggleReleaseFilter(r)} class:active={releasesFilters[r]}>
+            <button
+                    class="btn btn-sm btn-outline-dark"
+                    on:click={() => toggleReleaseFilter(r)}
+                    class:active={releasesFilters[r]}
+            >
                 {r}
             </button>
         {/each}
     </div>
 </div>
 
-{#key graphs}
-    <Filters {graphs} bind:filteredGraphs/>
-{/key}
-<div class="charts-container">
-    {#key filteredGraphs}
-        {#each filteredGraphs as graph (graph.id)}
-            <div class="chart-container" class:big-size={filteredGraphs.length<2}>
-                <ResultsGraph
-                        {graph} {ticks}
-                        height={filteredGraphs.length===1?600:height}
-                        width={filteredGraphs.length===1?1000:width}
-                        test_id={test_id}
-                        index={graph.id}
-                        releasesFilters={releasesFilters}
-                        on:runClick={dispatch_run_click}
-                />
-            </div>
-        {/each}
+<ul class="nav nav-tabs mb-3">
+    {#each allTabs as t, i}
+        <li class="nav-item">
+            <a
+                    class="nav-link {activeTab === i ? 'active' : ''}"
+                    on:click={() => handleTabClick(i)}
+            >
+                {t}
+            </a>
+        </li>
+    {/each}
+</ul>
+
+{#if activeTab === 0}
+    {#key graphs}
+        <Filters {graphs} bind:filteredGraphs/>
     {/key}
-</div>
+
+    <div class="charts-container">
+        {#key filteredGraphs}
+            {#each filteredGraphs as graph (graph.id)}
+                <div class="chart-container" class:big-size={filteredGraphs.length < 2}>
+                    <button class="add-btn" on:click={() => openAddGraphModal(graph)} title="add to graph view">
+                        <Fa icon={faPlus}/>
+                    </button>
+                    <ResultsGraph
+                            {graph}
+                            {ticks}
+                            height={filteredGraphs.length === 1 ? 600 : height}
+                            width={filteredGraphs.length === 1 ? 1000 : width}
+                            {test_id}
+                            index={graph.id}
+                            {releasesFilters}
+                            on:runClick={dispatch_run_click}
+                    />
+                </div>
+            {/each}
+        {/key}
+    </div>
+{:else if activeTab < allTabs.length - 1 && graphViews.length > 0}
+    <h5 class="text-center">{graphViews[activeTab - 1].description}</h5>
+    {#key releasesFilters}
+        {#key viewGraphs}
+            <Filters graphs={viewGraphs} bind:filteredGraphs/>
+            <div class="charts-container">
+                {#key filteredGraphs}
+                    {#each filteredGraphs as graph}
+                        <div class="chart-container" class:big-size={filteredGraphs.length < 2}>
+                            <button class="add-btn" on:click={() => openRemoveGraphModal(graph)} title="Remove from graph view">
+                                <Fa icon={faMinus}/>
+                            </button>
+                            <ResultsGraph
+                                    {graph}
+                                    {ticks}
+                                    height={filteredGraphs.length === 1 ? 600 : height}
+                                    width={filteredGraphs.length === 1 ? 1000 : width}
+                                    {test_id}
+                                    index={graph.id}
+                                    {releasesFilters}
+                                    on:runClick={dispatch_run_click}
+                            />
+                        </div>
+                    {/each}
+                {/key}
+            </div>
+        {/key}
+    {/key}
+{/if}
+
+{#if showModal}
+    <div class="modal show d-block" tabindex="-1" role="dialog" on:click={closeModal}>
+        <div class="modal-dialog" role="document" on:click|stopPropagation>
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">New View</h5>
+                    <button type="button" class="close" on:click={closeModal}>&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Name</label>
+                        <input class="form-control" type="text" bind:value={form.name}/>
+                    </div>
+                    <div class="form-group">
+                        <label>Description</label>
+                        <textarea class="form-control" bind:value={form.description}></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" on:click={saveNewView}>Save</button>
+                    <button type="button" class="btn btn-secondary" on:click={closeModal}>Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+{/if}
+
+{#if showAddGraphModal}
+    <div class="modal show d-block" tabindex="-1" role="dialog" on:click={closeAddGraphModal}>
+        <div class="modal-dialog" role="document" on:click|stopPropagation>
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Graph to View</h5>
+                    <button type="button" class="close" on:click={closeAddGraphModal}>&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Select Graph View</label>
+                        <select class="form-control" bind:value={selectedView}>
+                            <option value="" disabled>Select a view</option>
+                            {#each graphViews as v}
+                                <option value={v.name}>{v.name}</option>
+                            {/each}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" on:click={addGraphToView}>Add</button>
+                    <button class="btn btn-secondary" on:click={closeAddGraphModal}>Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+{/if}
+
+{#if showRemoveGraphModal}
+    <div class="modal show d-block" tabindex="-1" role="dialog" on:click={closeRemoveGraphModal}>
+        <div class="modal-dialog" role="document" on:click|stopPropagation>
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Remove Graph?</h5>
+                    <button type="button" class="close" on:click={closeRemoveGraphModal}>&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p>Remove <strong>{selectedGraph?.options?.plugins?.title?.text}</strong> from this view?</p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-danger" on:click={removeGraph}>Remove</button>
+                    <button class="btn btn-secondary" on:click={closeRemoveGraphModal}>Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+{/if}
 
 <style>
     .filters-container {
         display: flex;
         flex-direction: row;
         flex-wrap: wrap;
-        margin-bottom: 20px
+        margin-bottom: 20px;
     }
 
     .input-group-inline {
-        width: auto
+        width: auto;
     }
 
     .charts-container {
         display: flex;
         flex-wrap: wrap;
         justify-content: center;
-        align-items: center
+        align-items: center;
     }
 
     .chart-container {
         display: flex;
         justify-content: center;
         align-items: center;
-        margin: 10px
+        margin: 10px;
+        position: relative;
     }
 
     .big-size {
-        width: 90%
+        width: 90%;
     }
 
     .date-input {
-        max-width: 130px
+        max-width: 130px;
+    }
+
+    .add-btn {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: #888;
+        font-size: 1.2em;
+        z-index: 1000;
+    }
+
+    .add-btn:hover {
+        color: #333;
     }
 </style>
