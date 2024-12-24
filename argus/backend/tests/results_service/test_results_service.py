@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from uuid import uuid4
 
 import pytest
-from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ColumnMetadata
+from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ColumnMetadata, ArgusGraphView
 from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.plugins.sct.udt import PackageVersion
 from argus.backend.service.results_service import ResultsService
@@ -170,3 +170,32 @@ def test_get_tests_by_version_groups_runs_correctly(argus_db):
                                                 'started_by': None,
                                                 'status': 'created'}}}}}
     assert result == expected_result
+
+
+def test_create_update_argus_graph_view_should_create() -> None:
+    service = ResultsService()
+    test_id = uuid4()
+    service.create_argus_graph_view(test_id, "MyView", "MyDescription")
+    result = service.get_argus_graph_views(test_id)[0]
+    assert result is not None
+    assert result.name == "MyView"
+    assert result.description == "MyDescription"
+    assert result.graphs == {}
+
+def test_create_update_argus_graph_view_should_update() -> None:
+    service = ResultsService()
+    test_id = uuid4()
+    graph_view = service.create_argus_graph_view(test_id, "OldName", "OldDesc")
+    service.update_argus_graph_view(test_id, graph_view.id, "NewName", "NewDesc", {"graph2": "new_data"})
+    updated = service.get_argus_graph_views(test_id)[0]
+    assert updated.name == "NewName"
+    assert updated.description == "NewDesc"
+    assert updated.graphs == {"graph2": "new_data"}
+
+def test_get_argus_graph_views_should_return_list() -> None:
+    service = ResultsService()
+    test_id = uuid4()
+    service.create_argus_graph_view(test_id, "View1", "Desc1")
+    service.create_argus_graph_view(test_id, "View2", "Desc2")
+    views = service.get_argus_graph_views(test_id)
+    assert len(views) == 2

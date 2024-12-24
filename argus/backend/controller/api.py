@@ -409,10 +409,42 @@ def test_results():
         return Response(status=200 if exists else 404)
 
     graphs, ticks, releases_filters = service.get_test_graphs(test_id=UUID(test_id), start_date=start_date, end_date=end_date, table_names=table_names)
+    graph_views = service.get_argus_graph_views(test_id=UUID(test_id))
 
     return {
         "status": "ok",
-        "response": {"graphs": graphs, "ticks": ticks, "releases_filters": releases_filters}
+        "response": {"graphs": graphs, "ticks": ticks, "releases_filters": releases_filters, "graph_views": graph_views}
+    }
+
+@bp.route("/create-graph-view", methods=["POST"])
+@api_login_required
+def create_graph_view():
+    payload = get_payload(request)
+    service = ResultsService()
+    test_id = payload["testId"]
+    name = payload["name"]
+    description = payload["description"]
+    graph_view = service.create_argus_graph_view(test_id=UUID(test_id), name=name, description=description)
+    return {
+        "status": "ok",
+        "response": graph_view
+    }
+
+@bp.route("/update-graph-view", methods=["POST"])
+@api_login_required
+def update_graph_view():
+    payload = get_payload(request)
+    service = ResultsService()
+    test_id = payload["testId"]
+    id = payload["id"]
+    name = payload["name"]
+    description = payload["description"]
+    graphs = payload["graphs"]
+    graph_view = service.update_argus_graph_view(test_id=UUID(test_id), view_id=UUID(id), name=name, description=description,
+                                                 graphs=graphs)
+    return {
+        "status": "ok",
+        "response": graph_view
     }
 
 @bp.route("/test_run/comment/get", methods=["GET"])  # TODO: remove

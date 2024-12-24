@@ -1,87 +1,87 @@
 <script lang="ts">
-    import {onMount} from 'svelte'
+    import {onMount} from 'svelte';
 
-    export let graphs: any[] = []
-    export let filteredGraphs: any[] = []
-    let tableFilters: { level: number; items: string[] }[] = []
-    let columnFilters: string[] = []
-    let selectedTableFilters: { name: string; level: number }[] = []
-    let selectedColumnFilters: string[] = []
+    export let graphs: any[] = [];
+    export let filteredGraphs: any[] = [];
+    let tableFilters: { level: number; items: string[] }[] = [];
+    let columnFilters: string[] = [];
+    let selectedTableFilters: { name: string; level: number }[] = [];
+    let selectedColumnFilters: string[] = [];
 
     function extractTableFilters() {
-        let fltrs = new Map<number, Set<string>>()
+        let fltrs = new Map<number, Set<string>>();
         for (let g of graphs) {
-            const parts = g.options.plugins.title.text.split("-").slice(0, -1).map(p => p.trim())
+            const parts = g.options.plugins.title.text.split("-").slice(0, -1).map(p => p.trim());
             parts.forEach((p, i) => {
-                const lvl = i + 1
-                if (!fltrs.has(lvl)) fltrs.set(lvl, new Set())
-                fltrs.get(lvl)?.add(p)
-            })
+                const lvl = i + 1;
+                if (!fltrs.has(lvl)) fltrs.set(lvl, new Set());
+                fltrs.get(lvl)?.add(p);
+            });
         }
         tableFilters = [...fltrs.entries()]
             .sort((a, b) => a[0] - b[0])
-            .map(([level, items]) => ({level, items: [...items]}))
+            .map(([level, items]) => ({level, items: [...items]}));
     }
 
     function extractColumnFilters() {
-        let fltrs = new Set<string>()
+        let fltrs = new Set<string>();
         for (let g of graphs) {
-            const parts = g.options.plugins.title.text.split("-").slice(-1).map(p => p.trim())
-            parts.forEach(p => fltrs.add(p))
+            const parts = g.options.plugins.title.text.split("-").slice(-1).map(p => p.trim());
+            parts.forEach(p => fltrs.add(p));
         }
-        columnFilters = [...fltrs]
+        columnFilters = [...fltrs];
     }
 
     function toggleTableFilter(filter: string, level: number) {
-        const existing = selectedTableFilters.find(f => f.level === level)
+        const existing = selectedTableFilters.find(f => f.level === level);
         if (existing && existing.name === filter) {
-            selectedTableFilters = selectedTableFilters.filter(f => f.level !== level)
+            selectedTableFilters = selectedTableFilters.filter(f => f.level !== level);
         } else {
-            selectedTableFilters = [...selectedTableFilters.filter(f => f.level !== level), {name: filter, level}]
+            selectedTableFilters = [...selectedTableFilters.filter(f => f.level !== level), {name: filter, level}];
         }
-        filterTables()
+        filterTables();
     }
 
     function toggleColumnFilter(filter: string) {
         selectedColumnFilters = selectedColumnFilters.includes(filter)
             ? selectedColumnFilters.filter(f => f !== filter)
-            : [...selectedColumnFilters, filter]
-        filterTables()
+            : [...selectedColumnFilters, filter];
+        filterTables();
     }
 
     function filterTables() {
         if (!selectedTableFilters.length && !selectedColumnFilters.length) {
-            filteredGraphs = graphs
-            return
+            filteredGraphs = graphs;
+            return;
         }
         filteredGraphs = graphs.filter(g => {
-            const parts = g.options.plugins.title.text.split("-").map(p => p.trim())
-            const matchTable = selectedTableFilters.every(f => parts.includes(f.name))
-            const matchCol = !selectedColumnFilters.length || selectedColumnFilters.some(f => parts.includes(f))
-            return matchTable && matchCol
-        })
+            const parts = g.options.plugins.title.text.split("-").map(p => p.trim());
+            const matchTable = selectedTableFilters.every(f => parts.includes(f.name));
+            const matchCol = !selectedColumnFilters.length || selectedColumnFilters.some(f => parts.includes(f));
+            return matchTable && matchCol;
+        });
     }
 
     function clearTableFilters() {
-        selectedTableFilters = []
-        filterTables()
+        selectedTableFilters = [];
+        filterTables();
     }
 
     function clearColumnFilters() {
-        selectedColumnFilters = []
-        filterTables()
+        selectedColumnFilters = [];
+        filterTables();
     }
 
     function getTableFilterColor(level: number) {
-        const colors = ["#B8EFFF", "#FECBA1", "#D6B3E6", "#FFE699", "#F0A5C5", "#C4C8CA"]
-        return colors[(level - 1) % colors.length]
+        const colors = ["#B8EFFF", "#FECBA1", "#D6B3E6", "#FFE699", "#F0A5C5", "#C4C8CA"];
+        return colors[(level - 1) % colors.length];
     }
 
     onMount(() => {
-        extractTableFilters()
-        extractColumnFilters()
-        filterTables()
-    })
+        extractTableFilters();
+        extractColumnFilters();
+        filterTables();
+    });
 </script>
 
 <span>Filters:</span>
