@@ -6,11 +6,11 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from functools import partial, cache
 from typing import List, Dict, Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from dataclasses import dataclass
 from argus.backend.db import ScyllaCluster
-from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ArgusBestResultData, ColumnMetadata
+from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ArgusBestResultData, ColumnMetadata, ArgusGraphView
 from argus.backend.plugins.sct.udt import PackageVersion
 from argus.backend.service.testrun import TestRunService
 
@@ -626,3 +626,38 @@ class ResultsService:
             'versions': {version: dict(tests) for version, tests in result.items()},
             'test_info': test_info
         }
+
+    def create_argus_graph_view(self, test_id: UUID, name: str, description: str) -> ArgusGraphView:
+        view_id = uuid4()
+        graph_view = ArgusGraphView(test_id=test_id, id=view_id)
+        graph_view.name = name
+        graph_view.description = description
+        graph_view.save()
+        return graph_view
+
+    def update_argus_graph_view(self, test_id: UUID, view_id: UUID, name: str, description: str,
+                                graphs: dict[str, str]) -> ArgusGraphView:
+        try:
+            graph_view = ArgusGraphView.get(test_id=test_id, id=view_id)
+        except ArgusGraphView.DoesNotExist:
+            raise ValueError(f"GraphView with id {view_id} does not exist for test {test_id}")
+
+        existing_keys = set(graph_view.graphs.keys())
+        new_keys = set(graphs.keys())
+        keys_to_remove = existing_keys - new_keys
+
+        for key in keys_to_remove:
+            ArgusGraphView.objects(test_id=test_id, id=view_id).update(graphs={key: None})
+
+        if graphs:
+            ArgusGraphView.objects(test_id=test_id, id=view_id).update(graphs=graphs)
+
+        ArgusGraphView.objects(test_id=test_id, id=view_id).update(
+            name=name,
+            description=description
+        )
+
+        return ArgusGraphView.get(test_id=test_id, id=view_id)
+
+    def get_argus_graph_views(self, test_id: UUID) -> list[ArgusGraphView]:
+        return list(ArgusGraphView.objects(test_id=test_id))
