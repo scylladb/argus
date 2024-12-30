@@ -106,7 +106,7 @@
             <div class="mt-2 col-md-10">
                 <ul class="list-group list-group-flush">
                     {#each action.comments as comment (comment.id)}
-                        <Comment {comment} {currentUserId} {action} on:deleteComment on:updateCommentContent/>
+                        <Comment {comment} {currentUserId} {action} {users} on:deleteComment on:updateCommentContent/>
                     {/each}
                 </ul>
                 {#if !action.isArchived}
