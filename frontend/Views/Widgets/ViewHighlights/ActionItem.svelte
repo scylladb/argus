@@ -101,6 +101,7 @@
                 />
             </div>
         {/if}
+    </div>
         {#if action.showComments}
             <div class="mt-2 col-md-10">
                 <ul class="list-group list-group-flush">
