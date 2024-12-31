@@ -9,6 +9,7 @@
         faCopy,
         faPlay,
     } from "@fortawesome/free-solid-svg-icons";
+    import { sendMessage } from "../Stores/AlertStore";
     let sortHeaders = {
         creationTime: ["instance_info", "creation_time"],
         terminationTime: ["instance_info", "termination_time"],
@@ -88,6 +89,7 @@
                 navigator.clipboard.writeText(
                     `${regions} hydra clean-resources --backend ${backend} --test-id ${run_id}`
                 );
+                sendMessage("success", `\`${regions} hydra clean-resources --backend ${backend} --test-id ${run_id}\` has been copied to your clipboard`);
             }}>
             <Fa icon={faCopy} /> Hydra Clean Resources
         </button>
