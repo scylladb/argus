@@ -593,14 +593,14 @@ class ResultsService:
                 test_method = row['test_method']
                 if not test_method:
                     continue
-                sut_version = next(
-                    (f"{pkg.version}-{pkg.date}-{pkg.revision_id}" for pkg in packages if pkg.name == f"{sut_package_name}-upgraded"),
-                    None
-                ) or next(
-                    (f"{pkg.version}-{pkg.date}-{pkg.revision_id}" for pkg in packages if pkg.name.startswith(sut_package_name)),
-                    None
-                )
-
+                for sut_name in [f"{sut_package_name}-upgraded",
+                            f"{sut_package_name}-upgrade-target",
+                            sut_package_name,
+                            f"{sut_package_name}-target"
+                            ]:
+                    sut_version = next((f"{pkg.version}-{pkg.date}-{pkg.revision_id}" for pkg in packages if pkg.name == sut_name), None)
+                    if sut_version:
+                        break
                 if sut_version is None:
                     continue
                 method_name = test_method.rsplit('.', 1)[-1]
