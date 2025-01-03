@@ -49,9 +49,11 @@
     let newActionInput: HTMLInputElement;
     let newHighlightInput: HTMLInputElement;
 
-    $: users = $userList;
-    $: if (users) {
-        redraw++;
+    $: {
+        if (Object.keys(users).length === 0 && Object.keys($userList).length > 0) {
+            users = $userList;
+            redraw++
+        }
     }
 
     onMount(async () => {
