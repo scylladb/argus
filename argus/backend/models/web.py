@@ -237,6 +237,7 @@ class ArgusNotificationTypes(str, Enum):
     AssigneeChange = "TYPE_ASSIGNEE_CHANGE"
     ScheduleChange = "TYPE_SCHEDULE_CHANGE"
     ViewActionItemAssignee = "TYPE_VIEW_ACTION_ITEM_ASSIGNEE"
+    ViewHighlightMention = "TYPE_VIEW_HIGHLIGHT_MENTION"
 
 
 class ArgusNotificationSourceTypes(str, Enum):
@@ -244,6 +245,7 @@ class ArgusNotificationSourceTypes(str, Enum):
     Schedule = "SCHEDULE"
     Comment = "COMMENT"
     ViewActionItem = "VIEW_ACTION_ITEM"
+    ViewHighlight = "VIEW_HIGHLIGHT"
 
 
 class ArgusNotificationState(IntEnum):
