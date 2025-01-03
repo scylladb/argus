@@ -37,6 +37,9 @@
         [NotificationSource.ViewActionItem]: async () => {
             return {};
         },
+        [NotificationSource.ViewHighlight]: async () => {
+            return {};
+        },
     };
 
     const setNotificationAsRead = async function() {

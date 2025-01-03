@@ -16,6 +16,7 @@ export enum NotificationSource {
     Comment = "COMMENT",
     TestRun = "TEST_RUN",
     ViewActionItem = "VIEW_ACTION_ITEM",
+    ViewHighlight = "VIEW_HIGHLIGHT",
 }
 
 export interface ArgusNotificationJSON {

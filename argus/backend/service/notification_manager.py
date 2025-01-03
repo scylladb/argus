@@ -58,6 +58,7 @@ class NotificationSenderBase:
         ArgusNotificationTypes.AssigneeChange: "You were assigned to a run",
         ArgusNotificationTypes.ScheduleChange: "You were assigned to a schedule",
         ArgusNotificationTypes.ViewActionItemAssignee: "You were assigned to a view action item",
+        ArgusNotificationTypes.ViewHighlightMention: "You were mentioned in a view highlight",
     }
 
     CONTENT_TEMPLATES = {}
@@ -98,6 +99,8 @@ class ArgusDBNotificationSaver(NotificationSenderBase):
         ArgusNotificationTypes.AssigneeChange: lambda p: render_template("notifications/assigned.html.j2", **p if p else {}),
         ArgusNotificationTypes.ViewActionItemAssignee: lambda p: render_template(
             "notifications/view_action_item_assigned.html.j2", **p if p else {}),
+        ArgusNotificationTypes.ViewHighlightMention: lambda p: render_template(
+            "notifications/view_highlight_mention.html.j2", **p if p else {}),
     }
 
     def send_notification(self, receiver: UUID, sender: UUID, notification_type: ArgusNotificationTypes, source_type: ArgusNotificationSourceTypes,
@@ -124,6 +127,8 @@ class EmailNotificationServiceSender(NotificationSenderBase):
             "notifications/email_mention.html.j2", **p if p else {}),
         ArgusNotificationTypes.AssigneeChange: lambda p: render_template("notifications/assigned_email.html.j2", **p if p else {}),
         ArgusNotificationTypes.ViewActionItemAssignee: lambda p: render_template("notifications/view_action_item_assigned_email.html.j2", **p if p else {}),
+        ArgusNotificationTypes.ViewHighlightMention: lambda p: render_template(
+            "notifications/view_highlight_mention_email.html.j2", **p if p else {}),
     }
 
     def __init__(self):

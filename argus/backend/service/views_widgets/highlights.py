@@ -1,13 +1,15 @@
 from dataclasses import dataclass
 from datetime import datetime, UTC
 from uuid import UUID
+import re
 
-from flask import abort
+from flask import abort, g
 
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.view_widgets import WidgetHighlights, WidgetComment
-from argus.backend.models.web import ArgusNotificationTypes, ArgusNotificationSourceTypes, ArgusUserView
+from argus.backend.models.web import ArgusNotificationTypes, ArgusNotificationSourceTypes, ArgusUserView, User
 from argus.backend.service.notification_manager import NotificationManagerService
+from argus.backend.util.common import strip_html_tags
 
 
 @dataclass
@@ -139,6 +141,7 @@ class HighlightSetAssignee:
         if self.assignee_id and not isinstance(self.assignee_id, UUID):
             self.assignee_id = UUID(self.assignee_id)
 
+
 @dataclass
 class HighlightSetCompleted:
     view_id: UUID
@@ -151,24 +154,59 @@ class HighlightsService:
 
     def __init__(self) -> None:
         self.cluster = ScyllaCluster.get()
+        self.RE_MENTION = r"@[\w-]+"
+
+    def _process_mentions(self, content: str) -> set:
+        """Process mentions from content and return set of users to notify."""
+        content_stripped = strip_html_tags(content)
+        mentions = set()
+        for potential_mention in re.findall(self.RE_MENTION, content_stripped):
+            if user := User.exists_by_name(potential_mention.lstrip("@")):
+                mentions.add(user) if user.id != g.user.id else None
+        return mentions, content_stripped
+
+    def _send_highlight_notifications(self, mentions: set, content: str, view_id: UUID, sender_id: UUID, is_action_item: bool):
+        """Send notifications to mentioned users."""
+        view = ArgusUserView.get(id=view_id)
+        highlight_type = "action item" if is_action_item else "highlight"
+        for mention in mentions:
+            NotificationManagerService().send_notification(
+                receiver=mention.id,
+                sender=sender_id,
+                notification_type=ArgusNotificationTypes.ViewHighlightMention,
+                source_type=ArgusNotificationSourceTypes.ViewActionItem if is_action_item else ArgusNotificationSourceTypes.ViewHighlight,
+                source_id=view_id,
+                source_message=content,
+                content_params={
+                    "username": g.user.username,
+                    "view_id": view.id,
+                    "view_name": view.name,
+                    "display_name": view.display_name,
+                    "highlight_type": highlight_type,
+                }
+            )
 
     def create(
             self,
             creator: UUID,
             payload: HighlightCreate,
     ) -> Highlight | ActionItem:
-        created_at = datetime.now(UTC)
+        mentions, content_stripped = self._process_mentions(payload.content)
+
         highlight = WidgetHighlights(
             view_id=payload.view_id,
             index=payload.index,
-            created_at=created_at,
+            created_at=datetime.now(UTC),
             creator_id=creator,
-            content=payload.content,
+            content=content_stripped,
             completed=None if not payload.is_task else False,
             archived=datetime.fromtimestamp(0, tz=UTC),
             comments_count=0,
         )
         highlight.save()
+
+        self._send_highlight_notifications(mentions, content_stripped, payload.view_id, creator, payload.is_task)
+
         if payload.is_task:
             return ActionItem.from_db_model(highlight)
         return Highlight.from_db_model(highlight)
@@ -201,8 +239,13 @@ class HighlightsService:
             abort(404, description="Highlight not found")
         if entry.creator_id != user_id:
             abort(403, description="Not authorized to update highlight")
-        entry.content = payload.content
+
+        mentions, content_stripped = self._process_mentions(payload.content)
+        entry.content = content_stripped
         entry.save()
+
+        self._send_highlight_notifications(mentions, content_stripped, payload.view_id, user_id, entry.completed is not None)
+
         if entry.completed is None:
             return Highlight.from_db_model(entry)
         else:
