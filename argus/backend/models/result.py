@@ -171,3 +171,11 @@ class ArgusBestResultData(Model):
     key = columns.Ascii(primary_key=True)  # represents pair column:row
     value = columns.Double()
     run_id = columns.UUID()
+
+class ArgusGraphView(Model):
+    __table_name__ = "graph_view_v1"
+    test_id = columns.UUID(partition_key=True)
+    id = columns.UUID(primary_key=True)
+    name = columns.Text()
+    description = columns.Text()
+    graphs = columns.Map(key_type=columns.Text(), value_type=columns.Ascii())  # key: graph name, value: graph properties (e.g. size)

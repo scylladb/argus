@@ -7,7 +7,7 @@ from cassandra.cqlengine import columns
 from cassandra.util import uuid_from_time, unix_time_from_uuid1  # pylint: disable=no-name-in-module
 
 from argus.backend.models.plan import ArgusReleasePlan
-from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ArgusBestResultData
+from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ArgusBestResultData, ArgusGraphView
 from argus.backend.models.view_widgets import WidgetHighlights, WidgetComment
 
 
@@ -390,6 +390,7 @@ USED_MODELS: list[Model] = [
     ArgusReleasePlan,
     WidgetHighlights,
     WidgetComment,
+    ArgusGraphView,
 ]
 
 USED_TYPES: list[UserType] = [
