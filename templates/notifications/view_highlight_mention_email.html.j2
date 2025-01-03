@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html>
+<body>
+    <p>Hi,</p>
+    <p>{{ sender }} mentioned you in a {{ highlight_type }} in view "{{ display_name }}".</p>
+    {% if message %}
+    <p>Content:</p>
+    <blockquote>{{ message }}</blockquote>
+    {% endif %}
+    <p>You can view it at: <a href='{{ config["BASE_URL"] }}{{ url_for("main.view_dashboard", **{ "view_name": view_name}) }}'>{{ display_name }}</a></p>
+</body>
+</html>

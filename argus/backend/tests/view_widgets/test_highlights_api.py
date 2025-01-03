@@ -7,8 +7,8 @@ from flask import g
 
 from argus.backend.models.view_widgets import WidgetHighlights, WidgetComment
 
-
-def test_create_highlight_should_return_created_highlight(flask_client):
+@patch("argus.backend.service.views_widgets.highlights.HighlightsService._send_highlight_notifications")
+def test_create_highlight_should_return_created_highlight(notifications, flask_client):
     view_id = str(uuid4())
     now = datetime.now(UTC)
     response = flask_client.post(
@@ -28,8 +28,8 @@ def test_create_highlight_should_return_created_highlight(flask_client):
     assert "completed" not in response.json["response"]
     assert "assignee_id" not in response.json["response"]
 
-
-def test_create_action_item_should_return_created_action_item(flask_client):
+@patch("argus.backend.service.views_widgets.highlights.HighlightsService._send_highlight_notifications")
+def test_create_action_item_should_return_created_action_item(notifications, flask_client):
     view_id = str(uuid4())
     now = datetime.now(UTC)
     response = flask_client.post(
@@ -157,8 +157,8 @@ def test_unarchive_highlight_should_unmark_highlight_from_archived(flask_client)
     unarchived_entry = WidgetHighlights.objects(view_id=UUID(view_id), index=0, created_at=created_at).first()
     assert unarchived_entry.archived_at.replace(tzinfo=UTC) == datetime.fromtimestamp(0, tz=UTC)
 
-
-def test_update_highlight_should_update_content_for_creator(flask_client):
+@patch("argus.backend.service.views_widgets.highlights.HighlightsService._send_highlight_notifications")
+def test_update_highlight_should_update_content_for_creator(notifications, flask_client):
     view_id = str(uuid4())
     created_at = datetime.now(UTC)
     creator_id = g.user.id
