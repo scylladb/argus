@@ -11,6 +11,7 @@
     export let test_id = "";
     export let width = 500;
     export let height = 300;
+    export let responsive = false;
     export let releasesFilters = {};
     let chart;
     let showModal = false;
@@ -118,7 +119,7 @@
         const tickValues = calculateTickValues(xValues, width, ticksGapPx);
 
         graph.options.animation = false;
-        graph.options.responsive = false;
+        graph.options.responsive = responsive;
         graph.options.lazy = true;
         graph.options.plugins.tooltip = {
             position: "above",

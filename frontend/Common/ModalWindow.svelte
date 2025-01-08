@@ -1,12 +1,19 @@
 <script>
     import { createEventDispatcher } from "svelte";
+    import { onMount, onDestroy } from "svelte";
 
     const dispatch = createEventDispatcher();
 
     export let widthClass = "h-50";
 
+    function handleKeyDown(event) {
+        if (event.key === "Escape") {
+            dispatch("modalClose");
+        }
+    }
 </script>
 
+<svelte:window on:keydown={handleKeyDown} />
 <div class="modal-window">
     <div class="d-flex align-items-center justify-content-center p-4">
         <div class="rounded bg-white p-4 {widthClass}">

@@ -9,17 +9,9 @@
             selectedScreenshot = "";
         }
     }
-
-    onMount(() => {
-        window.addEventListener("keydown", handleKeyDown);
-    });
-
-    onDestroy(() => {
-        window.removeEventListener("keydown", handleKeyDown);
-    });
 </script>
 
-
+<svelte:window on:keydown={handleKeyDown} />
 {#if selectedScreenshot}
     <div class="screenshot-modal">
         <div class="text-end">

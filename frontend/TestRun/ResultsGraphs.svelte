@@ -2,6 +2,7 @@
     import {createEventDispatcher, onMount} from "svelte";
     import {sendMessage} from "../Stores/AlertStore";
     import ResultsGraph from "./ResultsGraph.svelte";
+    import GraphFilters from "./Components/GraphFilters.svelte";
     import dayjs from "dayjs";
     import queryString from "query-string";
 
@@ -16,16 +17,14 @@
     let filteredGraphs = [];
     let startDate = "";
     let endDate = "";
-    let dateRange = 3;
+    let dateRange = 6;
     let showCustomInputs = false;
     let width = 500;  // default width for each chart
     let height = 300;  // default height for each chart
 
-    $: setDateRange(dateRange);
-
     const dispatch = createEventDispatcher();
 
-    const dispatch_run_click = (e) => {
+    const dispatchRunClick = (e) => {
         dispatch("runClick", {runId: e.detail.runId});
     };
 
@@ -69,26 +68,14 @@
         return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
     };
 
-    const setDefaultDateRange = () => {
-        const now = dayjs();
-        endDate = now.format('YYYY-MM-DD');
-        const pastDate = now.subtract(3, 'month');
-        startDate = pastDate.format('YYYY-MM-DD');
+    const handleDateChange = (event) => {
+        startDate = event.detail.startDate;
+        endDate = event.detail.endDate;
+        fetchTestResults(test_id);
     };
 
-    const setDateRange = (months) => {
-        if (months === -1) {
-            startDate = "";
-            endDate = "";
-            showCustomInputs = true;
-            return;
-        }
-        const now = dayjs();
-        endDate = now.format('YYYY-MM-DD');
-        const pastDate = now.subtract(months, 'month');
-        startDate = pastDate.format('YYYY-MM-DD');
-        showCustomInputs = false;
-        fetchTestResults(test_id);
+    const handleReleaseChange = () => {
+        filterGraphs();
     };
 
     const extractTableFilters = () => {
@@ -179,59 +166,17 @@
     };
 
     onMount(() => {
-        setDefaultDateRange();
+        // setDefaultDateRange();
+        // fetchTestResults(test_id);
     });
 </script>
-<div class="filters-container">
-    <span class="my-auto">Time range:</span>
-    <div class="input-group input-group-inline input-group-sm mx-2">
-        <button class="btn btn-outline-primary btn-sm"
-                class:active={dateRange === 1}
-                on:click={() => dateRange = 1}>
-            Last Month
-        </button>
-        <button class="btn btn-outline-primary btn-sm"
-                class:active={dateRange === 3}
-                on:click={() => dateRange = 3}>
-            Last 3 Months
-        </button>
-        <button class="btn btn-outline-primary btn-sm"
-                class:active={dateRange === 6}
-                on:click={() => dateRange = 6}>
-            Last 6 Months
-        </button>
-        <button class="btn btn-outline-primary btn-sm"
-                class:active={dateRange === 12}
-                on:click={() => dateRange = 12}>
-            Last year
-        </button>
-        <button class="btn btn-outline-primary btn-sm"
-                class:active={dateRange === 24}
-                on:click={() => dateRange = 24}>
-            Last 2 years
-        </button>
-        <button class="btn btn-outline-primary btn-sm"
-                on:click={() => dateRange = -1}
-                class:active={showCustomInputs}>
-            Custom
-        </button>
-        {#if showCustomInputs}
-            <input type="date" class="form-control date-input" bind:value={startDate} on:change={() => fetchTestResults(test_id)}/>
-            <input type="date" class="form-control date-input" bind:value={endDate} on:change={() => fetchTestResults(test_id)}/>
-        {/if}
-    </div>
-    <span class="my-auto">Releases:</span>
-    <div class="input-group input-group-inline input-group-sm mx-2">
-        {#each Object.keys(releasesFilters) as release}
-            <button class="btn btn-sm btn-outline-dark"
-                    on:click={() => toggleReleaseFilter(release)}
-                    class:active={releasesFilters[release]}
-            >
-                {release}
-            </button>
-        {/each}
-    </div>
-</div>
+
+<GraphFilters
+        bind:dateRange
+        bind:releasesFilters
+        on:dateChange={handleDateChange}
+        on:releaseChange={handleReleaseChange}
+/>
 
 <span>Filters:</span>
 <div class="filters-container  ">
@@ -286,7 +231,7 @@
                     test_id={test_id}
                     index={graph.id}
                     releasesFilters={releasesFilters}
-                    on:runClick={dispatch_run_click}
+                    on:runClick={dispatchRunClick}
             />
         </div>
     {/each}

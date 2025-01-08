@@ -500,9 +500,13 @@ class ResultsService:
 
         return [{entry['table_name']: entry['table_data']} for entry in table_entries]
 
-    def get_test_graphs(self, test_id: UUID, start_date: datetime | None = None, end_date: datetime | None = None):
+    def get_test_graphs(self, test_id: UUID, start_date: datetime | None = None, end_date: datetime | None = None, table_names: list[str] | None = None):
         runs_details = self._get_runs_details(test_id)
         tables_meta = self._get_tables_metadata(test_id=test_id)
+
+        if table_names:
+            tables_meta = [table for table in tables_meta if table.name in table_names]
+
         graphs = []
         releases_filters = set()
         for table in tables_meta:

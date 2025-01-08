@@ -395,6 +395,7 @@ def test_results():
     test_id = request.args.get("testId")
     start_date_str = request.args.get("startDate")
     end_date_str = request.args.get("endDate")
+    table_names = request.args.getlist("tableNames[]")
 
     if not test_id:
         raise Exception("No testId provided")
@@ -407,7 +408,7 @@ def test_results():
         exists = service.is_results_exist(test_id=UUID(test_id))
         return Response(status=200 if exists else 404)
 
-    graphs, ticks, releases_filters = service.get_test_graphs(test_id=UUID(test_id), start_date=start_date, end_date=end_date)
+    graphs, ticks, releases_filters = service.get_test_graphs(test_id=UUID(test_id), start_date=start_date, end_date=end_date, table_names=table_names)
 
     return {
         "status": "ok",
