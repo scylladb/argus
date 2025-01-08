@@ -144,7 +144,12 @@
         </div>
         <ul class="result-list">
             {#each Object.entries(filteredTables) as [table_name, result]}
-                <ResultTable table_name={table_name} result={result} bind:selectedScreenshot/>
+                <ResultTable
+                    table_name={table_name}
+                    result={result}
+                    test_id={test_id}
+                    bind:selectedScreenshot
+                />
             {/each}
         </ul>
     </div>

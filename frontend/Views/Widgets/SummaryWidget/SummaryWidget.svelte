@@ -351,8 +351,12 @@
                                                     {#each results as tableEntry}
                                                         {#each Object.entries(tableEntry) as [table_name, result]}
                                                             <li class="list-group-item">
-                                                                <ResultTable table_name={table_name} result={result}
-                                                                             bind:selectedScreenshot/>
+                                                                <ResultTable
+                                                                    {table_name}
+                                                                    {result}
+                                                                    test_id={testId}
+                                                                    bind:selectedScreenshot
+                                                                />
                                                             </li>
                                                         {/each}
                                                     {/each}

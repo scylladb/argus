@@ -1,22 +1,41 @@
 <script>
-    import { faMarkdown } from "@fortawesome/free-brands-svg-icons";
-    import { faInfoCircle } from "@fortawesome/free-solid-svg-icons";
-    import { ResultCellStatusStyleMap } from "../../Common/TestStatus";
+    import {faMarkdown} from "@fortawesome/free-brands-svg-icons";
+    import {faInfoCircle, faChartLine} from "@fortawesome/free-solid-svg-icons";
+    import {ResultCellStatusStyleMap} from "../../Common/TestStatus";
     import Cell from "./Cell.svelte";
     import Fa from "svelte-fa";
-    import { sendMessage } from "../../Stores/AlertStore";
+    import {sendMessage} from "../../Stores/AlertStore";
+    import ResultsGraph from "../ResultsGraph.svelte";
+    import queryString from "query-string";
+    import GraphFilters from "./GraphFilters.svelte";
+    import ModalWindow from "../../Common/ModalWindow.svelte";
 
     export let table_name;
     export let result;
     export let selectedScreenshot;
+    export let test_id;
 
     let showDescription = false;
+    let showGraphModal = false;
+    let graph = null;
+    let ticks = {};
+    let releasesFilters = {};
+    let selectedColumnName = "";
+    let dateRange = 6;
+    let startDate = "";
+    let endDate = "";
+    let redraw = 0;
 
     const tableStyleToColor = {
         "table-success": "green",
         "table-danger": "red",
         "table-warning": "yellow",
         "table-secondary": "gray",
+    };
+
+    const dispatchRunClick = (e) => {
+        const runId = e.detail.runId;
+        window.open(`/tests/scylla-cluster-tests/${runId}`, "_blank", "popup");
     };
 
     function styleToColor(classList) {
@@ -37,32 +56,34 @@
             const rows = Array.from(table.querySelectorAll("tr"));
             rows.forEach((row, rowIndex) => {
                 const cells = Array.from(row.querySelectorAll("th, td"));
-                const markdownRow = cells.map(cell => {
-                    let cellText = cell.innerText.trim();
-                    let link = "";
+                const markdownRow = cells
+                    .map((cell) => {
+                        let cellText = cell.innerText.trim();
+                        let link = "";
 
-                    const linkElement = cell.querySelector("a");
-                    const buttonElement = cell.querySelector("button");
+                        const linkElement = cell.querySelector("a");
+                        const buttonElement = cell.querySelector("button");
 
-                    if (linkElement) {
-                        link = linkElement.href;
-                    } else if (buttonElement) {
-                        link = buttonElement.getAttribute("data-link");
-                    }
+                        if (linkElement) {
+                            link = linkElement.href;
+                        } else if (buttonElement) {
+                            link = buttonElement.getAttribute("data-link");
+                        }
 
-                    cellText = cellText.replace(/#/g, "#&#8203;");
+                        cellText = cellText.replace(/#/g, "#&#8203;");
 
-                    if (link) {
-                        cellText = `[${cellText}](${link})`;
-                    }
+                        if (link) {
+                            cellText = `[${cellText}](${link})`;
+                        }
 
-                    const color = styleToColor(cell.className);
-                    if (color) {
-                        cellText = `$$\{\\color{${color}}${cellText}}$$`;
-                    }
+                        const color = styleToColor(cell.className);
+                        if (color) {
+                            cellText = `$$\{\\color{${color}}${cellText}}$$`;
+                        }
 
-                    return cellText;
-                }).join(" | ");
+                        return cellText;
+                    })
+                    .join(" | ");
                 markdown += `| ${markdownRow} |\n`;
 
                 if (rowIndex === 0) {
@@ -83,13 +104,70 @@
     function toggleDescription() {
         showDescription = !showDescription;
     }
+
+    async function fetchGraphData() {
+        try {
+            const params = queryString.stringify({
+                testId: test_id,
+                startDate,
+                endDate,
+                "tableNames[]": [table_name],
+            });
+
+            let res = await fetch(`/api/v1/test-results?${params}`);
+            if (res.status !== 200) {
+                throw new Error(`HTTP Error ${res.status} trying to fetch test results`);
+            }
+            let results = await res.json();
+            if (results.status !== "ok") {
+                throw new Error(`API Error: ${results.message}`);
+            }
+
+            const response = results["response"];
+            if (!response.graphs || response.graphs.length === 0) {
+                throw new Error("No graph data available for this table");
+            }
+
+            graph = response["graphs"].find((graph) => graph.options.plugins.title.text.endsWith(selectedColumnName));
+            ticks = response["ticks"];
+            releasesFilters = Object.fromEntries(response["releases_filters"].map((key) => [key, true]));
+        } catch (error) {
+            console.log("Error:", error);
+            sendMessage("error", `Failed to load graph data: ${error.message}`);
+        }
+    }
+
+    async function openGraphModal(columnName = "") {
+        selectedColumnName = columnName;
+        showGraphModal = true;
+    }
+
+    function closeGraphModal() {
+        showGraphModal = false;
+        graph = null;
+        selectedColumnName = "";
+    }
+
+    async function handleDateChange(event) {
+        startDate = event.detail.startDate;
+        endDate = event.detail.endDate;
+        if (showGraphModal) {
+            await fetchGraphData();
+            redraw++;
+        }
+    }
+
+    async function handleReleaseChange(event) {
+        releasesFilters = event.detail.releasesFilters;
+        redraw++;
+    }
 </script>
 
 <li class="result-item {result.table_status}">
     <div class="result-content">
         <div class="table-header">
             <h5>{table_name}</h5>
-            <button class="btn btn-outline-secondary btn-sm p-1" on:click={toggleDescription}>
+            <button class="btn btn-link p-0 ms-1" on:click={toggleDescription}>
                 <Fa icon={faInfoCircle} size="sm"/>
             </button>
         </div>
@@ -102,12 +180,23 @@
                     <thead class="thead-dark">
                     <tr>
                         <th>
-                            <button class="btn btn-outline-success btn-sm p-1" on:click={copyResultTableAsMarkdown}>
+                            <button class="btn btn-link p-1" on:click={copyResultTableAsMarkdown}>
                                 <Fa icon={faMarkdown} size="sm"/>
                             </button>
                         </th>
                         {#each result.columns as col}
-                            <th>{col.name} <span class="unit">{col.unit ? `[${col.unit}]` : ''}</span></th>
+                            {#if col.unit}
+                                <th class="clickable" on:click={() => openGraphModal(col.name)} title="Show metric history">
+                                    <div class="column-header">
+                                        {col.name}<span
+                                            class="unit">{col.unit ? `[${col.unit}]` : ""}</span>
+                                    </div>
+                                </th>
+                            {:else}
+                                <th>
+                                    <div class="column-header">{col.name}</div>
+                                </th>
+                            {/if}
                         {/each}
                     </tr>
                     </thead>
@@ -117,7 +206,11 @@
                             <td>{row}</td>
                             {#each result.columns as col}
                                 {#key result.table_data[row][col.name]}
-                                    <td class="{ResultCellStatusStyleMap[result.table_data[row][col.name]?.status || 'NULL']}">
+                                    <td
+                                            class={ResultCellStatusStyleMap[
+                                                result.table_data[row][col.name]?.status || "NULL"
+                                            ]}
+                                    >
                                         <Cell cell={result.table_data[row][col.name]} bind:selectedScreenshot/>
                                     </td>
                                 {/key}
@@ -130,6 +223,37 @@
         </div>
     </div>
 </li>
+
+{#if showGraphModal}
+    <ModalWindow widthClass="w-75" on:modalClose={closeGraphModal}>
+        <div slot="title">
+            {table_name}
+            {selectedColumnName ? `- ${selectedColumnName}` : ""}
+        </div>
+        <div slot="body" style="min-height: 800px;">
+            <GraphFilters
+                    bind:dateRange
+                    bind:releasesFilters
+                    on:dateChange={handleDateChange}
+                    on:releaseChange={handleReleaseChange}
+            />
+            {#if graph}
+                {#key redraw}
+                    <ResultsGraph
+                            {graph}
+                            {ticks}
+                            {test_id}
+                            width={1400}
+                            height={700}
+                            {releasesFilters}
+                            responsive={true}
+                            on:runClick={dispatchRunClick}
+                    />
+                {/key}
+            {/if}
+        </div>
+    </ModalWindow>
+{/if}
 
 <style>
     .result-item {
@@ -194,7 +318,8 @@
         font-size: 0.85rem;
     }
 
-    th, td {
+    th,
+    td {
         text-align: center;
         padding: 0.25rem !important;
     }
@@ -208,5 +333,24 @@
     :global(.btn-sm) {
         font-size: 0.75rem;
     }
-</style>
 
+    .column-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+    }
+
+    .column-header button {
+        opacity: 0.6;
+    }
+
+    .column-header button:hover {
+        opacity: 1;
+    }
+
+    .clickable {
+        text-decoration: underline;
+        cursor: pointer;
+    }
+</style>
