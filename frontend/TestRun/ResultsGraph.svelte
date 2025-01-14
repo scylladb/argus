@@ -1,8 +1,8 @@
 <script>
-    import {Chart, registerables, Tooltip} from "chart.js";
-    import {createEventDispatcher, onDestroy, onMount} from "svelte";
+    import { Chart, registerables, Tooltip } from "chart.js";
+    import { createEventDispatcher, onDestroy, onMount } from "svelte";
     import "chartjs-adapter-date-fns";
-    import {faExpand} from "@fortawesome/free-solid-svg-icons";
+    import { faExpand, faExternalLinkAlt } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
 
     export let graph = {};
@@ -16,28 +16,35 @@
     let chart;
     let showModal = false;
     let modalChart;
+    let activeTooltip = null;
 
     function openModal() {
         showModal = true;
-        window.addEventListener('keydown', handleKeydown);
+        window.addEventListener("keydown", handleKeydown);
     }
 
     function closeModal() {
+        activeTooltip = null;
         showModal = false;
         if (modalChart) {
             modalChart.destroy();
+            modalChart = null;
         }
-        window.removeEventListener('keydown', handleKeydown);
+        const tooltipEl = document.getElementById("chartjs-tooltip");
+        if (tooltipEl) {
+            tooltipEl.remove();
+        }
+        window.removeEventListener("keydown", handleKeydown);
     }
 
     function handleKeydown(event) {
-        if (event.key === 'Escape') {
+        if (event.key === "Escape") {
             closeModal();
         }
     }
 
     onDestroy(() => {
-        window.removeEventListener('keydown', handleKeydown);
+        window.removeEventListener("keydown", handleKeydown);
     });
 
     const ticksGapPx = 40;
@@ -69,7 +76,10 @@
 
         while (currentIndex < xValuesUnique.length - 1) {
             let nextIndex = currentIndex + 1;
-            while (nextIndex < xValuesUnique.length && (new Date(xValuesUnique[nextIndex]) - new Date(xValuesUnique[currentIndex])) < minGapInDays) {
+            while (
+                nextIndex < xValuesUnique.length &&
+                new Date(xValuesUnique[nextIndex]) - new Date(xValuesUnique[currentIndex]) < minGapInDays
+            ) {
                 nextIndex++;
             }
             if (nextIndex < xValuesUnique.length) {
@@ -78,7 +88,11 @@
             currentIndex = nextIndex;
         }
 
-        if (tickValues.length > 1 && (new Date(xValuesUnique[xValuesUnique.length - 1]) - new Date(tickValues[tickValues.length - 2])) < minGapInDays) {
+        if (
+            tickValues.length > 1 &&
+            new Date(xValuesUnique[xValuesUnique.length - 1]) - new Date(tickValues[tickValues.length - 2]) <
+                minGapInDays
+        ) {
             tickValues[tickValues.length - 1] = xValuesUnique[xValuesUnique.length - 1];
         } else if (tickValues[tickValues.length - 1] !== xValuesUnique[xValuesUnique.length - 1]) {
             tickValues.push(xValuesUnique[xValuesUnique.length - 1]);
@@ -94,56 +108,146 @@
         return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
     }
 
+    const handleOpenRun = (e) => {
+        const runId = e.detail;
+        window.open(`/tests/scylla-cluster-tests/${runId}`, "_blank", "popup");
+    };
+
+    function handleChartClick(event, elements, chart) {
+        if (elements[0]) {
+            const dataset_idx = elements[0].datasetIndex;
+            const index = elements[0].index;
+            activeTooltip = { datasetIndex: dataset_idx, index: index };
+        } else {
+            // Clicked outside points - clear tooltip
+            activeTooltip = null;
+            const tooltipEl = document.getElementById("chartjs-tooltip");
+            if (tooltipEl) tooltipEl.remove();
+        }
+    }
+
     onMount(() => {
         Chart.register(...registerables);
 
         if (Object.values(releasesFilters).includes(false)) {
             // filter datasets based on releases filters
-            graph = {...graph, data: {...graph.data, datasets: [...graph.data.datasets]}};
-            graph.data.datasets = graph.data.datasets.filter(dataset => {
-                const releaseLabel = dataset.label.split(' -')[0];
+            graph = { ...graph, data: { ...graph.data, datasets: [...graph.data.datasets] } };
+            graph.data.datasets = graph.data.datasets.filter((dataset) => {
+                const releaseLabel = dataset.label.split(" -")[0];
                 return releasesFilters[releaseLabel] !== false;
             });
         }
 
         let actions = {
-            onClick: (event, elements, chart) => {
-                if (elements[0]) {
-                    const dataset_idx = elements[0].datasetIndex;
-                    const index = elements[0].index;
-                    dispatch("runClick", {runId: chart.data.datasets[dataset_idx].data[index].id});
-                }
-            }
+            onClick: handleChartClick,
         };
-        const xValues = graph.data.datasets.flatMap(dataset => dataset.data.map(point => point.x.slice(0, 10)));
+        const xValues = graph.data.datasets.flatMap((dataset) => dataset.data.map((point) => point.x.slice(0, 10)));
         const tickValues = calculateTickValues(xValues, width, ticksGapPx);
 
         graph.options.animation = false;
         graph.options.responsive = responsive;
         graph.options.lazy = true;
         graph.options.plugins.tooltip = {
+            enabled: false,
+            mode: "point",
+            intersect: true,
             position: "above",
-            usePointStyle: true,
-            bodyFont: {
-                size: 16,
-                family: 'sans-serif',
+            external: function (context) {
+                if (activeTooltip) {
+                    return;
+                }
+                let tooltipEl = document.getElementById("chartjs-tooltip");
+                if (!tooltipEl) {
+                    tooltipEl = document.createElement("div");
+                    tooltipEl.id = "chartjs-tooltip";
+                    tooltipEl.innerHTML = "<div></div>";
+                    document.body.appendChild(tooltipEl);
+                }
+
+                const tooltipModel = context.tooltip;
+                if (tooltipModel.opacity === 0 && !activeTooltip) {
+                    tooltipEl.remove();
+                    return;
+                }
+
+                if (tooltipModel.body) {
+                    const titleLines = tooltipModel.title || [];
+                    const bodyLines = tooltipModel.body.map((b) => b.lines);
+
+                    let innerHtml = '<div class="custom-tooltip">';
+
+                    tooltipModel.dataPoints.forEach((dataPoint, i) => {
+                        const colors = tooltipModel.labelColors[i];
+                        const pointStyle = tooltipModel.labelPointStyles[i];
+
+                        const span = document.createElement("span");
+                        span.style.display = "inline-block";
+                        span.style.width = "10px";
+                        span.style.height = "10px";
+                        span.style.marginRight = "8px";
+                        span.style.borderRadius = "50%";
+                        span.style.backgroundColor = colors.backgroundColor;
+                        span.style.border = `2px solid ${colors.borderColor}`;
+
+                        // Add title
+                        innerHtml += `<div class="tooltip-title">`;
+                        innerHtml += span.outerHTML;
+                        innerHtml += titleLines[i];
+                        innerHtml += `</div>`;
+
+                        // Add corresponding changes
+                        const changes = tooltipModel.body[i]?.lines || [];
+                        changes.forEach((line) => {
+                            innerHtml += `<div class="tooltip-body">${line}</div>`;
+                        });
+
+                        const runId = context.chart.data.datasets[dataPoint.datasetIndex].data[dataPoint.dataIndex].id;
+                        innerHtml += `<div class="d-flex justify-content-end mt-2">`;
+                        innerHtml += `<button class="btn btn-success btn-sm" onclick="document.getElementById('graph-${test_id}-${index}').dispatchEvent(new CustomEvent('openRun', {detail: '${runId}'}))">Open <i class="fas fa-external-link-alt"></i></button>`;
+                        innerHtml += `</div>`;
+
+                        // Add separator between points if not the last one
+                        if (i < tooltipModel.dataPoints.length - 1) {
+                            innerHtml += '<hr class="tooltip-separator">';
+                        }
+                    });
+
+                    innerHtml += "</div>";
+                    tooltipEl.innerHTML = innerHtml;
+                }
+
+                const position = context.chart.canvas.getBoundingClientRect();
+
+                // Display, position, and set styles for font
+                tooltipEl.style.position = "absolute";
+                tooltipEl.style.left = position.left + window.scrollX + tooltipModel.caretX + "px";
+                tooltipEl.style.top = position.top + window.scrollY + tooltipModel.caretY + "px";
+                tooltipEl.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
+                tooltipEl.style.color = "#fff";
+                tooltipEl.style.borderRadius = "3px";
+                tooltipEl.style.transform = "translate(-50%, -100%)";
             },
             callbacks: {
-                label: function (tooltipItem) {
-                    const yValue = tooltipItem.parsed.y;
-                    const limitValue = tooltipItem.raw.limit;
-                    const isHHMMSS = graph.options.scales.y.title?.text?.includes("[HH:MM:SS]");
-                    const formattedY = isHHMMSS ? formatSecondsToHHMMSS(yValue) : yValue.toFixed(2);
-                    const formattedLimit = isHHMMSS && limitValue !== undefined
-                        ? formatSecondsToHHMMSS(limitValue)
-                        : limitValue?.toFixed(2) || "N/A";
+                title: function (tooltipItems) {
+                    return tooltipItems.map((item) => {
+                        const yValue = item.parsed.y;
+                        const limitValue = item.raw.limit;
+                        const isHHMMSS = graph.options.scales.y.title?.text?.includes("[HH:MM:SS]");
+                        const formattedY = isHHMMSS ? formatSecondsToHHMMSS(yValue) : yValue.toFixed(2);
+                        const formattedLimit =
+                            isHHMMSS && limitValue !== undefined
+                                ? formatSecondsToHHMMSS(limitValue)
+                                : limitValue?.toFixed(2) || "N/A";
 
-                    const x = new Date(tooltipItem.parsed.x).toLocaleDateString("sv-SE");
-                    const ori = tooltipItem.raw.ori;
-                    const changes = tooltipItem.raw.changes;
-                    return [`${x}: ${ori ? ori : formattedY} (error threshold: ${formattedLimit})`, ...changes];
+                        const x = new Date(item.parsed.x).toLocaleDateString("sv-SE");
+                        const ori = item.raw.ori;
+                        return `${x}: ${ori ? ori : formattedY} (error threshold: ${formattedLimit})`;
+                    });
                 },
-            }
+                label: function (tooltipItem) {
+                    return tooltipItem.raw.changes || [];
+                },
+            },
         };
         graph.options.scales.x.min = ticks["min"];
         graph.options.scales.x.max = ticks["max"];
@@ -153,7 +257,7 @@
                 if (tickValues.includes(value)) {
                     return value;
                 }
-            }
+            },
         };
         graph.options.scales.y.title = graph.options.scales.y.title || {};
         graph.options.scales.y.ticks = {
@@ -167,56 +271,62 @@
 
         graph.data.datasets.forEach((dataset) => {
             const pointBackgroundColors = dataset.data.map((point) =>
-                point.dep_change ? 'white' : dataset.backgroundColor || dataset.borderColor
+                point.dep_change ? "white" : dataset.backgroundColor || dataset.borderColor
             );
             dataset.pointBackgroundColor = pointBackgroundColors;
         });
 
-        chart = new Chart(
-            document.getElementById(`graph-${test_id}-${index}`),
-            {type: "scatter", data: graph.data, options: {...graph.options, ...actions}}
-        );
+        chart = new Chart(document.getElementById(`graph-${test_id}-${index}`), {
+            type: "scatter",
+            data: graph.data,
+            options: { ...graph.options, ...actions },
+        });
 
         return () => {
             chart.destroy();
             if (modalChart) {
                 modalChart.destroy();
+                modalChart = null;
+            }
+            // Remove tooltip element on component destroy
+            const tooltipEl = document.getElementById("chartjs-tooltip");
+            if (tooltipEl) {
+                tooltipEl.remove();
             }
             Chart.unregister(...registerables);
-            window.removeEventListener('keydown', handleKeydown);
+            window.removeEventListener("keydown", handleKeydown);
         };
     });
 
     $: if (showModal) {
+        let actions = {
+            onClick: handleChartClick,
+        };
         setTimeout(() => {
             const modalCanvas = document.getElementById(`modal-graph-${test_id}-${index}`);
             if (modalCanvas) {
-                modalChart = new Chart(
-                    modalCanvas,
-                    {
-                        type: "scatter",
-                        data: graph.data,
-                        options: {...graph.options, responsive: true, maintainAspectRatio: false}
-                    }
-                );
+                modalChart = new Chart(modalCanvas, {
+                    type: "scatter",
+                    data: graph.data,
+                    options: { ...graph.options, responsive: true, maintainAspectRatio: false, ...actions },
+                });
             }
         }, 0);
     }
-
 </script>
 
 <div class="graph-container">
     <button class="enlarge-btn" on:click={openModal}>
-        <Fa icon={faExpand}/>
+        <Fa icon={faExpand} />
     </button>
-    <canvas id="graph-{test_id}-{index}" width="{width}" height="{height}"></canvas>
+    <canvas id="graph-{test_id}-{index}" {width} {height} on:openRun={handleOpenRun} />
 </div>
 
 {#if showModal}
     <div class="modal" on:click={closeModal}>
         <div class="modal-content" on:click|stopPropagation>
             <button class="close-btn" on:click={closeModal}>&times;</button>
-            <canvas id="modal-graph-{test_id}-{index}"></canvas>
+            <canvas id="modal-graph-{test_id}-{index}" />
         </div>
     </div>
 {/if}
@@ -276,5 +386,36 @@
     canvas {
         max-width: 100%;
         max-height: 100%;
+    }
+
+    :global(#chartjs-tooltip) {
+        z-index: 10000;
+    }
+
+    :global(.custom-tooltip) {
+        min-width: 200px;
+        margin: 4px;
+    }
+
+    :global(.tooltip-title) {
+        margin-bottom: 8px;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+    }
+
+    :global(.tooltip-title span) {
+        flex-shrink: 0;
+    }
+
+    :global(.tooltip-body) {
+        margin-bottom: 4px;
+    }
+
+    :global(.tooltip-separator) {
+        border: none;
+        height: 1px;
+        background-color: #ccc;
+        margin: 8px 0;
     }
 </style>
