@@ -9,6 +9,7 @@ from cassandra.util import uuid_from_time, unix_time_from_uuid1  # pylint: disab
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ArgusBestResultData, ArgusGraphView
 from argus.backend.models.view_widgets import WidgetHighlights, WidgetComment
+from argus.backend.models.argus_ai import ErrorEventEmbeddings, CriticalEventEmbeddings
 
 
 def uuid_now():
@@ -100,6 +101,7 @@ class Team(Model):
     leader = columns.UUID(index=True, required=True)
     members = columns.List(value_type=columns.UUID)
     motd = columns.Text()
+
 
 class UserOauthToken(Model):
     id = columns.UUID(primary_key=True, default=uuid4)
@@ -394,6 +396,8 @@ USED_MODELS: list[Model] = [
     WidgetHighlights,
     WidgetComment,
     ArgusGraphView,
+    ErrorEventEmbeddings,
+    CriticalEventEmbeddings,
 ]
 
 USED_TYPES: list[UserType] = [

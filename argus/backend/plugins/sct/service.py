@@ -7,7 +7,7 @@ import re
 from time import time
 from xml.etree import ElementTree
 from flask import g
-from argus.backend.models.web import ArgusEventTypes
+from argus.backend.models.web import ArgusEventTypes, ArgusGithubIssue, ErrorEventEmbeddings, CriticalEventEmbeddings
 from argus.backend.plugins.sct.testrun import SCTJunitReports, SCTTestRun, SubtestType
 from argus.common.sct_types import GeminiResultsRequest, PerformanceResultsRequest, ResourceUpdateRequest
 from argus.backend.plugins.sct.udt import (
@@ -435,6 +435,92 @@ class SCTService:
                 }
                 links.append(log_link)
         return links
+
+    @staticmethod
+    def get_similar_events(run_id: str) -> list[dict]:
+        """Get similar events for each event in a test run
+
+        Args:
+            run_id: The test run ID to get similar events for
+
+        Returns:
+            List of dictionaries containing event_index, severity and similars_set for each event
+        """
+        error_embeddings = ErrorEventEmbeddings.filter(run_id=run_id).only(["event_index", "similars_map"]).all()
+        critical_embeddings = CriticalEventEmbeddings.filter(run_id=run_id).only(["event_index", "similars_map"]).all()
+        
+        result = []
+        # Process ERROR embeddings
+        for embedding in error_embeddings:
+            result.append(
+                {
+                    "event_index": embedding.event_index,
+                    "severity": "ERROR",
+                    "similars_set": [str(similar_run_id) for similar_run_id in embedding.similars_map],
+                }
+            )
+        
+        # Process CRITICAL embeddings
+        for embedding in critical_embeddings:
+            result.append(
+                {
+                    "event_index": embedding.event_index,
+                    "severity": "CRITICAL",
+                    "similars_set": [str(similar_run_id) for similar_run_id in embedding.similars_map],
+                }
+            )
+            
+        return result
+
+    @staticmethod
+    def get_similar_runs_info(run_ids: list[str]):
+        """Get build IDs and issues for a list of run IDs
+
+        Args:
+            run_ids: List of run IDs to fetch information for
+
+        Returns:
+            Dictionary mapping run IDs to their information (build_id, start_time, and issues)
+        """
+
+        result = {}
+        for run_id in run_ids:
+            try:
+                test_run = SCTTestRun.get(id=run_id)
+                if not test_run:
+                    continue
+                issues = ArgusGithubIssue.objects.filter(run_id=run_id).all()
+                try:
+                    build_number = int(
+                        test_run.build_job_url[:-1].split("/")[-1]
+                    )
+                except Exception as e:
+                    LOGGER.error(f"Error parsing build number for run {run_id}: {test_run.build_job_url[:-1].split("/")} - {str(e)}")
+                    build_number = -1
+
+                for pkg_name in ["scylla-server-upgraded", "scylla-server", "scylla-server-target"]:
+                    sut_version = next((f"{pkg.version}-{pkg.date}" for pkg in test_run.packages if pkg.name == pkg_name), None)
+                    if sut_version:
+                        break
+                result[run_id] = {
+                    "build_id": f"{test_run.build_id}#{build_number}",
+                    "start_time": test_run.start_time.isoformat(),
+                    "version": sut_version or "unknown",
+                    "issues": [
+                        {
+                            "issue_number": issue.issue_number,
+                            "last_status": issue.last_status,
+                            "title": issue.title,
+                            "url": issue.url,
+                        }
+                        for issue in issues
+                    ],
+                }
+            except Exception as e:
+                LOGGER.error(f"Error fetching info for run {run_id}: {str(e)}")
+                result[run_id] = {"build_id": None, "start_time": None, "issues": []}
+
+        return result
 
     @staticmethod
     def get_scylla_version_kernels_report(release_name: str):

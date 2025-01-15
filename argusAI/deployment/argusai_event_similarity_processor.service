@@ -1,0 +1,19 @@
+[Unit]
+Description=Event Similarity Processor Service for Argus AI
+After=network.target
+
+[Service]
+Type=simple
+User=argus
+Group=argus
+WorkingDirectory=/home/argus/app
+Environment="PYTHONPATH=."
+Environment="DAYS_BACK=120"
+ExecStart=/usr/bin/uv --project argusAI/pyproject.toml run argusAI/event_similarity_processor.py
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Install]
+WantedBy=multi-user.target
