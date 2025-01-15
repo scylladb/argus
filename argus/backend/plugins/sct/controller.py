@@ -184,3 +184,36 @@ def sct_get_junit_reports(run_id: str):
         "status": "ok",
         "response": result
     }
+
+@bp.route("/<string:run_id>/similar_events", methods=["GET"])
+@api_login_required
+def sct_get_similar_events(run_id: str):
+    result = SCTService.get_similar_events(run_id=run_id)
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+@bp.route("/similar_runs_info", methods=["POST"])
+@api_login_required
+def sct_get_similar_runs_info():
+    """Get build IDs and issues for a list of run IDs"""
+    data = request.get_json()
+    if not data or "run_ids" not in data:
+        return {
+            "status": "error",
+            "response": "Missing run_ids parameter"
+        }, 400
+    
+    run_ids = data["run_ids"]
+    if not isinstance(run_ids, list):
+        return {
+            "status": "error",
+            "response": "run_ids must be a list"
+        }, 400
+    
+    result = SCTService.get_similar_runs_info(run_ids=run_ids)
+    return {
+        "status": "ok",
+        "response": result
+    }
