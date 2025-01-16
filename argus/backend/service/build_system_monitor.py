@@ -75,7 +75,7 @@ class ArgusTestsMonitor(ABC):
 class JenkinsMonitor(ArgusTestsMonitor):
 
     BUILD_SYSTEM_FILTERED_PREFIXES = [
-        "releng",
+
     ]
 
     JENKINS_MONITORED_RELEASES = [
