@@ -250,7 +250,6 @@
             },
         };
         graph.options.scales.x.min = ticks["min"];
-        graph.options.scales.x.max = ticks["max"];
         graph.options.scales.x.ticks = {
             minRotation: 45,
             callback: function (value, index) {
