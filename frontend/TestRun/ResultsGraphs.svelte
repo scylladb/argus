@@ -20,7 +20,7 @@
     let dateRange = 6;
     let showCustomInputs = false;
     let width = 500;  // default width for each chart
-    let height = 300;  // default height for each chart
+    let height = 350;  // default height for each chart
 
     const dispatch = createEventDispatcher();
 

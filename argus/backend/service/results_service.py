@@ -311,10 +311,10 @@ def create_chart_options(table: ArgusGenericResultMetadata, column: ColumnMetada
     """
     options = copy.deepcopy(default_options)
     options["plugins"]["title"]["text"] = f"{table.name} - {column.name}"
+    options["plugins"]["subtitle"] = {"text": table.description, "display": True} if table.description else {"text": ""}
     options["scales"]["y"]["title"]["text"] = f"[{column.unit}]" if column.unit else ""
     options["scales"]["y"]["min"] = min_y
     options["scales"]["y"]["max"] = max_y
-
     return options
 
 
