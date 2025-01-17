@@ -339,7 +339,7 @@ def calculate_graph_ticks(graphs: List[Dict]) -> dict[str, str]:
 def _identify_most_changed_package(packages_list: list[PackageVersion]) -> str:
     version_date_changes: dict[str, set[tuple[str, str]]] = defaultdict(set)
 
-    # filtering as workaround for issue https://github.com/scylladb/argus/issues/550
+    # avoid counting unrelevant packages when detecting automatically
     packages_list = [pkg for pkg in packages_list if pkg.name in ('scylla-server-upgraded', 'scylla-server', 'scylla-manager-server')]
     for package_version in packages_list:
         version_date_changes[package_version.name].add((package_version.version, package_version.date))
@@ -410,7 +410,7 @@ class ResultsService:
         return RunsDetails(ignored=ignored_runs, packages=packages)
 
     def _get_tables_metadata(self, test_id: UUID) -> list[ArgusGenericResultMetadata]:
-        query_fields = ["name", "description", "columns_meta", "rows_meta", "validation_rules"]
+        query_fields = ["name", "description", "columns_meta", "rows_meta", "validation_rules", "sut_package_name"]
         raw_query = (f"SELECT {','.join(query_fields)}"
                      f" FROM generic_result_metadata_v1 WHERE test_id = ?")
         query = self.cluster.prepare(raw_query)
@@ -527,7 +527,9 @@ class ResultsService:
             if not data:
                 continue
             best_results = self.get_best_results(test_id=test_id, name=table.name)
-            main_package = _identify_most_changed_package([pkg for sublist in runs_details.packages.values() for pkg in sublist])
+            main_package = tables_meta[0].sut_package_name
+            if not main_package:
+                main_package = _identify_most_changed_package([pkg for sublist in runs_details.packages.values() for pkg in sublist])
             releases_map = _split_results_by_release(runs_details.packages, main_package=main_package)
             graphs.extend(
                 create_chartjs(table, data, best_results, releases_map=releases_map, runs_details=runs_details, main_package=main_package))

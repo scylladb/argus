@@ -20,6 +20,7 @@ class SampleTable(GenericResultTable):
     class Meta:
         name = "Test Table"
         description = "Test Table Description"
+        sut_package_name = "test_package"
         Columns = [
             ColumnMetadata(name="metric1", unit="ms", type=ResultType.FLOAT, higher_is_better=False),
             ColumnMetadata(name="metric2", unit="ms", type=ResultType.INTEGER, higher_is_better=False),
@@ -42,6 +43,7 @@ def test_submit_results_responds_ok_if_all_cells_pass(fake_test, client_service)
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
     client_service.submit_run(run_type, asdict(run))
     response = client_service.submit_results(run_type, run.run_id, results.as_dict())
+    assert results.as_dict()["meta"]["sut_package_name"] == "test_package"
     assert response["status"] == "ok"
     assert response["message"] == "Results submitted"
 
