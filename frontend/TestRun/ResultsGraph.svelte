@@ -10,7 +10,7 @@
     export let index = 0;
     export let test_id = "";
     export let width = 500;
-    export let height = 300;
+    export let height = 350;
     export let responsive = false;
     export let releasesFilters = {};
     let chart;
