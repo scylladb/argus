@@ -50,10 +50,12 @@ def test_update_if_changed():
         "name": "Updated Metadata",
         "columns_meta": [{"name": "col1", "unit": "ms", "type": "float", "higher_is_better": True}],
         "validation_rules": {"col1": {"best_pct": 95.0, "best_abs": 105.0, "fixed_limit": 50.0}},
-        "rows_meta": ["row1"]
+        "rows_meta": ["row1"],
+        "sut_package_name": "new_package",
     }
     updated_metadata = metadata.update_if_changed(new_data)
     assert updated_metadata.name == "Updated Metadata"
+    assert updated_metadata.sut_package_name == "new_package"
     assert len(updated_metadata.columns_meta) == 1
     assert len(updated_metadata.rows_meta) == 2  # should not remove rows from other runs
     assert len(updated_metadata.validation_rules["col1"]) == 2  # keep also the old rule

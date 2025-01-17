@@ -27,6 +27,7 @@ class ArgusGenericResultMetadata(Model):
     columns_meta = columns.List(value_type=columns.UserDefinedType(ColumnMetadata))
     validation_rules = columns.Map(key_type=columns.Ascii(), value_type=columns.List(columns.UserDefinedType(ValidationRules)))
     rows_meta = columns.List(value_type=columns.Ascii())
+    sut_package_name = columns.Ascii()
 
     def __init__(self, **kwargs):
         kwargs["columns_meta"] = [ColumnMetadata(**col) for col in kwargs.pop('columns_meta', [])]
