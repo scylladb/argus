@@ -1,9 +1,10 @@
 from collections import defaultdict
 from functools import reduce
+import json
 import logging
 
 from datetime import datetime
-from typing import TypedDict
+from typing import Any, TypedDict
 from uuid import UUID
 
 from cassandra.cqlengine.models import Model
@@ -568,13 +569,19 @@ class ViewStatsCollector:
         self.view_id = view_id
         self.filter = filter
 
-    def collect(self, limited=False, force=False, include_no_version=False) -> dict:
+    def collect(self, limited=False, force=False, include_no_version = False, widget_id: int = None) -> dict:
         self.view: ArgusUserView = ArgusUserView.get(id=self.view_id)
+        widget: dict[str, Any] | None = None
+        if isinstance(widget_id, int):
+            settings = json.loads(self.view.widget_settings)
+            widget = next((widget for widget in settings if widget["position"] == widget_id), None)
         all_tests: list[ArgusTest] = []
         for slice in chunk(self.view.tests):
             all_tests.extend(ArgusTest.filter(id__in=slice).all())
-        build_ids = reduce(lambda acc, test: acc[test.plugin_name or "unknown"].append(
-            test.build_system_id) or acc, all_tests, defaultdict(list))
+
+        if widget and widget.get("filter"):
+            all_tests = [test for test in all_tests if any(str(test[key]) in widget["filter"] for key in ["id", "group_id", "release_id"])]
+        build_ids = reduce(lambda acc, test: acc[test.plugin_name or "unknown"].append(test.build_system_id) or acc, all_tests, defaultdict(list))
         self.view_rows = [futures for plugin in all_plugin_models()
                           for futures in plugin.get_stats_for_release(release=self.view, build_ids=build_ids.get(plugin._plugin_name, []))]
         self.view_rows = [row for future in self.view_rows for row in future.result()]

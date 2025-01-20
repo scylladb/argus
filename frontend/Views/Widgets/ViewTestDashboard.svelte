@@ -5,6 +5,7 @@
     export let settings;
     export let productVersion;
     export let clickedTests;
+    export let widgetId;
 
     import TestDashboard from "../../ReleaseDashboard/TestDashboard.svelte";
     import TestPopoutSelector from "../../ReleaseDashboard/TestPopoutSelector.svelte";
@@ -16,6 +17,7 @@
             dashboardObject={dashboardObject}
             {dashboardObjectType}
             {settings}
+            {widgetId}
             bind:productVersion={productVersion}
             bind:stats={stats}
             bind:clickedTests={clickedTests}

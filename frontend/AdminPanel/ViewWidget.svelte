@@ -1,14 +1,16 @@
 <script>
     import Fa from "svelte-fa";
     import { WIDGET_TYPES, Widget } from "../Common/ViewTypes";
-    import { faEdit, faList, faTrash } from "@fortawesome/free-solid-svg-icons";
+    import { faEdit, faList, faQuestionCircle, faTrash } from "@fortawesome/free-solid-svg-icons";
     import { createEventDispatcher, onMount } from "svelte";
+    import { titleCase } from "../Common/TextUtils";
 
 
     /**
      * @type {Widget}
      */
     export let widgetSettings = {};
+    export let items = [];
 
     let editingSettings = false;
     const dispatch = createEventDispatcher();
@@ -24,7 +26,10 @@
             });
     };
 
-    onMount(() => populateWidgetSettings());
+    onMount(populateWidgetSettings);
+    onMount(() => {
+        if (!widgetSettings.filter) widgetSettings.filter = [];
+    });
 </script>
 
 <div class="mb-2 rounded bg-white p-2">
@@ -62,6 +67,17 @@
                     </div>
                 </div>
                 <div>
+                    <div>
+                        <div class="mb-2">
+                            Item Filter <span title="Only selected items will be shown in the widget. No selection - Show all"><Fa icon={faQuestionCircle}/></span>
+                            <button class="btn btn-sm btn-outline-danger" on:click={() => (widgetSettings.filter = [])}>Clear All</button>
+                        </div>
+                        <select class="form-select" multiple size=10 bind:value={widgetSettings.filter}>
+                            {#each items as item}
+                                <option value="{item.id}"><span class="fw-bold">[{titleCase(item.type)}]</span> {item.pretty_name || item.name}</option>
+                            {/each}
+                        </select>
+                    </div>
                     {#each Object.entries(WIDGET_DEF.settingDefinitions) as [settingName, definition] (settingName)}
                         {#if typeof definition.type !== "string"}
                             <svelte:component this={definition.type} bind:settings={widgetSettings.settings} {definition} {settingName} />
