@@ -29,11 +29,9 @@
     <div class="event-header d-flex align-items-start flex-wrap">
         <div class="ms-2 mb-2 bg-dark text-light rounded px-2">{event.eventType}</div>
         <div class="ms-2 mb-2 rounded px-2 severity-{event.severity.toLowerCase()}">{event.severity}</div>
-        {#if event.nemesis}
-            <div class="ms-2 mb-2 rounded px-2 status-{event.nemesis.status.toLowerCase()}">{event.nemesis.name}</div>
-        {:else}
-            <div class="ms-2 mb-2 rounded px-2 status-skipped">no nemesis</div>
-        {/if}
+        {#each event.nemesis ?? [] as nemesis}
+            <div class="ms-2 mb-2 rounded px-2 status-{nemesis.status.toLowerCase()}">{nemesis.name}</div>
+        {/each}
         <div class="ms-auto mb-2 rounded px-2">
             <button
                 class="btn btn-light"

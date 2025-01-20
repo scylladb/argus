@@ -4,10 +4,13 @@
     import Fa from "svelte-fa";
     import RawEvent from "./RawEvent.svelte";
     import StructuredEvent from "./StructuredEvent.svelte";
+    import dayjs from "dayjs";
     export let testRun;
 
     let parsedEvents = [];
     let filterString = "";
+    let nemesisByKey = {};
+    let nemesisPeriods = {};
 
     const displayCategories = {
         CRITICAL: {
@@ -92,10 +95,27 @@
         return parsedEvent;
     };
 
+
+    const calculateNemesisKey = function(nemesis) {
+        return `${nemesis.name}-${nemesis.start_time}-${nemesis.end_time}-${nemesis.target_node.name}`;
+    };
+
+    const defineNemesisPeriods = function(nemesisData) {
+        let periods = nemesisData.reduce((acc, nemesis) => {
+            acc[calculateNemesisKey(nemesis)] = {
+                start: dayjs.utc(nemesis.start_time * 1000).toDate(),
+                end: dayjs.utc(nemesis.end_time * 1000).toDate(),
+            };
+            return acc;
+        }, {});
+
+        return periods;
+    };
+
     /**
      * @param {{last_events: string[], event_amount: int, severity: string }[]} events
      */
-    const prepareEvents = function (events, nemesisData) {
+    const prepareEvents = function (events) {
         let flatEvents = events.reduce((acc, val) => {
             displayCategories[val.severity].totalEvents = val.event_amount;
             displayCategories[val.severity].eventsSubmitted = val.last_events.length;
@@ -106,6 +126,9 @@
             let parsed = {};
             try {
                 parsed = parseEvent(val);
+                parsed.nemesis = Object.entries(nemesisPeriods)
+                    .filter(([_, period]) => period.start <= parsed.time && period.end >= parsed.time)
+                    .map(([key, _]) => nemesisByKey[key]);
             } catch (error) {
                 parsed = {
                     time: new Date(0),
@@ -117,27 +140,16 @@
             return parsed;
         });
 
-        let sortedNemesises = nemesisData.sort((a, b) => a.start_time - b.start_time);
-        let nemesisIndex = 0;
-        for (let event of parsedEvents.sort((a, b) => a.time - b.time)) {
-            event.nemesis = undefined;
-            while(sortedNemesises[nemesisIndex]) {
-                if (event.time.getTime() < sortedNemesises[nemesisIndex].start_time * 1000) {
-                    break;
-                } else if(event.time.getTime() <= sortedNemesises[nemesisIndex].end_time * 1000) {
-                    event.nemesis = sortedNemesises[nemesisIndex];
-                    break;
-                }
-                nemesisIndex++;
-            }
-
-        }
-
         return parsedEvents.sort((a, b) => b.time - a.time);
     };
 
     onMount(() => {
-        parsedEvents = prepareEvents(testRun?.events ?? [], testRun?.nemesis_data ?? []);
+        nemesisByKey = testRun.nemesis_data.reduce((acc, val) => {
+            acc[calculateNemesisKey(val)] = val;
+            return acc;
+        }, {});
+        nemesisPeriods = defineNemesisPeriods(testRun.nemesis_data);
+        parsedEvents = prepareEvents(testRun?.events ?? []);
     });
 </script>
 
