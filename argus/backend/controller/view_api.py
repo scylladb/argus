@@ -142,8 +142,11 @@ def view_stats():
     version = request.args.get("productVersion", None)
     include_no_version = bool(int(request.args.get("includeNoVersion", True)))
     force = bool(int(request.args.get("force",  0)))
+    widget_id = request.args.get("widgetId", None)
+    if widget_id:
+        widget_id = int(widget_id)
     collector = ViewStatsCollector(view_id=view_id, filter=version)
-    stats = collector.collect(limited=limited, force=force, include_no_version=include_no_version)
+    stats = collector.collect(limited=limited, force=force, include_no_version=include_no_version, widget_id=widget_id)
 
     res = jsonify({
         "status": "ok",
@@ -169,6 +172,16 @@ def view_versions(view_id: str):
 def view_resolve(view_id: str):
     service = UserViewService()
     res = service.resolve_view_for_edit(view_id)
+    return {
+        "status": "ok",
+        "response": res
+    }
+
+@bp.route("/<string:view_id>/resolve/tests", methods=["GET"])
+@api_login_required
+def view_resolve_tests(view_id: str):
+    service = UserViewService()
+    res = service.resolve_view_tests(view_id)
     return {
         "status": "ok",
         "response": res

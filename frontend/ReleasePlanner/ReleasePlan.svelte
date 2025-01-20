@@ -9,13 +9,14 @@
     import ReleaseStats from "../Stats/ReleaseStats.svelte";
     import { faEdit } from "@fortawesome/free-regular-svg-icons";
     import { userList } from "../Stores/UserlistSubscriber";
+    import { GLOBAL_STATS_KEY } from "../Common/ViewTypes";
 
 
     export let plan;
     export let detached = false;
     let users = {};
     export let expandedPlans;
-    let planStats;
+    let planStats = {};
 
     let owner;
     $: users = $userList;
@@ -72,7 +73,7 @@
             {plan.target_version}
             {#if planStats}
                 <div>
-                    <ReleaseStats releaseStats={planStats} />
+                    <ReleaseStats releaseStats={planStats[GLOBAL_STATS_KEY]} />
                 </div>
             {/if}
         </div>

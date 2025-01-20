@@ -20,9 +20,12 @@ export class Widget {
         this.position = position;
         this.type = type;
         this.settings = settings;
+        this.filter = [];
     }
 }
 
+// sha1("")
+export const GLOBAL_STATS_KEY = "da39a3ee5e6b4b0d3255bfef95601890afd80709";
 
 export const WIDGET_TYPES = {
     UNSUPPORTED: {
@@ -47,6 +50,12 @@ export const WIDGET_TYPES = {
                 default: true,
                 help: "Include No Version results for stat fetches",
                 displayName: "Include No Version"
+            },
+            flatView: {
+                type: CheckValue,
+                default: false,
+                help: "Do not group tests by group",
+                displayName: "Flat View"
             },
             productVersion: {
                 type: StringValue,

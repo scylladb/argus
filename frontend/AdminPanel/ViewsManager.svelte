@@ -450,7 +450,7 @@
                             </button>
                         </div>
                         {#each newWidgets as widget (widget.position)}
-                            <ViewWidget bind:widgetSettings={widget} on:removeWidget={removeWidget}/>
+                            <ViewWidget bind:widgetSettings={widget} items={newView.items} on:removeWidget={removeWidget}/>
                         {/each}
                     </div>
                 </div>

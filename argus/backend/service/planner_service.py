@@ -85,6 +85,7 @@ class PlanningService:
         {
             "position": 1,
             "type": "githubIssues",
+            "filter": [],
             "settings": {
                 "submitDisabled": True,
                 "aggregateByIssue": True
@@ -93,6 +94,7 @@ class PlanningService:
         {
             "position": 2,
             "type": "releaseStats",
+            "filter": [],
             "settings": {
                 "horizontal": False,
                 "displayExtendedStats": True,
@@ -102,6 +104,7 @@ class PlanningService:
         {
             "position": 3,
             "type": "testDashboard",
+            "filter": [],
             "settings": {
                 "targetVersion": True,
                 "versionsIncludeNoVersion": False,
