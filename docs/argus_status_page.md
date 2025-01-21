@@ -72,6 +72,7 @@ def lambda_handler(event, context):
 * Each lambda uses its own role that is created during lambda creation.
 * argus_status_page_get function has additional access to the SCT-vpc network
 * Both lambdas roles extended by [argus-status-page](https://us-east-1.console.aws.amazon.com/iam/home#/policies/arn:aws:iam::797456418907:policy/argus-status-page) policy that provide access trigger [argus_status_page_put](https://eu-north-1.console.aws.amazon.com/lambda/home?region=eu-north-1#/functions/argus_status_page_put) function and access to [argus-status-page](https://s3.console.aws.amazon.com/s3/buckets/argus-status-page?region=eu-north-1) S3 bucket
+* To deploy/update lambdas, use DevOpsAccessRole in cloudius-systems account
 ```
 {
     "Version": "2012-10-17",
