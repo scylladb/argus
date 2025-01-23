@@ -58,7 +58,7 @@
                 const cells = Array.from(row.querySelectorAll("th, td"));
                 const markdownRow = cells
                     .map((cell) => {
-                        let cellText = cell.innerText.trim();
+                        let cellText = cell.innerText;
                         let link = "";
 
                         const linkElement = cell.querySelector("a");
@@ -70,6 +70,8 @@
                             link = buttonElement.getAttribute("data-link");
                         }
 
+                        cellText = cellText.replace(/\|/g, "\\|");
+                        cellText = cellText.replace(/\s+/g, " ").trim();
                         cellText = cellText.replace(/#/g, "#&#8203;");
 
                         if (link) {
