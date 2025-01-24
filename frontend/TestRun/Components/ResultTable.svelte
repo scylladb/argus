@@ -187,7 +187,7 @@
                             </button>
                         </th>
                         {#each result.columns as col}
-                            {#if col.unit}
+                            {#if col.type !== 'TEXT'}
                                 <th class="clickable" on:click={() => openGraphModal(col.name)} title="Show metric history">
                                     <div class="column-header">
                                         {col.name}<span
