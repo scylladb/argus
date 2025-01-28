@@ -340,7 +340,7 @@ def _identify_most_changed_package(packages_list: list[PackageVersion]) -> str:
     version_date_changes: dict[str, set[tuple[str, str]]] = defaultdict(set)
 
     # filtering as workaround for issue https://github.com/scylladb/argus/issues/550
-    packages_list = [pkg for pkg in packages_list if pkg.name in ('scylla-server', 'scylla-manager-server')]
+    packages_list = [pkg for pkg in packages_list if pkg.name in ('scylla-server-upgraded', 'scylla-server', 'scylla-manager-server')]
     for package_version in packages_list:
         version_date_changes[package_version.name].add((package_version.version, package_version.date))
 
@@ -385,6 +385,18 @@ class ResultsService:
     def __init__(self):
         self.cluster = ScyllaCluster.get()
 
+    def _remove_duplicate_packages(self, packages: List[PackageVersion]) -> List[PackageVersion]:
+        """removes scylla packages that are considered as duplicates: 
+        scylla-server-upgraded, scylla-server-upgrade-target, sylla-server, scylla-server-target
+        (first found is kept)"""
+        packages_to_remove = ["scylla-server-upgraded", "scylla-server-upgrade-target",  "scylla-server", "scylla-server-target"]
+        for package in packages_to_remove[:]:
+            if any(package == p.name for p in packages):
+                packages_to_remove.remove(package)
+                break
+        packages = [p for p in packages if p.name not in packages_to_remove]
+        return packages
+
     @cache
     def _get_runs_details(self, test_id: UUID) -> RunsDetails:
         plugin_query = self.cluster.prepare("SELECT id, plugin_name FROM argus_test_v2 WHERE id = ?")
@@ -394,7 +406,7 @@ class ResultsService:
             f"SELECT id, investigation_status, packages FROM {plugin.model.table_name()} WHERE test_id = ?")
         rows = self.cluster.session.execute(runs_details_query, parameters=(test_id,)).all()
         ignored_runs = [row["id"] for row in rows if row["investigation_status"].lower() == "ignored"]
-        packages = {row["id"]: row["packages"] for row in rows if row["packages"] and row["id"] not in ignored_runs}
+        packages = {row["id"]: self._remove_duplicate_packages(row["packages"]) for row in rows if row["packages"] and row["id"] not in ignored_runs}
         return RunsDetails(ignored=ignored_runs, packages=packages)
 
     def _get_tables_metadata(self, test_id: UUID) -> list[ArgusGenericResultMetadata]:
