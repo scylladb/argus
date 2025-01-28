@@ -53,7 +53,7 @@ class CloudSetupDetails(UserType):
 class CloudResource(UserType):
     __type_name__ = "CloudResource_v3"
     name = columns.Text()
-    state = columns.Text(default=lambda: ResourceState.RUNNING)
+    state = columns.Text(default=lambda: ResourceState.RUNNING.value)
     resource_type = columns.Text()
     instance_info = columns.UserDefinedType(user_type=CloudInstanceDetails)
 
