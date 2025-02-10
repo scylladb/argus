@@ -160,14 +160,40 @@ class PlanningService:
         plan.last_updated = datetime.datetime.now(tz=datetime.UTC)
         plan.save()
 
-        old_view: ArgusUserView = ArgusUserView.get(id=plan.view_id)
-        old_view.delete()
-
-        view = self.create_view_for_plan(plan)
+        view = self.update_view_for_plan(plan)
         plan.view_id = view.id
         plan.save()
         
         return True
+
+    def update_view_for_plan(self, plan: ArgusReleasePlan) -> ArgusUserView:
+        service = UserViewService()
+        release: ArgusRelease = ArgusRelease.get(id=plan.release_id)
+
+        version_str = f" ({plan.target_version}) " if plan.target_version else ""
+        view_name = f"{release.name} {version_str}- {plan.name}"
+
+        view: ArgusUserView = ArgusUserView.get(id=plan.view_id)
+        settings = json.loads(view.widget_settings)
+        items = [f"test:{tid}" for tid in plan.tests]
+        items = [*items, *[f"group:{gid}" for gid in plan.groups]]
+        entities = service.parse_view_entity_list(items)
+        view.tests = entities["tests"]
+        view.display_name = view_name
+        view.name = slugify(view_name)
+        view.description = f"{plan.target_version or ''} Automatic view for the release plan \"{plan.name}\". {plan.description}"
+        view.group_ids = entities["group"]
+
+        dash = next(filter(lambda widget: widget["type"] == "testDashboard", settings), None)
+        if dash:
+            dash["settings"]["productVersion"] = plan.target_version
+            dash["settings"]["targetVersion"] = bool(plan.target_version)
+
+        view.widget_settings = json.dumps(settings)
+        view.save()
+        service.refresh_stale_view(view)
+        return view
+
 
     def create_view_for_plan(self, plan: ArgusReleasePlan) -> ArgusUserView:
         service = UserViewService()
