@@ -40,21 +40,33 @@ class UserViewService:
         view.widget_settings = widget_settings
         view.plan_id = plan_id
         view.tests = []
-        for entity in items:
-            entity_type, entity_id = entity.split(":")
-            match (entity_type):
-                case "release": 
-                    view.tests.extend(t.id for t in ArgusTest.filter(release_id=entity_id).all())
-                    view.release_ids.append(entity_id)
-                case "group": 
-                    view.tests.extend(t.id for t in ArgusTest.filter(group_id=entity_id).all())
-                    view.group_ids.append(entity_id)
-                case "test": 
-                    view.tests.append(entity_id)
+        entities = self.parse_view_entity_list(items)
+        view.tests = entities["tests"]
+        view.release_ids = entities["release"]
+        view.group_ids = entities["group"]
         view.user_id = current_user().id
 
         view.save()
         return view
+
+    def parse_view_entity_list(self, entity_list: list[str]) -> dict[str, list[str]]:
+        entities = {
+            "release": [],
+            "group": [],
+            "tests": []
+        }
+        for entity in entity_list:
+            entity_type, entity_id = entity.split(":")
+            match (entity_type):
+                case "release": 
+                    entities["tests"].extend(t.id for t in ArgusTest.filter(release_id=entity_id).all())
+                    entities["release"].append(entity_id)
+                case "group": 
+                    entities["tests"].extend(t.id for t in ArgusTest.filter(group_id=entity_id).all())
+                    entities["group"].append(entity_id)
+                case "test": 
+                    entities["tests"].append(entity_id)
+        return entities
 
     def test_lookup(self, query: str):
         return TestLookup.test_lookup(query)
