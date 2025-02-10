@@ -422,7 +422,8 @@ class DriverTestRun(PluginModelBase):
 
     def finish_run(self, payload: dict = None):
         self.end_time = datetime.utcnow()
-        self.status = self._determine_run_status().value
+        status = payload.get("status", "passed")
+        self.status = TestStatus(status).value
 
     def submit_logs(self, logs: list[dict]):
         pass
