@@ -8,12 +8,13 @@
     import ViewDashboard from "../Views/ViewDashboard.svelte";
     import ReleaseStats from "../Stats/ReleaseStats.svelte";
     import { faEdit } from "@fortawesome/free-regular-svg-icons";
+    import { GLOBAL_STATS_KEY } from "../Common/ViewTypes";
 
 
     export let plan;
     export let users;
     export let expandedPlans;
-    let planStats;
+    let planStats = {};
 
     let owner;
     $: owner = getUser(plan.owner, users);
@@ -66,7 +67,7 @@
             {plan.target_version}
             {#if planStats}
                 <div>
-                    <ReleaseStats releaseStats={planStats} />
+                    <ReleaseStats releaseStats={planStats[GLOBAL_STATS_KEY]} />
                 </div>
             {/if}
         </div>
