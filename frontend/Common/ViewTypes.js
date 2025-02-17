@@ -11,7 +11,7 @@ import ViewHighlights from "../Views/Widgets/ViewHighlights/ViewHighlights.svelt
 import IntegerValue from "../Views/WidgetSettingTypes/IntegerValue.svelte";
 import SummaryWidget from "../Views/Widgets/SummaryWidget/SummaryWidget.svelte";
 import GraphWidget from "../Views/Widgets/GraphsWidget/GraphsWidget.svelte";
-
+import ViewNemesisStats from "../Views/Widgets/ViewNemesisStats.svelte";
 
 export class Widget {
     constructor(position = -1, type = "testDashboard", settings = {}) {
@@ -126,6 +126,12 @@ export const WIDGET_TYPES = {
         type: GraphWidget,
         friendlyName: "Graphs Views",
         settingDefinitions: {}
+    },
+    releaseStats: {
+        type: ViewNemesisStats,
+        friendlyName: "Nemesis stats",
+        settingDefinitions: {
+        },
     },
 };
 
