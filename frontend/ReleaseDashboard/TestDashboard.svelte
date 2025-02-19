@@ -30,6 +30,7 @@
     import { getPicture } from "../Common/UserUtils";
     import NumberStats from "../Stats/NumberStats.svelte";
     import { timestampToISODate } from "../Common/DateUtils";
+    import AssigneeFilter from "./AssigneeFilter.svelte";
     export let dashboardObject;
     export let dashboardObjectType = "release";
     export let clickedTests = {};
@@ -42,6 +43,7 @@
     let versionsIncludeNoVersion = JSON.parse(window.localStorage.getItem(`releaseDashIncludeNoVersions-${dashboardObject.id}`)) ?? (settings.versionsIncludeNoVersion || true);
     let versionsFilterExtraVersions = JSON.parse(window.localStorage.getItem(`releaseDashFilterExtraVersions-${dashboardObject.id}`)) ?? true;
     let users = {};
+    let userFilter;
     $: users = $userList;
 
     const PANEL_MODES = {
@@ -219,6 +221,23 @@
         } catch (error) {
             console.log("Failure filtering version", error);
         }
+    };
+
+    const shouldFilterOutByUser = function (user, test, group = undefined, tests = undefined, type = "test") {
+        if (!user) return false;
+        switch (type) {
+        case "test":
+            return getAssigneesForTest(test.test.id, test.test.group_id, test.last_runs) != user.id;
+        case "group":
+            return (assigneeList.groups?.[group.id]?.[0] ?? "") != user.id && tests.filter(v => !shouldFilterOutByUser(user, v)).length == 0;
+        default:
+            return false;
+        }
+    };
+
+    const handleUserFilter = function(event) {
+        let user = event.detail;
+        userFilter = user;
     };
 
     const saveCheckboxState = function(name, state) {
@@ -420,34 +439,41 @@
         </div>
     {/if}
     {#if stats}
-        <div class="mb-2 d-inline-flex align-items-start flex-column rounded bg-white">
-            <div class="p-2">
-                Quick filters
-            </div>
-            <div class="p-2">
-                <div class="btn-group" role="group">
-                    <button class="btn btn-primary btn-sm" on:click={() => quickTestFilter(stats, (v) => v?.investigation_status == TestInvestigationStatus.NOT_INVESTIGATED && [TestStatus.FAILED, TestStatus.TEST_ERROR].includes(v?.status))}>
-                        <Fa color="#fff" icon={faEyeSlash} />
-                        Failed and Not Investigated
-                    </button>
-                    <button class="btn btn-primary btn-sm" on:click={() => quickTestFilter(stats, (v) => v?.investigation_status == TestInvestigationStatus.INVESTIGATED && [TestStatus.FAILED, TestStatus.TEST_ERROR].includes(v?.status) && !v.hasBugReport)}>
-                        <Fa color="#fff" icon={faQuestion} />
-                        Investigated w/o Issues
-                    </button>
-                    <button class="btn btn-primary btn-sm" on:click={() => quickTestFilter(stats, (v) => v["hasBugReport"])}>
-                        <Fa color="#fff" icon={faBug} />
-                        All w/ Issues
-                    </button>
-                    <button class="btn btn-primary btn-sm" on:click={() => quickTestFilter(stats, (v) => v["hasComments"])}>
-                        <Fa color="#fff" icon={faComment} />
-                        All w/ Comments
-                    </button>
+        <div class="d-flex">
+            <div class="mb-2 d-inline-flex align-items-start flex-column rounded bg-white">
+                <div class="p-2">
+                    Quick filters
                 </div>
+                <div class="p-2">
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-primary btn-sm" on:click={() => quickTestFilter(stats, (v) => v?.investigation_status == TestInvestigationStatus.NOT_INVESTIGATED && [TestStatus.FAILED, TestStatus.TEST_ERROR].includes(v?.status))}>
+                            <Fa color="#fff" icon={faEyeSlash} />
+                            Failed and Not Investigated
+                        </button>
+                        <button class="btn btn-primary btn-sm" on:click={() => quickTestFilter(stats, (v) => v?.investigation_status == TestInvestigationStatus.INVESTIGATED && [TestStatus.FAILED, TestStatus.TEST_ERROR].includes(v?.status) && !v.hasBugReport)}>
+                            <Fa color="#fff" icon={faQuestion} />
+                            Investigated w/o Issues
+                        </button>
+                        <button class="btn btn-primary btn-sm" on:click={() => quickTestFilter(stats, (v) => v["hasBugReport"])}>
+                            <Fa color="#fff" icon={faBug} />
+                            All w/ Issues
+                        </button>
+                        <button class="btn btn-primary btn-sm" on:click={() => quickTestFilter(stats, (v) => v["hasComments"])}>
+                            <Fa color="#fff" icon={faComment} />
+                            All w/ Comments
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white rounded mx-2 mb-2 w-25">
+                <div class="p-2">Filter by assignee</div>
+                <div class="p-2"><AssigneeFilter on:selected={handleUserFilter}/></div>
+                
             </div>
         </div>
         {#each sortedGroups(stats.groups) as groupStats (groupStats.group.id)}
             {#if !groupStats.disabled}
-                <div class="p-2 shadow mb-2 rounded bg-main">
+                <div class="p-2 shadow mb-2 rounded bg-main" class:d-none={shouldFilterOutByUser(userFilter, undefined, groupStats, Object.values(groupStats.tests), "group")}>
                     <h5 class="mb-2 d-flex">
                         <div class="flex-fill">
                             <div class="mb-2">{#if dashboardObjectType != "release"}<span class="d-inline-block border p-1 me-1">{stats.releases?.[groupStats.group.release_id]?.name ?? "" }</span>{/if}{groupStats.group.pretty_name || groupStats.group.name}</div>
@@ -495,7 +521,7 @@
                             {#each Object.entries(sortTestStats(groupStats.tests)) as [testId, testStats] (testId)}
                                 <!-- svelte-ignore a11y-click-events-have-key-events -->
                                 <div
-                                    class:d-none={hideNotPlanned && testStats?.status == TestStatus.NOT_PLANNED}
+                                    class:d-none={hideNotPlanned && testStats?.status == TestStatus.NOT_PLANNED || shouldFilterOutByUser(userFilter, testStats)}
                                     class:status-block-active={testStats.start_time != 0}
                                     class:investigating={testStats?.investigation_status == TestInvestigationStatus.IN_PROGRESS}
                                     class:should-be-investigated={testStats?.investigation_status == TestInvestigationStatus.NOT_INVESTIGATED && [TestStatus.FAILED, TestStatus.TEST_ERROR].includes(testStats?.status)}
