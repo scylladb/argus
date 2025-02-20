@@ -63,7 +63,7 @@
         {#if !isEditing}
             <div class="img-profile me-2" style="background-image: url('{getPicture(creator?.picture_id)}');" data-bs-toggle="tooltip"
                  title="{creator?.username}"/>
-            <div class="d-flex align-items-center flex-grow-1">
+            <div class="d-flex align-items-center flex-grow-1 markdown-body">
                 <input id="checkbox-{action.id}" class="form-check-input me-2 mt-0" type="checkbox" disabled={isArchived}
                        bind:checked={action.isCompleted} on:change={toggleComplete}>
                 <label class="form-check-label no-bottom-margin"

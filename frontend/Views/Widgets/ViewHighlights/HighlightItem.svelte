@@ -61,7 +61,7 @@
         {#if !isEditing}
             <div class="img-profile me-2" style="background-image: url('{getPicture(creator?.picture_id)}');" data-bs-toggle="tooltip"
                  title="{creator?.username}"/>
-            <div class="d-flex align-items-center flex-grow-1 no-bottom-margin-p">
+            <div class="d-flex align-items-center flex-grow-1 no-bottom-margin-p markdown-body">
                 <span class="no-bottom-margin">{@html marked.parse(highlight.content, markdownRendererOptions)}</span>
             </div>
             <div class="d-flex align-items-center">
