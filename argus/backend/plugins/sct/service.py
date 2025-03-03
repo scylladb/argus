@@ -63,6 +63,8 @@ class SCTService:
             run: SCTTestRun = SCTTestRun.get(id=run_id)
             for package_dict in packages:
                 package = PackageVersion(**package_dict)
+                if "target" in package.name:
+                    SCTService.process_target_version(run, package)
                 if package not in run.packages:
                     run.packages.append(package)
             run.save()
@@ -72,6 +74,13 @@ class SCTService:
 
         return "added"
 
+
+    @staticmethod
+    def process_target_version(run: SCTTestRun, package: PackageVersion):
+        if "upgrade-target" in run.version_source and package.name == "scylla-server-target":
+            return
+        run.version_source = package.name
+        run.scylla_version = package.version
 
     @staticmethod
     def set_sct_runner(run_id: str, public_ip: str, private_ip: str, region: str, backend: str, name: str = None):
