@@ -68,6 +68,7 @@ class SCTTestRun(PluginModelBase):
     config_files = columns.List(value_type=columns.Text())
     packages = columns.List(value_type=columns.UserDefinedType(user_type=PackageVersion))
     scylla_version = columns.Text()
+    version_source = columns.Text()
     yaml_test_duration = columns.Integer()
 
     # Test Preset Resources
@@ -215,7 +216,8 @@ class SCTTestRun(PluginModelBase):
         return self.events
 
     def submit_product_version(self, version: str):
-        self.scylla_version = version
+        if not self.version_source:
+            self.scylla_version = version
         try:
             new_assignee = self.get_assignment(version)
         except Model.DoesNotExist:
