@@ -33,6 +33,7 @@
     import AssigneeFilter from "./AssigneeFilter.svelte";
     export let dashboardObject;
     export let dashboardObjectType = "release";
+    export let widgetId;
     export let clickedTests = {};
     export let productVersion;
     export let settings = {};
@@ -144,6 +145,7 @@
             viewId: dashboardObject.id,
             limited: new Number(false),
             force: new Number(true),
+            widgetId: widgetId,
             includeNoVersion: new Number(versionsIncludeNoVersion),
             productVersion: productVersion ?? "",
         });
