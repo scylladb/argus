@@ -127,7 +127,7 @@ export const WIDGET_TYPES = {
         friendlyName: "Graphs Views",
         settingDefinitions: {}
     },
-    releaseStats: {
+    nemesisStats: {
         type: ViewNemesisStats,
         friendlyName: "Nemesis stats",
         settingDefinitions: {
