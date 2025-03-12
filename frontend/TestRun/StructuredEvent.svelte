@@ -2,12 +2,17 @@
     import { faCopy, faDotCircle } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
     import { sendMessage } from "../Stores/AlertStore";
-
+    import ModalWindow from "../Common/ModalWindow.svelte";
 
     export let event;
+    export let similars = [];
     export let display = true;
     export let filterString = "";
 
+    let showSimilars = false;
+    let fetchingIssues = false;
+    let similarRunsInfo = {};
+    let issuesMap = {};
     let displayShortPeriodBlock = true;
 
     const shouldFilter = function (filterString) {
@@ -19,6 +24,44 @@
         }
     };
 
+    const toggleSimilars = async () => {
+        showSimilars = !showSimilars;
+
+        // Fetch build IDs and issues for all similar runs when opening the modal
+        if (showSimilars && similars.length > 0 && Object.keys(similarRunsInfo).length === 0) {
+            fetchingIssues = true;
+            try {
+                const response = await fetch('/api/v1/client/sct/similar_runs_info', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        run_ids: similars
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.status === 'ok') {
+                        similarRunsInfo = data.response;
+                    } else {
+                        console.error('Error fetching similar runs info:', data);
+                    }
+                } else {
+                    console.error('Failed to fetch similar runs info:', response.statusText);
+                }
+            } catch (error) {
+                console.error('Error fetching similar runs info:', error);
+            } finally {
+                fetchingIssues = false;
+            }
+        }
+    };
+
+    function closeSimilarModal() {
+        showSimilars = false;
+    }
 </script>
 
 
@@ -32,6 +75,16 @@
         {#each event.nemesis ?? [] as nemesis}
             <div class="ms-2 mb-2 rounded px-2 status-{nemesis.status.toLowerCase()}">{nemesis.name}</div>
         {/each}
+        {#if (event.severity === 'ERROR' || event.severity === 'CRITICAL') && similars.length > 0}
+            <div class="ms-2 mb-2">
+                <button
+                    class="btn btn-info btn-sm py-0"
+                    on:click={toggleSimilars}
+                >
+                    View {similars.length} Similar Events
+                </button>
+            </div>
+        {/if}
         <div class="ms-auto mb-2 rounded px-2">
             <button
                 class="btn btn-light"
@@ -93,6 +146,77 @@
     <pre class="bg-light-one rounded m-2 p-2 log-line">{event.eventText}</pre>
 </div>
 
+{#if showSimilars}
+    <ModalWindow widthClass="w-75" on:modalClose={closeSimilarModal}>
+        <svelte:fragment slot="title">
+            Similar Events ({similars.length})
+        </svelte:fragment>
+        <svelte:fragment slot="body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>Build ID</th>
+                            <th>Start Time</th>
+                            <th>Version</th>
+
+                            <th>Issues</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {#each similars as runId}
+                            <tr>
+                                <td>
+                                    <a
+                                        href="/tests/scylla-cluster-tests/{runId}"
+                                        target="_blank"
+                                        title={runId}
+                                    >
+                                        {similarRunsInfo[runId]?.build_id || runId}
+                                    </a>
+                                </td>
+
+                                <td class="date-column">
+                                    {#if similarRunsInfo[runId]?.start_time}
+                                        {new Date(similarRunsInfo[runId].start_time).toLocaleDateString("en-CA")}
+                                    {:else}
+                                        -
+                                    {/if}
+                                </td>
+                                <td>
+                                    {#if similarRunsInfo[runId]?.version}
+                                        {similarRunsInfo[runId].version}
+                                    {:else}
+                                        -
+                                    {/if}
+                                </td>
+                                <td>
+                                    {#if fetchingIssues}
+                                        <div class="spinner-border spinner-border-sm" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                    {:else if similarRunsInfo[runId]?.issues?.length}
+                                        {#each similarRunsInfo[runId].issues as issue}
+                                        <div class="issue-item mb-1">
+                                            <a href={issue.url} target="_blank" class="issue-link">
+                                                <span class="badge {issue.last_status === 'open' ? 'issue-open' : 'issue-closed'}">#{issue.issue_number}</span>
+                                                {issue.title}
+                                            </a>
+                                        </div>
+                                        {/each}
+                                    {:else}
+                                        <span class="text-muted">No issues</span>
+                                    {/if}
+                                </td>
+                            </tr>
+                        {/each}
+                    </tbody>
+                </table>
+            </div>
+        </svelte:fragment>
+    </ModalWindow>
+{/if}
+
 <style>
     .log-line {
         white-space: pre-wrap
@@ -133,5 +257,30 @@
     .status-skipped {
         background-color: #1c1f23;
         color: white;
+    }
+
+    .issues-container {
+        max-height: 150px;
+        overflow-y: auto;
+    }
+
+    .issue-link {
+        text-decoration: none;
+        color: #212529;
+    }
+
+    .issue-link:hover {
+        text-decoration: underline;
+    }
+    .issue-open {
+        color: #f4faff;
+        background-color: #347d39;
+    }
+    .issue-closed {
+        color: #f4faff;
+        background-color: #8256d0;
+    }
+    .date-column {
+        width: 100px;
     }
 </style>

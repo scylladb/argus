@@ -44,7 +44,6 @@ def get_testrun(run_type: str, run_id: str):
     run_id = UUID(run_id)
     service = TestRunService()
     test_run = service.get_run(run_type=run_type, run_id=run_id)
-
     return {
         "status": "ok",
         "response": test_run

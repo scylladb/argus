@@ -11,6 +11,7 @@
     let filterString = "";
     let nemesisByKey = {};
     let nemesisPeriods = {};
+    let eventEmbeddings = {};
 
     const displayCategories = {
         CRITICAL: {
@@ -116,25 +117,46 @@
      * @param {{last_events: string[], event_amount: int, severity: string }[]} events
      */
     const prepareEvents = function (events) {
+        console.log("event embeddings inside", eventEmbeddings);
+        console.log("events", events);
+
         let flatEvents = events.reduce((acc, val) => {
+            let eventIndex = 0; // Track the global event index
+
             displayCategories[val.severity].totalEvents = val.event_amount;
             displayCategories[val.severity].eventsSubmitted = val.last_events.length;
-            return [...acc, ...val.last_events];
+            console.log("val", val);
+            console.log("event index", eventIndex);
+            // Map each event to include its index and any similar events
+            const mappedEvents = val.last_events.map((event, idx) => ({
+                text: event,
+                severity: val.severity,
+                index: idx,
+                similars: (val.severity === 'ERROR' || val.severity === 'CRITICAL') ?
+                    (eventEmbeddings[`${val.severity}_${idx}`] ?? []) : []
+            }));
+            eventIndex++;
+            console.log("event index", eventIndex);
+            return [...acc, ...mappedEvents];
         }, []);
 
         let parsedEvents = flatEvents.map((val) => {
             let parsed = {};
             try {
-                parsed = parseEvent(val);
+                parsed = parseEvent(val.text);
                 parsed.nemesis = Object.entries(nemesisPeriods)
                     .filter(([_, period]) => period.start <= parsed.time && period.end >= parsed.time)
                     .map(([key, _]) => nemesisByKey[key]);
+                parsed.severity = val.severity;
+                parsed.similars = val.similars;
             } catch (error) {
                 parsed = {
                     time: new Date(0),
                     parsed: false,
-                    text: val,
-                    error: error.message
+                    text: val.text,
+                    error: error.message,
+                    severity: val.severity,
+                    similars: val.similars
                 };
             }
             return parsed;
@@ -143,7 +165,21 @@
         return parsedEvents.sort((a, b) => b.time - a.time);
     };
 
-    onMount(() => {
+    onMount(async () => {
+        try {
+            const response = await fetch(`/api/v1/client/sct/${testRun.id}/event_embeddings`);
+            if (response.ok) {
+                const data = await response.json();
+                console.log("event embeddings", data);
+                // Create a map of event index to similars set with severity prefix
+                eventEmbeddings = data.response.reduce((acc, item) => {
+                    acc[`${item.severity}_${item.event_index}`] = item.similars_set;
+                    return acc;
+                }, {});
+            }
+        } catch (error) {
+            console.error("Failed to fetch event embeddings:", error);
+        }
         nemesisByKey = testRun.nemesis_data.reduce((acc, val) => {
             acc[calculateNemesisKey(val)] = val;
             return acc;
@@ -182,7 +218,12 @@
         </div>
         {#each parsedEvents as event}
             {#if event.parsed}
-                <StructuredEvent bind:filterString={filterString} display={displayCategories[event.severity].show ?? true} {event} />
+                <StructuredEvent
+                    bind:filterString={filterString}
+                    display={displayCategories[event.severity].show ?? true}
+                    {event}
+                    similars={event.similars}
+                />
             {:else}
                 <RawEvent eventText={event.text} errorMessage={event.error} />
             {/if}
