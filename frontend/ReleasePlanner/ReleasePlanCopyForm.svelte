@@ -7,6 +7,7 @@
     import Select from "svelte-select";
     import User from "../Profile/User.svelte";
     import { createEventDispatcher, onMount } from "svelte";
+    import { filterUser } from "../Common/SelectUtils";
 
     export let plan;
     export let release;
@@ -208,6 +209,7 @@
                 on:select={(e) => copy.owner = e.detail.id}
                 items={users}
                 Item={User}
+                itemFilter={filterUser}
                 labelIdentifier="username"
                 optionIdentifier="id"
             />

@@ -11,6 +11,7 @@
     import { sendMessage } from "../Stores/AlertStore";
     import ModalWindow from "../Common/ModalWindow.svelte";
     import ReleasePlannerGridView from "./ReleasePlannerGridView.svelte";
+    import { filterUser } from "../Common/SelectUtils";
 
 
     export let release;
@@ -429,6 +430,7 @@
                 on:select={(e) => plan.owner = e.detail.id}
                 items={users}
                 Item={User}
+                itemFilter={filterUser}
                 labelIdentifier="username"
                 optionIdentifier="id"
             />
@@ -466,6 +468,7 @@
                 bind:value={participants}
                 items={users}
                 Item={User}
+                itemFilter={filterUser}
                 isMulti={true}
                 labelIdentifier="username"
                 optionIdentifier="id"
@@ -536,6 +539,7 @@
                             plan = plan;
                         }}
                         items={participants}
+                        itemFilter={filterUser}
                         Item={User}
                         labelIdentifier="username"
                         optionIdentifier="id"
