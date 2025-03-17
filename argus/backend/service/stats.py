@@ -203,7 +203,8 @@ class ViewStats:
                 plan = ArgusReleasePlan.get(id=self.release.plan_id)
                 self.plans = [plan]
             else:
-                plans: list[ArgusReleasePlan] = [plan for release_id in all_release_ids for results in ArgusReleasePlan.filter(release_id=release_id).all() for plan in results]
+                plans_by_release = [ArgusReleasePlan.filter(release_id=release_id).all() for release_id in all_release_ids]
+                plans: list[ArgusReleasePlan] = [plan for plans in plans_by_release for plan in plans]
                 self.plans = plans if not version_filter else [plan for plan in plans if version_filter == plan.target_version]
             # TODO: Legacy and unconditional, will show extra data.
             self.test_schedules = reduce(
