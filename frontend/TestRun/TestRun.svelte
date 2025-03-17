@@ -321,7 +321,7 @@
                     id="nav-resources-{runId}"
                     role="tabpanel"
                 >
-                    <div class="p-2">
+                    <div class="p-2 overflow-scroll">
                         <ResourcesInfo
                             resources={testRun.allocated_resources}
                             backend={testRun.cloud_setup?.backend}
@@ -334,12 +334,12 @@
                     id="nav-packages-{runId}"
                     role="tabpanel"
                 >
-                    <div class="p-2">
+                    <div class="p-2 overflow-scroll">
                         <PackagesInfo packages={testRun.packages}
                         />
                     </div>
                 </div>
-                <div class="tab-pane fade" id="nav-junit-{runId}" role="tabpanel">
+                <div class="tab-pane fade overflow-scroll" id="nav-junit-{runId}" role="tabpanel">
                    {#if jUnitFetched}
                         <JUnitResults results={jUnitResults}/>
                    {/if}
@@ -350,7 +350,7 @@
                     {/if}
                 </div>
                 <div
-                    class="tab-pane fade"
+                    class="tab-pane fade overflow-scroll"
                     id="nav-nemesis-{runId}"
                     role="tabpanel"
                 >
@@ -359,7 +359,7 @@
                         resources={testRun.allocated_resources}
                     />
                 </div>
-                <div class="tab-pane fade" id="nav-logs-{runId}" role="tabpanel">
+                <div class="tab-pane fade overflow-scroll" id="nav-logs-{runId}" role="tabpanel">
                     {#if artifactTabOpened}
                         <ArtifactTab {testRun} on:refreshRequest={fetchTestRunData}/>
                     {/if}
