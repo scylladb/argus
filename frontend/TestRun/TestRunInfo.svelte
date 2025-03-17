@@ -29,7 +29,7 @@
 
     const locateGrafanaNode = function () {
         return test_run.allocated_resources.find((node) => {
-            return new RegExp(/\-monitor\-node\-/).test(node.name) && node.state === "running";
+            return new RegExp(/-monitor-node-/).test(node.name) && node.state === "running";
         });
     };
 

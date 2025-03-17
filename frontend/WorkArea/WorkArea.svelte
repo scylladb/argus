@@ -62,7 +62,7 @@
 <div class="container-fluid bg-lighter">
     <div class="row p-4" id="dashboard-main">
         <div
-            class="col-3 p-0 py-4 me-3 border rounded shadow-sm bg-white"
+            class="col-md-3 p-0 py-4 me-3 border rounded shadow-sm bg-white"
             id="run-sidebar"
         >
             {#await fetchReleases()}
@@ -95,7 +95,7 @@
                 </div>
             {/await}
         </div>
-        <div class="col-8 p-2 border rounded shadow-sm bg-main">
+        <div class="col-md-8 col-sm-12 p-2 border rounded shadow-sm bg-main">
             <TestRunsPanel
                 bind:testRuns={testRuns}
                 on:testRunRemove={onTestRunRemove}
@@ -109,5 +109,11 @@
     #run-sidebar {
         height: 960px;
         overflow-y: scroll;
+    }
+
+    @media screen and (max-width: 768px) {
+        #run-sidebar {
+            display: none
+        }
     }
 </style>
