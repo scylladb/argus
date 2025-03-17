@@ -327,7 +327,11 @@
     <div class="d-flex align-items-center justify-content-center p-4">
         <div class="rounded bg-white p-4 h-50">
             <div class="mb-2 d-flex border-bottom pb-2">
-                <h5>Cloning <span class="fw-bold">{buildId}#{buildNumber}</span></h5>
+                {#if buildNumber != -1}
+                    <h5>Cloning <span class="fw-bold">{buildId}#{buildNumber}</span></h5>
+                {:else}
+                    <h5>Cloning <span class="fw-bold">{buildId}</span></h5>
+                {/if}
                 <div class="ms-auto">
                     <button 
                         class="btn btn-close"

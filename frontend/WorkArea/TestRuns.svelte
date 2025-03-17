@@ -12,7 +12,7 @@
     import { AVAILABLE_PLUGINS } from "../Common/PluginDispatch";
     import { sendMessage } from "../Stores/AlertStore";
     import TestRunsMessage from "./TestRunsMessage.svelte";
-    import { faGear, faTimes } from "@fortawesome/free-solid-svg-icons";
+    import { faGear, faPlay, faTimes } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
     import { Collapse } from "bootstrap";
     import JobConfigureModal from "./JobConfigureModal.svelte";
@@ -20,6 +20,7 @@
     import ResultsGraphs from "../TestRun/ResultsGraphs.svelte";
     import { faCopy } from "@fortawesome/free-regular-svg-icons";
     import JenkinsCloneModal from "../TestRun/Jenkins/JenkinsCloneModal.svelte";
+    import JenkinsBuildModal from "../TestRun/Jenkins/JenkinsBuildModal.svelte";
 
     export let testId;
     export let listId = uuidv4();
@@ -119,6 +120,7 @@
     let selectedPlugin = "";
     let configureRequested = false;
     let cloneRequested = false;
+    let execRequested = false;
     let open = true;
     let pluginFixed = false;
     let runsBody = undefined;
@@ -324,6 +326,7 @@
                     {#if applicationCurrentUser.roles.some(v => ["ROLE_ADMIN", "ROLE_MANAGER"].includes(v)) || testInfo.release.name.includes("staging")}
                         <button class="btn" on:click={(e) => {configureRequested = true; e.stopPropagation();}}><Fa icon={faGear}/></button>
                     {/if}
+                    <button class="btn" on:click={(e) => {execRequested = true; e.stopPropagation();}}><Fa icon={faPlay} /></button>
                     <button class="btn" on:click={(e) => {cloneRequested = true; e.stopPropagation();}}><Fa icon={faCopy} /></button>
                 </div>
             {#if removableRuns}
@@ -357,6 +360,15 @@
             oldTestName={testInfo.test.name}
             on:cloneCancel={() => (cloneRequested = false)}
             on:cloneComplete={(e) => { cloneRequested = false; dispatch("cloneSelect", { testId: e.detail.testId }); }}
+        />
+    {/if}
+    {#if execRequested}
+        <JenkinsBuildModal
+            buildId={testInfo.test.build_system_id} 
+            buildNumber={runs.length > 0 ? extractBuildNumber(runs[0]) : undefined}
+            pluginName={testInfo.test.plugin_name}
+            on:rebuildCancel={() => (execRequested = false)}
+            on:rebuildComplete={() => (execRequested = false)}
         />
     {/if}
     <div class="collapse show bg-main shadow-sm rounded" id="collapse-{listId}">

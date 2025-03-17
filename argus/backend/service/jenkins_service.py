@@ -50,8 +50,18 @@ class JenkinsService:
                                         username=current_app.config["JENKINS_USER"],
                                         password=current_app.config["JENKINS_API_TOKEN"])
 
-    def retrieve_job_parameters(self, build_id: str, build_number: int) -> list[Parameter]:
-        job_info = self._jenkins.get_build_info(name=build_id, number=build_number)
+    def retrieve_job_parameters(self, build_id: str, build_number: int | None) -> list[Parameter]:
+        job_info = self._jenkins.get_job_info(name=build_id)
+        if not build_number:
+            next_build_number = job_info.get("nextBuildNumber")
+            if not next_build_number:
+                raise JenkinsServiceError("#noBuildsAvailable")
+            try:
+                build_info = self._jenkins.get_build_info(name=build_id, number=next_build_number - 1)
+            except jenkins.JenkinsException:
+                raise JenkinsServiceError("#noBuildsAvailable")
+        else:
+            build_info = self._jenkins.get_build_info(name=build_id, number=build_number)
         raw_config = self._jenkins.get_job_config(name=build_id)
         config = ET.fromstring(raw_config)
         parameter_defs = config.find("*//parameterDefinitions")
@@ -62,8 +72,12 @@ class JenkinsService:
             }
         else:
             descriptions = {}
-        params = next(a for a in job_info["actions"] if a.get("_class", "#NONE") == "hudson.model.ParametersAction")["parameters"]
-        params = [param for param in params if param["name"] != self.RESERVED_PARAMETER_NAME]
+        params = next((a for a in build_info["actions"] if a.get("_class", "#NONE") == "hudson.model.ParametersAction"), None)
+        if params:
+            params = [param for param in params["parameters"] if param["name"] != self.RESERVED_PARAMETER_NAME]
+        else:
+            default_params = next((prop for prop in job_info["property"] if prop.get("_class", "") == "hudson.model.ParametersDefinitionProperty"), {}).get("parameterDefinitions", {})
+            params = [{"name": param["name"], "value": param.get("defaultParameterValue", {}).get("value", "")} for param in default_params if param["name"] != self.RESERVED_PARAMETER_NAME]
         for idx, param in enumerate(params):
             params[idx]["description"] = descriptions.get(param["name"], "")
 
