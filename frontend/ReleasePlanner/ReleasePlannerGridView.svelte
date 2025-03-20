@@ -58,7 +58,7 @@
             release: release.name,
             productVersion: selectingFor?.target_version ?? "",
             limited: new Number(false),
-            force: new Number(false),
+            force: new Number(true),
         });
         let response = await fetch("/api/v1/release/stats/v2?" + params, { cache: "reload" });
         let json = await response.json();
@@ -250,7 +250,7 @@
                 ) as [groupId, tests] (groupId)}
             {@const group = gridView.groups[groupId] ?? {}}
             {@const prettyName = group?.pretty_name ?? group?.name}
-            {@const groupStats = releaseStats?.groups[group?.id]}
+            {@const groupStats = releaseStats?.groups?.[group?.id]}
             {#if group && groupStats}
                 <div 
                     class="mb-2 rounded bg-white p-2 border-success" 
