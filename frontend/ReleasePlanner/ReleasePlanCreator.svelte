@@ -280,6 +280,10 @@
             }
             items = items.filter(v => v.id != groupId);
             items = [...items, ...json.response];
+            if (plan.assignments[groupId]) {
+                json.response.forEach(v => plan.assignments[v.id] = plan.assignments[groupId]);
+                delete plan.assignments[groupId];
+            }
 
         } catch (error) {
             console.log(error);
