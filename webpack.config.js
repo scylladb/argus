@@ -58,6 +58,10 @@ module.exports = {
             import: "./frontend/release-dashboard.js",
             dependOn: "globalAlert"
         },
+        plan: {
+            import: "./frontend/plan.js",
+            dependOn: "globalAlert"
+        },
         viewDashboard: {
             import: "./frontend/view-dashboard.js",
             dependOn: "globalAlert"

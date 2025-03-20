@@ -1,9 +1,12 @@
 <script>
+    import Fa from "svelte-fa";
     import { WIDGET_TYPES } from "../Common/ViewTypes";
     import { sendMessage } from "../Stores/AlertStore";
+    import { faLink } from "@fortawesome/free-solid-svg-icons";
     export let view;
     export let stats = undefined;
     export let productVersion;
+    export let embedded = false;
     let clickedTests = {};
 
     const handleTestClick = function (detail) {
@@ -50,6 +53,9 @@
 <div class="rounded bg-white m-2 shadow-sm p-2">
     <div>
         <h4>{view.display_name || view.name}</h4>
+        {#if !embedded && view.plan_id}
+            <a href="/plan/{view.plan_id}" class="link-secondary link"><Fa icon={faLink}/>Plan</a>
+        {/if}
     </div>
     <div class="mb-2">
         {#each view.widget_settings as widget}

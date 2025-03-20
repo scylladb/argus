@@ -247,7 +247,6 @@
             <ReleasePlan
                 bind:expandedPlans
                 {plan}
-                {users}
                 on:createFromClick={(e) => {selectedPlan = e.detail; createFromPlan = true; }}
                 on:copyClick={(e) => { selectedPlan = e.detail; copyingPlan = true; }}
                 on:deleteClick={(e) => { selectedPlan = e.detail; deletingPlan = true; }}

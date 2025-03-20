@@ -3,19 +3,22 @@
     import { getPicture, getUser } from "../Common/UserUtils";
     import { sendMessage } from "../Stores/AlertStore";
     import Fa from "svelte-fa";
-    import { faChevronDown, faChevronUp, faCopy, faTrash } from "@fortawesome/free-solid-svg-icons";
+    import { faArrowUp, faChevronDown, faChevronUp, faCopy, faLink, faTrash } from "@fortawesome/free-solid-svg-icons";
     import { faClone } from "@fortawesome/free-regular-svg-icons";
     import ViewDashboard from "../Views/ViewDashboard.svelte";
     import ReleaseStats from "../Stats/ReleaseStats.svelte";
     import { faEdit } from "@fortawesome/free-regular-svg-icons";
+    import { userList } from "../Stores/UserlistSubscriber";
 
 
     export let plan;
-    export let users;
+    export let detached = false;
+    let users = {};
     export let expandedPlans;
     let planStats;
 
     let owner;
+    $: users = $userList;
     $: owner = getUser(plan.owner, users);
     const dispatch = createEventDispatcher();
 
@@ -54,6 +57,9 @@
 </script>
 
 <div class="rounded p-2 mb-2 bg-white shadow-sm">
+    {#if detached}
+        <a href="/release/by-id/{plan.release_id}/planner" class="btn btn-sm btn-secondary"><Fa icon={faArrowUp}/> Back to planner</a>
+    {/if}
     <div class=" d-flex align-items-center">
         <div class="">
             {plan.name}
@@ -70,32 +76,35 @@
                 </div>
             {/if}
         </div>
-        <div class="ms-2">
-            {#if planStats}
-                <button on:click={() => { expandedPlans[plan.id] = (!expandedPlans[plan.id]); }} class="btn btn-primary"><Fa icon={expandedPlans[plan.id] ? faChevronUp : faChevronDown}/></button>
-            {:else}
-                <button class="btn btn-primary"><span class="spinner-grow spinner-grow-sm"></span></button>
-            {/if}
-        </div>
-        {#if !plan.created_from}
+        {#if !detached}
             <div class="ms-2">
-                <button class="btn btn-primary" on:click={() => { dispatch("createFromClick", plan); }}><Fa icon={faClone}/></button>
+                {#if planStats}
+                    <button on:click={() => { expandedPlans[plan.id] = (!expandedPlans[plan.id]); }} class="btn btn-primary"><Fa icon={expandedPlans[plan.id] ? faChevronUp : faChevronDown}/></button>
+                {:else}
+                    <button class="btn btn-primary"><span class="spinner-grow spinner-grow-sm"></span></button>
+                {/if}
+            </div>
+            {#if !plan.created_from}
+                <div class="ms-2">
+                    <button class="btn btn-primary" on:click={() => { dispatch("createFromClick", plan); }}><Fa icon={faClone}/></button>
+                </div>
+            {/if}
+            <div class="ms-2">
+                <button class="btn btn-warning" on:click={() => { dispatch("editClick", plan); }}><Fa icon={faEdit}/></button>
+            </div>
+            <div class="ms-2">
+                <button class="btn btn-success" on:click={() => { dispatch("copyClick", plan); }}><Fa icon={faCopy}/></button>
+            </div>
+            <div class="ms-2">
+                <button on:click={() => { dispatch("deleteClick", plan); }} class="btn btn-danger"><Fa icon={faTrash}/></button>
             </div>
         {/if}
-        <div class="ms-2">
-            <button class="btn btn-warning" on:click={() => { dispatch("editClick", plan); }}><Fa icon={faEdit}/></button>
-        </div>
-        <div class="ms-2">
-            <button class="btn btn-success" on:click={() => { dispatch("copyClick", plan); }}><Fa icon={faCopy}/></button>
-        </div>
-        <div class="ms-2">
-            <button on:click={() => { dispatch("deleteClick", plan); }} class="btn btn-danger"><Fa icon={faTrash}/></button>
-        </div>
     </div>
     <div class="p-2 bg-light-three rounded collapse" class:show={expandedPlans[plan.id]}>
         {#await fetchViewForPlan(plan.view_id)}
             <div class="text-center text-muted p-2">Loading view...</div>
         {:then view}
+            <div><a href="/view/{view.name}" class="btn btn-sm btn-primary"><Fa icon={faLink}/> View</a></div>
             <ViewDashboard bind:stats={planStats} productVersion={plan.target_version} {view}/>
         {/await}
     </div>

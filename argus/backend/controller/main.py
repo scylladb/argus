@@ -8,7 +8,7 @@ from flask import (
 from argus.backend.controller.notifications import bp as notifications_bp
 from argus.backend.controller.team_ui import bp as teams_bp
 from argus.backend.service.argus_service import ArgusService
-from argus.backend.models.web import WebFileStorage
+from argus.backend.models.web import ArgusRelease, WebFileStorage
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.planner_service import PlanningService
 from argus.backend.service.user import UserService, login_required
@@ -93,6 +93,15 @@ def view_dashboard(view_name: str):
     return render_template("view_dashboard.html.j2", data=data_json)
 
 
+@bp.route("/plan/<string:plan_id>")
+@login_required
+def plan_dashboard(plan_id: str):
+    service = PlanningService()
+    plan = service.get_plan(plan_id=plan_id)
+    data_json = plan
+    return render_template("plan_dashboard.html.j2", data=data_json)
+
+
 @bp.route("/alert_debug")
 @login_required
 def alert_debug():
@@ -128,6 +137,13 @@ def release_scheduler(name: str):
         "tests": [dict(test.items()) for test in release_tests],
     }
     return render_template("release_schedule.html.j2", release_name=name, data=data_json)
+
+
+@bp.route("/release/by-id/<string:id>/planner")
+@login_required
+def release_planner_by_id(id: str):
+    release = ArgusRelease.get(id=id)
+    return redirect(url_for("main.release_planner", name=release.name))
 
 
 @bp.route("/release/<string:name>/planner")
