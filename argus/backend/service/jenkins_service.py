@@ -51,7 +51,16 @@ class JenkinsService:
                                         password=current_app.config["JENKINS_API_TOKEN"])
 
     def retrieve_job_parameters(self, build_id: str, build_number: int) -> list[Parameter]:
-        job_info = self._jenkins.get_build_info(name=build_id, number=build_number)
+        if build_number == -1:
+            next_build_number = self._jenkins.get_job_info(name=build_id).get("nextBuildNumber")
+            if not next_build_number:
+                raise JenkinsServiceError("#noBuildsAvailable")
+            try:
+                job_info = self._jenkins.get_build_info(name=build_id, number=next_build_number - 1)
+            except jenkins.JenkinsException:
+                raise JenkinsServiceError("#noBuildsAvailable")
+        else:
+            job_info = self._jenkins.get_build_info(name=build_id, number=build_number)
         raw_config = self._jenkins.get_job_config(name=build_id)
         config = ET.fromstring(raw_config)
         parameter_defs = config.find("*//parameterDefinitions")
