@@ -77,7 +77,7 @@ class SCTService:
 
     @staticmethod
     def process_target_version(run: SCTTestRun, package: PackageVersion):
-        if "upgrade-target" in run.version_source and package.name == "scylla-server-target":
+        if run.version_source and "upgrade-target" in run.version_source and package.name == "scylla-server-target":
             return
         run.version_source = package.name
         run.scylla_version = package.version
