@@ -3,50 +3,75 @@
     import {faEdit, faTrash} from '@fortawesome/free-solid-svg-icons';
     import {createEventDispatcher} from 'svelte';
     import {getPicture} from "../../../Common/UserUtils";
+    import CommentEditor from "../../../Discussion/CommentEditor.svelte";
+    import { marked } from "marked";
+    import { markdownRendererOptions } from "../../../markdownOptions";
 
-    export let comment;
-    export let currentUserId;
-    export let action;
-    export let highlight;
-    export let users = {};
+    export let comment: any;
+    export let currentUserId: string;
+    export let action: any;
+    export let highlight: any;
+    export let users: Record<string, any> = {};
 
-    let creator = users[comment.creator_id];
+    let creator = comment.creator_id ? users[comment.creator_id] || {} : {};
     let isArchived = action?.isArchived || highlight?.isArchived;
     let isEditing = false;
     let commentTimeStr = comment.createdAt.toLocaleDateString("en-CA") + " " + comment.createdAt.toLocaleTimeString("en-GB");
+    let commentBody = {
+        id: comment.id || "",
+        message: comment.content || "",
+        release: "",
+        reactions: {},
+        mentions: [],
+        user_id: comment.creator_id || "",
+        release_id: "",
+        test_run_id: "",
+        posted_at: comment.createdAt || new Date(),
+    };
 
     const dispatch = createEventDispatcher();
 
-    const updateContent = () => {
+    const updateContent = (event: { detail?: any }) => {
+        const updatedComment = event?.detail || commentBody;
+        comment.content = updatedComment.message;
         dispatch('updateCommentContent', {comment, newContent: comment.content});
         isEditing = false;
     };
     const deleteComment = () => dispatch('deleteComment', {comment});
 </script>
 
-<li class="list-group-item py-1"  class:bg-light={isArchived}>
-    <div class="align-items-center">
-        {#if isEditing}
-            <input type="text" class="form-control me-2" bind:value={comment.content}
-                   on:keydown={(e) => { if(e.key === 'Enter') updateContent(); }}>
-            <button class="btn btn-sm btn-primary me-2" on:click={updateContent}>Save</button>
-            <button class="btn btn-sm btn-secondary me-2" on:click={() => isEditing = false}>Cancel</button>
-        {:else}
-            <div class="flex-fill d-inline-flex">
+<li class="list-group-item py-1" class:bg-light={isArchived}>
+    {#if isEditing}
+        <div class="flex-grow-1">
+            <CommentEditor
+                commentBody={commentBody}
+                mode="edit"
+                entryType="comment"
+                on:submitComment={updateContent}
+                on:cancelEditing={() => isEditing = false}
+            />
+        </div>
+    {:else}
+        <div class="d-flex">
+            <div class="flex-fill d-inline-flex align-items-start">
                 <div class="img-profile me-2" style="background-image: url('{getPicture(creator?.picture_id)}');" data-bs-toggle="tooltip" title="{creator?.username}" />
                 <small class="text-muted ms-2">{commentTimeStr}</small>
             </div>
-        {/if}
-        <div class="d-flex">
-            <p class="mb-0 flex-grow-1">{comment.content}</p>
-            {#if comment.creator_id === currentUserId && !isArchived}
-            <button class="btn btn-sm btn-outline-secondary me-1" on:click={() => isEditing = !isEditing}>
-                <Fa icon={faEdit}/>
-            </button>
-            <button class="btn btn-sm btn-outline-danger" on:click={deleteComment}>
-                <Fa icon={faTrash}/>
-            </button>
-        {/if}
         </div>
-    </div>
+        <div class="d-flex justify-content-between align-items-start mt-1">
+            <div class="mb-0 flex-grow-1 markdown-body">
+                {@html marked.parse(comment.content, markdownRendererOptions)}
+            </div>
+            {#if comment.creator_id === currentUserId && !isArchived}
+            <div class="d-flex align-items-start ms-2">
+                <button class="btn btn-sm btn-outline-secondary me-1" on:click={() => isEditing = !isEditing}>
+                    <Fa icon={faEdit}/>
+                </button>
+                <button class="btn btn-sm btn-outline-danger" on:click={deleteComment}>
+                    <Fa icon={faTrash}/>
+                </button>
+            </div>
+            {/if}
+        </div>
+    {/if}
 </li>

@@ -6,17 +6,29 @@
     import {getPicture} from "../../../Common/UserUtils";
     import AssigneeSelector from "../../../Common/AssigneeSelector.svelte";
     import CommentEditor from "../../../Discussion/CommentEditor.svelte";
-    import * as marked from "marked";
+    import { marked } from "marked";
     import {MarkdownUserMention} from "../../../Discussion/MarkedMentionExtension";
     import {markdownRendererOptions} from "../../../markdownOptions";
 
-    export let action;
-    export let currentUserId;
-    export let users = {};
+    export let action: any;
+    export let currentUserId: string;
+    export let users: Record<string, any> = {};
 
     let isEditing = false;
     let newComment = '';
-    let creator = users[action.creator_id];
+    let showNewCommentEditor = false;
+    let newCommentBody = {
+        id: '',
+        message: '',
+        release: '',
+        reactions: {},
+        mentions: [],
+        user_id: currentUserId || '',
+        release_id: '',
+        test_run_id: '',
+        posted_at: new Date(),
+    };
+    let creator = action.creator_id ? users[action.creator_id] || {} : {};
     let assignee_id = action.assignee_id;
     let isArchived = action.isArchived;
     const dispatch = createEventDispatcher();
@@ -41,7 +53,7 @@
             dispatch('loadComments', {action});
         }
     };
-    const updateContent = (e) => {
+    const updateContent = (e: { detail: any }) => {
         commentBody.message = e.detail.message;
         isEditing = false;
         dispatch('updateContent', {action, newContent: commentBody.message});
@@ -55,7 +67,13 @@
         if (event.key === 'Enter') addComment();
     };
     const toggleComplete = () => dispatch('toggleComplete', {action});
-    const handleAssignee = (e) => dispatch('assigneeSelected', {action, assignee: e.detail});
+    const handleAssignee = (e: { detail: any }) => dispatch('assigneeSelected', {action, assignee: e.detail});
+    const handleNewCommentSubmit = (event: { detail: any }) => {
+        const commentData = event.detail;
+        dispatch('addComment', {action, content: commentData.message});
+        newCommentBody.message = '';
+        showNewCommentEditor = false;
+    };
 </script>
 
 <li class="list-group-item" class:bg-light={isArchived}>
@@ -106,15 +124,25 @@
             <div class="mt-2 col-md-10">
                 <ul class="list-group list-group-flush">
                     {#each action.comments as comment (comment.id)}
-                        <Comment {comment} {currentUserId} {action} {users} on:deleteComment on:updateCommentContent/>
+                        <Comment {comment} {currentUserId} {action} highlight={null} {users} on:deleteComment on:updateCommentContent/>
                     {/each}
                 </ul>
                 {#if !action.isArchived}
-                    <div class="input-group mt-2">
-                        <input type="text" class="form-control" placeholder="Add a comment" bind:value={newComment}
-                               on:keydown={handleCommentKeydown}>
-                        <button class="btn btn-outline-primary" on:click={addComment}>Add</button>
-                    </div>
+                    {#if showNewCommentEditor}
+                        <div class="mt-2">
+                            <CommentEditor
+                                commentBody={newCommentBody}
+                                mode="post"
+                                entryType="comment"
+                                on:submitComment={handleNewCommentSubmit}
+                                on:cancelEditing={() => (showNewCommentEditor = false)}
+                            />
+                        </div>
+                    {:else}
+                        <button class="btn btn-outline-primary w-100 mt-2" on:click={() => showNewCommentEditor = true}>
+                            Add a comment
+                        </button>
+                    {/if}
                 {/if}
             </div>
         {/if}
