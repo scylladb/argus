@@ -165,7 +165,7 @@ class HighlightsService:
                 mentions.add(user) if user.id != g.user.id else None
         return mentions, content_stripped
 
-    def _send_highlight_notifications(self, mentions: set, content: str, view_id: UUID, sender_id: UUID, is_action_item: bool):
+    def _send_highlight_notifications(self, mentions: set, content: str, view_id: UUID, sender_id: UUID, is_action_item: bool, is_comment: bool = False):
         """Send notifications to mentioned users."""
         view = ArgusUserView.get(id=view_id)
         highlight_type = "action item" if is_action_item else "highlight"
@@ -182,7 +182,8 @@ class HighlightsService:
                     "view_id": view.id,
                     "view_name": view.name,
                     "display_name": view.display_name,
-                    "highlight_type": highlight_type,
+                    "highlight_type": f'{highlight_type}{" comment" if is_comment else ""}',
+                    "message": content,
                 }
             )
 
@@ -290,6 +291,7 @@ class HighlightsService:
         if not highlight:
             abort(404, description="Highlight not found")
         created_at = datetime.now(UTC)
+        mentions, content_stripped = self._process_mentions(payload.content)
         comment = WidgetComment(
             view_id=payload.view_id,
             index=payload.index,
@@ -301,6 +303,7 @@ class HighlightsService:
         comment.save()
         highlight.comments_count += 1
         highlight.save()
+        self._send_highlight_notifications(mentions, content_stripped, payload.view_id, creator_id, highlight.completed is not None, is_comment=True)
         return Comment.from_db_model(comment)
 
     def update_comment(self, user_id: UUID, payload: CommentUpdate) -> Comment:
@@ -316,8 +319,10 @@ class HighlightsService:
             abort(404, description="Comment not found")
         if comment.creator_id != user_id:
             abort(403, description="Not authorized to update comment")
+        mentions, content_stripped = self._process_mentions(payload.content)
         comment.content = payload.content
         comment.save()
+        self._send_highlight_notifications(mentions, content_stripped, payload.view_id, user_id, WidgetHighlights.objects(view_id=payload.view_id, index=payload.index, created_at=highlight_created_at).first().completed is not None, is_comment=True)
         return Comment.from_db_model(comment)
 
     def delete_comment(self, user_id: UUID, payload: CommentDelete):
