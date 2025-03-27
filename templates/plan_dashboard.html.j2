@@ -1,0 +1,19 @@
+{% extends "base.html.j2" %}
+
+{% block title %}
+{{ data.display_name or data.name }}
+{% endblock %}
+
+{% block javascripts %}
+{{ super() }}
+<script>
+    globalThis.ARGUS_PLAN_DATA = {{ data | tojson | safe }};
+</script>
+<script defer src="/s/dist/plan.bundle.js"></script>
+{% endblock javascripts %}
+
+{% block body %}
+    <div class="container-fluid my-4">
+        <div id="planDashboard"></div>
+    </div>
+{% endblock %}
