@@ -100,8 +100,8 @@ def submit_driver_env(api_key: str, base_url: str, run_id: str, env_path: str, e
 @click.option("--base-url", default="https://argus.scylladb.com", help="Base URL for argus instance")
 @click.option("--id", "run_id", required=True, help="UUID (v4 or v1) unique to the job")
 @click.option("--status", required=True, help="Resulting job status")
-def finish_driver_matrix_run(api_key: str, base_url: str, run_id: str, status: str):
-    client = ArgusDriverMatrixClient(run_id=run_id, auth_token=api_key, base_url=base_url)
+def finish_driver_matrix_run(api_key: str, base_url: str, run_id: str, status: str, extra_headers: dict):
+    client = ArgusDriverMatrixClient(run_id=run_id, auth_token=api_key, base_url=base_url, extra_headers=extra_headers)
     client.finalize_run(run_type=ArgusDriverMatrixClient.test_type, run_id=run_id, body={"status": TestStatus(status)})
 
 
