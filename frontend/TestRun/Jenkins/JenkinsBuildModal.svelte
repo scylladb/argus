@@ -5,6 +5,7 @@
     import ParamFetchPlaceholder from "./ParamFetchPlaceholder.svelte";
     import ParameterEditor from "./ParameterEditor.svelte";
     import ModalError from "./ModalError.svelte";
+    import BuildConfirmationDialog from "./BuildConfirmationDialog.svelte";
 
     export let buildId;
     export let buildNumber;
@@ -17,6 +18,7 @@
         PARAM_EDIT: "param_edit",
         BUILD_START: "build_start",
         BUILD_CONFIRMED: "build_confirmed",
+        BUILD_CONFIRM: "build_confirmation",
         ERROR: "error",
     };
 
@@ -28,8 +30,12 @@
                     let res = await fetchLastBuildParams(this.args.buildId, this.args.buildNumber);
                     setState(STATES.PARAM_EDIT, {params: res});
                 } catch (error) {
-                    setState(STATES.ERROR, { message: error.message });
-                    console.log(error);
+                    if (error.message == "#noBuildsAvailable") {
+                        setState(STATES.BUILD_CONFIRM);
+                    } else {
+                        setState(STATES.ERROR, { message: error.message });
+                        console.log(error);
+                    }
                 }
             },
             /**
@@ -58,6 +64,24 @@
             args: {
                 pluginName: pluginName,
                 params: {}
+            },
+        },
+        [STATES.BUILD_CONFIRM]: {
+            component: BuildConfirmationDialog,
+            onEnter: async function () {
+                //empty
+            },
+            /**
+             * @param {CustomEvent} event
+             */
+            onExit: async function (e) {
+                if (e.detail.confirm) {
+                    setState(STATES.BUILD_START, { buildParams: {} });
+                } else {
+                    dispatch("rebuildCancel");
+                }
+            },
+            args: {
             },
         },
         [STATES.BUILD_START]: {
