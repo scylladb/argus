@@ -370,8 +370,8 @@ def test_set_assignee_should_not_work_for_highlight(flask_client):
     assert response.json["status"] == "error"
     assert response.json["response"]["exception"] == "NotFound"
 
-
-def test_create_comment_should_increment_comments_count(flask_client):
+@patch("argus.backend.service.views_widgets.highlights.HighlightsService._send_highlight_notifications")
+def test_create_comment_should_increment_comments_count(notification, flask_client):
     view_id = str(uuid4())
     highlight_created_at = datetime.now(UTC)
     highlight_entry = WidgetHighlights(
@@ -443,8 +443,8 @@ def test_delete_comment_should_decrement_comments_count(flask_client):
     updated_highlight = WidgetHighlights.objects(view_id=UUID(view_id), index=0, created_at=highlight_created_at).first()
     assert updated_highlight.comments_count == 0
 
-
-def test_update_comment_should_modify_content(flask_client):
+@patch("argus.backend.service.views_widgets.highlights.HighlightsService._send_highlight_notifications")
+def test_update_comment_should_modify_content(notification, flask_client):
     view_id = str(uuid4())
     highlight_created_at = datetime.now(UTC)
     comment_created_at = datetime.now(UTC)
