@@ -1,0 +1,219 @@
+<script lang="ts">
+    import { writable } from "svelte/store";
+    import type { NemesisData, TestRun } from "./Interfaces";
+
+    /** @description Array of items to display (either NemesisData or TestRun) */
+    export let items: (NemesisData | TestRun)[];
+
+    /** @description Number of items to show per page */
+    export let itemsPerPage: number = 20;
+
+    /** @description Table title */
+    export let title: string;
+    export let sortField: string;
+    export let sortDirection: "asc" | "desc";
+    /**
+     * @description Table column definitions
+     * @type {Array<{key: string, label: string, sort?: (a: any, b: any) => number, render?: (item: any) => string, component?: any, width?: string}>}
+     */
+    export let columns: {
+        key: string;
+        label: string;
+        sort?: (a: any, b: any) => number;
+        render?: (item: any) => string;
+        component?: any;
+        width?: string;
+    }[];
+
+    /** @description Callback to close the table */
+    export let onClose: () => void;
+
+    /**
+     * @description Reactive state store for pagination and sorting
+     * @type {import('svelte/store').Writable}
+     */
+    const state = writable<{
+        currentPage: number;
+        sortField: string;
+        sortDirection: "asc" | "desc";
+    }>({
+        currentPage: 1,
+        sortField: sortField || "status",
+        sortDirection: sortDirection || "asc",
+    });
+
+    /**
+     * @description Sorts items based on specified field and direction
+     * @param {(NemesisData | TestRun)[]} items - Array of items to sort
+     * @param {string} field - Column key to sort by
+     * @param {"asc" | "desc"} direction - Sort direction
+     * @returns {(NemesisData | TestRun)[]} Sorted array
+     */
+    function sortItems(items: (NemesisData | TestRun)[], field: string, direction: "asc" | "desc") {
+        const column = columns.find((c) => c.key === field);
+        if (!column?.sort) return items;
+
+        const sortFn = column.sort;
+
+        return [...items].sort((a, b) => {
+            const comparison = sortFn(a, b);
+            return direction === "asc" ? comparison : -comparison;
+        });
+    }
+
+    /**
+     * @description Toggles sort direction for a given field
+     * @param {string} field - Column key to sort by
+     */
+    function toggleSort(field: string) {
+        $state.sortField = field;
+        $state.sortDirection = $state.sortField === field && $state.sortDirection === "asc" ? "desc" : "asc";
+    }
+
+    /** @description Reactively sorted items based on current sort state */
+    $: sortedItems = sortItems(items, $state.sortField, $state.sortDirection);
+
+    /** @description Reactively paginated items for current page */
+    $: paginatedItems = sortedItems.slice(($state.currentPage - 1) * itemsPerPage, $state.currentPage * itemsPerPage);
+
+    /** @description Total number of pages based on items and itemsPerPage */
+    $: totalPages = Math.ceil(items.length / itemsPerPage);
+
+    /**
+     * @description Formats duration in seconds to a human-readable string
+     * @param {number} seconds - Duration in seconds
+     * @returns {string} Formatted duration (e.g., "1h 30m 45s")
+     */
+    function formatDuration(seconds: number): string {
+        const absSeconds = Math.abs(seconds);
+        return `${Math.floor(absSeconds / 3600)}h ${Math.floor((absSeconds % 3600) / 60)}m ${Math.floor(
+            absSeconds % 60
+        )}s`;
+    }
+
+    /**
+     * @description Formats Unix timestamp to a readable date
+     * @param {number} timestamp - Unix timestamp in seconds
+     * @returns {string} Formatted date or "N/A" if invalid
+     */
+    function formatTimestamp(timestamp: number): string {
+        return timestamp ? new Date(timestamp * 1000).toLocaleDateString("en-CA", { timeZone: "UTC" }) : "N/A";
+    }
+
+    /**
+     * @description Gets display value for an item property
+     * @param {NemesisData | TestRun} item - Data item
+     * @param {string} key - Property key
+     * @returns {string} Stringified value or empty string
+     */
+    function getItemValue(item: NemesisData | TestRun, key: string): string {
+        const value = (item as any)[key];
+        return value !== undefined && value !== null ? String(value) : "";
+    }
+</script>
+
+<div class="details mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5>{title}</h5>
+        <button class="btn btn-sm btn-outline-secondary" on:click={onClose}><i class="bi bi-x" /> Close</button>
+    </div>
+    <div class="table-responsive">
+        {#key sortedItems}
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        {#each columns as column, i}
+                            <th
+                                class:sortable={column.sort !== undefined}
+                                on:click={() => column.sort && toggleSort(column.key)}
+                                style={column.width
+                                    ? `width: ${column.width}; min-width: ${column.width};`
+                                    : i === columns.length - 1
+                                    ? "width: auto; min-width: 150px;"
+                                    : "width: 150px; min-width: 150px;"}
+                            >
+                                {column.label}
+                                {#if column.sort && $state.sortField === column.key}
+                                    <i class="fas fa-sort-{$state.sortDirection === 'desc' ? 'down' : 'up'}" />
+                                {/if}
+                            </th>
+                        {/each}
+                    </tr>
+                </thead>
+                <tbody>
+                    {#each paginatedItems as item}
+                        <tr>
+                            {#each columns as column}
+                                <td>
+                                    {#if column.component}
+                                        <svelte:component this={column.component} run={item} />
+                                    {:else if column.render}
+                                        {@html column.render(item)}
+                                    {:else if column.key === "duration"}
+                                        {formatDuration(item[column.key])}
+                                    {:else if column.key === "start_time"}
+                                        <a href={`/tests/scylla-cluster-tests/${item.run_id}`} target="_blank"
+                                            >{formatTimestamp(item[column.key])}</a
+                                        >
+                                    {:else}
+                                        {getItemValue(item, column.key) || ""}
+                                    {/if}
+                                </td>
+                            {/each}
+                        </tr>
+                    {/each}
+                </tbody>
+            </table>
+        {/key}
+    </div>
+    {#if totalPages > 1}
+        <nav class="mt-3">
+            <ul class="pagination pagination-sm justify-content-center">
+                <li class="page-item {$state.currentPage === 1 ? 'disabled' : ''}">
+                    <button
+                        class="page-link"
+                        on:click={() => ($state.currentPage -= 1)}
+                        disabled={$state.currentPage === 1}>Previous</button
+                    >
+                </li>
+                {#each Array(totalPages) as _, i}
+                    <li class="page-item {$state.currentPage === i + 1 ? 'active' : ''}">
+                        <button class="page-link" on:click={() => ($state.currentPage = i + 1)}>{i + 1}</button>
+                    </li>
+                {/each}
+                <li class="page-item {$state.currentPage === totalPages ? 'disabled' : ''}">
+                    <button
+                        class="page-link"
+                        on:click={() => ($state.currentPage += 1)}
+                        disabled={$state.currentPage === totalPages}>Next</button
+                    >
+                </li>
+            </ul>
+        </nav>
+    {/if}
+</div>
+
+<style>
+    .details {
+        border-top: 1px solid #dee2e6;
+        padding-top: 1.5rem;
+    }
+    .sortable {
+        cursor: pointer;
+        position: relative;
+        padding-right: 1.5rem;
+    }
+    .sortable:hover {
+        background-color: rgba(0, 0, 0, 0.05);
+    }
+    .table {
+        table-layout: fixed;
+        width: 100%;
+    }
+    th,
+    td {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+</style>
