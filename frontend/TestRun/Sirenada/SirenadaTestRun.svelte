@@ -25,13 +25,23 @@
     export let runId = "";
     export let buildNumber = -1;
     export let testInfo = {};
+    export let tab = "";
     const dispatch = createEventDispatcher();
     let testRun = undefined;
     let runRefreshInterval;
-    let activityOpen = false;
-    let commentsOpen = false;
-    let issuesOpen = false;
+    let activeTab = tab.toLowerCase() || "details";
     let failedToLoad = false;
+
+    const setActiveTab = (tabName) => {
+        tabName = tabName.toLowerCase();
+        if (tabName !== activeTab) {
+            activeTab = tabName;
+            if (!window.location.pathname.startsWith("/workspace")) {
+                const newUrl = `/tests/${testInfo.test.plugin_name}/${runId}/${tabName}`;
+                history.replaceState({}, "", newUrl);
+            }
+        }
+    };
 
     const fetchTestRunData = async function () {
         try {
@@ -124,50 +134,62 @@
             <nav>
                 <div class="nav nav-tabs" id="nav-tab-{runId}" role="tablist">
                     <button
-                        class="nav-link active"
+                        class="nav-link"
+                        class:active={activeTab === 'details'}
                         id="nav-details-tab-{runId}"
                         data-bs-toggle="tab"
                         data-bs-target="#nav-details-{runId}"
                         type="button"
                         role="tab"
+                        on:click={() => setActiveTab("details")}
+                        on:keydown={(e) => e.key === "Enter" && setActiveTab("details")}
                         ><Fa icon={faInfoCircle}/> Details</button
                     >
                     <button
                         class="nav-link"
+                        class:active={activeTab === 'results'}
                         id="nav-results-tab-{runId}"
                         data-bs-toggle="tab"
                         data-bs-target="#nav-results-{runId}"
                         type="button"
                         role="tab"
+                        on:click={() => setActiveTab("results")}
+                        on:keydown={(e) => e.key === "Enter" && setActiveTab("results")}
                         ><Fa icon={faClipboard}/> Results</button
                     >
                     <button
                         class="nav-link"
+                        class:active={activeTab === 'discuss'}
                         id="nav-discuss-tab-{runId}"
                         data-bs-toggle="tab"
                         data-bs-target="#nav-discuss-{runId}"
                         type="button"
-                        on:click={() => (commentsOpen = true)}
+                        on:click={() => setActiveTab("discuss")}
+                        on:keydown={(e) => e.key === "Enter" && setActiveTab("discuss")}
                         role="tab"
                         ><Fa icon={faComments}/> Discussion</button
                     >
                     <button
                         class="nav-link"
+                        class:active={activeTab === 'issues'}
                         id="nav-issues-tab-{runId}"
                         data-bs-toggle="tab"
                         data-bs-target="#nav-issues-{runId}"
                         type="button"
                         role="tab"
-                        on:click={() => (issuesOpen = true)}
+                        on:click={() => setActiveTab("issues")}
+                        on:keydown={(e) => e.key === "Enter" && setActiveTab("issues")}
                         ><Fa icon={faCodeBranch}/> Issues</button
                     >
                     <button
                         class="nav-link"
+                        class:active={activeTab === 'activity'}
                         id="nav-activity-tab-{runId}"
                         data-bs-toggle="tab"
                         data-bs-target="#nav-activity-{runId}"
                         type="button"
-                        on:click={() => (activityOpen = true)}
+                        on:click={() => setActiveTab("activity")}
+                        on:keydown={(e) => e.key === "Enter" && setActiveTab("activity")}
                         role="tab"
                         ><Fa icon={faExclamationTriangle}/> Activity</button
                     >
@@ -178,7 +200,9 @@
                 id="nav-tabContent-{runId}"
             >
                 <div
-                    class="tab-pane fade show active"
+                    class="tab-pane fade"
+                    class:show={activeTab === 'details'}
+                    class:active={activeTab === 'details'}
                     id="nav-details-{runId}"
                     role="tabpanel"
                 >
@@ -186,6 +210,8 @@
                 </div>
                 <div
                     class="tab-pane fade"
+                    class:show={activeTab === 'results'}
+                    class:active={activeTab === 'results'}
                     id="nav-results-{runId}"
                     role="tabpanel"
                 >
@@ -193,27 +219,37 @@
                 </div>
                 <div
                     class="tab-pane fade"
+                    class:show={activeTab === 'discuss'}
+                    class:active={activeTab === 'discuss'}
                     id="nav-discuss-{runId}"
                     role="tabpanel"
                 >
-                    {#if commentsOpen}
+                    {#if activeTab === 'discuss'}
                         <TestRunComments {testRun} {testInfo}/>
                     {/if}
                 </div>
-                <div class="tab-pane fade" id="nav-issues-{runId}" role="tabpanel">
+                <div 
+                    class="tab-pane fade"
+                    class:show={activeTab === 'issues'}
+                    class:active={activeTab === 'issues'}
+                    id="nav-issues-{runId}" 
+                    role="tabpanel"
+                >
                     <SirenadaIssueTemplate test_run={testRun} test={testInfo.test} />
                     <div class="py-2 bg-white">
-                        {#if issuesOpen}
+                        {#if activeTab === 'issues'}
                             <IssueTab {testInfo} {runId} />
                         {/if}
                     </div>
                 </div>
                 <div
                     class="tab-pane fade"
+                    class:show={activeTab === 'activity'}
+                    class:active={activeTab === 'activity'}
                     id="nav-activity-{runId}"
                     role="tabpanel"
                 >
-                    {#if activityOpen}
+                    {#if activeTab === 'activity'}
                         <ActivityTab id={runId} />
                     {/if}
                 </div>

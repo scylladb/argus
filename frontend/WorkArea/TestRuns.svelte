@@ -23,6 +23,7 @@
     import JenkinsBuildModal from "../TestRun/Jenkins/JenkinsBuildModal.svelte";
 
     export let testId;
+    export let tab;
     export let listId = uuidv4();
     export let filtered = false;
     export let removableRuns = false;
@@ -429,6 +430,7 @@
                                 <TestRunDispatcher
                                     runId={run.id}
                                     {testInfo}
+                                    tab={tab}
                                     buildNumber={extractBuildNumber(run)}
                                     on:closeRun={handleTestRunClose}
                                     on:investigationStatusChange
