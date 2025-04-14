@@ -40,9 +40,10 @@ def runs(test_id: UUID):
     return render_template("standalone_test_with_runs.html.j2", test_id=test_id, additional_runs=additional_runs)
 
 
-@bp.route("/tests/<string:plugin_name>/<string:run_id>")
+@bp.route("/tests/<string:plugin_name>/<string:run_id>", defaults={"tab": "details"})
+@bp.route("/tests/<string:plugin_name>/<string:run_id>/<string:tab>")
 @login_required
-def get_run_by_plugin(plugin_name: str, run_id: UUID | str):
+def get_run_by_plugin(plugin_name: str, run_id: UUID | str, tab: str):
     try:
         run_id = UUID(run_id)
     except ValueError:
@@ -52,7 +53,7 @@ def get_run_by_plugin(plugin_name: str, run_id: UUID | str):
     if not run:
         flash(f"Run {plugin_name}/{run_id} not found.", "error")
         return redirect(url_for("main.error", type=404))
-    return render_template("run_view_by_plugin.html.j2", run=run)
+    return render_template("run_view_by_plugin.html.j2", run=run, tab=tab)
 
 
 @bp.route("/")

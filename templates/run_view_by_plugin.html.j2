@@ -9,6 +9,7 @@ Test Run
 <script>
     const gTestId = "{{ run.test_id or undefined }}";
     const gRun = {{ [run.id] | tojson | safe }}
+    const gTab = "{{ tab }}";
 </script>
 <script defer src="/s/dist/runByPlugin.bundle.js"></script>
 {% endblock javascripts %}
