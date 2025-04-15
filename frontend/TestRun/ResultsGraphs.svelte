@@ -351,7 +351,7 @@
         cursor: pointer;
         color: #888;
         font-size: 1.2em;
-        z-index: 1000;
+        z-index: 999;
     }
 
     .add-btn:hover {

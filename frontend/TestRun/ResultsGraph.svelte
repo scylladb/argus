@@ -108,11 +108,6 @@
         return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
     }
 
-    const handleOpenRun = (e) => {
-        const runId = e.detail;
-        window.open(`/tests/scylla-cluster-tests/${runId}`, "_blank", "popup");
-    };
-
     function handleChartClick(event, elements, chart) {
         if (elements[0]) {
             const dataset_idx = elements[0].datasetIndex;
@@ -203,7 +198,7 @@
 
                         const runId = context.chart.data.datasets[dataPoint.datasetIndex].data[dataPoint.dataIndex].id;
                         innerHtml += `<div class="d-flex justify-content-end mt-2">`;
-                        innerHtml += `<button class="btn btn-success btn-sm" onclick="document.getElementById('graph-${test_id}-${index}').dispatchEvent(new CustomEvent('openRun', {detail: '${runId}'}))">Open <i class="fas fa-external-link-alt"></i></button>`;
+                        innerHtml += `<a href="/tests/scylla-cluster-tests/${runId}" class="btn btn-success btn-sm" target="_blank">Open <i class="fas fa-external-link-alt"></i></a>`;
                         innerHtml += `</div>`;
 
                         // Add separator between points if not the last one
@@ -318,7 +313,7 @@
     <button class="enlarge-btn" on:click={openModal}>
         <Fa icon={faExpand} />
     </button>
-    <canvas id="graph-{test_id}-{index}" {width} {height} on:openRun={handleOpenRun} />
+    <canvas id="graph-{test_id}-{index}" {width} {height} />
 </div>
 
 {#if showModal}
