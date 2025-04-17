@@ -38,7 +38,7 @@
         let cases = Array
             .from(doc.querySelectorAll("testcase"))
             .map(raw_case => {
-                let statusNode = raw_case.childNodes.length > 0 ? Array.from(raw_case.childNodes).filter(v => v.nodeName != "#text")[0] : undefined;
+                let statusNode = raw_case.childNodes.length > 0 ? Array.from(raw_case.childNodes).filter(v => v.nodeName !== "#text" && v.nodeName !== "system-out" && v.nodeName !== "system-err")[0] : undefined;
                 return {
                     name: raw_case.attributes.getNamedItem("name").textContent,
                     class: raw_case.attributes.getNamedItem("classname").textContent,
