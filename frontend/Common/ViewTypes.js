@@ -12,6 +12,7 @@ import IntegerValue from "../Views/WidgetSettingTypes/IntegerValue.svelte";
 import SummaryWidget from "../Views/Widgets/SummaryWidget/SummaryWidget.svelte";
 import GraphWidget from "../Views/Widgets/GraphsWidget/GraphsWidget.svelte";
 import ViewNemesisStats from "../Views/Widgets/ViewNemesisStats.svelte";
+import ViewGraphedStats from "../Views/Widgets/ViewGraphedStats.svelte";
 
 export class Widget {
     constructor(position = -1, type = "testDashboard", settings = {}) {
@@ -130,6 +131,12 @@ export const WIDGET_TYPES = {
     nemesisStats: {
         type: ViewNemesisStats,
         friendlyName: "Nemesis stats",
+        settingDefinitions: {
+        },
+    },
+    graphedStats: {
+        type: ViewGraphedStats,
+        friendlyName: "Graphed Stats",
         settingDefinitions: {
         },
     },
