@@ -183,9 +183,9 @@
                                             <div class="issue-item mb-1">
                                                 <a href={issue.url} target="_blank" class="issue-link">
                                                     <span
-                                                        class="badge {issue.last_status === 'open'
+                                                        class="badge {issue.state === 'open'
                                                             ? 'issue-open'
-                                                            : 'issue-closed'}">#{issue.issue_number}</span
+                                                            : 'issue-closed'}">#{issue.number}</span
                                                     >
                                                     {issue.title}
                                                 </a>

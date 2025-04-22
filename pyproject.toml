@@ -39,6 +39,7 @@ python-magic = "^0.4.24"
 uwsgi = "^2.0.20"
 python-jenkins = "^1.7.0"
 python-slugify = "^6.1.1"
+pygithub = "^2.6.1"
 
 [tool.poetry.group.docker-image.dependencies]
 supervisor = "^4.2.4"

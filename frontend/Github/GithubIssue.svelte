@@ -30,33 +30,28 @@
         closed: faCheckCircle,
     };
     export let issue = {
-        group_id: "",
         id: "",
-        issue_number: -1,
-        last_status: "unknown",
+        number: -1,
+        state: "unknown",
         owner: "nobody",
-        release_id: "",
         repo: "no-repo",
-        run_id: "",
-        test_id: "",
         title: "NO ISSUE",
-        runs: [],
+        links: [],
+        labels: [],
         type: "issues",
         url: "https://github.com/",
         user_id: "",
-        state: undefined,
         added_on: "Mon, 1 Jan 1970 9:00:00 GMT",
     };
 
+    export let runId;
     export let deleteEnabled = true;
     export let aggregated = false;
 
     let deleting = false;
     let showRuns = false;
-    let issueState = issue.state;
 
     let resolvedRuns;
-
 
     const resolveRuns = async function(runs) {
         if (resolvedRuns) return resolvedRuns;
@@ -78,51 +73,10 @@
         return data.response.runs;
     };
 
-    const fetchGithubToken = async function() {
-        let tokenRequest = await apiMethodCall("/api/v1/profile/github/token", undefined, "GET");
-        if (tokenRequest.status != "ok") {
-            return Promise.reject(new Error("noToken"));
-        } else {
-            return Promise.resolve(tokenRequest.response);
-        }
-    };
-
-    const fetchIssueState = async function() {
-        if (issueState) return issueState;
-        if (!githubToken) {
-            try {
-                githubToken = await fetchGithubToken();
-            } catch (error) {
-                sendMessage("error", "Github Oauth token not found.", "GithubIssue::fetchIssueState");
-                return;
-            }
-        }
-        let issue_url = `https://api.github.com/repos/${issue.owner}/${issue.repo}/issues/${issue.issue_number}`;
-        let issueStateResponse = await fetch(issue_url, {
-            headers: {
-                "Accept": "application/vnd.github.v3+json",
-                "Authorization": `token ${githubToken}`,
-            }
-        });
-        if (issueStateResponse.status < 200 || issueStateResponse.status >= 300) {
-            return Promise.reject(new Error("API Error"));
-        }
-
-        if (parseInt(issueStateResponse.headers.get("x-ratelimit-remaining")) === 0) {
-            return Promise.reject(new Error("Rate limit exceeded"));
-        }
-        issueState = await issueStateResponse.json();
-        dispatch("issueStateUpdate", {
-            issueId: issue.id,
-            state: issueState,
-        });
-        return issueState;
-    };
-
-
     const deleteIssue = async function () {
         deleting = true;
         try {
+            if (aggregated) throw new Error("Cannot delete aggregated issues");
             let apiResponse = await fetch("/api/v1/issues/delete", {
                 method: "POST",
                 headers: {
@@ -130,6 +84,7 @@
                 },
                 body: JSON.stringify({
                     issue_id: issue.id,
+                    run_id: runId,
                 }),
             });
             let apiJson = await apiResponse.json();
@@ -161,58 +116,33 @@
 <div class="row m-2">
     <div class="col rounded p-2 bg-white shadow-sm">
         <div class="d-flex">
-            {#await fetchIssueState()}
-                <div
-                    class="me-2"
-                    style="width: 30em;"
-                    title={issue.title}
-                >
-                    <Fa icon={faGithub} /> <a target="_blank" class="link-dark" href={issue.url}>{issue.title}</a>
+            <div class="ms-2 align-self-center">
+                <div class="mb-1 py-1 shadow-sm rounded-pill d-inline-flex {IssueColorMap[issue.state]}">
+                    <div class="ms-2 me-1"><Fa icon={IssueIcon[issue.state]} /></div>
+                    <div class="me-2">{issue.state}</div>
                 </div>
-                <div class="ms-2 me-2">
-                    <span class="spinner-border spinner-border-sm"></span> Loading issue state...
-                </div>
-            {:then issueState}
-                <div class="ms-2 align-self-center">
-                    <div class="mb-1 py-1 shadow-sm rounded-pill d-inline-flex {IssueColorMap[issueState.state]}">
-                        <div class="ms-2 me-1"><Fa icon={IssueIcon[issueState.state]} /></div>
-                        <div class="me-2">{issueState.state}</div>
-                    </div>
-                </div>
-                <div
-                    class="ms-2 me-2"
-                    style="width: 30em;"
-                    title={issue.title}
-                >
-                    <Fa icon={faGithub} /> <a target="_blank" class="link-dark" href={issue.url}>{issue.title}</a>
-                    <div class="text-muted ms-auto me-2">{issue.repo}#{issue.issue_number}</div>
-                </div>
-                <div class="ms-2 me-2">
-                    {#each issueState.labels as label (label.id)}
-                        <button
-                            class="align-items-center me-1 px-2 label-text border border-dark cursor-pointer"
-                            style="color: {Color(`#${label.color}`).isDark() ? 'white' : 'black'}; background-color: #{label.color};"
-                            on:click={() => {
-                                dispatch("labelClick", label);
-                            }}
-                        >
-                            <div>{label.name}</div>
-                        </button>
-                    {/each}
-                </div>
-            {:catch error}
-                <div
-                    class="me-2"
-                    style="width: 30em;"
-                    title={issue.title}
-                >
-                    <Fa icon={faGithub} /> <a target="_blank" class="link-dark" href={issue.url}>{issue.title}</a>
-                    <div class="text-muted ms-auto me-2">{issue.repo}#{issue.issue_number}</div>
-                </div>
-                <div class="ms-2 me-2">
-                    Error fetching state from Github: {error?.message ?? "Unknown"}
-                </div>
-            {/await}
+            </div>
+            <div
+                class="ms-2 me-2"
+                style="width: 30em;"
+                title={issue.title}
+            >
+                <Fa icon={faGithub} /> <a target="_blank" class="link-dark" href={issue.url}>{issue.title}</a>
+                <div class="text-muted ms-auto me-2">{issue.repo}#{issue.number}</div>
+            </div>
+            <div class="ms-2 me-2">
+                {#each issue.labels as label (label.id)}
+                    <button
+                        class="align-items-center me-1 px-2 label-text border border-dark cursor-pointer"
+                        style="color: {Color(`#${label.color}`).isDark() ? 'white' : 'black'}; background-color: #{label.color};"
+                        on:click={() => {
+                            dispatch("labelClick", label);
+                        }}
+                    >
+                        <div>{label.name}</div>
+                    </button>
+                {/each}
+            </div>
             <div class="ms-auto me-2">
                 {#if Object.keys(users).length > 0}
                     <div
@@ -247,7 +177,7 @@
                 {/if}
                 {#if aggregated}
                     <div class="text-end my-2">
-                        <button class="btn btn-primary" on:click={() => (showRuns = true)}>View {issue.runs.length} runs</button>
+                        <button class="btn btn-primary" on:click={() => (showRuns = true)}>View {issue.links.length} runs</button>
                     </div>
                 {/if}
             </div>
@@ -272,18 +202,18 @@
                 </div>
                 <div>
                 </div>
-                    {#await resolveRuns(issue.runs)}
+                    {#await resolveRuns(issue.links)}
                         <div class="mb-2 text-center p-2">
                             <span class="spinner-border spinner-border-sm"></span> Loading runs...
                         </div>
                         <div class="list-group mb-2">
-                            {#each issue.runs as run, idx}
+                            {#each issue.links as run, idx}
                                 <a class="list-group-item list-group-item-action" href="/test/{run.test_id}/runs?additionalRuns[]={run.run_id}"><Fa icon={faExternalLinkSquareAlt} /> Run#{idx+1}</a>
                             {/each}
                         </div>
                     {:then resolved}
                         <div class="list-group mb-2">
-                            {#each issue.runs as run, idx}
+                            {#each issue.links as run, idx}
                                 <a class="list-group-item list-group-item-action" href="/test/{run.test_id}/runs?additionalRuns[]={run.run_id}"><Fa icon={faExternalLinkSquareAlt} /> {resolved[run.run_id].build_id}#{resolved[run.run_id].build_number}</a>
                             {/each}
                         </div>
@@ -292,13 +222,13 @@
                             {error.message}
                         </div>
                         <div class="list-group mb-2">
-                            {#each issue.runs as run, idx}
+                            {#each issue.links as run, idx}
                                 <a class="list-group-item list-group-item-action" href="/test/{run.test_id}/runs?additionalRuns[]={run.run_id}"><Fa icon={faExternalLinkSquareAlt} /> Run#{idx+1}</a>
                             {/each}
                         </div>
                     {/await}
                 <div>
-                    <a class="w-100 btn btn-primary w-75 me-1" href="/workspace?state={stateEncoder([...new Set(issue.runs.map(run => run.test_id))])}">Investigate selected <Fa icon={faExternalLinkSquareAlt} /></a>
+                    <a class="w-100 btn btn-primary w-75 me-1" href="/workspace?state={stateEncoder([...new Set(issue.links.map(run => run.test_id))])}">Investigate selected <Fa icon={faExternalLinkSquareAlt} /></a>
                 </div>
             </div>
         </div>
@@ -320,7 +250,7 @@
             <div class="modal-body">
                 <p>
                     Are you sure you want to remove <span class="fw-bold"
-                        >{issue.repo}#{issue.issue_number}</span
+                        >{issue.repo}#{issue.number}</span
                     > from this run?
                 </p>
             </div>
