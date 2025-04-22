@@ -17,8 +17,8 @@
     const copyIssueTableAsMarkdown = function () {
         const issues = sortedIssues[currentPage] ?? [];
         let issueFormattedList = issues
-            .sort((a, b) => a.issue_number - b.issue_number)
-            .map(val => `|${val.state ? `${val.state.state.toUpperCase()} ` : " "}|${val.url}|${val.state ? val.state.labels.map(v => v.name).join("\t") : ""}|${val.state && val.state.assignee ? val.state.assignee.login : ""}|`);
+            .sort((a, b) => a.number - b.number)
+            .map(val => `|${val.state ? `${val.state.state.toUpperCase()} ` : " "}|${val.url}|${val.state ? val.state.labels.map(v => v.name).join("\t") : ""}|${val.state && val.assignees ? val.assignees.map(v => v.login).join(",") : ""}|`);
         navigator.clipboard.writeText(`Current Issues ${selectedLabels.length > 0 ? selectedLabels.map(label => `[${label.name}]`).join(" ") : ""}\n|State|Issue|Tags|Assignee|\n|---|---|---|---|\n${issueFormattedList.join("\n")}`);
     };
 
@@ -80,32 +80,24 @@
                     <tbody>
                     {#each sortedIssues[currentPage] ?? [] as issue (issue.id)}
                         <tr>
-                            <td style="border: solid 1px black">{titleCase(issue?.state?.state ?? issue?.last_status + " (?)")}</td>
+                            <td style="border: solid 1px black">{titleCase(issue?.state)}</td>
                             <td style="border: solid 1px black">
-                                <a class="link-primary" href="{issue.url}">{issue.owner}/{issue.repo}#{issue.issue_number}</a>
+                                <a class="link-primary" href="{issue.url}">{issue.owner}/{issue.repo}#{issue.number}</a>
                             </td>
                             <td style="border: solid 1px black">
                                 {issue.title}
                             </td>
                             <td style="border: solid 1px black">
-                                {#if issue.state}
-                                    {#each issue.state.labels as label}
-                                        <span style="text-decoration: underline; color: {Color(`#${label.color}`).darken(0.50)}">{label.name}</span><br>
-                                    {/each}
-                                {:else}
-                                    Unknown
-                                {/if}
+                                {#each issue.labels as label}
+                                    <span style="text-decoration: underline; color: {Color(`#${label.color}`).darken(0.50)}">{label.name}</span><br>
+                                {/each}
                             </td>
                             <td style="border: solid 1px black">
-                                {#if issue.state}
-                                    {#if issue.state.assignee}
-                                        <a href="{issue.state.assignee.html_url}">@{issue.state.assignee.login}</a>
-                                    {:else}
-                                        None
-                                    {/if}
+                                {#each issue.assignees as assignee}
+                                    <a href="{assignee.html_url}">@{assignee.login}</a>
                                 {:else}
-                                    Unknown
-                                {/if}
+                                    None
+                                {/each}
                             </td>
                         </tr>
                     {/each}

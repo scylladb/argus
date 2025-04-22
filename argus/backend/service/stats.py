@@ -7,11 +7,12 @@ from typing import TypedDict
 from uuid import UUID
 
 from cassandra.cqlengine.models import Model
+from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.plugins.loader import all_plugin_models
 from argus.backend.util.common import chunk, get_build_number
 from argus.common.enums import TestStatus, TestInvestigationStatus
-from argus.backend.models.web import ArgusGithubIssue, ArgusRelease, ArgusGroup, ArgusScheduleTest, ArgusTest,\
+from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusScheduleTest, ArgusTest,\
     ArgusTestRunComment, ArgusUserView
 from argus.backend.db import ScyllaCluster
 
@@ -145,6 +146,38 @@ def generate_field_status_map(
                 status_map[run_number] = (run[field_name], run)
     return status_map
 
+
+def _fetch_multiple_release_queries(entity: Model, releases: list[str]):
+    result_set = []
+    for release_id in releases:
+        result_set.extend(entity.filter(release_id=release_id).all())
+    return result_set
+
+
+def fetch_issues(release: list[UUID] | UUID):
+    if isinstance(release, UUID):
+        links = IssueLink.filter(release_id=release)
+    else:
+        links = _fetch_multiple_release_queries(IssueLink, release)
+
+    unique_issues = {link.issue_id for link in links}
+    resolved_issues = {}
+    for batch in chunk(unique_issues):
+        for issue in GithubIssue.filter(id__in=batch).all():
+            resolved_issues[issue.id] = issue
+
+    linked_issues = []
+    for link in links:
+        linked = dict(link.items())
+        issue = resolved_issues.get(link.issue_id)
+        linked = {
+            **linked,
+            **dict(issue.items())
+        }
+        linked_issues.append(linked)
+
+    return linked_issues
+
 class ViewStats:
     def __init__(self, release: ArgusUserView) -> None:
         self.release = release
@@ -154,7 +187,7 @@ class ViewStats:
         self.last_status = TestStatus.NOT_PLANNED
         self.last_investigation_status = TestInvestigationStatus.NOT_INVESTIGATED
         self.has_bug_report = False
-        self.issues: list[ArgusGithubIssue] = []
+        self.issues: list[GithubIssue] = []
         self.comments: list[ArgusTestRunComment] = []
         self.plans: list[ArgusReleasePlan] = []
         self.test_schedules = {}
@@ -189,12 +222,6 @@ class ViewStats:
             **aggregated_investigation_status
         }
 
-    def _fetch_multiple_release_queries(self, entity: Model, releases: list[str]):
-        result_set = []
-        for release_id in releases:
-            result_set.extend(entity.filter(release_id=release_id).all())
-        return result_set
-
     def collect(self, rows: list[TestRunStatRow], limited=False, force=False, dict: dict[str, TestRunStatRow] | None = None, tests: list[ArgusTest] = None, version_filter: str = None) -> None:
         self.forced_collection = force
         all_release_ids = list({t.release_id for t in tests})
@@ -209,7 +236,7 @@ class ViewStats:
             # TODO: Legacy and unconditional, will show extra data.
             self.test_schedules = reduce(
                 lambda acc, row: acc[row["test_id"]].append(row) or acc,
-                self._fetch_multiple_release_queries(ArgusScheduleTest, all_release_ids),
+                _fetch_multiple_release_queries(ArgusScheduleTest, all_release_ids),
                 defaultdict(list)
             )
 
@@ -218,12 +245,12 @@ class ViewStats:
         if not limited or force:
             self.issues = reduce(
                 lambda acc, row: acc[row["run_id"]].append(row) or acc,
-                self._fetch_multiple_release_queries(ArgusGithubIssue, all_release_ids),
+                self._fetch_issues(all_release_ids),
                 defaultdict(list)
             )
             self.comments = reduce(
                 lambda acc, row: acc[row["test_run_id"]].append(row) or acc,
-                self._fetch_multiple_release_queries(ArgusTestRunComment, all_release_ids),
+                _fetch_multiple_release_queries(ArgusTestRunComment, all_release_ids),
                 defaultdict(list)
             )
         self.all_tests = tests
@@ -254,7 +281,7 @@ class ReleaseStats:
         self.last_status = TestStatus.NOT_PLANNED
         self.last_investigation_status = TestInvestigationStatus.NOT_INVESTIGATED
         self.has_bug_report = False
-        self.issues: list[ArgusGithubIssue] = []
+        self.issues: list[GithubIssue] = []
         self.comments: list[ArgusTestRunComment] = []
         self.plans: list[ArgusReleasePlan] = []
         self.test_schedules = {}
@@ -306,7 +333,7 @@ class ReleaseStats:
         if not limited or force:
             self.issues = reduce(
                 lambda acc, row: acc[row["run_id"]].append(row) or acc,
-                ArgusGithubIssue.filter(release_id=self.release.id).all(),
+                fetch_issues(self.release.id),
                 defaultdict(list)
             )
             self.comments = reduce(

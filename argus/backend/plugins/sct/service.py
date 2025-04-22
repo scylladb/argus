@@ -7,7 +7,8 @@ import re
 from time import time
 from xml.etree import ElementTree
 from flask import g
-from argus.backend.models.web import ArgusEventTypes, ArgusGithubIssue, ErrorEventEmbeddings, CriticalEventEmbeddings
+from argus.backend.models.github_issue import GithubIssue, IssueLink
+from argus.backend.models.web import ArgusEventTypes, ErrorEventEmbeddings, CriticalEventEmbeddings
 from argus.backend.plugins.sct.testrun import SCTJunitReports, SCTTestRun, SubtestType
 from argus.common.sct_types import GeminiResultsRequest, PerformanceResultsRequest, ResourceUpdateRequest
 from argus.backend.plugins.sct.udt import (
@@ -20,7 +21,7 @@ from argus.backend.plugins.sct.udt import (
     PerformanceHDRHistogram,
 )
 from argus.backend.service.event_service import EventService
-from argus.backend.util.common import get_build_number
+from argus.backend.util.common import chunk, get_build_number
 from argus.common.enums import NemesisStatus, ResourceState, TestStatus
 
 LOGGER = logging.getLogger(__name__)
@@ -489,7 +490,10 @@ class SCTService:
                 test_run = SCTTestRun.get(id=run_id)
                 if not test_run:
                     continue
-                issues = ArgusGithubIssue.objects.filter(run_id=run_id).all()
+                links = IssueLink.objects.filter(run_id=run_id).all()
+                issues: list[GithubIssue] = []
+                for batch in chunk(links):
+                    issues.extend(GithubIssue.filter(id__in=batch).all())
                 try:
                     build_number = int(
                         test_run.build_job_url[:-1].split("/")[-1]
@@ -508,8 +512,8 @@ class SCTService:
                     "version": sut_version or "unknown",
                     "issues": [
                         {
-                            "issue_number": issue.issue_number,
-                            "last_status": issue.last_status,
+                            "number": issue.number,
+                            "state": issue.state,
                             "title": issue.title,
                             "url": issue.url,
                         }

@@ -8,7 +8,6 @@ import time
 from typing import Any
 from uuid import UUID
 
-import requests
 from flask import g
 from cassandra.query import BatchStatement, ConsistencyLevel
 from cassandra.cqlengine.query import BatchQuery
@@ -17,16 +16,12 @@ from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import (
     ArgusEvent,
     ArgusEventTypes,
-    ArgusGithubIssue,
-    ArgusGroup,
     ArgusNotificationSourceTypes,
     ArgusNotificationTypes,
     ArgusRelease,
     ArgusTest,
     ArgusTestRunComment,
-    ArgusUserView,
     User,
-    UserOauthToken,
 )
 
 from argus.backend.plugins.core import PluginInfoBase, PluginModelBase
@@ -52,9 +47,6 @@ class TestRunService:
     RE_MENTION = r"@[A-Za-z\d](?:[A-Za-z\d]|-(?=[A-Za-z\d])){0,38}"
 
     plugins = AVAILABLE_PLUGINS
-    github_headers = {
-        "Accept": "application/vnd.github.v3+json",
-    }
 
     def __init__(self) -> None:
         self.notification_manager = NotificationManagerService()
@@ -322,121 +314,6 @@ class TestRunService:
         }
         return response
 
-
-    def submit_github_issue(self, issue_url: str, test_id: UUID, run_id: UUID):
-        user_tokens = UserOauthToken.filter(user_id=g.user.id).all()
-        token = None
-        for tok in user_tokens:
-            if tok.kind == "github":
-                token = tok.token
-                break
-        if not token:
-            raise Exception("Github token not found")
-
-        match = re.match(
-            r"http(s)?://(www\.)?github\.com/(?P<owner>[\w\d]+)/"
-            r"(?P<repo>[\w\d\-_]+)/(?P<type>issues|pull)/(?P<issue_number>\d+)(/)?",
-            issue_url,
-        )
-        if not match:
-            raise Exception("URL doesn't match Github schema")
-
-        test: ArgusTest = ArgusTest.get(id=test_id)
-        plugin = self.get_plugin(plugin_name=test.plugin_name)
-
-        run = plugin.model.get(id=run_id)
-        release = ArgusRelease.get(id=run["release_id"])
-        test = ArgusTest.get(build_system_id=run["build_id"])
-        group = ArgusGroup.get(id=test.group_id)
-
-        new_issue = ArgusGithubIssue()
-        new_issue.user_id = g.user.id
-        new_issue.run_id = run_id
-        new_issue.group_id = group.id
-        new_issue.release_id = release.id
-        new_issue.test_id = test.id
-        new_issue.type = match.group("type")
-        new_issue.owner = match.group("owner")
-        new_issue.repo = match.group("repo")
-        new_issue.issue_number = int(match.group("issue_number"))
-
-        issue_request = requests.get(
-            f"https://api.github.com/repos/{new_issue.owner}/{new_issue.repo}/issues/{new_issue.issue_number}",
-            headers={
-                **self.github_headers,
-                "Authorization": f"token {token}",
-            }
-        )
-        if issue_request.status_code == 200:
-            issue_state: dict[str, Any] = issue_request.json()
-
-            new_issue.title = issue_state.get("title")
-            new_issue.url = issue_state.get("html_url")
-            new_issue.last_status = issue_state.get("state")
-        else:
-            new_issue.title = f"{new_issue.owner}/{new_issue.repo}#{new_issue.issue_number}"
-            new_issue.url = issue_url
-            new_issue.last_status = "open"
-        new_issue.save()
-
-        EventService.create_run_event(
-            kind=ArgusEventTypes.TestRunIssueAdded,
-            body={
-                "message": "An issue titled \"{title}\" was added by {username}",
-                "username": g.user.username,
-                "url": issue_url,
-                "title": new_issue.title,
-                "state": new_issue.last_status,
-            },
-            user_id=g.user.id,
-            run_id=new_issue.run_id,
-            release_id=new_issue.release_id,
-            group_id=new_issue.group_id,
-            test_id=new_issue.test_id
-        )
-
-        response = {
-            **dict(list(new_issue.items())),
-            "title": new_issue.title,
-            "state": new_issue.last_status,
-        }
-
-        return response
-
-    def _get_github_issues_for_view(self, view_id: UUID | str) -> list[ArgusGithubIssue]:
-        view: ArgusUserView = ArgusUserView.get(id=view_id)
-        issues = []
-        for batch in chunk(view.tests):
-            issues.extend(ArgusGithubIssue.filter(test_id__in=batch).allow_filtering().all())
-        
-        return issues
-
-    def get_github_issues(self, filter_key: str, filter_id: UUID, aggregate_by_issue: bool = False) -> dict:
-        if filter_key not in ["release_id", "group_id", "test_id", "run_id", "user_id", "view_id"]:
-            raise Exception(
-                "filter_key can only be one of: \"release_id\", \"group_id\", \"test_id\", \"run_id\", \"user_id\", \"view_id\""
-            )
-        if filter_key == "view_id":
-            all_issues = self._get_github_issues_for_view(filter_id)
-        else:
-            all_issues = ArgusGithubIssue.filter(**{filter_key: filter_id}).all()
-        if aggregate_by_issue:
-            runs_by_issue = {}
-            response = []
-            for issue in all_issues:
-                runs = runs_by_issue.get(issue, [])
-                runs.append({"test_id": issue.test_id, "run_id": issue.run_id})
-                runs_by_issue[issue] = runs
-
-            for issue, runs in runs_by_issue.items():
-                issue_dict = dict(issue.items())
-                issue_dict["runs"] = runs
-                response.append(issue_dict)
-
-        else:
-            response = [dict(issue.items()) for issue in all_issues]
-        return response
-
     def resolve_run_build_id_and_number_multiple(self, runs: list[tuple[UUID, UUID]]) -> dict[UUID, dict[str, Any]]:
         test_ids = [r[0] for r in runs]
         all_tests: list = []
@@ -454,31 +331,6 @@ class TestRunService:
             all_runs.update({ str(run["id"]): {**run, "build_number": get_build_number(run["build_job_url"])} for run in model_runs })
 
         return all_runs
-
-
-    def delete_github_issue(self, issue_id: UUID) -> dict:
-        issue: ArgusGithubIssue = ArgusGithubIssue.get(id=issue_id)
-
-        EventService.create_run_event(
-            kind=ArgusEventTypes.TestRunIssueRemoved,
-            body={
-                "message": "An issue titled \"{title}\" was removed by {username}",
-                "username": g.user.username,
-                "url": issue.url,
-                "title": issue.title,
-                "state": issue.last_status,
-            },
-            user_id=g.user.id,
-            run_id=issue.run_id,
-            release_id=issue.release_id,
-            group_id=issue.group_id,
-            test_id=issue.test_id
-        )
-        issue.delete()
-
-        return {
-            "deleted": issue_id
-        }
 
     def terminate_stuck_runs(self):
         sct = AVAILABLE_PLUGINS.get("scylla-cluster-tests").model

@@ -6,8 +6,10 @@ from cassandra.cqlengine.usertype import UserType
 from cassandra.cqlengine import columns
 from cassandra.util import uuid_from_time, unix_time_from_uuid1  # pylint: disable=no-name-in-module
 
+from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ArgusBestResultData, ArgusGraphView
+from argus.backend.models.runtime_store import RuntimeStore
 from argus.backend.models.view_widgets import WidgetHighlights, WidgetComment
 from argus.backend.models.argus_ai import ErrorEventEmbeddings, CriticalEventEmbeddings
 
@@ -293,6 +295,7 @@ class ArgusNotification(Model):
 
 
 class ArgusGithubIssue(Model):
+    # FIXME: Deprecated. To be removed.
     # pylint: disable=too-many-instance-attributes
     id = columns.UUID(primary_key=True, default=uuid4, partition_key=True)
     added_on = columns.DateTime(default=datetime.utcnow)
@@ -372,6 +375,7 @@ class WebFileStorage(Model):
 
 
 USED_MODELS: list[Model] = [
+    RuntimeStore,
     User,
     UserOauthToken,
     Team,
@@ -382,7 +386,6 @@ USED_MODELS: list[Model] = [
     ArgusTest,
     ArgusTestRunComment,
     ArgusEvent,
-    ArgusGithubIssue,
     ReleasePlannerComment,
     ArgusNotification,
     ArgusSchedule,
@@ -398,6 +401,8 @@ USED_MODELS: list[Model] = [
     ArgusGraphView,
     ErrorEventEmbeddings,
     CriticalEventEmbeddings,
+    GithubIssue,
+    IssueLink,
 ]
 
 USED_TYPES: list[UserType] = [

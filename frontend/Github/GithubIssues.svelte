@@ -9,6 +9,7 @@
     import Color from "color";
     import GithubIssuesCopyModal from "./GithubIssuesCopyModal.svelte";
     export let id = "";
+    export let runId;
     export let testId;
     export let pluginName;
     export let filter_key = "run_id";
@@ -134,7 +135,7 @@
         if (shouldFilterByState(issue, selectedLabels, stateFilter)) return true;
         if (!filterString) return false;
         if (!issue) return true;
-        const allTerms = `${issue.owner}$$${issue.title}$$${issue.repo}#${issue.issue_number}`;
+        const allTerms = `${issue.owner}$$${issue.title}$$${issue.repo}#${issue.number}`;
         return allTerms.toLowerCase().search(filterString.toLowerCase()) == -1;
     };
 
@@ -145,28 +146,9 @@
      * @param {{ open: boolean, closed: boolean }} stateFilter
      */
     const shouldFilterByState = function(issue, selectedLabels, stateFilter) {
-        if (!issue.state) return false;
-        if (!stateFilter[issue.state.state]) return true;
+        if (!stateFilter[issue.state]) return true;
         if (selectedLabels.length == 0) return false;
-        return !issue.state.labels.map(label => !!selectedLabels.find(selectedLabel => label.id == selectedLabel.id)).includes(true);
-    };
-
-    /**
-     * 
-     * @param {CustomEvent} e
-     */
-    const onStateUpdate = function (e) {
-        const issueId = e.detail.issueId;
-        const state = e.detail.state;
-        let issue = issues.find(i => i.id == issueId);
-        issue.state = state;
-        issues = issues;
-        state.labels.forEach((label) => {
-            if (availableLabels.findIndex((v) => v.id == label.id) == -1)  {
-                availableLabels.push(label);
-                availableLabels = availableLabels;
-            }
-        });
+        return !issue.labels.map(label => !!selectedLabels.find(selectedLabel => label.id == selectedLabel.id)).includes(true);
     };
 
     /**
@@ -325,7 +307,7 @@
             </div>
             <div class="row">
                 {#each sortedIssues[currentPage] ?? [] as issue (issue.id)}
-                    <GithubIssue bind:issue={issue} aggregated={aggregateByIssue} deleteEnabled={!submitDisabled} on:issueDeleted={fetchIssues} on:issueStateUpdate={onStateUpdate} on:labelClick={(e) => handleLabelClick(e.detail)}/>
+                    <GithubIssue {runId} bind:issue={issue} aggregated={aggregateByIssue} deleteEnabled={!submitDisabled} on:issueDeleted={fetchIssues} on:labelClick={(e) => handleLabelClick(e.detail)}/>
                 {/each}
             </div>
             <div class="d-flex ">

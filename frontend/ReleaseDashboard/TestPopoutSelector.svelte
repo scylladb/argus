@@ -171,7 +171,7 @@
                                                         <div
                                                             class="ms-auto text-muted"
                                                         >
-                                                            {issue.owner}/{issue.repo}#{issue.issue_number}
+                                                            {issue.owner}/{issue.repo}#{issue.number}
                                                         </div>
                                                     </li>
                                                 {/each}
