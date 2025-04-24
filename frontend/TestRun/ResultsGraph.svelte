@@ -2,8 +2,9 @@
     import { Chart, registerables, Tooltip } from "chart.js";
     import { createEventDispatcher, onDestroy, onMount } from "svelte";
     import "chartjs-adapter-date-fns";
-    import { faExpand, faExternalLinkAlt } from "@fortawesome/free-solid-svg-icons";
+    import {faExpand, faCopy} from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
+    import {sendMessage} from "../Stores/AlertStore";
 
     export let graph = {};
     export let ticks = {};
@@ -40,6 +41,27 @@
     function handleKeydown(event) {
         if (event.key === "Escape") {
             closeModal();
+        }
+    }
+
+    async function copyToClipboard() {
+        try {
+            const canvasId = showModal ? `modal-graph-${test_id}-${index}` : `graph-${test_id}-${index}`;
+            const canvas = document.getElementById(canvasId);
+            const dataUrl = canvas.toDataURL("image/png");
+
+            // Convert dataUrl to Blob
+            const res = await fetch(dataUrl);
+            const blob = await res.blob();
+
+            // eslint-disable-next-line no-undef
+            const item = new ClipboardItem({"image/png": blob});
+            await navigator.clipboard.write([item]);
+
+            sendMessage("success", "Graph copied to clipboard");
+        } catch (error) {
+            console.error("Error copying to clipboard:", error);
+            sendMessage("error", "Failed to copy graph to clipboard");
         }
     }
 
@@ -310,17 +332,23 @@
 </script>
 
 <div class="graph-container">
-    <button class="enlarge-btn" on:click={openModal}>
-        <Fa icon={faExpand} />
+    <button class="copy-btn" on:click={copyToClipboard}>
+        <Fa icon={faCopy}/>
     </button>
-    <canvas id="graph-{test_id}-{index}" {width} {height} />
+    <button class="enlarge-btn" on:click={openModal}>
+        <Fa icon={faExpand}/>
+    </button>
+    <canvas id="graph-{test_id}-{index}" {width} {height}/>
 </div>
 
 {#if showModal}
     <div class="modal" on:click={closeModal}>
         <div class="modal-content" on:click|stopPropagation>
             <button class="close-btn" on:click={closeModal}>&times;</button>
-            <canvas id="modal-graph-{test_id}-{index}" />
+            <button class="modal-copy-btn" on:click={() => copyToClipboard(true)}>
+                <Fa icon={faCopy}/>
+            </button>
+            <canvas id="modal-graph-{test_id}-{index}"/>
         </div>
     </div>
 {/if}
@@ -330,10 +358,9 @@
         position: relative;
     }
 
-    .enlarge-btn {
+    .enlarge-btn, .copy-btn {
         position: absolute;
         top: 10px;
-        right: 10px;
         background: none;
         border: none;
         cursor: pointer;
@@ -341,7 +368,15 @@
         font-size: 1.2em;
     }
 
-    .enlarge-btn:hover {
+    .enlarge-btn {
+        right: 10px;
+    }
+
+    .copy-btn {
+        right: 40px;
+    }
+
+    .enlarge-btn:hover, .copy-btn:hover {
         color: #333;
     }
 
@@ -375,6 +410,21 @@
         border: none;
         font-size: 1.5em;
         cursor: pointer;
+    }
+
+    .modal-copy-btn {
+        position: absolute;
+        top: 10px;
+        right: 40px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: #888;
+        font-size: 1.2em;
+    }
+
+    .modal-copy-btn:hover {
+        color: #333;
     }
 
     canvas {
