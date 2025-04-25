@@ -51,6 +51,10 @@
     let jUnitFetched: boolean = false;
     let jUnitResults: any[] = [];
 
+    // Track which tabs have been visited
+    let visitedTabs: Record<string, boolean> = {};
+    visitedTabs[activeTab] = true;
+
     const fetchTestRunData = async function () {
         try {
             let run = await fetchRun(testInfo.test.plugin_name, runId);
@@ -115,6 +119,7 @@
         tabName = tabName.toLowerCase();
         if (tabName !== activeTab) {
             activeTab = tabName;
+            visitedTabs[tabName] = true;
             if (!window.location.pathname.startsWith("/workspace")) {
                 const newUrl = `/tests/${testInfo.test.plugin_name}/${runId}/${tabName}`;
                 history.replaceState({}, "", newUrl);
@@ -427,7 +432,7 @@
                     id="nav-results-{runId}"
                     role="tabpanel"
                 >
-                    {#if activeTab === "results"}
+                    {#if visitedTabs["results"]}
                         <ResultsTab id={runId} test_id={testInfo.test.id} />
                     {/if}
                 </div>
@@ -438,7 +443,7 @@
                     id="nav-events-{runId}"
                     role="tabpanel"
                 >
-                    {#if activeTab === "events"}
+                    {#if visitedTabs["events"]}
                         <EventsTab {testRun} />
                     {/if}
                 </div>
@@ -458,7 +463,7 @@
                     id="nav-logs-{runId}"
                     role="tabpanel"
                 >
-                    {#if activeTab === "logs"}
+                    {#if visitedTabs["logs"]}
                         <ArtifactTab {testRun} on:refreshRequest={fetchTestRunData} />
                     {/if}
                 </div>
@@ -469,7 +474,7 @@
                     id="nav-discuss-{runId}"
                     role="tabpanel"
                 >
-                    {#if activeTab === "discuss"}
+                    {#if visitedTabs["discuss"]}
                         <TestRunComments {testRun} {testInfo} />
                     {/if}
                 </div>
@@ -481,7 +486,7 @@
                     role="tabpanel"
                 >
                     <IssueTemplate test_run={testRun} test={testInfo.test} />
-                    {#if activeTab === "issues"}
+                    {#if visitedTabs["issues"]}
                         <IssueTab {testInfo} {runId} />
                     {/if}
                 </div>
@@ -492,7 +497,7 @@
                     id="nav-activity-{runId}"
                     role="tabpanel"
                 >
-                    {#if activeTab === "activity"}
+                    {#if visitedTabs["activity"]}
                         <ActivityTab id={runId} />
                     {/if}
                 </div>
