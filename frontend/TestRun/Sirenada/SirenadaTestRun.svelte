@@ -32,10 +32,15 @@
     let activeTab = tab.toLowerCase() || "details";
     let failedToLoad = false;
 
+    // Track which tabs have been visited
+    let visitedTabs = {};
+    visitedTabs[activeTab] = true;
+
     const setActiveTab = (tabName) => {
         tabName = tabName.toLowerCase();
         if (tabName !== activeTab) {
             activeTab = tabName;
+            visitedTabs[tabName] = true;
             if (!window.location.pathname.startsWith("/workspace")) {
                 const newUrl = `/tests/${testInfo.test.plugin_name}/${runId}/${tabName}`;
                 history.replaceState({}, "", newUrl);
@@ -224,7 +229,7 @@
                     id="nav-discuss-{runId}"
                     role="tabpanel"
                 >
-                    {#if activeTab === 'discuss'}
+                    {#if visitedTabs['discuss']}
                         <TestRunComments {testRun} {testInfo}/>
                     {/if}
                 </div>
@@ -237,7 +242,7 @@
                 >
                     <SirenadaIssueTemplate test_run={testRun} test={testInfo.test} />
                     <div class="py-2 bg-white">
-                        {#if activeTab === 'issues'}
+                        {#if visitedTabs['issues']}
                             <IssueTab {testInfo} {runId} />
                         {/if}
                     </div>
@@ -249,7 +254,7 @@
                     id="nav-activity-{runId}"
                     role="tabpanel"
                 >
-                    {#if activeTab === 'activity'}
+                    {#if visitedTabs['activity']}
                         <ActivityTab id={runId} />
                     {/if}
                 </div>
