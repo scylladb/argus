@@ -4,6 +4,7 @@ import ViewTestDashboard from "../Views/Widgets/ViewTestDashboard.svelte";
 import ViewUnsupportedPlaceholder from "../Views/Widgets/ViewUnsupportedPlaceholder.svelte";
 import CheckValue from "../Views/WidgetSettingTypes/CheckValue.svelte";
 import MultiSelectValue from "../Views/WidgetSettingTypes/MultiSelectValue.svelte";
+import MultiStringValue from "../Views/WidgetSettingTypes/MultiStringValue.svelte";
 import StringValue from "../Views/WidgetSettingTypes/StringValue.svelte";
 import {TestStatus} from "./TestStatus";
 import {subUnderscores, titleCase} from "./TextUtils";
@@ -138,6 +139,12 @@ export const WIDGET_TYPES = {
         type: ViewGraphedStats,
         friendlyName: "Graphed Stats",
         settingDefinitions: {
+            testFilters: {
+                type: MultiStringValue,
+                default: [],
+                help: "Regular expressions to filter out tests (e.g. .*/artifacts/)",
+                displayName: "Test Filters"
+            },
         },
     },
 };
