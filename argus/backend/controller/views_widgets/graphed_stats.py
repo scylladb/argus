@@ -19,8 +19,11 @@ def get_graphed_stats():
         "test_runs": [],
         "nemesis_data": []
     }
+
+    filters = request.args.get("filters")
+
     for test_id in view.tests:
-        data = service.get_graphed_stats(test_id)
+        data = service.get_graphed_stats(test_id, filters)
         response_data["test_runs"].extend(data["test_runs"])
         response_data["nemesis_data"].extend(data["nemesis_data"])
     return {

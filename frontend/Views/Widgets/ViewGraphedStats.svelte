@@ -9,6 +9,7 @@
     import { TestRun, NemesisData, DataResponse } from "./ViewGraphedStats/Interfaces";
 
     export let dashboardObject: { id: string };
+    export let settings: {testFilters: string[]} ;
 
     /**
      * @description Reactive state store containing component data and UI states
@@ -76,7 +77,12 @@
         $state.loading = true;
         $state.errorMsg = "";
         try {
-            const response = await fetch(`/api/v1/views/widgets/graphed_stats?view_id=${dashboardObject.id}`);
+            // Prepare filters if they exist
+            const filters = settings.testFilters && settings.testFilters.length > 0 
+                ? `&filters=${encodeURIComponent(JSON.stringify(settings.testFilters))}` 
+                : '';
+
+            const response = await fetch(`/api/v1/views/widgets/graphed_stats?view_id=${dashboardObject.id}${filters}`);
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             const data = await response.json();
             if (data.status === "error") throw new Error(data.response.exception);
