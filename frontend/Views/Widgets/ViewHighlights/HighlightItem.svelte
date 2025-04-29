@@ -61,6 +61,7 @@
         if (event.key === 'Enter') addComment();
     };
     const handleCommentUpdate = (e: { detail: any }) => {
+        commentBody.message = e.detail.message;
         isEditing = false;
         dispatch('updateContent', {highlight, newContent: commentBody.message});
     };
