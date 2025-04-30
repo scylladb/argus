@@ -1,0 +1,57 @@
+[build-system]
+requires = [
+    "setuptools >= 40.0.4",
+    "wheel >= 0.29.0",
+]
+build-backend = 'setuptools.build_meta'
+
+[project]
+name = "pytest-argus-reporter"
+version = "0.15.0"
+authors = [
+    {name = "Scylladb", email = "qa@scylladb.com"},
+]
+description = "A simple plugin to report results of test into argus"
+readme = "README.md"
+keywords = [
+    "pytest",
+    "testing",
+]
+requires-python = ">=3.10"
+license = "Apache-2.0"
+classifiers = [
+        "Development Status :: 4 - Beta",
+        "Framework :: Pytest",
+        "Intended Audience :: Developers",
+        "Topic :: Software Development :: Testing",
+        "Programming Language :: Python",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+        "Operating System :: OS Independent",
+]
+dependencies = [
+    "argus-alm",
+]
+
+[project.entry-points."pytest11"]
+argus-reporter  = "pytest_argus_reporter"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=3.0",
+    "pre-commit",
+    "requests-mock",
+    "codecov",
+    "pytest-cov",
+    "nox",
+    "pytest-xdist",
+    "pytest-subtests",
+    "ruff",
+    "autopep8",
+]
+
+[tool.pytest.ini_options]
+addopts = "-p no:argus-reporter"
