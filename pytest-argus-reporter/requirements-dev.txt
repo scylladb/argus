@@ -1,0 +1,11 @@
+-e .
+pytest>=3.0
+pre-commit
+requests-mock
+codecov
+pytest-cov
+tox
+wheel>=0.33.0
+pytest-xdist
+pytest-subtests
+six
