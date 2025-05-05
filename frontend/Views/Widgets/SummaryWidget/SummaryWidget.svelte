@@ -84,15 +84,7 @@
 
     async function fetchRunResults(currentVersionIndex = 0) {
         currentVersionRuns = versioned_runs[versions[currentVersionIndex]];
-        const isEnterprise = versions[currentVersionIndex].split('.')[0].length > 3;
         selectedVersionTestInfo = {...test_info};
-        selectedVersionTestInfo = Object.fromEntries(
-            Object.entries(selectedVersionTestInfo).filter(([testId, testData]) =>
-                isEnterprise
-                    ? testData.build_id.startsWith('scylla-enterprise')
-                    : !testData.build_id.startsWith('scylla-enterprise')
-            )
-        );
         const runs_response = await fetch(`/api/v1/views/widgets/summary/runs_results`, {
             method: "POST",
             headers: {"Content-Type": "application/json"},
