@@ -1,0 +1,41 @@
+[build-system]
+requires = [
+    "setuptools >= 40.0.4",
+    "wheel >= 0.29.0",
+]
+build-backend = 'setuptools.build_meta'
+
+[project]
+name = "pytest-argus-reporter"
+version = "0.14.2"
+authors = [
+    {name = "Scylladb", email = "qa@scylladb.com"},
+]
+description = "A simple plugin to report results of test into argus"
+readme = "README.md"
+requires-python = ">=3.8"
+keywords = ["one", "two"]
+license = "BSD-3-Clause"
+classifiers = [
+        "Development Status :: 4 - Beta",
+        "Framework :: Pytest",
+        "Intended Audience :: Developers",
+        "Topic :: Software Development :: Testing",
+        "Programming Language :: Python",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+        "Programming Language :: Python :: Implementation :: CPython",
+        "Programming Language :: Python :: Implementation :: PyPy",
+        "Operating System :: OS Independent",
+]
+dependencies = [
+    "argus-alm",
+]
+
+[project.entry-points."pytest11"]
+argus-reporter  = "pytest_argus_reporter"
+
+
