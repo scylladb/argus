@@ -23,6 +23,13 @@ LOGIN_METHODS:
 APP_LOG_LEVEL: INFO
 # Secret key used to match session data
 SECRET_KEY: MUSTBEUNIQUE
+# Allowed buckets for S3 proxying
+S3_ALLOWED_BUCKETS:
+  - my-bucket-name
+# AWS Client ID
+AWS_CLIENT_ID: ABCDE
+# AWS Client Secret
+AWS_CLIENT_SECRET: YourSecretKey
 # Client ID of a github oauth application
 GITHUB_CLIENT_ID: YOUR_GITHUB_CLIENT_ID
 # Scopes used for Github Application:

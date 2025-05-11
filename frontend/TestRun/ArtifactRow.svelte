@@ -3,6 +3,7 @@
     import pretty from "prettysize";
     export let artifactName;
     export let artifactLink;
+    export let originalLink;
 
     let artifactSize;
 
@@ -14,7 +15,7 @@
 
     onMount(async () => {
         let params = new URLSearchParams({
-            l: artifactLink
+            l: originalLink
         });
         let res = await fetch("/api/v1/artifact/resolveSize?" + params);
 

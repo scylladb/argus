@@ -1,8 +1,12 @@
 <script>
+    import { createScreenshotUrl } from "../Common/RunUtils";
     import ScreenshotModal from "./Components/ScreenshotModal.svelte";
     export let screenshots = [];
+    export let testInfo;
+    export let runId;
 
     let selectedScreenshot = undefined;
+
 </script>
 
 <div class="d-flex p-2 align-items-center justify-content-center screenshots-holder">
@@ -10,9 +14,13 @@
         <div
             class="screenshot-thumb mx-1 mb-2"
             role="button"
-            style="background-image: url('{screenshot_url}')"
+            tabindex="0"
+            style="background-image: url('{createScreenshotUrl(testInfo.test.plugin_name, runId, screenshot_url)}')"
             on:click={() => {
-                selectedScreenshot = screenshot_url;
+                selectedScreenshot = createScreenshotUrl(testInfo.test.plugin_name, runId, screenshot_url);
+            }}
+            on:keypress={() => {
+                selectedScreenshot = createScreenshotUrl(testInfo.test.plugin_name, runId, screenshot_url);
             }}
         />
 {:else}

@@ -5,6 +5,7 @@ import requests
 from flask import (
     Blueprint,
     g,
+    redirect,
     request, Response
 )
 from flask.json import jsonify
@@ -17,6 +18,7 @@ from argus.backend.controller.view_api import bp as view_bp
 from argus.backend.controller.planner_api import bp as planner_bp
 from argus.backend.service.argus_service import ArgusService, ScheduleUpdateRequest
 from argus.backend.service.results_service import ResultsService
+from argus.backend.service.testrun import TestRunService
 from argus.backend.service.user import UserService, api_login_required
 from argus.backend.service.stats import ReleaseStatsCollector
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, User, UserOauthToken
@@ -553,14 +555,7 @@ def resolve_artifact_size():
     if not link:
         raise Exception("No link provided")
 
-    res = requests.head(link)
-
-    if res.status_code != 200:
-        raise Exception("Error requesting resource")
-
-    length = res.headers.get("Content-Length")
-    if length:
-        length = int(length)
+    length = TestRunService().resolve_artifact_size(link)
 
     return {
         "status": "ok",
@@ -568,6 +563,18 @@ def resolve_artifact_size():
             "artifactSize": length,
         }
     }
+
+
+@bp.route("/s3/<string:bucket_name>/<path:bucket_path>")
+@api_login_required
+def s3_generic_proxy(bucket_name: str, bucket_path: str):
+    service = TestRunService()
+    result = service.proxy_s3_image(
+        bucket_name=bucket_name,
+        bucket_path=bucket_path
+    )
+
+    return redirect(result, code=302)
 
 
 @bp.route("/user/jobs")
