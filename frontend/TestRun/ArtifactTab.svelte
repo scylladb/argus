@@ -6,6 +6,7 @@
     import Fa from "svelte-fa";
 
     export let testRun;
+    export let testInfo;
 
     let logName = "";
     let logLink = "";
@@ -95,8 +96,8 @@
         <th>Log URL</th>
     </thead>
     <tbody>
-        {#each testRun.logs as log}
-            <ArtifactRow artifactName={log[0]} artifactLink={log[1]}/>
+        {#each testRun.logs as [name, link], idx}
+            <ArtifactRow artifactName={name} originalLink={link} artifactLink={`/api/v1/tests/${testInfo.test.plugin_name}/${testRun.id}/log/${name}/download`}/>
         {/each}
     </tbody>
 </table>

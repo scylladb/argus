@@ -2,8 +2,12 @@ import logging
 from uuid import UUID
 from flask import (
     Blueprint,
-    request
+    make_response,
+    redirect,
+    request,
+    send_file
 )
+import magic
 
 from argus.backend.error_handlers import handle_api_exception
 from argus.backend.models.web import ArgusTest
@@ -92,6 +96,33 @@ def set_testrun_status(test_id: str, run_id: str):
         "status": "ok",
         "response": result
     }
+
+
+@bp.route("/tests/<string:plugin_name>/<string:run_id>/log/<string:log_name>/download", methods=["GET"])
+@api_login_required
+def download_log(plugin_name: str, run_id: str, log_name: str):
+    service = TestRunService()
+    result = service.get_log(
+        plugin_name=plugin_name,
+        run_id=UUID(run_id),
+        log_name=log_name,
+    )
+
+    return redirect(result, code=302)
+
+
+@bp.route("/tests/<string:plugin_name>/<string:run_id>/screenshot/<string:image_name>", methods=["GET"])
+@api_login_required
+def proxy_screenshot(plugin_name: str, run_id: str, image_name: str):
+
+    service = TestRunService()
+    result = service.proxy_stored_s3_image(
+        plugin_name=plugin_name,
+        run_id=UUID(run_id),
+        image_name=image_name,
+    )
+
+    return redirect(result, code=302)
 
 
 @bp.route("/test/<string:test_id>/run/<string:run_id>/investigation_status/set", methods=["POST"])

@@ -63,3 +63,14 @@ export const fetchRun = async function(runType, runId) {
 
     return run.response;
 };
+
+
+/**
+ * Create argus proxy link for the image stored on s3
+ * @param {string} link
+ * @returns
+ */
+export const createScreenshotUrl = function (plugin, id, link) {
+    const name = link.split("/").reverse()[0];
+    return `/api/v1/tests/${plugin}/${id}/screenshot/${name}`;
+};
