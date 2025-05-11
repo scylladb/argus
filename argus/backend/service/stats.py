@@ -245,7 +245,7 @@ class ViewStats:
         if not limited or force:
             self.issues = reduce(
                 lambda acc, row: acc[row["run_id"]].append(row) or acc,
-                self._fetch_issues(all_release_ids),
+                fetch_issues(all_release_ids),
                 defaultdict(list)
             )
             self.comments = reduce(
