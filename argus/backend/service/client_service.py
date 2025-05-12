@@ -104,7 +104,7 @@ class ClientService:
             table_metadata = ArgusGenericResultMetadata(test_id=run.test_id, **results["meta"])
             table_metadata.save()
         if results.get("sut_timestamp", 0) == 0:
-            results["sut_timestamp"] = run.sut_timestamp()  # automatic sut_timestamp
+            results["sut_timestamp"] = run.sut_timestamp(results.get('sut_package_name', 'scylla-server'))  # automatic sut_timestamp
         results["sut_timestamp"] = datetime.fromtimestamp(results["sut_timestamp"])
         best_results = results_service.update_best_results(test_id=run.test_id, table_name=table_name, table_metadata=table_metadata,
                                                            cells=cells, run_id=run_id)

@@ -261,19 +261,24 @@ class SCTTestRun(PluginModelBase):
 
         self._collect_event_message(event, event_message)
 
-    def sut_timestamp(self) -> float:
-        """converts scylla-server date to timestamp and adds revision in subseconds precision to diffirentiate
+    def sut_timestamp(self, sut_package_name) -> float:
+        """converts scylla-server date to timestamp and adds revision in sub-seconds precision to differentiate
         scylla versions from the same day. It's not perfect, but we don't know exact version time."""
-        try:
-            scylla_package_upgraded = [package for package in self.packages if package.name == "scylla-server-upgraded"][0]
-        except IndexError:
-            scylla_package_upgraded = None
-        try:
-            scylla_package = scylla_package_upgraded or [package for package in self.packages if package.name == "scylla-server"][0]
-        except IndexError:
-            raise ValueError("Scylla package not found in packages - cannot determine SUT timestamp")
-        return (datetime.strptime(scylla_package.date, '%Y%m%d').replace(tzinfo=timezone.utc).timestamp()
-                + int(scylla_package.revision_id, 16) % 1000000 / 1000000)
+
+        for sut_name in [f"{sut_package_name}-upgraded",
+                         f"{sut_package_name}-upgrade-target",
+                         sut_package_name,
+                         f"{sut_package_name}-target"
+                         ]:
+            scylla_package = next((pkg for pkg in self.packages if pkg.name == sut_name), None)
+            if scylla_package:
+                break
+
+        if scylla_package:
+            return (datetime.strptime(scylla_package.date, '%Y%m%d').replace(tzinfo=timezone.utc).timestamp()
+                    + int(scylla_package.revision_id, 16) % 1000000 / 1000000)
+        else:
+            raise ValueError(f"{sut_package_name} package not found in packages - cannot determine SUT timestamp")
 
 
 class SCTJunitReports(Model):

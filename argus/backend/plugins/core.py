@@ -232,7 +232,7 @@ class PluginModelBase(Model):
     def finish_run(self, payload: dict = None):
         raise NotImplementedError()
 
-    def sut_timestamp(self) -> float:
+    def sut_timestamp(self, sut_package_name) -> float:
         raise NotImplementedError()
 
 class PluginInfoBase:
