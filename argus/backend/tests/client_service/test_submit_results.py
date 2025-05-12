@@ -5,7 +5,8 @@ import pytest
 
 from argus.backend.error_handlers import DataValidationError
 from argus.backend.tests.conftest import get_fake_test_run
-from argus.client.generic_result import GenericResultTable, ColumnMetadata, ResultType, ValidationRule, Status
+from argus.client.generic_result import ColumnMetadata, ResultType, ValidationRule, Status, \
+    StaticGenericResultTable
 
 
 @dataclass
@@ -16,7 +17,7 @@ class SampleCell:
     status: Status = Status.UNSET
 
 
-class SampleTable(GenericResultTable):
+class SampleTable(StaticGenericResultTable):
     class Meta:
         name = "Test Table"
         description = "Test Table Description"
