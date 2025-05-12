@@ -460,8 +460,10 @@ class PlanningService:
         plan: ArgusReleasePlan = ArgusReleasePlan.get(id=plan_id)
 
         release: ArgusRelease = ArgusRelease.get(id=plan.release_id)
-        tests: list[ArgusTest] = list(ArgusTest.filter(id__in=plan.tests).all())
-        test_groups: list[ArgusGroup] = ArgusGroup.filter(id__in=[t.group_id for t in tests]).all()
+        tests: list[ArgusTest] = []
+        for batch in chunk(plan.tests):
+            tests.extend(ArgusTest.filter(id__in=batch).all())
+        test_groups: list[ArgusGroup] = ArgusGroup.filter(id__in=list({t.group_id for t in tests})).all()
         test_groups = { g.id: g for g in test_groups }
         groups: list[ArgusGroup] = list(ArgusGroup.filter(id__in=plan.groups).all())
 
