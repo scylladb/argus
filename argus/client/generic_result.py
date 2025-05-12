@@ -161,5 +161,6 @@ class StaticGenericResultTable(GenericResultTable):
             description=description or meta.description,
             columns=columns or getattr(meta, "Columns", getattr(meta, "columns", None)),
             sut_package_name=sut_package_name or getattr(meta, "sut_package_name", ""),
-            validation_rules=validation_rules or getattr(meta, "ValidationRules", getattr(meta, "validation_rules", {})),
+            validation_rules=validation_rules or getattr(
+                meta, "ValidationRules", getattr(meta, "validation_rules", {})),
         )
