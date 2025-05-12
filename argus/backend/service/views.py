@@ -6,6 +6,7 @@ from uuid import UUID
 
 from cassandra.cqlengine.models import Model
 from argus.backend.models.plan import ArgusReleasePlan
+from argus.backend.models.pytest import PytestResultTable
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, ArgusUserView, User
 from argus.backend.plugins.loader import all_plugin_models
 from argus.backend.service.test_lookup import TestLookup
@@ -176,6 +177,19 @@ class UserViewService:
             releases.extend(ArgusGroup.filter(id__in=batch).all())
 
         return releases
+
+    def get_pytest_view_results(self, view_id: str | UUID) -> list[PytestResultTable]:
+
+        view: ArgusUserView = ArgusUserView.get(id=view_id)
+        tests: list[ArgusTest] = []
+        for batch in chunk(view.tests):
+            tests.extend(ArgusTest.filter(id__in=batch).all())
+        tests = [test for test in tests if test.plugin_name == "generic"]
+        results = []
+        for batch in chunk(tests):
+            results.extend(PytestResultTable.filter(test_id__in=[t.id for t in batch]).allow_filtering().all())
+
+        return results
 
     def get_versions_for_view(self, view_id: str | UUID) -> list[str]:
         tests = self.resolve_view_tests(view_id)

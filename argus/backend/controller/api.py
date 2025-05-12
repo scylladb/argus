@@ -126,6 +126,19 @@ def release_versions(release_id: str):
     })
 
 
+@bp.route("/release/<string:release_id>/pytest/results")
+@api_login_required
+def release_pytest_results(release_id: str):
+    release_id = UUID(release_id)
+    service = TestRunService()
+    res = service.get_pytest_release_results(release_id=release_id)
+
+    return jsonify({
+        "status": "ok",
+        "response": res
+    })
+
+
 @bp.route("/release/planner/comment/get/test")
 def get_planner_comment_by_test():
     test_id = request.args.get("id")
