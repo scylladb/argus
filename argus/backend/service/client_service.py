@@ -2,8 +2,11 @@ from dataclasses import asdict
 from datetime import datetime
 from uuid import UUID
 
+from cassandra.util import uuid_from_time
+
 from argus.backend.db import ScyllaCluster
 from argus.backend.error_handlers import DataValidationError
+from argus.backend.models.pytest import PytestResultTable
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS
@@ -32,6 +35,24 @@ class ClientService:
         model.submit_run(request_data=request_data)
 
         return "Created"
+
+    def submit_pytest_result(self, request_data: dict) -> str: 
+
+        new_result = PytestResultTable()
+        new_result.name = request_data["name"]
+        new_result.id = uuid_from_time(request_data["timestamp"])
+        new_result.test_type = request_data["test_type"]
+        new_result.run_id = request_data["run_id"]
+        new_result.duration = request_data.get("duration")
+        new_result.test_timestamp = request_data["timestamp"]
+        new_result.session_timestamp = request_data["session_timestamp"]
+        new_result.markers = request_data["markers"]
+        new_result.user_fields = {}
+        for field, value in request_data.get("user_fields", {}).items():
+            new_result.user_fields[field] = str(value)
+
+        new_result.save()
+        return "Submitted"
 
     def get_run(self, run_type: str, run_id: str):
         model = self.get_model(run_type)
