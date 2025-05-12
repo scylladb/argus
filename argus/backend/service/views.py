@@ -24,6 +24,7 @@ class ViewUpdateRequest(TypedDict):
     display_name: str
     tests: list[str]
     widget_settings: str
+    plan_id: str | None
 
 
 class UserViewService:

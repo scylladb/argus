@@ -145,7 +145,8 @@ def copy_plan():
 @bp.route("/plan/<string:plan_id>/delete", methods=["DELETE"])
 @api_login_required
 def delete_plan(plan_id: str):
-    result = PlanningService().delete_plan(plan_id)
+    delete_view = bool(int(request.args.get("deleteView", "0")))
+    result = PlanningService().delete_plan(plan_id, delete_view=delete_view)
 
     return {
         "status": "ok",
