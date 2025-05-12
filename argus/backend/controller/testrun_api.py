@@ -234,6 +234,20 @@ def get_testrun_comments(run_id: str):
     }
 
 
+@bp.route("/run/<string:run_id>/pytest/results", methods=["GET"])
+@api_login_required
+def get_testrun_pytest_results(run_id: str):
+    service = TestRunService()
+    res = service.get_pytest_run_results(
+        run_id=UUID(run_id)
+    )
+
+    return {
+        "status": "ok",
+        "response": res
+    }
+
+
 @bp.route("/comment/<string:comment_id>/get", methods=["GET"])
 @api_login_required
 def get_single_comment(comment_id: str):
@@ -506,6 +520,41 @@ def clone_validate_new_settings():
     service = JenkinsService()
 
     result = service.verify_job_settings(build_id=payload["buildId"], new_settings=payload["newSettings"])
+
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
+@bp.route("/pytest/<string:test_name>/results")
+@api_login_required
+def get_pytest_test_results(test_name: str):
+
+    before = request.args.get("before")
+    after = request.args.get("after")
+
+    result = TestRunService().get_pytest_test_results(test_name=test_name, before=before, after=after)
+
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
+@bp.route("/pytest/<string:test_name>/stats/<string:field_name>/<string:aggr_function>")
+@api_login_required
+def get_pytest_test_field_stats(test_name: str, field_name: str, aggr_function: str):
+    """
+        Method: GET
+        Params:
+            test_name: name of a pytest unit, for example "sample.py::TestSample::test_sampe"
+            field_name: a field inside PytestResultTable that supports aggregation, e.g. duration
+            aggr_function: Supported: avg, count, min, max - which function to use for the aggregate
+    """
+
+    result = TestRunService().get_pytest_test_field_stats(test_name=test_name, field_name=field_name,
+                                                          aggr_function=aggr_function, query=dict(request.args))
 
     return {
         "status": "ok",

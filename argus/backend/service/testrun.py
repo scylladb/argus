@@ -13,10 +13,12 @@ import boto3
 import magic
 import requests
 from flask import current_app, g
+from cassandra.util import uuid_from_time
 from cassandra.query import BatchStatement, ConsistencyLevel
 from cassandra.cqlengine.query import BatchQuery
 from argus.backend.db import ScyllaCluster
 
+from argus.backend.models.pytest import PytestResultTable
 from argus.backend.models.web import (
     ArgusEvent,
     ArgusEventTypes,
@@ -487,3 +489,78 @@ class TestRunService:
         event_batch.execute()
 
         return jobs_affected
+
+    def get_pytest_test_results(self, test_name: str, before: float = None, after: float = None) -> list[PytestResultTable]:
+        query = PytestResultTable.filter(name=test_name)
+        if before:
+            query = query.filter(id__lt=uuid_from_time(before))
+
+        if after:
+            query = query.filter(id__gt=uuid_from_time(after))
+
+        results = query.all()
+
+        return list(results)
+
+    def get_pytest_test_field_stats(self, test_name: str, field_name: str, aggr_function: str, query: dict) -> dict[str]:
+        VALID_FUNCTIONS = {
+            "avg": "AVG",
+            "min": "MIN",
+            "max": "MAX",
+            "count": "COUNT",
+        }
+
+        fun = VALID_FUNCTIONS[aggr_function]
+
+        db = ScyllaCluster.get()
+        query_values = [test_name]
+        if field_name not in PytestResultTable._columns.keys():
+            raise TestRunServiceException(f"Invalid fixed column: {field_name}", field_name)
+        raw_query = f"SELECT {fun}({field_name}) FROM pytest_result_table WHERE name = ?"
+
+        status = query.pop("status", None)
+        if status:
+            raw_query += " AND status = ?"
+            query_values.append(status)
+
+        period = query.pop("since", None)
+        if period:
+            try:
+                since = uuid_from_time(int(period))
+            except ValueError:
+                raise TestRunServiceException("Malformed timestamp value")
+            raw_query += " AND id >= ?"
+            query_values.append(since)
+
+        for key, value in query.items():
+            raw_query += f" AND user_fields[?] = ?"
+            query_values.extend([key, value])
+
+        raw_query += " ALLOW FILTERING"
+        q = db.prepare(raw_query)
+        stmt = q.bind(values=query_values)
+        res = next(iter(db.session.execute(stmt).one().values()))
+
+        return {
+            test_name: {
+                field_name: {
+                    aggr_function: res
+                }
+            }
+        }
+
+    def get_pytest_release_results(self, release_id: str | UUID) -> list[PytestResultTable]:
+        """
+            Unbound filter function, will return all tests for a specific release
+        """
+        results = PytestResultTable.filter(release_id=release_id).all()
+
+        return list(results)
+
+    def get_pytest_run_results(self, run_id: str | UUID) -> list[PytestResultTable]:
+        """
+            Unbound filter function, will return all tests for a specific release
+        """
+        results = PytestResultTable.filter(run_id=run_id).all()
+
+        return list(results)

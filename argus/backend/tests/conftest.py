@@ -7,9 +7,12 @@ from cassandra.auth import PlainTextAuthProvider
 from docker import DockerClient
 from flask import g
 
+from argus.backend.plugins.loader import all_plugin_types
 from argus.backend.util.config import Config
 
 os.environ['DOCKER_HOST'] = ""
+
+from cassandra.cqlengine.management import sync_type
 from _pytest.fixtures import fixture
 from docker.errors import NotFound
 from argus.backend.cli import sync_models
@@ -90,6 +93,8 @@ def argus_db():
     Config.CONFIG = config  # patch config for whole test to avoid using Config.load_yaml_config() required by app context
     database = ScyllaCluster.get(config)
     if need_sync_models:
+        for user_type in all_plugin_types():
+            sync_type(ks_name="test_argus", type_model=user_type)
         sync_models()
 
     yield database

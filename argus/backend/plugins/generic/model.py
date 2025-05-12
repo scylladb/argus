@@ -19,6 +19,7 @@ class GenericRun(PluginModelBase):
     __table_name__ = "generic_run"
     logs = columns.Map(key_type=columns.Text(), value_type=columns.Text())
     started_by = columns.Text()
+    sub_type = columns.Text() # Used to tell which framework the GenericRun belongs to
     # TODO: Legacy field name, should be renamed to product_version and abstracted
     scylla_version = columns.Text()
 
@@ -67,6 +68,7 @@ class GenericRun(PluginModelBase):
         run.started_by = request_data["started_by"]
         run.id = request_data["run_id"]
         run.build_job_url = request_data["build_url"]
+        run.sub_type = request_data.get("sub_type")
         run.assign_categories()
         try:
             run.assignee = run.get_scheduled_assignee()
