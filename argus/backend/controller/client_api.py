@@ -1,6 +1,7 @@
 from flask import Blueprint, request
 
 from argus.backend.error_handlers import handle_api_exception
+from argus.backend.service.testrun import TestRunService
 from argus.backend.service.user import api_login_required
 from argus.backend.service.client_service import ClientService
 from argus.backend.util.common import get_payload
@@ -107,3 +108,27 @@ def run_finalize(run_type: str, run_id: str):
 def submit_results(run_type: str, run_id: str):
     payload = get_payload(request)
     return ClientService().submit_results(run_type=run_type, run_id=run_id, results=payload)
+
+
+@bp.route("/testrun/pytest/result/submit", methods=["POST"])
+@api_login_required
+def submit_pytest_result():
+    payload = get_payload(request)
+    result = ClientService().submit_pytest_result(request_data=payload)
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
+@bp.route("/testrun/pytest/<string:test_name>/stats/<string:field_name>/<string:aggr_function>")
+@api_login_required
+def get_pytest_test_field_stats(test_name: str, field_name: str, aggr_function: str):
+
+    result = TestRunService().get_pytest_test_field_stats(test_name=test_name, field_name=field_name,
+                                                          aggr_function=aggr_function, query=dict(request.args))
+
+    return {
+        "status": "ok",
+        "response": result
+    }

@@ -22,6 +22,19 @@ class TestStatus(str, Enum):
     NOT_RUN = "not_run"
 
 
+class PytestStatus(str, Enum):
+    ERROR = "error"
+    PASSED = "passed"
+    FAILURE = "failure"
+    SKIPPED = "skipped"
+    XFAILED = "xfailed"
+    XPASS = "xpass"
+    PASSED_ERROR = "passed & error"
+    FAILURE_ERROR = "failure & error"
+    SKIPPED_ERROR = "skipped & error"
+    ERROR_ERROR = "error & error"
+
+
 class TestInvestigationStatus(str, Enum):
     NOT_INVESTIGATED = "not_investigated"
     IN_PROGRESS = "in_progress"

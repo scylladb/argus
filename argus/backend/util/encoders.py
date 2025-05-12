@@ -6,6 +6,7 @@ from uuid import UUID
 from flask.json.provider import DefaultJSONProvider
 import cassandra.cqlengine.usertype as ut
 import cassandra.cqlengine.models as m
+from cassandra.util import Time as c_time
 
 
 LOGGER = logging.getLogger(__name__)

@@ -17,6 +17,7 @@ from argus.backend.controller.view_api import bp as view_bp
 from argus.backend.controller.planner_api import bp as planner_bp
 from argus.backend.service.argus_service import ArgusService, ScheduleUpdateRequest
 from argus.backend.service.results_service import ResultsService
+from argus.backend.service.testrun import TestRunService
 from argus.backend.service.user import UserService, api_login_required
 from argus.backend.service.stats import ReleaseStatsCollector
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, User, UserOauthToken
@@ -121,6 +122,19 @@ def release_versions(release_id: str):
     return jsonify({
         "status": "ok",
         "response": distinct_versions
+    })
+
+
+@bp.route("/release/<string:release_id>/pytest/results")
+@api_login_required
+def release_pytest_results(release_id: str):
+    release_id = UUID(release_id)
+    service = TestRunService()
+    res = service.get_pytest_release_results(release_id=release_id)
+
+    return jsonify({
+        "status": "ok",
+        "response": res
     })
 
 
