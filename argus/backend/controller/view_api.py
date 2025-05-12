@@ -173,3 +173,14 @@ def view_resolve(view_id: str):
         "status": "ok",
         "response": res
     }
+
+
+@bp.route("/<string:view_id>/pytest/results", methods=["GET"])
+@api_login_required
+def view_get_pytest_results(view_id: str):
+    service = UserViewService()
+    res = service.get_pytest_view_results(view_id)
+    return {
+        "status": "ok",
+        "response": res
+    }

@@ -7,6 +7,7 @@ class GenericRunSubmitRequest(TypedDict):
     run_id: str
     started_by: str
     scylla_version: str | None
+    sub_type: str | None
 
 
 class GenericRunFinishRequest(TypedDict):
