@@ -12,6 +12,7 @@
     import ModalWindow from "../Common/ModalWindow.svelte";
     import ReleasePlannerGridView from "./ReleasePlannerGridView.svelte";
     import { filterUser } from "../Common/SelectUtils";
+    import ViewSelect from "../Views/ViewSelect.svelte";
 
 
     export let release;
@@ -23,6 +24,7 @@
     let lastHits = [];
     let participants = [];
     let items = [];
+    let views = [];
     const dispatch = createEventDispatcher();
 
     const TYPE_MARKER = {
@@ -107,6 +109,7 @@
                 participants: plan.participants,
                 target_version: plan.target_version,
                 release_id: plan.release_id,
+                view_id: plan.view_id,
                 tests: plan.tests,
                 groups: plan.groups,
                 assignments: plan.assignments,
@@ -251,6 +254,21 @@
         }
     };
 
+    const getAllViews = async function () {
+        try {
+            const response = await fetch("/api/v1/views/all");
+            const json = await response.json();
+            if (json.status != "ok") {
+                throw json;
+            }
+            views = json.response;
+            return views;
+
+        } catch (error) {
+            console.log(error);
+        }
+    };
+
     const resolvePlan = async function (plan) {
         try {
             const response = await fetch(`/api/v1/planning/plan/${plan.id}/resolve_entities`);
@@ -376,6 +394,7 @@
 
     onMount(async () => {
         await getUsers();
+        await getAllViews();
         if (mode == "edit" || mode == "createFrom") {
             plan.assignments = plan.assignee_mapping;
             participants = users.filter(u => plan.participants.includes(u.id));
@@ -475,6 +494,19 @@
                 itemFilter={filterUser}
                 isMulti={true}
                 labelIdentifier="username"
+                optionIdentifier="id"
+            />
+        </div>
+    </div>
+    <div class="d-flex align-items-center mb-2">
+        <div class="w-25 fw-bold me-2">Existing view</div>
+        <div class="flex-fill">
+            <Select
+                value={views.find(p => p.id == plan.view_id)}
+                on:select={(e) => plan.view_id = e.detail.id}
+                items={views}
+                Item={ViewSelect}
+                labelIdentifier="display_name"
                 optionIdentifier="id"
             />
         </div>

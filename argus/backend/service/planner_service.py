@@ -33,6 +33,7 @@ class CreatePlanPayload:
     tests: list[str]
     groups: list[str]
     assignments: dict[str, str]
+    view_id: Optional[str] = None
     created_from: Optional[str] = None
 
 
@@ -50,11 +51,11 @@ class TempPlanPayload:
     release_id: str
     tests: list[str]
     groups: list[str]
-    view_id: str
     creation_time: str
     last_updated: str
     ends_at: str
     created_from: Optional[str]
+    view_id: Optional[str] = None
 
 
 @dataclass(frozen=True, init=True, repr=True, kw_only=True)
@@ -137,9 +138,13 @@ class PlanningService:
         plan.tests = plan_request.tests
         if plan_request.created_from:
             plan.created_from = plan_request.created_from
-        view = self.create_view_for_plan(plan)
-        plan.view_id = view.id
-
+        if not plan_request.view_id:
+            view = self.create_view_for_plan(plan)
+            plan.view_id = view.id
+        else:
+            plan.view_id = plan_request.view_id
+            view = self.update_view_for_plan(plan, existing=True)
+        
         plan.save()
 
         return plan
@@ -166,15 +171,30 @@ class PlanningService:
         plan.target_version = plan_request.target_version
         plan.description = plan_request.description
         plan.last_updated = datetime.datetime.now(tz=datetime.UTC)
-        plan.save()
 
-        view = self.update_view_for_plan(plan)
-        plan.view_id = view.id
+        if plan_request.view_id:
+            if plan_request.view_id != plan.view_id:
+                try:
+                    old_view: ArgusUserView = ArgusUserView.get(id=plan.view_id)
+                    old_view.plan_id = None
+                    old_view.save()
+                except ArgusUserView.DoesNotExist:
+                    pass
+            plan.view_id = plan_request.view_id
+            view = self.update_view_for_plan(plan, existing=True)
+        else:
+            if plan.view_id:
+                view: ArgusUserView = ArgusUserView.get(id=plan.view_id)
+                view.plan_id = None
+                view.save()
+            view = self.create_view_for_plan(plan)
+            plan.view_id = view.id
+
         plan.save()
 
         return True
 
-    def update_view_for_plan(self, plan: ArgusReleasePlan) -> ArgusUserView:
+    def update_view_for_plan(self, plan: ArgusReleasePlan, existing: bool = False) -> ArgusUserView:
         service = UserViewService()
         release: ArgusRelease = ArgusRelease.get(id=plan.release_id)
 
@@ -182,14 +202,18 @@ class PlanningService:
         view_name = f"{release.name} {version_str}- {plan.name}"
 
         view: ArgusUserView = ArgusUserView.get(id=plan.view_id)
+        if view.plan_id and view.plan_id != plan.id:
+            raise PlannerServiceException("This view is already assigned to another plan.")
+        view.plan_id = plan.id
         settings = json.loads(view.widget_settings)
         items = [f"test:{tid}" for tid in plan.tests]
         items = [*items, *[f"group:{gid}" for gid in plan.groups]]
         entities = service.parse_view_entity_list(items)
         view.tests = entities["tests"]
-        view.display_name = view_name
-        view.name = slugify(view_name)
-        view.description = f"{plan.target_version or ''} Automatic view for the release plan \"{plan.name}\". {plan.description}"
+        if not existing:
+            view.display_name = view_name
+            view.name = slugify(view_name)
+            view.description = f"{plan.target_version or ''} Automatic view for the release plan \"{plan.name}\". {plan.description}"
         view.group_ids = entities["group"]
 
         dash = next(filter(lambda widget: widget["type"] == "testDashboard", settings), None)
@@ -390,11 +414,15 @@ class PlanningService:
     def get_plans_for_release(self, release_id: str | UUID) -> list[ArgusReleasePlan]:
         return list(ArgusReleasePlan.filter(release_id=release_id).all())
 
-    def delete_plan(self, plan_id: str | UUID):
+    def delete_plan(self, plan_id: str | UUID, delete_view: bool = True):
         plan: ArgusReleasePlan = ArgusReleasePlan.get(id=plan_id)
         if plan.view_id:
             view: ArgusUserView = ArgusUserView.get(id=plan.view_id)
-            view.delete()
+            if delete_view:
+                view.delete()
+            else:
+                view.plan_id = None
+                view.save()
 
         plan.delete()
         return True
