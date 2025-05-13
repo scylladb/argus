@@ -35,7 +35,7 @@
                         type="text"
                         class="form-control"
                         bind:value={releaseNameForConfirmation}
-                    /> 
+                    />
                 </div>
             </div>
             <div class="mt-2 mb-1">

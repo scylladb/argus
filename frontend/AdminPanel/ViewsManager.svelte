@@ -69,7 +69,7 @@
     };
 
     /**
-     * 
+     *
      * @param {{type: string}[]} viewWidgets
      */
     const checkIfViewSupported = function(viewWidgets) {
@@ -277,7 +277,7 @@
 
     const handleAllItemSelect = function() {
         newView.items = [
-            ...newView.items, 
+            ...newView.items,
             ...lastHits
                 .filter(i => i.id != ADD_ALL_ID
                 ).map(item => {

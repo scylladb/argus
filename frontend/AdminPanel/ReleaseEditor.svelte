@@ -33,7 +33,7 @@
                     class="form-control"
                     placeholder="Example: ScyllaDB Enterprise 2024.1"
                     bind:value={releaseData.pretty_name}
-                />                
+                />
                 <label for="" class="form-label">Version Regex</label>
                 <input
                     type="text"
@@ -50,7 +50,7 @@
                     bind:checked={releaseData.perpetual}
                 />
             </div>
-            
+
             <div class="form-group">
                 <label for="" class="form-label mb-0">Disable stats fetching</label>
                 <input

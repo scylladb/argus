@@ -54,4 +54,3 @@
 {:else if type === "IMAGE"}
     <button class="btn btn-primary btn-sm py-0" on:click={() => selectedScreenshot = value} data-link="{value}">view</button>
 {/if}
-

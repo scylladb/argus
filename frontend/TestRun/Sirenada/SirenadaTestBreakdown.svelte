@@ -9,7 +9,7 @@
     import { faBucket, faCircleExclamation } from "@fortawesome/free-solid-svg-icons";
     import { Collapse } from "bootstrap";
 
-    export let testRun = {}; 
+    export let testRun = {};
 
 
     let resultsByBrowser = {};
@@ -100,7 +100,7 @@
                     <div class="ms-auto">
                         <a
                             class="btn btn-sm btn-dark"
-                            href="https://s3.console.aws.amazon.com/s3/buckets/sirenada-results?prefix={failingTest.s3_folder_id}/sirenada-{failingTest.sirenada_test_id}/" 
+                            href="https://s3.console.aws.amazon.com/s3/buckets/sirenada-results?prefix={failingTest.s3_folder_id}/sirenada-{failingTest.sirenada_test_id}/"
                             target="_blank"
                         >
                             <Fa icon={faBucket}/> S3 Bucket
@@ -153,7 +153,7 @@
                                                 {@const failed = ["failed", "error", "aborted"].includes(result.status.toLowerCase())}
                                                 <tr class="">
                                                     <td
-                                                        data-bs-toggle="{result.status != "passed" ? "collapse" : ""}" 
+                                                        data-bs-toggle="{result.status != "passed" ? "collapse" : ""}"
                                                         data-bs-target="#test-{resultHash}"
                                                     >
                                                         {result.test_name}
@@ -167,7 +167,7 @@
                                                         <td colspan="4" class="">
                                                             <div class="bg-white d-flex flex-column p-2 rounded">
                                                                 <div class="mb-2">
-                                                                    <span class="fw-bold">Status:</span> <span class="{StatusCSSClassMap[result.status]}">{titleCase(result.status)}</span>                                                                
+                                                                    <span class="fw-bold">Status:</span> <span class="{StatusCSSClassMap[result.status]}">{titleCase(result.status)}</span>
                                                                 </div>
                                                                 <div class="mb-2">
                                                                     <span class="fw-bold">Class name:</span> {result.class_name}

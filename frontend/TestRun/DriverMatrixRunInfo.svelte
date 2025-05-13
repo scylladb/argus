@@ -101,7 +101,7 @@
     <div class="row">
         {#if rebuildRequested}
             <JenkinsBuildModal
-                buildId={testRun.build_id} 
+                buildId={testRun.build_id}
                 buildNumber={extractBuildNumber(testRun)}
                 pluginName={testInfo.test.plugin_name}
                 on:rebuildCancel={() => (rebuildRequested = false)}
@@ -109,8 +109,8 @@
             />
         {/if}
         {#if cloneRequested}
-            <JenkinsCloneModal 
-                buildId={testRun.build_id} 
+            <JenkinsCloneModal
+                buildId={testRun.build_id}
                 buildNumber={extractBuildNumber(testRun)}
                 pluginName={testInfo.test.plugin_name}
                 testId={testInfo.test.id}

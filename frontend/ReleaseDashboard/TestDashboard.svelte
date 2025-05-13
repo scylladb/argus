@@ -395,7 +395,7 @@
                 class="btn me-2"
                 class:btn-success={versionsIncludeNoVersion}
                 class:btn-danger={!versionsIncludeNoVersion}
-                on:click={() => { 
+                on:click={() => {
                     versionsIncludeNoVersion = !versionsIncludeNoVersion;
                     saveCheckboxState(`releaseDashIncludeNoVersions-${dashboardObject.id}`, versionsIncludeNoVersion);
                     handleVersionClick(productVersion);
@@ -468,7 +468,7 @@
             <div class="bg-white rounded mx-2 mb-2 w-25">
                 <div class="p-2">Filter by assignee</div>
                 <div class="p-2"><AssigneeFilter on:selected={handleUserFilter}/></div>
-                
+
             </div>
         </div>
         {#each sortedGroups(stats.groups) as groupStats (groupStats.group.id)}

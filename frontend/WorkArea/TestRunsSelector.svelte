@@ -117,7 +117,7 @@
         </button>
     </div>
     <div class="d-inline-block">
-        <button 
+        <button
             class="btn btn-light"
             on:click={() => dispatch("fetchNewRuns")}
             title="Fetch Runs"
@@ -135,14 +135,14 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <p>You have chosen to ignore failed and not investigated runs for {testInfo.test.name}. 
+                <p>You have chosen to ignore failed and not investigated runs for {testInfo.test.name}.
                     To finish the process, please provide a reason</p>
                 <textarea rows="10" bind:value={ignoreReason} style="width: 100%"></textarea>
             </div>
             <div class="modal-footer">
-                <button 
-                    type="button" 
-                    class="btn btn-secondary" 
+                <button
+                    type="button"
+                    class="btn btn-secondary"
                     on:click={() => {
                         modal.hide();
                         ignoreReason = "";
@@ -150,7 +150,7 @@
                 >
                     Cancel
                 </button>
-                <button 
+                <button
                     type="button"
                     class="btn btn-danger"
                     on:click={() => {

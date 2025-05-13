@@ -80,8 +80,8 @@
     >
         {#each Object.values(TestStatus) as status}
             {#if stats[status]}
-                <div 
-                    class:d-none={stats[status] == 0} 
+                <div
+                    class:d-none={stats[status] == 0}
                     class="d-flex align-items-center justify-content-center flex-fill {StatusBackgroundCSSClassMap[status]}"
                     style="width: {Math.max(Math.round(normalize(stats[status], stats.total, 0) * 100), 10)}%"
                     title="{subUnderscores(titleCase(status))} ({stats[status]})"
@@ -100,7 +100,7 @@
     </div>
     {#if stats.total != -1 && displayInvestigations}
         {@const allowedStatuses = Object.values(TestStatus).filter(v => !hiddenStatuses.includes(v))}
-        <div 
+        <div
             class="mt-2 collapse show"
             bind:this={shortBlock}
         >
@@ -110,14 +110,14 @@
             >
                 {#each Object.values(TestInvestigationStatus) as investigationStatus, idx}
                     {@const statusStats = calculateStatusStats(stats, investigationStatus, allowedStatuses)}
-                    <div 
+                    <div
                         class="flex-fill text-center {idx > 0 ? "border-start" : ""} px-3 py-2"
                         role="button"
                     >
                         <Fa icon={InvestigationStatusIcon[investigationStatus]}/>
                         {statusStats?.total}
                     </div>
-                {/each} 
+                {/each}
             </div>
         </div>
         <div class="collapse mt-2" bind:this={extendedBlock}>
@@ -138,7 +138,7 @@
                                     {#if statusStats.counts?.[status]}
                                         <div class="flex-fill d-flex align-items-center">
                                             <div class="me-4">
-                                                <button 
+                                                <button
                                                     class="btn btn-sm btn-light mb-1"
                                                     on:click={() => {
                                                         dispatch("quickSelect", { tests: getTestsForStatus(stats, investigationStatus, status) });

@@ -123,7 +123,7 @@
     };
 
     let elegiblePromise = checkElegible(selectedRelease);
-    
+
     onMount(async () => {
         getUsers();
     });

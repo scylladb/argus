@@ -14,12 +14,12 @@
     const dispatch = createEventDispatcher();
     let WIDGET_DEF = WIDGET_TYPES[widgetSettings.type];
     $: WIDGET_DEF = WIDGET_TYPES[widgetSettings.type];
-    
+
 
     const populateWidgetSettings = function() {
         Object
             .entries(WIDGET_DEF.settingDefinitions)
-            .forEach(([setting, definition]) => { 
+            .forEach(([setting, definition]) => {
                 if (!widgetSettings.settings[setting]) widgetSettings.settings[setting] = definition.default;
             });
     };
@@ -53,7 +53,7 @@
                 <div class="mb-2 d-flex border-bottom pb-2">
                     <h5>Editing <span class="fw-bold">{WIDGET_DEF.friendlyName}</span></h5>
                     <div class="ms-auto">
-                        <button 
+                        <button
                             class="btn btn-close"
                             on:click={() => {
                                 editingSettings = false;

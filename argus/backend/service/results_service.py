@@ -393,7 +393,7 @@ class ResultsService:
         self.cluster = ScyllaCluster.get()
 
     def _remove_duplicate_packages(self, packages: List[PackageVersion]) -> List[PackageVersion]:
-        """removes scylla packages that are considered as duplicates: 
+        """removes scylla packages that are considered as duplicates:
         scylla-server-upgraded, scylla-server-upgrade-target, sylla-server, scylla-server-target
         (first found is kept)"""
         packages_to_remove = ["scylla-server-upgraded",

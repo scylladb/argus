@@ -72,7 +72,7 @@
     };
 
     /**
-     * 
+     *
      * @param {number} id
      * @param {Object[]} selectedLabels
      */
@@ -127,7 +127,7 @@
     };
 
     /**
-     * 
+     *
      * @param {{title: string, added_on: string, repo: string}} issue
      * @param {string} filterString
      */
@@ -140,7 +140,7 @@
     };
 
     /**
-     * 
+     *
      * @param {{ state: { state: ('open'|'closed'), labels: {id: number, name: string }[]}}}issue
      * @param {{id: number, name: string }[]} selectedLabels
      * @param {{ open: boolean, closed: boolean }} stateFilter
@@ -152,7 +152,7 @@
     };
 
     /**
-     * 
+     *
      * @param {{title: string, added_on: string, repo: string}[]} issues
      * @param sortCriteria
      * @param reverse
@@ -293,8 +293,8 @@
                     <div class="collapse" class:show={showAllLabels}>
                         <div class="d-flex p-2 bg-dark rounded shadow-sm flex-wrap">
                             {#each availableLabels as label}
-                                <button 
-                                    class="ms-2 btn btn-sm btn-secondary m-1" 
+                                <button
+                                    class="ms-2 btn btn-sm btn-secondary m-1"
                                     style="border-color: #{label.color}; color: #{label.color}; background-color: {labelActive(label.id, selectedLabels) ? Color(`#${label.color}`).darken(0.75) : "rgba(1,1,1,0)"}"
                                     on:click={() => handleLabelClick(label)}
                                 >

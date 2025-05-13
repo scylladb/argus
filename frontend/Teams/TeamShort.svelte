@@ -39,7 +39,7 @@
                 sendMessage("error", `${error.arguments[0]}`, "TeamShort::handleDelete");
             }
             console.log(error);
-            
+
         } finally {
             deleting = false;
         }

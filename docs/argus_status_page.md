@@ -50,7 +50,7 @@ def lambda_handler(event, context):
             json_output.append({"status": r.status_code, "response": r.json(),  "node_type": "scylla", "ip": scylla_node_ip})
         except:
             json_output.append({"status": "fail", "response": traceback.format_exc(), "node_type": "argus", "ip": argus})
-            
+
     return {"time": str(datetime.now(timezone.utc)), "statuses": json_output}
 ```
 

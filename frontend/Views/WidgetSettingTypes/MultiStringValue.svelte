@@ -30,7 +30,7 @@
 
 <div>
     <div>{definition.displayName} <span title="{definition.help}"><Fa icon={faQuestionCircle}/></span></div>
-    
+
     {#each settings[settingName] as value, index}
         <div class="input-group mb-2">
             <input type="text" class="form-control" bind:value={settings[settingName][index]}>
@@ -39,7 +39,7 @@
             </button>
         </div>
     {/each}
-    
+
     <button class="btn btn-outline-primary btn-sm" on:click={addNewString}>
         <Fa icon={faPlus}/> Add Filter
     </button>

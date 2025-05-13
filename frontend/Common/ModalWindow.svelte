@@ -22,7 +22,7 @@
                     <slot name="title"><!-- optional fallback --></slot>
                 </h5>
                 <div class="ms-auto">
-                    <button 
+                    <button
                         class="btn btn-close"
                         on:click={() => {
                             dispatch("modalClose");

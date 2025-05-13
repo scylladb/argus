@@ -60,9 +60,9 @@
     };
 </script>
 
-<button 
+<button
 class="btn btn-sm btn-primary"
-data-bs-toggle="collapse" 
+data-bs-toggle="collapse"
 data-bs-target="#createTeamCollapse"
 >
     <Fa icon={faPlusSquare} /> New Team

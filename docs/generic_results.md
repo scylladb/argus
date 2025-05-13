@@ -15,7 +15,7 @@ Generic results are stored in 2 tables: `ArgusGenericResultMetadata` `ArgusGener
 This table stores information what results are available for given `test_id` (Jenkins job in terms of Argus). Contain information about each
 result: name, description, columns, and rows.
 Columns are described by set of attributes: `name`, `unit`, `type` and `higher_is_better`. `type` can be one of `ResultType` enum values (FLOAT, INTEGER,DURATION, TEXT). `higher_is_better` is used for finding best value for given cell across all runs in given test.
-Besides Columns metadata, user might supply also `validation_rules` which are used to validate data before storing it in Argus. `ValidationRules` are defined by map between column name and `ValidationRule` object that defines 3 fields: 
+Besides Columns metadata, user might supply also `validation_rules` which are used to validate data before storing it in Argus. `ValidationRules` are defined by map between column name and `ValidationRule` object that defines 3 fields:
 - `best_pct` - defines max value limit relative to best result in percent unit
 - `best_abs` - defines max value limit relative to best result in absolute unit
 - `fixed_limit` - defines fixed value limit above/below which result is considered as ERROR

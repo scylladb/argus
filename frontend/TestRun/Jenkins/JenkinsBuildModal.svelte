@@ -211,7 +211,7 @@
                     <h5>Starting <span class="fw-bold">{buildId}</span></h5>
                 {/if}
                 <div class="ms-auto">
-                    <button 
+                    <button
                         class="btn btn-close"
                         on:click={() => {
                             dispatch("rebuildCancel");

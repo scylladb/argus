@@ -60,7 +60,7 @@
         return groups
             .filter(v => v.build_system_id && v.enabled)
             .filter(v => (targetRelease.name || "").toLowerCase().includes("staging") ? true : v.name.toLowerCase().includes("repro"))
-            .map((v) => { 
+            .map((v) => {
                 return {
                     value: v.id,
                     label: v.pretty_name ? `${v.pretty_name} [Jenkins path: ${v.build_system_id}]`: `${v.name} [Jenkins path: ${v.build_system_id}]`,
@@ -73,7 +73,7 @@
             groupState = "groupFetch";
             group = undefined;
             groups = undefined;
-            targetRelease = args.targets.find(v => v.id == target); 
+            targetRelease = args.targets.find(v => v.id == target);
             const params = {
                 targetId: target,
             };
@@ -271,8 +271,8 @@
             </div>
         {/if}
         <div class="mb-2">
-            <button 
-            class="btn btn-primary w-100" 
+            <button
+            class="btn btn-primary w-100"
                 on:click={handleValidation}
             >
                 {#if validated}

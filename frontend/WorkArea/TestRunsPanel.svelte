@@ -22,7 +22,7 @@
     };
 
     /**
-     * 
+     *
      * @param {CustomEvent} event
      */
     const handleSearch = function(event) {
@@ -80,7 +80,7 @@
             fetchGroupTests(group.id);
         });
         selectingFromGrid = false;
-        release = null; 
+        release = null;
         testRuns = testRuns;
         updateUrl();
     };
