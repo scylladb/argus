@@ -22,10 +22,10 @@ class GithubService:
     LAST_RAN_KEY = "github_service_last_issue_refresh"
 
     plugins = AVAILABLE_PLUGINS
+
     def __init__(self):
         auth = Auth.Token(token=self.get_installation_token())
         self.gh = Github(auth=auth, per_page=1000)
-
 
     def get_plugin(self, plugin_name: str) -> PluginInfoBase | None:
         return self.plugins.get(plugin_name)
@@ -51,10 +51,11 @@ class GithubService:
         check_time = datetime.now(tz=UTC)
 
         all_issues: list[GithubIssue] = list(GithubIssue.all())
-        issues_by_identifier = { f"{issue.owner.lower()}/{issue.repo.lower()}#{issue.number}": issue for issue in all_issues }
+        issues_by_identifier = {
+            f"{issue.owner.lower()}/{issue.repo.lower()}#{issue.number}": issue for issue in all_issues}
         touch_count = 0
 
-        unique_repos = { f"{issue.owner}/{issue.repo}" for issue in all_issues }
+        unique_repos = {f"{issue.owner}/{issue.repo}" for issue in all_issues}
         for idx, repo in enumerate(unique_repos):
             LOGGER.info("[%s/%s] Fetching %s...", idx + 1, len(unique_repos), repo)
             repo = self.gh.get_repo(repo)
@@ -74,8 +75,10 @@ class GithubService:
                 LOGGER.debug("[%s/%s] Refreshing %s...", issue_idx + 1, "?", identifier)
                 issue_to_update.title = issue.title
                 issue_to_update.state = issue.state
-                issue_to_update.labels = [IssueLabel(id=label.id, name=label.name, color=label.color, description=label.description) for label in issue.labels]
-                issue_to_update.assignees = [IssueAssignee(login=assignee.login, html_url=assignee.html_url) for assignee in issue.assignees]
+                issue_to_update.labels = [IssueLabel(
+                    id=label.id, name=label.name, color=label.color, description=label.description) for label in issue.labels]
+                issue_to_update.assignees = [IssueAssignee(
+                    login=assignee.login, html_url=assignee.html_url) for assignee in issue.assignees]
                 issue_to_update.save()
                 touch_count += 1
 
@@ -95,7 +98,6 @@ class GithubService:
         test: ArgusTest = ArgusTest.get(id=test_id)
         plugin = self.get_plugin(plugin_name=test.plugin_name)
         run = plugin.model.get(id=run_id)
-
 
         existing = True
         try:
@@ -172,7 +174,7 @@ class GithubService:
         links = []
         for batch in chunk(view.tests):
             links.extend(IssueLink.filter(test_id__in=batch).allow_filtering().all())
-        
+
         return links
 
     def get_github_issues(self, filter_key: str, filter_id: UUID, aggregate_by_issue: bool = False) -> dict:
@@ -229,4 +231,3 @@ class GithubService:
         return {
             "deleted": issue_id if remaining_links == 0 else (link.run_id, link.issue_id)
         }
-

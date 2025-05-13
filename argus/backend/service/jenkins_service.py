@@ -13,6 +13,7 @@ from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, UserOa
 LOGGER = logging.getLogger(__name__)
 GITHUB_REPO_RE = r"(?P<http>^https?:\/\/(www\.)?github\.com\/(?P<user>[\w\d\-]+)\/(?P<repo>[\w\d\-]+)(\.git)?$)|(?P<ssh>git@github\.com:(?P<ssh_user>[\w\d\-]+)\/(?P<ssh_repo>[\w\d\-]+)(\.git)?)"
 
+
 class Parameter(TypedDict):
     _class: str
     name: str
@@ -72,12 +73,15 @@ class JenkinsService:
             }
         else:
             descriptions = {}
-        params = next((a for a in build_info["actions"] if a.get("_class", "#NONE") == "hudson.model.ParametersAction"), None)
+        params = next((a for a in build_info["actions"] if a.get(
+            "_class", "#NONE") == "hudson.model.ParametersAction"), None)
         if params:
             params = [param for param in params["parameters"] if param["name"] != self.RESERVED_PARAMETER_NAME]
         else:
-            default_params = next((prop for prop in job_info["property"] if prop.get("_class", "") == "hudson.model.ParametersDefinitionProperty"), {}).get("parameterDefinitions", {})
-            params = [{"name": param["name"], "value": param.get("defaultParameterValue", {}).get("value", "")} for param in default_params if param["name"] != self.RESERVED_PARAMETER_NAME]
+            default_params = next((prop for prop in job_info["property"] if prop.get(
+                "_class", "") == "hudson.model.ParametersDefinitionProperty"), {}).get("parameterDefinitions", {})
+            params = [{"name": param["name"], "value": param.get("defaultParameterValue", {}).get(
+                "value", "")} for param in default_params if param["name"] != self.RESERVED_PARAMETER_NAME]
         for idx, param in enumerate(params):
             params[idx]["description"] = descriptions.get(param["name"], "")
 
@@ -92,7 +96,6 @@ class JenkinsService:
             return last_build["number"]
         except jenkins.JenkinsException:
             raise JenkinsServiceError("Job doesn't exist", build_id)
-        
 
     def get_releases_for_clone(self, test_id: str):
         test_id = UUID(test_id)
@@ -135,8 +138,8 @@ class JenkinsService:
                 "Accept": "application/vnd.github+json",
                 "Authorization": f"Bearer {token}",
             }
-            )
-        
+        )
+
         if response.status_code == 404:
             return (False, f"Pipeline file not found in the <a href=\"https://github.com/{user}/{repo}/tree/{new_settings['gitBranch']}\"> target repository</a>, please check the repository before continuing")
 
@@ -186,7 +189,7 @@ class JenkinsService:
         xpath_map = self.SETTINGS_CONFIG_MAP.get(plugin_name)
         if not xpath_map:
             return
-        
+
         config = self._jenkins.get_job_config(name=build_id)
         xml = ET.fromstring(config)
         for setting, value in settings.items():
@@ -229,7 +232,8 @@ class JenkinsService:
         new_test.save()
 
         if advanced_settings:
-            self.adjust_job_settings(build_id=jenkins_new_build_id, plugin_name=new_test.plugin_name, settings=advanced_settings)
+            self.adjust_job_settings(build_id=jenkins_new_build_id,
+                                     plugin_name=new_test.plugin_name, settings=advanced_settings)
 
         return {
             "new_job": new_job_info,

@@ -12,7 +12,7 @@ from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.plugins.loader import all_plugin_models
 from argus.backend.util.common import chunk, get_build_number
 from argus.common.enums import TestStatus, TestInvestigationStatus
-from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusScheduleTest, ArgusTest,\
+from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusScheduleTest, ArgusTest, \
     ArgusTestRunComment, ArgusUserView
 from argus.backend.db import ScyllaCluster
 
@@ -128,11 +128,11 @@ class ComparableTestInvestigationStatus:
 
 
 def generate_field_status_map(
-        last_runs: list[TestRunStatRow],
-        field_name = "status",
-        container_class = TestStatus,
-        cmp_class = ComparableTestStatus
-    ) -> dict[int, tuple[str, TestRunStatRow]]:
+    last_runs: list[TestRunStatRow],
+    field_name="status",
+    container_class=TestStatus,
+    cmp_class=ComparableTestStatus
+) -> dict[int, tuple[str, TestRunStatRow]]:
 
     status_map = {}
     for run in last_runs:
@@ -178,6 +178,7 @@ def fetch_issues(release: list[UUID] | UUID):
 
     return linked_issues
 
+
 class ViewStats:
     def __init__(self, release: ArgusUserView) -> None:
         self.release = release
@@ -203,7 +204,8 @@ class ViewStats:
             for investigation_status in TestInvestigationStatus:
                 current_status = aggregated_investigation_status.get(investigation_status.value, {})
                 result = {
-                    status.value: current_status.get(status.value, 0) + group.get(investigation_status.value, {}).get(status, 0)
+                    status.value: current_status.get(status.value, 0) +
+                    group.get(investigation_status.value, {}).get(status, 0)
                     for status in TestStatus
                 }
                 aggregated_investigation_status[investigation_status.value] = result
@@ -230,9 +232,11 @@ class ViewStats:
                 plan = ArgusReleasePlan.get(id=self.release.plan_id)
                 self.plans = [plan]
             else:
-                plans_by_release = [ArgusReleasePlan.filter(release_id=release_id).all() for release_id in all_release_ids]
+                plans_by_release = [ArgusReleasePlan.filter(release_id=release_id).all()
+                                    for release_id in all_release_ids]
                 plans: list[ArgusReleasePlan] = [plan for plans in plans_by_release for plan in plans]
-                self.plans = plans if not version_filter else [plan for plan in plans if version_filter == plan.target_version]
+                self.plans = plans if not version_filter else [
+                    plan for plan in plans if version_filter == plan.target_version]
             # TODO: Legacy and unconditional, will show extra data.
             self.test_schedules = reduce(
                 lambda acc, row: acc[row["test_id"]].append(row) or acc,
@@ -296,7 +300,8 @@ class ReleaseStats:
             for investigation_status in TestInvestigationStatus:
                 current_status = aggregated_investigation_status.get(investigation_status.value, {})
                 result = {
-                    status.value: current_status.get(status.value, 0) + group.get(investigation_status.value, {}).get(status, 0)
+                    status.value: current_status.get(status.value, 0) +
+                    group.get(investigation_status.value, {}).get(status, 0)
                     for status in TestStatus
                 }
                 aggregated_investigation_status[investigation_status.value] = result
@@ -324,7 +329,7 @@ class ReleaseStats:
             self.plans = plans if not filter else [plan for plan in plans if version_filter == plan.target_version]
             self.test_schedules = reduce(
                 lambda acc, row: acc[row["test_id"]].append(row) or acc,
-                ArgusScheduleTest.filter(release_id=self.release.id).all(), 
+                ArgusScheduleTest.filter(release_id=self.release.id).all(),
                 defaultdict(list)
             )
 
@@ -434,7 +439,7 @@ class TestStats:
         self.has_comments = False
         self.is_scheduled = scheduled
         self.schedules = schedules if schedules else tuple()
-        self.is_scheduled_legacy = len(self.schedules) > 0 # TODO: Remove once old scheduling system is removed
+        self.is_scheduled_legacy = len(self.schedules) > 0  # TODO: Remove once old scheduling system is removed
         self.tracked_run_number = None
 
     def to_dict(self) -> dict:
@@ -494,8 +499,10 @@ class TestStats:
             target_run = next(run for run in self.last_runs if run["id"] == worst_case[1]["id"])
         except StopIteration:
             target_run = worst_case[1]
-            target_run["issues"] = [dict(issue.items()) for issue in self.parent_group.parent_release.issues[target_run["id"]]]
-            target_run["comments"] = [dict(comment.items()) for comment in self.parent_group.parent_release.comments[target_run["id"]]]
+            target_run["issues"] = [dict(issue.items())
+                                    for issue in self.parent_group.parent_release.issues[target_run["id"]]]
+            target_run["comments"] = [dict(comment.items())
+                                      for comment in self.parent_group.parent_release.comments[target_run["id"]]]
         self.has_bug_report = len(target_run["issues"]) > 0
         self.parent_group.parent_release.has_bug_report = self.has_bug_report or self.parent_group.parent_release.has_bug_report
         self.has_comments = len(target_run["comments"]) > 0
@@ -516,7 +523,8 @@ class ReleaseStatsCollector:
     def collect(self, limited=False, force=False, include_no_version=False) -> dict:
         self.release: ArgusRelease = ArgusRelease.get(name=self.release_name)
         all_tests: list[ArgusTest] = list(ArgusTest.filter(release_id=self.release.id).all())
-        build_ids = reduce(lambda acc, test: acc[test.plugin_name or "unknown"].append(test.build_system_id) or acc, all_tests, defaultdict(list))
+        build_ids = reduce(lambda acc, test: acc[test.plugin_name or "unknown"].append(
+            test.build_system_id) or acc, all_tests, defaultdict(list))
         self.release_rows = [futures for plugin in all_plugin_models()
                              for futures in plugin.get_stats_for_release(release=self.release, build_ids=build_ids.get(plugin._plugin_name, []))]
         self.release_rows = [row for future in self.release_rows for row in future.result()]
@@ -526,7 +534,7 @@ class ReleaseStatsCollector:
             }
         if self.release_version:
             if include_no_version:
-                expr = lambda row: row["scylla_version"] == self.release_version or not row["scylla_version"] 
+                expr = lambda row: row["scylla_version"] == self.release_version or not row["scylla_version"]
             elif self.release_version == "!noVersion":
                 expr = lambda row: not row["scylla_version"]
             else:
@@ -544,7 +552,8 @@ class ReleaseStatsCollector:
             self.release_dict[row["build_id"]] = runs
 
         self.release_stats = ReleaseStats(release=self.release)
-        self.release_stats.collect(rows=self.release_rows, limited=limited, force=force, dict=self.release_dict, tests=all_tests, version_filter=self.release_version)
+        self.release_stats.collect(rows=self.release_rows, limited=limited, force=force,
+                                   dict=self.release_dict, tests=all_tests, version_filter=self.release_version)
         return self.release_stats.to_dict()
 
 
@@ -564,14 +573,15 @@ class ViewStatsCollector:
         all_tests: list[ArgusTest] = []
         for slice in chunk(self.view.tests):
             all_tests.extend(ArgusTest.filter(id__in=slice).all())
-        build_ids = reduce(lambda acc, test: acc[test.plugin_name or "unknown"].append(test.build_system_id) or acc, all_tests, defaultdict(list))
+        build_ids = reduce(lambda acc, test: acc[test.plugin_name or "unknown"].append(
+            test.build_system_id) or acc, all_tests, defaultdict(list))
         self.view_rows = [futures for plugin in all_plugin_models()
-                             for futures in plugin.get_stats_for_release(release=self.view, build_ids=build_ids.get(plugin._plugin_name, []))]
+                          for futures in plugin.get_stats_for_release(release=self.view, build_ids=build_ids.get(plugin._plugin_name, []))]
         self.view_rows = [row for future in self.view_rows for row in future.result()]
 
         if self.filter:
             if include_no_version:
-                expr = lambda row: row["scylla_version"] == self.filter or not row["scylla_version"] 
+                expr = lambda row: row["scylla_version"] == self.filter or not row["scylla_version"]
             elif self.filter == "!noVersion":
                 expr = lambda row: not row["scylla_version"]
             else:
@@ -588,5 +598,6 @@ class ViewStatsCollector:
             self.runs_by_build_id[row["build_id"]] = runs
 
         self.view_stats = ViewStats(release=self.view)
-        self.view_stats.collect(rows=self.view_rows, limited=limited, force=force, dict=self.runs_by_build_id, tests=all_tests, version_filter=self.filter)
+        self.view_stats.collect(rows=self.view_rows, limited=limited, force=force,
+                                dict=self.runs_by_build_id, tests=all_tests, version_filter=self.filter)
         return self.view_stats.to_dict()

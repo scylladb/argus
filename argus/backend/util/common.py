@@ -23,7 +23,7 @@ def first(iterable, value, key: Callable = None, predicate: Callable = None):
     return None
 
 
-def chunk(iterable: Iterable, slice_size = 90):
+def chunk(iterable: Iterable, slice_size=90):
     it = iter(iterable)
     return iter(lambda: list(islice(it, slice_size)), [])
 

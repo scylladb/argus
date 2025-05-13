@@ -13,7 +13,6 @@ class PackageVersion(UserType):
     revision_id = columns.Text()
     build_id = columns.Text()
 
-
     def __eq__(self, other):
         if isinstance(other, PackageVersion):
             return all(getattr(self, a) == getattr(other, a) for a in ["name", "version", "date", "revision_id", "build_id"])

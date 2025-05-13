@@ -7,56 +7,61 @@ from uuid import UUID
 
 class MessageSanitizer:
     """
-        A class used to sanitize event messages by removing or replacing sensitive information
-        such as IP addresses, URLs, file paths, and other identifiable data.
+    A class used to sanitize event messages by removing or replacing sensitive information
+    such as IP addresses, URLs, file paths, and other identifiable data.
 
-        Sanitized messages are written to a file for further analysis.
+    Sanitized messages are written to a file for further analysis.
     """
+
     def __init__(self):
-        self.event_pattern: Pattern = re.compile(r'Severity\.(ERROR|CRITICAL|WARNING|INFO)\)')
-        self.event_id_pattern: Pattern = re.compile(r'(?:event_id=)?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}')
-        self.ip_pattern = re.compile(
-            r'\b(?:'
-            r'(?:\d{1,3}\.){3}\d{1,3}'  # IPv4
-            r'|'
-            r'(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4})'  # Full IPv6
-            r'|'
-            r'[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4}){0,6}::[0-9a-fA-F]{0,4}(?::[0-9a-fA-F]{1,4}){0,6}'  # IPv6 with ::
-            r')\b',
-            re.IGNORECASE
+        self.event_pattern: Pattern = re.compile(r"Severity\.(ERROR|CRITICAL|WARNING|INFO)\)")
+        self.event_id_pattern: Pattern = re.compile(
+            r"(?:event_id=)?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
         )
-        self.scylla_data_path = re.compile(r'[^\s\[\(:]*/scylla/data/[^\s\]\)]*')
-        self.sct_path = re.compile(r'[^\s\[\(:]*/scylla-cluster-tests/[^\s\]\)]*')
+        self.ip_pattern = re.compile(
+            r"\b(?:"
+            r"(?:\d{1,3}\.){3}\d{1,3}"  # IPv4
+            r"|"
+            r"(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4})"  # Full IPv6
+            r"|"
+            r"[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4}){0,6}::[0-9a-fA-F]{0,4}(?::[0-9a-fA-F]{1,4}){0,6}"  # IPv6 with ::
+            r")\b",
+            re.IGNORECASE,
+        )
+        self.scylla_data_path = re.compile(r"[^\s\[\(:]*/scylla/data/[^\s\]\)]*")
+        self.sct_path = re.compile(r"[^\s\[\(:]*/scylla-cluster-tests/[^\s\]\)]*")
         self.filepath_pattern = re.compile(
-            r'(?:/|\b)[\w/.-]*(?:libreloc/)?[\w.-]+\.(so|py|cpp|sh|db|txt)(?:\+0x[0-9a-fA-F]+)?\b'
+            r"(?:/|\b)[\w/.-]*(?:libreloc/)?[\w.-]+\.(so|py|cpp|sh|db|txt)(?:\+0x[0-9a-fA-F]+)?\b"
         )
         self.field_patterns: List[Pattern] = [
-            re.compile(r'period_type=\S+'),
-            re.compile(r'(target_)?node=Node\s+[\w\-\.]+\s*\[.*?\]'),
-            re.compile(r'node=[\w\-\.]+\s*\[.*?\]'),
-            re.compile(r'executable=/[\w/]+\s+executable_version=[\d\.]'),
-            re.compile(r'line_number[=:\s]*[\d]+')
+            re.compile(r"period_type=\S+"),
+            re.compile(r"(target_)?node=Node\s+[\w\-\.]+\s*\[.*?\]"),
+            re.compile(r"node=[\w\-\.]+\s*\[.*?\]"),
+            re.compile(r"executable=/[\w/]+\s+executable_version=[\d\.]"),
+            re.compile(r"line_number[=:\s]*[\d]+"),
         ]
         self.traceback_pattern: Pattern = re.compile(r'File "[^"]+", line \d+, in ([\w_]+)\s*')
-        self.url_pattern: Pattern = re.compile(r'(corefile_url=|download_instructions:)\s*https?://[^\s]+|gsutil cp gs://[^\s]+')
-        self.metadata_pattern: Pattern = re.compile(
-            r'(PID|UID|GID|Timestamp|Command Line|Executable|Control Group|Unit|Slice|Boot ID|'
-            r'Machine ID|Hostname|Storage|Size on Disk|Message|Disk Size):.*?(?=\n|$)',
-            re.MULTILINE
+        self.url_pattern: Pattern = re.compile(
+            r"(corefile_url=|download_instructions:)\s*https?://[^\s]+|gsutil cp gs://[^\s]+"
         )
-        self.lib_address_pattern: Pattern = re.compile(r'\([^()]+ \+ 0x[0-9a-fA-F]+\)')
-        self.module_pattern: Pattern = re.compile(r'Module [^\n]+ from rpm [^\n]+')
-        self.stack_header_pattern: Pattern = re.compile(r'Stack trace of thread \d+:')
-        self.stack_line_pattern: Pattern = re.compile(r'#\d+\s+0x[0-9a-fA-F]+\s+([^\s(]+)')
+        self.metadata_pattern: Pattern = re.compile(
+            r"(PID|UID|GID|Timestamp|Command Line|Executable|Control Group|Unit|Slice|Boot ID|"
+            r"Machine ID|Hostname|Storage|Size on Disk|Message|Disk Size):.*?(?=\n|$)",
+            re.MULTILINE,
+        )
+        self.lib_address_pattern: Pattern = re.compile(r"\([^()]+ \+ 0x[0-9a-fA-F]+\)")
+        self.module_pattern: Pattern = re.compile(r"Module [^\n]+ from rpm [^\n]+")
+        self.stack_header_pattern: Pattern = re.compile(r"Stack trace of thread \d+:")
+        self.stack_line_pattern: Pattern = re.compile(r"#\d+\s+0x[0-9a-fA-F]+\s+([^\s(]+)")
         self.quote_pattern: Pattern = re.compile(r'[\'"]')
-        self.memory_address_pattern = re.compile(r'0x[0-9a-fA-F]+')
-        self.node_name_pattern = re.compile(r'(node\s+|Node\s+)?[\w-]+\-(db|loader|monitor)-node-[\w-]+\d+')
-        self.process_id_pattern = re.compile(r'\[scylla\[\d+\]\]:?')
-        self.iso_timestamp_pattern = re.compile(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}_\d{3}\+\d{2}:\d{2}')
-        self.special_chars = re.compile(r'[|[\]:,]')
-        self.eol_pattern = re.compile(r'\\n')
-        self.backslashes_pattern = re.compile(r'\\')
-        self.repetitions_pattern = re.compile(r'(\b\w+\b)(?:\s+\1)+')
+        self.memory_address_pattern = re.compile(r"0x[0-9a-fA-F]+")
+        self.node_name_pattern = re.compile(r"(node\s+|Node\s+)?[\w-]+\-(db|loader|monitor)-node-[\w-]+\d+")
+        self.process_id_pattern = re.compile(r"\[scylla\[\d+\]\]:?")
+        self.iso_timestamp_pattern = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}_\d{3}\+\d{2}:\d{2}")
+        self.special_chars = re.compile(r"[|[\]:,]")
+        self.eol_pattern = re.compile(r"\\n")
+        self.backslashes_pattern = re.compile(r"\\")
+        self.repetitions_pattern = re.compile(r"(\b\w+\b)(?:\s+\1)+")
 
         self.sanitizers: List[Callable[[str], str]] = [
             self.remove_preface,
@@ -88,9 +93,11 @@ class MessageSanitizer:
             self.remove_special_chars,
             self.normalize_whitespace,
         ]
-        self.sanitized_messages_fp = open('logs/sanitized_messages_' + datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + '.log', 'w')
+        self.sanitized_messages_fp = open(
+            "logs/sanitized_messages_" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".log", "w"
+        )
 
-    def sanitize(self,run_id: UUID, message: str) -> str:
+    def sanitize(self, run_id: UUID, message: str) -> str:
         result = message
         for sanitizer in self.sanitizers:
             result = sanitizer(result)
@@ -99,105 +106,110 @@ class MessageSanitizer:
 
     def remove_preface(self, text: str) -> str:
         try:
-            date = text.split(' ', 1)[0]
+            date = text.split(" ", 1)[0]
         except IndexError:
             return text
         try:
-            return date + ' ' + text.split('(', 1)[1]
+            return date + " " + text.split("(", 1)[1]
         except IndexError:
             return text
 
     def remove_scylla_data_paths(self, text: str) -> str:
-        return self.scylla_data_path.sub('DATA', text)
+        return self.scylla_data_path.sub("DATA", text)
 
     def remove_sct_paths(self, text: str) -> str:
-        return self.sct_path.sub('SCT', text)
+        return self.sct_path.sub("SCT", text)
 
     def remove_lib_address(self, text: str) -> str:
-        return self.lib_address_pattern.sub('', text)
+        return self.lib_address_pattern.sub("", text)
 
     def truncate_long_words(self, text: str) -> str:
-        """ Long words are not fitting well and cause very long processing. truncate it."""
+        """Long words are not fitting well and cause very long processing. truncate it."""
         return " ".join([word[:100] for word in text.split()])
 
     def remove_severity_levels(self, text: str) -> str:
-        return self.event_pattern.sub('', text)
+        return self.event_pattern.sub("", text)
 
     def remove_event_ids(self, text: str) -> str:
-        return self.event_id_pattern.sub('ID', text)
+        return self.event_id_pattern.sub("ID", text)
 
     def remove_ip_addresses(self, text: str) -> str:
-        return self.ip_pattern.sub('IP', text)
+        return self.ip_pattern.sub("IP", text)
 
     def remove_urls(self, text: str) -> str:
-        return self.url_pattern.sub('URL', text)
+        return self.url_pattern.sub("URL", text)
 
     def remove_metadata(self, text: str) -> str:
-        return self.metadata_pattern.sub('', text)
+        return self.metadata_pattern.sub("", text)
 
     def remove_modules(self, text: str) -> str:
-        return self.module_pattern.sub('', text)
+        return self.module_pattern.sub("", text)
 
     def remove_file_paths(self, text: str) -> str:
-        return self.filepath_pattern.sub('FP', text)
+        return self.filepath_pattern.sub("FP", text)
 
     def remove_specific_fields(self, text: str) -> str:
         result = text
         for pattern in self.field_patterns:
-            result = pattern.sub('', result)
+            result = pattern.sub("", result)
         return result
 
     def remove_message_prefix(self, text: str) -> str:
-        return re.sub(r'message[ =]', '', text)
+        return re.sub(r"message[ =]", "", text)
 
     def truncate_traceback(self, text: str) -> str:
-        text = self.traceback_pattern.sub(r'in \1 ', text)
-        text = re.sub(r'Traceback \(most recent call last\):', 'TB ', text)
+        text = self.traceback_pattern.sub(r"in \1 ", text)
+        text = re.sub(r"Traceback \(most recent call last\):", "TB ", text)
         return text
 
     def simplify_stack_trace(self, text: str) -> str:
-        text = re.sub(r'(0x[0-9a-fA-F]+\s*)+(?!\w)', '', text)
-        text = self.stack_header_pattern.sub('Stack:', text)
+        text = re.sub(r"(0x[0-9a-fA-F]+\s*)+(?!\w)", "", text)
+        text = self.stack_header_pattern.sub("Stack:", text)
         stack_lines = self.stack_line_pattern.findall(text)
         if stack_lines:
-            text = re.sub(r'Stack trace of thread \d+:.*?(?=\nStack trace|$)', f"Stack: {' '.join(stack_lines)}", text, flags=re.DOTALL)
+            text = re.sub(
+                r"Stack trace of thread \d+:.*?(?=\nStack trace|$)",
+                f"Stack: {' '.join(stack_lines)}",
+                text,
+                flags=re.DOTALL,
+            )
         return text
 
     def remove_redundant_punctuation(self, text: str) -> str:
-        text = re.sub(r'\(([\w]+)\)', r'\1', text)
-        text = re.sub(r'\(([\w\.]+\) *\(\))', r'\1', text)
-        text = re.sub(r'[=]', ' ', text)
+        text = re.sub(r"\(([\w]+)\)", r"\1", text)
+        text = re.sub(r"\(([\w\.]+\) *\(\))", r"\1", text)
+        text = re.sub(r"[=]", " ", text)
         return text
 
     def remove_quotes(self, text: str) -> str:
-        return self.quote_pattern.sub('', text)
+        return self.quote_pattern.sub("", text)
 
     def simplify_namespaces(self, text: str) -> str:
-        return re.sub(r'(\w+)\.(\w+)', r'\1_\2', text)
+        return re.sub(r"(\w+)\.(\w+)", r"\1_\2", text)
 
     def normalize_whitespace(self, text: str) -> str:
-        return ' '.join(text.split())
+        return " ".join(text.split())
 
     def remove_memory_addresses(self, text: str) -> str:
-        return self.memory_address_pattern.sub('', text)
+        return self.memory_address_pattern.sub("", text)
 
     def remove_node_names(self, text: str) -> str:
-        return self.node_name_pattern.sub(r'\2', text)
+        return self.node_name_pattern.sub(r"\2", text)
 
     def remove_process_ids(self, text: str) -> str:
-        return self.process_id_pattern.sub('', text)
+        return self.process_id_pattern.sub("", text)
 
     def remove_iso_timestamps(self, text: str) -> str:
-        return self.iso_timestamp_pattern.sub('', text)
+        return self.iso_timestamp_pattern.sub("", text)
 
     def remove_special_chars(self, text: str) -> str:
-        return self.special_chars.sub(' ', text)
+        return self.special_chars.sub(" ", text)
 
     def remove_backslashes(self, text: str) -> str:
-        return self.backslashes_pattern.sub('', text)
+        return self.backslashes_pattern.sub("", text)
 
     def remove_eol(self, text: str) -> str:
-        return self.eol_pattern.sub(' ', text)
+        return self.eol_pattern.sub(" ", text)
 
-    def remove_repetitions(self, text:str) -> str:
-        return self.repetitions_pattern.sub(r'\1', text)
+    def remove_repetitions(self, text: str) -> str:
+        return self.repetitions_pattern.sub(r"\1", text)

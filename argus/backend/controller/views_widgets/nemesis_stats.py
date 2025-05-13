@@ -24,4 +24,3 @@ def get_nemesis_data():
         "status": "ok",
         "response": {"nemesis_data": nemesis_data},
     }
-

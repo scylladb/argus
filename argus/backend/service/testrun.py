@@ -77,7 +77,8 @@ class TestRunService:
         for row in last_runs:
             row["build_number"] = get_build_number(build_job_url=row["build_job_url"])
 
-        last_runs = sorted(last_runs, reverse=True, key=lambda run: (run["build_number"], ComparableTestStatus(TestStatus(run["status"]))))
+        last_runs = sorted(last_runs, reverse=True, key=lambda run: (
+            run["build_number"], ComparableTestStatus(TestStatus(run["status"]))))
 
         return last_runs
 
@@ -321,14 +322,17 @@ class TestRunService:
             all_tests.extend(ArgusTest.filter(id__in=id_slice).all())
 
         tests: dict[str, ArgusTest] = {str(t.id): t for t in all_tests}
-        runs_by_plugin = reduce(lambda acc, val: acc[tests[val[0]].plugin_name].append(val[1]) or acc, runs, defaultdict(list))
+        runs_by_plugin = reduce(lambda acc, val: acc[tests[val[0]].plugin_name].append(
+            val[1]) or acc, runs, defaultdict(list))
         all_runs = {}
         for plugin, run_ids in runs_by_plugin.items():
             model = AVAILABLE_PLUGINS.get(plugin).model
             model_runs = []
             for run_id in run_ids:
-                model_runs.append(model.filter(id=run_id).only(["build_id", "start_time", "build_job_url", "id", "test_id"]).get())
-            all_runs.update({ str(run["id"]): {**run, "build_number": get_build_number(run["build_job_url"])} for run in model_runs })
+                model_runs.append(model.filter(id=run_id).only(
+                    ["build_id", "start_time", "build_job_url", "id", "test_id"]).get())
+            all_runs.update(
+                {str(run["id"]): {**run, "build_number": get_build_number(run["build_job_url"])} for run in model_runs})
 
         return all_runs
 
@@ -390,18 +394,18 @@ class TestRunService:
                 )
 
                 ArgusEvent.batch(event_batch).create(
-                    release_id = job["release_id"],
-                    group_id = job["group_id"],
-                    test_id = test_id,
-                    user_id = g.user.id,
-                    run_id = job["id"],
-                    body = json.dumps({
+                    release_id=job["release_id"],
+                    group_id=job["group_id"],
+                    test_id=test_id,
+                    user_id=g.user.id,
+                    run_id=job["id"],
+                    body=json.dumps({
                         "message": "Run was marked as ignored by {username} due to the following reason: {reason}",
                         "username": g.user.username,
                         "reason": reason,
                     }, ensure_ascii=True, separators=(',', ':')),
-                    kind = ArgusEventTypes.TestRunBatchInvestigationStatusChange.value,
-                    created_at = datetime.utcnow(),
+                    kind=ArgusEventTypes.TestRunBatchInvestigationStatusChange.value,
+                    created_at=datetime.utcnow(),
                 )
 
                 jobs_affected += 1

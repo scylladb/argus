@@ -57,7 +57,8 @@ class GenericRun(PluginModelBase):
     def submit_run(cls, request_data: GenericRunSubmitRequest) -> 'GenericRun':
         try:
             run = cls.get(id=request_data["run_id"])
-            raise GenericPluginException(f"Run with UUID {request_data['run_id']} already exists.", request_data["run_id"])
+            raise GenericPluginException(
+                f"Run with UUID {request_data['run_id']} already exists.", request_data["run_id"])
         except cls.DoesNotExist:
             pass
         run = cls()

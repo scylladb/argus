@@ -52,6 +52,7 @@ class ValidationRule:
             "fixed_limit": self.fixed_limit
         }
 
+
 class ResultTableMeta(type):
     def __new__(cls, name, bases, dct):
         cls_instance = super().__new__(cls, name, bases, dct)

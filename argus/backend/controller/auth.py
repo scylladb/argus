@@ -40,7 +40,7 @@ def login():
             session["csrf_token"] = token
         except UserServiceException as exc:
             flash(next(iter(exc.args), "No message"), category="error")
-        
+
         return redirect(url_for('main.home'))
 
     return render_template('auth/login.html.j2',

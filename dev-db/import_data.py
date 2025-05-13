@@ -3,12 +3,6 @@ import json
 
 from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.db import ScyllaCluster
-from argus.backend.models.result import (
-    ArgusGenericResultMetadata,
-    ArgusGenericResultData,
-    ArgusBestResultData,
-    ArgusGraphView,
-)
 from argus.backend.util.config import Config
 
 db = ScyllaCluster.get()
@@ -19,7 +13,7 @@ release_name = "scylla-enterprise"  # change name here
 dest = Path(__file__).parent / "sample_data" / release_name
 
 print("importing releases")
-statement = db.prepare(f"INSERT INTO argus_release_v2 JSON ?")
+statement = db.prepare("INSERT INTO argus_release_v2 JSON ?")
 with (dest / "release.json").open(mode="rt", encoding="utf-8") as src:
     release_raw = src.read()
     release = json.loads(release_raw)
@@ -63,9 +57,7 @@ for file in dest.glob("generic_result_metadata_*.json"):
         metadata_raw = src.read()
         metadata = json.loads(metadata_raw)
         db.session.execute(statement, parameters=(metadata_raw,))
-        print(
-            f"Saved metadata for test {metadata['test_id']} and name {metadata['name']}"
-        )
+        print(f"Saved metadata for test {metadata['test_id']} and name {metadata['name']}")
 
 print("importing graph views")
 statement = db.prepare("INSERT INTO graph_view_v1 JSON ?")
@@ -75,9 +67,7 @@ for file in dest.glob("graph_view_*.json"):
         for graph_view in graph_views:
             graph_view_raw = json.dumps(graph_view)
             db.session.execute(statement, parameters=(graph_view_raw,))
-            print(
-                f"Saved graph view {graph_view['id']} for test {graph_view['test_id']}"
-            )
+            print(f"Saved graph view {graph_view['id']} for test {graph_view['test_id']}")
 
 print("importing best results")
 statement = db.prepare("INSERT INTO generic_result_best_v2 JSON ?")
@@ -87,9 +77,7 @@ for file in dest.glob("best_result_*.json"):
         for best_result in best_results:
             best_result_raw = json.dumps(best_result)
             db.session.execute(statement, parameters=(best_result_raw,))
-            print(
-                f"Saved best result for test {best_result['test_id']} and name {best_result['name']}"
-            )
+            print(f"Saved best result for test {best_result['test_id']} and name {best_result['name']}")
 
 print("importing generic result data")
 statement = db.prepare("INSERT INTO generic_result_data_v1 JSON ?")

@@ -63,7 +63,6 @@ def test_submit_results_responds_with_error_when_cell_fails_validation(fake_test
         client_service.submit_results(run_type, run.run_id, results.as_dict())
 
 
-
 def test_submit_results_responds_with_error_when_cell_has_error(fake_test, client_service):
     run_type, run = get_fake_test_run(test=fake_test)
     results = SampleTable()

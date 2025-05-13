@@ -191,7 +191,6 @@ class ReleaseManagerService:
         release.description = payload["description"]
         release.valid_version_regex = payload["valid_version_regex"]
 
-
         release.save()
         return True
 

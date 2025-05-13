@@ -8,6 +8,7 @@ from argus.backend.plugins.sct.testrun import SCTTestRun
 setup_application_logging()
 LOGGER = logging.getLogger(__name__)
 
+
 def up():
     db = ScyllaCluster.get()
     db.session.default_timeout = 3600
@@ -34,7 +35,10 @@ def up():
     new_ids = [row["id"] for row in list(db.session.execute(f"SELECT id FROM {new_table_name}").all())]
     total_new_ids = len(new_ids)
     if total_ids - total_new_ids - len(broken_runs) != 0:
-        LOGGER.critical("Mismatch detected when comparing updated tables, %s != %s", total_ids, total_new_ids + len(broken_runs))
+        LOGGER.critical(
+            "Mismatch detected when comparing updated tables, %s != %s", total_ids, total_new_ids + len(broken_runs)
+        )
+
 
 if __name__ == "__main__":
     up()

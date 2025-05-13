@@ -7,6 +7,7 @@ from email.mime.text import MIMEText
 from flask import current_app
 from flask import render_template
 
+
 class Email:
     """
     Responsible for sending emails
@@ -45,16 +46,16 @@ class Email:
         if not self._connection:
             return False
         try:
-            status, _ =  self._connection.noop()
+            status, _ = self._connection.noop()
         except SMTPException:
             status = -1
 
         return True if status == 250 else False
 
-    def _prepare_email(self, subject:str,
-                      content: str,
-                      recipients: List[str],
-                      html: bool = True):
+    def _prepare_email(self, subject: str,
+                       content: str,
+                       recipients: List[str],
+                       html: bool = True):
         msg = MIMEMultipart()
         msg['subject'] = subject
         msg['from'] = self.sender

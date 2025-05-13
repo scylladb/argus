@@ -8,6 +8,7 @@ from argus.backend.util.config import Config
 
 LOGGER = logging.getLogger(__name__)
 
+
 class ScyllaConnection:
     def __init__(self):
         """Initialize ScyllaDB connection with longer timeouts and prepared statement cache."""
@@ -25,16 +26,13 @@ class ScyllaConnection:
                 self.shutdown()
 
             auth_provider = PlainTextAuthProvider(
-                username=self.config["SCYLLA_USERNAME"],
-                password=self.config["SCYLLA_PASSWORD"]
+                username=self.config["SCYLLA_USERNAME"], password=self.config["SCYLLA_PASSWORD"]
             )
 
             lb_policy = WhiteListRoundRobinPolicy(hosts=self.config["SCYLLA_CONTACT_POINTS"])
 
             self.execution_profile = ExecutionProfile(
-                load_balancing_policy=lb_policy,
-                consistency_level=ConsistencyLevel.QUORUM,
-                request_timeout=30.0
+                load_balancing_policy=lb_policy, consistency_level=ConsistencyLevel.QUORUM, request_timeout=30.0
             )
 
             self.cluster = Cluster(
@@ -45,7 +43,7 @@ class ScyllaConnection:
                 idle_heartbeat_interval=180,
                 idle_heartbeat_timeout=160,
                 connect_timeout=20,
-                control_connection_timeout=20
+                control_connection_timeout=20,
             )
 
             self.session = self.cluster.connect(keyspace=self.config["SCYLLA_KEYSPACE_NAME"])
@@ -80,7 +78,7 @@ class ScyllaConnection:
             except Exception as reprepare_e:
                 LOGGER.error(f"Failed to re-prepare query: {query}. Error: {reprepare_e}")
                 raise
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             LOGGER.error(f"Failed to execute query: {query}. Error: {e}")
             LOGGER.error(f"Error type: {type(e)}")
             LOGGER.error(f"Params: {params}")
@@ -93,7 +91,7 @@ class ScyllaConnection:
             if self.cluster:
                 self.cluster.shutdown()
             LOGGER.info("ScyllaDB connection shut down successfully")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             LOGGER.warning(f"Error shutting down ScyllaDB connection: {e}")
         finally:
             self.session = None

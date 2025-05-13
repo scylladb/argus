@@ -23,6 +23,7 @@ def submit_run(run_type: str):
         "response": result
     }
 
+
 @bp.route("/testrun/<string:run_type>/<string:run_id>/get", methods=["GET"])
 @api_login_required
 def get_run(run_type: str, run_id: str):

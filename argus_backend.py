@@ -4,7 +4,7 @@ from argus.backend.template_filters import export_filters
 from argus.backend.controller import admin, api, main
 from argus.backend.cli import cli_bp
 from argus.backend.util.logsetup import setup_application_logging
-from argus.backend.util.encoders import ArgusJSONEncoder, ArgusJSONProvider
+from argus.backend.util.encoders import ArgusJSONProvider
 from argus.backend.db import ScyllaCluster
 from argus.backend.controller import auth
 from argus.backend.util.config import Config

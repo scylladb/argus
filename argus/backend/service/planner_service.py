@@ -21,6 +21,7 @@ from argus.backend.util.common import chunk
 
 LOGGER = logging.getLogger(__name__)
 
+
 @dataclass(frozen=True, init=True, repr=True, kw_only=True)
 class CreatePlanPayload:
     name: str
@@ -55,6 +56,7 @@ class TempPlanPayload:
     ends_at: str
     created_from: Optional[str]
 
+
 @dataclass(frozen=True, init=True, repr=True, kw_only=True)
 class CopyPlanPayload:
     plan: TempPlanPayload
@@ -62,6 +64,7 @@ class CopyPlanPayload:
     replacements: dict[str, str]
     targetReleaseId: str
     targetReleaseName: str
+
 
 class PlanTriggerPayload(TypedDict):
     plan_id: str | None
@@ -113,9 +116,11 @@ class PlanningService:
         plan_request = CreatePlanPayload(**payload)
 
         try:
-            existing = ArgusReleasePlan.filter(name=plan_request.name, target_version=plan_request.target_version).allow_filtering().get()
+            existing = ArgusReleasePlan.filter(
+                name=plan_request.name, target_version=plan_request.target_version).allow_filtering().get()
             if existing:
-                raise PlannerServiceException(f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing, plan_request)
+                raise PlannerServiceException(
+                    f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing, plan_request)
         except ArgusReleasePlan.DoesNotExist:
             pass
 
@@ -126,7 +131,8 @@ class PlanningService:
         plan.target_version = plan_request.target_version
         plan.release_id = UUID(plan_request.release_id)
         plan.participants = plan_request.participants
-        plan.assignee_mapping = { UUID(entity_id): UUID(user_id) for entity_id, user_id in plan_request.assignments.items() }
+        plan.assignee_mapping = {UUID(entity_id): UUID(user_id)
+                                 for entity_id, user_id in plan_request.assignments.items()}
         plan.groups = plan_request.groups
         plan.tests = plan_request.tests
         if plan_request.created_from:
@@ -142,9 +148,11 @@ class PlanningService:
         plan_request = TempPlanPayload(**payload)
 
         try:
-            existing = ArgusReleasePlan.filter(name=plan_request.name, target_version=plan_request.target_version).allow_filtering().get()
+            existing = ArgusReleasePlan.filter(
+                name=plan_request.name, target_version=plan_request.target_version).allow_filtering().get()
             if existing and existing.id != UUID(plan_request.id):
-                raise PlannerServiceException(f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing, plan_request)
+                raise PlannerServiceException(
+                    f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing, plan_request)
         except ArgusReleasePlan.DoesNotExist:
             pass
 
@@ -163,7 +171,7 @@ class PlanningService:
         view = self.update_view_for_plan(plan)
         plan.view_id = view.id
         plan.save()
-        
+
         return True
 
     def update_view_for_plan(self, plan: ArgusReleasePlan) -> ArgusUserView:
@@ -193,7 +201,6 @@ class PlanningService:
         view.save()
         service.refresh_stale_view(view)
         return view
-
 
     def create_view_for_plan(self, plan: ArgusReleasePlan) -> ArgusUserView:
         service = UserViewService()
@@ -239,12 +246,12 @@ class PlanningService:
         groups: list[ArgusGroup] = list(ArgusGroup.filter(release_id=release_id).all())
         tests: list[ArgusTest] = list(ArgusTest.filter(release_id=release_id).all())
 
-        groups = { str(g.id): TestLookup.index_mapper(g, "group") for g in groups if g.enabled }
+        groups = {str(g.id): TestLookup.index_mapper(g, "group") for g in groups if g.enabled}
 
         tests_by_group = reduce(lambda acc, test: acc[str(test.group_id)].append(test) or acc, tests, defaultdict(list))
 
         res = {
-            "tests": { str(t.id): TestLookup.index_mapper(t) for t in tests if t.enabled and groups.get(str(t.group_id), {}).get("enabled", False) },
+            "tests": {str(t.id): TestLookup.index_mapper(t) for t in tests if t.enabled and groups.get(str(t.group_id), {}).get("enabled", False)},
             "groups": groups,
             "testByGroup": tests_by_group
         }
@@ -261,14 +268,14 @@ class PlanningService:
 
     def copy_plan(self, payload: CopyPlanPayload) -> ArgusReleasePlan:
 
-
         try:
-            existing = ArgusReleasePlan.filter(name=payload.plan.name, target_version=payload.plan.target_version).allow_filtering().get()
+            existing = ArgusReleasePlan.filter(
+                name=payload.plan.name, target_version=payload.plan.target_version).allow_filtering().get()
             if existing:
-                raise PlannerServiceException(f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing, payload)
+                raise PlannerServiceException(
+                    f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing, payload)
         except ArgusReleasePlan.DoesNotExist:
             pass
-
 
         original_plan: ArgusReleasePlan = ArgusReleasePlan.get(id=payload.plan.id)
         target_release: ArgusRelease = ArgusRelease.get(id=payload.targetReleaseId)
@@ -279,8 +286,8 @@ class PlanningService:
         target_tests: list[ArgusTest] = ArgusTest.filter(release_id=target_release.id).all()
         target_groups: list[ArgusGroup] = ArgusGroup.filter(release_id=target_release.id).all()
 
-        tests_by_build_id = { t.build_system_id: t for t in target_tests }
-        groups_by_build_id = { g.build_system_id: g for g in target_groups }
+        tests_by_build_id = {t.build_system_id: t for t in target_tests}
+        groups_by_build_id = {g.build_system_id: g for g in target_groups}
 
         new_tests = []
         new_groups = []
@@ -324,7 +331,6 @@ class PlanningService:
 
         return new_plan
 
-
     def check_plan_copy_eligibility(self, plan_id: str | UUID, target_release_id: str | UUID) -> dict:
         target_release: ArgusRelease = ArgusRelease.get(id=target_release_id)
         plan: ArgusReleasePlan = ArgusReleasePlan.get(id=plan_id)
@@ -336,8 +342,8 @@ class PlanningService:
         target_tests: list[ArgusTest] = ArgusTest.filter(release_id=target_release.id).all()
         target_groups: list[ArgusGroup] = ArgusGroup.filter(release_id=target_release.id).all()
 
-        tests_by_build_id = { t.build_system_id: t for t in target_tests }
-        groups_by_build_id = { g.build_system_id: g for g in target_groups }
+        tests_by_build_id = {t.build_system_id: t for t in target_tests}
+        groups_by_build_id = {g.build_system_id: g for g in target_groups}
 
         missing_tests = []
         missing_groups = []
@@ -370,7 +376,6 @@ class PlanningService:
                 "groups": missing_groups,
             }
         }
-
 
     def release_planner(self, release_name: str) -> dict[str, Any]:
         release: ArgusRelease = ArgusRelease.get(name=release_name)
@@ -425,7 +430,8 @@ class PlanningService:
         all_assignments = {}
         for plan in reversed(plans):
             # TODO: (gid, [user_id]) Should be changed to gid, user_id once old scheduling mechanism is completely removed
-            all_assignments.update(map(lambda group_id: (str(group_id), [plan.assignee_mapping.get(group_id,  plan.owner)]), plan.groups))
+            all_assignments.update(map(lambda group_id: (
+                str(group_id), [plan.assignee_mapping.get(group_id,  plan.owner)]), plan.groups))
 
         return all_assignments
 
@@ -439,14 +445,16 @@ class PlanningService:
             plans = [ArgusReleasePlan.get(id=plan_id)]
 
         all_assignments = {}
+
         def get_assignee(test_id: UUID, mapping: dict[UUID, UUID]):
             test_assignment = mapping.get(test_id)
             return test_assignment
 
         for plan in reversed(plans):
             # TODO: (tid, [user_id]) Should be changed to tid, user_id once old scheduling mechanism is completely removed
-            all_assignments.update(map(lambda test_id: (str(test_id), [get_assignee(test_id, plan.assignee_mapping) or plan.owner]), plan.tests))
-        
+            all_assignments.update(map(lambda test_id: (str(test_id), [get_assignee(
+                test_id, plan.assignee_mapping) or plan.owner]), plan.tests))
+
         return all_assignments
 
     def complete_plan(self, plan_id: str | UUID) -> bool:
@@ -464,11 +472,12 @@ class PlanningService:
         for batch in chunk(plan.tests):
             tests.extend(ArgusTest.filter(id__in=batch).all())
         test_groups: list[ArgusGroup] = ArgusGroup.filter(id__in=list({t.group_id for t in tests})).all()
-        test_groups = { g.id: g for g in test_groups }
+        test_groups = {g.id: g for g in test_groups}
         groups: list[ArgusGroup] = list(ArgusGroup.filter(id__in=plan.groups).all())
 
-        mapped = [TestLookup.index_mapper(entity, "group" if isinstance(entity, ArgusGroup) else "test") for entity in [*tests, *groups]]
-        
+        mapped = [TestLookup.index_mapper(entity, "group" if isinstance(
+            entity, ArgusGroup) else "test") for entity in [*tests, *groups]]
+
         for ent in mapped:
             ent["release"] = release.name
             if group_id := ent.get("group_id"):
@@ -476,7 +485,7 @@ class PlanningService:
                 ent["group"] = group.pretty_name or group.name
 
         return mapped
-    
+
     def trigger_jobs(self, payload: PlanTriggerPayload) -> bool:
 
         release_name = payload.get("release")
@@ -488,14 +497,14 @@ class PlanningService:
         match condition_set:
             case (True, False, False):
                 release = ArgusRelease.get(name=release_name)
-                filter_expr = { "release_id__eq": release.id }
+                filter_expr = {"release_id__eq": release.id}
             case (False, True, False):
-                filter_expr = { "id__eq": plan_id }
+                filter_expr = {"id__eq": plan_id}
             case (False, False, True):
-                filter_expr = { "target_version__eq": version }
+                filter_expr = {"target_version__eq": version}
             case (True, False, True):
                 release = ArgusRelease.get(name=release_name)
-                filter_expr = { "target_version__eq": version, "release_id__eq": release.id }
+                filter_expr = {"target_version__eq": version, "release_id__eq": release.id}
             case _:
                 raise PlannerServiceException("No version, release name or plan id specified.", payload)
 
@@ -530,7 +539,7 @@ class PlanningService:
                     failures.append(test.build_system_id)
                     continue
                 raw_params = service.retrieve_job_parameters(test.build_system_id, latest_build_number)
-                job_params = { param["name"]: param["value"] for param in raw_params if param.get("value") }
+                job_params = {param["name"]: param["value"] for param in raw_params if param.get("value")}
                 backend = job_params.get("backend")
                 match backend.split("-"):
                     case ["aws", *_]:
@@ -551,8 +560,9 @@ class PlanningService:
                         job_params[region_key] = region
                         break
                 if not job_params:
-                    raise PlannerServiceException(f"Parameters not found for job {test.build_system_id}", test.build_system_id)
-                final_params = { **job_params, **common_params, **job_params}
+                    raise PlannerServiceException(
+                        f"Parameters not found for job {test.build_system_id}", test.build_system_id)
+                final_params = {**job_params, **common_params, **job_params}
                 queue_item = service.build_job(test.build_system_id, final_params, g.user.username)
                 info = service.get_queue_info(queue_item)
                 url = info.get("url", info.get("taskUrl", ""))

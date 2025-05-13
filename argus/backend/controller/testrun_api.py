@@ -64,7 +64,6 @@ def test_run_activity(run_id: str):
     }
 
 
-
 @bp.route("/run/<string:test_id>/<string:run_id>/fetch_results", methods=["GET"])
 @api_login_required
 def fetch_results(test_id: str, run_id: str):
@@ -459,7 +458,8 @@ def set_job_settings():
     payload = get_payload(request)
     service = JenkinsService()
     test = ArgusTest.get(build_system_id=payload["buildId"])
-    result = service.adjust_job_settings(build_id=test.build_system_id, plugin_name=test.plugin_name, settings=payload["settings"])
+    result = service.adjust_job_settings(build_id=test.build_system_id,
+                                         plugin_name=test.plugin_name, settings=payload["settings"])
 
     return {
         "status": "ok",

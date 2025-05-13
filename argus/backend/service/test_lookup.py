@@ -1,6 +1,5 @@
 
 
-
 from functools import partial
 import re
 from urllib.parse import unquote
@@ -16,9 +15,9 @@ from argus.backend.util.common import get_build_number
 
 class TestLookup:
     ADD_ALL_ID = UUID("db6f33b2-660b-4639-ba7f-79725ef96616")
-    
+
     @classmethod
-    def index_mapper(cls, item: Model, type = "test"):
+    def index_mapper(cls, item: Model, type="test"):
         mapped = dict(item)
         mapped["type"] = type
         return mapped
@@ -47,7 +46,6 @@ class TestLookup:
             except model.DoesNotExist:
                 pass
         return None
-
 
     @classmethod
     def query_to_uuid(cls, query: str) -> UUID | None:
@@ -96,7 +94,6 @@ class TestLookup:
             run["name"] = f"{name}#{run['build_number']}"
 
             return [run]
-
 
         return []
 
@@ -153,7 +150,6 @@ class TestLookup:
             if facet in facet_funcs.keys():
                 search_func = facet_wrapper(query_func=search_func, facet_query=value, facet_type=facet)
 
-
         if release_id:
             all_releases = [ArgusRelease.get(id=release_id)]
         else:
@@ -173,4 +169,4 @@ class TestLookup:
 
         results = filter(partial(search_func, query=text_query), index)
 
-        return [{ "id": cls.ADD_ALL_ID, "name": "Add all...", "type": "special" }, *list(res for res in results if check_visibility(res))]
+        return [{"id": cls.ADD_ALL_ID, "name": "Add all...", "type": "special"}, *list(res for res in results if check_visibility(res))]

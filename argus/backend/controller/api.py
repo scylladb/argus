@@ -389,6 +389,7 @@ def test_info():
         "response": info
     }
 
+
 @bp.route("/test-results", methods=["GET", "HEAD"])
 @api_login_required
 def test_results():
@@ -408,13 +409,15 @@ def test_results():
         exists = service.is_results_exist(test_id=UUID(test_id))
         return Response(status=200 if exists else 404)
 
-    graphs, ticks, releases_filters = service.get_test_graphs(test_id=UUID(test_id), start_date=start_date, end_date=end_date, table_names=table_names)
+    graphs, ticks, releases_filters = service.get_test_graphs(test_id=UUID(
+        test_id), start_date=start_date, end_date=end_date, table_names=table_names)
     graph_views = service.get_argus_graph_views(test_id=UUID(test_id))
 
     return {
         "status": "ok",
         "response": {"graphs": graphs, "ticks": ticks, "releases_filters": releases_filters, "graph_views": graph_views}
     }
+
 
 @bp.route("/create-graph-view", methods=["POST"])
 @api_login_required
@@ -429,6 +432,7 @@ def create_graph_view():
         "status": "ok",
         "response": graph_view
     }
+
 
 @bp.route("/update-graph-view", methods=["POST"])
 @api_login_required
@@ -446,6 +450,7 @@ def update_graph_view():
         "status": "ok",
         "response": graph_view
     }
+
 
 @bp.route("/test_run/comment/get", methods=["GET"])  # TODO: remove
 @api_login_required

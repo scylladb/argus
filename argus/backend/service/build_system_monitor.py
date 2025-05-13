@@ -143,7 +143,8 @@ class JenkinsMonitor(ArgusTestsMonitor):
                     LOGGER.warning(
                         "Group %s for release %s doesn't exist, creating...", group_name, saved_release.name)
                     try:
-                        display_name = group.get("displayName", self._jenkins.get_job_info(name=group["fullname"])["displayName"])
+                        display_name = group.get("displayName", self._jenkins.get_job_info(
+                            name=group["fullname"])["displayName"])
                         display_name = display_name if not group_dict[
                             "parent_display_name"] else f"{group_dict['parent_display_name']} - {display_name}"
                     except Exception:
