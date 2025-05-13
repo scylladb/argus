@@ -19,6 +19,7 @@
     let editingPlan = false;
     let copyingPlan = false;
     let createFromPlan = false;
+    let deleteViewForPlan = true;
     let selectedPlan;
     let releaseRedirect = "";
 
@@ -107,7 +108,7 @@
     const handlePlanDelete = async function () {
 
         try {
-            const response = await fetch(`/api/v1/planning/plan/${selectedPlan.id}/delete`, {
+            const response = await fetch(`/api/v1/planning/plan/${selectedPlan.id}/delete?deleteView=${new Number(deleteViewForPlan)}`, {
                 method: "DELETE",
             });
 
@@ -215,6 +216,10 @@
         </div>
         <div slot="body">
             <div>Are you sure you want to delete this plan?</div>
+            <div class="my-2 fw-bold p-2">
+                <label class="form-check-label" for="planDeleteViewCheckbox">Delete attached view</label>
+                <input class="form-check-input" type="checkbox" id="planDeleteViewCheckbox" bind:checked={deleteViewForPlan}>
+            </div>
 
             <div class="d-flex p-2">
                 <button

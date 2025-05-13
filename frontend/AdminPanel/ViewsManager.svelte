@@ -99,6 +99,7 @@
         newView = {
             id: viewForUpdate.id,
             name: viewForUpdate.name,
+            plan_id: viewForUpdate.plan_id,
             description: viewForUpdate.description,
             displayName: viewForUpdate.display_name,
             settings: viewForUpdate.widget_settings,
@@ -120,6 +121,7 @@
                     name: newView.name,
                     description: newView.description,
                     display_name: newView.displayName,
+                    plan_id: newView.plan_id || null,
                     items: newView.items.map(item => `${item.type}:${item.id}`),
                     widget_settings: JSON.stringify(newWidgets),
                 }
@@ -405,6 +407,7 @@
                 <input class="form-control mb-2" type="text" placeholder="Name (internal)" disabled bind:value={newView.name}>
                 <input class="form-control mb-2" type="text" placeholder="Display name" on:change={() => newView.name = urlSlug.convert(newView.displayName)} bind:value={newView.displayName}>
                 <textarea class="form-control mb-2" type="text" placeholder="Description (optional)" bind:value={newView.description}/>
+                <input class="form-control mb-2" type="text" placeholder="Plan ID (internal)" bind:value={newView.plan_id}>
                 <div class="mb-2">
                     <Select
                         id="viewSelectComponent"
