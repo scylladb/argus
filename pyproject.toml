@@ -88,3 +88,10 @@ max-locals = 15
 [tool.autopep8]
 max_line_length = 120
 ignore = "E226,E24,W50,W690,E402,E731"
+
+[tool.pytest.ini_options]
+markers = [
+    "docker_required: this test requires docker and docker-compose",
+]
+log_cli = true
+log_cli_level = "INFO"
