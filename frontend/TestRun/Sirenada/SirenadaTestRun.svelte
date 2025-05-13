@@ -233,11 +233,11 @@
                         <TestRunComments {testRun} {testInfo}/>
                     {/if}
                 </div>
-                <div 
+                <div
                     class="tab-pane fade"
                     class:show={activeTab === 'issues'}
                     class:active={activeTab === 'issues'}
-                    id="nav-issues-{runId}" 
+                    id="nav-issues-{runId}"
                     role="tabpanel"
                 >
                     <SirenadaIssueTemplate test_run={testRun} test={testInfo.test} />

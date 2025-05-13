@@ -10,4 +10,3 @@ const app = new Login({
         methods: LOGIN_METHODS,
     }
 });
-

@@ -51,18 +51,18 @@
 
     const ALL_BACKENDS = {
         azure: "Microsoft Azure",
-        aws: "Amazon AWS", 
-        "aws-siren": "Amazon AWS (Siren-tests)", 
-        "k8s-local-kind-aws": "Kubernetes in Docker on AWS", 
+        aws: "Amazon AWS",
+        "aws-siren": "Amazon AWS (Siren-tests)",
+        "k8s-local-kind-aws": "Kubernetes in Docker on AWS",
         "k8s-eks": "Kubernetes (Amazon EKS)",
         gce: "Google Cloud",
         "gce-siren": "Google Cloud (Siren-tests)",
-        "k8s-local-kind-gce": "Kubernetes in Docker on GCE", 
+        "k8s-local-kind-gce": "Kubernetes in Docker on GCE",
         "k8s-gke": "Kubernetes (Google Kubernetes Engine)",
     };
 
     /**
-     * 
+     *
      * @param {string} backend
      * @param {string} group
      */
@@ -500,8 +500,8 @@
                 <div class="ms-2">
                     {paramDef.name}
                 </div>
-                <button 
-                    class="ms-auto btn btn-outline-dark" 
+                <button
+                    class="ms-auto btn btn-outline-dark"
                     type="button"
                     on:click={() => {
                         paramDef.show = !paramDef.show;

@@ -49,5 +49,3 @@
         on:clear
         isDisabled={disabled}
 />
-
-

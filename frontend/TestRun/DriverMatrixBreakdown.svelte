@@ -158,9 +158,9 @@
                         {testCase.status.toUpperCase()}
                     </div>
                     {#if testCase.message}
-                    <button 
-                        class="ms-1 btn btn-primary" 
-                        title="More..." 
+                    <button
+                        class="ms-1 btn btn-primary"
+                        title="More..."
                         on:click={() => handleExpandButtonClick(testCase.name, testCase.classname)}
                     >
                         {#if caseExpanded(testCase, expandedCases)}

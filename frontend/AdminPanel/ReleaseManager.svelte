@@ -399,7 +399,7 @@
             {#if currentRelease}
                 <div class="mx-2">
                     <button
-                        class="btn btn-primary" 
+                        class="btn btn-primary"
                         on:click={() => (editingRelease = true)}
                     >
                         Edit
@@ -407,7 +407,7 @@
                 </div>
             {/if}
             {#if editingRelease}
-                <ReleaseEditor 
+                <ReleaseEditor
                     releaseData={currentRelease}
                     on:releaseEdit={handleReleaseEdit}
                     on:releaseEditCancel={handleReleaseEditCancel}

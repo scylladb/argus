@@ -71,7 +71,7 @@ JOB_VALIDITY_PERIOD_DAYS: 30
    4. Confirm and get the tokens/ids required for config - visible on the page
 
 #### Create Jenkins token for your account
-1. Click your username in top right corner 
+1. Click your username in top right corner
 2.  write down user id
 3. Go to `Configure` from left panel
 4. Click `Add new Token` and name it `argus-dev`

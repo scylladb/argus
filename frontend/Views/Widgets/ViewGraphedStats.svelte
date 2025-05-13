@@ -78,8 +78,8 @@
         $state.errorMsg = "";
         try {
             // Prepare filters if they exist
-            const filters = settings.testFilters && settings.testFilters.length > 0 
-                ? `&filters=${encodeURIComponent(JSON.stringify(settings.testFilters))}` 
+            const filters = settings.testFilters && settings.testFilters.length > 0
+                ? `&filters=${encodeURIComponent(JSON.stringify(settings.testFilters))}`
                 : '';
 
             const response = await fetch(`/api/v1/views/widgets/graphed_stats?view_id=${dashboardObject.id}${filters}`);

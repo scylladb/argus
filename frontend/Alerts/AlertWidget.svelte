@@ -53,7 +53,7 @@
                 <div class="mb-2 d-flex border-bottom pb-2">
                     <h5>Error console</h5>
                     <div class="ms-auto">
-                        <button 
+                        <button
                             class="btn btn-close"
                             on:click={() => {
                                 showOldMessages = false;

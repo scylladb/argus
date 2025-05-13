@@ -146,7 +146,7 @@
             <div class="mb-2 d-flex border-bottom pb-2">
                 <h5>Configuring <span class="fw-bold">{testName}</span></h5>
                 <div class="ms-auto">
-                    <button 
+                    <button
                         class="btn btn-close"
                         on:click={() => {
                             dispatch("configureCancel");
@@ -179,8 +179,8 @@
                         {/each}
                     </div>
                     <div class="mb-2">
-                        <button 
-                        class="btn btn-primary w-100" 
+                        <button
+                        class="btn btn-primary w-100"
                             on:click={handleValidation}
                         >
                             {#if validated}

@@ -27,7 +27,7 @@
             return acc;
         }, {});
     };
-    
+
     onMount(() => {
         let preparedResults = prepareChartedResults(results);
         let chartData = {

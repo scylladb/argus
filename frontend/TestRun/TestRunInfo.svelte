@@ -235,8 +235,8 @@
                 {/if}
             {/if}
             {#if rebuildRequested}
-                <JenkinsBuildModal 
-                    buildId={test_run.build_id} 
+                <JenkinsBuildModal
+                    buildId={test_run.build_id}
                     buildNumber={extractBuildNumber(test_run)}
                     pluginName={test.plugin_name}
                     on:rebuildCancel={() => (rebuildRequested = false)}
@@ -244,8 +244,8 @@
                 />
             {/if}
             {#if cloneRequested}
-                <JenkinsCloneModal 
-                    buildId={test_run.build_id} 
+                <JenkinsCloneModal
+                    buildId={test_run.build_id}
                     buildNumber={extractBuildNumber(test_run)}
                     pluginName={test.plugin_name}
                     testId={test.id}

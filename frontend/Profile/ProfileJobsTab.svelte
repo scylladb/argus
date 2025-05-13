@@ -15,7 +15,7 @@
     let testIdMap = {};
     let releaseIdMap = {};
     let allVersions = {};
-    
+
     let enabledReleases = {};
     let enabledVersions = {};
     let stats = {};
@@ -26,14 +26,14 @@
         if (!testIdMap[testId]) {
             testIdMap[testId] = testInfo.test.name;
         }
-        
+
         if (!releaseIdMap[testInfo.release.id]) {
             releaseIdMap[testInfo.release.id] = testInfo.release.name;
         }
     };
 
     /**
-     * 
+     *
      * @param {string} filterString
      * @param {string} testName
      */
@@ -199,7 +199,7 @@
     <div class="d-flex flex-wrap mb-2">
         {#each Object.keys(enabledReleases) as releaseId}
             {@const releaseName = releaseIdMap[releaseId] ?? releaseId}
-            <button 
+            <button
                 class="btn btn-{enabledReleases[releaseId] ? "success" : "light"} ms-2 mb-2 text-truncate"
                 title="Branch {releaseName}"
                 style="flex: 0 0 15%"
@@ -215,8 +215,8 @@
     </div>
     <div class="d-flex flex-wrap">
         {#each flattenVersions(allVersions, enabledReleases) as version}
-            <button 
-                class="btn btn-{enabledVersions[version] ? "primary" : "light"} ms-2 mb-2" 
+            <button
+                class="btn btn-{enabledVersions[version] ? "primary" : "light"} ms-2 mb-2"
                 style="flex: 0 0 10%"
                 title="Product Version"
                 on:click={() => (enabledVersions[version] = !enabledVersions[version])}
@@ -241,7 +241,7 @@
 {#if pagedData.length > 1}
     <div class="d-flex flex-wrap">
         {#each pagedData as _, idx}
-            <button 
+            <button
                 class="me-2 btn btn-sm btn-primary p-1 mb-1"
                 style="flex: 0 0 2.5%;"
                 on:click={() => (currentPage = idx)}

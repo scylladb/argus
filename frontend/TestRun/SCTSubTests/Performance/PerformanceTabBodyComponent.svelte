@@ -50,7 +50,7 @@
     };
 
     /**
-     * 
+     *
      * @param {Object[]} historicalData
      */
     const sortResultsByVersion = function(historicalData) {
@@ -71,7 +71,7 @@
     };
 
     /**
-     * 
+     *
      * @param {{[key: string]: Object[]}} sortedHistoricalData
      * @param {string} metricName
      */

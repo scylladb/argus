@@ -72,21 +72,21 @@
 <div class="container">
     <div class="bg-white rounded my-4 border-start border-end border-bottom ">
         <div class="d-flex btn-group p-2">
-                <button 
+                <button
                     class="btn btn-dark"
                     class:active={activeTab == "todo"}
                     on:click={() => (activeTab = "todo")}
                 >
                     <Fa icon={faSearch}/> To Do
                 </button>
-                <button 
+                <button
                     class="btn btn-dark"
                     class:active={activeTab == "done"}
                     on:click={() => (activeTab = "done")}
                 >
                     <Fa icon={faCheck}/> Done
                 </button>
-                <button 
+                <button
                     class="btn btn-dark"
                     class:active={activeTab == "planned"}
                     on:click={() => (activeTab = "planned")}

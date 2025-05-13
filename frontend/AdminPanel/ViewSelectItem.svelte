@@ -14,7 +14,7 @@
 </script>
 
 
-<div 
+<div
     class="p-2 border-bottom border-top"
     class:rounded-top={isFirst}
     class:bg-primary={isHover}

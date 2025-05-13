@@ -40,21 +40,21 @@
 <div>
     <div class="mb-1">
         <div class="btn-group btn-group-sm" role="group">
-            <button 
+            <button
                 type="button"
                 class="btn"
                 class:btn-primary={paramTab == 0}
                 class:btn-outline-primary={paramTab != 0}
                 on:click={() => (paramTab = 0)}
             >Wizard</button>
-            <button 
+            <button
                 type="button"
                 class="btn"
                 class:btn-primary={paramTab == 1}
                 class:btn-outline-primary={paramTab != 1}
                 on:click={() => (paramTab = 1)}
             >This build parameters</button>
-            <button 
+            <button
                 type="button"
                 class="btn"
                 class:btn-primary={paramTab == 2}

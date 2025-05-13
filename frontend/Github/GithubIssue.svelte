@@ -192,7 +192,7 @@
                 <div class="mb-2 d-flex border-bottom pb-2">
                     <h5>Runs for <span class="fw-bold">{issue.title}</span></h5>
                     <div class="ms-auto">
-                        <button 
+                        <button
                             class="btn btn-close"
                             on:click={() => {
                                 showRuns = false;

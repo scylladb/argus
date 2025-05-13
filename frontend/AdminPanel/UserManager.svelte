@@ -49,7 +49,7 @@
         selectedUser = undefined;
         working = false;
     };
-    
+
     let userPromise = getUsers();
 
     const changeUserPassword = async function() {
@@ -321,7 +321,7 @@
                                     </button>
                                     <button
                                         disabled={working}
-                                        class="btn btn-outline-danger" 
+                                        class="btn btn-outline-danger"
                                         on:click={() => {
                                             selectedUser = user;
                                             confirmDeleteUser = true;

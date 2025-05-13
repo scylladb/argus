@@ -256,8 +256,8 @@
                 testId: testId,
                 reason: reason,
             })
-        });        
-        
+        });
+
         if (response.status != 200) {
             sendMessage("error", "Failed to ignore runs for this test", "TestRuns::handleIgnoreRuns");
             return;
@@ -343,16 +343,16 @@
         </button>
     </div>
     {#if configureRequested}
-        <JobConfigureModal 
-            testName={testInfo.test.pretty_name || testInfo.test.name} 
-            buildId={testInfo.test.build_system_id} 
+        <JobConfigureModal
+            testName={testInfo.test.pretty_name || testInfo.test.name}
+            buildId={testInfo.test.build_system_id}
             on:configureCancel={() => (configureRequested = false)}
             on:settingsFinished={() => (configureRequested = false)}
         />
     {/if}
     {#if cloneRequested}
         <JenkinsCloneModal
-            buildId={testInfo.test.build_system_id} 
+            buildId={testInfo.test.build_system_id}
             buildNumber={runs.length > 0 ? extractBuildNumber(runs[0]) : -1}
             pluginName={testInfo.test.plugin_name}
             testId={testInfo.test.id}
@@ -365,7 +365,7 @@
     {/if}
     {#if execRequested}
         <JenkinsBuildModal
-            buildId={testInfo.test.build_system_id} 
+            buildId={testInfo.test.build_system_id}
             buildNumber={runs.length > 0 ? extractBuildNumber(runs[0]) : undefined}
             pluginName={testInfo.test.plugin_name}
             on:rebuildCancel={() => (execRequested = false)}

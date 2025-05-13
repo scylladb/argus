@@ -147,7 +147,7 @@
                         >
                             <button class="btn btn-dark btn-sm" on:click={() => onSelectAllClick(tests)}>Select All</button>
                         </div>
-                        <div 
+                        <div
                             class:ms-2={!getCollapseState(`collapse-${groupStats.group.id}`, collapseState)}
                             class:ms-auto={getCollapseState(`collapse-${groupStats.group.id}`, collapseState)}
                         >

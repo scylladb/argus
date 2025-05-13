@@ -292,7 +292,7 @@
 
     const handleAllItemSelect = function() {
         items = [
-            ...items, 
+            ...items,
             ...lastHits
                 .filter(i => i.id != ADD_ALL_ID
                 ).map(item => {
@@ -518,7 +518,7 @@
         {/if}
         {#each items as item}
             <div class="p-2 border rounded bg-white mb-1 d-flex align-items-center">
-                <div 
+                <div
                     class="{TYPE_MARKER[item.type] ?? "bg-danger"} rounded p-2 fw-bold text-white"
                     title={titleCase(item.type)}
                 >

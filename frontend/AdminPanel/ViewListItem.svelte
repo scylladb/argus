@@ -43,7 +43,7 @@
                 <div class="mb-2 d-flex border-bottom pb-2">
                     <h5>Deleting <span class="fw-bold">{view.display_name || view.name}</span></h5>
                     <div class="ms-auto">
-                        <button 
+                        <button
                             class="btn btn-close"
                             on:click={() => {
                                 deleting = false;

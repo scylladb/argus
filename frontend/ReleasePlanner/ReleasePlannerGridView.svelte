@@ -252,10 +252,10 @@
             {@const prettyName = group?.pretty_name ?? group?.name}
             {@const groupStats = releaseStats?.groups?.[group?.id]}
             {#if group && groupStats}
-                <div 
-                    class="mb-2 rounded bg-white p-2 border-success" 
-                    class:border={clickedGroups[group.id]} 
-                    style="border-size: 4px" 
+                <div
+                    class="mb-2 rounded bg-white p-2 border-success"
+                    class:border={clickedGroups[group.id]}
+                    style="border-size: 4px"
                     class:d-none={shouldFilterIfParent(group, null, filterToParent, true, tests) || shouldFilterIfExecuted(group, null, filterExecuted, true, tests)}
                 >
                     <div
@@ -271,7 +271,7 @@
                         >
                             <button class="btn btn-dark btn-sm" on:click={() => onSelectGroupClick(group)}>Select Group</button>
                         </div>
-                        <div 
+                        <div
                             class:ms-2={!getCollapseState(`collapse-${groupStats.group.id}`, collapseState)}
                             class:ms-auto={getCollapseState(`collapse-${groupStats.group.id}`, collapseState)}
                         >

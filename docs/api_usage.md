@@ -23,24 +23,24 @@ Accepts following parameters:
 ```json
 {
   "response": {
-    "build_id": "example/driver-matrix/test", 
-    "release": "xxxxxxxx", 
-    "test": "testing-driver-matrix", 
+    "build_id": "example/driver-matrix/test",
+    "release": "xxxxxxxx",
+    "test": "testing-driver-matrix",
     "versions": {
       "datastax": [
-        "pytest.datastax.v3.3.24.0", 
-        "pytest.datastax.v3.3.25.0", 
-        "pytest.datastax.v4.3.24.0", 
+        "pytest.datastax.v3.3.24.0",
+        "pytest.datastax.v3.3.25.0",
+        "pytest.datastax.v4.3.24.0",
         "pytest.datastax.v4.3.25.0"
-      ], 
+      ],
       "scylla": [
-        "pytest.scylla.v3.3.24.8", 
-        "pytest.scylla.v3.3.25.5", 
-        "pytest.scylla.v4.3.24.8", 
+        "pytest.scylla.v3.3.24.8",
+        "pytest.scylla.v3.3.25.5",
+        "pytest.scylla.v4.3.24.8",
         "pytest.scylla.v4.3.25.5"
       ]
     }
-  }, 
+  },
   "status": "ok"
 }
 ```
@@ -106,7 +106,7 @@ Example payload:
       "path/job/three",
       "path/job/four"
     ]
-  }, 
+  },
   "status": "ok"
 }
 ```

@@ -37,4 +37,3 @@ export const startJobBuild = async function(buildId, buildParams) {
         }
     }
 };
-

@@ -289,7 +289,7 @@
     };
 
     /**
-     * 
+     *
      * @param {{
      * args: {
      *  currentTestId: string,
@@ -333,7 +333,7 @@
                     <h5>Cloning <span class="fw-bold">{buildId}</span></h5>
                 {/if}
                 <div class="ms-auto">
-                    <button 
+                    <button
                         class="btn btn-close"
                         on:click={() => {
                             dispatch("cloneCancel");

@@ -22,7 +22,7 @@
     let resultRetryTimeout;
 
     /**
-     * 
+     *
      * @param {number} queueItem
      * @returns {Promise<{_class: string, number: number, url: string}>}
      */

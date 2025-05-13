@@ -128,7 +128,7 @@ const StatusPage = {
     },
 
     /**
-     * @param {NodeStatus} status 
+     * @param {NodeStatus} status
      */
     setupArgusStatus: function(status) {
         let argusStatusField = this.STATUS_BLOCK.querySelector("#argusStatusField");
@@ -143,7 +143,7 @@ const StatusPage = {
     },
 
     /**
-     * @param {NodeStatus[]} statuses 
+     * @param {NodeStatus[]} statuses
      */
     setupScyllaStatus: function(statuses) {
         let renderedStatuses = statuses.map((status) => {
@@ -176,7 +176,7 @@ const StatusPage = {
     },
 
     /**
-     * @param {number} status 
+     * @param {number} status
      */
     resolveStatus: function(status) {
         let category = Math.floor(status/100)*100;
@@ -184,7 +184,7 @@ const StatusPage = {
     },
 
     /**
-     * @param {number} status 
+     * @param {number} status
      */
     resolveTextStatus: function(status) {
         let category = Math.floor(status/100)*100;
@@ -192,7 +192,7 @@ const StatusPage = {
     },
 
     /**
-     * @param {string} status 
+     * @param {string} status
      * @returns {string}
      */
     resolveNodeStatus: function(status) {

@@ -44,7 +44,7 @@
     const handleAllItemSelect = function() {
         if (mode == "single") return;
         items = [
-            ...items, 
+            ...items,
             ...lastHits
                 .filter(i => i.id != ADD_ALL_ID
                 ).map(item => {
@@ -78,7 +78,7 @@
         if (mode == "single") handleFinishSearch();
     };
 
-    const handleFinishSearch = function () { 
+    const handleFinishSearch = function () {
         dispatch("selected", {
             items: items,
         });

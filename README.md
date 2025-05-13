@@ -105,5 +105,3 @@ WARNING: `start_argus.sh` assumes pyenv is installed into `~/.pyenv`
 sudo systemctl daemon-reload
 sudo systemctl enable --now argus.service
 ```
-
-
