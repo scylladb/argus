@@ -193,7 +193,7 @@ def profile_oauth_github_callback():
     service = UserService()
     try:
         first_run_info = service.github_callback(req_code)
-    except Exception as exc:  # pylint: disable=broad-except
+    except Exception as exc:
         LOGGER.error("An error occured in callback", exc_info=True)
         flash(message=exc.args[0], category="error")
         return redirect(url_for("main.error", type=403))
@@ -215,7 +215,7 @@ def get_picture(picture_id: str):
             res.set_data(file.read())
         res.content_type = "image/*"
         res.status = 200
-    except FileNotFoundError:  # pylint: disable=broad-except
+    except FileNotFoundError:
         res.status = 404
         res.content_type = "text/plain"
         res.set_data("404 NOT FOUND")
@@ -294,7 +294,7 @@ def update_password():
     try:
         service.update_password(
             g.user, old_password=old_password, new_password=new_password)
-    except Exception:  # pylint: disable=broad-except
+    except Exception:
         flash("Old password is incorrect", category="error")
         return redirect(url_for("main.profile"))
 

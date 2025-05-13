@@ -25,7 +25,6 @@ class GithubOrganizationMissingError(Exception):
 
 
 class UserService:
-    # pylint: disable=no-self-use
     def __init__(self) -> None:
         self.cluster = ScyllaCluster.get()
         self.session = self.cluster.session
@@ -45,7 +44,6 @@ class UserService:
     def github_callback(self, req_code: str) -> dict | None:
         if "gh" not in current_app.config.get("LOGIN_METHODS", []):
             raise UserServiceException("Github Login is disabled")
-        # pylint: disable=too-many-locals
         oauth_response = requests.post(
             "https://github.com/login/oauth/access_token",
             headers={
@@ -86,7 +84,7 @@ class UserService:
         temp_password = None
         required_organizations = current_app.config.get("GITHUB_REQUIRED_ORGANIZATIONS")
         if required_organizations:
-            logins = set([org["login"] for org in organizations])  # pylint: disable=consider-using-set-comprehension
+            logins = set([org["login"] for org in organizations])
             required_organizations = set(required_organizations)
             if len(logins.intersection(required_organizations)) == 0:
                 raise GithubOrganizationMissingError(
@@ -238,7 +236,7 @@ class UserService:
                 old_file = WebFileStorage.get(id=old_picture_id)
                 os.unlink(old_file.filepath)
                 old_file.delete()
-        except Exception as exc:  # pylint: disable=broad-except
+        except Exception as exc:
             print(exc)
 
         g.user.picture_id = web_file.id
@@ -288,7 +286,7 @@ def load_logged_in_user():
 
     if user_id:
         try:
-            g.user = User.get(id=UUID(user_id))  # pylint: disable=assigning-non-slot
+            g.user = User.get(id=UUID(user_id))
             return
         except User.DoesNotExist:
             session.clear()
@@ -304,4 +302,4 @@ def load_logged_in_user():
             raise APIException("Malformed authorization header") from exception
         except User.DoesNotExist as exception:
             raise APIException("User not found for supplied token") from exception
-    g.user = None  # pylint: disable=assigning-non-slot
+    g.user = None

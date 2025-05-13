@@ -165,7 +165,7 @@ class DriverTestRun(PluginModelBase):
         run.assign_categories()
         try:
             run.assignee = run.get_scheduled_assignee()
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             run.assignee = None
 
         run.status = TestStatus.CREATED.value
@@ -321,13 +321,13 @@ class DriverTestRun(PluginModelBase):
         # Legacy method
         req = DriverMatrixRunSubmissionRequest(**request_data)
         run = cls()
-        run.id = req.run_id  # pylint: disable=invalid-name
+        run.id = req.run_id
         run.build_id = req.job_name
         run.build_job_url = req.job_url
         run.assign_categories()
         try:
             run.assignee = run.get_scheduled_assignee()
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             run.assignee = None
         for key, value in req.test_environment.items():
             env_info = EnvironmentInfo()

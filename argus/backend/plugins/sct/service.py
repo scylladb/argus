@@ -152,7 +152,6 @@ class SCTService:
 
     @staticmethod
     def submit_performance_results(run_id: str, performance_results: PerformanceResultsRequest):
-        # pylint: disable=too-many-statements
         try:
             run: SCTTestRun = SCTTestRun.get(id=run_id)
             run.subtest_name = SubtestType.PERFORMANCE.value
@@ -197,7 +196,6 @@ class SCTService:
 
             for version, runs in older_runs_by_version.items():
                 for metric in metrics_to_check:
-                    # pylint: disable=cell-var-from-loop
                     best_run = sorted(runs, reverse=(not is_latency_test), key=lambda v: v[metric])[0]
                     last_run = runs[0]
 

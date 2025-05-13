@@ -26,7 +26,6 @@ class ArgusTestsMonitor(ABC):
         self._filtered_groups: list[str] = self.BUILD_SYSTEM_FILTERED_PREFIXES
 
     def create_release(self, release_name):
-        # pylint: disable=no-self-use
         release = ArgusRelease()
         release.name = release_name
         release.save()
@@ -34,7 +33,6 @@ class ArgusTestsMonitor(ABC):
         return release
 
     def create_group(self, release: ArgusRelease, group_name: str, build_id: str, group_pretty_name: str | None = None):
-        # pylint: disable=no-self-use
         group = ArgusGroup()
         group.release_id = release.id
         group.name = group_name
@@ -47,7 +45,6 @@ class ArgusTestsMonitor(ABC):
 
     def create_test(self, release: ArgusRelease, group: ArgusGroup,
                     test_name: str, build_id: str, build_url: str) -> ArgusTest:
-        # pylint: disable=no-self-use
         test = ArgusTest()
         test.name = test_name
         test.group_id = group.id
@@ -178,7 +175,6 @@ class JenkinsMonitor(ArgusTestsMonitor):
                                 LOGGER.error("Unable to create test for build_id %s", job["fullname"], exc_info=True)
 
     def collect_groups_for_release(self, jobs):
-        # pylint: disable=no-self-use
         groups = [folder for folder in jobs if "Folder" in folder["_class"]]
         groups = [group for group in groups if self.check_filter(group["name"])]
 

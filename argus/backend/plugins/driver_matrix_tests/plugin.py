@@ -7,7 +7,6 @@ from argus.backend.plugins.driver_matrix_tests.udt import TestCollection, Enviro
 
 
 class PluginInfo(PluginInfoBase):
-    # pylint: disable=too-few-public-methods
     name: str = "driver-matrix-tests"
     model: PluginModelBase = DriverTestRun
     controller: Blueprint = driver_matrix_api_bp

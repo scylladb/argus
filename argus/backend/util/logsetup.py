@@ -2,7 +2,6 @@ import logging
 from logging.config import dictConfig
 from flask import has_request_context, request
 
-# pylint: disable=line-too-long
 LOG_FORMAT_REQUEST = "[%(levelcolor)s%(levelname)s%(colorreset)s] %(grey)s<%(remote_addr)s - %(url)s - %(endpoint)s>%(colorreset)s - %(module)s::%(funcName)s - %(message)s"
 
 

@@ -2,7 +2,6 @@ from functools import cached_property
 import logging
 from typing import Optional
 from flask import g, Flask
-# pylint: disable=no-name-in-module
 from cassandra.policies import WhiteListRoundRobinPolicy
 from cassandra import ConsistencyLevel
 from cassandra.cluster import ExecutionProfile, EXEC_PROFILE_DEFAULT, Cluster
@@ -19,7 +18,6 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ScyllaCluster:
-    # pylint: disable=too-many-instance-attributes
     APP_INSTANCE: Optional['ScyllaCluster'] = None
 
     def __init__(self, config=None):
@@ -88,11 +86,11 @@ class ScyllaCluster:
     def get_session(cls):
         cluster = cls.get()
         if 'scylla_session' not in g:
-            g.scylla_session = cluster.session  # pylint: disable=assigning-non-slot
+            g.scylla_session = cluster.session
         return g.scylla_session
 
     @classmethod
-    def close_session(cls, error=None):  # pylint: disable=unused-argument
+    def close_session(cls, error=None):
         g.pop("scylla_session", None)
 
     @classmethod

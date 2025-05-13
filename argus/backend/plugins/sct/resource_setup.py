@@ -158,7 +158,6 @@ def _prepare_docker_resource_setup(sct_config: dict) -> CloudSetupDetails:
 
 
 class ResourceSetup:
-    # pylint: disable=too-few-public-methods
     BACKEND_MAP = {
         "aws": _prepare_aws_resource_setup,
         "aws-siren": _prepare_aws_resource_setup,

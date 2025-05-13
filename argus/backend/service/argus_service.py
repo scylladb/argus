@@ -6,7 +6,7 @@ import logging
 import datetime
 from types import NoneType
 from uuid import UUID
-from cassandra.util import uuid_from_time  # pylint: disable=no-name-in-module
+from cassandra.util import uuid_from_time
 from flask import current_app
 from argus.backend.db import ScyllaCluster
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS, all_plugin_models
@@ -44,7 +44,6 @@ class ScheduleUpdateRequest:
 
 
 class ArgusService:
-    # pylint: disable=no-self-use,too-many-arguments,too-many-instance-attributes,too-many-locals, too-many-public-methods
     def __init__(self, database_session=None):
         self.session = database_session if database_session else ScyllaCluster.get_session()
         self.database = ScyllaCluster.get()

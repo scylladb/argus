@@ -236,7 +236,6 @@ class PluginModelBase(Model):
         raise NotImplementedError()
 
 class PluginInfoBase:
-    # pylint: disable=too-few-public-methods
     name: str
     controller: Blueprint
     model: PluginModelBase

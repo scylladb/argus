@@ -8,7 +8,6 @@ from flask import current_app
 from flask import render_template
 
 class Email:
-    #  pylint: disable=too-many-instance-attributes
     """
     Responsible for sending emails
     """
@@ -55,7 +54,7 @@ class Email:
     def _prepare_email(self, subject:str,
                       content: str,
                       recipients: List[str],
-                      html: bool = True):  # pylint: disable=too-many-arguments
+                      html: bool = True):
         msg = MIMEMultipart()
         msg['subject'] = subject
         msg['from'] = self.sender
@@ -69,7 +68,7 @@ class Email:
         email = msg.as_string()
         return email
 
-    def send(self, subject, content, recipients, html=True):  # pylint: disable=too-many-arguments
+    def send(self, subject, content, recipients, html=True):
         """
         :param subject: text
         :param content: text/html

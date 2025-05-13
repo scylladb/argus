@@ -4,7 +4,7 @@ from enum import Enum, IntEnum, auto
 from cassandra.cqlengine.models import Model
 from cassandra.cqlengine.usertype import UserType
 from cassandra.cqlengine import columns
-from cassandra.util import uuid_from_time, unix_time_from_uuid1  # pylint: disable=no-name-in-module
+from cassandra.util import uuid_from_time, unix_time_from_uuid1
 
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.plan import ArgusReleasePlan
@@ -16,8 +16,6 @@ from argus.backend.models.argus_ai import ErrorEventEmbeddings, CriticalEventEmb
 
 def uuid_now():
     return uuid_from_time(datetime.utcnow())
-
-# pylint: disable=invalid-name
 
 
 class ArgusTestException(Exception):
@@ -45,20 +43,16 @@ class User(Model):
         return hash(self.id)
 
     def is_manager(self) -> bool:
-        # pylint: disable=unsupported-membership-test
         return UserRoles.Manager in self.roles
 
     def is_admin(self) -> bool:
-        # pylint: disable=unsupported-membership-test
         return UserRoles.Admin in self.roles
 
     def set_as_admin(self) -> None:
-        # pylint: disable=unsupported-membership-test
         if UserRoles.Admin not in self.roles:
             self.roles.append(UserRoles.Admin.value)
 
     def set_as_manager(self) -> None:
-        # pylint: disable=unsupported-membership-test
         if UserRoles.Manager not in self.roles:
             self.roles.append(UserRoles.Manager.value)
 
@@ -296,7 +290,6 @@ class ArgusNotification(Model):
 
 class ArgusGithubIssue(Model):
     # FIXME: Deprecated. To be removed.
-    # pylint: disable=too-many-instance-attributes
     id = columns.UUID(primary_key=True, default=uuid4, partition_key=True)
     added_on = columns.DateTime(default=datetime.utcnow)
     release_id = columns.UUID(index=True)
