@@ -2,38 +2,33 @@
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
 -   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v2.0.0
+    rev: v5.0.0
     hooks:
     -   id: trailing-whitespace
-        exclude: .git/*
     -   id: end-of-file-fixer
-        exclude: .git/*
     -   id: check-yaml
         args:
         - --allow-multiple-documents
-        exclude: >
-            (?x)^(
-                tests/.*|
-                data_dir/scylla.yaml|
-                sdcm/k8s_configs/minio/templates/.*|
-                sdcm/k8s_configs/provisioner/templates/.*
-            )$
     -   id: check-added-large-files
     -   id: check-json
-    -   id: detect-aws-credentials
     -   id: detect-private-key
-        exclude: data_dir/ssl_conf/*
 
 -   repo: local
     hooks:
     -   id: autopep8
         name: autopep8
-        entry: autopep8 -i -j 2 --max-line-length=120 --ignore=E226,E24,W50,W690,E402
+        entry: autopep8 -i -j 2
+        language: system
+        types: [python]
+
+    -   id: ruff
+        name: ruff
+        entry: ruff check --fix --preview
         language: system
         types: [python]
 
 - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
-  rev: v2.2.1
+  rev: v9.22.0
   hooks:
       - id: commitlint
         stages: [commit-msg]
