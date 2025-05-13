@@ -44,7 +44,7 @@ pygithub = "^2.6.1"
 [tool.poetry.group.docker-image.dependencies]
 supervisor = "^4.2.4"
 
-[tool.poetry.dev-dependencies]
+[tool.poetry.group.dev.dependencies]
 coverage = "5.5"
 docker = "7.1.0"
 pytest = "6.2.5"
