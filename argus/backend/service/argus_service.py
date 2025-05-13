@@ -32,6 +32,7 @@ from argus.backend.util.common import chunk
 
 LOGGER = logging.getLogger(__name__)
 
+
 @dataclass(init=True, frozen=True)
 class ScheduleUpdateRequest:
     release_id: UUID
@@ -40,7 +41,6 @@ class ScheduleUpdateRequest:
     new_tests: list[UUID]
     old_tests: list[UUID]
     comments: dict[UUID, str]
-
 
 
 class ArgusService:
@@ -432,7 +432,7 @@ class ArgusService:
         tests = []
         for batch in chunk(all_test_ids):
             tests.extend(ArgusTest.filter(id__in=batch).all())
-        tests_by_id: dict[UUID, ArgusTest] = { test.id: test for test in tests }
+        tests_by_id: dict[UUID, ArgusTest] = {test.id: test for test in tests}
 
         all_scheduled_tests: list[ArgusScheduleTest] = list(ArgusScheduleTest.filter(schedule_id=schedule_id).all())
         tests_to_remove = all_test_ids.difference(new_tests)
@@ -441,7 +441,8 @@ class ArgusService:
                 test = tests_by_id.get(scheduled_test.test_id)
                 scheduled_test.delete()
                 if test:
-                    self.update_schedule_comment({"newComment": "", "releaseId": test.release_id, "groupId": test.group_id, "testId": test.id})
+                    self.update_schedule_comment(
+                        {"newComment": "", "releaseId": test.release_id, "groupId": test.group_id, "testId": test.id})
 
         tests_to_add = new_tests.difference(old_tests)
         for test_id in tests_to_add:
@@ -456,7 +457,8 @@ class ArgusService:
         for test_id, comment in comments.items():
             test = tests_by_id.get(UUID(test_id))
             if test:
-                self.update_schedule_comment({"newComment": comment, "releaseId": test.release_id, "groupId": test.group_id, "testId": test.id})
+                self.update_schedule_comment(
+                    {"newComment": comment, "releaseId": test.release_id, "groupId": test.group_id, "testId": test.id})
 
         schedule_assignee: ArgusScheduleAssignee = ArgusScheduleAssignee.get(schedule_id=schedule_id)
         new_assignee = ArgusScheduleAssignee()
@@ -527,7 +529,8 @@ class ArgusService:
                 tests.extend(ArgusTest.filter(id__in=batch).all())
 
             for test in tests:
-                self.update_schedule_comment({"newComment": "", "releaseId": test.release_id, "groupId": test.group_id, "testId": test.id})
+                self.update_schedule_comment({"newComment": "", "releaseId": test.release_id,
+                                             "groupId": test.group_id, "testId": test.id})
 
         return {
             "releaseId": release.id,
@@ -587,7 +590,7 @@ class ArgusService:
         group_ids = [group.id for group in groups if group.enabled]
 
         schedule_ids = set()
-        group_schedules =[]
+        group_schedules = []
         step_size = 90
 
         for step in range(0, ceil(len(group_ids) / step_size)):

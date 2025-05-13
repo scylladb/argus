@@ -245,7 +245,8 @@ class HighlightsService:
         entry.content = content_stripped
         entry.save()
 
-        self._send_highlight_notifications(mentions, content_stripped, payload.view_id, user_id, entry.completed is not None)
+        self._send_highlight_notifications(mentions, content_stripped, payload.view_id,
+                                           user_id, entry.completed is not None)
 
         if entry.completed is None:
             return Highlight.from_db_model(entry)
@@ -287,7 +288,8 @@ class HighlightsService:
 
     def create_comment(self, creator_id: UUID, payload: CommentCreate) -> Comment:
         highlight_created_at = datetime.fromtimestamp(payload.highlight_created_at, tz=UTC)
-        highlight = WidgetHighlights.objects(view_id=payload.view_id, index=payload.index, created_at=highlight_created_at).first()
+        highlight = WidgetHighlights.objects(
+            view_id=payload.view_id, index=payload.index, created_at=highlight_created_at).first()
         if not highlight:
             abort(404, description="Highlight not found")
         created_at = datetime.now(UTC)
@@ -303,7 +305,8 @@ class HighlightsService:
         comment.save()
         highlight.comments_count += 1
         highlight.save()
-        self._send_highlight_notifications(mentions, content_stripped, payload.view_id, creator_id, highlight.completed is not None, is_comment=True)
+        self._send_highlight_notifications(mentions, content_stripped, payload.view_id,
+                                           creator_id, highlight.completed is not None, is_comment=True)
         return Comment.from_db_model(comment)
 
     def update_comment(self, user_id: UUID, payload: CommentUpdate) -> Comment:
@@ -322,7 +325,8 @@ class HighlightsService:
         mentions, content_stripped = self._process_mentions(payload.content)
         comment.content = payload.content
         comment.save()
-        self._send_highlight_notifications(mentions, content_stripped, payload.view_id, user_id, WidgetHighlights.objects(view_id=payload.view_id, index=payload.index, created_at=highlight_created_at).first().completed is not None, is_comment=True)
+        self._send_highlight_notifications(mentions, content_stripped, payload.view_id, user_id, WidgetHighlights.objects(
+            view_id=payload.view_id, index=payload.index, created_at=highlight_created_at).first().completed is not None, is_comment=True)
         return Comment.from_db_model(comment)
 
     def delete_comment(self, user_id: UUID, payload: CommentDelete):
@@ -340,7 +344,8 @@ class HighlightsService:
         if comment.creator_id != user_id:
             abort(403, description="Not authorized to delete comment")
         comment.delete()
-        highlight = WidgetHighlights.objects(view_id=payload.view_id, index=index, created_at=highlight_created_at).first()
+        highlight = WidgetHighlights.objects(view_id=payload.view_id, index=index,
+                                             created_at=highlight_created_at).first()
         if not highlight:
             abort(404, description="Highlight not found")
         highlight.comments_count -= 1

@@ -23,7 +23,7 @@ from argusAI.utils.scylla_connection import ScyllaConnection
 SLEEP_INTERVAL: int = 300  # 5 minutes
 SIMILARITY_THRESHOLD: float = 0.90
 MAX_SIMILARS: int = 20
-DAYS_BACK: int = int(os.getenv('DAYS_BACK', '120'))
+DAYS_BACK: int = int(os.getenv("DAYS_BACK", "120"))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,7 +31,7 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 
-EmbeddingEntry = namedtuple('EmbeddingEntry', ['run_id', 'event_index', 'embedding', 'start_time'])
+EmbeddingEntry = namedtuple("EmbeddingEntry", ["run_id", "event_index", "embedding", "start_time"])
 
 
 class BgeSmallEnEmbeddingModel(ONNXMiniLM_L6_V2):
@@ -40,6 +40,7 @@ class BgeSmallEnEmbeddingModel(ONNXMiniLM_L6_V2):
     Trained on large-scale paired data with RetroMAE and contrastive learning.
     Produces high-quality 384-dim embeddings, optimized for efficiency in semantic search, classification, and clustering.
     """
+
     MODEL_NAME: str = "bge-small-en-v1.5"
     DOWNLOAD_PATH: Path = Path.home() / ".cache" / "chroma" / "onnx_models" / MODEL_NAME
     EXTRACTED_FOLDER_NAME: str = "onnx"
@@ -70,7 +71,7 @@ class EventSimilarityProcessor:
         self._chromadb_client: chromadb.Client = chromadb.Client(Settings(anonymized_telemetry=False))
         self._collections: Dict[str, chromadb.Collection] = {
             EventType.ERROR: self._chromadb_client.get_or_create_collection("test_error_events"),
-            EventType.CRITICAL: self._chromadb_client.get_or_create_collection("test_critical_events")
+            EventType.CRITICAL: self._chromadb_client.get_or_create_collection("test_critical_events"),
         }
         self._embedding_model: BgeSmallEnEmbeddingModel = BgeSmallEnEmbeddingModel()
         self._sanitizer: MessageSanitizer = MessageSanitizer()
@@ -79,11 +80,7 @@ class EventSimilarityProcessor:
         LOGGER.info("Event Processor initialized with error and critical collections")
 
     def find_similarities(
-            self,
-            event_type: str,
-            embedding_entry: EmbeddingEntry,
-            similarity_threshold: float,
-            max_similars: int
+        self, event_type: str, embedding_entry: EmbeddingEntry, similarity_threshold: float, max_similars: int
     ) -> None:
         """
         Find similar events in the collection and update the database.
@@ -126,12 +123,15 @@ class EventSimilarityProcessor:
                 f"UPDATE {table.__table_name__} SET similars_map = ? WHERE run_id = ? AND event_index = ?",
                 (similar_map, run_id, event_index),
             )
-            LOGGER.info(f"Found {len(similar_map)} similar {event_type} events for run_id: {run_id}, event_index: {event_index}")
-        except Exception as e:
+            LOGGER.info(
+                f"Found {len(similar_map)} similar {event_type} events for run_id: {run_id}, event_index: {event_index}"
+            )
+        except Exception as e:  # noqa: BLE001
             LOGGER.error(f"Failed to update similars_map for run_id: {run_id}, event_index: {event_index}: {e}")
 
-    def load_events(self, event_type: str, cutoff_time: datetime.datetime, batch_size: int = 5000
-                    ) -> Tuple[Set[uuid.UUID], List[EmbeddingEntry]]:
+    def load_events(
+        self, event_type: str, cutoff_time: datetime.datetime, batch_size: int = 5000
+    ) -> Tuple[Set[uuid.UUID], List[EmbeddingEntry]]:
         """
         Load historical events from ScyllaDB into ChromaDB.
 
@@ -169,7 +169,9 @@ class EventSimilarityProcessor:
                 embeddings_list.append(emb.embedding)
                 metadatas.append({"run_id": str(emb.run_id), "idx": emb.event_index})
                 if emb.similars_map is None:
-                    similars_to_update.append(EmbeddingEntry(emb.run_id, emb.event_index, emb.embedding, emb.start_time))
+                    similars_to_update.append(
+                        EmbeddingEntry(emb.run_id, emb.event_index, emb.embedding, emb.start_time)
+                    )
 
             if ids:
                 collection.upsert(ids=ids, embeddings=embeddings_list, metadatas=metadatas)
@@ -177,8 +179,12 @@ class EventSimilarityProcessor:
                 LOGGER.info(f"Loaded batch {batch_count} of {event_type} events")
         return processed_runs, similars_to_update
 
-    def process_new_events(self, cutoff_time: datetime.datetime, processed_runs: Set[uuid.UUID],
-                           similars_to_find: Dict[str, List[EmbeddingEntry]]) -> None:
+    def process_new_events(  # noqa: PLR0914
+        self,
+        cutoff_time: datetime.datetime,
+        processed_runs: Set[uuid.UUID],
+        similars_to_find: Dict[str, List[EmbeddingEntry]],
+    ) -> None:
         """
         Continuously process new events from test runs.
 
@@ -191,20 +197,23 @@ class EventSimilarityProcessor:
             LOGGER.info(f"Starting event processing cycle; fetching tests since: {cutoff_time}")
             tests_to_process_result = self._db.execute(
                 f"SELECT id, status FROM {SCTTestRun.table_name()} WHERE start_time > ? ALLOW FILTERING BYPASS CACHE",
-                (cutoff_time,)
+                (cutoff_time,),
             )
-            tests_to_process: Set[uuid.UUID] = {run.id for run in tests_to_process_result if
-                                                run.status != TestStatus.PASSED.value} - processed_runs
+            tests_to_process: Set[uuid.UUID] = {
+                run.id for run in tests_to_process_result if run.status != TestStatus.PASSED.value
+            } - processed_runs
             LOGGER.info(f"tests to process (including in progress) count: {len(tests_to_process)}")
             try:
-                stats: Dict[str, int] = {EventType.ERROR: len(similars_to_find[EventType.ERROR]),
-                                         EventType.CRITICAL: len(similars_to_find[EventType.CRITICAL])}
+                stats: Dict[str, int] = {
+                    EventType.ERROR: len(similars_to_find[EventType.ERROR]),
+                    EventType.CRITICAL: len(similars_to_find[EventType.CRITICAL]),
+                }
                 embedding_start_time: float = time.time()
                 self._similars_found = 0
                 for run_id in tests_to_process:
                     test_run = self._db.execute(
                         f"SELECT id, start_time, events FROM {SCTTestRun.table_name()} WHERE id = ? BYPASS CACHE",
-                        (run_id,)
+                        (run_id,),
                     ).one()
                     if not test_run or not test_run.events:
                         continue
@@ -214,7 +223,9 @@ class EventSimilarityProcessor:
                             continue
 
                         event_type: str = event.severity
-                        event_texts: List[str] = [self._sanitizer.sanitize(test_run.id, event_text) for event_text in event.last_events]
+                        event_texts: List[str] = [
+                            self._sanitizer.sanitize(test_run.id, event_text) for event_text in event.last_events
+                        ]
 
                         if not event_texts:
                             continue
@@ -232,14 +243,16 @@ class EventSimilarityProcessor:
                             )
 
                             query: str = f"INSERT INTO {table.__table_name__} (run_id, event_index, embedding, start_time) VALUES (?, ?, ?, ?)"
-                            embedding_list: List[float] = list(embedding) if not isinstance(embedding, list) else embedding
+                            embedding_list: List[float] = (
+                                list(embedding) if not isinstance(embedding, list) else embedding
+                            )
                             self._db.execute(query, (test_run.id, event_idx, embedding_list, test_run.start_time))
 
                             emb = EmbeddingEntry(
                                 run_id=test_run.id,
                                 event_index=event_idx,
                                 embedding=embedding,
-                                start_time=test_run.start_time
+                                start_time=test_run.start_time,
                             )
                             new_embeddings[event_type].append(emb)
                             stats[event_type] += 1
@@ -250,7 +263,9 @@ class EventSimilarityProcessor:
                 similarity_time: float = 0
 
                 if any(stats.values()):
-                    LOGGER.info(f"Processed {stats[EventType.ERROR]} new error events and {stats[EventType.CRITICAL]} new critical events")
+                    LOGGER.info(
+                        f"Processed {stats[EventType.ERROR]} new error events and {stats[EventType.CRITICAL]} new critical events"
+                    )
                     for event_type, embeddings in new_embeddings.items():
                         if embeddings:
                             LOGGER.info(f"Computing similarities for new {event_type} embeddings")
@@ -268,7 +283,8 @@ class EventSimilarityProcessor:
                 similarity_time = 0
 
             LOGGER.info(
-                f"Cycle complete; embedding time: {embedding_time:.2f} seconds; similarity time: {similarity_time:.2f} seconds; Found {self._similars_found} similars; sleeping for {SLEEP_INTERVAL} seconds")
+                f"Cycle complete; embedding time: {embedding_time:.2f} seconds; similarity time: {similarity_time:.2f} seconds; Found {self._similars_found} similars; sleeping for {SLEEP_INTERVAL} seconds"
+            )
             new_embeddings = {EventType.ERROR: [], EventType.CRITICAL: []}
             stop_event.wait(timeout=SLEEP_INTERVAL)
 
@@ -287,8 +303,11 @@ if __name__ == "__main__":
     processed_critical_runs, critical_similars_to_find = processor.load_events(EventType.CRITICAL, cutoff_time)
     thread: Thread = Thread(
         target=processor.process_new_events,
-        args=(cutoff_time, processed_error_runs | processed_critical_runs,
-              {EventType.ERROR: error_similars_to_find, EventType.CRITICAL: critical_similars_to_find}),
+        args=(
+            cutoff_time,
+            processed_error_runs | processed_critical_runs,
+            {EventType.ERROR: error_similars_to_find, EventType.CRITICAL: critical_similars_to_find},
+        ),
         daemon=True,
     )
     thread.start()

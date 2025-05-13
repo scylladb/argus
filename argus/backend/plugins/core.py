@@ -29,7 +29,8 @@ class PluginModelBase(Model):
     _plugin_name = "unknown"
     # Metadata
     build_id = columns.Text(required=True, partition_key=True)
-    start_time = columns.DateTime(required=True, primary_key=True, clustering_order="DESC", default=datetime.utcnow, custom_index=True)
+    start_time = columns.DateTime(required=True, primary_key=True, clustering_order="DESC",
+                                  default=datetime.utcnow, custom_index=True)
     id = columns.UUID(index=True, required=True)
     release_id = columns.UUID(index=True)
     group_id = columns.UUID(index=True)
@@ -83,7 +84,6 @@ class PluginModelBase(Model):
 
         # FIXME: Legacy fallback until we fully migrate to new plans
         return self._legacy_get_scheduled_assignee(associated_test=associated_test, associated_release=associated_release)
-    
 
     def get_scheduled_assignee(self) -> UUID:
         return self.get_assignment()
@@ -140,7 +140,8 @@ class PluginModelBase(Model):
     @classmethod
     def get_jobs_meta_by_test_id(cls, test_id: UUID):
         cluster = ScyllaCluster.get()
-        query = cluster.prepare(f"SELECT build_id, start_time, id, test_id, release_id, group_id, status, investigation_status FROM {cls.table_name()} WHERE test_id = ?")
+        query = cluster.prepare(
+            f"SELECT build_id, start_time, id, test_id, release_id, group_id, status, investigation_status FROM {cls.table_name()} WHERE test_id = ?")
         rows = cluster.session.execute(query=query, parameters=(test_id,))
 
         return list(rows)
@@ -148,7 +149,8 @@ class PluginModelBase(Model):
     @classmethod
     def prepare_investigation_status_update_query(cls, build_id: str, start_time: datetime, new_status: TestInvestigationStatus):
         cluster = ScyllaCluster.get()
-        query = cluster.prepare(f"UPDATE {cls.table_name()} SET investigation_status = ? WHERE build_id = ? AND start_time = ?")
+        query = cluster.prepare(
+            f"UPDATE {cls.table_name()} SET investigation_status = ? WHERE build_id = ? AND start_time = ?")
         bound_query = query.bind(values=(new_status.value, build_id, start_time))
 
         return bound_query
@@ -166,6 +168,7 @@ class PluginModelBase(Model):
             futures.append(cluster.session.execute_async(query=query, parameters=(next_slice,)))
 
         return futures
+
     @classmethod
     def get_run_meta_by_build_id(cls, build_id: str, limit: int = 10):
         cluster = ScyllaCluster.get()
@@ -202,8 +205,9 @@ class PluginModelBase(Model):
         statement = cluster.prepare(f"SELECT scylla_version FROM {cls.table_name()} WHERE build_id IN ?")
         futures = []
         for batch in chunk(tests):
-            futures.append(cluster.session.execute_async(query=statement, parameters=([t.build_system_id for t in batch],)))
-        
+            futures.append(cluster.session.execute_async(query=statement,
+                           parameters=([t.build_system_id for t in batch],)))
+
         rows = []
         for future in futures:
             rows.extend(future.result())
@@ -234,6 +238,7 @@ class PluginModelBase(Model):
 
     def sut_timestamp(self, sut_package_name) -> float:
         raise NotImplementedError()
+
 
 class PluginInfoBase:
     name: str

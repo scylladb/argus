@@ -40,7 +40,8 @@ class Cell:
                                           ) -> None:
         column_validation_rules = table_metadata.validation_rules.get(self.column)
         rules = column_validation_rules[-1] if column_validation_rules else {}
-        higher_is_better = next((col.higher_is_better for col in table_metadata.columns_meta if col.name == self.column), None)
+        higher_is_better = next(
+            (col.higher_is_better for col in table_metadata.columns_meta if col.name == self.column), None)
         if not rules or self.status != "UNSET" or higher_is_better is None:
             return
         is_better = partial(operator.gt, self.value) if higher_is_better else partial(operator.lt, self.value)
@@ -130,11 +131,12 @@ dash_patterns = [
     [5, 10],     # Long gap
     [15, 5, 5, 5],  # Alternating long and short dashes
     [5, 5, 1, 5],   # Mixed small dash and gap
-    [10, 10, 5, 5], # Alternating medium and small dashes
+    [10, 10, 5, 5],  # Alternating medium and small dashes
     [20, 5],        # Very long dash
     [10, 5, 2, 5],   # Long, medium, and small dashes
     [5, 5],  # Standard dashed
 ]
+
 
 def get_sorted_data_for_column_and_row(data: List[ArgusGenericResultData], column: str, row: str,
                                        runs_details: RunsDetails, main_package: str) -> List[Dict[str, Any]]:
@@ -147,13 +149,15 @@ def get_sorted_data_for_column_and_row(data: List[ArgusGenericResultData], colum
     if not points:
         return points
     packages = runs_details.packages
-    prev_versions = {pkg.name: pkg.version + (f" ({pkg.date})" if pkg.date else "") for pkg in packages.get(points[0]["id"], [])}
+    prev_versions = {pkg.name: pkg.version + (f" ({pkg.date})" if pkg.date else "")
+                     for pkg in packages.get(points[0]["id"], [])}
     points[0]['changes'] = [f"{main_package}: {prev_versions.pop(main_package, None)}"]
     points[0]['dep_change'] = False
     for point in points[1:]:
         changes = []
         mark_dependency_change = False
-        current_versions = {pkg.name: pkg.version + (f" ({pkg.date})" if pkg.date else "") for pkg in packages.get(point["id"], [])}
+        current_versions = {pkg.name: pkg.version + (f" ({pkg.date})" if pkg.date else "")
+                            for pkg in packages.get(point["id"], [])}
         main_package_version = current_versions.pop(main_package, None)
         for pkg_name in current_versions.keys() | prev_versions.keys():
             curr_ver = current_versions.get(pkg_name)
@@ -216,7 +220,8 @@ def calculate_limits(points: List[dict], best_results: List, validation_rules_li
             multiplier = 1 - validation_rule.best_pct / 100 if higher_is_better else 1 + validation_rule.best_pct / 100
             limit_values.append(best_value * multiplier)
         if validation_rule.best_abs is not None:
-            limit_values.append(best_value - validation_rule.best_abs if higher_is_better else best_value + validation_rule.best_abs)
+            limit_values.append(
+                best_value - validation_rule.best_abs if higher_is_better else best_value + validation_rule.best_abs)
         if limit_values:
             limit_value = max(limit_values) if higher_is_better else min(limit_values)
             point['limit'] = limit_value
@@ -340,7 +345,8 @@ def _identify_most_changed_package(packages_list: list[PackageVersion]) -> str:
     version_date_changes: dict[str, set[tuple[str, str]]] = defaultdict(set)
 
     # avoid counting unrelevant packages when detecting automatically
-    packages_list = [pkg for pkg in packages_list if pkg.name in ('scylla-server-upgraded', 'scylla-server', 'scylla-manager-server')]
+    packages_list = [pkg for pkg in packages_list if pkg.name in (
+        'scylla-server-upgraded', 'scylla-server', 'scylla-manager-server')]
     for package_version in packages_list:
         version_date_changes[package_version.name].add((package_version.version, package_version.date))
 
@@ -369,7 +375,8 @@ def create_chartjs(table: ArgusGenericResultMetadata, data: list[ArgusGenericRes
     columns = [column for column in table.columns_meta if column.type != "TEXT"]
 
     for column in columns:
-        datasets = create_datasets_for_column(table, data, best_results, releases_map, column, runs_details, main_package)
+        datasets = create_datasets_for_column(table, data, best_results, releases_map,
+                                              column, runs_details, main_package)
 
         if datasets:
             min_y, max_y = get_min_max_y(datasets)
@@ -389,7 +396,8 @@ class ResultsService:
         """removes scylla packages that are considered as duplicates: 
         scylla-server-upgraded, scylla-server-upgrade-target, sylla-server, scylla-server-target
         (first found is kept)"""
-        packages_to_remove = ["scylla-server-upgraded", "scylla-server-upgrade-target",  "scylla-server", "scylla-server-target"]
+        packages_to_remove = ["scylla-server-upgraded",
+                              "scylla-server-upgrade-target",  "scylla-server", "scylla-server-target"]
         for package in packages_to_remove[:]:
             if any(package == p.name for p in packages):
                 packages_to_remove.remove(package)
@@ -406,7 +414,8 @@ class ResultsService:
             f"SELECT id, investigation_status, packages FROM {plugin.model.table_name()} WHERE test_id = ?")
         rows = self.cluster.session.execute(runs_details_query, parameters=(test_id,)).all()
         ignored_runs = [row["id"] for row in rows if row["investigation_status"].lower() == "ignored"]
-        packages = {row["id"]: self._remove_duplicate_packages(row["packages"]) for row in rows if row["packages"] and row["id"] not in ignored_runs}
+        packages = {row["id"]: self._remove_duplicate_packages(
+            row["packages"]) for row in rows if row["packages"] and row["id"] not in ignored_runs}
         return RunsDetails(ignored=ignored_runs, packages=packages)
 
     def _get_tables_metadata(self, test_id: UUID) -> list[ArgusGenericResultMetadata]:
@@ -529,7 +538,8 @@ class ResultsService:
             best_results = self.get_best_results(test_id=test_id, name=table.name)
             main_package = tables_meta[0].sut_package_name
             if not main_package:
-                main_package = _identify_most_changed_package([pkg for sublist in runs_details.packages.values() for pkg in sublist])
+                main_package = _identify_most_changed_package(
+                    [pkg for sublist in runs_details.packages.values() for pkg in sublist])
             releases_map = _split_results_by_release(runs_details.packages, main_package=main_package)
             graphs.extend(
                 create_chartjs(table, data, best_results, releases_map=releases_map, runs_details=runs_details, main_package=main_package))
@@ -612,11 +622,12 @@ class ResultsService:
                 if not test_method:
                     continue
                 for sut_name in [f"{sut_package_name}-upgraded",
-                            f"{sut_package_name}-upgrade-target",
-                            sut_package_name,
-                            f"{sut_package_name}-target"
-                            ]:
-                    sut_version = next((f"{pkg.version}-{pkg.date}-{pkg.revision_id}" for pkg in packages if pkg.name == sut_name), None)
+                                 f"{sut_package_name}-upgrade-target",
+                                 sut_package_name,
+                                 f"{sut_package_name}-target"
+                                 ]:
+                    sut_version = next(
+                        (f"{pkg.version}-{pkg.date}-{pkg.revision_id}" for pkg in packages if pkg.name == sut_name), None)
                     if sut_version:
                         break
                 if sut_version is None:

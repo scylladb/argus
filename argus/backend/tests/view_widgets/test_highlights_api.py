@@ -7,6 +7,7 @@ from flask import g
 
 from argus.backend.models.view_widgets import WidgetHighlights, WidgetComment
 
+
 @patch("argus.backend.service.views_widgets.highlights.HighlightsService._send_highlight_notifications")
 def test_create_highlight_should_return_created_highlight(notifications, flask_client):
     view_id = str(uuid4())
@@ -27,6 +28,7 @@ def test_create_highlight_should_return_created_highlight(notifications, flask_c
     assert response.json["response"]["created_at"] > now.timestamp()
     assert "completed" not in response.json["response"]
     assert "assignee_id" not in response.json["response"]
+
 
 @patch("argus.backend.service.views_widgets.highlights.HighlightsService._send_highlight_notifications")
 def test_create_action_item_should_return_created_action_item(notifications, flask_client):
@@ -156,6 +158,7 @@ def test_unarchive_highlight_should_unmark_highlight_from_archived(flask_client)
 
     unarchived_entry = WidgetHighlights.objects(view_id=UUID(view_id), index=0, created_at=created_at).first()
     assert unarchived_entry.archived_at.replace(tzinfo=UTC) == datetime.fromtimestamp(0, tz=UTC)
+
 
 @patch("argus.backend.service.views_widgets.highlights.HighlightsService._send_highlight_notifications")
 def test_update_highlight_should_update_content_for_creator(notifications, flask_client):
@@ -304,6 +307,7 @@ def test_set_completed_should_not_work_for_highlight(flask_client):
     assert response.json["status"] == "error"
     assert response.json["response"]["exception"] == "NotFound"
 
+
 @patch("argus.backend.controller.views_widgets.highlights.HighlightsService.send_action_notification")
 def test_set_assignee_should_set_assignee_for_action_item(notification, flask_client):
     view_id = str(uuid4())
@@ -370,6 +374,7 @@ def test_set_assignee_should_not_work_for_highlight(flask_client):
     assert response.json["status"] == "error"
     assert response.json["response"]["exception"] == "NotFound"
 
+
 @patch("argus.backend.service.views_widgets.highlights.HighlightsService._send_highlight_notifications")
 def test_create_comment_should_increment_comments_count(notification, flask_client):
     view_id = str(uuid4())
@@ -399,7 +404,8 @@ def test_create_comment_should_increment_comments_count(notification, flask_clie
     assert response.json["status"] == "ok"
     assert response.json["response"]["content"] == "Test comment"
 
-    updated_highlight = WidgetHighlights.objects(view_id=UUID(view_id), index=0, created_at=highlight_created_at).first()
+    updated_highlight = WidgetHighlights.objects(view_id=UUID(
+        view_id), index=0, created_at=highlight_created_at).first()
     assert updated_highlight.comments_count == 1
 
 
@@ -440,8 +446,10 @@ def test_delete_comment_should_decrement_comments_count(flask_client):
     assert response.status_code == 200
     assert response.json["status"] == "ok"
 
-    updated_highlight = WidgetHighlights.objects(view_id=UUID(view_id), index=0, created_at=highlight_created_at).first()
+    updated_highlight = WidgetHighlights.objects(view_id=UUID(
+        view_id), index=0, created_at=highlight_created_at).first()
     assert updated_highlight.comments_count == 0
+
 
 @patch("argus.backend.service.views_widgets.highlights.HighlightsService._send_highlight_notifications")
 def test_update_comment_should_modify_content(notification, flask_client):
@@ -511,7 +519,8 @@ def test_get_comments_should_return_list_of_comments(flask_client):
     )
     comment_entry.save()
 
-    response = flask_client.get(f"/api/v1/views/widgets/highlights/comments?view_id={view_id}&index=0&created_at={highlight_created_at.timestamp()}")
+    response = flask_client.get(
+        f"/api/v1/views/widgets/highlights/comments?view_id={view_id}&index=0&created_at={highlight_created_at.timestamp()}")
     assert response.status_code == 200
     assert response.json["status"] == "ok"
     comments = response.json["response"]

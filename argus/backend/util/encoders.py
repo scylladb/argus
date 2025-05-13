@@ -10,6 +10,7 @@ import cassandra.cqlengine.models as m
 
 LOGGER = logging.getLogger(__name__)
 
+
 class ArgusJSONEncoder(JSONEncoder):
     def default(self, o):
         match o:
@@ -31,7 +32,7 @@ class ArgusJSONProvider(DefaultJSONProvider):
     def process_nested_dicts(o: dict):
         for k, v in o.items():
             if isinstance(v, dict):
-                o[k] = { str(key): val for key, val in v.items() }
+                o[k] = {str(key): val for key, val in v.items()}
         return o
 
     @classmethod
@@ -40,15 +41,15 @@ class ArgusJSONProvider(DefaultJSONProvider):
             case UUID():
                 return str(o)
             case ut.UserType():
-                o = { str(k): v for k, v in o.items() }
+                o = {str(k): v for k, v in o.items()}
                 o = cls.process_nested_dicts(o)
                 return o
             case m.Model():
-                o = { str(k): v for k, v in o.items() }
+                o = {str(k): v for k, v in o.items()}
                 o = cls.process_nested_dicts(o)
                 return o
             case dict():
-                return { str(k): v for k, v in o.items() }
+                return {str(k): v for k, v in o.items()}
             case datetime():
                 return o.strftime("%Y-%m-%dT%H:%M:%SZ")
             case _:

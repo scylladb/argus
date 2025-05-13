@@ -21,7 +21,7 @@ bp.register_error_handler(Exception, handle_api_exception)
 def team_create():
     payload = get_payload(request)
     result = TeamManagerService().create_team(
-        name=payload["name"], 
+        name=payload["name"],
         leader=UUID(payload["leader"]),
         members=[UUID(m) for m in payload["members"]],
     )
@@ -56,6 +56,7 @@ def team_delete(team_id: str):
         }
     }
 
+
 @bp.route("/<string:team_id>/edit", methods=["POST"])
 @api_login_required
 def team_edit(team_id: str):
@@ -75,6 +76,7 @@ def team_edit(team_id: str):
         }
     }
 
+
 @bp.route("/<string:team_id>/motd/edit", methods=["POST"])
 @api_login_required
 def team_edit_motd(team_id: str):
@@ -91,6 +93,7 @@ def team_edit_motd(team_id: str):
             "status": "updated",
         }
     }
+
 
 @bp.route("/user/<string:user_id>/teams")
 @api_login_required

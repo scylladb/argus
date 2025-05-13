@@ -36,6 +36,7 @@ def test_create_chartjs_without_validation_rules_should_create_chart_without_lim
     assert len(graphs) == 1
     assert len(graphs[0]['data']['datasets']) == 1  # no limits series
 
+
 def test_create_chartjs_without_best_results_should_not_fail():
     table = ArgusGenericResultMetadata(
         test_id=uuid4(),
@@ -64,6 +65,7 @@ def test_create_chartjs_without_best_results_should_not_fail():
     graphs = create_chartjs(table, data, best_results, releases_map, runs_details, main_package="pkg1")
     assert len(graphs) == 1
     assert len(graphs[0]['data']['datasets']) == 1  # no limits series
+
 
 def test_create_chartjs_with_validation_rules_should_add_limit_series():
     table = ArgusGenericResultMetadata(
@@ -96,6 +98,7 @@ def test_create_chartjs_with_validation_rules_should_add_limit_series():
     runs_details = RunsDetails(ignored=[], packages={})
     graphs = create_chartjs(table, data, best_results, releases_map, runs_details, main_package="pkg1")
     assert 'limit' in graphs[0]['data']['datasets'][0]['data'][0]
+
 
 def test_chartjs_with_multiple_best_results_and_validation_rules_should_adjust_limits_for_each_point():
     table = ArgusGenericResultMetadata(
@@ -149,6 +152,7 @@ def test_chartjs_with_multiple_best_results_and_validation_rules_should_adjust_l
     assert limits[0] == 105.0
     assert limits[1] == 96.0
 
+
 def test_create_chartjs_no_data_should_not_fail():
     table = ArgusGenericResultMetadata(
         test_id=uuid4(),
@@ -163,6 +167,7 @@ def test_create_chartjs_no_data_should_not_fail():
     runs_details = RunsDetails(ignored=[], packages={})
     graphs = create_chartjs(table, data, best_results, releases_map, runs_details, main_package="pkg1")
     assert len(graphs) == 0
+
 
 def test_create_chartjs_multiple_columns_and_rows():
     table = ArgusGenericResultMetadata(

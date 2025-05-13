@@ -77,7 +77,8 @@ def test_can_track_best_result(fake_test, client_service, results_service, relea
     assert best_results["h_is_better:row"][-1].result_date > result_date_h  # result date should be updated
     assert best_results["l_is_better:row"][-1].value == 5
     assert best_results["duration col name:row"][-1].value == 10
-    assert best_results["duration col name:row"][-1].result_date == result_date_duration  # result date should not change as was not updated
+    # result date should not change as was not updated
+    assert best_results["duration col name:row"][-1].result_date == result_date_duration
 
 
 def test_can_enable_best_results_tracking(fake_test, client_service, results_service, release, group):
@@ -107,8 +108,10 @@ def test_can_enable_best_results_tracking(fake_test, client_service, results_ser
             description = "Test Table Description"
             Columns = [ColumnMetadata(name="h_is_better", unit="ms", type=ResultType.FLOAT, higher_is_better=True),
                        ColumnMetadata(name="l_is_better", unit="ms", type=ResultType.INTEGER, higher_is_better=False),
-                       ColumnMetadata(name="duration col name", unit="s", type=ResultType.DURATION, higher_is_better=False),
-                       ColumnMetadata(name="non tracked col name", unit="", type=ResultType.FLOAT, higher_is_better=True),
+                       ColumnMetadata(name="duration col name", unit="s",
+                                      type=ResultType.DURATION, higher_is_better=False),
+                       ColumnMetadata(name="non tracked col name", unit="",
+                                      type=ResultType.FLOAT, higher_is_better=True),
                        ColumnMetadata(name="text col name", unit="", type=ResultType.TEXT, higher_is_better=True),
                        ]
 
@@ -137,6 +140,7 @@ def test_can_enable_best_results_tracking(fake_test, client_service, results_ser
     assert best_results["duration col name:row"][-1].value == 10
     assert best_results["non tracked col name:row"][-1].value == 10
     assert 'text col name:row' not in best_results  # text column should not be tracked
+
 
 def test_ignored_runs_are_not_considered_in_best_results(fake_test, client_service, results_service, release, group):
     run_type, run = get_fake_test_run(test=fake_test)

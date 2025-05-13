@@ -30,7 +30,8 @@ class UserViewService:
     def create_view(self, name: str, items: list[str], widget_settings: str, description: str = None, display_name: str = None, plan_id: UUID = None) -> ArgusUserView:
         try:
             name_check = ArgusUserView.get(name=name)
-            raise UserViewException(f"View with name {name} already exists: {name_check.id}", name, name_check, name_check.id)
+            raise UserViewException(
+                f"View with name {name} already exists: {name_check.id}", name, name_check, name_check.id)
         except ArgusUserView.DoesNotExist:
             pass
         view = ArgusUserView()
@@ -58,13 +59,13 @@ class UserViewService:
         for entity in entity_list:
             entity_type, entity_id = entity.split(":")
             match (entity_type):
-                case "release": 
+                case "release":
                     entities["tests"].extend(t.id for t in ArgusTest.filter(release_id=entity_id).all())
                     entities["release"].append(entity_id)
-                case "group": 
+                case "group":
                     entities["tests"].extend(t.id for t in ArgusTest.filter(group_id=entity_id).all())
                     entities["group"].append(entity_id)
-                case "test": 
+                case "test":
                     entities["tests"].append(entity_id)
         return entities
 
@@ -86,13 +87,13 @@ class UserViewService:
         for entity in items:
             entity_type, entity_id = entity.split(":")
             match (entity_type):
-                case "release": 
+                case "release":
                     view.tests.extend(t.id for t in ArgusTest.filter(release_id=entity_id).all())
                     view.release_ids.append(entity_id)
-                case "group": 
+                case "group":
                     view.tests.extend(t.id for t in ArgusTest.filter(group_id=entity_id).all())
                     view.group_ids.append(entity_id)
-                case "test": 
+                case "test":
                     view.tests.append(entity_id)
         view.last_updated = datetime.datetime.utcnow()
         view.save()
@@ -188,10 +189,13 @@ class UserViewService:
         view_groups = self.batch_resolve_entity(ArgusGroup, "id", view.group_ids)
         view_releases = self.batch_resolve_entity(ArgusRelease, "id", view.release_ids)
         view_tests = self.resolve_view_tests(view.id)
-        all_groups = { group.id: partial(TestLookup.index_mapper, type="group")(group) for group in self.resolve_releases_for_tests(view_tests) }
-        all_releases ={ release.id: partial(TestLookup.index_mapper, type="release")(release) for release in self.resolve_releases_for_tests(view_tests) }
+        all_groups = {group.id: partial(TestLookup.index_mapper, type="group")(group)
+                      for group in self.resolve_releases_for_tests(view_tests)}
+        all_releases = {release.id: partial(TestLookup.index_mapper, type="release")(release)
+                        for release in self.resolve_releases_for_tests(view_tests)}
         entities_by_id = {
-            entity.id: partial(TestLookup.index_mapper, type="release" if isinstance(entity, ArgusRelease) else "group")(entity)
+            entity.id: partial(TestLookup.index_mapper, type="release" if isinstance(
+                entity, ArgusRelease) else "group")(entity)
             for container in [view_releases, view_groups]
             for entity in container
         }
@@ -205,8 +209,10 @@ class UserViewService:
 
         items = [*entities_by_id.values(), *items]
         for entity in items:
-            entity["group"] = all_groups.get(entity.get("group_id"), {}).get("pretty_name") or all_groups.get(entity.get("group_id"), {}).get("name")
-            entity["release"] = all_releases.get(entity.get("release_id"), {}).get("pretty_name") or all_releases.get(entity.get("release_id"), {}).get("name")
+            entity["group"] = all_groups.get(entity.get("group_id"), {}).get(
+                "pretty_name") or all_groups.get(entity.get("group_id"), {}).get("name")
+            entity["release"] = all_releases.get(entity.get("release_id"), {}).get(
+                "pretty_name") or all_releases.get(entity.get("release_id"), {}).get("name")
 
         resolved["items"] = items
         return resolved

@@ -22,6 +22,7 @@ def get_versioned_runs():
         "response": versioned_runs,
     }
 
+
 @bp.route("/summary/runs_results", methods=["POST"])
 @api_login_required
 def get_runs_results():

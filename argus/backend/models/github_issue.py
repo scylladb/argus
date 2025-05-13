@@ -51,6 +51,7 @@ class GithubIssue(Model):
     def __ne__(self, other):
         return not self == other
 
+
 class IssueLink(Model):
     run_id = columns.UUID(primary_key=True, required=True, partition_key=True)
     issue_id = columns.UUID(primary_key=True, required=True)

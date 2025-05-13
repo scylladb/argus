@@ -29,7 +29,6 @@ class SirenadaTest(UserType):
     sirenada_password = columns.Text()
 
 
-
 class SirenadaRun(PluginModelBase):
     _plugin_name = "sirenada"
     __table_name__ = "sirenada_run"
@@ -84,7 +83,7 @@ class SirenadaRun(PluginModelBase):
             run = cls.get(id=UUID(request_data["run_id"]))
         except cls.DoesNotExist:
             run = cls()
-            run.id = request_data["run_id"] # FIXME: Validate pls
+            run.id = request_data["run_id"]  # FIXME: Validate pls
             run.build_id = request_data["build_id"]
             run.start_time = datetime.utcnow()
             run.assign_categories()

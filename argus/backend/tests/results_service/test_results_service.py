@@ -182,6 +182,7 @@ def test_create_update_argus_graph_view_should_create() -> None:
     assert result.description == "MyDescription"
     assert result.graphs == {}
 
+
 def test_create_update_argus_graph_view_should_update() -> None:
     service = ResultsService()
     test_id = uuid4()
@@ -191,6 +192,7 @@ def test_create_update_argus_graph_view_should_update() -> None:
     assert updated.name == "NewName"
     assert updated.description == "NewDesc"
     assert updated.graphs == {"graph2": "new_data"}
+
 
 def test_get_argus_graph_views_should_return_list() -> None:
     service = ResultsService()

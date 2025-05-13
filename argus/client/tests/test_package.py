@@ -6,7 +6,8 @@ import pytest
 
 
 def run_command(command: list[str], cwd: str = None, env=None):
-    result = subprocess.run(command, cwd=cwd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+    result = subprocess.run(command, cwd=cwd, check=True, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, text=True, env=env)
     print(result.stdout)
     return result
 

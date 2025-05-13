@@ -267,7 +267,7 @@ def get_tests_for_group():
 @check_roles(UserRoles.Admin)
 @api_login_required
 def quick_toggle_test_enabled():
-    
+
     payload = get_payload(request)
     res = ReleaseManagerService().toggle_test_enabled(test_id=payload["entityId"], new_state=payload["state"])
     return {
@@ -280,7 +280,7 @@ def quick_toggle_test_enabled():
 @check_roles(UserRoles.Admin)
 @api_login_required
 def quick_toggle_group_enabled():
-    
+
     payload = get_payload(request)
     res = ReleaseManagerService().toggle_group_enabled(group_id=payload["entityId"], new_state=payload["state"])
     return {
@@ -341,6 +341,7 @@ def user_change_password(user_id: str):
         "status": "ok",
         "response": result
     }
+
 
 @bp.route("/user/<string:user_id>/admin/toggle", methods=["POST"])
 @check_roles(UserRoles.Admin)

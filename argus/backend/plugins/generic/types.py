@@ -1,5 +1,6 @@
 from typing import TypedDict
 
+
 class GenericRunSubmitRequest(TypedDict):
     build_id: str
     build_url: str

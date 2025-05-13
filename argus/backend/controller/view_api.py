@@ -48,7 +48,7 @@ def create_view():
     payload = get_payload(request)
     service = UserViewService()
     view = service.create_view(
-        name=payload["name"], 
+        name=payload["name"],
         items=payload["items"],
         widget_settings=payload["settings"],
         description=payload.get("description"),
@@ -131,6 +131,7 @@ def search_tests():
         }
     }
 
+
 @bp.route("/stats", methods=["GET"])
 @api_login_required
 def view_stats():
@@ -151,6 +152,7 @@ def view_stats():
     res.cache_control.max_age = 300
     return res
 
+
 @bp.route("/<string:view_id>/versions", methods=["GET"])
 @api_login_required
 def view_versions(view_id: str):
@@ -160,6 +162,7 @@ def view_versions(view_id: str):
         "status": "ok",
         "response": res
     }
+
 
 @bp.route("/<string:view_id>/resolve", methods=["GET"])
 @api_login_required

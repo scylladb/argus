@@ -22,13 +22,15 @@ from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGeneric
 @pytest.fixture
 def package_data():
     return [
-        PackageVersion(name='scylla-server', version='2024.3.0~dev', date='20241018', revision_id='c3e2bc', build_id='b974e8'),
+        PackageVersion(name='scylla-server', version='2024.3.0~dev',
+                       date='20241018', revision_id='c3e2bc', build_id='b974e8'),
         PackageVersion(name='scylla-manager-server', version='3.2.8', date='20240517', revision_id='', build_id='')
     ]
 
 
 def test_identify_main_package_should_return_most_frequent_package(package_data):
-    packages_list = package_data * 5 + [PackageVersion(name='java-driver', version='3.11.5.3', date='null', revision_id='', build_id='')]
+    packages_list = package_data * 5 + \
+        [PackageVersion(name='java-driver', version='3.11.5.3', date='null', revision_id='', build_id='')]
     main_package = _identify_most_changed_package(packages_list)
     assert main_package == 'scylla-server'
 
@@ -77,6 +79,7 @@ def test_get_sorted_data_for_column_and_row():
     result_data = [{"x": item["x"], "y": item["y"], "changes": item["changes"]} for item in result]
     assert result_data == expected
 
+
 def test_get_min_max_y():
     datasets = [
         {
@@ -121,7 +124,8 @@ def test_coerce_values_to_axis_boundries():
 
 def test_create_chart_options():
     table = ArgusGenericResultMetadata(name="Test Table", description="Test Description",
-                                       columns_meta=[ColumnMetadata(name="col1", unit="ms", type="NUMBER", higher_is_better=True)],
+                                       columns_meta=[ColumnMetadata(name="col1", unit="ms",
+                                                                    type="NUMBER", higher_is_better=True)],
                                        rows_meta=["row1"], validation_rules={})
     column = table.columns_meta[0]
     options = create_chart_options(table, column, min_y=0, max_y=10)
@@ -140,15 +144,19 @@ def test_create_datasets_for_column():
         validation_rules={}
     )
     data = [
-        ArgusGenericResultData(run_id=uuid4(), column="col1", row="row1", value=1.5, status="PASS", sut_timestamp=datetime(2023, 10, 23)),
-        ArgusGenericResultData(run_id=uuid4(), column="col1", row="row1", value=2.5, status="PASS", sut_timestamp=datetime(2023, 10, 24)),
-        ArgusGenericResultData(run_id=uuid4(), column="col1", row="row2", value=3.5, status="PASS", sut_timestamp=datetime(2023, 10, 25)),
+        ArgusGenericResultData(run_id=uuid4(), column="col1", row="row1", value=1.5,
+                               status="PASS", sut_timestamp=datetime(2023, 10, 23)),
+        ArgusGenericResultData(run_id=uuid4(), column="col1", row="row1", value=2.5,
+                               status="PASS", sut_timestamp=datetime(2023, 10, 24)),
+        ArgusGenericResultData(run_id=uuid4(), column="col1", row="row2", value=3.5,
+                               status="PASS", sut_timestamp=datetime(2023, 10, 25)),
     ]
     best_results = {}
     releases_map = {"2024.2": [point.run_id for point in data][:1], "2024.3": [point.run_id for point in data][2:]}
     column = table.columns_meta[0]
     runs_details = RunsDetails(ignored=[], packages={})
-    datasets = create_datasets_for_column(table, data, best_results, releases_map, column, runs_details, main_package="pkg1")
+    datasets = create_datasets_for_column(table, data, best_results, releases_map,
+                                          column, runs_details, main_package="pkg1")
     assert len(datasets) == 2
     labels = [dataset["label"] for dataset in datasets]
     assert "2024.2 - row1" in labels
@@ -183,8 +191,8 @@ def test_create_limit_dataset():
     }
     table = ArgusGenericResultMetadata(name="Test Table", description="Test Description",
                                        columns_meta=[column], rows_meta=[row], validation_rules={
-            "col1": [{"fixed_limit": 1.8, "best_pct": 10, "best_abs": 0.2, "valid_from": datetime(2023, 10, 23)}]
-        })
+                                           "col1": [{"fixed_limit": 1.8, "best_pct": 10, "best_abs": 0.2, "valid_from": datetime(2023, 10, 23)}]
+                                       })
     line_color = 'rgba(255, 0, 0, 1.0)'
     is_fixed_limit_drawn = False
     limit_dataset = create_limit_dataset(points, column, row, best_results, table, line_color, is_fixed_limit_drawn)
@@ -200,7 +208,8 @@ def test_calculate_limits():
         {"x": "2023-10-25T00:00:00Z", "y": 3.5},
     ]
     best_results = [BestResult(key="col1:row1", value=2.0, result_date=datetime(2023, 10, 24), run_id="run2")]
-    validation_rules_list = [ValidationRules(valid_from=datetime(2023, 10, 23), best_pct=10, best_abs=0.2, fixed_limit=1.8)]
+    validation_rules_list = [ValidationRules(valid_from=datetime(
+        2023, 10, 23), best_pct=10, best_abs=0.2, fixed_limit=1.8)]
     higher_is_better = True
     updated_points = calculate_limits(points, best_results, validation_rules_list, higher_is_better)
     for point in updated_points:
@@ -227,6 +236,7 @@ def test_calculate_graph_ticks_with_data_returns_min_max_ticks():
     ticks = calculate_graph_ticks(graphs)
     assert ticks["min"] == "2023-10-22"
     assert ticks["max"] == "2023-10-25"
+
 
 def test_calculate_graph_ticks_without_data_does_not_fail():
     graphs = [

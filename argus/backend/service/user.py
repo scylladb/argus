@@ -20,6 +20,7 @@ from argus.backend.util.common import FlaskView
 class UserServiceException(Exception):
     pass
 
+
 class GithubOrganizationMissingError(Exception):
     pass
 
@@ -96,8 +97,10 @@ class UserService:
             user = User()
             user.username = user_info.get("login")
             # pick only scylladb.com emails
-            scylla_email = next(iter([email.get("email") for email in email_info if email.get("email").endswith("@scylladb.com")]), None)
-            primary_email = next(iter([email.get("email") for email in email_info if email.get("primary") and email.get("verified")]), None)
+            scylla_email = next(iter([email.get("email")
+                                for email in email_info if email.get("email").endswith("@scylladb.com")]), None)
+            primary_email = next(iter([email.get("email")
+                                 for email in email_info if email.get("primary") and email.get("verified")]), None)
             user.email = scylla_email or primary_email
             user.full_name = user_info.get("name", user_info.get("login"))
             user.registration_date = datetime.utcnow()
@@ -145,7 +148,7 @@ class UserService:
     def get_users(self) -> dict:
         users = User.all()
         return {str(user.id): user.to_json() for user in users}
-    
+
     def get_users_privileged(self) -> dict:
         users = User.all()
         users = {str(user.id): dict(user.items()) for user in users}
@@ -197,7 +200,7 @@ class UserService:
 
         return True
 
-    def update_password(self, user: User, old_password: str, new_password: str, force = False):
+    def update_password(self, user: User, old_password: str, new_password: str, force=False):
         if not check_password_hash(user.password, old_password) and not force:
             raise UserServiceException("Incorrect old password")
 

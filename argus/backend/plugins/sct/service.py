@@ -75,7 +75,6 @@ class SCTService:
 
         return "added"
 
-
     @staticmethod
     def process_target_version(run: SCTTestRun, package: PackageVersion):
         if run.version_source and "upgrade-target" in run.version_source and package.name == "scylla-server-target":
@@ -138,10 +137,10 @@ class SCTService:
             if run.gemini_status != "PASSED":
                 run.status = TestStatus.FAILED
                 EventService.create_run_event(kind=ArgusEventTypes.TestRunStatusChanged, body={
-                        "message": "[{username}] Setting run status to {status} due to Gemini reporting following status: {gemini_status}",
-                        "username": g.user.username,
-                        "status": TestStatus.FAILED.value,
-                        "gemini_status": run.gemini_status,
+                    "message": "[{username}] Setting run status to {status} due to Gemini reporting following status: {gemini_status}",
+                    "username": g.user.username,
+                    "status": TestStatus.FAILED.value,
+                    "gemini_status": run.gemini_status,
                 }, user_id=g.user.id, run_id=run_id, release_id=run.release_id, test_id=run.test_id)
                 run.save()
         except SCTTestRun.DoesNotExist as exception:
@@ -173,7 +172,8 @@ class SCTService:
                 return change if delta >= 0 else change * -1
 
             previous_runs = SCTTestRun.get_perf_results_for_test_name(run.build_id, run.start_time, run.test_name)
-            metrics_to_check = ["perf_avg_latency_99th", "perf_avg_latency_mean"] if is_latency_test else ["perf_op_rate_total"]
+            metrics_to_check = ["perf_avg_latency_99th",
+                                "perf_avg_latency_mean"] if is_latency_test else ["perf_op_rate_total"]
 
             older_runs_by_version = {}
             for prev_run in previous_runs:
@@ -192,7 +192,7 @@ class SCTService:
 
             if performance_results["histograms"]:
                 for histogram in performance_results["histograms"]:
-                    run.histograms = { k: PerformanceHDRHistogram(**v) for k, v in histogram.items() }
+                    run.histograms = {k: PerformanceHDRHistogram(**v) for k, v in histogram.items()}
 
             for version, runs in older_runs_by_version.items():
                 for metric in metrics_to_check:
@@ -226,19 +226,19 @@ class SCTService:
                 run.status = TestStatus.FAILED.value
                 run.save()
                 EventService.create_run_event(kind=ArgusEventTypes.TestRunStatusChanged, body={
-                        "message": "[{username}] Setting run status to {status} due to performance metric '{metric}' falling "
-                                   "below allowed threshold ({threshold_negative}): {delta}% compared to "
-                                   "<a href='/test/{test_id}/runs?additionalRuns[]={base_run_id}&additionalRuns[]={previous_run_id}'>This {version} (#{build_number}) run</a>",
-                        "username": g.user.username,
-                        "status": TestStatus.FAILED.value,
-                        "metric": regression_info["metric"],
-                        "threshold_negative": threshold_negative,
-                        "delta": regression_info["delta"],
-                        "test_id": str(run.test_id),
-                        "base_run_id": str(run.id),
-                        "previous_run_id": regression_info["id"],
-                        "version": regression_info["version"],
-                        "build_number": get_build_number(regression_info["job_url"])
+                    "message": "[{username}] Setting run status to {status} due to performance metric '{metric}' falling "
+                    "below allowed threshold ({threshold_negative}): {delta}% compared to "
+                    "<a href='/test/{test_id}/runs?additionalRuns[]={base_run_id}&additionalRuns[]={previous_run_id}'>This {version} (#{build_number}) run</a>",
+                    "username": g.user.username,
+                    "status": TestStatus.FAILED.value,
+                    "metric": regression_info["metric"],
+                    "threshold_negative": threshold_negative,
+                    "delta": regression_info["delta"],
+                    "test_id": str(run.test_id),
+                    "base_run_id": str(run.id),
+                    "previous_run_id": regression_info["id"],
+                    "version": regression_info["version"],
+                    "build_number": get_build_number(regression_info["job_url"])
                 }, user_id=g.user.id, run_id=run_id, release_id=run.release_id, test_id=run.test_id)
             else:
                 # NOTE: This will override status set by SCT Events.
@@ -255,12 +255,12 @@ class SCTService:
     def get_performance_history_for_test(run_id: str):
         try:
             run: SCTTestRun = SCTTestRun.get(id=run_id)
-            rows = run.get_perf_results_for_test_name(build_id=run.build_id, start_time=run.start_time, test_name=run.test_name)
+            rows = run.get_perf_results_for_test_name(
+                build_id=run.build_id, start_time=run.start_time, test_name=run.test_name)
             return rows
         except SCTTestRun.DoesNotExist as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
             raise SCTServiceException("Run not found", run_id) from exception
-
 
     @staticmethod
     def create_resource(run_id: str, resource_details: dict) -> str:
@@ -323,7 +323,7 @@ class SCTService:
     def terminate_resource(run_id: str, resource_name: str, reason: str) -> str:
         try:
             run: SCTTestRun = SCTTestRun.get(id=run_id)
-            if "sct-runner" in resource_name: # FIXME: Temp solution until sct-runner name is propagated on submit
+            if "sct-runner" in resource_name:  # FIXME: Temp solution until sct-runner name is propagated on submit
                 resource = next(res for res in run.get_resources() if "sct-runner" in res.name)
             else:
                 resource = next(res for res in run.get_resources() if res.name == resource_name)
@@ -447,7 +447,7 @@ class SCTService:
         """
         error_embeddings = ErrorEventEmbeddings.filter(run_id=run_id).only(["event_index", "similars_map"]).all()
         critical_embeddings = CriticalEventEmbeddings.filter(run_id=run_id).only(["event_index", "similars_map"]).all()
-        
+
         result = []
         # Process ERROR embeddings
         for embedding in error_embeddings:
@@ -458,7 +458,7 @@ class SCTService:
                     "similars_set": [str(similar_run_id) for similar_run_id in embedding.similars_map],
                 }
             )
-        
+
         # Process CRITICAL embeddings
         for embedding in critical_embeddings:
             result.append(
@@ -468,7 +468,7 @@ class SCTService:
                     "similars_set": [str(similar_run_id) for similar_run_id in embedding.similars_map],
                 }
             )
-            
+
         return result
 
     @staticmethod
@@ -497,11 +497,13 @@ class SCTService:
                         test_run.build_job_url[:-1].split("/")[-1]
                     )
                 except Exception as e:
-                    LOGGER.error(f"Error parsing build number for run {run_id}: {test_run.build_job_url[:-1].split("/")} - {str(e)}")
+                    LOGGER.error(
+                        f"Error parsing build number for run {run_id}: {test_run.build_job_url[:-1].split("/")} - {str(e)}")
                     build_number = -1
 
                 for pkg_name in ["scylla-server-upgraded", "scylla-server", "scylla-server-target"]:
-                    sut_version = next((f"{pkg.version}-{pkg.date}" for pkg in test_run.packages if pkg.name == pkg_name), None)
+                    sut_version = next(
+                        (f"{pkg.version}-{pkg.date}" for pkg in test_run.packages if pkg.name == pkg_name), None)
                     if sut_version:
                         break
                 result[run_id] = {
@@ -560,7 +562,7 @@ class SCTService:
             "versions": kernels_by_version,
             "metadata": kernel_metadata
         }
-    
+
     @staticmethod
     def junit_submit(run_id: str, file_name: str, content: str) -> bool:
         try:
@@ -572,7 +574,7 @@ class SCTService:
         report = SCTJunitReports()
         report.test_id = run_id
         report.file_name = file_name
-        
+
         xml_content = str(base64.decodebytes(bytes(content, encoding="utf-8")), encoding="utf-8")
         try:
             _ = ElementTree.fromstring(xml_content)
@@ -587,7 +589,7 @@ class SCTService:
     @staticmethod
     def junit_get_all(run_id: str) -> list[SCTJunitReports]:
         return list(SCTJunitReports.filter(test_id=run_id).all())
-    
+
     @staticmethod
     def junit_get_single(run_id: str, file_name: str) -> SCTJunitReports:
         return SCTJunitReports.get(test_id=run_id, file_name=file_name)

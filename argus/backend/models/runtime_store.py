@@ -2,6 +2,7 @@ from datetime import datetime, time
 from cassandra.cqlengine.models import Model
 from cassandra.cqlengine import columns
 
+
 class RuntimeStore(Model):
     """
         This model provides a way for the application to store configuration
@@ -55,4 +56,3 @@ class RuntimeStore(Model):
             case "boolean": self.value_boolean = v
             case "datetime": self.value_date = v
         self.value_type = type_name
-

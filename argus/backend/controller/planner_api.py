@@ -72,6 +72,7 @@ def search_tests():
         }
     }
 
+
 @bp.route("/group/<string:group_id>/explode", methods=["GET"])
 @api_login_required
 def explode_group(group_id: str):
@@ -128,6 +129,7 @@ def update_plan():
         "response": result
     }
 
+
 @bp.route("/plan/copy", methods=["POST"])
 @api_login_required
 def copy_plan():
@@ -139,7 +141,6 @@ def copy_plan():
         "status": "ok",
         "response": result
     }
-
 
 
 @bp.route("/plan/<string:plan_id>/delete", methods=["DELETE"])
@@ -176,6 +177,7 @@ def resolve_plan_entities(plan_id: str):
         "status": "ok",
         "response": result,
     }
+
 
 @bp.route("/plan/trigger", methods=["POST"])
 @api_login_required

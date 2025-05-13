@@ -14,18 +14,17 @@ setup_application_logging(log_level=logging.INFO)
 def migrate():
     old_issues: list[ArgusGithubIssue] = list(ArgusGithubIssue.all())
     total = len(old_issues)
-    inserted = {
-
-    }
+    inserted = {}
     done = 0
     for idx, old_issue in enumerate(old_issues):
-        LOGGER.info("[%s/%s] Migrating %s/%s#%s attached to %s...",
-            idx+1,
+        LOGGER.info(
+            "[%s/%s] Migrating %s/%s#%s attached to %s...",
+            idx + 1,
             total,
             old_issue.owner,
             old_issue.repo,
-            old_issue.issue_number, 
-            old_issue.run_id
+            old_issue.issue_number,
+            old_issue.run_id,
         )
         key = f"{old_issue.owner}/{old_issue.repo}#{old_issue.issue_number}"
         if not (i := inserted.get(key)):
@@ -54,13 +53,9 @@ def migrate():
         l.test_id = old_issue.test_id
 
         l.save()
-        LOGGER.info("[%s/%s] Migrated",
-            idx+1,
-            total
-        )
+        LOGGER.info("[%s/%s] Migrated", idx + 1, total)
 
     LOGGER.info("Migration complete. Consolidated %s issues into %s.", total, done)
-
 
 
 if __name__ == "__main__":

@@ -19,6 +19,7 @@ from argus.common.enums import TestStatus
 
 LOGGER = logging.getLogger(__name__)
 
+
 class DriverMatrixPluginError(Exception):
     pass
 
@@ -92,6 +93,7 @@ def generic_adapter(xml: ElementTree.ElementTree) -> AdaptedXUnitData:
         "timestamp": datetime.utcnow().isoformat()
     }
 
+
 class DriverTestRun(PluginModelBase):
     _plugin_name = "driver-matrix-tests"
     __table_name__ = "driver_test_run"
@@ -107,7 +109,6 @@ class DriverTestRun(PluginModelBase):
         "python": python_driver_matrix_adapter,
         "gocql": gocql_driver_matrix_adapter,
     }
-
 
     _artifact_fnames = {
         "cpp": r"TEST-(?P<driver_name>[\w]*)-(?P<version>[\d\.-]*)",
@@ -149,7 +150,6 @@ class DriverTestRun(PluginModelBase):
                 return driver_info["driver_name"]
         return "unknown_driver"
 
-
     @classmethod
     def submit_run(cls, request_data: dict) -> 'DriverTestRun':
         if request_data["schema_version"] == "v2":
@@ -184,7 +184,6 @@ class DriverTestRun(PluginModelBase):
 
         run.save()
         return run
-
 
     @classmethod
     def submit_driver_failure(cls, run_id: UUID, driver_name: str, driver_type: TestTypeType, fail_message: str):
@@ -281,7 +280,8 @@ class DriverTestRun(PluginModelBase):
 
         driver_info = self.get_driver_info(name, test_type)
         test_collection = TestCollection()
-        test_collection.timestamp = datetime.fromisoformat(adapted_data["timestamp"][0:-1] if adapted_data["timestamp"][-1] == "Z" else adapted_data["timestamp"])
+        test_collection.timestamp = datetime.fromisoformat(
+            adapted_data["timestamp"][0:-1] if adapted_data["timestamp"][-1] == "Z" else adapted_data["timestamp"])
         test_collection.name = name
         test_collection.driver = driver_info.get("driver_name")
         test_collection.tests_total = 0

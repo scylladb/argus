@@ -14,7 +14,8 @@ def test_initialization(argus_db):
         name="Test Metadata",
         description="A test description",
         columns_meta=[{"name": "col1", "unit": "ms", "type": "float", "higher_is_better": True}],
-        validation_rules={"col1": [{"valid_from": datetime.now(timezone.utc), "best_pct": 90.0, "best_abs": 100.0, "fixed_limit": 50.0}]},
+        validation_rules={"col1": [{"valid_from": datetime.now(
+            timezone.utc), "best_pct": 90.0, "best_abs": 100.0, "fixed_limit": 50.0}]},
         rows_meta=["row1", "row2"]
     )
     assert metadata.name == "Test Metadata"
@@ -28,7 +29,8 @@ def test_update_validation_rules():
         test_id=generate_random_test_id(),
         name="Test Metadata",
         columns_meta=[{"name": "col1", "unit": "ms", "type": "float", "higher_is_better": True}],
-        validation_rules={"col1": [{"valid_from": datetime.now(timezone.utc), "best_pct": 90.0, "best_abs": 100.0, "fixed_limit": 50.0}]},
+        validation_rules={"col1": [{"valid_from": datetime.now(
+            timezone.utc), "best_pct": 90.0, "best_abs": 100.0, "fixed_limit": 50.0}]},
         rows_meta=["row1", "row2"]
     )
     new_rules = {"col1": {"best_pct": 95.0, "best_abs": 105.0, "fixed_limit": 55.0}}
@@ -43,7 +45,8 @@ def test_update_if_changed():
         test_id=generate_random_test_id(),
         name="Test Metadata",
         columns_meta=[{"name": "col1", "unit": "ms", "type": "float", "higher_is_better": True}],
-        validation_rules={"col1": [{"valid_from": datetime.now(timezone.utc), "best_pct": 90.0, "best_abs": 100.0, "fixed_limit": 50.0}]},
+        validation_rules={"col1": [{"valid_from": datetime.now(
+            timezone.utc), "best_pct": 90.0, "best_abs": 100.0, "fixed_limit": 50.0}]},
         rows_meta=["row1", "row2"]
     )
     new_data = {
@@ -66,7 +69,8 @@ def test_no_update_on_same_data():
         test_id=generate_random_test_id(),
         name="Test Metadata",
         columns_meta=[{"name": "col1", "unit": "ms", "type": "float", "higher_is_better": True}],
-        validation_rules={"col1": [{"valid_from": datetime.now(timezone.utc), "best_pct": 90.0, "best_abs": 100.0, "fixed_limit": 50.0}]},
+        validation_rules={"col1": [{"valid_from": datetime.now(
+            timezone.utc), "best_pct": 90.0, "best_abs": 100.0, "fixed_limit": 50.0}]},
         rows_meta=["row1", "row2"]
     )
     new_data = {
@@ -85,7 +89,8 @@ def test_adding_new_rows():
         test_id=generate_random_test_id(),
         name="Test Metadata",
         columns_meta=[{"name": "col1", "unit": "ms", "type": "float", "higher_is_better": True}],
-        validation_rules={"col1": [{"valid_from": datetime.now(timezone.utc), "best_pct": 90.0, "best_abs": 100.0, "fixed_limit": 50.0}]},
+        validation_rules={"col1": [{"valid_from": datetime.now(
+            timezone.utc), "best_pct": 90.0, "best_abs": 100.0, "fixed_limit": 50.0}]},
         rows_meta=["row1"]
     )
     new_data = {"rows_meta": ["row2", "row3"]}

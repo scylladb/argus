@@ -109,7 +109,8 @@ class SCTTestRun(PluginModelBase):
     perf_total_errors = columns.Double()
     stress_cmd = columns.Text()
 
-    histograms = columns.List(value_type=columns.Map(key_type=columns.Text(), value_type=columns.UserDefinedType(user_type=PerformanceHDRHistogram)))
+    histograms = columns.List(value_type=columns.Map(key_type=columns.Text(
+    ), value_type=columns.UserDefinedType(user_type=PerformanceHDRHistogram)))
     test_method = columns.Ascii()
 
     @classmethod

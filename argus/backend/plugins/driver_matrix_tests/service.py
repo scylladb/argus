@@ -8,6 +8,7 @@ from argus.backend.plugins.driver_matrix_tests.model import DriverTestRun
 
 LOGGER = logging.getLogger(__name__)
 
+
 class DriverMatrixService:
     def tested_versions_report(self, build_id: str) -> dict:
         db = ScyllaCluster.get()
@@ -23,8 +24,8 @@ class DriverMatrixService:
             test: ArgusTest = ArgusTest.get(id=latest["test_id"])
             release: ArgusRelease = ArgusRelease.get(id=latest["release_id"])
         except (ArgusTest.DoesNotExist, ArgusRelease.DoesNotExist):
-            raise Exception(f"Unable to find release and test information for build_id {build_id} and run_id {latest['id']}", build_id, latest["id"])
-        
+            raise Exception(
+                f"Unable to find release and test information for build_id {build_id} and run_id {latest['id']}", build_id, latest["id"])
 
         version_map = {}
 

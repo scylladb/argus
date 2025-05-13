@@ -98,14 +98,14 @@ def test_can_track_validation_rules_changes(fake_test, client_service, results_s
     for cell in sample_data:
         if cell.column == "text col name" or cell.column == "non tracked col name":
             assert actual_cells[cell.column][cell.row][
-                       'value'] == cell.value, f"Expected {cell.value} but got {actual_cells[cell.column][cell.row]['value']}"
+                'value'] == cell.value, f"Expected {cell.value} but got {actual_cells[cell.column][cell.row]['value']}"
             assert actual_cells[cell.column][cell.row][
-                       'status'] == "UNSET", f"Expected ERROR for {cell.column} but got {actual_cells[cell.column][cell.row]['status']}"
+                'status'] == "UNSET", f"Expected ERROR for {cell.column} but got {actual_cells[cell.column][cell.row]['status']}"
         else:
             assert actual_cells[cell.column][cell.row][
-                       'value'] == cell.value, f"Expected {cell.value} but got {actual_cells[cell.column][cell.row]['value']}"
+                'value'] == cell.value, f"Expected {cell.value} but got {actual_cells[cell.column][cell.row]['value']}"
             assert actual_cells[cell.column][cell.row][
-                       'status'] == "ERROR", f"Expected ERROR for {cell.column} but got {actual_cells[cell.column][cell.row]['status']}"
+                'status'] == "ERROR", f"Expected ERROR for {cell.column} but got {actual_cells[cell.column][cell.row]['status']}"
 
     # new best result appears
     run_type, run = get_fake_test_run(test=fake_test)
@@ -127,14 +127,14 @@ def test_can_track_validation_rules_changes(fake_test, client_service, results_s
     for cell in sample_data:
         if cell.column == "text col name" or cell.column == "non tracked col name":
             assert actual_cells[cell.column][cell.row][
-                       'value'] == cell.value, f"Expected {cell.value} but got {actual_cells[cell.column][cell.row]['value']}"
+                'value'] == cell.value, f"Expected {cell.value} but got {actual_cells[cell.column][cell.row]['value']}"
             assert actual_cells[cell.column][cell.row][
-                       'status'] == "UNSET", f"Expected PASS for {cell.column} but got {actual_cells[cell.column][cell.row]['status']}"
+                'status'] == "UNSET", f"Expected PASS for {cell.column} but got {actual_cells[cell.column][cell.row]['status']}"
         else:
             assert actual_cells[cell.column][cell.row][
-                       'value'] == cell.value, f"Expected {cell.value} but got {actual_cells[cell.column][cell.row]['value']}"
+                'value'] == cell.value, f"Expected {cell.value} but got {actual_cells[cell.column][cell.row]['value']}"
             assert actual_cells[cell.column][cell.row][
-                       'status'] == "PASS", f"Expected PASS for {cell.column} but got {actual_cells[cell.column][cell.row]['status']}"
+                'status'] == "PASS", f"Expected PASS for {cell.column} but got {actual_cells[cell.column][cell.row]['status']}"
 
     # validation should be now with new best results
     run_type, run = get_fake_test_run(test=fake_test)
@@ -157,14 +157,14 @@ def test_can_track_validation_rules_changes(fake_test, client_service, results_s
     for cell in sample_data:
         if cell.column == "text col name" or cell.column == "non tracked col name":
             assert actual_cells[cell.column][cell.row][
-                       'value'] == cell.value, f"Expected {cell.value} but got {actual_cells[cell.column][cell.row]['value']}"
+                'value'] == cell.value, f"Expected {cell.value} but got {actual_cells[cell.column][cell.row]['value']}"
             assert actual_cells[cell.column][cell.row][
-                       'status'] == "UNSET", f"Expected ERROR for {cell.column} but got {actual_cells[cell.column][cell.row]['status']}"
+                'status'] == "UNSET", f"Expected ERROR for {cell.column} but got {actual_cells[cell.column][cell.row]['status']}"
         else:
             assert actual_cells[cell.column][cell.row][
-                       'value'] == cell.value, f"Expected {cell.value} but got {actual_cells[cell.column][cell.row]['value']}"
+                'value'] == cell.value, f"Expected {cell.value} but got {actual_cells[cell.column][cell.row]['value']}"
             assert actual_cells[cell.column][cell.row][
-                       'status'] == "ERROR", f"Expected ERROR for {cell.column} but got {actual_cells[cell.column][cell.row]['status']}"
+                'status'] == "ERROR", f"Expected ERROR for {cell.column} but got {actual_cells[cell.column][cell.row]['status']}"
 
     # applying new validation rules should be taken into account for next results, new rules are less strict
     # duration col name rule is removed and 'non tracked col name' has new fixed limit
@@ -174,8 +174,10 @@ def test_can_track_validation_rules_changes(fake_test, client_service, results_s
             description = "Test Table Description"
             Columns = [ColumnMetadata(name="h_is_better", unit="ms", type=ResultType.FLOAT, higher_is_better=True),
                        ColumnMetadata(name="l_is_better", unit="ms", type=ResultType.INTEGER, higher_is_better=False),
-                       ColumnMetadata(name="duration col name", unit="s", type=ResultType.DURATION, higher_is_better=False),
-                       ColumnMetadata(name="non tracked col name", unit="", type=ResultType.FLOAT, higher_is_better=True),
+                       ColumnMetadata(name="duration col name", unit="s",
+                                      type=ResultType.DURATION, higher_is_better=False),
+                       ColumnMetadata(name="non tracked col name", unit="",
+                                      type=ResultType.FLOAT, higher_is_better=True),
                        ColumnMetadata(name="text col name", unit="", type=ResultType.TEXT),
                        ]
             ValidationRules = {"h_is_better": ValidationRule(best_abs=100),
@@ -199,13 +201,13 @@ def test_can_track_validation_rules_changes(fake_test, client_service, results_s
     run_results = results_service.get_run_results(fake_test.id, UUID(run.run_id))
     actual_cells = results_to_dict(run_results[0])
     for cell in sample_data:
-        if cell.column == "text col name" :
+        if cell.column == "text col name":
             assert actual_cells[cell.column][cell.row][
-                       'value'] == cell.value, f"Expected {cell.value} but got {actual_cells[cell.column][cell.row]['value']}"
+                'value'] == cell.value, f"Expected {cell.value} but got {actual_cells[cell.column][cell.row]['value']}"
             assert actual_cells[cell.column][cell.row][
-                       'status'] == "UNSET", f"Expected UNSET for {cell.column} but got {actual_cells[cell.column][cell.row]['status']}"
+                'status'] == "UNSET", f"Expected UNSET for {cell.column} but got {actual_cells[cell.column][cell.row]['status']}"
         else:
             assert actual_cells[cell.column][cell.row][
-                       'value'] == cell.value, f"Expected {cell.value} but got {actual_cells[cell.column][cell.row]['value']}"
+                'value'] == cell.value, f"Expected {cell.value} but got {actual_cells[cell.column][cell.row]['value']}"
             assert actual_cells[cell.column][cell.row][
-                       'status'] == "PASS", f"Expected PASS for {cell.column} but got {actual_cells[cell.column][cell.row]['status']}"
+                'status'] == "PASS", f"Expected PASS for {cell.column} but got {actual_cells[cell.column][cell.row]['status']}"

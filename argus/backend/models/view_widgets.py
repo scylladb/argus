@@ -15,6 +15,7 @@ class WidgetHighlights(Model):
     completed = columns.Boolean(default=lambda: None)  # None means it's highlight, not an action item
     comments_count = columns.TinyInt()
 
+
 class WidgetComment(Model):
     view_id = columns.UUID(partition_key=True, required=True)
     index = columns.Integer(partition_key=True, required=True)

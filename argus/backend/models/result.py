@@ -25,7 +25,8 @@ class ArgusGenericResultMetadata(Model):
     name = columns.Text(required=True, primary_key=True)
     description = columns.Text()
     columns_meta = columns.List(value_type=columns.UserDefinedType(ColumnMetadata))
-    validation_rules = columns.Map(key_type=columns.Ascii(), value_type=columns.List(columns.UserDefinedType(ValidationRules)))
+    validation_rules = columns.Map(key_type=columns.Ascii(
+    ), value_type=columns.List(columns.UserDefinedType(ValidationRules)))
     rows_meta = columns.List(value_type=columns.Ascii())
     sut_package_name = columns.Ascii()
 
@@ -38,7 +39,8 @@ class ArgusGenericResultMetadata(Model):
                 if not isinstance(rule, list):
                     rule['valid_from'] = datetime.now(timezone.utc)
                     validation_rules[column] = [rule]
-            kwargs["validation_rules"] = {k: [ValidationRules(**rules) for rules in v] for k, v in validation_rules.items()}
+            kwargs["validation_rules"] = {k: [ValidationRules(**rules)
+                                              for rules in v] for k, v in validation_rules.items()}
         super().__init__(**kwargs)
 
     def update_validation_rules(self, new_rules: dict) -> "ArgusGenericResultMetadata":
@@ -173,10 +175,12 @@ class ArgusBestResultData(Model):
     value = columns.Double()
     run_id = columns.UUID()
 
+
 class ArgusGraphView(Model):
     __table_name__ = "graph_view_v1"
     test_id = columns.UUID(partition_key=True)
     id = columns.UUID(primary_key=True)
     name = columns.Text()
     description = columns.Text()
-    graphs = columns.Map(key_type=columns.Text(), value_type=columns.Ascii())  # key: graph name, value: graph properties (e.g. size)
+    # key: graph name, value: graph properties (e.g. size)
+    graphs = columns.Map(key_type=columns.Text(), value_type=columns.Ascii())

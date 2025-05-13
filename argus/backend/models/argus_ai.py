@@ -1,6 +1,7 @@
 from cassandra.cqlengine import columns
 from cassandra.cqlengine.models import Model
 
+
 class ErrorEventEmbeddings(Model):
     __table_name__ = "error_event_embeddings"
     run_id = columns.UUID(partition_key=True)
@@ -10,6 +11,7 @@ class ErrorEventEmbeddings(Model):
     columns.BaseCollectionColumn._freeze_db_type(embedding)
     similars_map = columns.Map(key_type=columns.UUID(), value_type=columns.Integer())
     columns.BaseCollectionColumn._freeze_db_type(similars_map)
+
 
 class CriticalEventEmbeddings(Model):
     __table_name__ = "critical_event_embeddings"
