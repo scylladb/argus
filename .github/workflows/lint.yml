@@ -22,18 +22,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Python 3.12
+      - name: Install poetry
+        run: pip install poetry
+
+      - name: Setup Python
+        id: setup-python
         uses: actions/setup-python@v4
         with:
           python-version: '3.12'
-
-      - name: Install Poetry
-        uses: snok/install-poetry@76e04a911780d5b312d89783f7b1cd627778900a
-        with:
-          version: '1.8.3'
+          cache: "poetry"
+          cache-dependency-path: "pyproject.toml"
 
       - name: Install project dependencies
-        run: poetry install --with dev
+        run: poetry install --with web-backend,dev
 
       - name: Run precommit hooks
         run: poetry run pre-commit run --all-files
