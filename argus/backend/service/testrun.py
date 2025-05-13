@@ -4,11 +4,15 @@ from functools import reduce
 import json
 import logging
 import re
+from sys import prefix
 import time
 from typing import Any
 from uuid import UUID
 
-from flask import g
+import boto3
+import magic
+import requests
+from flask import current_app, g
 from cassandra.query import BatchStatement, ConsistencyLevel
 from cassandra.cqlengine.query import BatchQuery
 from argus.backend.db import ScyllaCluster
@@ -28,6 +32,8 @@ from argus.backend.plugins.core import PluginInfoBase, PluginModelBase
 
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS
 from argus.backend.events.event_processors import EVENT_PROCESSORS
+from argus.backend.plugins.sct.testrun import SCTTestRun
+from argus.backend.plugins.sirenada.model import SirenadaRun
 from argus.backend.service.event_service import EventService
 from argus.backend.service.notification_manager import NotificationManagerService
 from argus.backend.service.stats import ComparableTestStatus
@@ -50,6 +56,8 @@ class TestRunService:
 
     def __init__(self) -> None:
         self.notification_manager = NotificationManagerService()
+        self.s3 = boto3.client(service_name="s3", aws_access_key_id=current_app.config.get(
+            "AWS_CLIENT_ID"), aws_secret_access_key=current_app.config.get("AWS_CLIENT_SECRET"))
 
     def get_plugin(self, plugin_name: str) -> PluginInfoBase | None:
         return self.plugins.get(plugin_name)
@@ -127,6 +135,71 @@ class TestRunService:
             "test_run_id": run.id,
             "status": new_status
         }
+
+    @staticmethod
+    def _match_s3_link(link: str) -> re.Match:
+        return re.match(r"(https:\/\/)?(?P<bucket>[\w\-]*)\.s3(?P<region>\.[\w\-\d]*)?\.amazonaws.com\/(?P<key>.+)", link)
+
+    def get_log(self, plugin_name: str, run_id: UUID, log_name: str):
+        plugin = self.get_plugin(plugin_name=plugin_name)
+        run: PluginModelBase = plugin.model.get(id=run_id)
+
+        link = {log[0]: log[1] for log in run.logs}.get(log_name)
+        if not link:
+            raise TestRunServiceException(f"Log name {log_name} not found.")
+        match = self._match_s3_link(link)
+        if not match:
+            return link
+        presigned_url = self.s3.generate_presigned_url(ClientMethod="get_object", Params={
+                                                       "Bucket": match.group("bucket"), "Key": match.group("key")}, ExpiresIn=3600)
+
+        return presigned_url
+
+    def resolve_artifact_size(self, link: str):
+
+        match = self._match_s3_link(link)
+
+        if not match:
+            res = requests.head(link)
+            if res.status_code != 200:
+                raise Exception("Error requesting resource")
+
+            length = res.headers.get("Content-Length")
+            if length:
+                length = int(length)
+
+            return length
+
+        obj = self.s3.get_object(Bucket=match.group("bucket"), Key=match.group("key"))
+        return obj["ContentLength"]
+
+    def proxy_stored_s3_image(self, plugin_name: str, run_id: UUID | str, image_name: str):
+        plugin = self.get_plugin(plugin_name=plugin_name)
+        run: SCTTestRun | SirenadaRun = plugin.model.get(id=run_id)
+        match run:
+            case SCTTestRun():
+                screenshot = {scr.split("/")[-1]: scr for scr in run.screenshots}.get(image_name)
+            case SirenadaRun():
+                screenshot = {
+                    scr.split("/")[-1]: scr for scr in [result.screenshot_file for result in run.results]}.get(image_name)
+
+        match = self._match_s3_link(screenshot)
+        if not match:
+            return screenshot
+
+        return self.s3.generate_presigned_url(ClientMethod="get_object", Params={"Bucket": match.group("bucket"), "Key": match.group("key")}, ExpiresIn=3600)
+
+    def proxy_s3_image(self, bucket_name: str, bucket_path: str):
+        if bucket_name not in current_app.config.get("S3_ALLOWED_BUCKETS", []):
+            raise TestRunServiceException(f"{bucket_name} is not an allowed S3 bucket to pull from")
+
+        obj = self.s3.get_object(Bucket=bucket_name, Key=bucket_path)
+        header = obj["Body"].read(1024)
+        mime = magic.from_buffer(header, mime=True)
+        if "image" not in mime.lower():
+            raise TestRunServiceException(f"Cannot proxy a non-image file: {mime}", mime)
+
+        return self.s3.generate_presigned_url(ClientMethod="get_object", Params={"Bucket": bucket_name, "Key": bucket_path}, ExpiresIn=600)
 
     def change_run_investigation_status(self, test_id: UUID, run_id: UUID, new_status: TestInvestigationStatus):
         test = ArgusTest.get(id=test_id)

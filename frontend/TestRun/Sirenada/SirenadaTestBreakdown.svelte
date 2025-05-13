@@ -8,8 +8,10 @@
     import Fa from "svelte-fa";
     import { faBucket, faCircleExclamation } from "@fortawesome/free-solid-svg-icons";
     import { Collapse } from "bootstrap";
+    import { createScreenshotUrl } from "../../Common/RunUtils";
 
     export let testRun = {};
+    export let testInfo = {};
 
 
     let resultsByBrowser = {};
@@ -47,8 +49,8 @@
                 return lhs - rhs;
             }
         );
-        return sortedStatus
-    }
+        return sortedStatus;
+    };
 
     const calculateStatus = function(resultList) {
         return sortedStatusMap(resultList)[0];
@@ -181,7 +183,7 @@
                                                                 <div class="mb-2 p-2">
                                                                     <h6>Screenshot</h6>
                                                                     <div>
-                                                                        <img src="{result.screenshot_file}" alt="Screenshot" style="width: 256px;">
+                                                                        <img src="{createScreenshotUrl(testInfo.test.plugin_name, testRun.id, result.screenshot_file)}" alt="Screenshot" style="width: 256px;">
                                                                     </div>
                                                                 </div>
                                                                 {#if result.message}

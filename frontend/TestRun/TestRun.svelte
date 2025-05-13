@@ -386,7 +386,7 @@
                     id="nav-screenshots-{runId}"
                     role="tabpanel"
                 >
-                    <Screenshots screenshots={testRun.screenshots} />
+                    <Screenshots {testInfo} runId={testRun.id} screenshots={testRun.screenshots} />
                 </div>
                 <div
                     class="tab-pane fade"
@@ -464,7 +464,7 @@
                     role="tabpanel"
                 >
                     {#if visitedTabs["logs"]}
-                        <ArtifactTab {testRun} on:refreshRequest={fetchTestRunData} />
+                        <ArtifactTab {testRun} {testInfo} on:refreshRequest={fetchTestRunData} />
                     {/if}
                 </div>
                 <div

@@ -220,7 +220,7 @@
                     id="nav-results-{runId}"
                     role="tabpanel"
                 >
-                    <SirenadaTestBreakdown {testRun} />
+                    <SirenadaTestBreakdown {testRun} {testInfo}/>
                 </div>
                 <div
                     class="tab-pane fade"

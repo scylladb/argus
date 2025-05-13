@@ -16,7 +16,7 @@
     <div class="screenshot-modal">
         <div class="text-end">
             <div class="d-inline-block screenshot-button">
-                <a href={selectedScreenshot} target="_blank">
+                <a href="{selectedScreenshot}?download=1" target="_blank">
                     <Fa color="#a0a0a0" icon={faFileDownload}/>
                 </a>
             </div>
