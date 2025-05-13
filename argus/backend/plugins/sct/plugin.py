@@ -17,7 +17,6 @@ from argus.backend.plugins.sct.udt import (
 
 
 class PluginInfo(PluginInfoBase):
-    # pylint: disable=too-few-public-methods
     name: str = "scylla-cluster-tests"
     model: PluginModelBase = SCTTestRun
     controller: Blueprint = sct_bp

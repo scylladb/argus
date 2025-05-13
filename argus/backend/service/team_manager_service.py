@@ -13,7 +13,6 @@ class TeamManagerException(Exception):
 
 
 class TeamManagerService:
-    # pylint: disable=no-self-use
     def __init__(self, database: ScyllaCluster | None = None) -> None:
         if not database:
             database = ScyllaCluster.get()

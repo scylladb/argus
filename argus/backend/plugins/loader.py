@@ -5,7 +5,6 @@ from argus.backend.plugins.core import PluginModelBase
 
 
 class PluginModule(typing.Protocol):
-    # pylint: disable=too-few-public-methods
     PluginInfo: PluginInfoBase
 
 

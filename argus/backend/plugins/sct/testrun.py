@@ -164,7 +164,7 @@ class SCTTestRun(PluginModelBase):
         except _DoesNotExist:
             run.assignee = None
         run.start_time = datetime.utcnow()
-        run.id = UUID(req.run_id)  # pylint: disable=invalid-name
+        run.id = UUID(req.run_id)
         run.scm_revision_id = req.commit_id
         if req.origin_url:
             run.origin_url = req.origin_url

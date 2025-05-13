@@ -155,5 +155,5 @@ class EmailNotificationServiceSender(NotificationSenderBase):
             self.email.send(subject=f"Argus Notification - {subject}",
                             content=email_content,
                             recipients=[receiver_user.email])
-        except Exception as details:  # pylint: disable=broad-except
+        except Exception as details:
             current_app.logger.error("Failed to send email: %s", details)

@@ -32,13 +32,6 @@ repos:
         language: system
         types: [python]
 
-    -   id: pylint
-        name: pylint
-        entry: pylint -j 2
-        language: system
-        exclude: docker/alternator-dns/*
-        types: [python]
-
 - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
   rev: v2.2.1
   hooks:

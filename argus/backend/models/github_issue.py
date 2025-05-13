@@ -27,7 +27,6 @@ class IssueAssignee(UserType):
 
 
 class GithubIssue(Model):
-    # pylint: disable=too-many-instance-attributes
     id = columns.UUID(primary_key=True, default=uuid4, partition_key=True)
     user_id = columns.UUID(index=True)  # Internal Argus UserId
     type = columns.Text()  # Can be: issues, pulls
