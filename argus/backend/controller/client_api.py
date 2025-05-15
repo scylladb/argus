@@ -107,3 +107,14 @@ def run_finalize(run_type: str, run_id: str):
 def submit_results(run_type: str, run_id: str):
     payload = get_payload(request)
     return ClientService().submit_results(run_type=run_type, run_id=run_id, results=payload)
+
+
+@bp.route("/testrun/pytest/result/submit", methods=["POST"])
+@api_login_required
+def submit_pytest_result():
+    payload = get_payload(request)
+    result = ClientService().submit_pytest_result(request_data=payload)
+    return {
+        "status": "ok",
+        "response": result
+    }
