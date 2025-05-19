@@ -4,7 +4,7 @@
     import User from "../Profile/User.svelte";
     import { userList } from "../Stores/UserlistSubscriber";
     import { filterUser } from "../Common/SelectUtils";
-
+    export let user;
     const dispatch = createEventDispatcher();
     let users = {};
     $: users = $userList;
@@ -16,6 +16,7 @@
 
 <div class="w-100">
     <Select
+        value={user}
         itemFilter={filterUser}
         placeholder="Filter..."
         labelIdentifier="username"

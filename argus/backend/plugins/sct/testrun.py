@@ -8,7 +8,7 @@ from uuid import UUID
 from cassandra.cqlengine import columns
 from cassandra.cqlengine.models import _DoesNotExist, Model
 from argus.backend.db import ScyllaCluster
-from argus.backend.models.web import ArgusRelease
+from argus.backend.models.web import ArgusRelease, ArgusTest
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.sct.resource_setup import ResourceSetup
 from argus.backend.plugins.sct.udt import (
@@ -20,6 +20,7 @@ from argus.backend.plugins.sct.udt import (
     PackageVersion,
     PerformanceHDRHistogram
 )
+from argus.backend.util.common import chunk
 
 LOGGER = logging.getLogger(__name__)
 SCT_REGION_PROPERTY_MAP = {
@@ -116,7 +117,7 @@ class SCTTestRun(PluginModelBase):
     @classmethod
     def _stats_query(cls) -> str:
         return ("SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, "
-                f"assignee, end_time, investigation_status, heartbeat, scylla_version FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT 15")
+                f"assignee, end_time, investigation_status, heartbeat, scylla_version, cloud_setup, allocated_resources FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT 15")
 
     @classmethod
     def load_test_run(cls, run_id: UUID) -> 'SCTTestRun':
@@ -144,6 +145,36 @@ class SCTTestRun(PluginModelBase):
         rows = cluster.session.execute(query=query, parameters=(release.id,))
 
         return list(rows)
+
+    @staticmethod
+    def get_image(row: dict):
+        if cs := row.get("cloud_setup"):
+            return cs.db_node.image_id
+
+    @classmethod
+    def get_distinct_cloud_images_for_release(cls, release: ArgusRelease):
+        cluster = ScyllaCluster.get()
+        statement = cluster.prepare(f"SELECT cloud_setup FROM {cls.table_name()} WHERE release_id = ?")
+        rows = cluster.session.execute(query=statement, parameters=(release.id,))
+        unique_images = {cls.get_image(r) for r in rows if cls.get_image(r)}
+
+        return sorted(list(unique_images), reverse=True)
+
+    @classmethod
+    def get_distinct_cloud_images_for_view(cls, tests: list[ArgusTest]):
+        cluster = ScyllaCluster.get()
+        statement = cluster.prepare(f"SELECT cloud_setup FROM {cls.table_name()} WHERE build_id IN ?")
+        futures = []
+        for batch in chunk(tests):
+            futures.append(cluster.session.execute_async(query=statement,
+                           parameters=([t.build_system_id for t in batch],)))
+
+        rows = []
+        for future in futures:
+            rows.extend(future.result())
+        unique_images = {cls.get_image(r) for r in rows if cls.get_image(r)}
+
+        return sorted(list(unique_images), reverse=True)
 
     @classmethod
     def get_perf_results_for_test_name(cls, build_id: str, start_time: float, test_name: str):
