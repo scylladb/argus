@@ -200,6 +200,14 @@ class PluginModelBase(Model):
         raise NotImplementedError()
 
     @classmethod
+    def get_distinct_cloud_images_for_release(cls, release: ArgusRelease):
+        raise NotImplementedError()
+
+    @classmethod
+    def get_distinct_cloud_images_for_view(cls, tests: list[ArgusTest]):
+        raise NotImplementedError()
+
+    @classmethod
     def get_distinct_versions_for_view(cls, tests: list[ArgusTest]) -> list[str]:
         cluster = ScyllaCluster.get()
         statement = cluster.prepare(f"SELECT scylla_version FROM {cls.table_name()} WHERE build_id IN ?")

@@ -8,7 +8,7 @@ from cassandra.cqlengine.models import Model
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.pytest import PytestResultTable
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, ArgusUserView, User
-from argus.backend.plugins.loader import all_plugin_models
+from argus.backend.plugins.loader import AVAILABLE_PLUGINS, all_plugin_models
 from argus.backend.service.test_lookup import TestLookup
 from argus.backend.util.common import chunk, current_user
 
@@ -197,6 +197,12 @@ class UserViewService:
                            for ver in plugin.get_distinct_versions_for_view(tests=tests)}
 
         return sorted(list(unique_versions), reverse=True)
+
+    def get_images_for_view(self, view_id: str | UUID) -> list[str]:
+        tests = self.resolve_view_tests(view_id)
+        images = AVAILABLE_PLUGINS["scylla-cluster-tests"].model.get_distinct_cloud_images_for_view(tests)
+
+        return images
 
     def resolve_view_for_edit(self, view_id: str | UUID) -> dict:
         view: ArgusUserView = ArgusUserView.get(id=view_id)

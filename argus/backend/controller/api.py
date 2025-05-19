@@ -139,6 +139,19 @@ def release_pytest_results(release_id: str):
     })
 
 
+@bp.route("/release/<string:release_id>/images")
+@api_login_required
+def release_images(release_id: str):
+    release_id = UUID(release_id)
+    service = ArgusService()
+    distinct_images = service.get_distinct_release_images(release_id=release_id)
+
+    return jsonify({
+        "status": "ok",
+        "response": distinct_images
+    })
+
+
 @bp.route("/release/planner/comment/get/test")
 def get_planner_comment_by_test():
     test_id = request.args.get("id")
@@ -499,10 +512,16 @@ def release_stats_v2():
     release = request.args.get("release")
     limited = bool(int(request.args.get("limited")))
     version = request.args.get("productVersion", None)
+    image_id = request.args.get("imageId", None)
     include_no_version = bool(int(request.args.get("includeNoVersion", True)))
     force = bool(int(request.args.get("force")))
     stats = ReleaseStatsCollector(
-        release_name=release, release_version=version).collect(limited=limited, force=force, include_no_version=include_no_version)
+        release_name=release, release_version=version).collect(
+            limited=limited,
+            force=force,
+            include_no_version=include_no_version,
+            image_id=image_id
+    )
 
     res = jsonify({
         "status": "ok",

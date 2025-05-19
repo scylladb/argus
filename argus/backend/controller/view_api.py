@@ -143,12 +143,13 @@ def view_stats():
     limited = bool(int(request.args.get("limited", 0)))
     version = request.args.get("productVersion", None)
     include_no_version = bool(int(request.args.get("includeNoVersion", True)))
+    image_id = request.args.get("imageId", None)
     force = bool(int(request.args.get("force",  0)))
     widget_id = request.args.get("widgetId", None)
     if widget_id:
         widget_id = int(widget_id)
     collector = ViewStatsCollector(view_id=view_id, filter=version)
-    stats = collector.collect(limited=limited, force=force, include_no_version=include_no_version, widget_id=widget_id)
+    stats = collector.collect(limited=limited, force=force, include_no_version=include_no_version, widget_id=widget_id, image_id=image_id)
 
     res = jsonify({
         "status": "ok",
@@ -163,6 +164,17 @@ def view_stats():
 def view_versions(view_id: str):
     service = UserViewService()
     res = service.get_versions_for_view(view_id)
+    return {
+        "status": "ok",
+        "response": res
+    }
+
+
+@bp.route("/<string:view_id>/images", methods=["GET"])
+@api_login_required
+def view_images(view_id: str):
+    service = UserViewService()
+    res = service.get_images_for_view(view_id)
     return {
         "status": "ok",
         "response": res

@@ -1,12 +1,13 @@
 from itertools import islice
 import logging
-from typing import Callable, Iterable
+from typing import Callable, Iterable, TypeVar
 from uuid import UUID
 
 from flask import Request, Response, g
 
 from argus.backend.models.web import User
 
+T = TypeVar('T')
 
 LOGGER = logging.getLogger(__name__)
 FlaskView = Callable[..., Response]
@@ -23,7 +24,7 @@ def first(iterable, value, key: Callable = None, predicate: Callable = None):
     return None
 
 
-def chunk(iterable: Iterable, slice_size=90):
+def chunk(iterable: Iterable[T], slice_size=90) -> list[list[T]]:
     it = iter(iterable)
     return iter(lambda: list(islice(it, slice_size)), [])
 

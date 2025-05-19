@@ -176,6 +176,13 @@ class ArgusService:
 
         return sorted(list(unique_versions), reverse=True)
 
+    def get_distinct_release_images(self, release_id: UUID | str) -> list[str]:
+        release_id = UUID(release_id) if isinstance(release_id, str) else release_id
+        release = ArgusRelease.get(id=release_id)
+        images = AVAILABLE_PLUGINS["scylla-cluster-tests"].model.get_distinct_cloud_images_for_release(release)
+
+        return images
+
     def poll_test_runs(self, test_id: UUID, additional_runs: list[UUID], limit: int = 10):
         test: ArgusTest = ArgusTest.get(id=test_id)
 
