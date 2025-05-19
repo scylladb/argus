@@ -13,9 +13,8 @@
     export let dashboardObjectType = "release";
     export let assigneeList;
     export let users;
-    export let userFilter;
+    export let doFilters;
     export let clickedTests;
-    export let hideNotPlanned;
 
     const dispatch = createEventDispatcher();
 
@@ -87,9 +86,9 @@
             </div>
         </h5>
         <div class="collapse" class:show={!collapsed} id="collapse-{groupStats.group.id}">
-            <div class="my-2 d-flex flex-wrap bg-lighter rounded shadow-sm">
+            <div id="testContainer-{groupStats.group.id}" class="my-2 d-flex flex-wrap bg-lighter rounded shadow-sm">
                 {#each Object.entries(sortTestStats(groupStats.tests)) as [testId, testStats] (testId)}
-                    <TestDashboardTest {assigneeList} bind:clickedTests={clickedTests} {groupStats} {testStats} {hideNotPlanned} {userFilter} on:testClick/>
+                    <TestDashboardTest {assigneeList} bind:clickedTests={clickedTests} {groupStats} {testStats} {doFilters} on:testClick/>
                 {:else}
                     <div class="text-dark m-2">No tests for this group</div>
                 {/each}
