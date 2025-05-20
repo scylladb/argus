@@ -1,5 +1,5 @@
-    <script>
-    import { onMount, onDestroy, createEventDispatcher } from "svelte";
+<script>
+    import {onMount, onDestroy, createEventDispatcher} from "svelte";
     import Fa from "svelte-fa";
     import {
         faRefresh,
@@ -7,13 +7,14 @@
     } from "@fortawesome/free-solid-svg-icons";
     import ActivityTab from "../ActivityTab.svelte";
     import TestRunComments from "../TestRunComments.svelte";
-    import { sendMessage } from "../../Stores/AlertStore";
-    import { fetchRun } from "../../Common/RunUtils";
+    import {sendMessage} from "../../Stores/AlertStore";
+    import {fetchRun} from "../../Common/RunUtils";
     import RunStatusButton from "../RunStatusButton.svelte";
     import RunInvestigationStatusButton from "../RunInvestigationStatusButton.svelte";
     import RunAssigneeSelector from "../RunAssigneeSelector.svelte";
     import IssueTab from "../IssueTab.svelte";
     import GenericTestRunInfo from "./GenericTestRunInfo.svelte";
+    import * as subtests from "./Subtest";
 
     export let runId = "";
     export let buildNumber = -1;
@@ -98,14 +99,18 @@
             <button class="btn btn-sm btn-outline-dark" title="Refresh" on:click={() => {
                 fetchTestRunData();
             }}
-                ><Fa icon={faRefresh} /></button
+            >
+                <Fa icon={faRefresh}/>
+            </button
             >
         </div>
         <div class="ms-2 text-end">
             <button class="btn btn-sm btn-outline-dark" title="Close" on:click={() => {
                 dispatch("closeRun", { id: runId });
             }}
-            ><Fa icon={faTimes} /></button
+            >
+                <Fa icon={faTimes}/>
+            </button
             >
         </div>
     </div>
@@ -117,7 +122,7 @@
                         <RunStatusButton {testRun} on:statusUpdate={(e) => {
                             testRun.status = e.detail.status;
                             dispatch("runStatusChange");
-                        }} />
+                        }}/>
                         <RunInvestigationStatusButton {testRun} on:investigationStatusChange={(e) => {
                             testRun.investigation_status = e.detail.status;
                             dispatch("investigationStatusChange", e.detail);
@@ -127,126 +132,145 @@
                 <div class="col-6">
                     <RunAssigneeSelector {testRun} on:assigneeUpdate={(e) => {
                         testRun.assignee = e.detail.assignee;
-                    }} />
+                    }}/>
                 </div>
             </div>
             <nav>
                 <div class="nav nav-tabs" id="nav-tab-{runId}" role="tablist">
                     <button
-                        class="nav-link"
-                        class:active={activeTab === 'details'}
-                        id="nav-details-tab-{runId}"
-                        data-bs-toggle="tab"
-                        data-bs-target="#nav-details-{runId}"
-                        type="button"
-                        role="tab"
-                        on:click={() => setActiveTab("details")}
-                        on:keydown={(e) => e.key === "Enter" && setActiveTab("details")}
-                        ><i class="fas fa-info-circle" /> Details</button
+                            class="nav-link"
+                            class:active={activeTab === 'details'}
+                            id="nav-details-tab-{runId}"
+                            data-bs-toggle="tab"
+                            data-bs-target="#nav-details-{runId}"
+                            type="button"
+                            role="tab"
+                            on:click={() => setActiveTab("details")}
+                            on:keydown={(e) => e.key === "Enter" && setActiveTab("details")}
+                    ><i class="fas fa-info-circle"/> Details
+                    </button
+                    >
+                    {#if testRun.sub_type}
+                        {#each subtests.Cases as subtestCase}
+                            {#if subtestCase == testRun.sub_type }
+                                <svelte:component this={subtests.Tabs[subtestCase]} {testRun}/>
+                            {/if}
+                        {/each}
+                    {/if}
+                    <button
+                            class="nav-link"
+                            class:active={activeTab === 'discuss'}
+                            id="nav-discuss-tab-{runId}"
+                            data-bs-toggle="tab"
+                            data-bs-target="#nav-discuss-{runId}"
+                            type="button"
+                            on:click={() => setActiveTab("discuss")}
+                            on:keydown={(e) => e.key === "Enter" && setActiveTab("discuss")}
+                            role="tab"
+                    ><i class="fas fa-comments"/> Discussion
+                    </button
                     >
                     <button
-                        class="nav-link"
-                        class:active={activeTab === 'discuss'}
-                        id="nav-discuss-tab-{runId}"
-                        data-bs-toggle="tab"
-                        data-bs-target="#nav-discuss-{runId}"
-                        type="button"
-                        on:click={() => setActiveTab("discuss")}
-                        on:keydown={(e) => e.key === "Enter" && setActiveTab("discuss")}
-                        role="tab"
-                        ><i class="fas fa-comments" /> Discussion</button
+                            class="nav-link"
+                            class:active={activeTab === 'issues'}
+                            id="nav-issues-tab-{runId}"
+                            data-bs-toggle="tab"
+                            data-bs-target="#nav-issues-{runId}"
+                            type="button"
+                            role="tab"
+                            on:click={() => setActiveTab("issues")}
+                            on:keydown={(e) => e.key === "Enter" && setActiveTab("issues")}
+                    ><i class="fas fa-code-branch"/> Issues
+                    </button
                     >
                     <button
-                        class="nav-link"
-                        class:active={activeTab === 'issues'}
-                        id="nav-issues-tab-{runId}"
-                        data-bs-toggle="tab"
-                        data-bs-target="#nav-issues-{runId}"
-                        type="button"
-                        role="tab"
-                        on:click={() => setActiveTab("issues")}
-                        on:keydown={(e) => e.key === "Enter" && setActiveTab("issues")}
-                        ><i class="fas fa-code-branch" /> Issues</button
-                    >
-                    <button
-                        class="nav-link"
-                        class:active={activeTab === 'activity'}
-                        id="nav-activity-tab-{runId}"
-                        data-bs-toggle="tab"
-                        data-bs-target="#nav-activity-{runId}"
-                        type="button"
-                        on:click={() => setActiveTab("activity")}
-                        on:keydown={(e) => e.key === "Enter" && setActiveTab("activity")}
-                        role="tab"
-                        ><i class="fas fa-exclamation-triangle" /> Activity</button
+                            class="nav-link"
+                            class:active={activeTab === 'activity'}
+                            id="nav-activity-tab-{runId}"
+                            data-bs-toggle="tab"
+                            data-bs-target="#nav-activity-{runId}"
+                            type="button"
+                            on:click={() => setActiveTab("activity")}
+                            on:keydown={(e) => e.key === "Enter" && setActiveTab("activity")}
+                            role="tab"
+                    ><i class="fas fa-exclamation-triangle"/> Activity
+                    </button
                     >
                 </div>
             </nav>
             <div
-                class="tab-content border-start border-end border-bottom bg-white"
-                id="nav-tabContent-{runId}"
+                    class="tab-content border-start border-end border-bottom bg-white"
+                    id="nav-tabContent-{runId}"
             >
                 <div
-                    class="tab-pane fade"
-                    class:show={activeTab === 'details'}
-                    class:active={activeTab === 'details'}
-                    id="nav-details-{runId}"
-                    role="tabpanel"
+                        class="tab-pane fade"
+                        class:show={activeTab === 'details'}
+                        class:active={activeTab === 'details'}
+                        id="nav-details-{runId}"
+                        role="tabpanel"
                 >
-                    <GenericTestRunInfo test_run={testRun} release={testInfo.release} group={testInfo.group} test={testInfo.test}/>
+                    <GenericTestRunInfo test_run={testRun} release={testInfo.release} group={testInfo.group}
+                                        test={testInfo.test}/>
                 </div>
+                {#if testRun.sub_type}
+                    {#each subtests.Cases as subtestCase}
+                        {#if subtestCase == testRun.sub_type }
+                            <svelte:component this={subtests.TabBody[subtestCase]} {testRun}/>
+                        {/if}
+                    {/each}
+                {/if}
                 <div
-                    class="tab-pane fade"
-                    class:show={activeTab === 'discuss'}
-                    class:active={activeTab === 'discuss'}
-                    id="nav-discuss-{runId}"
-                    role="tabpanel"
+                        class="tab-pane fade"
+                        class:show={activeTab === 'discuss'}
+                        class:active={activeTab === 'discuss'}
+                        id="nav-discuss-{runId}"
+                        role="tabpanel"
                 >
                     {#if visitedTabs['discuss']}
                         <TestRunComments {testRun} {testInfo}/>
                     {/if}
                 </div>
                 <div
-                    class="tab-pane fade"
-                    class:show={activeTab === 'issues'}
-                    class:active={activeTab === 'issues'}
-                    id="nav-issues-{runId}"
-                    role="tabpanel"
+                        class="tab-pane fade"
+                        class:show={activeTab === 'issues'}
+                        class:active={activeTab === 'issues'}
+                        id="nav-issues-{runId}"
+                        role="tabpanel"
                 >
                     <div class="py-2 bg-white">
                         {#if visitedTabs['issues']}
-                            <IssueTab {testInfo} {runId} />
+                            <IssueTab {testInfo} {runId}/>
                         {/if}
                     </div>
                 </div>
                 <div
-                    class="tab-pane fade"
-                    class:show={activeTab === 'activity'}
-                    class:active={activeTab === 'activity'}
-                    id="nav-activity-{runId}"
-                    role="tabpanel"
+                        class="tab-pane fade"
+                        class:show={activeTab === 'activity'}
+                        class:active={activeTab === 'activity'}
+                        id="nav-activity-{runId}"
+                        role="tabpanel"
                 >
                     {#if visitedTabs['activity']}
-                        <ActivityTab id={runId} />
+                        <ActivityTab id={runId}/>
                     {/if}
                 </div>
             </div>
         </div>
     {:else if failedToLoad}
         <div
-            class="text-center p-2 m-1 d-flex align-items-center justify-content-center"
+                class="text-center p-2 m-1 d-flex align-items-center justify-content-center"
         >
             <span class="fs-4"
-                >Run not found.</span
+            >Run not found.</span
             >
         </div>
     {:else}
         <div
-            class="text-center p-2 m-1 d-flex align-items-center justify-content-center"
+                class="text-center p-2 m-1 d-flex align-items-center justify-content-center"
         >
-            <span class="spinner-border me-4" /><span class="fs-4"
-                >Loading...</span
-            >
+            <span class="spinner-border me-4"/><span class="fs-4"
+        >Loading...</span
+        >
         </div>
     {/if}
 </div>
