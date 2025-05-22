@@ -46,6 +46,7 @@
         if (!document.hasFocus()) return;
         try {
             let run = await fetchRun(testInfo.test.plugin_name, runId);
+            console.log(run);
             testRun = run;
             if (!testRun) {
                 failedToLoad = true;
@@ -85,6 +86,7 @@
         if (runRefreshInterval) clearInterval(runRefreshInterval);
     });
 </script>
+
 
 <div class="border rounded shadow-sm testrun-card mb-4 top-bar">
     <div class="d-flex px-2 py-2 mb-1 border-bottom bg-white ">
@@ -148,12 +150,14 @@
                             on:click={() => setActiveTab("details")}
                             on:keydown={(e) => e.key === "Enter" && setActiveTab("details")}
                     ><i class="fas fa-info-circle"/> Details
-                    </button
-                    >
+                    </button>
                     {#if testRun.sub_type}
-                        {#each subtests.Cases as subtestCase}
-                            {#if subtestCase == testRun.sub_type }
-                                <svelte:component this={subtests.Tabs[subtestCase]} {testRun}/>
+                        {#each Object.entries(subtests.Cases) as [key, value]}
+                            {#if value === testRun.sub_type}
+                                <svelte:component
+                                        on:tab-switched={(ev) => setActiveTab(ev.detail.tab)}
+                                        this={subtests.Tabs[value]} {runId}
+                                />
                             {/if}
                         {/each}
                     {/if}
@@ -213,11 +217,19 @@
                                         test={testInfo.test}/>
                 </div>
                 {#if testRun.sub_type}
-                    {#each subtests.Cases as subtestCase}
-                        {#if subtestCase == testRun.sub_type }
-                            <svelte:component this={subtests.TabBody[subtestCase]} {testRun}/>
-                        {/if}
-                    {/each}
+                        {#each Object.entries(subtests.Cases) as [key, value]}
+                            {#if value === testRun.sub_type && activeTab === value}
+                                <div
+                                        class="tab-pane fade"
+                                        class:show={activeTab === testRun.sub_type}
+                                        class:active={activeTab === testRun.sub_type}
+                                        id="nav-discuss-{runId}"
+                                        role="tabpanel"
+                                >
+                                        <svelte:component this={subtests.TabBody[value]} {runId}/>
+                                </div>
+                            {/if}
+                        {/each}
                 {/if}
                 <div
                         class="tab-pane fade"
