@@ -203,6 +203,20 @@ def get_testrun_comments(run_id: str):
     }
 
 
+@bp.route("/run/<string:run_id>/pytest/results", methods=["GET"])
+@api_login_required
+def get_testrun_pytest_results(run_id: str):
+    service = TestRunService()
+    res = service.get_pytest_run_results(
+        run_id=UUID(run_id)
+    )
+
+    return {
+        "status": "ok",
+        "response": res
+    }
+
+
 @bp.route("/comment/<string:comment_id>/get", methods=["GET"])
 @api_login_required
 def get_single_comment(comment_id: str):
@@ -475,6 +489,31 @@ def clone_validate_new_settings():
     service = JenkinsService()
 
     result = service.verify_job_settings(build_id=payload["buildId"], new_settings=payload["newSettings"])
+
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
+@bp.route("/pytest/<string:test_name>/results")
+@api_login_required
+def get_pytest_test_results(test_name: str):
+
+    result = TestRunService().get_pytest_test_results(test_name=test_name)
+
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
+@bp.route("/pytest/<string:test_name>/stats/<string:field_name>/<string:aggr_function>")
+@api_login_required
+def get_pytest_test_field_stats(test_name: str, field_name: str, aggr_function: str):
+
+    result = TestRunService().get_pytest_test_field_stats(test_name=test_name, field_name=field_name,
+                                                          aggr_function=aggr_function, query=dict(request.args))
 
     return {
         "status": "ok",
