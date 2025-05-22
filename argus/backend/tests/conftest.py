@@ -8,6 +8,8 @@ from docker import DockerClient
 from flask import g
 
 from argus.backend.plugins.loader import all_plugin_types
+from argus.backend.service.testrun import TestRunService
+from argus.backend.service.views_widgets.pytest import PytestViewService
 from argus.backend.util.config import Config
 
 os.environ['DOCKER_HOST'] = ""
@@ -131,6 +133,16 @@ def release_manager_service(argus_db) -> ReleaseManagerService:
 @fixture(scope='session')
 def client_service(argus_db):
     return ClientService()
+
+
+@fixture(scope='session')
+def pv_service(argus_db) -> PytestViewService:
+    return PytestViewService()
+
+
+@fixture(scope='session')
+def testrun_service(argus_db) -> TestRunService:
+    return TestRunService()
 
 
 @fixture(scope='session')

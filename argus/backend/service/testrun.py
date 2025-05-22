@@ -18,7 +18,7 @@ from cassandra.query import BatchStatement, ConsistencyLevel
 from cassandra.cqlengine.query import BatchQuery
 from argus.backend.db import ScyllaCluster
 
-from argus.backend.models.pytest import PytestResultTable
+from argus.backend.models.pytest import PytestResultTable, PytestUserField
 from argus.backend.models.web import (
     ArgusEvent,
     ArgusEventTypes,
@@ -40,7 +40,7 @@ from argus.backend.service.event_service import EventService
 from argus.backend.service.notification_manager import NotificationManagerService
 from argus.backend.service.stats import ComparableTestStatus
 from argus.backend.util.common import chunk, get_build_number, strip_html_tags
-from argus.common.enums import TestInvestigationStatus, TestStatus
+from argus.common.enums import PytestStatus, TestInvestigationStatus, TestStatus
 
 LOGGER = logging.getLogger(__name__)
 
@@ -516,27 +516,26 @@ class TestRunService:
         query_values = [test_name]
         if field_name not in PytestResultTable._columns.keys():
             raise TestRunServiceException(f"Invalid fixed column: {field_name}", field_name)
-        raw_query = f"SELECT {fun}({field_name}) FROM pytest_result_table WHERE name = ?"
+        raw_query = f"SELECT {fun}({field_name}) FROM pytest_v2 WHERE name = ?"
 
         status = query.pop("status", None)
+        period = query.pop("since", None)
         if status:
             raw_query += " AND status = ?"
             query_values.append(status)
 
-        period = query.pop("since", None)
+        if not status and period:
+            raw_query += " AND status IN ?"
+            query_values.append([s.value for s in PytestStatus])
+
         if period:
             try:
-                since = uuid_from_time(int(period))
+                since = datetime.fromtimestamp(int(period))
             except ValueError:
                 raise TestRunServiceException("Malformed timestamp value")
             raw_query += " AND id >= ?"
             query_values.append(since)
 
-        for key, value in query.items():
-            raw_query += f" AND user_fields[?] = ?"
-            query_values.extend([key, value])
-
-        raw_query += " ALLOW FILTERING"
         q = db.prepare(raw_query)
         stmt = q.bind(values=query_values)
         res = next(iter(db.session.execute(stmt).one().values()))

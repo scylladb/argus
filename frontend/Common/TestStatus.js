@@ -166,6 +166,85 @@ export const ResultCellStatusStyleMap = {
 };
 
 export const NemesisStatusToTestStatus = {
-  "skipped": "aborted",
-  "succeeded": "passed",
-}
+    "skipped": "aborted",
+    "succeeded": "passed",
+};
+
+export const PytestStatus = {
+    PASSED: "passed",
+    FAILURE: "failure",
+    SKIPPED: "skipped",
+    ERROR: "error",
+    XFAILED: "xfailed",
+    XPASS: "xpass",
+    PASSED_ERROR: "passed & error",
+    FAILURE_ERROR: "failure & error",
+    SKIPPED_ERROR: "skipped & error",
+    ERROR_ERROR: "error & error",
+};
+
+export const PytestColors = {
+    [PytestStatus.PASSED]: "#198754",
+    [PytestStatus.FAILURE]: "#dc3545",
+    [PytestStatus.ERROR]: "#ffc107",
+    [PytestStatus.SKIPPED]: "#212529",
+    [PytestStatus.XFAILED]: "#442529",
+    [PytestStatus.XPASS]: "#198754",
+    [PytestStatus.PASSED_ERROR]: "#438754",
+    [PytestStatus.FAILURE_ERROR]: "#ee5545",
+    [PytestStatus.SKIPPED_ERROR]: "#445533",
+    [PytestStatus.ERROR_ERROR]: "#ddaa07",
+};
+
+export const PytestBgStyles = {
+    [PytestStatus.PASSED]: "bg-success",
+    [PytestStatus.FAILURE]: "bg-danger",
+    [PytestStatus.ERROR]: "bg-warning",
+    [PytestStatus.SKIPPED]: "bg-dark",
+    [PytestStatus.XFAILED]: "bg-light",
+    [PytestStatus.XPASS]: "bg-light",
+    [PytestStatus.PASSED_ERROR]: "bg-warning",
+    [PytestStatus.FAILURE_ERROR]: "bg-danger",
+    [PytestStatus.SKIPPED_ERROR]: "bg-dark",
+    [PytestStatus.ERROR_ERROR]: "bg-warning",
+};
+
+export const PytestFgStyles = {
+    [PytestStatus.PASSED]: "text-success",
+    [PytestStatus.FAILURE]: "text-danger",
+    [PytestStatus.ERROR]: "text-warning",
+    [PytestStatus.SKIPPED]: "text-dark",
+    [PytestStatus.XFAILED]: "text-light",
+    [PytestStatus.XPASS]: "text-light",
+    [PytestStatus.PASSED_ERROR]: "text-warning",
+    [PytestStatus.FAILURE_ERROR]: "text-danger",
+    [PytestStatus.SKIPPED_ERROR]: "text-dark",
+    [PytestStatus.ERROR_ERROR]: "text-warning",
+};
+
+
+export const PytestTextStyles = {
+    [PytestStatus.PASSED]: "text-light",
+    [PytestStatus.FAILURE]: "text-light",
+    [PytestStatus.ERROR]: "text-dark",
+    [PytestStatus.SKIPPED]: "text-light",
+    [PytestStatus.XFAILED]: "text-dark",
+    [PytestStatus.XPASS]: "text-dark",
+    [PytestStatus.PASSED_ERROR]: "text-dark",
+    [PytestStatus.FAILURE_ERROR]: "text-light",
+    [PytestStatus.SKIPPED_ERROR]: "text-light",
+    [PytestStatus.ERROR_ERROR]: "text-dark",
+};
+
+export const PytestBtnStyles = {
+    [PytestStatus.PASSED]: "btn-success",
+    [PytestStatus.FAILURE]: "btn-danger",
+    [PytestStatus.ERROR]: "btn-warning",
+    [PytestStatus.SKIPPED]: "btn-dark",
+    [PytestStatus.XFAILED]: "btn-light",
+    [PytestStatus.XPASS]: "btn-light",
+    [PytestStatus.PASSED_ERROR]: "btn-warning",
+    [PytestStatus.FAILURE_ERROR]: "btn-danger",
+    [PytestStatus.SKIPPED_ERROR]: "btn-dark",
+    [PytestStatus.ERROR_ERROR]: "btn-warning",
+};
