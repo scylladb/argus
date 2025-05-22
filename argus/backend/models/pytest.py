@@ -20,7 +20,8 @@ class PytestSubmitData(TypedDict):
     user_fields: dict[str, Any]
 
 
-class PytestResultTable(Model):
+class PytestResultTableOld(Model):
+    __table_name__ = "pytest_result_table"
     name = columns.Text(primary_key=True, partition_key=True)
     id = columns.TimeUUID(primary_key=True, clustering_order="DESC",
                           default=lambda: uuid_from_time(datetime.now(tz=UTC)))
@@ -47,3 +48,27 @@ class PytestResultTable(Model):
             "CREATE INDEX IF NOT EXISTS pytest_result_table_user_entries_idx ON pytest_result_table (ENTRIES(user_fields))")
         session.execute(
             "CREATE INDEX IF NOT EXISTS pytest_result_table_user_value_idx ON pytest_result_table (VALUES(user_fields))")
+
+
+class PytestResultTable(Model):
+    __table_name__ = "pytest_v2"
+    name = columns.Text(partition_key=True, primary_key=True)
+    status = columns.Text(primary_key=True, default=lambda: PytestStatus.PASSED.value)
+    id = columns.DateTime(primary_key=True, default=lambda: datetime.now(tz=UTC))
+    test_type = columns.Text(required=True)
+    run_id = columns.UUID(index=True, required=True)
+    test_id = columns.UUID(index=True)
+    release_id = columns.UUID(index=True)
+    duration = columns.Double()
+    message = columns.Text()
+    test_timestamp = columns.DateTime() # timestamp for the submitted test
+    session_timestamp = columns.DateTime() # timestamp of the test session
+    markers = columns.List(value_type=columns.Text())
+
+
+class PytestUserField(Model):
+    __table_name__ = "pytest_user_field"
+    name = columns.Text(partition_key=True, primary_key=True)
+    id = columns.DateTime(primary_key=True)
+    field_name = columns.Text(primary_key=True)
+    field_value = columns.Text()

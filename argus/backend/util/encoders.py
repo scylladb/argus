@@ -6,6 +6,7 @@ from uuid import UUID
 from flask.json.provider import DefaultJSONProvider
 import cassandra.cqlengine.usertype as ut
 import cassandra.cqlengine.models as m
+from cassandra.util import OrderedMapSerializedKey
 
 
 LOGGER = logging.getLogger(__name__)
@@ -40,6 +41,8 @@ class ArgusJSONProvider(DefaultJSONProvider):
         match o:
             case UUID():
                 return str(o)
+            case OrderedMapSerializedKey():
+                return dict(o)
             case ut.UserType():
                 o = {str(k): v for k, v in o.items()}
                 o = cls.process_nested_dicts(o)
