@@ -1,41 +1,43 @@
 <script lang="ts">
-    import {onMount, onDestroy} from "svelte";
+    import {onDestroy, onMount} from "svelte";
     import {sendMessage} from "../../Stores/AlertStore";
+    import PytestItem from "./PytestItem.svelte";
+    import {type PytestData, PytestStatus, PytestStatuses} from "./types";
+    import IntersectionObserver from "../../Utils/IntersectionObserver.svelte";
 
-    const enum PytestStatus {
-        ERROR = "error",
-        PASSED = "passed",
-        FAILURE = "failure",
-        SKIPPED = "skipped",
-        XFAILED = "xfailed",
-        XPASS = "xpass",
-        PASSED_ERROR = "passed & error",
-        FAILURE_ERROR = "failure & error",
-        SKIPPED_ERROR = "skipped & error",
-        ERROR_ERROR = "error & error",
-    }
-
-    type PytestData = {
-        name: string,
-        timestamp: number,
-        session_timestamp: number,
-        test_type: string,
-        run_id: string,
-        status: PytestStatus,
-        duration: number,
-        markers: string[],
-        user_fields: { [key: string]: string },
-    };
-
-    export let testRunId: string;
+    export let runId: string;
 
     let data: PytestData[] | null = null;
     let refreshInterval: any = null;
     let failedToLoad = false;
+    let filters = {
+        search: "",
+        status: {
+            [PytestStatus.ERROR]: true,
+            [PytestStatus.FAILURE]: true,
+            [PytestStatus.XFAILED]: true,
+            [PytestStatus.PASSED]: true,
+            [PytestStatus.SKIPPED]: true,
+            [PytestStatus.XPASS]: true,
+            [PytestStatus.PASSED_ERROR]: true,
+            [PytestStatus.FAILURE_ERROR]: true,
+            [PytestStatus.SKIPPED_ERROR]: true,
+            [PytestStatus.ERROR_ERROR]: true,
+        },
+    };
+
+    $: filteredData = data?.filter((test) => {
+        const status = test.status;
+        if (filters.search.length === 0) {
+            return filters.status[status];
+        }
+
+        return filters.status[status] && test.name.toLowerCase().includes(filters.search.toLowerCase());
+    });
 
     const fetchData = async () => {
         try {
-            const response = await fetch(`/api/v1/run/${testRunId}/pytest/results`);
+            const response = await fetch(`/api/v1/run/${runId}/pytest/results`);
             const responseData: { status: string, response: PytestData[] } = await response.json();
 
             if (!response.ok) {
@@ -68,6 +70,10 @@
         return null;
     };
 
+    const onStatusFilterChange = (ev: any, status: PytestStatus) => {
+        filters.status[status] = ev.target.checked;
+    };
+
     onMount(async () => {
         data = await fetchData();
         if (data) {
@@ -80,22 +86,78 @@
         }
     });
 
-    onDestroy(() => clearInterval(refreshInterval));
+    onDestroy(() => {
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+        }
+    });
 
 </script>
+<div style="min-height: 24rem; max-height: 48vh; overflow-y: scroll; overflow-x: hidden" class="position-relative">
+    <div class="d-flex align-items-end align-center justify-content-end w-100 py-3 position-sticky top-0 bg-white" style="z-index: 1">
+        <div class="row w-100">
+            <div class="col">
+                <input
+                        class="form-control"
+                        type="text"
+                        placeholder="Search test"
+                        bind:value="{filters.search}"
+                >
+            </div>
+            <div class="col">
+                <div class="btn-group">
+                    <button type="button" class="btn btn-info dropdown-toggle" data-bs-toggle="dropdown"
+                            aria-expanded="false">
+                        Filter Tests
+                    </button>
+                    <ul class="dropdown-menu">
+                        {#each PytestStatuses as status}
+                            <li class="dropdown-item">
+                                <input
+                                        class="form-check-input"
+                                        type="checkbox"
+                                        id="{status}-checkbox"
+                                        checked="{filters.status[status]}"
+                                        on:change={(event) => onStatusFilterChange(event, status)}
+                                >
+                                <label for="{status}-checkbox">{status}</label>
+                            </li>
+                        {/each}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
 
-{#if data}
-    <div
-            class="tab-pane fade"
-            id="nav-pytest-{testRunId}"
-            role="tabpanel"
-    ></div>
-{:else if failedToLoad}
-<div class="text-center p-2 m-1 d-flex align-items-center justify-content-center">
-    <span class="fs-4">Run not found.</span>
+
+    {#if filteredData}
+        {#if filteredData?.length === 0}
+            <div class="text-center p-2 m-1 d-flex align-items-center justify-content-center">
+                <span class="fs-4">No tests to display</span>
+            </div>
+        {:else}
+            <div class="accordion accordion-flush">
+                <IntersectionObserver let:intersecting top={20}>
+                    {#each filteredData as test, idx}
+                        {#if intersecting}
+                            <PytestItem
+                                    testId={test.run_id}
+                                    idx={idx}
+                                    item={test}
+                            />
+                        {/if}
+                    {/each}
+                </IntersectionObserver>
+            </div>
+        {/if}
+
+    {:else if failedToLoad}
+        <div class="text-center p-2 m-1 d-flex align-items-center justify-content-center">
+            <span class="fs-4">Run not found.</span>
+        </div>
+    {:else}
+        <div class="text-center p-2 m-1 d-flex align-items-center justify-content-center">
+            <span class="spinner-border me-4"/><span class="fs-4">Loading...</span>
+        </div>
+    {/if}
 </div>
-{:else}
-<div class="text-center p-2 m-1 d-flex align-items-center justify-content-center">
-    <span class="spinner-border me-4" /><span class="fs-4">Loading...</span>
-</div>
-{/if}
