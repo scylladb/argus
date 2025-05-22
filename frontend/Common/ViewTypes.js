@@ -14,6 +14,7 @@ import SummaryWidget from "../Views/Widgets/SummaryWidget/SummaryWidget.svelte";
 import GraphWidget from "../Views/Widgets/GraphsWidget/GraphsWidget.svelte";
 import ViewNemesisStats from "../Views/Widgets/ViewNemesisStats.svelte";
 import ViewGraphedStats from "../Views/Widgets/ViewGraphedStats.svelte";
+import PytestOverviewWidget from "../Views/Widgets/PytestWidget/PytestOverviewWidget.svelte";
 
 export class Widget {
     constructor(position = -1, type = "testDashboard", settings = {}) {
@@ -145,6 +146,18 @@ export const WIDGET_TYPES = {
                 help: "Regular expressions to filter out tests (e.g. .*/artifacts/)",
                 displayName: "Test Filters"
             },
+        },
+    },
+    pytestOverview: {
+        type: PytestOverviewWidget,
+        friendlyName: "Pytest Stats",
+        settingDefinitions: {
+            collapsed: {
+                type: CheckValue,
+                default: false,
+                help: "Show widget full-screen or as collapsible accordion",
+                displayName: "Collapsible"
+            }
         },
     },
 };
