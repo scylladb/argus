@@ -8,12 +8,12 @@ from argus.backend.error_handlers import DataValidationError
 from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.tests.conftest import get_fake_test_run, fake_test
 from argus.common.enums import TestInvestigationStatus
-from argus.client.generic_result import GenericResultTable, ColumnMetadata, ResultType, ValidationRule, Status
+from argus.client.generic_result import ColumnMetadata, ResultType, ValidationRule, Status, StaticGenericResultTable
 
 LOGGER = logging.getLogger(__name__)
 
 
-class SampleTable(GenericResultTable):
+class SampleTable(StaticGenericResultTable):
     class Meta:
         name = "Test Table Name"
         description = "Test Table Description"
@@ -102,7 +102,7 @@ def test_can_enable_best_results_tracking(fake_test, client_service, results_ser
     best_results = results_service.get_best_results(fake_test.id, results.name)
     assert 'non tracked col name:row' not in best_results  # non tracked column should not be tracked
 
-    class TrackingAllSampleTable(GenericResultTable):
+    class TrackingAllSampleTable(StaticGenericResultTable):
         class Meta:
             name = "Test Table Name"
             description = "Test Table Description"
