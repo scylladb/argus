@@ -176,6 +176,7 @@
                     scylla_repo: ["scyllaRepo"],
                     scylla_image: ["scyllaImageAWS", "scyllaImageGCE", "scyllaImageAzure", ],
                     rolling_upgrade: ["newScyllaRepo"],
+                    scylla_byo: ["scyllaRepoBYO", "scyllaBranchBYO"],
                 };
                 let result = true;
                 console.log(this);
@@ -206,8 +207,8 @@
                     onChange: function (e, params) {
                         paramDefinitions.scyllaVersion.currentSource = e.target.value;
                     },
-                    values: ["scylla_version", "scylla_repo", "scylla_image", "rolling_upgrade"],
-                    labels: ["Provide Scylla version directly", "Provide Scylla repo", "Specify Cloud Image", "Specify Rolling Upgrade Params"],
+                    values: ["scylla_version", "scylla_repo", "scylla_image", "rolling_upgrade", "scylla_byo"],
+                    labels: ["Provide Scylla version directly", "Provide Scylla repo", "Specify Cloud Image", "Specify Rolling Upgrade Params", "Scylla BYO"],
                 },
                 scyllaVersion: {
                     name: "Scylla Version",
@@ -247,7 +248,6 @@
                         params.scylla_ami_id = "";
                         params.gce_image_db = "";
                         params.azure_image_db = "";
-                        this.validated = this.validate(params);
                     }
                 },
                 scyllaImageAWS: {
@@ -302,6 +302,47 @@
                     onChange: function (e, params) {
                         params.scylla_version = "";
                         params.scylla_repo = "";
+                    }
+                },
+                scyllaRepoBYO: {
+                    name: "Scylla BYO Repository",
+                    description: "Scylla BYO GitHub repository",
+                    type: StringParam,
+                    internalName: "byo_scylla_repo",
+                    requiresValidation: true,
+                    validated: true,
+                    validationHelpText: "Repository URL must be in the format: git@github.com:<username>/<repo>.git",
+                    validate: function (params) {
+                        const GIT_REPO_RE = /^git@github\.com:[\w-]+\/[\w-]+\.git$/;
+                        return !!params[this.internalName] && GIT_REPO_RE.test(params[this.internalName]);
+                    },
+                    condition: (params, defs) => (defs.scyllaVersion.currentSource == "scylla_byo"),
+                    onChange: function (e, params) {
+                        params.scylla_version = "";
+                        params.scylla_repo = "";
+                        params.scylla_ami_id = "";
+                        params.gce_image_db = "";
+                        params.azure_image_db = "";
+                    }
+                },
+                scyllaBranchBYO: {
+                    name: "Scylla BYO Branch",
+                    description: "Scylla BYO GitHub branch",
+                    type: StringParam,
+                    internalName: "byo_scylla_branch",
+                    requiresValidation: true,
+                    validated: true,
+                    validationHelpText: "Branch name cannot be empty.",
+                    validate: function (params) {
+                        return !!params[this.internalName];
+                    },
+                    condition: (params, defs) => (defs.scyllaVersion.currentSource == "scylla_byo"),
+                    onChange: function (e, params) {
+                        params.scylla_version = "";
+                        params.scylla_repo = "";
+                        params.scylla_ami_id = "";
+                        params.gce_image_db = "";
+                        params.azure_image_db = "";
                     }
                 },
                 newScyllaRepo: {
