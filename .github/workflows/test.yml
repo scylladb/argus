@@ -41,3 +41,9 @@ jobs:
 
       - name: Run tests
         run: poetry run pytest argus
+
+      - name: Run pytest-argus-reporter tests
+        run: |
+          cd pytest-argus-reporter
+          python -m pip install uv nox
+          nox

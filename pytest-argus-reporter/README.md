@@ -144,7 +144,7 @@ test_history_slices.py::test_that_failed
 
 ## Contributing
 
-Contributions are very welcome. Tests can be run with [`tox`][tox]. Please ensure
+Contributions are very welcome. Tests can be run with [`nox`][nox]. Please ensure
 the coverage at least stays the same before you submit a pull request.
 
 ## License
@@ -166,6 +166,6 @@ This [pytest] plugin was generated with [Cookiecutter] along with [@hackebrot]'s
 [cookiecutter-pytest-plugin]: https://github.com/pytest-dev/cookiecutter-pytest-plugin
 [file an issue]: https://github.com/scylladb/argus/issues
 [pytest]: https://github.com/pytest-dev/pytest
-[tox]: https://tox.readthedocs.io/en/latest/
+[nox]: https://nox.thea.codes/
 [pip]: https://pypi.org/project/pip/
 [PyPI]: https://pypi.org/project
