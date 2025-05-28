@@ -144,7 +144,7 @@ class PlanningService:
         else:
             plan.view_id = plan_request.view_id
             view = self.update_view_for_plan(plan, existing=True)
-        
+
         plan.save()
 
         return plan
