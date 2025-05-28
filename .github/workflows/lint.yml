@@ -22,19 +22,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Install poetry
-        run: pip install poetry
-
-      - name: Setup Python
-        id: setup-python
-        uses: actions/setup-python@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
+          enable-cache: true
           python-version: '3.12'
-          cache: "poetry"
-          cache-dependency-path: "pyproject.toml"
 
       - name: Install project dependencies
-        run: poetry install --with web-backend,dev
+        run: uv sync --extra web-backend --extra dev
 
       - name: Run precommit hooks
-        run: poetry run pre-commit run --all-files
+        run: uv run pre-commit run --all-files

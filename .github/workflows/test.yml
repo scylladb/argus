@@ -22,28 +22,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Install poetry
-        run: pip install poetry
-
-      - name: Setup Python
-        id: setup-python
-        uses: actions/setup-python@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
+          enable-cache: true
           python-version: '3.12'
-          cache: "poetry"
-          cache-dependency-path: "pyproject.toml"
 
       - name: Install project dependencies
-        run: poetry install --with web-backend,dev
+        run: uv sync --extra web-backend --extra dev
 
       - name: Verify Docker installation
         run: docker --version
 
       - name: Run tests
-        run: poetry run pytest argus
+        run: uv run pytest
 
       - name: Run pytest-argus-reporter tests
         run: |
           cd pytest-argus-reporter
-          python -m pip install uv nox
-          nox
+          uv sync --all-extras
+          uv run nox
