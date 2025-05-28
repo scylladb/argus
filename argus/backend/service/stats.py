@@ -486,6 +486,8 @@ class TestStats:
             {
                 "id": run["id"],
                 "status": run["status"],
+                "setup": run.get("cloud_setup"),
+                "resources": run.get("allocated_resources"),
                 "build_number": get_build_number(run["build_job_url"]),
                 "build_job_name": run["build_id"],
                 "start_time": run["start_time"],

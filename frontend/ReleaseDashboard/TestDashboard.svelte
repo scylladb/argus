@@ -14,14 +14,20 @@
         faTimes,
         faEyeSlash,
         faQuestion,
+        faCheckSquare,
+        faSquare,
     } from "@fortawesome/free-solid-svg-icons";
 
     import {
         InvestigationStatusIcon,
         StatusBackgroundCSSClassMap,
+        StatusButtonCSSClassMap,
         TestInvestigationStatus,
         TestInvestigationStatusStrings,
         TestStatus,
+
+        TestStatusFilterDefaultState
+
     } from "../Common/TestStatus";
     import { subUnderscores, titleCase } from "../Common/TextUtils";
     import { apiMethodCall } from "../Common/ApiUtils";
@@ -31,6 +37,7 @@
     import NumberStats from "../Stats/NumberStats.svelte";
     import { timestampToISODate } from "../Common/DateUtils";
     import AssigneeFilter from "./AssigneeFilter.svelte";
+    import Select from "svelte-select";
     export let dashboardObject;
     export let dashboardObjectType = "release";
     export let clickedTests = {};
@@ -39,11 +46,9 @@
     export let stats;
     let statRefreshInterval;
     let statsFetchedOnce = false;
-    let hideNotPlanned =  JSON.parse(window.localStorage.getItem(`releaseDashHideNotPlanned-${dashboardObject.id}`)) ?? false;
     let versionsIncludeNoVersion = JSON.parse(window.localStorage.getItem(`releaseDashIncludeNoVersions-${dashboardObject.id}`)) ?? (settings.versionsIncludeNoVersion || true);
     let versionsFilterExtraVersions = JSON.parse(window.localStorage.getItem(`releaseDashFilterExtraVersions-${dashboardObject.id}`)) ?? true;
     let users = {};
-    let userFilter;
     $: users = $userList;
 
     const PANEL_MODES = {
@@ -57,6 +62,87 @@
         }
     };
 
+    const FILTER_STACK = {
+        user: {
+            f: function (test) {
+                if (!this.state) return true;
+                return getAssigneesForTest(test.test.id, test.test.group_id, test.last_runs) == this.state?.id;
+            },
+            op: (a, b) => a && b,
+            state: undefined,
+        },
+        status: {
+            /**
+             * @param test {{status: string}}
+             */
+            f: function (test) {
+                return this.state[test.status];
+            },
+            op: (a, b) => a && b,
+            state: Object.assign({}, TestStatusFilterDefaultState),
+        },
+        image: {
+            f: function(test) {
+                const lastRun = test.last_runs?.[0];
+                if (!this.state) return true;
+                if (!lastRun) return false;
+                return (lastRun?.setup?.db_node?.image_id ?? "None") == this.state;
+            },
+            op: (a, b) => a && b,
+            state: undefined,
+            options: [],
+            populate: function (stats) {
+                let images = Object
+                    .values(stats.groups)
+                    .flatMap(g => Object.values(g.tests))
+                    .map(test => (test.last_runs?.[0]?.setup?.db_node?.image_id) || "None")
+                    .sort();
+                return Array.from(new Set(images));
+            },
+        },
+        backend: {
+            f: function(test) {
+                const lastRun = test.last_runs?.[0];
+                if (!this.state) return true;
+                if (!lastRun) return false;
+                return (lastRun?.setup?.backend ?? "None") == this.state;
+            },
+            op: (a, b) => a && b,
+            state: undefined,
+            options: [],
+            populate: function (stats) {
+                let backends = Object
+                    .values(stats.groups)
+                    .flatMap(g => Object.values(g.tests))
+                    .map(test => (test.last_runs?.[0]?.setup?.backend) || "None")
+                    .sort();
+                return Array.from(new Set(backends));
+            },
+        },
+    };
+
+    const populateFilterStackOptions = function(stats) {
+        Object.values(FILTER_STACK).forEach(filter => {
+            if (filter.populate) filter.options = filter.populate(stats);
+        });
+    };
+
+    const loadedState = JSON.parse(window.localStorage.getItem(`testDashFilterState-${dashboardObject.id}`));
+    if (loadedState) {
+        Object.entries(loadedState).forEach(([key, state]) => {
+            FILTER_STACK[key].state = state;
+        });
+    }
+
+    $: {
+        let state = Object.entries(FILTER_STACK).reduce((acc, [key, filter]) => {
+            acc[key] = filter.state;
+            return acc;
+        }, {});
+        const serializedState = JSON.stringify(state);
+        window.localStorage.setItem(`testDashFilterState-${dashboardObject.id}`, serializedState);
+    }
+
     let assigneeList = {
         groups: {
 
@@ -64,6 +150,20 @@
         tests: {
 
         }
+    };
+
+    const doFilters = function(test, stack) {
+        let filterState = Object.values(stack).map(filter => {
+            return [filter.f(test), filter.op];
+        });
+
+        let finalResult = true;
+        while (filterState.length > 0) {
+            let [filterResult, filterOp] = filterState.shift();
+            finalResult = filterOp(finalResult, filterResult);
+        }
+
+        return finalResult;
     };
 
     const dispatch = createEventDispatcher();
@@ -123,6 +223,7 @@
             return false;
         }
         stats = json.response;
+        populateFilterStackOptions(stats);
         dispatch("statsUpdate", stats);
         statsFetchedOnce = true;
 
@@ -223,21 +324,16 @@
         }
     };
 
-    const shouldFilterOutByUser = function (user, test, group = undefined, tests = undefined, type = "test") {
-        if (!user) return false;
-        switch (type) {
-        case "test":
-            return getAssigneesForTest(test.test.id, test.test.group_id, test.last_runs) != user.id;
-        case "group":
-            return (assigneeList.groups?.[group.id]?.[0] ?? "") != user.id && tests.filter(v => !shouldFilterOutByUser(user, v)).length == 0;
-        default:
-            return false;
-        }
+    const hideEmptyGroup = function (groupStats) {
+        let div = document.querySelector(`#testContainer-${groupStats.group.id}`);
+        if (!div) return false;
+        let children = div.querySelectorAll(".status-block:not(.d-none)");
+        return children.length == 0;
     };
 
     const handleUserFilter = function(event) {
         let user = event.detail;
-        userFilter = user;
+        FILTER_STACK.user.state = user;
     };
 
     const saveCheckboxState = function(name, state) {
@@ -333,6 +429,14 @@
             });
     };
 
+    const loadOptionValue = function(stack, key) {
+        if (!stack[key] || !stack[key].state) return null;
+        return {
+            label: stack[key].state,
+            value: stack[key].state
+        };
+    };
+
     onMount(() => {
         fetchStats();
         let refreshInterval = 300 + 15 + Math.round((Math.random() * 10));
@@ -350,16 +454,6 @@
 </script>
 <div class="rounded bg-light-one shadow-sm p-2">
     <div class="text-end mb-2">
-        <button title="Hide not planned tests" class="btn btn-sm btn-outline-dark" on:click={() => {
-                hideNotPlanned = !hideNotPlanned;
-                saveCheckboxState(`releaseDashHideNotPlanned-${dashboardObject.id}`, hideNotPlanned);
-            }}>
-            {#if hideNotPlanned}
-                Hide not planned tests
-            {:else}
-                Show not planned tests
-            {/if}
-        </button>
         <button title="Refresh" class="btn btn-sm btn-outline-dark" on:click={handleDashboardRefreshClick}>
             <Fa icon={faRefresh}/>
         </button>
@@ -467,13 +561,65 @@
             </div>
             <div class="bg-white rounded mx-2 mb-2 w-25">
                 <div class="p-2">Filter by assignee</div>
-                <div class="p-2"><AssigneeFilter on:selected={handleUserFilter}/></div>
+                <div class="p-2"><AssigneeFilter user={FILTER_STACK.user.state} on:selected={handleUserFilter}/></div>
 
+            </div>
+        </div>
+        <div class="d-flex">
+            <div class="mb-2 d-inline-flex align-items-start flex-column rounded bg-white">
+                <div class="p-2">Status filter</div>
+                <div class="p-2">
+                    {#each Object.entries(TestStatus) as [name, status]}
+                        <button
+                            class="ms-2 mb-2 btn btn-sm {StatusButtonCSSClassMap?.[status]}"
+                            on:click={() => FILTER_STACK.status.state[status] = !FILTER_STACK.status.state[status]}
+                        >
+                            {#if FILTER_STACK.status.state[status]}
+                                <Fa icon={faCheckSquare}/>
+                            {:else}
+                                <Fa icon={faSquare}/>
+                            {/if}
+                            {titleCase(name.split("_").join(" ").toLowerCase())}
+                        </button>
+                    {/each}
+                </div>
+            </div>
+        </div>
+        <div class="d-flex">
+            <div class="mb-2 d-inline-flex w-50 align-items-start flex-column rounded bg-white">
+                <div class="p-2">Filter by ImageId</div>
+                <div class="p-2 w-100">
+                    <Select
+                        value={loadOptionValue(FILTER_STACK, "image")}
+                        on:select={e => FILTER_STACK.image.state = e.detail.value}
+                        on:clear={() => FILTER_STACK.image.state = undefined}
+                        placeholder="ImageId"
+                        items={FILTER_STACK.image.options.map(id => { return { label: id, value: id};})}
+                        hideEmptyState={true}
+                        isClearable={true}
+                        isSearchable={true}
+                    />
+                </div>
+            </div>
+            <div class="ms-2 mb-2 d-inline-flex w-50 align-items-start flex-column rounded bg-white">
+                <div class="p-2">Filter by SCT Backend</div>
+                <div class="p-2 w-100">
+                    <Select
+                        value={loadOptionValue(FILTER_STACK, "backend")}
+                        on:select={e => FILTER_STACK.backend.state = e.detail.value}
+                        on:clear={() => FILTER_STACK.backend.state = undefined}
+                        placeholder="Backend"
+                        items={FILTER_STACK.backend.options.map(id => { return { label: id, value: id};})}
+                        hideEmptyState={true}
+                        isClearable={true}
+                        isSearchable={true}
+                    />
+                </div>
             </div>
         </div>
         {#each sortedGroups(stats.groups) as groupStats (groupStats.group.id)}
             {#if !groupStats.disabled}
-                <div class="p-2 shadow mb-2 rounded bg-main" class:d-none={shouldFilterOutByUser(userFilter, undefined, groupStats, Object.values(groupStats.tests), "group")}>
+                <div class="p-2 shadow mb-2 rounded bg-main" class:d-none={hideEmptyGroup(groupStats, FILTER_STACK)}>
                     <h5 class="mb-2 d-flex">
                         <div class="flex-fill">
                             <div class="mb-2">{#if dashboardObjectType != "release"}<span class="d-inline-block border p-1 me-1">{stats.releases?.[groupStats.group.release_id]?.name ?? "" }</span>{/if}{groupStats.group.pretty_name || groupStats.group.name}</div>
@@ -517,11 +663,11 @@
                         </div>
                     </h5>
                     <div class="collapse" class:show={!getCollapseState(`collapse-${groupStats.group.id}`, collapseState)} id="collapse-{groupStats.group.id}">
-                        <div class="my-2 d-flex flex-wrap bg-lighter rounded shadow-sm">
+                        <div id="testContainer-{groupStats.group.id}" class="my-2 d-flex flex-wrap bg-lighter rounded shadow-sm">
                             {#each Object.entries(sortTestStats(groupStats.tests)) as [testId, testStats] (testId)}
                                 <!-- svelte-ignore a11y-click-events-have-key-events -->
                                 <div
-                                    class:d-none={hideNotPlanned && testStats?.status == TestStatus.NOT_PLANNED || shouldFilterOutByUser(userFilter, testStats)}
+                                    class:d-none={!doFilters(testStats, FILTER_STACK)}
                                     class:status-block-active={testStats.start_time != 0}
                                     class:investigating={testStats?.investigation_status == TestInvestigationStatus.IN_PROGRESS}
                                     class:should-be-investigated={testStats?.investigation_status == TestInvestigationStatus.NOT_INVESTIGATED && [TestStatus.FAILED, TestStatus.TEST_ERROR].includes(testStats?.status)}
