@@ -6,12 +6,12 @@ Minimal local dev setup with one db node (adjust accordingly if needed more node
 1. Python >=3.10.0 (system-wide or pyenv)
 2. NodeJS >=16 (with npm)
 3. Yarn (can be installed globally with `npm -g install yarn`)
-4. poetry
+4. uv (https://docs.astral.sh/uv/getting-started/installation/)
 5. docker-compose
 
 ## Installing argus dependencies
 ```bash
-poetry install --with dev,web-backend,docker-image
+uv sync --all-extras
 yarn install
 ```
 
@@ -91,12 +91,12 @@ docker exec -it argus_alpha_1 cqlsh --user cassandra --password cassandra -e "CR
 
 ### create all tables
 ```bash
-FLASK_DEBUG=1 FLASK_ENV=development FLASK_APP=argus_backend:argus_app poetry run flask cli sync-models
+FLASK_DEBUG=1 FLASK_ENV=development FLASK_APP=argus_backend:argus_app uv run flask cli sync-models
 ```
 
 ### import jenkins jobs
 ```bash
-FLASK_DEBUG=1 FLASK_ENV=development FLASK_APP=argus_backend:argus_app poetry run flask cli scan-jenkins
+FLASK_DEBUG=1 FLASK_ENV=development FLASK_APP=argus_backend:argus_app uv run flask cli scan-jenkins
 ```
 
 ### import data

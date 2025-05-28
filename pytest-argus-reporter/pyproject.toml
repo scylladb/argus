@@ -2,12 +2,12 @@
 requires = [
     "setuptools >= 40.0.4",
     "wheel >= 0.29.0",
+    "setuptools-scm>=8",
 ]
 build-backend = 'setuptools.build_meta'
 
 [project]
 name = "pytest-argus-reporter"
-version = "0.15.0"
 authors = [
     {name = "Scylladb", email = "qa@scylladb.com"},
 ]
@@ -36,6 +36,10 @@ dependencies = [
     "argus-alm",
     "six >= 1.10.0",
 ]
+dynamic = ["version",]
+
+[tool.setuptools_scm]
+root = ".."
 
 [project.entry-points."pytest11"]
 argus-reporter  = "pytest_argus_reporter"
