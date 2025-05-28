@@ -20,15 +20,14 @@ RUN apt-get install -y nginx-full && \
 RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
     && apt-get install -y nodejs \
     && npm i -g yarn
-# Install Poetry
+# Install uv
 USER ${ARGUS_USER}
-RUN curl -fsSL https://install.python-poetry.org | python3 - --preview
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 # Copy project files
 COPY --chown=${ARGUS_USER}:${ARGUS_USER} . /app
 WORKDIR /app
 # Build project
-RUN poetry install --with default,web-backend,docker-image \
-    --without dev \
+RUN uv sync --extra web-backend --extra docker-image \
     && yarn \
     && WEBPACK_ENVIRONMENT=${WEBPACK_ENVIRONMENT} yarn webpack \
     && mkdir /app/nginx
