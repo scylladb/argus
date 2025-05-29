@@ -15,14 +15,14 @@ repos:
 
 -   repo: local
     hooks:
-    -   id: autopep8
-        name: autopep8
-        entry: autopep8 -i -j 2
+    -   id: ruff_format
+        name: ruff format
+        entry: ruff format
         language: system
         types: [python]
 
-    -   id: ruff
-        name: ruff
+    -   id: ruff_check
+        name: ruff check
         entry: ruff check --fix --preview
         language: system
         types: [python]
