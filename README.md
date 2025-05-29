@@ -20,7 +20,7 @@ For development setup instructions, see [dev-setup.md](./docs/dev-setup.md).
 
 - nginx
 
-- poetry >=1.2.0b1
+- uv
 
 ### From source
 
@@ -53,7 +53,7 @@ cd ~/app
 Install project dependencies:
 
 ```bash
-poetry install --with default,dev,web-backend,docker-image
+uv sync --all-extras
 yarn install
 ```
 

@@ -1,2 +1,2 @@
 #!/bin/bash
-poetry run supervisord -c ./docker/config/supervisord.conf -n
+uv run supervisord -c ./docker/config/supervisord.conf -n
