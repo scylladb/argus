@@ -136,70 +136,73 @@
 {#if showSimilars}
     <ModalWindow widthClass="w-75" on:modalClose={closeSimilarModal}>
         <svelte:fragment slot="title">
-            Similar Events ({similars.length})
+            Similar Events ({Object.keys(similarRunsInfo).length})
         </svelte:fragment>
         <svelte:fragment slot="body">
-            <div class="table-responsive">
-                <table class="table table-striped table-hover">
-                    <thead>
-                        <tr>
-                            <th>Build ID</th>
-                            <th>Start Time</th>
-                            <th>Version</th>
-
-                            <th>Issues</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {#each similars as runId}
+            {#if fetchingIssues}
+                <div class="d-flex justify-content-center align-items-center" style="min-height: 200px;">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading similar runs information...</span>
+                    </div>
+                    <span class="ms-3">Loading similar runs information...</span>
+                </div>
+            {:else}
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
                             <tr>
-                                <td>
-                                    <a href="/tests/scylla-cluster-tests/{runId}" target="_blank" title={runId}>
-                                        {similarRunsInfo[runId]?.build_id || runId}
-                                    </a>
-                                </td>
-
-                                <td class="date-column">
-                                    {#if similarRunsInfo[runId]?.start_time}
-                                        {new Date(similarRunsInfo[runId].start_time).toLocaleDateString("en-CA")}
-                                    {:else}
-                                        -
-                                    {/if}
-                                </td>
-                                <td>
-                                    {#if similarRunsInfo[runId]?.version}
-                                        {similarRunsInfo[runId].version}
-                                    {:else}
-                                        -
-                                    {/if}
-                                </td>
-                                <td>
-                                    {#if fetchingIssues}
-                                        <div class="spinner-border spinner-border-sm" role="status">
-                                            <span class="visually-hidden">Loading...</span>
-                                        </div>
-                                    {:else if similarRunsInfo[runId]?.issues?.length}
-                                        {#each similarRunsInfo[runId].issues as issue}
-                                            <div class="issue-item mb-1">
-                                                <a href={issue.url} target="_blank" class="issue-link">
-                                                    <span
-                                                        class="badge {issue.state === 'open'
-                                                            ? 'issue-open'
-                                                            : 'issue-closed'}">#{issue.number}</span
-                                                    >
-                                                    {issue.title}
-                                                </a>
-                                            </div>
-                                        {/each}
-                                    {:else}
-                                        <span class="text-muted">No issues</span>
-                                    {/if}
-                                </td>
+                                <th>Build ID</th>
+                                <th>Start Time</th>
+                                <th>Version</th>
+                                <th>Issues</th>
                             </tr>
-                        {/each}
-                    </tbody>
-                </table>
-            </div>
+                        </thead>
+                        <tbody>
+                            {#each similars.filter(runId => similarRunsInfo[runId]) as runId}
+                                <tr>
+                                    <td>
+                                        <a href="/tests/scylla-cluster-tests/{runId}" target="_blank" title={runId}>
+                                            {similarRunsInfo[runId]?.build_id || runId}
+                                        </a>
+                                    </td>
+                                    <td class="date-column">
+                                        {#if similarRunsInfo[runId]?.start_time}
+                                            {new Date(similarRunsInfo[runId].start_time).toLocaleDateString("en-CA")}
+                                        {:else}
+                                            -
+                                        {/if}
+                                    </td>
+                                    <td>
+                                        {#if similarRunsInfo[runId]?.version}
+                                            {similarRunsInfo[runId].version}
+                                        {:else}
+                                            -
+                                        {/if}
+                                    </td>
+                                    <td>
+                                        {#if similarRunsInfo[runId]?.issues?.length}
+                                            {#each similarRunsInfo[runId].issues as issue}
+                                                <div class="issue-item mb-1">
+                                                    <a href={issue.url} target="_blank" class="issue-link">
+                                                        <span
+                                                            class="badge {issue.state === 'open'
+                                                                ? 'issue-open'
+                                                                : 'issue-closed'}">#{issue.number}</span
+                                                        >
+                                                        {issue.title}
+                                                    </a>
+                                                </div>
+                                            {/each}
+                                        {:else}
+                                            <span class="text-muted">No issues</span>
+                                        {/if}
+                                    </td>
+                                </tr>
+                            {/each}
+                        </tbody>
+                    </table>
+                </div>
+            {/if}
         </svelte:fragment>
     </ModalWindow>
 {/if}
