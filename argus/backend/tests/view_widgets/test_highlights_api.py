@@ -1,4 +1,5 @@
 import json
+import time
 from datetime import datetime, UTC
 from unittest.mock import patch
 from uuid import uuid4, UUID
@@ -77,6 +78,9 @@ def test_get_highlights_should_return_highlights_and_action_items(flask_client):
         comments_count=0,
     )
     action_item_entry.save()
+
+    # Add small delay to ensure can be read (test was flaky)
+    time.sleep(0.05)  # 50ms delay
 
     response = flask_client.get(f"/api/v1/views/widgets/highlights?view_id={view_id}&index=0")
 

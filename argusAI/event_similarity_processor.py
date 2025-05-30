@@ -22,7 +22,7 @@ from argusAI.utils.scylla_connection import ScyllaConnection
 
 SLEEP_INTERVAL: int = 300  # 5 minutes
 SIMILARITY_THRESHOLD: float = 0.90
-MAX_SIMILARS: int = 20
+MAX_SIMILARS: int = 200
 DAYS_BACK: int = int(os.getenv("DAYS_BACK", "120"))
 
 logging.basicConfig(
