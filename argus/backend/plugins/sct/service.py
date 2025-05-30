@@ -25,6 +25,7 @@ from argus.backend.util.common import chunk, get_build_number
 from argus.common.enums import NemesisStatus, ResourceState, TestStatus
 
 LOGGER = logging.getLogger(__name__)
+MAX_SIMILARS = 20
 
 
 class SCTServiceException(Exception):
@@ -481,24 +482,62 @@ class SCTService:
         Returns:
             Dictionary mapping run IDs to their information (build_id, start_time, and issues)
         """
-
         result = {}
-        for run_id in run_ids:
+
+        # Step 1: Get issue links for all run_ids in batches
+        all_issue_links = {}
+
+        for batch_run_ids in chunk(run_ids):
+            batch_links = IssueLink.objects.filter(run_id__in=batch_run_ids).all()
+
+            for link in batch_links:
+                run_id_str = str(link.run_id)
+                if run_id_str not in all_issue_links:
+                    all_issue_links[run_id_str] = []
+                all_issue_links[run_id_str].append(link)
+
+        # Step 2: Fetch all unique issue details
+        all_issue_ids = set()
+        for links in all_issue_links.values():
+            all_issue_ids.update(link.issue_id for link in links)
+
+        issues_by_id = {}
+        if all_issue_ids:
+            for batch_issue_ids in chunk(list(all_issue_ids)):
+                batch_issues = GithubIssue.filter(id__in=batch_issue_ids).all()
+
+                for issue in batch_issues:
+                    issues_by_id[issue.id] = issue
+
+        # Step 3: Fetch test runs only for run_ids that have issue links (limiting to MAX_SIMILARS runs)
+        runs_with_issues = list(all_issue_links.keys())
+
+        test_runs = {}
+        if runs_with_issues:
+            for run_id in runs_with_issues[:MAX_SIMILARS]:
+                try:
+                    test_run = SCTTestRun.get(id=run_id)
+                    test_runs[run_id] = test_run
+                except Exception as e:
+                    LOGGER.debug(f"Failed to fetch test run {run_id}: {str(e)}")
+
+        # Step 4: Assign run and issue details to result for runs with issues
+        for run_id in runs_with_issues:
             try:
-                test_run = SCTTestRun.get(id=run_id)
+                test_run = test_runs.get(run_id)
                 if not test_run:
                     continue
-                links = IssueLink.objects.filter(run_id=run_id).all()
-                issues: list[GithubIssue] = []
-                for batch in chunk(links):
-                    issues.extend(GithubIssue.filter(id__in=batch).all())
+
+                links = all_issue_links.get(run_id, [])
+                issues = [issues_by_id[link.issue_id] for link in links if link.issue_id in issues_by_id]
+
                 try:
                     build_number = int(
                         test_run.build_job_url[:-1].split("/")[-1]
                     )
                 except Exception as e:
                     LOGGER.error(
-                        f"Error parsing build number for run {run_id}: {test_run.build_job_url[:-1].split("/")} - {str(e)}")
+                        f"Error parsing build number for run {run_id}: {test_run.build_job_url[:-1].split('/')} - {str(e)}")
                     build_number = -1
 
                 for pkg_name in ["scylla-server-upgraded", "scylla-server", "scylla-server-target"]:
@@ -506,6 +545,7 @@ class SCTService:
                         (f"{pkg.version}-{pkg.date}" for pkg in test_run.packages if pkg.name == pkg_name), None)
                     if sut_version:
                         break
+
                 result[run_id] = {
                     "build_id": f"{test_run.build_id}#{build_number}",
                     "start_time": test_run.start_time.isoformat(),
@@ -523,6 +563,53 @@ class SCTService:
             except Exception as e:
                 LOGGER.error(f"Error fetching info for run {run_id}: {str(e)}")
                 result[run_id] = {"build_id": None, "start_time": None, "issues": []}
+
+        # Step 5: If less than MAX_SIMILARS results, fetch MAX_SIMILARS more run details
+        if len(result) < MAX_SIMILARS:
+            remaining_run_ids = [run_id for run_id in run_ids if run_id not in result]
+            additional_needed = min(MAX_SIMILARS - len(result), len(remaining_run_ids))
+
+            if additional_needed > 0:
+                additional_run_ids = remaining_run_ids[:additional_needed]
+
+                additional_test_runs = {}
+                for run_id in additional_run_ids:
+                    try:
+                        test_run = SCTTestRun.get(id=run_id)
+                        additional_test_runs[run_id] = test_run
+                    except Exception as e:
+                        LOGGER.debug(f"Failed to fetch additional test run {run_id}: {str(e)}")
+
+                for run_id in additional_run_ids:
+                    try:
+                        test_run = additional_test_runs.get(run_id)
+                        if not test_run:
+                            continue
+
+                        try:
+                            build_number = int(
+                                test_run.build_job_url[:-1].split("/")[-1]
+                            )
+                        except Exception as e:
+                            LOGGER.error(
+                                f"Error parsing build number for run {run_id}: {test_run.build_job_url[:-1].split('/')} - {str(e)}")
+                            build_number = -1
+
+                        for pkg_name in ["scylla-server-upgraded", "scylla-server", "scylla-server-target"]:
+                            sut_version = next(
+                                (f"{pkg.version}-{pkg.date}" for pkg in test_run.packages if pkg.name == pkg_name), None)
+                            if sut_version:
+                                break
+
+                        result[run_id] = {
+                            "build_id": f"{test_run.build_id}#{build_number}",
+                            "start_time": test_run.start_time.isoformat(),
+                            "version": sut_version or "unknown",
+                            "issues": [],
+                        }
+                    except Exception as e:
+                        LOGGER.error(f"Error fetching info for run {run_id}: {str(e)}")
+                        result[run_id] = {"build_id": None, "start_time": None, "issues": []}
 
         return result
 
