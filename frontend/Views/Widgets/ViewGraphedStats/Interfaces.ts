@@ -8,6 +8,25 @@ export interface TestRun {
     start_time: number;
     stack_trace?: string;
     investigation_status: string;
+    assignee?: string;
+    issues?: Issue[];
+}
+
+export interface Issue {
+    number: number;
+    state: string;
+    title: string;
+    url: string;
+}
+
+export interface RunDetails {
+    build_id: string;
+    status: string;
+    start_time: string;
+    assignee: string;
+    version: string;
+    investigation_status: string;
+    issues: Issue[];
 }
 
 export interface NemesisData {

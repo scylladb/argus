@@ -126,6 +126,7 @@
                             <th
                                 class:sortable={column.sort !== undefined}
                                 on:click={() => column.sort && toggleSort(column.key)}
+                                title={column.label}
                                 style={column.width
                                     ? `width: ${column.width}; min-width: ${column.width};`
                                     : i === columns.length - 1

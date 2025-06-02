@@ -500,7 +500,7 @@
                                 <div>
                                     <TestRunTable
                                         testRuns={$state.filteredData.test_runs}
-                                        onClose={() => ($state.currentBuildLevel = "")}
+                                        onClose={zoomOut}
                                     />
                                 </div>
                             {:else}
