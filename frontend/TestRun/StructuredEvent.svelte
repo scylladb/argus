@@ -262,14 +262,7 @@
     .issue-link:hover {
         text-decoration: underline;
     }
-    .issue-open {
-        color: #f4faff;
-        background-color: #347d39;
-    }
-    .issue-closed {
-        color: #f4faff;
-        background-color: #8256d0;
-    }
+
     .date-column {
         width: 100px;
     }

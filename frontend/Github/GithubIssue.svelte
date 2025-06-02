@@ -285,16 +285,6 @@
         color: white !important;
     }
 
-    .issue-open {
-        color: #f4faff;
-        background-color: #347d39;
-    }
-
-    .issue-closed {
-        color: #f4faff;
-        background-color: #8256d0;
-    }
-
     .h-50 {
         width: 50%;
     }

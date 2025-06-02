@@ -164,3 +164,13 @@ div#notificationCounter {
     background-position: center;
     background-size: cover;
 }
+
+.issue-open {
+    color: #f4faff;
+    background-color: #347d39;
+}
+
+.issue-closed {
+    color: #f4faff;
+    background-color: #8256d0;
+}
