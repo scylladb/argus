@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from argus.backend.util.common import get_payload
 from flask import Blueprint, request
 
 from argus.backend.models.web import ArgusUserView
@@ -36,19 +37,13 @@ def get_graphed_stats():
 @api_login_required
 def get_runs_details():
     """Get detailed information for provided test runs including assignee and attached issues."""
-    data = request.get_json()
+    data = get_payload(request)
     if not data or "run_ids" not in data:
-        return {
-            "status": "error",
-            "response": "Missing run_ids parameter"
-        }, 400
+        raise ValueError("Missing run_ids parameter")
 
     run_ids = data["run_ids"]
     if not isinstance(run_ids, list):
-        return {
-            "status": "error",
-            "response": "run_ids must be a list"
-        }, 400
+        raise ValueError("run_ids must be a list")
 
     service = GraphedStatsService()
     result = service.get_runs_details(run_ids)

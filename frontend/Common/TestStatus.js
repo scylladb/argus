@@ -164,3 +164,8 @@ export const ResultCellStatusStyleMap = {
     "WARNING": "table-warning",
     "NULL": "table-secondary"
 };
+
+export const NemesisStatusToTestStatus = {
+  "skipped": "aborted",
+  "succeeded": "passed",
+}

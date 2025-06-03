@@ -5,7 +5,7 @@ import re
 from argus.backend.db import ScyllaCluster
 from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.models.github_issue import GithubIssue, IssueLink
-from argus.backend.util.common import chunk
+from argus.backend.util.common import chunk, get_build_number
 
 LOGGER = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ class GraphedStatsService:
             release_data["test_runs"].append({
                 "build_id": run["build_id"],
                 "start_time": run["start_time"].timestamp(),
-                "duration": duration,
+                "duration": duration if duration > 0 else 0,
                 "status": run["status"],
                 "version": version,
                 "run_id": str(run["id"]),
@@ -139,17 +139,10 @@ class GraphedStatsService:
                 links = all_issue_links.get(run_id, [])
                 issues = [issues_by_id[issue_id] for issue_id in links if issue_id in issues_by_id]
 
-                try:
-                    build_number = int(
-                        test_run.build_job_url[:-1].split("/")[-1]
-                    )
-                except Exception as e:
-                    LOGGER.error(
-                        f"Error parsing build number for run {run_id}: {test_run.build_job_url[:-1].split('/')} - {str(e)}")
-                    build_number = -1
+                build_number = get_build_number(test_run.build_job_url)
 
                 # Get Scylla version from packages
-                for pkg_name in ["scylla-server-upgraded", "scylla-server", "scylla-server-target"]:
+                for pkg_name in ["scylla-server-upgraded", "scylla-server-upgrade-target", "scylla-server", "scylla-server-target"]:
                     sut_version = next(
                         (f"{pkg.version}-{pkg.date}" for pkg in test_run.packages if pkg.name == pkg_name), None)
                     if sut_version:
