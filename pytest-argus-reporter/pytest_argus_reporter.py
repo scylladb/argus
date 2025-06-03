@@ -165,11 +165,12 @@ class ArgusReporter(object):  # pylint: disable=too-many-instance-attributes
         self.extra_headers = config.getoption("extra_headers")
         self.max_splice_time = config.getoption("max_splice_time")
         self.default_test_time = config.getoption("default_test_time")
+        if self.post_reports:
+            assert self.run_id and self.test_type, (
+                "'--argus-run-id' and '--argus-test-type' should be set, "
+                "or set ARGUS_RUN_ID and ARGUS_TEST_TYPE environment variables"
+            )
 
-        assert self.run_id and self.test_type, (
-            "'--argus-run-id' and '--argus-test-type' should be set, "
-            "or set ARGUS_RUN_ID and ARGUS_TEST_TYPE environment variables"
-        )
         self.session_data = dict()
         self.session_data["username"] = get_username()
         self.session_data["hostname"] = socket.gethostname()
@@ -177,7 +178,6 @@ class ArgusReporter(object):  # pylint: disable=too-many-instance-attributes
         self.reports = defaultdict(list)
         self.config = config
         self.is_slave = False
-
         self.slices_query_fields = dict()
 
     @property
