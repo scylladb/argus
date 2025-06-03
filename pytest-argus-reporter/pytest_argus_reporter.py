@@ -297,7 +297,7 @@ class ArgusReporter(object):  # pylint: disable=too-many-instance-attributes
 
                 request_data["test_type"] = self.test_type
                 request_data["run_id"] = self.run_id
-
+                request_data["message"] = test_data.pop("failure_message", None)
                 request_data["status"] = test_data.pop("outcome")
                 request_data["duration"] = test_data.pop("duration")
                 request_data["timestamp"] = test_data.pop("timestamp")
