@@ -34,7 +34,7 @@ def configure_needed_env_vars():
 
 @pytest.fixture(scope="function", autouse=True)
 def configure_argus_mock(requests_mock):  # pylint: disable=redefined-outer-name
-    matcher = re.compile(r"http://argus.scylladb.com:443/api/v1/client/testrun/pytest/result/.*")
+    matcher = re.compile(r"https://argus.scylladb.com/api/v1/client/testrun/pytest/result/.*")
 
     requests_mock.post(matcher, status_code=201)
 

@@ -94,6 +94,19 @@ def test_failures(testdir, requests_mock):  # pylint: disable=redefined-outer-na
     # make sure that we get a '1' exit code for the testsuite
     assert result.ret == 1
 
+    for req in requests_mock.request_history:
+        req_json = req.json()
+        assert "status" in req_json
+        assert "name" in req_json
+        assert "user_fields" in req_json
+        assert "test_type" in req_json
+        assert "session_timestamp" in req_json
+        assert "duration" in req_json
+
+        # Ensure that for failed tests (excluding xpass tests), the "message" field is populated with an error message.
+        if "message" in req_json and "xpass" not in req_json["name"] and req_json["status"] != "passed":
+            assert req_json["message"] is not None, f"message should not be None {req_json}"
+
 
 def test_argus_configuration(testdir):
     """Make sure that pytest accepts our argus configuration."""
