@@ -1,6 +1,7 @@
 <script lang="ts">
     import PaginatedTable from "./PaginatedTable.svelte";
     import StackTracePreview from "./StackTracePreview.svelte";
+    import StatusBadge from "./StatusBadge.svelte";
     import type { NemesisData } from "./Interfaces";
 
     export let nemesisName: string | null;
@@ -20,16 +21,13 @@
                     ? 1
                     : a.run_id.localeCompare(b.run_id),
             width: "120px",
-            render: (item: NemesisData) =>
-                `<span class="badge bg-${item.status === "failed" ? "danger" : "success"}">${
-                    item.status === "failed" ? "Failed" : "Succeeded"
-                }</span>`,
+            component: StatusBadge,
         },
         {
             key: "start_time",
             label: "Start Time",
             sort: (a: NemesisData, b: NemesisData) => a.start_time - b.start_time,
-            width: "130px",
+            width: "150px",
         },
         {
             key: "duration",

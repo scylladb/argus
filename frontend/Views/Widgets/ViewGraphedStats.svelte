@@ -359,10 +359,26 @@
                 plugins: {
                     title: { display: true, text: "Nemesis Success and Failure Counts" },
                     legend: { position: "bottom" },
+                    tooltip: {
+                        mode: "index",
+                        intersect: false,
+                        position: "nearest",
+                        callbacks: {
+                            title: (tooltipItems) => {
+                                return tooltipItems[0].label;
+                            },
+                            label: (context) => {
+                                const label = context.dataset.label;
+                                const value = context.parsed.y;
+                                return `${label}: ${value}`;
+                            },
+                        },
+                    },
                 },
                 onClick: (event, elements) => {
                     if (elements.length) onClick(nemesisNames[elements[0].index]);
                 },
+
             },
         }) as ChartType;
     }

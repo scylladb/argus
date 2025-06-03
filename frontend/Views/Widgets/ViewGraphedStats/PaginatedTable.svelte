@@ -1,5 +1,7 @@
 <script lang="ts">
     import { writable } from "svelte/store";
+    import humanizeDuration from "humanize-duration";
+    import { timestampToISODate } from "../../../Common/DateUtils.js";
     import type { NemesisData, TestRun } from "./Interfaces";
 
     /** @description Array of items to display (either NemesisData or TestRun) */
@@ -14,13 +16,12 @@
     export let sortDirection: "asc" | "desc";
     /**
      * @description Table column definitions
-     * @type {Array<{key: string, label: string, sort?: (a: any, b: any) => number, render?: (item: any) => string, component?: any, width?: string}>}
+     * @type {Array<{key: string, label: string, sort?: (a: any, b: any) => number, component?: any, width?: string}>}
      */
     export let columns: {
         key: string;
         label: string;
         sort?: (a: any, b: any) => number;
-        render?: (item: any) => string;
         component?: any;
         width?: string;
     }[];
@@ -80,27 +81,6 @@
     $: totalPages = Math.ceil(items.length / itemsPerPage);
 
     /**
-     * @description Formats duration in seconds to a human-readable string
-     * @param {number} seconds - Duration in seconds
-     * @returns {string} Formatted duration (e.g., "1h 30m 45s")
-     */
-    function formatDuration(seconds: number): string {
-        const absSeconds = Math.abs(seconds);
-        return `${Math.floor(absSeconds / 3600)}h ${Math.floor((absSeconds % 3600) / 60)}m ${Math.floor(
-            absSeconds % 60
-        )}s`;
-    }
-
-    /**
-     * @description Formats Unix timestamp to a readable date
-     * @param {number} timestamp - Unix timestamp in seconds
-     * @returns {string} Formatted date or "N/A" if invalid
-     */
-    function formatTimestamp(timestamp: number): string {
-        return timestamp ? new Date(timestamp * 1000).toLocaleDateString("en-CA", { timeZone: "UTC" }) : "N/A";
-    }
-
-    /**
      * @description Gets display value for an item property
      * @param {NemesisData | TestRun} item - Data item
      * @param {string} key - Property key
@@ -148,13 +128,13 @@
                                 <td>
                                     {#if column.component}
                                         <svelte:component this={column.component} run={item} />
-                                    {:else if column.render}
-                                        {@html column.render(item)}
                                     {:else if column.key === "duration"}
-                                        {formatDuration(item[column.key])}
+                                        {item[column.key] === 0
+                                            ? "unknown"
+                                            : humanizeDuration(item[column.key] * 1000, { largest: 2, round: true })}
                                     {:else if column.key === "start_time"}
                                         <a href={`/tests/scylla-cluster-tests/${item.run_id}`} target="_blank"
-                                            >{formatTimestamp(item[column.key])}</a
+                                            >{timestampToISODate(item[column.key] * 1000)}</a
                                         >
                                     {:else}
                                         {getItemValue(item, column.key) || ""}
