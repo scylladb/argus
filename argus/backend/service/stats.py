@@ -147,6 +147,11 @@ def generate_field_status_map(
     return status_map
 
 
+def _get_image(row: dict):
+    if cs := row.get("cloud_setup"):
+        return cs.db_node.image_id
+
+
 def _fetch_multiple_release_queries(entity: Model, releases: list[str]):
     result_set = []
     for release_id in releases:
@@ -486,6 +491,8 @@ class TestStats:
             {
                 "id": run["id"],
                 "status": run["status"],
+                "setup": run.get("cloud_setup"),
+                "resources": run.get("allocated_resources"),
                 "build_number": get_build_number(run["build_job_url"]),
                 "build_job_name": run["build_id"],
                 "start_time": run["start_time"],
@@ -520,7 +527,7 @@ class ReleaseStatsCollector:
         self.release_name = release_name
         self.release_version = release_version
 
-    def collect(self, limited=False, force=False, include_no_version=False) -> dict:
+    def collect(self, limited=False, force=False, include_no_version=False, image_id: str = None) -> dict:
         self.release: ArgusRelease = ArgusRelease.get(name=self.release_name)
         all_tests: list[ArgusTest] = list(ArgusTest.filter(release_id=self.release.id).all())
         build_ids = reduce(lambda acc, test: acc[test.plugin_name or "unknown"].append(
@@ -545,6 +552,9 @@ class ReleaseStatsCollector:
             else:
                 expr = lambda row: row["scylla_version"]
         self.release_rows = list(filter(expr, self.release_rows))
+        if image_id:
+            self.release_rows = list(filter(lambda row: row.get("cloud_setup", {}).get(
+                "db_node", {}).get("image_id", "") == image_id, self.release_rows))
         self.release_dict = {}
         for row in self.release_rows:
             runs = self.release_dict.get(row["build_id"], [])
@@ -568,7 +578,7 @@ class ViewStatsCollector:
         self.view_id = view_id
         self.filter = filter
 
-    def collect(self, limited=False, force=False, include_no_version=False) -> dict:
+    def collect(self, limited=False, force=False, include_no_version=False, image_id: str = None) -> dict:
         self.view: ArgusUserView = ArgusUserView.get(id=self.view_id)
         all_tests: list[ArgusTest] = []
         for slice in chunk(self.view.tests):
@@ -592,6 +602,8 @@ class ViewStatsCollector:
             else:
                 expr = lambda row: row["scylla_version"]
         self.view_rows = list(filter(expr, self.view_rows))
+        if image_id:
+            self.view_rows = list(filter(lambda row: _get_image(row) == image_id, self.view_rows))
         for row in self.view_rows:
             runs = self.runs_by_build_id.get(row["build_id"], [])
             runs.append(row)
