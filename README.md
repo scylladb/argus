@@ -1,5 +1,5 @@
 # Argus
-![PyPI - Version](https://img.shields.io/pypi/v/argus-alm)
+[![PyPI - Version](https://img.shields.io/pypi/v/argus-alm)](https://pypi.python.org/pypi/argus-alm)
 
 ## Description
 
