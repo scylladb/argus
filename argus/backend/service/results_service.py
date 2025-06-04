@@ -498,7 +498,7 @@ class ResultsService:
             for cell in cells:
                 column = cell['column']
                 row = cell['row']
-                value = cell.get('value') or cell.get('value_text')
+                value = cell.get('value') if cell.get('value') is not None else cell.get('value_text')
                 status = cell['status']
 
                 if column in column_names and row in table_data['rows']:
