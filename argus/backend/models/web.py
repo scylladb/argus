@@ -8,6 +8,7 @@ from cassandra.util import uuid_from_time, unix_time_from_uuid1
 
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.plan import ArgusReleasePlan
+from argus.backend.models.pytest import PytestResultTable
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ArgusBestResultData, ArgusGraphView
 from argus.backend.models.runtime_store import RuntimeStore
 from argus.backend.models.view_widgets import WidgetHighlights, WidgetComment
@@ -396,6 +397,7 @@ USED_MODELS: list[Model] = [
     CriticalEventEmbeddings,
     GithubIssue,
     IssueLink,
+    PytestResultTable,
 ]
 
 USED_TYPES: list[UserType] = [
