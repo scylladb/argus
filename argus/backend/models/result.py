@@ -17,6 +17,7 @@ class ColumnMetadata(UserType):
     unit = columns.Text()
     type = columns.Ascii()
     higher_is_better = columns.Boolean()  # used for tracking best results, if None - no tracking
+    visible = columns.Boolean(default=True)  # controls visibility in UI, True by default
 
 
 class ArgusGenericResultMetadata(Model):
