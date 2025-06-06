@@ -58,6 +58,21 @@ class TestMixedResults(StaticGenericResultTable):
         validation_rules = {"column1": ValidationRule(best_pct=10, best_abs=20, fixed_limit=30)}
 
 
+class TestVisibilityResults(StaticGenericResultTable):
+    """
+    Testing Results with mixed visible and invisible columns
+    """
+
+    class Meta:
+        name = "Visibility Test Results"
+        description = "Testing column visibility feature"
+        columns = [
+            ColumnMetadata(name="visible_col", unit="unit1", type=ResultType.INTEGER, higher_is_better=True, visible=True),
+            ColumnMetadata(name="invisible_col", unit="unit2", type=ResultType.FLOAT, higher_is_better=False, visible=False),
+            ColumnMetadata(name="default_col", unit="unit3", type=ResultType.DURATION, higher_is_better=True),  # Should default to visible=True
+        ]
+
+
 def test_static_results():
     """
     Tests that you can create Results with all the information in the Meta class
@@ -110,6 +125,55 @@ def test_add_results():
 
     assert len(serialized["meta"]["rows_meta"]) == 2
     assert len(serialized["results"]) == 2
+
+
+def test_column_metadata_as_dict_includes_visibility():
+    """Test that ColumnMetadata.as_dict() includes visibility field"""
+    # Test explicitly visible column
+    visible_col = ColumnMetadata(name="test", unit="unit", type=ResultType.INTEGER, visible=True)
+    visible_dict = visible_col.as_dict()
+    assert "visible" in visible_dict
+    assert visible_dict["visible"] is True
+
+    # Test explicitly invisible column
+    invisible_col = ColumnMetadata(name="test", unit="unit", type=ResultType.INTEGER, visible=False)
+    invisible_dict = invisible_col.as_dict()
+    assert "visible" in invisible_dict
+    assert invisible_dict["visible"] is False
+
+    # Test default visibility
+    default_col = ColumnMetadata(name="test", unit="unit", type=ResultType.INTEGER)
+    default_dict = default_col.as_dict()
+    assert "visible" in default_dict
+    assert default_dict["visible"] is True
+
+
+def test_mixed_visibility_dynamic_results():
+    """Test dynamic results with mixed column visibility"""
+    class TestDynamicVisibility(GenericResultTable):
+        def __init__(self):
+            super().__init__(
+                name="Dynamic Visibility Test",
+                description="Testing dynamic column visibility",
+                columns=[
+                    ColumnMetadata(name="visible1", unit="unit1", type=ResultType.INTEGER, visible=True),
+                    ColumnMetadata(name="invisible1", unit="unit2", type=ResultType.FLOAT, visible=False),
+                    ColumnMetadata(name="visible2", unit="unit3", type=ResultType.TEXT),  # Default visible
+                ],
+            )
+
+    results = TestDynamicVisibility()
+    serialized = results.as_dict()
+
+    columns_meta = serialized["meta"]["columns_meta"]
+    assert len(columns_meta) == 3
+
+    visible_columns = [col for col in columns_meta if col["visible"]]
+    invisible_columns = [col for col in columns_meta if not col["visible"]]
+
+    assert len(visible_columns) == 2
+    assert len(invisible_columns) == 1
+    assert invisible_columns[0]["name"] == "invisible1"
 
 
 def test_no_column():

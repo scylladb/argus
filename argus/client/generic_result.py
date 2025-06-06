@@ -30,6 +30,7 @@ class ColumnMetadata:
     unit: str
     type: ResultType
     higher_is_better: bool = None
+    visible: bool = True  # controls visibility in UI, True by default
 
     def as_dict(self) -> dict:
         return {
@@ -37,6 +38,7 @@ class ColumnMetadata:
             "unit": self.unit,
             "type": str(self.type),
             "higher_is_better": self.higher_is_better,
+            "visible": self.visible,
         }
 
 
