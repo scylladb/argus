@@ -372,7 +372,8 @@ def create_chartjs(table: ArgusGenericResultMetadata, data: list[ArgusGenericRes
     Create Chart.js-compatible graph for each column in the table.
     """
     graphs = []
-    columns = [column for column in table.columns_meta if column.type != "TEXT"]
+    columns = [column for column in table.columns_meta
+               if column.type != "TEXT" and column.visible is not False]
 
     for column in columns:
         datasets = create_datasets_for_column(table, data, best_results, releases_map,
@@ -471,7 +472,7 @@ class ResultsService:
             table_name = table.name
             table_description = table.description
             column_types_map = {col_meta.name: col_meta.type for col_meta in table.columns_meta}
-            column_names = [col_meta.name for col_meta in table.columns_meta]
+            column_names = [col_meta.name for col_meta in table.columns_meta if col_meta.visible is not False]
 
             table_data = {
                 'description': table_description,
@@ -484,9 +485,10 @@ class ResultsService:
             present_columns = {cell['column'] for cell in cells}
             present_rows = {cell['row'] for cell in cells}
 
-            # Filter columns and rows based on the presence in cells
+            # Filter columns based on presence in cells and visibility
             table_data['columns'] = [
-                col_meta for col_meta in table.columns_meta if col_meta.name in present_columns
+                col_meta for col_meta in table.columns_meta
+                if col_meta.name in present_columns and col_meta.name in column_names
             ]
             table_data['rows'] = [
                 row for row in table.rows_meta if row in present_rows
