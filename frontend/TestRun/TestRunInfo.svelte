@@ -67,7 +67,7 @@
                     {(test?.pretty_name || test?.name) ?? "#NO_TEST"}
                 </li>
                 {#if test_run.test_method}
-                    <li>
+                    <li class="text-break">
                         <span class="fw-bold">Test Method:</span>
                         {test_run.test_method}
                     </li>
