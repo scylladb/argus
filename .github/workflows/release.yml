@@ -35,7 +35,7 @@ jobs:
   publish-to-pypi:
     name: >-
       Publish Python 🐍 distribution 📦 to PyPI
-    # if: startsWith(github.ref, 'refs/tags/')  # only publish to PyPI on tag pushes
+    if: github.ref_type == 'tag'
     needs:
     - build
     runs-on: ubuntu-latest
@@ -44,6 +44,7 @@ jobs:
       url: https://pypi.org/p/argus-alm  # Replace <package-name> with your PyPI project name
     permissions:
       id-token: write  # IMPORTANT: mandatory for trusted publishing
+      contents: write
 
     steps:
     - name: Download all the dists
@@ -56,6 +57,7 @@ jobs:
       uses: pypa/gh-action-pypi-publish@release/v1
 
     - name: Create GitHub release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         generate_release_notes: true
+        files: dist/*
