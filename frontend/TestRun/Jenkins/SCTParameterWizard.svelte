@@ -306,7 +306,7 @@
                 },
                 scyllaRepoBYO: {
                     name: "Scylla BYO Repository",
-                    description: "Scylla BYO GitHub repository",
+                    description: "ScyllaDB GitHub repository in SSH format (git@github.com:personal-username/scylla.git)",
                     type: StringParam,
                     internalName: "byo_scylla_repo",
                     requiresValidation: true,
@@ -326,7 +326,7 @@
                     }
                 },
                 scyllaBranchBYO: {
-                    name: "Scylla BYO Branch",
+                    name: "ScyllaDB GitHub branch name",
                     description: "Scylla BYO GitHub branch",
                     type: StringParam,
                     internalName: "byo_scylla_branch",
