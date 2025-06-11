@@ -29,9 +29,17 @@
     const dispatch = createEventDispatcher();
 
 
-    const handleParameterSubmit = function (_) {
+    let validationInProgress = $state(false);
+
+    const handleParameterSubmit = async function (_) {
         if (wizard && wizard.validate) {
-            let [validated, errors] = wizard.validate();
+            validationInProgress = true;
+            let validated, errors;
+            try {
+                [validated, errors] = await wizard.validate();
+            } finally {
+                validationInProgress = false;
+            }
             if (!validated) {
                 sendMessage("error", "Validation failed. Please verify the parameters", "ParameterEditor::Validate");
                 return;
@@ -97,6 +105,13 @@
         <button
             class="btn btn-success w-100 mb-1"
             onclick={handleParameterSubmit}
-        >Build</button>
+            disabled={validationInProgress}
+        >
+            {#if validationInProgress}
+                <span class="spinner-border spinner-border-sm"></span> Validating...
+            {:else}
+                Build
+            {/if}
+        </button>
     </div>
 </div>
