@@ -7,9 +7,12 @@
 
     export let runId: string;
 
+    const PAGE_SIZE_STEP = 100;
+
     let data: PytestData[] | null = null;
     let refreshInterval: any = null;
     let failedToLoad = false;
+    let pageSize = PAGE_SIZE_STEP;
     let filters = {
         search: "",
         status: {
@@ -136,9 +139,9 @@
                 <span class="fs-4">No tests to display</span>
             </div>
         {:else}
-            <div class="accordion accordion-flush">
+            <div class="accordion accordion-flush mb-2">
                 <IntersectionObserver let:intersecting top={20}>
-                    {#each filteredData as test, idx}
+                    {#each filteredData.slice(0, pageSize) as test, idx}
                         {#if intersecting}
                             <PytestItem
                                     testId={test.run_id}
@@ -149,6 +152,11 @@
                     {/each}
                 </IntersectionObserver>
             </div>
+            {#if filteredData.length > PAGE_SIZE_STEP}
+                <div>
+                    <button class="btn btn-primary w-100" on:click={() => pageSize += PAGE_SIZE_STEP}>Show more</button>
+                </div>
+            {/if}
         {/if}
 
     {:else if failedToLoad}
