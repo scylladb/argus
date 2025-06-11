@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from functools import reduce
 from unittest.mock import MagicMock
 from uuid import UUID
-from github import Github, Auth
+from github import Github, Auth, GithubException, UnknownObjectException
 
 from coodie.exceptions import DocumentNotFound
 
@@ -19,6 +19,12 @@ from argus.backend.util.common import chunk
 from argus.backend.util.config import Config
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _github_error_message(exc: GithubException) -> str:
+    if isinstance(exc.data, dict):
+        return exc.data.get("message", "Unknown error")
+    return str(exc.data or "Unknown error")
 
 
 class GithubService:
@@ -255,3 +261,33 @@ class GithubService:
         return {
             "deleted": issue_id if remaining_links == 0 else (link.run_id, link.issue_id)
         }
+
+    def validate_repo(self, repo: str, branch: str | None = None) -> tuple[bool, str]:
+        """
+        Verify that a GitHub repository (and optionally a branch inside it) exists and is reachable.
+
+        Accepts both SSH (git@github.com:owner/repo.git) and HTTPS (https://github.com/owner/repo) forms.
+        """
+        match = re.search(r"github\.com[:/](?P<full_name>[\w.-]+/[\w.-]+?)(?:\.git)?/?$", repo)
+        if not match:
+            return (False, f"'{repo}' is not a valid GitHub repository URL.")
+
+        try:
+            repository = self.gh.get_repo(match.group("full_name"))
+        except UnknownObjectException:
+            return (False, f"Repository '{repo}' not found or access denied.")
+        except GithubException as e:
+            LOGGER.error("GithubException while getting repo %s: %s %s", repo, e.status, e.data)
+            return (False, f"Error accessing repository '{repo}': {_github_error_message(e)}")
+
+        if not branch:
+            return (True, "Repository is valid.")
+
+        try:
+            repository.get_branch(branch)
+            return (True, "Repository and branch are valid.")
+        except UnknownObjectException:
+            return (False, f"Branch '{branch}' not found in repository '{repo}'.")
+        except GithubException as e:
+            LOGGER.error("GithubException while getting branch %s for repo %s: %s %s", branch, repo, e.status, e.data)
+            return (False, f"Error accessing branch '{branch}': {_github_error_message(e)}")
