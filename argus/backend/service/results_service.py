@@ -612,7 +612,7 @@ class ResultsService:
                 f"""
                 SELECT id, status, investigation_status, test_name, build_id, packages, test_method, started_by
                 FROM {plugin.model.table_name()}
-                WHERE test_id = ? LIMIT 10
+                WHERE test_id = ?
                 """
             )
             rows = self.cluster.session.execute(runs_details_query, parameters=(test_id,)).all()
