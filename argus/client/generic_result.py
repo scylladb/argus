@@ -155,7 +155,7 @@ class StaticGenericResultTable(GenericResultTable):
     """Results class for static results metainformation, defined in Meta class."""
 
     def __init__(
-        self, name=None, description=None, columns=None, sut_package_name=None, validation_rules=None
+        self, name=None, description=None, columns=None, sut_package_name=None, validation_rules=None, results=None, sut_timestamp=0
     ):
         meta = getattr(self.__class__, "Meta")
         super().__init__(
@@ -165,4 +165,9 @@ class StaticGenericResultTable(GenericResultTable):
             sut_package_name=sut_package_name or getattr(meta, "sut_package_name", ""),
             validation_rules=validation_rules or getattr(
                 meta, "ValidationRules", getattr(meta, "validation_rules", {})),
+            results=results or [],
+            sut_timestamp=sut_timestamp
         )
+
+    class Meta:
+        pass
