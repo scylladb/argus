@@ -6,7 +6,7 @@ from argus.client.generic_result import (
     ColumnMetadata,
     ResultType,
     ValidationRule,
-    GenericResultTable,
+    GenericResultTable, Cell,
 )
 
 
@@ -222,3 +222,33 @@ def test_text_rule():
 
     with pytest.raises(ValueError, match="TEXT"):
         TextType()
+
+
+@pytest.mark.parametrize("clazz", [
+    pytest.param(GenericResultTable, id="GenericResultTable"),
+    pytest.param(StaticGenericResultTable, id="StaticGenericResultTable"),
+])
+def test_all_parameters(clazz):
+    """
+    Tests that all parameters can be passed through constructor
+    """
+    results = clazz(name="test",
+                    description="test",
+                    columns=[
+                        ColumnMetadata(name="column2", unit="unit1", type=ResultType.INTEGER, higher_is_better=True),
+                    ],
+                    validation_rules={"column2": ValidationRule(best_pct=10, best_abs=20, fixed_limit=30)},
+                    sut_timestamp=10,
+                    results=[
+                        Cell(column='column2', row="1", value=2.86, status=Status.UNSET)
+                    ],
+                    sut_package_name="test package")
+
+    serialized = results.as_dict()
+
+    assert serialized["meta"]["name"] == "test"
+    assert serialized["meta"]["description"] == "test"
+    assert len(serialized["meta"]["rows_meta"]) == 1
+    assert len(serialized["meta"]["columns_meta"]) == 1
+    assert len(serialized["meta"]["validation_rules"]) == 1
+    assert len(serialized["results"]) == 1
