@@ -511,3 +511,20 @@ def clone_validate_new_settings():
         "status": "ok",
         "response": result
     }
+
+
+@bp.route("/github/repo/validate", methods=["POST"])
+@api_login_required
+def byo_validation():
+    payload = get_payload(client_request=request)
+    service = GithubService()
+
+    validated, message = service.validate_repo(payload["repo"], payload["branch"])
+
+    return {
+        "status": "ok",
+        "response": {
+            "validated": validated,
+            "message": message,
+        }
+    }
