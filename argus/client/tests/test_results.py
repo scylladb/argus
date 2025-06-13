@@ -14,6 +14,7 @@ class TestStaticResults(StaticGenericResultTable):
     """
     Testing Results, which contain all the information in Meta class
     """
+    __test__ = False
 
     class Meta:
         name = "Important Static Results"
@@ -28,6 +29,7 @@ class TestDynamicResults(GenericResultTable):
     """
     Testing Results, which pass all the information in the constructor
     """
+    __test__ = False
 
     def __init__(self, operation):
         super().__init__(
@@ -45,6 +47,7 @@ class TestMixedResults(StaticGenericResultTable):
     """
     Testing Results, which combine Meta class with some dynamic information
     """
+    __test__ = False
 
     def __init__(self, operation):
         super().__init__(name=f"{operation} - Dynamic Results")
@@ -62,6 +65,7 @@ class TestVisibilityResults(StaticGenericResultTable):
     """
     Testing Results with mixed visible and invisible columns
     """
+    __test__ = False
 
     class Meta:
         name = "Visibility Test Results"
