@@ -97,3 +97,11 @@
         </div>
     </div>
 {/if}
+
+<style>
+    .img-thumb {
+        border-radius: 50%;
+        width: 32px;
+    }
+
+</style>
