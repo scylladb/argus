@@ -10,6 +10,7 @@ from argus.backend.controller.views_widgets.summary import bp as summary_bp
 from argus.backend.controller.views_widgets.graphs import bp as graphs_bp
 from argus.backend.controller.views_widgets.nemesis_stats import bp as nemesis_stats_bp
 from argus.backend.controller.views_widgets.graphed_stats import bp as graphed_stats_bp
+from argus.backend.controller.views_widgets.pytest import bp as pytest_bp
 from argus.backend.error_handlers import handle_api_exception
 from argus.backend.models.web import User
 from argus.backend.service.stats import ViewStatsCollector
@@ -24,6 +25,7 @@ bp.register_blueprint(summary_bp)
 bp.register_blueprint(graphs_bp)
 bp.register_blueprint(graphed_stats_bp)
 bp.register_blueprint(nemesis_stats_bp)
+bp.register_blueprint(pytest_bp)
 bp.register_error_handler(Exception, handle_api_exception)
 
 
