@@ -47,9 +47,9 @@ web-backend = [
     "humanize ~= 3.13.1",
     "python-magic ~= 0.4.24",
     "uwsgi ~= 2.0.20",
-    "python-jenkins ~= 1.7.0",
+    "python-jenkins >= 1.7.0",
     "python-slugify ~= 6.1.1",
-    "pygithub ~= 2.6.1",
+    "pygithub >= 2.6.1",
     "boto3 ~= 1.38.9",
 ]
 docker-image = [
