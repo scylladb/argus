@@ -12,14 +12,13 @@
     export let groupStats;
     export let assigneeList;
     export let clickedTests;
-    export let hideNotPlanned;
-    export let userFilter;
+    export let doFilters;
     const dispatch = createEventDispatcher();
 </script>
 
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <div
-    class:d-none={hideNotPlanned && testStats?.status == TestStatus.NOT_PLANNED || shouldFilterOutByUser(assigneeList, userFilter, testStats)}
+    class:d-none={!doFilters(testStats)}
     class:status-block-active={testStats.start_time != 0}
     class:investigating={testStats?.investigation_status == TestInvestigationStatus.IN_PROGRESS}
     class:should-be-investigated={testStats?.investigation_status == TestInvestigationStatus.NOT_INVESTIGATED && [TestStatus.FAILED, TestStatus.TEST_ERROR].includes(testStats?.status)}
