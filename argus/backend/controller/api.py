@@ -582,7 +582,7 @@ def resolve_artifact_size():
 @api_login_required
 def s3_generic_proxy(bucket_name: str, bucket_path: str):
     service = TestRunService()
-    result = service.proxy_s3_image(
+    result = service.proxy_s3_file(
         bucket_name=bucket_name,
         bucket_path=bucket_path
     )

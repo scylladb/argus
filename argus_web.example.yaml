@@ -26,6 +26,13 @@ SECRET_KEY: MUSTBEUNIQUE
 # Allowed buckets for S3 proxying
 S3_ALLOWED_BUCKETS:
   - my-bucket-name
+
+# Allowed mime types for S3 proxying
+S3_ALLOWED_MIME:
+  - image/png
+  - application/zstd
+  - application/gzip
+
 # AWS Client ID
 AWS_CLIENT_ID: ABCDE
 # AWS Client Secret
