@@ -191,15 +191,15 @@ class TestRunService:
 
         return self.s3.generate_presigned_url(ClientMethod="get_object", Params={"Bucket": match.group("bucket"), "Key": match.group("key")}, ExpiresIn=3600)
 
-    def proxy_s3_image(self, bucket_name: str, bucket_path: str):
+    def proxy_s3_file(self, bucket_name: str, bucket_path: str):
         if bucket_name not in current_app.config.get("S3_ALLOWED_BUCKETS", []):
             raise TestRunServiceException(f"{bucket_name} is not an allowed S3 bucket to pull from")
 
         obj = self.s3.get_object(Bucket=bucket_name, Key=bucket_path)
         header = obj["Body"].read(1024)
         mime = magic.from_buffer(header, mime=True)
-        if "image" not in mime.lower():
-            raise TestRunServiceException(f"Cannot proxy a non-image file: {mime}", mime)
+        if mime.lower() not in current_app.config.get("S3_ALLOWED_MIME", []):
+            raise TestRunServiceException(f"Cannot proxy mime type that is not allowed: {mime}", mime)
 
         return self.s3.generate_presigned_url(ClientMethod="get_object", Params={"Bucket": bucket_name, "Key": bucket_path}, ExpiresIn=600)
 
