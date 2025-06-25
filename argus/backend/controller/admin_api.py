@@ -6,6 +6,7 @@ from flask import (
     Request,
 )
 from argus.backend.error_handlers import handle_api_exception
+from argus.backend.service.admin import AdminService
 from argus.backend.service.release_manager import ReleaseEditPayload, ReleaseManagerService
 from argus.backend.service.user import UserService, api_login_required, check_roles
 from argus.backend.models.web import User, UserRoles
@@ -348,6 +349,18 @@ def user_change_password(user_id: str):
 @api_login_required
 def user_toggle_admin(user_id: str):
     result = UserService().toggle_admin(user_id=user_id)
+
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
+@bp.route("/utils/config/reload", methods=["POST"])
+@check_roles(UserRoles.Admin)
+@api_login_required
+def util_reload_config():
+    result = AdminService().reload_config()
 
     return {
         "status": "ok",
