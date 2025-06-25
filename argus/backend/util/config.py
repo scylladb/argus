@@ -27,8 +27,8 @@ class Config:
         raise Exception("Failed to locate web application config file!")
 
     @classmethod
-    def load_yaml_config(cls) -> dict:
-        if cls.CONFIG:
+    def load_yaml_config(cls, force: bool = False) -> dict:
+        if cls.CONFIG and not force:
             return cls.CONFIG
         path = cls.locate_argus_web_config()
         with open(path, "rt", encoding="utf-8") as file:
