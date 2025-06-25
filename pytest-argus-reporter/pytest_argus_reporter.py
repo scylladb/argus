@@ -475,7 +475,7 @@ def git_data(request):
     """
 
     try:
-        from subprocess import DEVNULL  # py3k
+        from subprocess import DEVNULL  # noqa: PLC0415
     except ImportError:
         DEVNULL = open(os.devnull, "wb")
 
