@@ -36,6 +36,7 @@
 
     interface IWidgetState {
         before: number | null;
+        test: string | null;
         after: number | null;
         status: { [V in typeof PytestStatus[keyof typeof PytestStatus]]: boolean },
         query: string | null;
@@ -65,6 +66,9 @@
      * @type {string}
      */
     export let dashboardObjectType: string;
+    export let settings: {
+        enabledStatuses: string[]
+    };
 
     let pytestBarStatsCanvas: HTMLCanvasElement;
     let pytestBarChart: Chart<"bar">;
@@ -100,8 +104,9 @@
         return {
             before: qs.pytestBefore ? new Number(qs.pytestBefore) : null,
             after: qs.pytestAfter ? new Number(qs.pytestAfter) : defaultAfterDate(),
-            status: qs.pytestStatus ? loadStatusState(qs.pytestStatus as string[], false) : loadStatusState([]),
+            status: qs.pytestStatus ? loadStatusState(qs.pytestStatus as string[], false) : loadStatusState(settings.enabledStatuses || [], false),
             query: qs.pytestQuery || null,
+            test: qs.pytestTest || null,
             filters: qs.pytestFilters || [],
             limit: qs.pytestLimit || null,
             markers: qs.pytestMarkers || [],
@@ -118,6 +123,7 @@
                 before: widgetState.before,
                 after: widgetState.after,
                 filters: widgetState.filters,
+                test: widgetState.test,
                 markers: widgetState.markers,
                 query: widgetState.query,
                 status: Object.keys(widgetState.status).filter(v => widgetState.status[v]),
@@ -126,6 +132,10 @@
             const res = await fetch(ROUTES[dashboardObjectType].replace("$id", dashboardObject.id as string) + `?${queryString.stringify(qs, { arrayFormat: "bracket" })}`);
             const json = await res.json();
 
+            if (json.status !== "ok") {
+                dirty = true;
+                throw json;
+            }
             testData = json.response.hits;
             total = json.response.total;
             createBarChar(json.response.barChart);
@@ -146,6 +156,13 @@
         dirty = true;
         let query = event.detail.query as string;
         widgetState.query = query;
+        forceRefresh();
+    };
+
+    const handleTestNameUpdate = function (event: CustomEvent) {
+        dirty = true;
+        let test = event.detail.test as string;
+        widgetState.test = test;
         forceRefresh();
     };
 
@@ -281,6 +298,7 @@
             pytestFilters: widgetState.filters.length ? widgetState.filters : undefined,
             pytestLimit: widgetState.limit ?? undefined,
             pytestMarkers: widgetState.markers.length ? widgetState.markers : undefined,
+            pytestTest: widgetState.test ? widgetState.test : undefined,
         };
         const search = queryString.stringify(newQs, { arrayFormat: "bracket" });
         window.history.pushState(null, "", `?${search}`);
@@ -390,7 +408,7 @@
         Total {total} tests. (Last 500 are shown)
     </div>
     <div class="w-100">
-        <PytestTableWidget {testData} {fetching} filterString={widgetState.query || ""} on:queryUpdated={handleQueryUpdate} on:markerSelect={handleMarkerClick} on:filterSelect={handleFilterClick}/>
+        <PytestTableWidget {testData} {fetching} testString={widgetState.test || ""} filterString={widgetState.query || ""} on:testNameUpdated={handleTestNameUpdate} on:queryUpdated={handleQueryUpdate} on:markerSelect={handleMarkerClick} on:filterSelect={handleFilterClick}/>
     </div>
 </div>
 

@@ -9,6 +9,7 @@
     export let dashboardObjectType: string;
     export let settings: {
         collapsed: boolean,
+        enabledStatuses: string[]
     };
 
     let opened = false;
@@ -16,6 +17,6 @@
 
 <svelte:component this={settings.collapsed ? PytestCollapseHelper : PytestFlatHelper} on:open={() => (opened = true)}>
 {#if opened}
-    <ViewPytestOverview {dashboardObject} {dashboardObjectType} />
+    <ViewPytestOverview {dashboardObject} {dashboardObjectType} {settings}/>
 {/if}
 </svelte:component>

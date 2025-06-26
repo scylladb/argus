@@ -6,7 +6,7 @@ import CheckValue from "../Views/WidgetSettingTypes/CheckValue.svelte";
 import MultiSelectValue from "../Views/WidgetSettingTypes/MultiSelectValue.svelte";
 import MultiStringValue from "../Views/WidgetSettingTypes/MultiStringValue.svelte";
 import StringValue from "../Views/WidgetSettingTypes/StringValue.svelte";
-import {TestStatus} from "./TestStatus";
+import {PytestStatus, TestStatus} from "./TestStatus";
 import {subUnderscores, titleCase} from "./TextUtils";
 import ViewHighlights from "../Views/Widgets/ViewHighlights/ViewHighlights.svelte";
 import IntegerValue from "../Views/WidgetSettingTypes/IntegerValue.svelte";
@@ -166,6 +166,14 @@ export const WIDGET_TYPES = {
                 default: false,
                 help: "Show widget full-screen or as collapsible accordion",
                 displayName: "Collapsible"
+            },
+            enabledStatuses: {
+                type: MultiSelectValue,
+                default: Object.values(PytestStatus),
+                values: Object.values(PytestStatus),
+                labels: Object.keys(PytestStatus).map(s => subUnderscores(s).split(" ").map(s => titleCase(s)).join(" ")),
+                help: "Select which statuses to enable by default",
+                displayName: "Statuses shown by default"
             }
         },
     },
