@@ -39,11 +39,9 @@
     <div class="input-group">
         <span class="input-group-text">
             <input class="form-check-input mt-0 me-1" type="checkbox" bind:checked={isRange}>
-            {isRange ? "Range" : "Since"}
+            Range
         </span>
-        {#if isRange}
-            <span class="input-group-text">After</span>
-        {/if}
+        <span class="input-group-text">After</span>
         <input class="form-control" type="datetime-local" bind:value={dateAfter} on:input={handleAfterChange}>
         {#if isRange}
         <span class="input-group-text">Before</span>

@@ -1,20 +1,26 @@
 <script lang="ts">
     import { faSearch } from "@fortawesome/free-solid-svg-icons";
-import PytestResultRow from "./PytestResultRow.svelte";
+    import PytestResultRow from "./PytestResultRow.svelte";
     import { PytestResult } from "./ViewPytestOverview.svelte";
     import Fa from "svelte-fa";
-    import { createEventDispatcher } from "svelte";
+    import { createEventDispatcher, onMount } from "svelte";
 
-    export let testData: PytestResult[];
+    export let testData: PytestResult[] = [];
     export let fetching = false;
     const dispatch = createEventDispatcher();
 
     let PAGE_SIZE = 50;
     let currentPage = 1;
     export let filterString = "";
+    export let testString = "";
     let dirty = false;
     const shouldFilter = function () {
         dispatch("queryUpdated", { query: filterString} );
+        dirty = false;
+    };
+
+    const shouldSearch = function () {
+        dispatch("testNameUpdated", { test: testString} );
         dirty = false;
     };
 
@@ -48,13 +54,20 @@ import PytestResultRow from "./PytestResultRow.svelte";
 
 <div class="rounded bg-light-one p-2">
     <div class="rounded bg-white p-2 mb-2 input-group">
-        <input class="form-control form-input" type="text" placeholder="Filter tests..." bind:value={filterString} on:input={() => dirty = true}>
+        <input class="form-control form-input" type="text" placeholder="Filter test by name" bind:value={testString} on:input={() => dirty = true}>
+        <button class="btn btn-primary" on:click={shouldSearch} disabled={(testString.length == 0 || fetching) && !dirty}><Fa icon={faSearch}/>Search Specific Test</button>
+    </div>
+    <div class="rounded bg-white p-2 mb-2 input-group">
+        <input class="form-control form-input" type="text" placeholder="Filter test body" bind:value={filterString} on:input={() => dirty = true}>
         <button class="btn btn-primary" on:click={shouldFilter} disabled={(filterString.length == 0 || fetching) && !dirty}><Fa icon={faSearch}/>Search</button>
     </div>
     <div class="rounded bg-white p-2">
         <div class="p-1 rounded bg-light-one">
             {#each loadMore(pagedTests, currentPage) as item}
-                <PytestResultRow test={item} on:filterSelect on:markerSelect />
+                <PytestResultRow test={item} on:filterSelect on:markerSelect on:testSelect={(e) => {
+                        testString = e.detail;
+                        dispatch("testNameUpdated", { test: e.detail } );
+                    }}/>
             {:else}
                 <div class="p-4 text-muted text-center">
                     No data available.
