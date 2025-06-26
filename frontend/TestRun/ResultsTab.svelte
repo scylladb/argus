@@ -99,6 +99,9 @@
         list-style-type: none;
         padding: 0;
         margin: 0;
+        overflow-x: auto;
+        white-space: nowrap;
+        display: block;
     }
 
     .filters-container {
