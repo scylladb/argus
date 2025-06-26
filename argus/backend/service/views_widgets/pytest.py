@@ -1,11 +1,14 @@
 from collections import defaultdict
-from datetime import datetime
+from datetime import UTC, datetime
 from functools import reduce
 import re
 import logging
-from typing import TypedDict
+from typing import NamedTuple, TypedDict
 from uuid import UUID
+from time import sleep, time
 
+
+from humanize import naturaltime
 from flask import request
 from cassandra.util import uuid_from_time, unix_time_from_uuid1
 from argus.backend.db import ScyllaCluster
@@ -28,14 +31,18 @@ class PytestViewService:
         self.cluster = ScyllaCluster.get()
 
     @staticmethod
-    def stringify_result(result: PytestResultTable) -> str:
-        return f"{result.name} {result.message or ''} {' '.join(f'{key} {val}' for key, val, in result.user_fields.items())} {' '.join(f'{mark}' for mark in result.markers)}".lower()
+    def stringify_result(result: dict) -> str:
+        try:
+            return f"{result.name} {result.message or ''} {' '.join(f'{key} {val}' for key, val, in (result.user_fields or {}).items())} {' '.join(f'{mark}' for mark in (result.markers or []))}".lower()
+        except Exception as exc:
+            LOGGER.error("%s", result, exc_info=True)
+            raise exc
 
     @staticmethod
-    def do_user_field_filter(field: str, value: str, negated: bool, result: PytestResultTable) -> bool:
+    def do_user_field_filter(field: str, value: str, negated: bool, result: dict) -> bool:
 
-        if not (field_value := result.user_fields.get(field)):
-            return field not in result.user_fields if negated else field in result.user_fields
+        if not (field_value := (result.user_fields or {}).get(field)):
+            return field not in (result.user_fields or {}) if negated else field in (result.user_fields or {})
 
         res = field_value == value
 
@@ -52,13 +59,13 @@ class PytestViewService:
         tests = list(ArgusTest.filter(release_id=release_id).all())
         return self.result_filter([test for test in tests if test.plugin_name == GenericPluginInfo.name])
 
-    def prepare_pie_chart(self, hits: list[PytestResultTable]) -> dict:
-        def count_status(acc: dict, result: PytestResultTable):
+    def prepare_pie_chart(self, hits: list[dict]) -> dict:
+        def count_status(acc: dict, result: dict):
             acc[result.status] += 1
             return acc
         return reduce(count_status, hits, defaultdict(lambda: 0))
 
-    def prepare_bar_chart(self, hits: list[PytestResultTable]) -> dict:
+    def prepare_bar_chart(self, hits: list[dict]) -> dict:
         result = {}
         for hit in hits:
             if hit.session_timestamp:
@@ -80,6 +87,13 @@ class PytestViewService:
         }
 
     def result_filter(self, tests: list[ArgusTest]) -> PytestResult:
+        ts_start = time()
+        db = ScyllaCluster.get()
+
+        unique_tests = []
+        unique_tests.extend((row["name"] for row in db.session.execute(f"SELECT DISTINCT name FROM pytest_v2").all()))
+
+
         limit = request.args.get("limit", 500)
         before = request.args.get("before")
         after = request.args.get("after")
@@ -88,37 +102,67 @@ class PytestViewService:
         filters = request.args.getlist("filters[]")
         markers = request.args.getlist("markers[]")
 
-        dml = PytestResultTable.filter().allow_filtering()
+        db_query = "SELECT test_id, id, name, session_timestamp, status, markers, duration, test_type, user_fields FROM pytest_v2"
+        query_filters = []
 
         if before:
-            dml = dml.filter(id__lt=uuid_from_time(float(before)))
+            query_filters.append(("id <= ?", datetime.fromtimestamp(int(before), tz=UTC)))
 
         if after:
-            dml = dml.filter(id__gt=uuid_from_time(float(after)))
+            query_filters.append(("id >= ?", datetime.fromtimestamp(int(after), tz=UTC)))
 
-        results: list[PytestResultTable] = dml.all()
+        LOGGER.warning("%s, %s", db_query, query_filters)
+        prepared = db.prepare(db_query)
+        ts_prepare = time()
+        results: list[NamedTuple] = []
+        if isinstance(enabled_statuses, list):
+            query_filters.append(("status in ?", enabled_statuses))
+
+        for test in tests:
+            parallel_filter = [*query_filters]
+            for partition_chunk in chunk(unique_tests, 100):
+                parallel_query = db_query
+                partition_filter = [("name IN ?", partition_chunk), *parallel_filter]
+                parallel_query += " WHERE "
+                parallel_query += " AND ".join([f for f, _ in partition_filter])
+                LOGGER.warning("%s, %s", parallel_query, partition_filter)
+                prepared = db.prepare(parallel_query)
+                future = db.session.execute_async(prepared, parameters=[p for _, p in partition_filter], timeout=60.0, execution_profile="read_fast_named_tuple")
+                results.append(future)
+        LOGGER.warning("Total queries in progress: %s", len(results))
+        results = [row for future in results for row in future.result()]
+
+        ts_data_fetch = time()
 
         if markers:
             for marker in markers:
-                results = [result for result in results if marker in result.markers]
-
+                results = [result for result in results if marker in (result.markers or [])]
+        ts_marker_filter = time()
         if query:
             pattern = re.compile(query.lower())
             results = [result for result in results if re.search(pattern, self.stringify_result(result))]
-
+        ts_text_filter = time()
         if filters:
             filters = [(f[0] == "!", f.lstrip("!").split("=", 1)[0], f.lstrip("!").split("=", 1)[1]) for f in filters]
             for negated, field, value in filters:
                 results = [result for result in results if self.do_user_field_filter(field, value, negated, result)]
+        ts_user_filter = time()
+        ts_status_filter = time()
+        results = sorted(results, key=lambda r: r.id, reverse=True)
+        ts_sort = time()
+        LOGGER.warning("Stats\nParse: %s\nFetch: %s\nMarkers: %s\nText: %s\nFields: %s\nStatus: %s\nSort: %s",
+                       naturaltime(ts_prepare - ts_start, minimum_unit="milliseconds", future=True),
+                       naturaltime(ts_data_fetch - ts_prepare, minimum_unit="milliseconds", future=True),
+                       naturaltime(ts_marker_filter - ts_data_fetch, minimum_unit="milliseconds", future=True),
+                       naturaltime(ts_text_filter - ts_marker_filter, minimum_unit="milliseconds", future=True),
+                       naturaltime(ts_user_filter - ts_text_filter, minimum_unit="milliseconds", future=True),
+                       naturaltime(ts_status_filter - ts_user_filter, minimum_unit="milliseconds", future=True),
+                       naturaltime(ts_sort - ts_status_filter, minimum_unit="milliseconds", future=True),
 
-        if isinstance(enabled_statuses, list):
-            results = [result for result in results if result.status in enabled_statuses]
-
-        results = sorted(results, key=lambda r: unix_time_from_uuid1(r.id), reverse=True)
-
+                    )
         return {
             "total": len(results),
             "barChart": self.prepare_bar_chart(results),
             "pieChart": self.prepare_pie_chart(results),
-            "hits": results[:limit]
+            "hits": [result._asdict() for result in  results[:limit]]
         }
