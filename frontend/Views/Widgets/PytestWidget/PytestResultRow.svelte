@@ -1,7 +1,7 @@
 <script lang="ts">
     import Fa from "svelte-fa";
     import { PytestResult } from "./ViewPytestOverview.svelte";
-    import { faChevronDown, faChevronUp, faClipboard, faCopy, faFilter } from "@fortawesome/free-solid-svg-icons";
+    import { faChevronDown, faChevronUp, faClipboard, faCopy, faFilter, faSearch } from "@fortawesome/free-solid-svg-icons";
     import { PytestBgStyles, PytestTextStyles } from "../../../Common/TestStatus";
     import humanizeDuration from "humanize-duration";
     import { timestampToISODate } from "../../../Common/DateUtils";
@@ -16,8 +16,14 @@
 
 <div class="p-1 bg-white rounded mb-2 p-2">
     <div class="d-flex flex-wrap align-items-center">
-        <div class="overflow-hidden">
+        <div class="overflow-hidden test-name">
             {test.name}
+            <button
+                class="btn btn-sm btn-dark d-none"
+                on:click={() => dispatch("testSelect", test.name)}
+            >
+                <Fa icon={faSearch}/>
+            </button>
         </div>
         <div class="ms-auto rounded px-2 bg-light text-dark">
             {humanizeDuration(test.duration * 1000, {round: true, largest: 2})}
@@ -90,6 +96,10 @@
     }
 
     td.value-cell:hover button {
+        display: inline !important;
+    }
+
+    div.test-name:hover button {
         display: inline !important;
     }
 </style>
