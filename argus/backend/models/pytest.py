@@ -20,7 +20,8 @@ class PytestSubmitData(TypedDict):
     user_fields: dict[str, Any]
 
 
-class PytestResultTable(Model):
+class PytestResultTableOld(Model):
+    __table_name__ = "pytest_result_table"
     name = columns.Text(primary_key=True, partition_key=True)
     id = columns.TimeUUID(primary_key=True, clustering_order="DESC",
                           default=lambda: uuid_from_time(datetime.now(tz=UTC)))
@@ -47,3 +48,32 @@ class PytestResultTable(Model):
             "CREATE INDEX IF NOT EXISTS pytest_result_table_user_entries_idx ON pytest_result_table (ENTRIES(user_fields))")
         session.execute(
             "CREATE INDEX IF NOT EXISTS pytest_result_table_user_value_idx ON pytest_result_table (VALUES(user_fields))")
+
+
+class PytestResultTable(Model):
+    __table_name__ = "pytest_v2"
+    test_id = columns.UUID(primary_key=True, partition_key=True)
+    name = columns.Text(primary_key=True)
+    id = columns.TimeUUID(primary_key=True, default=lambda: uuid_from_time(datetime.now(tz=UTC)))
+    test_type = columns.Text(required=True)
+    run_id = columns.UUID(index=True, required=True)
+    release_id = columns.UUID(index=True)
+    duration = columns.Double()
+    message = columns.Text()
+    status = columns.Text(default=lambda: PytestStatus.PASSED.value)
+    test_timestamp = columns.DateTime() # timestamp for the submitted test
+    session_timestamp = columns.DateTime() # timestamp of the test session
+    markers = columns.List(value_type=columns.Text())
+
+    # User fields map remaining user-specified fields into a simple string:string mapping
+    # Example: SCYLLA_MODE = release
+    user_fields = columns.Map(key_type=columns.Text(), value_type=columns.Text())
+
+    @classmethod
+    def _sync_additional_rules(cls, session: Session):
+        session.execute(
+            "CREATE INDEX IF NOT EXISTS pytest_v2_user_key_idx ON pytest_v2 (KEYS(user_fields))")
+        session.execute(
+            "CREATE INDEX IF NOT EXISTS pytest_v2_user_entries_idx ON pytest_v2 (ENTRIES(user_fields))")
+        session.execute(
+            "CREATE INDEX IF NOT EXISTS pytest_v2_user_value_idx ON pytest_v2 (VALUES(user_fields))")
