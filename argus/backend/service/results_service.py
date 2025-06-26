@@ -175,7 +175,7 @@ def get_sorted_data_for_column_and_row(data: List[ArgusGenericResultData], colum
 
 def get_min_max_y(datasets: List[Dict[str, Any]]) -> (float, float):
     """0.5 - 1.5 of min/max of 50% results"""
-    y = [entry['y'] for dataset in datasets for entry in dataset['data']]
+    y = [entry['y'] for dataset in datasets for entry in dataset['data'] if entry['y'] is not None]
     if not y:
         return 0, 0
     sorted_y = sorted(y)
@@ -191,12 +191,13 @@ def coerce_values_to_axis_boundaries(datasets: List[Dict[str, Any]], min_y: floa
     for dataset in datasets:
         for entry in dataset['data']:
             val = entry['y']
-            if val > max_y:
-                entry['y'] = max_y
-                entry['ori'] = val
-            elif val < min_y:
-                entry['y'] = min_y
-                entry['ori'] = val
+            if val is not None:
+                if val > max_y:
+                    entry['y'] = max_y
+                    entry['ori'] = val
+                elif val < min_y:
+                    entry['y'] = min_y
+                    entry['ori'] = val
     return datasets
 
 
