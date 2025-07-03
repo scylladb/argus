@@ -13,6 +13,20 @@ export const TestStatus = {
     UNKNOWN: "unknown",
 };
 
+export const TestStatusFilterDefaultState = {
+    "created": true,
+    "running": true,
+    "failed": true,
+    "test_error": true,
+    "error": true,
+    "passed": true,
+    "aborted": true,
+    "not_run": true,
+    "not_planned": true,
+    "unknown": true,
+    "skipped": true,
+};
+
 export const TestStatusChangeable = {
     FAILED: "failed",
     TEST_ERROR: "test_error",
@@ -109,8 +123,8 @@ export const StatusButtonCSSClassMap = {
     "passed": "btn-success",
     "aborted": "btn-dark",
     "not_run": "btn-secondary",
-    "not_planned": "btn-muted",
-    "unknown": "btn-muted"
+    "not_planned": "btn-secondary",
+    "unknown": "btn-secondary"
 };
 
 export const StatusSortPriority = {
