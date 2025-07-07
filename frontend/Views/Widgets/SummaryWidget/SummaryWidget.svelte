@@ -8,8 +8,13 @@
         faChevronDown,
         faChevronUp,
         faExclamationTriangle,
+        faExclamationCircle,
         faTimesCircle,
-        faCheckCircle
+        faCheckCircle,
+        faMinusCircle,
+        faCircle,
+        faSpinner,
+        faBan,
     } from '@fortawesome/free-solid-svg-icons';
     import ResultTable from "../../../TestRun/Components/ResultTable.svelte";
     import RunIssues from "./RunIssues.svelte";
@@ -282,7 +287,7 @@
                         <span class={testData.notRun ? 'text-warning' : testData.hasFailedStatus ? 'text-danger' : 'text-success'}>
                             {selectedVersionTestInfo[testId]?.name || testId}
                             {#if testData.notRun}
-                                <Fa icon={faExclamationTriangle} class="text-warning ms-2"/>
+                                <Fa icon={faMinusCircle} class="text-secondary ms-2"/>
                             {:else if testData.hasFailedStatus}
                                 <Fa icon={faTimesCircle} class="text-danger ms-2"/>
                             {:else}
@@ -315,8 +320,8 @@
                         {/if}
                         <div class="test-methods-container mt-3">
                             {#if testData.notRun}
-                                <div class="alert alert-warning">
-                                    <Fa icon={faExclamationTriangle} class="me-2"/>
+                                <div class="alert alert-secondary">
+                                    <Fa icon={faMinusCircle} class="me-2"/>
                                     This test was not run in this version.
                                 </div>
                             {:else}
@@ -333,6 +338,20 @@
                                                         <Fa icon={faCheckCircle} class="text-success ms-2"/>
                                                     {:else if currentVersionRuns[testId]?.[methodName]?.status === 'failed'}
                                                         <Fa icon={faTimesCircle} class="text-danger ms-2"/>
+                                                    {:else if currentVersionRuns[testId]?.[methodName]?.status === 'created'}
+                                                        <Fa icon={faCircle} class="text-info ms-2"/>
+                                                    {:else if currentVersionRuns[testId]?.[methodName]?.status === 'running'}
+                                                        <Fa icon={faSpinner} class="text-warning ms-2 fa-spin"/>
+                                                    {:else if currentVersionRuns[testId]?.[methodName]?.status === 'aborted'}
+                                                        <Fa icon={faBan} class="text-dark ms-2"/>
+                                                    {:else if currentVersionRuns[testId]?.[methodName]?.status === 'test_error'}
+                                                        <Fa icon={faExclamationCircle} class="text-test-error ms-2"/>
+                                                    {:else if currentVersionRuns[testId]?.[methodName]?.status === 'not_run'}
+                                                        <Fa icon={faMinusCircle} class="text-secondary ms-2"/>
+                                                    {:else if currentVersionRuns[testId]?.[methodName]?.status === 'not_planned'}
+                                                        <Fa icon={faMinusCircle} class="text-not-planned ms-2"/>
+                                                    {:else if currentVersionRuns[testId]?.[methodName]?.status === 'unknown'}
+                                                        <Fa icon={faQuestionCircle} class="text-muted ms-2"/>
                                                     {:else}
                                                         <Fa icon={faExclamationTriangle} class="text-warning ms-2"/>
                                                     {/if}
