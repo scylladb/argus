@@ -70,11 +70,16 @@
             soft: false,
             validate: function (plan) {
                 let assignedParticipants = Object.values(plan.assignments);
+                let missing = [];
                 for (const user of plan.participants) {
                     if (!assignedParticipants.find(v => v == user))  {
-                        this.message = `User @${users.find(v => v.id == user).username} is participating but is not assigned.`;
-                        return false;
+                        const username = users.find(v => v.id == user)?.username || user;
+                        missing.push(`@${username}`);
                     }
+                }
+                if (missing.length > 0) {
+                    this.message = `User(s) ${missing.join(", ")} participating but not assigned.`;
+                    return false;
                 }
                 return true;
             }
