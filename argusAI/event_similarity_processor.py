@@ -24,6 +24,7 @@ SLEEP_INTERVAL: int = 300  # 5 minutes
 SIMILARITY_THRESHOLD: float = 0.90
 MAX_SIMILARS: int = 200
 DAYS_BACK: int = int(os.getenv("DAYS_BACK", "120"))
+RECREATE_EMBEDDINGS: bool = os.getenv("RECREATE_EMBEDDINGS", "false").lower() in ("true", "1", "yes")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -148,7 +149,9 @@ class EventSimilarityProcessor:
         collection: chromadb.Collection = self._collections[event_type]
         table = ErrorEventEmbeddings if event_type == EventType.ERROR else CriticalEventEmbeddings
         similars_to_update: List[EmbeddingEntry] = []
-
+        if RECREATE_EMBEDDINGS:
+            LOGGER.info(f"Skipping loading of {event_type} events due to RECREATE_EMBEDDINGS setting")
+            return processed_runs, similars_to_update
         LOGGER.info(f"Loading processed {event_type} events...")
         query: str = f"SELECT * FROM {table.__table_name__} WHERE start_time > ? ALLOW FILTERING BYPASS CACHE"
         rows = self._db.execute(query, (cutoff_time,))

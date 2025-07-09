@@ -49,6 +49,7 @@ class MessageSanitizer:
             r"Machine ID|Hostname|Storage|Size on Disk|Message|Disk Size):.*?(?=\n|$)",
             re.MULTILINE,
         )
+        self.report_at_pattern: Pattern = re.compile(r"Please report: at .*\n")
         self.lib_address_pattern: Pattern = re.compile(r"\([^()]+ \+ 0x[0-9a-fA-F]+\)")
         self.module_pattern: Pattern = re.compile(r"Module [^\n]+ from rpm [^\n]+")
         self.stack_header_pattern: Pattern = re.compile(r"Stack trace of thread \d+:")
@@ -62,6 +63,17 @@ class MessageSanitizer:
         self.eol_pattern = re.compile(r"\\n")
         self.backslashes_pattern = re.compile(r"\\")
         self.repetitions_pattern = re.compile(r"(\b\w+\b)(?:\s+\1)+")
+        self.backtrace_unwanted_lines = {
+            "seastar::backtrace",
+            "seastar::print_with_backtrace",
+            "seastar::install_oneshot_signal_handler",
+            "seastar::current_backtrace",
+            "seastar::current_tasktrace",
+            "seastar::memory::cpu_pages::warn_large_allocation",
+            "seastar::memory::allocate_slowpath",
+            "at main.cc:",
+            " ??:",
+        }
 
         self.sanitizers: List[Callable[[str], str]] = [
             self.remove_preface,
@@ -72,8 +84,10 @@ class MessageSanitizer:
             self.remove_ip_addresses,
             self.remove_urls,
             self.remove_metadata,
+            self.remove_backtrace_unwanted_lines,
             self.remove_modules,
             self.remove_message_prefix,
+            self.remove_report_at,
             self.remove_lib_address,
             self.remove_process_ids,
             self.remove_memory_addresses,
@@ -213,3 +227,22 @@ class MessageSanitizer:
 
     def remove_repetitions(self, text: str) -> str:
         return self.repetitions_pattern.sub(r"\1", text)
+
+    def remove_report_at(self, text: str) -> str:
+        return self.report_at_pattern.sub("", text)
+
+    def _remove_inlined_starting(self, text: str) -> str:
+        """Remove inlined starting text that is not useful."""
+        if not text.startswith("(inlined by) "):
+            return text
+        return text.split("(inlined by) ", 1)[-1].strip()
+
+    def remove_backtrace_unwanted_lines(self, text: str) -> str:
+        """Specific lines in backtrace that are not useful and can be removed."""
+        if not "backtrace" in text[:1000]:
+            return text
+        return "\n".join(
+            self._remove_inlined_starting(line)
+            for line in text.splitlines()
+            if not any(problem in line for problem in self.backtrace_unwanted_lines)
+        )
