@@ -446,8 +446,8 @@ class SCTService:
         Returns:
             List of dictionaries containing event_index, severity and similars_set for each event
         """
-        error_embeddings = ErrorEventEmbeddings.filter(run_id=run_id).only(["event_index", "similars_map"]).all()
-        critical_embeddings = CriticalEventEmbeddings.filter(run_id=run_id).only(["event_index", "similars_map"]).all()
+        error_embeddings = ErrorEventEmbeddings.filter(run_id=run_id).only(["event_index", "similars_map", "duplicates_list"]).all()
+        critical_embeddings = CriticalEventEmbeddings.filter(run_id=run_id).only(["event_index", "similars_map", "duplicates_list"]).all()
 
         result = []
         # Process ERROR embeddings
@@ -457,6 +457,7 @@ class SCTService:
                     "event_index": embedding.event_index,
                     "severity": "ERROR",
                     "similars_set": [str(similar_run_id) for similar_run_id in embedding.similars_map],
+                    "duplicates_list": list(embedding.duplicates_list) if embedding.duplicates_list is not None else [],
                 }
             )
 
@@ -467,6 +468,7 @@ class SCTService:
                     "event_index": embedding.event_index,
                     "severity": "CRITICAL",
                     "similars_set": [str(similar_run_id) for similar_run_id in embedding.similars_map],
+                    "duplicates_list": list(embedding.duplicates_list) if embedding.duplicates_list is not None else [],
                 }
             )
 

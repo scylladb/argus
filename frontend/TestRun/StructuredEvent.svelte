@@ -4,10 +4,16 @@
     import { sendMessage } from "../Stores/AlertStore";
     import ModalWindow from "../Common/ModalWindow.svelte";
 
+
     export let event;
     export let similars = [];
+    export let duplicates = 0;
+    export let toggleDuplicates = () => {};
     export let display = true;
     export let filterString = "";
+
+    // Track if duplicates are shown for this event (local state)
+    let showingDuplicates = false;
 
     let showSimilars = false;
     let fetchingIssues = false;
@@ -63,7 +69,18 @@
     }
 </script>
 
-<div class:d-none={!display || shouldFilter(filterString)} class="mb-2 p-2 shadow rounded bg-white font-monospace">
+<div
+    class:d-none={!display || shouldFilter(filterString)}
+    class="mb-2 p-2 shadow rounded font-monospace"
+    class:bg-info-light={duplicates === -1}
+    class:bg-white={duplicates !== -1}
+>
+<style>
+    /* Light blue for duplicate events */
+    .bg-info-light {
+        background-color: #e3f2fd !important;
+    }
+</style>
     <div class="event-header d-flex align-items-start flex-wrap">
         <div class="ms-2 mb-2 bg-dark text-light rounded px-2">{event.eventType}</div>
         <div class="ms-2 mb-2 rounded px-2 severity-{event.severity.toLowerCase()}">{event.severity}</div>
@@ -86,6 +103,16 @@
             {#if (event.severity === "ERROR" || event.severity === "CRITICAL") && similars.length > 0}
                 <button class="btn btn-warning btn-sm d-flex align-items-center gap-2" on:click={toggleSimilars}>
                     <Fa icon={faLink} /><span>View {similars.length} Similar Events</span>
+                </button>
+            {/if}
+            {#if duplicates > 0}
+                <button
+                    class="btn btn-sm d-flex align-items-center gap-2"
+                    class:btn-primary={showingDuplicates}
+                    class:btn-info={!showingDuplicates}
+                    on:click={() => { showingDuplicates = !showingDuplicates; toggleDuplicates(event); }}>
+                    <Fa icon={faCopy} />
+                    <span>{showingDuplicates ? `Hide Duplicates` : `Show ${duplicates} Duplicates`}</span>
                 </button>
             {/if}
             <button

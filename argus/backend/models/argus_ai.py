@@ -11,6 +11,8 @@ class ErrorEventEmbeddings(Model):
     columns.BaseCollectionColumn._freeze_db_type(embedding)
     similars_map = columns.Map(key_type=columns.UUID(), value_type=columns.Integer())
     columns.BaseCollectionColumn._freeze_db_type(similars_map)
+    duplicates_list = columns.List(value_type=columns.Integer())
+    columns.BaseCollectionColumn._freeze_db_type(duplicates_list)
 
 
 class CriticalEventEmbeddings(Model):
@@ -22,3 +24,5 @@ class CriticalEventEmbeddings(Model):
     columns.BaseCollectionColumn._freeze_db_type(embedding)
     similars_map = columns.Map(key_type=columns.UUID(), value_type=columns.Integer())
     columns.BaseCollectionColumn._freeze_db_type(similars_map)
+    duplicates_list = columns.List(value_type=columns.Integer())
+    columns.BaseCollectionColumn._freeze_db_type(duplicates_list)
