@@ -13,6 +13,9 @@
     let nemesisByKey = {};
     let nemesisPeriods = {};
     let eventEmbeddings = {};
+    let eventDuplicates = {};
+    let distinctEvents = { ERROR: {}, CRITICAL: {} };
+    let shownDuplicates = { ERROR: new Set(), CRITICAL: new Set() };
     let isLoading = true;
 
     const displayCategories = {
@@ -116,6 +119,134 @@
     };
 
     /**
+     * Builds a map of distinct events and their duplicates for ERROR and CRITICAL severities.
+     *
+     * The concept of distinct events:
+     * - Events with the same content are considered duplicates
+     * - Only one "distinct" event is shown by default, representing all duplicates
+     * - Each distinct event maintains a list of its duplicate event indices
+     * - The backend provides a duplicates_list for each event containing indices of similar events
+     *
+     * Algorithm:
+     * 1. For each event, check if it's already processed as a duplicate
+     * 2. If not processed, check if any existing distinct event is in this event's duplicates list
+     * 3. If found, add this event to the existing distinct event's duplicates
+     * 4. If not found, create a new distinct event with its duplicates list
+     *
+     * @param {Array} eventData - Array of event objects with event_index, severity, and duplicates_list
+     * @returns {Object} Map of distinct events: { ERROR: {eventIndex: [duplicateIndices]}, CRITICAL: {eventIndex: [duplicateIndices]} }
+     */
+    const buildDistinctEvents = function(eventData) {
+        const distinct = { ERROR: {}, CRITICAL: {} };
+
+        const processEventsForSeverity = (severity) => {
+            const events = eventData.filter(event => event.severity === severity);
+            events.forEach(event => {
+                const eventIdx = event.event_index;
+                const duplicatesList = event.duplicates_list || [];
+
+                // Check if this event is already a duplicate of an existing distinct event
+                let isAlreadyProcessed = false;
+                for (const [distinctIdx, duplicates] of Object.entries(distinct[severity])) {
+                    if (duplicates.includes(eventIdx)) {
+                        isAlreadyProcessed = true;
+                        break;
+                    }
+                }
+
+                if (!isAlreadyProcessed) {
+                    // Check if any existing distinct event is in this event's duplicates list
+                    let foundParent = null;
+                    for (const [distinctIdx, duplicates] of Object.entries(distinct[severity])) {
+                        if (duplicatesList.includes(parseInt(distinctIdx))) {
+                            foundParent = distinctIdx;
+                            break;
+                        }
+                    }
+
+                    if (foundParent) {
+                        // Add this event to the existing distinct event's duplicates
+                        distinct[severity][foundParent].push(eventIdx);
+                    } else {
+                        // Create new distinct event
+                        distinct[severity][eventIdx] = duplicatesList.slice();
+                    }
+                }
+            });
+        };
+
+        processEventsForSeverity('ERROR');
+        processEventsForSeverity('CRITICAL');
+
+        return distinct;
+    };
+
+    /**
+     * Returns the number of duplicates for a distinct event, or -1 if the event is itself a duplicate.
+     *
+     * For ERROR/CRITICAL events:
+     *   - If the event is a distinct event (hasOwnProperty in distinctEvents), return its duplicates count
+     *   - If the event is a duplicate (not a key in distinctEvents), return -1
+     *   - For other severities, return 0
+     */
+    const getNumberOfDuplicates = function(event) {
+        if (event.severity !== 'ERROR' && event.severity !== 'CRITICAL') {
+            return 0;
+        }
+        if (!distinctEvents[event.severity].hasOwnProperty(event.index)) {
+            // This is a duplicate event
+            return -1;
+        }
+        const duplicates = distinctEvents[event.severity][event.index] || [];
+        return duplicates.length;
+    };
+
+    /**
+     * Toggles the visibility of duplicate events for a given distinct event.
+     *
+     * How it works:
+     * - Each distinct event has a list of duplicate event indices
+     * - The shownDuplicates set tracks which duplicate events are currently visible
+     * - When toggling, it either shows or hides ALL duplicates for the distinct event
+     * - If any duplicates are currently shown, it hides all of them
+     * - If no duplicates are shown, it shows all of them
+     * - Creates new Set objects to trigger Svelte reactivity
+     *
+     * @param {Object} event - The distinct event object containing severity and index
+     */
+    const toggleDuplicates = function(event) {
+        if (event.severity !== 'ERROR' && event.severity !== 'CRITICAL') {
+            return;
+        }
+
+        const duplicateIndices = distinctEvents[event.severity][event.index] || [];
+
+        const newShownDuplicates = {
+            ERROR: new Set(shownDuplicates.ERROR),
+            CRITICAL: new Set(shownDuplicates.CRITICAL)
+        };
+
+        // Check if any duplicates are currently shown
+        const anyDuplicatesShown = duplicateIndices.some(idx =>
+            shownDuplicates[event.severity].has(idx)
+        );
+
+        if (anyDuplicatesShown) {
+            // Hide all duplicates
+            duplicateIndices.forEach(idx => {
+                newShownDuplicates[event.severity].delete(idx);
+            });
+        } else {
+            // Show all duplicates
+            duplicateIndices.forEach(idx => {
+                newShownDuplicates[event.severity].add(idx);
+            });
+        }
+
+        shownDuplicates = newShownDuplicates;
+    };
+
+    /**
      * @param {{last_events: string[], event_amount: int, severity: string }[]} events
      */
     const prepareEvents = function (events) {
@@ -134,6 +265,10 @@
                     val.severity === "ERROR" || val.severity === "CRITICAL"
                         ? eventEmbeddings[`${val.severity}_${idx}`] ?? []
                         : [],
+                duplicates:
+                    val.severity === "ERROR" || val.severity === "CRITICAL"
+                        ? eventDuplicates[`${val.severity}_${idx}`] ?? []
+                        : [],
             }));
             eventIndex++;
             return [...acc, ...mappedEvents];
@@ -148,6 +283,8 @@
                     .map(([key, _]) => nemesisByKey[key]);
                 parsed.severity = val.severity;
                 parsed.similars = val.similars;
+                parsed.duplicates = val.duplicates;
+                parsed.index = val.index;
             } catch (error) {
                 parsed = {
                     time: new Date(0),
@@ -156,6 +293,8 @@
                     error: error.message,
                     severity: val.severity,
                     similars: val.similars,
+                    duplicates: val.duplicates,
+                    index: val.index,
                 };
             }
             return parsed;
@@ -175,6 +314,15 @@
                     acc[`${item.severity}_${item.event_index}`] = item.similars_set;
                     return acc;
                 }, {});
+
+                // Create a map of event index to duplicates list with severity prefix
+                eventDuplicates = data.response.reduce((acc, item) => {
+                    acc[`${item.severity}_${item.event_index}`] = item.duplicates_list || [];
+                    return acc;
+                }, {});
+
+                // Find duplicate pairs and mark events to hide
+                distinctEvents = buildDistinctEvents(data.response);
             }
         } catch (error) {
             console.error("Failed to fetch event embeddings:", error);
@@ -217,14 +365,18 @@
             {#if event.parsed}
                 <StructuredEvent
                     bind:filterString
-                    display={displayCategories[event.severity].show ?? true}
+                    display={(displayCategories[event.severity].show ?? true) && (distinctEvents[event.severity].hasOwnProperty(event.index) ||
+               shownDuplicates[event.severity].has(event.index))}
                     {event}
                     similars={event.similars}
+                    duplicates={getNumberOfDuplicates(event)}
+                    {toggleDuplicates}
                 />
             {:else}
                 <RawEvent eventText={event.text} errorMessage={event.error} />
             {/if}
         {/each}
+
     </div>
 {:else if isLoading}
     <div class="text-center p-2 m-1 d-flex align-items-center justify-content-center event-container">

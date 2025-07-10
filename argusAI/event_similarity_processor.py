@@ -9,7 +9,7 @@ import datetime
 from typing import Dict, Set, List, Tuple, Union
 import uuid
 
-from chromadb.api.types import IncludeEnum, Embeddings
+from chromadb.api.types import Embeddings
 from chromadb.utils.embedding_functions.onnx_mini_lm_l6_v2 import ONNXMiniLM_L6_V2
 from chromadb.config import Settings
 
@@ -98,13 +98,22 @@ class EventSimilarityProcessor:
 
         LOGGER.info(f"Finding similarities for run_id: {run_id}, event_index: {event_index}, type: {event_type}")
 
-        similar: Dict = collection.query(
+        similar = collection.query(
             query_embeddings=[embedding],
             n_results=max_similars,
             where={"run_id": {"$ne": str(run_id)}},
             include=[
-                IncludeEnum.metadatas,
-                IncludeEnum.distances,
+                "metadatas",
+                "distances",
+            ],
+        )
+        duplicate = collection.query(
+            query_embeddings=[embedding],
+            n_results=100,
+            where={"run_id": str(run_id)},
+            include=[
+                "metadatas",
+                "distances",
             ],
         )
 
@@ -117,17 +126,24 @@ class EventSimilarityProcessor:
                 if len(similar_map) >= max_similars:
                     break
 
+        duplicate_list: List[int] = []
+        for j, distance in enumerate(duplicate["distances"][0]):
+            if 1 - distance >= 0.95 and event_index != duplicate["metadatas"][0][j]["idx"]:
+                duplicate_list.append(duplicate["metadatas"][0][j]["idx"])
+
         table = ErrorEventEmbeddings if event_type == EventType.ERROR else CriticalEventEmbeddings
         try:
             self._db.execute(
-                f"UPDATE {table.__table_name__} SET similars_map = ? WHERE run_id = ? AND event_index = ?",
-                (similar_map, run_id, event_index),
+                f"UPDATE {table.__table_name__} SET similars_map = ?, duplicates_list = ? WHERE run_id = ? AND event_index = ?",
+                (similar_map, duplicate_list, run_id, event_index),
             )
             LOGGER.info(
                 f"Found {len(similar_map)} similar {event_type} events for run_id: {run_id}, event_index: {event_index}"
             )
         except Exception as e:  # noqa: BLE001
-            LOGGER.error(f"Failed to update similars_map for run_id: {run_id}, event_index: {event_index}: {e}")
+            LOGGER.error(
+                f"Failed to update similars_map/duplicates_list for run_id: {run_id}, event_index: {event_index}: {e}"
+            )
 
     def load_events(
         self, event_type: str, cutoff_time: datetime.datetime, batch_size: int = 5000
@@ -168,7 +184,7 @@ class EventSimilarityProcessor:
                 ids.append(f"{emb.run_id}_{emb.event_index}")
                 embeddings_list.append(emb.embedding)
                 metadatas.append({"run_id": str(emb.run_id), "idx": emb.event_index})
-                if emb.similars_map is None:
+                if emb.similars_map is None or emb.duplicates_list is None:
                     similars_to_update.append(
                         EmbeddingEntry(emb.run_id, emb.event_index, emb.embedding, emb.start_time)
                     )
