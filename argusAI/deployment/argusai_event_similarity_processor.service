@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 User=argus
 Group=argus
-WorkingDirectory=/home/argus/app
+WorkingDirectory=/home/argus/argusAI
 Environment="PYTHONPATH=."
 Environment="DAYS_BACK=120"
 ExecStart=/usr/bin/uv --project argusAI/pyproject.toml run argusAI/event_similarity_processor.py
