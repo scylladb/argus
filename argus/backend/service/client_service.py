@@ -1,13 +1,13 @@
 import logging
 from dataclasses import asdict
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
 from cassandra.util import uuid_from_time
 
 from argus.backend.db import ScyllaCluster
 from argus.backend.error_handlers import DataValidationError
-from argus.backend.models.pytest import PytestResultTable, PytestSubmitData
+from argus.backend.models.pytest import PytestResultTable, PytestSubmitData, PytestUserField
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.generic.model import GenericRun
@@ -44,7 +44,7 @@ class ClientService:
 
         new_result = PytestResultTable()
         new_result.name = request_data["name"]
-        new_result.id = uuid_from_time(request_data["timestamp"])
+        new_result.id = datetime.fromtimestamp(request_data["timestamp"], tz=UTC)
         new_result.status = request_data["status"]
         new_result.test_type = request_data["test_type"]
         new_result.run_id = request_data["run_id"]
@@ -53,9 +53,14 @@ class ClientService:
         new_result.test_timestamp = datetime.fromtimestamp(request_data["timestamp"])
         new_result.session_timestamp = datetime.fromtimestamp(request_data["session_timestamp"])
         new_result.markers = request_data["markers"]
-        new_result.user_fields = {}
+        fields: list[PytestUserField] = []
         for field, value in request_data.get("user_fields", {}).items():
-            new_result.user_fields[field] = str(value)
+            f = PytestUserField()
+            f.name = new_result.name
+            f.id = new_result.id
+            f.field_name = field
+            f.field_value = value
+            fields.append(f)
 
         try:
             run: GenericRun = AVAILABLE_PLUGINS.get("generic").model.filter(id=new_result.run_id).only(["id", "release_id", "test_id"]).get()
@@ -65,6 +70,7 @@ class ClientService:
             LOGGER.warning("RunId %s does not exist - result will be not be indexed for a release/view", new_result.run_id)
 
         new_result.save()
+        [f.save() for f in fields]
         return {
             "name": new_result.name,
             "id": new_result.id,
