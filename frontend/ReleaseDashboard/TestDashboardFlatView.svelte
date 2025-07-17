@@ -3,9 +3,8 @@
 
     export let groupStats;
     export let assigneeList;
-    export let userFilter;
     export let clickedTests;
-    export let hideNotPlanned;
+    export let doFilters = (test) => false;
 
 
     const sortTestStats = function (testStats) {
@@ -32,6 +31,6 @@
 
 {#if !groupStats.disabled}
     {#each Object.entries(sortTestStats(groupStats.tests)) as [testId, testStats] (testId)}
-        <TestDashboardTest {assigneeList} bind:clickedTests={clickedTests} {groupStats} {testStats} {hideNotPlanned} {userFilter} on:testClick/>
+        <TestDashboardTest {assigneeList} bind:clickedTests={clickedTests} {groupStats} {testStats} {doFilters} on:testClick/>
     {/each}
 {/if}
