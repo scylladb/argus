@@ -5,6 +5,7 @@
     import UserManager from "./UserManager.svelte";
     import ReleaseManager from "./ReleaseManager.svelte";
     import ViewsManager from "./ViewsManager.svelte";
+    import UtilManager from "./UtilManager.svelte";
 
     export let currentRoute;
 
@@ -13,6 +14,7 @@
         users: UserManager,
         releases: ReleaseManager,
         views: ViewsManager,
+        utils: UtilManager,
     };
 
     const handleRouteClick = function(route, event) {
@@ -69,6 +71,16 @@
                         on:click={(e) => handleRouteClick("views", e)}
                     >
                         Views
+                    </button>
+                </li>
+                <li class="list-group-item">
+                    <button
+                        class:btn-primary={currentRoute == "utils"}
+                        class:btn-outline-primary={currentRoute != "utils"}
+                        class="btn h-100 w-100"
+                        on:click={(e) => handleRouteClick("utils", e)}
+                    >
+                        Utilities
                     </button>
                 </li>
             </ul>
