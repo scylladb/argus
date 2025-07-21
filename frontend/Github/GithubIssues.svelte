@@ -57,12 +57,12 @@
         name: {
             field: "title",
             friendlyString: "By title",
-            f: (lhs, rhs) => reverseSort ? rhs.title.localeCompare(lhs.title.localeCompare) : lhs.title.localeCompare(lhs.title.localeCompare)
+            f: (lhs, rhs) => reverseSort ? rhs.title.localeCompare(lhs.title) : lhs.title.localeCompare(rhs.title)
         },
         repo: {
             field: "repo",
             friendlyString: "By repository",
-            f: (lhs, rhs) => reverseSort ? rhs.repo.localeCompare(lhs.repo.localeCompare) : lhs.repo.localeCompare(lhs.repo.localeCompare)
+            f: (lhs, rhs) => reverseSort ? rhs.repo.localeCompare(lhs.repo) : lhs.repo.localeCompare(rhs.repo)
         },
         date: {
             field: "added_on",
