@@ -138,6 +138,7 @@ class GithubService:
 
         link = IssueLink()
         link.run_id = run.id
+        link.user_id = g.user.id
         link.issue_id = issue.id
         link.release_id = test.release_id
         link.test_id = test.id
