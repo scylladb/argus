@@ -14,8 +14,14 @@
     let nemesisPeriods = {};
     let eventEmbeddings = {};
     let eventDuplicates = {};
-    let distinctEvents = { ERROR: {}, CRITICAL: {} };
-    let shownDuplicates = { ERROR: new Set(), CRITICAL: new Set() };
+    let distinctEvents = { ERROR: {}, CRITICAL: {}, WARNING: {}, NORMAL: {}, DEBUG: {} };
+    let shownDuplicates = {
+        ERROR: new Set(),
+        CRITICAL: new Set(),
+        WARNING: new Set(),
+        NORMAL: new Set(),
+        DEBUG: new Set(),
+    };
     let isLoading = true;
 
     const displayCategories = {
@@ -137,7 +143,7 @@
      * @returns {Object} Map of distinct events: { ERROR: {eventIndex: [duplicateIndices]}, CRITICAL: {eventIndex: [duplicateIndices]} }
      */
     const buildDistinctEvents = function(eventData) {
-        const distinct = { ERROR: {}, CRITICAL: {} };
+        const distinct = { ERROR: {}, CRITICAL: {}, WARNING: {}, NORMAL: {}, DEBUG: {} };
 
         const processEventsForSeverity = (severity) => {
             const events = eventData.filter(event => event.severity === severity);
@@ -223,7 +229,10 @@
 
         const newShownDuplicates = {
             ERROR: new Set(shownDuplicates.ERROR),
-            CRITICAL: new Set(shownDuplicates.CRITICAL)
+            CRITICAL: new Set(shownDuplicates.CRITICAL),
+            WARNING: new Set(shownDuplicates.WARNING),
+            NORMAL: new Set(shownDuplicates.NORMAL),
+            DEBUG: new Set(shownDuplicates.DEBUG)
         };
 
         // Check if any duplicates are currently shown
@@ -365,8 +374,11 @@
             {#if event.parsed}
                 <StructuredEvent
                     bind:filterString
-                    display={(displayCategories[event.severity].show ?? true) && (distinctEvents[event.severity].hasOwnProperty(event.index) ||
-               shownDuplicates[event.severity].has(event.index))}
+                    display={(displayCategories[event.severity].show ?? true) &&
+                        (event.severity === "ERROR" || event.severity === "CRITICAL"
+                            ? distinctEvents[event.severity].hasOwnProperty(event.index) ||
+                              shownDuplicates[event.severity].has(event.index)
+                            : true)}
                     {event}
                     similars={event.similars}
                     duplicates={getNumberOfDuplicates(event)}
@@ -376,7 +388,6 @@
                 <RawEvent eventText={event.text} errorMessage={event.error} />
             {/if}
         {/each}
-
     </div>
 {:else if isLoading}
     <div class="text-center p-2 m-1 d-flex align-items-center justify-content-center event-container">
