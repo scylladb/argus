@@ -7,8 +7,11 @@ import datetime
 from types import NoneType
 from uuid import UUID
 from cassandra.util import uuid_from_time
+from cassandra.cqlengine.models import Model
 from flask import current_app
 from argus.backend.db import ScyllaCluster
+from argus.backend.models.plan import ArgusReleasePlan
+from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS, all_plugin_models
 from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.service.notification_manager import NotificationManagerService
@@ -672,6 +675,32 @@ class ArgusService:
             for run in plugin.get_jobs_assigned_to_user(user_id=user.id):
                 if run["start_time"] >= validity_period:
                     yield run
+
+    def get_planned_jobs_for_user(self, user: User):
+        owned_plans = list(ArgusReleasePlan.filter(owner=user.id).allow_filtering().all())
+        participating_plans = list(ArgusReleasePlan.filter(participants__contains=user.id).allow_filtering().all())
+        unique_plans: list[ArgusReleasePlan] = list({plan for plan in [*owned_plans, *participating_plans]})
+
+        user_jobs = []
+        for plan in unique_plans:
+            if plan.owner == user.id:
+                jobs = filter(lambda test: not plan.assignee_mapping.get(test) or plan.assignee_mapping.get(test) == user.id, plan.tests)
+                user_jobs.extend(jobs)
+            if user.id in plan.participants:
+                jobs = filter(lambda test: plan.assignee_mapping.get(test) == user.id, plan.tests)
+                user_jobs.extend(jobs)
+        resolved: list[ArgusTest] = []
+        for batch in chunk(set(user_jobs)):
+            resolved.extend(ArgusTest.filter(id__in=batch).all())
+
+        last_runs: dict[UUID, Model] = {}
+        for test in resolved:
+            try:
+                last_runs[test.id] = AVAILABLE_PLUGINS[test.plugin_name].model.filter(build_id=test.build_system_id).limit(1).get()
+            except PluginModelBase.DoesNotExist:
+                last_runs[test.id] = None
+
+        return [{**dict(test.items()), "last_run": last_runs.get(test.id) } for test in resolved]
 
     def get_schedules_for_user(self, user: User) -> list[dict]:
         all_assigned_schedules = ArgusScheduleAssignee.filter(assignee=user.id).all()

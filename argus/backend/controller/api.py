@@ -619,3 +619,14 @@ def user_jobs():
         "status": "ok",
         "response": result
     }
+
+@bp.route("/user/planned_jobs")
+@api_login_required
+def user_planned_jobs():
+    service = ArgusService()
+    result = list(service.get_planned_jobs_for_user(user=g.user))
+
+    return {
+        "status": "ok",
+        "response": result
+    }
