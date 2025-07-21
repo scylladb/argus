@@ -4,6 +4,10 @@
     import PytestItem from "./PytestItem.svelte";
     import {type PytestData, PytestStatus, PytestStatuses} from "./types";
     import IntersectionObserver from "../../Utils/IntersectionObserver.svelte";
+    import Fa from "svelte-fa";
+    import { faCheck, faTimes } from "@fortawesome/free-solid-svg-icons";
+    import { titleCase } from "../../Common/TextUtils";
+    import { PytestBtnStyles } from "../../Common/TestStatus";
 
     export let runId: string;
 
@@ -16,18 +20,19 @@
     let filters = {
         search: "",
         status: {
-            [PytestStatus.ERROR]: true,
+            [PytestStatus.PASSED]: false,
             [PytestStatus.FAILURE]: true,
-            [PytestStatus.XFAILED]: true,
-            [PytestStatus.PASSED]: true,
-            [PytestStatus.SKIPPED]: true,
-            [PytestStatus.XPASS]: true,
+            [PytestStatus.ERROR]: true,
+            [PytestStatus.XFAILED]: false,
+            [PytestStatus.XPASS]: false,
             [PytestStatus.PASSED_ERROR]: true,
             [PytestStatus.FAILURE_ERROR]: true,
             [PytestStatus.SKIPPED_ERROR]: true,
             [PytestStatus.ERROR_ERROR]: true,
+            [PytestStatus.SKIPPED]: false,
         },
     };
+
 
     $: filteredData = data?.filter((test) => {
         const status = test.status;
@@ -47,9 +52,10 @@
                 failedToLoad = true;
                 sendMessage(
                     "error",
-                    "API Error when fetching test run data.",
-                    "DriverMatrixTestRun::fetchTestRunData"
+                    "HTTP Transport Error.",
+                    "PytestRun::fetchData"
                 );
+                console.log(response);
                 return null;
             }
 
@@ -58,29 +64,31 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error when fetching test run data.\nMessage: ${error.response.arguments[0]}`,
-                    "DriverMatrixTestRun::fetchTestRunData"
+                    `API Error when fetching dtest run data.\nMessage: ${error.response.arguments[0]}`,
+                    "PytestRun::fetchData"
                 );
             } else {
                 sendMessage(
                     "error",
-                    "A backend error occurred during test run data fetch",
-                    "DriverMatrixTestRun::fetchTestRunData"
+                    "A backend error occurred during dtest run data fetch",
+                    "PytestRun::fetchData"
                 );
+                console.log(error);
             }
         }
 
         return null;
     };
 
-    const onStatusFilterChange = (ev: any, status: PytestStatus) => {
-        filters.status[status] = ev.target.checked;
+    const onStatusFilterChange = (status: PytestStatus) => {
+        filters.status[status] = !filters.status[status];
     };
 
     onMount(async () => {
         data = await fetchData();
         if (data) {
             refreshInterval = setInterval(async () => {
+                if (!document.hasFocus()) return;
                 const newData = await fetchData();
                 if (newData) {
                     data = newData;
@@ -97,36 +105,25 @@
 
 </script>
 <div style="min-height: 24rem; max-height: 48vh; overflow-y: scroll; overflow-x: hidden" class="position-relative">
-    <div class="d-flex align-items-end align-center justify-content-end w-100 py-3 position-sticky top-0 bg-white" style="z-index: 1">
+    <div class="container-fluid">
         <div class="row w-100">
-            <div class="col">
+            <div class="col p-2">
                 <input
                         class="form-control"
                         type="text"
-                        placeholder="Search test"
+                        placeholder="Filter by string"
                         bind:value="{filters.search}"
                 >
             </div>
+        </div>
+        <div class="row w-100">
             <div class="col">
-                <div class="btn-group">
-                    <button type="button" class="btn btn-info dropdown-toggle" data-bs-toggle="dropdown"
-                            aria-expanded="false">
-                        Filter Tests
-                    </button>
-                    <ul class="dropdown-menu">
-                        {#each PytestStatuses as status}
-                            <li class="dropdown-item">
-                                <input
-                                        class="form-check-input"
-                                        type="checkbox"
-                                        id="{status}-checkbox"
-                                        checked="{filters.status[status]}"
-                                        on:change={(event) => onStatusFilterChange(event, status)}
-                                >
-                                <label for="{status}-checkbox">{status}</label>
-                            </li>
-                        {/each}
-                    </ul>
+                <div class="d-flex flex-wrap">
+                    {#each PytestStatuses as status}
+                        <button class="btn btn-sm {PytestBtnStyles[status]} me-2 mb-2" on:click={() => onStatusFilterChange(status)}>
+                            <Fa icon={filters.status[status] ? faCheck : faTimes} /> {titleCase(status)}
+                        </button>
+                    {/each}
                 </div>
             </div>
         </div>
@@ -139,15 +136,11 @@
                 <span class="fs-4">No tests to display</span>
             </div>
         {:else}
-            <div class="accordion accordion-flush mb-2">
+            <div class="mb-2">
                 <IntersectionObserver let:intersecting top={20}>
-                    {#each filteredData.slice(0, pageSize) as test, idx}
+                    {#each filteredData.slice(0, pageSize) as test (`${test.name}-${test.id}`)}
                         {#if intersecting}
-                            <PytestItem
-                                    testId={test.run_id}
-                                    idx={idx}
-                                    item={test}
-                            />
+                            <PytestItem item={test}/>
                         {/if}
                     {/each}
                 </IntersectionObserver>

@@ -12,12 +12,12 @@ export const enum PytestStatus {
 }
 
 export const PytestStatuses = [
-    PytestStatus.ERROR,
     PytestStatus.PASSED,
     PytestStatus.FAILURE,
-    PytestStatus.SKIPPED,
+    PytestStatus.ERROR,
     PytestStatus.XFAILED,
     PytestStatus.XPASS,
+    PytestStatus.SKIPPED,
     PytestStatus.PASSED_ERROR,
     PytestStatus.FAILURE_ERROR,
     PytestStatus.SKIPPED_ERROR,
@@ -26,7 +26,9 @@ export const PytestStatuses = [
 
 export type PytestData = {
     name: string,
+    id: string,
     timestamp: number,
+    message: string,
     session_timestamp: number,
     test_type: string,
     run_id: string,
