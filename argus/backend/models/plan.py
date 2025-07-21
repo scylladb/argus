@@ -22,3 +22,12 @@ class ArgusReleasePlan(Model):
     creation_time = columns.DateTime(default=lambda: datetime.datetime.now(tz=datetime.UTC))
     last_updated = columns.DateTime(default=lambda: datetime.datetime.now(tz=datetime.UTC))
     ends_at = columns.DateTime()
+
+    def __eq__(self, other):
+        if isinstance(other, ArgusReleasePlan):
+            return self.id == other.id
+        else:
+            return super().__eq__(other)
+
+    def __hash__(self):
+        return hash(self.id)

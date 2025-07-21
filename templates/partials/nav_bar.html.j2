@@ -10,7 +10,6 @@
             <a class="{% if request.path == url_for('main.views')%}active{%endif%} nav-link" href="{{ url_for('main.views')}}"><i class="far fa-object-group"></i> Views</a>
             {% if g.user %}
             <a class="{% if request.path == url_for('main.profile_jobs')%}active{%endif%} nav-link" href="{{ url_for('main.profile_jobs')}}"><i class="fas fa-archive"></i> My Jobs</a>
-            <a class="{% if request.path == url_for('main.profile_schedules')%}active{%endif%} nav-link" href="{{ url_for('main.profile_schedules')}}"><i class="fas fa-calendar-week"></i> My Schedule</a>
             <a class="{% if request.path == url_for('main.notifications.index')%}active{%endif%} nav-link position-relative" href="{{ url_for('main.notifications.index') }}"><div class="position-absolute" id="notificationCounter"></div><i class="far fa-bell"></i> Notifications</a>
                 {% if g.user.is_admin() %}
                     <a class="{% if request.path == url_for('admin.index')%}active{%endif%} nav-link" href="{{ url_for('admin.index')}}"><i class="fas fa-wrench"></i> Admin Area</a>
