@@ -73,6 +73,22 @@
         return data.response.runs;
     };
 
+    const resolveFirstUserForAggregation = function(issue) {
+        const resolved = issue.links
+            .filter(l => !!l.added_on && !!l.user_id)
+            .sort((a, b) => {
+                const lhs = Date.parse(a.added_on);
+                const rhs = Date.parse(b.added_on);
+
+                return lhs > rhs ? 1 : rhs > lhs ? -1 : 0;
+            });
+
+        return {
+            id: resolved?.[0]?.user_id ?? issue.user_id,
+            date: resolved?.[0]?.added_on ?? issue.added_on,
+        };
+    };
+
     const deleteIssue = async function () {
         deleting = true;
         try {
@@ -149,7 +165,7 @@
                         class="text-muted d-flex align-items-center"
                         title={new Date(issue.added_on).toISOString()}
                     >
-                        <div>Added by <span class="fw-bold">@{users?.[issue.user_id]?.username ?? "ghost"}</span> on {timestampToISODate(new Date(issue.added_on))}</div>
+                        <div>Added by <span class="fw-bold">@{users?.[resolveFirstUserForAggregation(issue).id]?.username ?? "ghost"}</span> on {timestampToISODate(new Date(resolveFirstUserForAggregation(issue).date))}</div>
                         {#if deleteEnabled && !aggregated}
                             <div class="ms-2 text-muted">
                                 {#if deleting}

@@ -58,3 +58,5 @@ class IssueLink(Model):
     release_id = columns.UUID(index=True)
     group_id = columns.UUID(index=True)
     test_id = columns.UUID(index=True)
+    user_id = columns.UUID(index=True)
+    added_on = columns.DateTime(default=datetime.utcnow)
