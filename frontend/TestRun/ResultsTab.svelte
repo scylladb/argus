@@ -2,6 +2,8 @@
     import {onMount} from "svelte";
     import ScreenshotModal from "./Components/ScreenshotModal.svelte";
     import ResultTable from "./Components/ResultTable.svelte";
+    import Fa from "svelte-fa";
+    import { faMarkdown } from "@fortawesome/free-brands-svg-icons";
 
     let fetching = true;
     export let id = "";
@@ -12,6 +14,7 @@
     let filteredTables = {};
     let selectedScreenshot = "";
     let showFilters = false;
+    let resultTables = {};
 
     const fetchResults = async function () {
         fetching = true;
@@ -31,6 +34,11 @@
         } catch (error) {
             console.log(error);
         }
+    };
+
+    const copyAllTablesAsMarkdown = async function () {
+        const markdownTables = await Promise.all(Object.entries(resultTables).map(async ([tableName, table]) => `### ${tableName}\n` + await table.copyResultTableAsMarkdown("string")));
+        await navigator.clipboard.writeText(markdownTables.join("\n"));
     };
 
     const extractFilters = () => {
@@ -145,9 +153,13 @@
                 {/each}
             {/each}
         </div>
+        <div class="mb-2">
+            <button class="btn btn-sm btn-primary" on:click={() => copyAllTablesAsMarkdown()}><Fa icon={faMarkdown}/> Copy all tables as Markdown</button>
+        </div>
         <ul class="result-list">
             {#each Object.entries(filteredTables) as [table_name, result]}
                 <ResultTable
+                    bind:this={resultTables[table_name]}
                     table_name={table_name}
                     result={result}
                     test_id={test_id}

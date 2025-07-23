@@ -25,6 +25,7 @@
     let startDate = "";
     let endDate = "";
     let redraw = 0;
+    let resultTableElement;
 
     const tableStyleToColor = {
         "table-success": "green",
@@ -48,8 +49,9 @@
         return "";
     }
 
-    async function copyResultTableAsMarkdown(event) {
-        const table = event.currentTarget.closest("table");
+    export async function copyResultTableAsMarkdown(mode = "clipboard") {
+        if (!resultTableElement) return;
+        const table = resultTableElement;
         let markdown = "";
 
         if (table) {
@@ -94,11 +96,15 @@
                 }
             });
 
-            try {
-                await navigator.clipboard.writeText(markdown);
-                sendMessage("info", "Table copied to clipboard in Markdown format!");
-            } catch (err) {
-                sendMessage("error", "Failed to copy: ", err);
+            if (mode === "clipboard") {
+                try {
+                    await navigator.clipboard.writeText(markdown);
+                    sendMessage("info", "Table copied to clipboard in Markdown format!");
+                } catch (err) {
+                    sendMessage("error", "Failed to copy: ", err);
+                }
+            } else if (mode === "string") {
+                return Promise.resolve(markdown);
             }
         }
     }
@@ -178,7 +184,7 @@
         {/if}
         <div class="table-responsive">
             <div class="table-container">
-                <table class="table table-sm table-bordered">
+                <table bind:this={resultTableElement} class="table table-sm table-bordered">
                     <thead class="thead-dark">
                     <tr>
                         <th>
@@ -187,7 +193,7 @@
                             </button>
                         </th>
                         {#each result.columns as col}
-                            {#if col.type !== 'TEXT'}
+                            {#if col.type !== "TEXT"}
                                 <th class="clickable" on:click={() => openGraphModal(col.name)} title="Show metric history">
                                     <div class="column-header">
                                         {col.name}<span
