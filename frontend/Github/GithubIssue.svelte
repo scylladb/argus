@@ -177,6 +177,9 @@
                 {/if}
                 {#if aggregated}
                     <div class="text-end my-2">
+                        {#if runId}
+                            <button class="btn btn-primary" on:click={() => dispatch("submitToCurrent", issue.url)}>Add to current run</button>
+                        {/if}
                         <button class="btn btn-primary" on:click={() => (showRuns = true)}>View {issue.links.length} runs</button>
                     </div>
                 {/if}
