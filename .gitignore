@@ -137,3 +137,4 @@ argus_web.yaml
 .vscode
 /profile/*
 !/profile/.gitkeep
+argus/_version.py
