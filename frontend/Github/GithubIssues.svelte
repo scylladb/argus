@@ -19,7 +19,7 @@
     let issues = [];
     let fetching = false;
     let showAllLabels = false;
-    const fetchIssues = async function () {
+    export const fetchIssues = async function () {
         issues = [];
         fetching = true;
         try {
@@ -307,7 +307,7 @@
             </div>
             <div class="row">
                 {#each sortedIssues[currentPage] ?? [] as issue (issue.id)}
-                    <GithubIssue {runId} bind:issue={issue} aggregated={aggregateByIssue} deleteEnabled={!submitDisabled} on:issueDeleted={fetchIssues} on:labelClick={(e) => handleLabelClick(e.detail)}/>
+                    <GithubIssue {runId} bind:issue={issue} aggregated={aggregateByIssue} deleteEnabled={!submitDisabled} on:submitToCurrent on:issueDeleted={fetchIssues} on:labelClick={(e) => handleLabelClick(e.detail)}/>
                 {/each}
             </div>
             <div class="d-flex ">
