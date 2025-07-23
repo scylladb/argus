@@ -5,12 +5,19 @@
     import { onMount } from "svelte";
     import ProfileJobsTab from "./ProfileJobsTab.svelte";
     import { TestInvestigationStatus } from "../Common/TestStatus";
+    import PlannedJobs from "./PlannedJobs.svelte";
+    import queryString from "query-string";
     export let jobs;
     export let userId;
 
-    let activeTab = "todo";
+    let activeTab = queryString.parse(document.location.search).activeTab ||  "todo";
     let jobsToDo = [];
     let jobsDone = [];
+    let plannedJobIndicator = 0;
+
+    $: {
+        history.pushState(undefined, null, `?${queryString.stringify({ activeTab })}`);
+    }
 
     const fetchUserJobs = async function() {
         if (jobs) {
@@ -91,7 +98,9 @@
                     class:active={activeTab == "planned"}
                     on:click={() => (activeTab = "planned")}
                 >
-                    <Fa icon={faCalendar}/> Planned
+                    <Fa icon={faCalendar}/> Planned {#if plannedJobIndicator > 0}
+                        <div class="d-inline-block bg-danger p-1" style="border-radius: 10%">{plannedJobIndicator}</div>
+                    {/if}
                 </button>
         </div>
         <div class="p-2">
@@ -103,7 +112,7 @@
                     <ProfileJobsTab jobs={jobsDone} on:investigationStatusChange={handleInvestigationStatusChangeDone} on:batchIgnoreDone={handleBatchIgnore}/>
                 </div>
                 <div class:d-none={activeTab != "planned"}>
-                    WIP
+                    <PlannedJobs bind:jobCount={plannedJobIndicator} />
                 </div>
             </div>
         </div>
