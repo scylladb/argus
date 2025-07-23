@@ -6,7 +6,7 @@ import CheckValue from "../Views/WidgetSettingTypes/CheckValue.svelte";
 import MultiSelectValue from "../Views/WidgetSettingTypes/MultiSelectValue.svelte";
 import MultiStringValue from "../Views/WidgetSettingTypes/MultiStringValue.svelte";
 import StringValue from "../Views/WidgetSettingTypes/StringValue.svelte";
-import {TestStatus} from "./TestStatus";
+import {PytestStatus, TestStatus} from "./TestStatus";
 import {subUnderscores, titleCase} from "./TextUtils";
 import ViewHighlights from "../Views/Widgets/ViewHighlights/ViewHighlights.svelte";
 import IntegerValue from "../Views/WidgetSettingTypes/IntegerValue.svelte";
@@ -14,6 +14,7 @@ import SummaryWidget from "../Views/Widgets/SummaryWidget/SummaryWidget.svelte";
 import GraphWidget from "../Views/Widgets/GraphsWidget/GraphsWidget.svelte";
 import ViewNemesisStats from "../Views/Widgets/ViewNemesisStats.svelte";
 import ViewGraphedStats from "../Views/Widgets/ViewGraphedStats.svelte";
+import PytestOverviewWidget from "../Views/Widgets/PytestWidget/PytestOverviewWidget.svelte";
 
 export class Widget {
     constructor(position = -1, type = "testDashboard", settings = {}) {
@@ -154,6 +155,26 @@ export const WIDGET_TYPES = {
                 help: "Regular expressions to filter out tests (e.g. .*/artifacts/)",
                 displayName: "Test Filters"
             },
+        },
+    },
+    pytestOverview: {
+        type: PytestOverviewWidget,
+        friendlyName: "Pytest Stats",
+        settingDefinitions: {
+            collapsed: {
+                type: CheckValue,
+                default: false,
+                help: "Show widget full-screen or as collapsible accordion",
+                displayName: "Collapsible"
+            },
+            enabledStatuses: {
+                type: MultiSelectValue,
+                default: Object.values(PytestStatus),
+                values: Object.values(PytestStatus),
+                labels: Object.keys(PytestStatus).map(s => subUnderscores(s).split(" ").map(s => titleCase(s)).join(" ")),
+                help: "Select which statuses to enable by default",
+                displayName: "Statuses shown by default"
+            }
         },
     },
 };
