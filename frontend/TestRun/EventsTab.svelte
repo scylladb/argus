@@ -15,6 +15,7 @@
     let eventEmbeddings = {};
     let eventDuplicates = {};
     let distinctEvents = { ERROR: {}, CRITICAL: {}, WARNING: {}, NORMAL: {}, DEBUG: {} };
+    let similarEventsServiceAvailable = true;
     let shownDuplicates = {
         ERROR: new Set(),
         CRITICAL: new Set(),
@@ -191,6 +192,7 @@
      * Returns the number of duplicates for a distinct event, or -1 if the event is itself a duplicate.
      *
      * For ERROR/CRITICAL events:
+     *   - If similar events service is down, return 0 (no duplicates)
      *   - If the event is a distinct event (hasOwnProperty in distinctEvents), return its duplicates count
      *   - If the event is a duplicate (not a key in distinctEvents), return -1
      *   - For other severities, return 0
@@ -199,6 +201,12 @@
         if (event.severity !== 'ERROR' && event.severity !== 'CRITICAL') {
             return 0;
         }
+        
+        // When similar events service is down, ignore duplicates feature
+        if (!similarEventsServiceAvailable) {
+            return 0;
+        }
+        
         if (!distinctEvents[event.severity].hasOwnProperty(event.index)) {
             // This is a duplicate event
             return -1;
@@ -211,6 +219,7 @@
      * Toggles the visibility of duplicate events for a given distinct event.
      *
      * How it works:
+     * - When similar events service is down, this function does nothing
      * - Each distinct event has a list of duplicate event indices
      * - The shownDuplicates set tracks which duplicate events are currently visible
      * - When toggling, it either shows or hides ALL duplicates for the distinct event
@@ -222,6 +231,11 @@
      */
     const toggleDuplicates = function(event) {
         if (event.severity !== 'ERROR' && event.severity !== 'CRITICAL') {
+            return;
+        }
+        
+        // When similar events service is down, ignore duplicates feature
+        if (!similarEventsServiceAvailable) {
             return;
         }
 
@@ -318,24 +332,34 @@
             const response = await fetch(`/api/v1/client/sct/${testRun.id}/similar_events`);
             if (response.ok) {
                 const data = await response.json();
-                // Create a map of event index to similars set with severity prefix
-                eventEmbeddings = data.response.reduce((acc, item) => {
-                    acc[`${item.severity}_${item.event_index}`] = item.similars_set;
-                    return acc;
-                }, {});
+                
+                // Check if similar events service is available (has data)
+                similarEventsServiceAvailable = data.response && data.response.length > 0;
+                
+                if (similarEventsServiceAvailable) {
+                    // Create a map of event index to similars set with severity prefix
+                    eventEmbeddings = data.response.reduce((acc, item) => {
+                        acc[`${item.severity}_${item.event_index}`] = item.similars_set;
+                        return acc;
+                    }, {});
 
-                // Create a map of event index to duplicates list with severity prefix
-                eventDuplicates = data.response.reduce((acc, item) => {
-                    acc[`${item.severity}_${item.event_index}`] = item.duplicates_list || [];
-                    return acc;
-                }, {});
+                    // Create a map of event index to duplicates list with severity prefix
+                    eventDuplicates = data.response.reduce((acc, item) => {
+                        acc[`${item.severity}_${item.event_index}`] = item.duplicates_list || [];
+                        return acc;
+                    }, {});
 
-                // Find duplicate pairs and mark events to hide
-                distinctEvents = buildDistinctEvents(data.response);
+                    // Find duplicate pairs and mark events to hide
+                    distinctEvents = buildDistinctEvents(data.response);
+                } else {
+                    // Similar events service is down, ignore similar events feature
+                    console.log("Similar events service is not available, ignoring similar events feature");
+                }
             }
         } catch (error) {
             console.error("Failed to fetch event embeddings:", error);
             sendMessage("error", "Failed to fetch event embeddings", "StructuredEvent::toggleSimilars");
+            similarEventsServiceAvailable = false;
         }
         nemesisByKey = testRun.nemesis_data.reduce((acc, val) => {
             acc[calculateNemesisKey(val)] = val;
@@ -376,8 +400,10 @@
                     bind:filterString
                     display={(displayCategories[event.severity].show ?? true) &&
                         (event.severity === "ERROR" || event.severity === "CRITICAL"
-                            ? distinctEvents[event.severity].hasOwnProperty(event.index) ||
-                              shownDuplicates[event.severity].has(event.index)
+                            ? similarEventsServiceAvailable 
+                                ? distinctEvents[event.severity].hasOwnProperty(event.index) ||
+                                  shownDuplicates[event.severity].has(event.index)
+                                : true  // When similar events service is down, show all ERROR/CRITICAL events
                             : true)}
                     {event}
                     similars={event.similars}
