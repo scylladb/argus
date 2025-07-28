@@ -182,8 +182,8 @@
             });
         };
 
-        processEventsForSeverity('ERROR');
-        processEventsForSeverity('CRITICAL');
+        processEventsForSeverity("ERROR");
+        processEventsForSeverity("CRITICAL");
 
         return distinct;
     };
@@ -198,7 +198,7 @@
      *   - For other severities, return 0
      */
     const getNumberOfDuplicates = function(event) {
-        if (event.severity !== 'ERROR' && event.severity !== 'CRITICAL') {
+        if (event.severity !== "ERROR" && event.severity !== "CRITICAL") {
             return 0;
         }
         
@@ -207,7 +207,7 @@
             return 0;
         }
         
-        if (!distinctEvents[event.severity].hasOwnProperty(event.index)) {
+        if (!Object.prototype.hasOwnProperty.call(distinctEvents[event.severity], event.index)) {
             // This is a duplicate event
             return -1;
         }
@@ -230,7 +230,7 @@
      * @param {Object} event - The distinct event object containing severity and index
      */
     const toggleDuplicates = function(event) {
-        if (event.severity !== 'ERROR' && event.severity !== 'CRITICAL') {
+        if (event.severity !== "ERROR" && event.severity !== "CRITICAL") {
             return;
         }
         
@@ -401,7 +401,7 @@
                     display={(displayCategories[event.severity].show ?? true) &&
                         (event.severity === "ERROR" || event.severity === "CRITICAL"
                             ? similarEventsServiceAvailable 
-                                ? distinctEvents[event.severity].hasOwnProperty(event.index) ||
+                                ? Object.prototype.hasOwnProperty.call(distinctEvents[event.severity], event.index) ||
                                   shownDuplicates[event.severity].has(event.index)
                                 : true  // When similar events service is down, show all ERROR/CRITICAL events
                             : true)}
