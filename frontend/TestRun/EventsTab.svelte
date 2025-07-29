@@ -22,6 +22,7 @@
         NORMAL: new Set(),
         DEBUG: new Set(),
     };
+    let hasSimilarEventsData = false;
     let isLoading = true;
 
     const displayCategories = {
@@ -191,12 +192,16 @@
      * Returns the number of duplicates for a distinct event, or -1 if the event is itself a duplicate.
      *
      * For ERROR/CRITICAL events:
+     *   - If similar events data is not available, return 0 (no duplicate filtering)
      *   - If the event is a distinct event (hasOwnProperty in distinctEvents), return its duplicates count
      *   - If the event is a duplicate (not a key in distinctEvents), return -1
      *   - For other severities, return 0
      */
     const getNumberOfDuplicates = function(event) {
         if (event.severity !== 'ERROR' && event.severity !== 'CRITICAL') {
+            return 0;
+        }
+        if (!hasSimilarEventsData) {
             return 0;
         }
         if (!distinctEvents[event.severity].hasOwnProperty(event.index)) {
@@ -211,6 +216,7 @@
      * Toggles the visibility of duplicate events for a given distinct event.
      *
      * How it works:
+     * - If similar events data is not available, do nothing
      * - Each distinct event has a list of duplicate event indices
      * - The shownDuplicates set tracks which duplicate events are currently visible
      * - When toggling, it either shows or hides ALL duplicates for the distinct event
@@ -222,6 +228,9 @@
      */
     const toggleDuplicates = function(event) {
         if (event.severity !== 'ERROR' && event.severity !== 'CRITICAL') {
+            return;
+        }
+        if (!hasSimilarEventsData) {
             return;
         }
 
@@ -318,24 +327,30 @@
             const response = await fetch(`/api/v1/client/sct/${testRun.id}/similar_events`);
             if (response.ok) {
                 const data = await response.json();
-                // Create a map of event index to similars set with severity prefix
-                eventEmbeddings = data.response.reduce((acc, item) => {
-                    acc[`${item.severity}_${item.event_index}`] = item.similars_set;
-                    return acc;
-                }, {});
+                // Check if we have any data from the similar events service
+                hasSimilarEventsData = data.response && data.response.length > 0;
 
-                // Create a map of event index to duplicates list with severity prefix
-                eventDuplicates = data.response.reduce((acc, item) => {
-                    acc[`${item.severity}_${item.event_index}`] = item.duplicates_list || [];
-                    return acc;
-                }, {});
+                if (hasSimilarEventsData) {
+                    // Create a map of event index to similars set with severity prefix
+                    eventEmbeddings = data.response.reduce((acc, item) => {
+                        acc[`${item.severity}_${item.event_index}`] = item.similars_set;
+                        return acc;
+                    }, {});
 
-                // Find duplicate pairs and mark events to hide
-                distinctEvents = buildDistinctEvents(data.response);
+                    // Create a map of event index to duplicates list with severity prefix
+                    eventDuplicates = data.response.reduce((acc, item) => {
+                        acc[`${item.severity}_${item.event_index}`] = item.duplicates_list || [];
+                        return acc;
+                    }, {});
+
+                    // Find duplicate pairs and mark events to hide
+                    distinctEvents = buildDistinctEvents(data.response);
+                }
             }
         } catch (error) {
             console.error("Failed to fetch event embeddings:", error);
             sendMessage("error", "Failed to fetch event embeddings", "StructuredEvent::toggleSimilars");
+            hasSimilarEventsData = false;
         }
         nemesisByKey = testRun.nemesis_data.reduce((acc, val) => {
             acc[calculateNemesisKey(val)] = val;
@@ -376,7 +391,8 @@
                     bind:filterString
                     display={(displayCategories[event.severity].show ?? true) &&
                         (event.severity === "ERROR" || event.severity === "CRITICAL"
-                            ? distinctEvents[event.severity].hasOwnProperty(event.index) ||
+                            ? !hasSimilarEventsData ||
+                              distinctEvents[event.severity].hasOwnProperty(event.index) ||
                               shownDuplicates[event.severity].has(event.index)
                             : true)}
                     {event}
