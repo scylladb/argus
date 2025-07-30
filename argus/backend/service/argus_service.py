@@ -695,6 +695,8 @@ class ArgusService:
 
         last_runs: dict[UUID, Model] = {}
         for test in resolved:
+            if not test.enabled:
+                continue
             try:
                 last_runs[test.id] = AVAILABLE_PLUGINS[test.plugin_name].model.filter(build_id=test.build_system_id).limit(1).get()
             except PluginModelBase.DoesNotExist:
