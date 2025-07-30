@@ -1,5 +1,113 @@
+<script lang="ts" context="module">
+    interface CloudNodesInfo {
+        image_id: string,
+        instance_type: string,
+        node_amount: string,
+        post_behaviour: string,
+    }
+
+    interface CloudResource {
+        name: string,
+        state: string,
+        resource_type: string,
+        instance_info: {
+            provider: string,
+            region: string,
+            public_ip: string,
+            private_ip: string,
+            dc_name: string,
+            rack_name: string,
+            creation_time: string,
+            termination_time: string,
+            termination_reason: string,
+            shards_amount: number,
+        }
+    }
+
+    interface SCTPackage {
+        name: string,
+        version: string,
+        date: string,
+        revision_id: string,
+        build_id: string,
+    }
+
+    interface NemesisInfo {
+        class_name: string,
+        name: string,
+        duration: number,
+        target_node: {
+            name: string,
+            ip: string,
+            shards: number
+        }
+        status: string,
+        start_time: number,
+        end_time: number,
+        stack_trace: string,
+    }
+
+    interface JUnitReport {
+        file_name: string,
+        report: string,
+    }
+
+    export interface TestInfo {
+        release: {
+            id: string,
+            name: string,
+        },
+        test: {
+            id: string,
+            pretty_name: string,
+            name: string,
+            plugin_name: string,
+        },
+        group: {
+            id: string,
+            pretty_name: string,
+            name: string,
+        },
+    }
+
+    export interface SCTTestRun {
+        id: string,
+        build_id: string,
+        assignee: string,
+        start_time: string,
+        build_job_url: string,
+        subtest_name: string,
+        status: string,
+        investigation_status: string,
+        screenshots: string[],
+        packages: SCTPackage[],
+        allocated_resources: CloudResource[],
+        nemesis_data: NemesisInfo[],
+        cloud_setup: {
+            backend: string,
+            db_node: CloudNodesInfo,
+            loader_node: CloudNodesInfo,
+            monitor_node: CloudNodesInfo,
+        }
+    }
+
+    export interface SCTTestRunResponse {
+        status: string,
+        response: SCTTestRun,
+    }
+
+    export interface APIError {
+        status: string
+        response: {
+            arguments: string[],
+            exception: string,
+            trace_id: string,
+        }
+    }
+</script>
+
 <script lang="ts">
-    import { onMount, onDestroy, createEventDispatcher } from "svelte";
+    import { onMount, createEventDispatcher } from "svelte";
     import Fa from "svelte-fa";
     import {
         faBox,
@@ -37,19 +145,20 @@
     import JUnitResults from "./jUnitResults.svelte";
     import ResultsTab from "./ResultsTab.svelte";
 
-    export let runId: string = "";
-    export let buildNumber: number = -1;
-    export let testInfo: any = {};
-    export let tab: string = "";
+    export let runId = "";
+    export let buildNumber = -1;
+    export let testInfo: TestInfo;
+    export let tab = "";
+
 
     const dispatch = createEventDispatcher();
 
-    let testRun: any = undefined;
-    let runRefreshInterval: number;
+    let testRun: SCTTestRun;
+    let runRefreshInterval: ReturnType<typeof setInterval>;
     let activeTab: string = tab.toLowerCase() || "details";
-    let failedToLoad: boolean = false;
-    let jUnitFetched: boolean = false;
-    let jUnitResults: any[] = [];
+    let failedToLoad = false;
+    let jUnitFetched = false;
+    let jUnitResults: JUnitReport[] = [];
 
     // Track which tabs have been visited
     let visitedTabs: Record<string, boolean> = {};
@@ -57,7 +166,7 @@
 
     const fetchTestRunData = async function () {
         try {
-            let run = await fetchRun(testInfo.test.plugin_name, runId);
+            let run: SCTTestRun = await fetchRun(testInfo.test.plugin_name, runId);
             testRun = run;
             if (!testRun) {
                 failedToLoad = true;
@@ -68,10 +177,10 @@
             }
             fetchJunitReports();
         } catch (error) {
-            if (error?.status === "error") {
+            if ((error as APIError)?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error when fetching test run data.\nMessage: ${error.response.arguments[0]}`,
+                    `API Error when fetching test run data.\nMessage: ${(error as APIError).response.arguments[0]}`,
                     "SCTTestRun::fetchTestRunData"
                 );
             } else {
@@ -87,7 +196,7 @@
 
     const fetchJunitReports = async function () {
         try {
-            let res = await fetch(`/api/v1/client/sct/${testRun.id}/junit/get_all`);
+            let res = await fetch(`/api/v1/client/sct/${testRun?.id}/junit/get_all`);
             if (res.status != 200) {
                 throw new Error(`Network error: ${res.status}`);
             }
@@ -98,10 +207,10 @@
             jUnitFetched = true;
             jUnitResults = json.response;
         } catch (error) {
-            if (error?.status === "error") {
+            if ((error as APIError)?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error when fetching test run junit results data.\nMessage: ${error.response.arguments[0]}`,
+                    `API Error when fetching test run junit results data.\nMessage: ${(error as APIError).response.arguments[0]}`,
                     "SCTTestRun::fetchJunitReports"
                 );
             } else {
@@ -199,7 +308,7 @@
                 <div class="nav nav-tabs" id="nav-tab-{runId}" role="tablist">
                     <button
                         class="nav-link"
-                        class:active={activeTab === 'details'}
+                        class:active={activeTab === "details"}
                         id="nav-details-tab-{runId}"
                         data-bs-toggle="tab"
                         data-bs-target="#nav-details-{runId}"
@@ -215,7 +324,7 @@
                     {/if}
                     <button
                         class="nav-link"
-                        class:active={activeTab === 'screenshots'}
+                        class:active={activeTab === "screenshots"}
                         id="nav-screenshots-tab-{runId}"
                         data-bs-toggle="tab"
                         data-bs-target="#nav-screenshots-{runId}"
@@ -228,7 +337,7 @@
                     </button>
                     <button
                         class="nav-link"
-                        class:active={activeTab === 'resources'}
+                        class:active={activeTab === "resources"}
                         id="nav-resources-tab-{runId}"
                         data-bs-toggle="tab"
                         data-bs-target="#nav-resources-{runId}"
@@ -241,7 +350,7 @@
                     </button>
                     <button
                         class="nav-link"
-                        class:active={activeTab === 'packages'}
+                        class:active={activeTab === "packages"}
                         id="nav-packages-tab-{runId}"
                         data-bs-toggle="tab"
                         data-bs-target="#nav-packages-{runId}"
@@ -255,7 +364,7 @@
                     {#if jUnitFetched && jUnitResults.length > 0}
                         <button
                             class="nav-link"
-                            class:active={activeTab === 'junit'}
+                            class:active={activeTab === "junit"}
                             id="nav-junit-tab-{runId}"
                             data-bs-toggle="tab"
                             data-bs-target="#nav-junit-{runId}"
@@ -269,7 +378,7 @@
                     {/if}
                     <button
                         class="nav-link"
-                        class:active={activeTab === 'results'}
+                        class:active={activeTab === "results"}
                         id="nav-results-tab-{runId}"
                         data-bs-toggle="tab"
                         data-bs-target="#nav-results-{runId}"
@@ -282,7 +391,7 @@
                     </button>
                     <button
                         class="nav-link"
-                        class:active={activeTab === 'events'}
+                        class:active={activeTab === "events"}
                         id="nav-events-tab-{runId}"
                         data-bs-toggle="tab"
                         data-bs-target="#nav-events-{runId}"
@@ -295,7 +404,7 @@
                     </button>
                     <button
                         class="nav-link"
-                        class:active={activeTab === 'nemesis'}
+                        class:active={activeTab === "nemesis"}
                         id="nav-nemesis-tab-{runId}"
                         data-bs-toggle="tab"
                         data-bs-target="#nav-nemesis-{runId}"
@@ -308,7 +417,7 @@
                     </button>
                     <button
                         class="nav-link"
-                        class:active={activeTab === 'logs'}
+                        class:active={activeTab === "logs"}
                         id="nav-logs-tab-{runId}"
                         data-bs-toggle="tab"
                         data-bs-target="#nav-logs-{runId}"
@@ -321,7 +430,7 @@
                     </button>
                     <button
                         class="nav-link"
-                        class:active={activeTab === 'discuss'}
+                        class:active={activeTab === "discuss"}
                         id="nav-discuss-tab-{runId}"
                         data-bs-toggle="tab"
                         data-bs-target="#nav-discuss-{runId}"
@@ -334,7 +443,7 @@
                     </button>
                     <button
                         class="nav-link"
-                        class:active={activeTab === 'issues'}
+                        class:active={activeTab === "issues"}
                         id="nav-issues-tab-{runId}"
                         data-bs-toggle="tab"
                         data-bs-target="#nav-issues-{runId}"
@@ -347,7 +456,7 @@
                     </button>
                     <button
                         class="nav-link"
-                        class:active={activeTab === 'activity'}
+                        class:active={activeTab === "activity"}
                         id="nav-activity-tab-{runId}"
                         data-bs-toggle="tab"
                         data-bs-target="#nav-activity-{runId}"
@@ -363,8 +472,8 @@
             <div class="tab-content border-start border-end border-bottom bg-white" id="nav-tabContent-{runId}">
                 <div
                     class="tab-pane fade"
-                    class:show={activeTab === 'details'}
-                    class:active={activeTab === 'details'}
+                    class:show={activeTab === "details"}
+                    class:active={activeTab === "details"}
                     id="nav-details-{runId}"
                     role="tabpanel"
                 >
@@ -381,8 +490,8 @@
                 {/if}
                 <div
                     class="tab-pane fade"
-                    class:show={activeTab === 'screenshots'}
-                    class:active={activeTab === 'screenshots'}
+                    class:show={activeTab === "screenshots"}
+                    class:active={activeTab === "screenshots"}
                     id="nav-screenshots-{runId}"
                     role="tabpanel"
                 >
@@ -390,8 +499,8 @@
                 </div>
                 <div
                     class="tab-pane fade"
-                    class:show={activeTab === 'resources'}
-                    class:active={activeTab === 'resources'}
+                    class:show={activeTab === "resources"}
+                    class:active={activeTab === "resources"}
                     id="nav-resources-{runId}"
                     role="tabpanel"
                 >
@@ -405,8 +514,8 @@
                 </div>
                 <div
                     class="tab-pane fade"
-                    class:show={activeTab === 'packages'}
-                    class:active={activeTab === 'packages'}
+                    class:show={activeTab === "packages"}
+                    class:active={activeTab === "packages"}
                     id="nav-packages-{runId}"
                     role="tabpanel"
                 >
@@ -416,8 +525,8 @@
                 </div>
                 <div
                     class="tab-pane fade overflow-scroll"
-                    class:show={activeTab === 'junit'}
-                    class:active={activeTab === 'junit'}
+                    class:show={activeTab === "junit"}
+                    class:active={activeTab === "junit"}
                     id="nav-junit-{runId}"
                     role="tabpanel"
                 >
@@ -427,8 +536,8 @@
                 </div>
                 <div
                     class="tab-pane fade"
-                    class:show={activeTab === 'results'}
-                    class:active={activeTab === 'results'}
+                    class:show={activeTab === "results"}
+                    class:active={activeTab === "results"}
                     id="nav-results-{runId}"
                     role="tabpanel"
                 >
@@ -438,8 +547,8 @@
                 </div>
                 <div
                     class="tab-pane fade"
-                    class:show={activeTab === 'events'}
-                    class:active={activeTab === 'events'}
+                    class:show={activeTab === "events"}
+                    class:active={activeTab === "events"}
                     id="nav-events-{runId}"
                     role="tabpanel"
                 >
@@ -449,8 +558,8 @@
                 </div>
                 <div
                     class="tab-pane fade overflow-scroll"
-                    class:show={activeTab === 'nemesis'}
-                    class:active={activeTab === 'nemesis'}
+                    class:show={activeTab === "nemesis"}
+                    class:active={activeTab === "nemesis"}
                     id="nav-nemesis-{runId}"
                     role="tabpanel"
                 >
@@ -458,8 +567,8 @@
                 </div>
                 <div
                     class="tab-pane fade overflow-scroll"
-                    class:show={activeTab === 'logs'}
-                    class:active={activeTab === 'logs'}
+                    class:show={activeTab === "logs"}
+                    class:active={activeTab === "logs"}
                     id="nav-logs-{runId}"
                     role="tabpanel"
                 >
@@ -469,8 +578,8 @@
                 </div>
                 <div
                     class="tab-pane fade"
-                    class:show={activeTab === 'discuss'}
-                    class:active={activeTab === 'discuss'}
+                    class:show={activeTab === "discuss"}
+                    class:active={activeTab === "discuss"}
                     id="nav-discuss-{runId}"
                     role="tabpanel"
                 >
@@ -480,8 +589,8 @@
                 </div>
                 <div
                     class="tab-pane fade"
-                    class:show={activeTab === 'issues'}
-                    class:active={activeTab === 'issues'}
+                    class:show={activeTab === "issues"}
+                    class:active={activeTab === "issues"}
                     id="nav-issues-{runId}"
                     role="tabpanel"
                 >
@@ -492,8 +601,8 @@
                 </div>
                 <div
                     class="tab-pane fade"
-                    class:show={activeTab === 'activity'}
-                    class:active={activeTab === 'activity'}
+                    class:show={activeTab === "activity"}
+                    class:active={activeTab === "activity"}
                     id="nav-activity-{runId}"
                     role="tabpanel"
                 >
