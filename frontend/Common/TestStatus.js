@@ -202,12 +202,12 @@ export const PytestColors = {
     [PytestStatus.FAILURE]: "#dc3545",
     [PytestStatus.ERROR]: "#ffc107",
     [PytestStatus.SKIPPED]: "#212529",
-    [PytestStatus.XFAILED]: "#442529",
-    [PytestStatus.XPASS]: "#198754",
-    [PytestStatus.PASSED_ERROR]: "#438754",
-    [PytestStatus.FAILURE_ERROR]: "#ee5545",
-    [PytestStatus.SKIPPED_ERROR]: "#445533",
-    [PytestStatus.ERROR_ERROR]: "#ddaa07",
+    [PytestStatus.XFAILED]: "#f8f9fa",
+    [PytestStatus.XPASS]: "#f8f9fa",
+    [PytestStatus.PASSED_ERROR]: "#ffc107",
+    [PytestStatus.FAILURE_ERROR]: "#dc3545",
+    [PytestStatus.SKIPPED_ERROR]: "#212529",
+    [PytestStatus.ERROR_ERROR]: "#ffc107",
 };
 
 export const PytestBgStyles = {
