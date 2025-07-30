@@ -74,6 +74,10 @@
     };
 
     const resolveFirstUserForAggregation = function(issue) {
+        if (!issue.links) return {
+            id: issue.user_id,
+            date: issue.added_on,
+        };
         const resolved = issue.links
             .filter(l => !!l.added_on && !!l.user_id)
             .sort((a, b) => {

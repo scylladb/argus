@@ -199,7 +199,7 @@ class GithubService:
                 response.append(issue_dict)
 
         else:
-            response = [dict(issue.items()) for issue in resolved_issues]
+            response = [{**dict(issue.items()), **issues[issue.id][0]} for issue in resolved_issues]
         return response
 
     def delete_github_issue(self, issue_id: UUID, run_id: UUID) -> dict:
