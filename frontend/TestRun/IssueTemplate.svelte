@@ -11,7 +11,9 @@
     import { markdownRendererOptions } from "../markdownOptions";
     import { sendMessage } from "../Stores/AlertStore";
     let renderedElement;
+    let renderedShortElement;
     let templateElement;
+    let shortTemplateElement;
     let issueTemplateText = "";
 
     const filterDbNodes = function (resources) {
@@ -20,10 +22,20 @@
         );
     };
 
+    const proxyS3Url = function (test, testRun, logName) {
+        return `/api/v1/tests/${test.plugin_name}/${testRun.id}/log/${logName}/download`;
+    };
+
     const copyTemplateToClipboard = function () {
         navigator.clipboard.writeText(templateElement.innerText);
         sendMessage("success", "Issue template has been copied to your clipboard");
     };
+
+    const copyShortTemplateToClipboard = function () {
+        navigator.clipboard.writeText(shortTemplateElement.innerText);
+        sendMessage("success", "Issue template has been copied to your clipboard");
+    };
+
 
     let scyllaServerPackage = getScyllaPackage(test_run.packages);
     let kernelPackage = getKernelPackage(test_run.packages);
@@ -43,6 +55,7 @@
 
     onMount(() => {
         renderedElement.innerHTML = parse(templateElement.innerHTML, markdownRendererOptions);
+        renderedShortElement.innerHTML = parse(shortTemplateElement.innerHTML, markdownRendererOptions);
         issueTemplateText = templateElement.innerHTML;
     });
 </script>
@@ -62,8 +75,14 @@
                 <button
                     type="button"
                     class="btn btn-input-group btn-success"
+                    on:click={copyShortTemplateToClipboard}
+                    ><Fa icon={faCopy} /> Short</button
+                >
+                <button
+                    type="button"
+                    class="btn btn-input-group btn-success"
                     on:click={copyTemplateToClipboard}
-                    ><Fa icon={faCopy} /></button
+                    ><Fa icon={faCopy} /> Full</button
                 >
             </div>
             <div id="collapseIssueTemplate-{test_run.id}" class="collapse">
@@ -95,6 +114,31 @@
                                 role="tab"
                             >
                                 Preview
+                            </button>
+
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button
+                                class="nav-link"
+                                id="home-tab"
+                                data-bs-toggle="tab"
+                                data-bs-target="#issueShortTemplateRaw-{test_run.id}"
+                                type="button"
+                                role="tab"
+                            >
+                                Short Template
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button
+                                class="nav-link"
+                                id="profile-tab"
+                                data-bs-toggle="tab"
+                                data-bs-target="#issueShortTemplatePreview-{test_run.id}"
+                                type="button"
+                                role="tab"
+                            >
+                                Preview for Short Template
                             </button>
                         </li>
                     </ul>
@@ -185,7 +229,7 @@ Logs and commands
 
 ## Logs:
 {#each test_run.logs as log}
-    - **{log[0]}** - [{log[1]}]({log[1]}){"\n"}
+    - **[{log[0]}](https://argus.scylladb.com{proxyS3Url(test, test_run, log[0])})**{"\n"}
 {:else}
     *No logs captured during this run.*
 {/each}
@@ -200,6 +244,87 @@ Logs and commands
                             <div
                                 class="p-2 markdown-body"
                                 bind:this={renderedElement}
+                                id="issueTemplateRendered-{test_run.id}"
+                            />
+                        </div>
+                        <div
+                            class="tab-pane fade"
+                            id="issueShortTemplateRaw-{test_run.id}"
+                            role="tabpanel"
+                        >
+                            <div class="p-1 mb-2">
+                                <button
+                                    class="btn btn-sm btn-primary"
+                                    on:click={() => {
+                                        let range = document.createRange();
+                                        range.selectNodeContents(shortTemplateElement);
+                                        let selection = window.getSelection();
+                                        selection.removeAllRanges();
+                                        selection.addRange(range);
+                                    }}
+                                >
+                                    Select All
+                                </button>
+                            </div>
+                            <pre
+                                class="code"
+                                bind:this={shortTemplateElement}
+                                id="issueShortTemplateText-{test_run.id}">
+
+[Argus]({document.location.origin}/test/{test_run.test_id}/runs?additionalRuns[]={test_run.id})
+
+{#if scyllaServerPackage}{upgradedPackage ? "Base " : ""}Scylla version: `{scyllaServerPackage.version}-{scyllaServerPackage.date}.{scyllaServerPackage.revision_id}` with build-id `{scyllaServerPackage.build_id}`{/if}
+{#if upgradedPackage}Target Scylla version (or git commit hash): `{upgradedPackage.version}-{upgradedPackage.date}.{upgradedPackage.revision_id}` with build-id `{upgradedPackage.build_id}`{/if}
+{#if relocatablePackage}Relocatable Package: `{relocatablePackage.version}`{/if}
+{#if operatorPackage}Operator Image: `{operatorPackage.version}`{/if}
+{#if operatorHelmPackage}Operator Helm Version: `{operatorHelmPackage.version}`{/if}
+{#if operatorHelmRepoPackage}Operator Helm Repository: `{operatorHelmRepoPackage.version}`{/if}
+{#if kernelPackage}Kernel Version: `{kernelPackage.version}`{/if}
+
+&lt;details&gt;
+&lt;summary&gt;
+Extra information
+&lt;/summary&gt;
+
+## Installation details
+
+Cluster size: {test_run?.cloud_setup?.db_node?.node_amount ?? "Unknown amount of"} nodes ({test_run?.cloud_setup?.db_node?.instance_type ?? "Unknown instance type"})
+
+Scylla Nodes used in this run:
+{#each filterDbNodes(test_run.allocated_resources) as resource}
+    - {resource.name} ({resource.instance_info.public_ip} | {resource.instance_info.private_ip}) (shards: {resource.instance_info.shards_amount}){"\n"}
+{:else}
+    **No resources left at the end of the run**
+{/each}
+
+OS / Image: `{test_run?.cloud_setup?.db_node?.image_id ?? "No image"}` ({test_run?.sct_runner_host?.provider ?? "NO RUNNER"}: {test_run?.sct_runner_host?.region ?? "NO RUNNER"})
+
+Test: `{test?.name}`
+Test id: `{test_run.id}`
+Test name: `{test_run.build_id}`
+{#if test_run.test_method}
+    Test method: `{test_run.test_method}`
+{/if}
+Test config file(s):
+
+- [{(test_run.config_files?.[0] ?? "None").split("/").reverse()[0]}](https://github.com/scylladb/scylla-cluster-tests/blob/{test_run.scm_revision_id}/{test_run.config_files[0]})
+
+
+## Logs:
+{#each test_run.logs as log}
+    - **[{log[0]}](https://argus.scylladb.com{proxyS3Url(test, test_run, log[0])})**{"\n"}
+{:else}
+    *No logs captured during this run.*
+{/each}
+[Jenkins job URL]({test_run.build_job_url})
+&lt;/details&gt;
+
+                            </pre>
+                        </div>
+                        <div class="tab-pane fade" id="issueShortTemplatePreview-{test_run.id}" role="tabpanel">
+                            <div
+                                class="p-2 markdown-body"
+                                bind:this={renderedShortElement}
                                 id="issueTemplateRendered-{test_run.id}"
                             />
                         </div>
