@@ -7,6 +7,8 @@
     import StringParam from "./StringParam.svelte";
     import { faExclamationCircle, faMinus, faPlus, faQuestionCircle } from "@fortawesome/free-solid-svg-icons";
     import DummyCheckParam from "./DummyCheckParam.svelte";
+    import { sendMessage } from "../../Stores/AlertStore";
+    import { faCheck, faTimes } from "@fortawesome/free-solid-svg-icons";
 
     /**@type {{[string]: string}}*/
     export let params = {};
@@ -531,6 +533,53 @@
         paramDefinitions = paramDefinitions;
         return [validated, errors];
     }
+
+    let repoValidation = {
+        inProgress: false,
+        validated: false,
+        message: "",
+    };
+
+    async function validateBYORepoParams() {
+        try {
+            const apiPayload = {
+                repo: params.byo_scylla_repo,
+                branch: params.byo_scylla_branch,
+            };
+            repoValidation.inProgress = true;
+            const response = await fetch("/api/v1/github/repo/validate", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(apiPayload, undefined, 1)
+            });
+
+            const json = await response.json();
+            if (json.status != "ok") {
+                throw json;
+            }
+            repoValidation.validated = json.response.validated;
+            repoValidation.message = json.response.message;
+        } catch (error) {
+            if (error?.status === "error") {
+                sendMessage(
+                    "error",
+                    `API Error when validating settings.\nMessage: ${error.response.arguments[0]}`,
+                    "CloneTargetSelector::handleValidation"
+                );
+            } else {
+                sendMessage(
+                    "error",
+                    "A backend error occurred during settings validation",
+                    "CloneTargetSelector::handleValidation"
+                );
+                console.log(error);
+            }
+        } finally {
+            repoValidation.inProgress = false;
+        }
+    };
 </script>
 
 
@@ -573,6 +622,38 @@
                             {#if !param.validated && param.requiresValidation}
                                 <div class="alert alert-danger">
                                     <Fa icon={faExclamationCircle}/> {param.validationHelpText}
+                                </div>
+                            {/if}
+
+                            {#if param.internalName === "byo_scylla_branch" && paramDefinitions.scyllaVersion.currentSource === "scylla_byo"}
+                                <div class="mb-2 text-center p-2">
+                                    {#if repoValidation.inProgress}
+                                        <span class="spinner-border spinner-border-sm"></span>
+                                    {/if}
+                                    {#if repoValidation.message}
+                                        <span class={repoValidation.validated ? "text-success" : "text-danger"}>
+                                            {repoValidation.message}
+                                        </span>
+                                    {/if}
+                                </div>
+                                <div class="mb-2">
+                                    <button
+                                        class="btn btn-primary w-100"
+                                        on:click={validateBYORepoParams}
+                                        disabled={
+                                            repoValidation.inProgress ||
+                                            !paramDefinitions.scyllaVersion.params.scyllaBranchBYO.validated ||
+                                            !paramDefinitions.scyllaVersion.params.scyllaRepoBYO.validated ||
+                                            !params.byo_scylla_branch ||
+                                            !params.byo_scylla_repo
+                                        }                                    >
+                                        {#if repoValidation.validated}
+                                            <Fa icon={faCheck}/>
+                                        {:else if !repoValidation.validated && repoValidation.message}
+                                            <Fa icon={faTimes}/>
+                                        {/if}
+                                        Validate
+                                    </button>
                                 </div>
                             {/if}
                         </div>
