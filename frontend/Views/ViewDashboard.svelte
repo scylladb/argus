@@ -11,10 +11,8 @@
     let clickedTests = {};
     let resolvedTests = [];
     const versionDispatch = {
-        GLOBAL_STATS_KEY: productVersion,
+        [GLOBAL_STATS_KEY]: productVersion,
     };
-
-    console.log(versionDispatch);
 
     const handleTestClick = function (detail) {
         if (detail.start_time == 0) {
