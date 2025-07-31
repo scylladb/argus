@@ -153,6 +153,14 @@ def _get_image(row: dict):
         return cs.db_node.image_id
 
 
+def check_version(filter_string: str, version: str) -> bool:
+    if not version:
+        return False
+    if version.startswith(filter_string):
+        return True
+
+    return False
+
 def _fetch_multiple_release_queries(entity: Model, releases: list[str]):
     result_set = []
     for release_id in releases:
@@ -542,11 +550,11 @@ class ReleaseStatsCollector:
             }
         if self.release_version:
             if include_no_version:
-                expr = lambda row: row["scylla_version"] == self.release_version or not row["scylla_version"]
+                expr = lambda row: check_version(self.release_version, row["scylla_version"]) or not row["scylla_version"]
             elif self.release_version == "!noVersion":
                 expr = lambda row: not row["scylla_version"]
             else:
-                expr = lambda row: row["scylla_version"] == self.release_version
+                expr = lambda row: check_version(self.release_version, row["scylla_version"])
         else:
             if include_no_version:
                 expr = lambda row: row
@@ -608,11 +616,11 @@ class ViewStatsCollector:
 
         if self.filter:
             if include_no_version:
-                expr = lambda row: row["scylla_version"] == self.filter or not row["scylla_version"]
+                expr = lambda row: check_version(self.filter, row["scylla_version"]) or not row["scylla_version"]
             elif self.filter == "!noVersion":
                 expr = lambda row: not row["scylla_version"]
             else:
-                expr = lambda row: row["scylla_version"] == self.filter
+                expr = lambda row: check_version(self.filter, row["scylla_version"])
         else:
             if include_no_version:
                 expr = lambda row: row
