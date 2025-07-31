@@ -15,6 +15,9 @@
                     <a class="{% if request.path == url_for('admin.index')%}active{%endif%} nav-link" href="{{ url_for('admin.index')}}"><i class="fas fa-wrench"></i> Admin Area</a>
                 {% endif %}
             <a class="{% if request.path == url_for('main.teams.index')%}active{%endif%} nav-link" href="{{ url_for('main.teams.index')}}"><i class="fas fa-users"></i> Teams</a>
+            {% if config["APP_DOC_LINK"] %}
+            <a class="nav-link" href="{{ config['APP_DOC_LINK'] }}" target="_blank"><i class="fas fa-book"></i> Docs</a>
+            {% endif %}
             <a class="{% if request.path == url_for('main.profile')%}active{%endif%} nav-link d-flex align-items-center" href="{{ url_for('main.profile')}}">
             {% if g.user.picture_id %}
             <img class="me-1" src="/storage/picture/{{ g.user.picture_id }}" style="height: 24px; border-radius: 50%" alt="">
@@ -31,6 +34,9 @@
                 </form>
             </div>
             {% else %}
+            {% if config["APP_DOC_LINK"] %}
+            <a class="nav-link" href="{{ config['APP_DOC_LINK'] }}" target="_blank"><i class="fas fa-book"></i> Docs</a>
+            {% endif %}
             <a href="{{ url_for('auth.login')}}" class="{% if request.path == url_for('auth.login')%}active{%endif%} nav-link"><i class="fas fa-sign-in-alt"></i> Login</a>
             {% endif %}
         </div>
