@@ -39,7 +39,7 @@ class GenericRun(PluginModelBase):
         return sorted(list(unique_versions), reverse=True)
 
     def submit_product_version(self, version: str):
-        pattern = re.compile(r"((?P<short>[\w.~]+)-(?P<build>(0\.)?(?P<date>[0-9]{8,8})\.(?P<commit>\w+).*))")
+        pattern = re.compile(r"((?P<short>[\w.\-~]+)-(?P<build>(0\.)?(?P<date>[0-9]{8,8})\.(?P<commit>\w+).*))")
         if match := pattern.search(version):
             self.scylla_version = match.group("short")
             try:
