@@ -20,6 +20,7 @@
         provider: ["instance_info", "provider"],
         state: "state",
         name: "name",
+        type: ["instance_info", "instance_type"],
         shards: ["instance_info", "shards_amount"],
         publicIp: ["instance_info", "public_ip"],
         privateIp: ["instance_info", "private_ip"],
@@ -135,6 +136,25 @@
                 </span>
             {/if}
             Provider
+        </th>
+        <th
+            role="button"
+            scope="col"
+            class="text-center align-middle"
+            on:click={() => {
+                sortHeader = "type";
+                sortAscending = !sortAscending;
+            }}
+        >
+            {#if sortHeader == "type"}
+                <span
+                    class="d-inline-block"
+                    class:invertArrow={sortAscending}
+                >
+                    &#x25B2;
+                </span>
+            {/if}
+            Instance Type
         </th>
         <th
             role="button"
@@ -350,6 +370,7 @@
         {#each sortResourcesByKey(resources, sortHeader, sortAscending) as resource (resource.name)}
             <tr class:d-none={filterResource(resource)}>
                 <td>{resource.instance_info.provider}</td>
+                <td>{resource.instance_info.instance_type || "N/A"}</td>
                 <td>{resource.name}</td>
                 <td>{resource.instance_info.region}</td>
                 <td>{resource.instance_info.dc_name ?? ""}</td>

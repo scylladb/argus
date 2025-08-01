@@ -22,6 +22,7 @@ class PackageVersion(UserType):
 class CloudInstanceDetails(UserType):
     __type_name__ = "CloudInstanceDetails_v3"
     provider = columns.Text()
+    instance_type = columns.Text()
     region = columns.Text()
     public_ip = columns.Text()
     private_ip = columns.Text()
