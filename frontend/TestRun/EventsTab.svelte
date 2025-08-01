@@ -399,6 +399,7 @@
                     similars={event.similars}
                     duplicates={getNumberOfDuplicates(event)}
                     {toggleDuplicates}
+                    on:issueAttach
                 />
             {:else}
                 <RawEvent eventText={event.text} errorMessage={event.error} />

@@ -1,16 +1,20 @@
 <script>
-    import {faCopy, faDotCircle, faLink} from "@fortawesome/free-solid-svg-icons";
+    import {faCheckCircle, faCopy, faDotCircle, faLink, faPlus} from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
     import { sendMessage } from "../Stores/AlertStore";
     import ModalWindow from "../Common/ModalWindow.svelte";
+    import { createEventDispatcher } from "svelte";
 
 
     export let event;
     export let similars = [];
     export let duplicates = 0;
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
     export let toggleDuplicates = () => {};
     export let display = true;
     export let filterString = "";
+
+    const dispatch = createEventDispatcher();
 
     // Track if duplicates are shown for this event (local state)
     let showingDuplicates = false;
@@ -112,7 +116,7 @@
                     class:btn-info={!showingDuplicates}
                     on:click={() => { showingDuplicates = !showingDuplicates; toggleDuplicates(event); }}>
                     <Fa icon={faCopy} />
-                    <span>{showingDuplicates ? `Hide Duplicates` : `Show ${duplicates} Duplicates`}</span>
+                    <span>{showingDuplicates ? "Hide Duplicates" : `Show ${duplicates} Duplicates`}</span>
                 </button>
             {/if}
             <button
@@ -209,15 +213,24 @@
                                     <td>
                                         {#if similarRunsInfo[runId]?.issues?.length}
                                             {#each similarRunsInfo[runId].issues as issue}
-                                                <div class="issue-item mb-1">
-                                                    <a href={issue.url} target="_blank" class="issue-link">
-                                                        <span
-                                                            class="badge {issue.state === 'open'
-                                                                ? 'issue-open'
-                                                                : 'issue-closed'}">#{issue.number}</span
+                                                <div class="mb-1 d-flex align-items-center">
+                                                    <div class="btn-group" style="width: 128px">
+                                                        <button
+                                                            class:btn-open={issue.state === "open"}
+                                                            class:btn-closed={issue.state !== "open"}
+                                                            class="btn btn-sm"
+                                                            title="Add this issue to the current run"
+                                                            on:click={() => dispatch("issueAttach", { url: issue.url })}
                                                         >
+                                                            <Fa icon={faPlus}/>
+                                                        </button>
+                                                        <a href={issue.url} class:btn-open={issue.state === "open"} class:btn-closed={issue.state !== "open"} target="_blank" class="btn btn-sm">
+                                                            <Fa icon={issue.state === "open" ? faDotCircle : faCheckCircle}/> #{issue.number}
+                                                        </a>
+                                                    </div>
+                                                    <div class="ms-2 overflow-ellipsis text-truncate" style="max-width: 512px" title="{issue.title}">
                                                         {issue.title}
-                                                    </a>
+                                                    </div>
                                                 </div>
                                             {/each}
                                         {:else}
@@ -292,5 +305,39 @@
 
     .date-column {
         width: 100px;
+    }
+
+    .btn-open {
+        --bs-btn-color: #fff;
+        --bs-btn-bg: #347d39;
+        --bs-btn-border-color: #2f5c32;
+        --bs-btn-hover-color: #fff;
+        --bs-btn-hover-bg: #29722e;
+        --bs-btn-hover-border-color: rgb(32, 68, 35);
+        --bs-btn-focus-shadow-rgb: 225, 83, 97;
+        --bs-btn-active-color: #fff;
+        --bs-btn-active-bg: #349b3b;
+        --bs-btn-active-border-color: #3a693d;
+        --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
+        --bs-btn-disabled-color: #fff;
+        --bs-btn-disabled-bg: #6fc575;
+        --bs-btn-disabled-border-color: #597e5c;
+    }
+
+    .btn-closed {
+        --bs-btn-color: #fff;
+        --bs-btn-bg: #8256d0;
+        --bs-btn-border-color: #7459a3;
+        --bs-btn-hover-color: #fff;
+        --bs-btn-hover-bg: #6843a8;
+        --bs-btn-hover-border-color: #624496;
+        --bs-btn-focus-shadow-rgb: 225, 83, 97;
+        --bs-btn-active-color: #fff;
+        --bs-btn-active-bg: #9255fa;
+        --bs-btn-active-border-color: #ba95fa;
+        --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
+        --bs-btn-disabled-color: #fff;
+        --bs-btn-disabled-bg: #b19cd4;
+        --bs-btn-disabled-border-color: #8e82a1;
     }
 </style>

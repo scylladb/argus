@@ -31,7 +31,7 @@
     import HeartbeatIndicator from "./HeartbeatIndicator.svelte";
     import EventsTab from "./EventsTab.svelte";
     import ArtifactTab from "./ArtifactTab.svelte";
-    import IssueTab from "./IssueTab.svelte";
+    import IssueTab, { submitIssue } from "./IssueTab.svelte";
     import { SubtestTabBodyComponents, SubtestTabComponents, Subtests } from "./SCTSubTests/Subtest";
     import PackagesInfo from "./PackagesInfo.svelte";
     import JUnitResults from "./jUnitResults.svelte";
@@ -444,7 +444,7 @@
                     role="tabpanel"
                 >
                     {#if visitedTabs["events"]}
-                        <EventsTab {testRun} />
+                        <EventsTab {testRun} on:issueAttach={(e) => submitIssue(e.detail.url, runId, testInfo.test.id)} />
                     {/if}
                 </div>
                 <div
