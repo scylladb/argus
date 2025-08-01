@@ -321,6 +321,13 @@
     };
 
     const fetchVersions = async function() {
+        const extractShortVersions = function (version) {
+            const VERSION_RE = /^(?<short>((?<oss>\d)|(?<ent>\d{4}))\.(\d*)\.(\d*)((~|\.)rc\d|~dev|\.dev)?)((-|\.)(?<build>(0\.)?(?<date>[0-9]{8,8})\.(?<commit>\w+).*))?$/;
+            let match = VERSION_RE.exec(version);
+            if (!match) return null;
+            const isEnterprise = !!match.groups.ent;
+            return [match.groups.short, isEnterprise];
+        };
         let response = await fetch(PANEL_MODES[dashboardObjectType].versionRoute(dashboardObject));
         if (response.status != 200) {
             return Promise.reject("API Error");
@@ -329,8 +336,25 @@
         if (json.status !== "ok") {
             return Promise.reject(json.exception);
         }
+        const unrecognizedVersions = [];
+        const uniqueShortVersions = json.response
+            .map(v => extractShortVersions(v) || (unrecognizedVersions.push(v) && false))
+            .filter(v => v);
 
-        return json.response;
+        const enterpriseVersions = uniqueShortVersions
+            .filter(([_, isEnterprise]) => isEnterprise)
+            .map(([version]) => version)
+            .filter((version, idx, src) => src.indexOf(version) === idx)
+            .sort()
+            .reverse();
+        const ossVersions = uniqueShortVersions
+            .filter(([_, isEnterprise]) => !isEnterprise)
+            .map(([version]) => version)
+            .filter((version, idx, src) => src.indexOf(version) === idx)
+            .sort()
+            .reverse();
+
+        return [...enterpriseVersions, ...ossVersions, ...unrecognizedVersions];
     };
 
     const fetchImages = async function() {
