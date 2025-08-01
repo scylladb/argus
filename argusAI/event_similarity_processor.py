@@ -1,6 +1,8 @@
 import os
 from collections import namedtuple
 from pathlib import Path
+
+import cassandra
 import chromadb
 from threading import Thread, Event
 import time
@@ -214,13 +216,19 @@ class EventSimilarityProcessor:
         new_embeddings: Dict[str, List[EmbeddingEntry]] = similars_to_find
         while not stop_event.is_set():
             LOGGER.info(f"Starting event processing cycle; fetching tests since: {cutoff_time}")
-            tests_to_process_result = self._db.execute(
-                f"SELECT id, status FROM {SCTTestRun.table_name()} WHERE start_time > ? ALLOW FILTERING BYPASS CACHE",
-                (cutoff_time,),
-            )
-            tests_to_process: Set[uuid.UUID] = {
-                run.id for run in tests_to_process_result if run.status != TestStatus.PASSED.value
-            } - processed_runs
+            try:
+                tests_to_process_result = self._db.execute(
+                    f"SELECT id, status FROM {SCTTestRun.table_name()} WHERE start_time > ? ALLOW FILTERING BYPASS CACHE",
+                    (cutoff_time,),
+                )
+                tests_to_process: Set[uuid.UUID] = {
+                    run.id for run in tests_to_process_result if run.status != TestStatus.PASSED.value
+                } - processed_runs
+            except cassandra.ReadTimeout:
+                LOGGER.error("Read Timeout while trying to get new events to process - skipping until next iteration")
+                stop_event.wait(timeout=SLEEP_INTERVAL)
+                continue
+
             LOGGER.info(f"tests to process (including in progress) count: {len(tests_to_process)}")
             try:
                 stats: Dict[str, int] = {
