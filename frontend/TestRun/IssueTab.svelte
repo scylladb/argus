@@ -1,14 +1,5 @@
-<script>
-    import GithubIssues from "../Github/GithubIssues.svelte";
-    import { sendMessage } from "../Stores/AlertStore";
-
-    export let runId;
-    export let testInfo;
-
-    let aggregatedIssuesComponent;
-    let runIssuesComponent;
-
-    const submitIssue = async function (url, runId, testId) {
+<script context="module">
+    export const submitIssue = async function (url, runId, testId) {
         try {
             if (!testId) return;
             let apiResponse = await fetch(`/api/v1/test/${testId}/run/${runId}/issues/submit`, {
@@ -22,8 +13,11 @@
             });
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
-                runIssuesComponent.fetchIssues();
-                aggregatedIssuesComponent.fetchIssues();
+                sendMessage(
+                    "success",
+                    "Issue has been added to the current run!",
+                    "IssueTab::submit"
+                );
             } else {
                 throw apiJson;
             }
@@ -45,6 +39,24 @@
     };
 </script>
 
+<script>
+    import GithubIssues from "../Github/GithubIssues.svelte";
+    import { sendMessage } from "../Stores/AlertStore";
+
+    export let runId;
+    export let testInfo;
+
+    const submitIssueLocal = async function (url, runId, testId) {
+        await submitIssue(url, runId, testId);
+        runIssuesComponent.fetchIssues();
+        aggregatedIssuesComponent.fetchIssues();
+    };
+
+    let aggregatedIssuesComponent;
+    let runIssuesComponent;
+
+</script>
+
 <GithubIssues bind:this={runIssuesComponent} {runId} id={runId} testId={testInfo.test.id} pluginName={testInfo.test.plugin_name}/>
 <div class="accordion accordion-flush border-top" id="allIssuesContainer-{testInfo.test.id}-{runId}">
     <div class="accordion-item">
@@ -55,7 +67,7 @@
         </h2>
         <div id="allIssues-{testInfo.test.id}-{runId}" class="accordion-collapse collapse" data-bs-parent="#allIssuesContainer-{testInfo.test.id}-{runId}">
         <div class="accordion-body overflow-scroll" style="max-height: 768px">
-            <GithubIssues on:submitToCurrent={(e) => submitIssue(e.detail, runId, testInfo.test.id)} bind:this={aggregatedIssuesComponent} {runId} id={testInfo.test.id} testId={testInfo.test.id} filter_key="test_id" aggregateByIssue={true} submitDisabled={true}/>
+            <GithubIssues on:submitToCurrent={(e) => submitIssueLocal(e.detail, runId, testInfo.test.id)} bind:this={aggregatedIssuesComponent} {runId} id={testInfo.test.id} testId={testInfo.test.id} filter_key="test_id" aggregateByIssue={true} submitDisabled={true}/>
         </div>
         </div>
     </div>
