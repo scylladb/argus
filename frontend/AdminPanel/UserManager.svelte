@@ -8,17 +8,17 @@
 
 
     let users = [];
-    let lastError = "";
-    let selectedUser;
-    let working = false;
-    let confirmChangePassword = false;
-    let confirmToggleAdmin = false;
-    let confirmDeleteUser = false;
-    let confirmChangeEmail = false;
-    let newEmail = "";
-    let newPassword = "";
-    let newPasswordConfirm = "";
-    let userDeleteConfirmationUsername = "";
+    let lastError = $state("");
+    let selectedUser = $state();
+    let working = $state(false);
+    let confirmChangePassword = $state(false);
+    let confirmToggleAdmin = $state(false);
+    let confirmDeleteUser = $state(false);
+    let confirmChangeEmail = $state(false);
+    let newEmail = $state("");
+    let newPassword = $state("");
+    let newPasswordConfirm = $state("");
+    let userDeleteConfirmationUsername = $state("");
 
     const getUsers = async function() {
         let response = await fetch("/admin/api/v1/users");
@@ -50,7 +50,7 @@
         working = false;
     };
 
-    let userPromise = getUsers();
+    let userPromise = $state(getUsers());
 
     const changeUserPassword = async function() {
         try {
@@ -170,76 +170,90 @@
 
 {#if confirmChangeEmail}
     <ModalWindow on:modalClose={() => confirmChangeEmail = false}>
-        <div slot="title">Changing email for <span class="fw-bold">@{selectedUser.username}</span></div>
-        <div slot="body">
-            <div class="form-group">
-                <label for="changeEmailField" class="form-label">New Email</label>
-                <input id="changeEmailField" type="email" class="form-control" bind:value={newEmail}>
+        {#snippet title()}
+                <div >Changing email for <span class="fw-bold">@{selectedUser.username}</span></div>
+            {/snippet}
+        {#snippet body()}
+                <div >
+                <div class="form-group">
+                    <label for="changeEmailField" class="form-label">New Email</label>
+                    <input id="changeEmailField" type="email" class="form-control" bind:value={newEmail}>
+                </div>
+                <div class="d-flex align-items-center my-2">
+                    <button disabled={working} class="btn btn-primary w-75 me-2" onclick={changeUserEmail}>Confirm</button>
+                    <button disabled={working} class="btn btn-secondary w-25" onclick={() => confirmChangeEmail = false}>Cancel</button>
+                </div>
             </div>
-            <div class="d-flex align-items-center my-2">
-                <button disabled={working} class="btn btn-primary w-75 me-2" on:click={changeUserEmail}>Confirm</button>
-                <button disabled={working} class="btn btn-secondary w-25" on:click={() => confirmChangeEmail = false}>Cancel</button>
-            </div>
-        </div>
+            {/snippet}
     </ModalWindow>
 {/if}
 {#if confirmChangePassword}
     <ModalWindow on:modalClose={() => confirmChangePassword = false}>
-        <div slot="title">Changing password for <span class="fw-bold">@{selectedUser.username}</span></div>
-        <div slot="body">
-            <div class="form-group">
-                <label for="changePasswordField" class="form-label">New Password</label>
-                <input id="changePasswordField" type="password" class="form-control" bind:value={newPassword}>
+        {#snippet title()}
+                <div >Changing password for <span class="fw-bold">@{selectedUser.username}</span></div>
+            {/snippet}
+        {#snippet body()}
+                <div >
+                <div class="form-group">
+                    <label for="changePasswordField" class="form-label">New Password</label>
+                    <input id="changePasswordField" type="password" class="form-control" bind:value={newPassword}>
+                </div>
+                <div class="form-group">
+                    <label for="changeConfirmPasswordField" class="form-label">Confirm Password</label>
+                    <input id="changeConfirmPasswordField" type="password" class="form-control" bind:value={newPasswordConfirm}>
+                </div>
+                <div class="d-flex align-items-center my-2">
+                    <button disabled={working} class="btn btn-primary w-75 me-2" onclick={changeUserPassword}>Confirm</button>
+                    <button disabled={working} class="btn btn-secondary w-25" onclick={() => confirmChangePassword = false}>Cancel</button>
+                </div>
             </div>
-            <div class="form-group">
-                <label for="changeConfirmPasswordField" class="form-label">Confirm Password</label>
-                <input id="changeConfirmPasswordField" type="password" class="form-control" bind:value={newPasswordConfirm}>
-            </div>
-            <div class="d-flex align-items-center my-2">
-                <button disabled={working} class="btn btn-primary w-75 me-2" on:click={changeUserPassword}>Confirm</button>
-                <button disabled={working} class="btn btn-secondary w-25" on:click={() => confirmChangePassword = false}>Cancel</button>
-            </div>
-        </div>
+            {/snippet}
     </ModalWindow>
 {/if}
 
 {#if confirmDeleteUser}
     <ModalWindow on:modalClose={() => confirmDeleteUser = false}>
-        <div slot="title">Deleting <span class="fw-bold">@{selectedUser.username}</span></div>
-        <div slot="body">
-            <div>
-                Are you sure you want to delete <span class="fw-bold">@{selectedUser.username}</span>?
+        {#snippet title()}
+                <div >Deleting <span class="fw-bold">@{selectedUser.username}</span></div>
+            {/snippet}
+        {#snippet body()}
+                <div >
+                <div>
+                    Are you sure you want to delete <span class="fw-bold">@{selectedUser.username}</span>?
+                </div>
+                <div class="form-group">
+                    <label for="deleteUserConfirm" class="form-label">Type the username to confirm</label>
+                    <input id="deleteUserConfirm" type="text" class="form-control" bind:value={userDeleteConfirmationUsername}>
+                </div>
+                <div class="d-flex align-items-center my-2">
+                    <button disabled={working || userDeleteConfirmationUsername != selectedUser.username} class="btn btn-danger w-75 me-2" onclick={deleteUser}>Confirm</button>
+                    <button disabled={working} class="btn btn-secondary w-25" onclick={() => confirmDeleteUser = false}>Cancel</button>
+                </div>
             </div>
-            <div class="form-group">
-                <label for="deleteUserConfirm" class="form-label">Type the username to confirm</label>
-                <input id="deleteUserConfirm" type="text" class="form-control" bind:value={userDeleteConfirmationUsername}>
-            </div>
-            <div class="d-flex align-items-center my-2">
-                <button disabled={working || userDeleteConfirmationUsername != selectedUser.username} class="btn btn-danger w-75 me-2" on:click={deleteUser}>Confirm</button>
-                <button disabled={working} class="btn btn-secondary w-25" on:click={() => confirmDeleteUser = false}>Cancel</button>
-            </div>
-        </div>
+            {/snippet}
     </ModalWindow>
 {/if}
 
 {#if confirmToggleAdmin}
     <ModalWindow on:modalClose={() => confirmToggleAdmin = false}>
-        <div slot="body">
-            <div>
-                {#if isAdmin(selectedUser)}
-                    Are you sure you want to demote <span class="fw-bold">@{selectedUser.username}</span> from <span class="text-danger">Admin</span> role?
-                {:else}
-                    Are you sure you want to set <span class="fw-bold">@{selectedUser.username}</span> as <span class="text-danger">Admin</span>?
-                {/if}
-            </div>
-            <div class="d-flex align-items-center my-2">
-                <button disabled={working} class="btn btn-warning w-75 me-2" on:click={toggleUserAdmin}>Confirm</button>
-                <button disabled={working} class="btn btn-secondary w-25" on:click={() => {
+        {#snippet body()}
+                <div >
+                <div>
+                    {#if isAdmin(selectedUser)}
+                        Are you sure you want to demote <span class="fw-bold">@{selectedUser.username}</span> from <span class="text-danger">Admin</span> role?
+                    {:else}
+                        Are you sure you want to set <span class="fw-bold">@{selectedUser.username}</span> as <span class="text-danger">Admin</span>?
+                    {/if}
+                </div>
+                <div class="d-flex align-items-center my-2">
+                    <button disabled={working} class="btn btn-warning w-75 me-2" onclick={toggleUserAdmin}>Confirm</button>
+                    <button disabled={working} class="btn btn-secondary w-25" onclick={() => {
                     invalidateUsers();
                     confirmToggleAdmin = false;
                 }}>Cancel</button>
+                </div>
             </div>
-        </div>
+            {/snippet}
     </ModalWindow>
 {/if}
 
@@ -250,14 +264,14 @@
                 <div class="alert alert-danger d-flex align-items-center">
                     <div>{lastError}</div>
                     <div class="text-end ms-auto">
-                        <button class="btn" on:click={() => lastError = ""}><Fa icon={faTimes} /></button>
+                        <button class="btn" onclick={() => lastError = ""}><Fa icon={faTimes} /></button>
                     </div>
                 </div>
             </div>
         {/if}
         {#await userPromise}
             <div class="p-2 text-center text-muted">
-                <span class="spinner-border spinner-border-sm" /> Loading users...
+                <span class="spinner-border spinner-border-sm"></span> Loading users...
             </div>
         {:then userList}
             <ul class="list-group list-group-flush rounded">
@@ -286,7 +300,7 @@
                                         role="switch"
                                         title="Switch user admin state"
                                         checked={isAdmin(user)}
-                                        on:change={() => {
+                                        onchange={() => {
                                             selectedUser = user;
                                             confirmToggleAdmin = true;
                                         }}
@@ -303,7 +317,7 @@
                                     <button
                                         disabled={working}
                                         class="btn btn-outline-primary"
-                                        on:click={() => {
+                                        onclick={() => {
                                             selectedUser = user;
                                             newEmail = user.email;
                                             confirmChangeEmail = true;
@@ -313,7 +327,7 @@
                                     <button
                                         disabled={working}
                                         class="btn btn-outline-primary"
-                                        on:click={() => {
+                                        onclick={() => {
                                             selectedUser = user;
                                             confirmChangePassword = true;
                                         }}>
@@ -322,7 +336,7 @@
                                     <button
                                         disabled={working}
                                         class="btn btn-outline-danger"
-                                        on:click={() => {
+                                        onclick={() => {
                                             selectedUser = user;
                                             confirmDeleteUser = true;
                                         }}>

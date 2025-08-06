@@ -1,4 +1,6 @@
-<script>
+<script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import { onMount } from "svelte";
     import { PLUGIN_NAMES } from "../Common/PluginNames";
     import { newIssueDestinations } from "../Common/IssueDestinations";
@@ -8,17 +10,29 @@
     import Fa from "svelte-fa";
     import Color from "color";
     import GithubIssuesCopyModal from "./GithubIssuesCopyModal.svelte";
-    export let id = "";
-    export let runId;
-    export let testId;
-    export let pluginName;
-    export let filter_key = "run_id";
-    export let submitDisabled = false;
-    export let aggregateByIssue = false;
-    let newIssueUrl = "";
-    let issues = [];
-    let fetching = false;
-    let showAllLabels = false;
+    interface Props {
+        id?: string;
+        runId: any;
+        testId: any;
+        pluginName: any;
+        filter_key?: string;
+        submitDisabled?: boolean;
+        aggregateByIssue?: boolean;
+    }
+
+    let {
+        id = "",
+        runId,
+        testId,
+        pluginName,
+        filter_key = "run_id",
+        submitDisabled = false,
+        aggregateByIssue = false
+    }: Props = $props();
+    let newIssueUrl = $state("");
+    let issues = $state([]);
+    let fetching = $state(false);
+    let showAllLabels = $state(false);
     export const fetchIssues = async function () {
         issues = [];
         fetching = true;
@@ -41,17 +55,17 @@
         }
     };
 
-    let sortCriteria = "date";
-    let reverseSort = true;
-    let currentPage = 0;
-    let PAGE_SIZE = 10;
-    let filterString = "";
+    let sortCriteria = $state("date");
+    let reverseSort = $state(true);
+    let currentPage = $state(0);
+    let PAGE_SIZE = $state(10);
+    let filterString = $state("");
     let availableLabels = [];
-    let selectedLabels = [];
-    const stateFilter = {
+    let selectedLabels = $state([]);
+    const stateFilter = $state({
         open: true,
         closed: true,
-    };
+    });
 
     const SORT_ORDERS = {
         name: {
@@ -172,8 +186,10 @@
         return pages;
     };
 
-    let sortedIssues = paginateIssues(issues, sortCriteria, reverseSort);
-    $: sortedIssues = paginateIssues(issues, sortCriteria, reverseSort, filterString, selectedLabels, stateFilter, PAGE_SIZE);
+    let sortedIssues = $state(paginateIssues(issues, sortCriteria, reverseSort));
+    run(() => {
+        sortedIssues = paginateIssues(issues, sortCriteria, reverseSort, filterString, selectedLabels, stateFilter, PAGE_SIZE);
+    });
 
 
 
@@ -230,7 +246,7 @@
                             class="btn btn-success"
                             type="button"
                             value="Add"
-                            on:click={submitIssue}
+                            onclick={submitIssue}
                         />
                     </div>
                 </div>
@@ -279,7 +295,7 @@
                         {/each}
                     </select>
                     <div class="mb-2">Issues per page</div>
-                    <select class="form-select mb-2" placeholder="Issues per page" on:change={(e) => PAGE_SIZE = parseInt(e.target.value)} value=10>
+                    <select class="form-select mb-2" placeholder="Issues per page" onchange={(e) => PAGE_SIZE = parseInt(e.target.value)} value=10>
                         <option value="10">10</option>
                         <option value="25">25</option>
                         <option value="50">50</option>
@@ -289,14 +305,14 @@
             </div>
             <div class="row">
                 <div class="rounded border p-2 bg-light-one">
-                    <div role="button" tabindex="0" class="mb-1 w-100" on:keypress={() => (showAllLabels = !showAllLabels)} on:click={() => (showAllLabels = !showAllLabels)}>All Labels <Fa icon={showAllLabels ? faChevronUp : faChevronDown}/></div>
+                    <div role="button" tabindex="0" class="mb-1 w-100" onkeypress={() => (showAllLabels = !showAllLabels)} onclick={() => (showAllLabels = !showAllLabels)}>All Labels <Fa icon={showAllLabels ? faChevronUp : faChevronDown}/></div>
                     <div class="collapse" class:show={showAllLabels}>
                         <div class="d-flex p-2 bg-dark rounded shadow-sm flex-wrap">
                             {#each availableLabels as label}
                                 <button
                                     class="ms-2 btn btn-sm btn-secondary m-1"
                                     style="border-color: #{label.color}; color: #{label.color}; background-color: {labelActive(label.id, selectedLabels) ? Color(`#${label.color}`).darken(0.75) : "rgba(1,1,1,0)"}"
-                                    on:click={() => handleLabelClick(label)}
+                                    onclick={() => handleLabelClick(label)}
                                 >
                                     {label.name}
                                 </button>
@@ -314,7 +330,7 @@
                 {#each sortedIssues as page, pageIdx}
                     {#if page.length > 0}
                         <div class="ms-1 p-1">
-                            <button class="btn btn-sm btn-primary" on:click={() => currentPage = pageIdx}>{pageIdx + 1}</button>
+                            <button class="btn btn-sm btn-primary" onclick={() => currentPage = pageIdx}>{pageIdx + 1}</button>
                         </div>
                     {/if}
                 {/each}

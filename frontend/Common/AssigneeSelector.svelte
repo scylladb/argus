@@ -1,14 +1,22 @@
-<script>
+<script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import {userList} from "../Stores/UserlistSubscriber";
     import User from "../Profile/User.svelte";
     import Select from "svelte-select";
     import {filterUser} from "../Common/SelectUtils";
     import UserSelection from "../Profile/UserSelection.svelte";
 
-    export let assignee_id;
-    export let disabled = false;
-    let users = {};
-    $: users = $userList;
+    interface Props {
+        assignee_id: any;
+        disabled?: boolean;
+    }
+
+    let { assignee_id, disabled = false }: Props = $props();
+    let users = $state({});
+    run(() => {
+        users = $userList;
+    });
     let currentAssignee = $userList[assignee_id];
     let selectedAssignee = {
         label: currentAssignee?.username,

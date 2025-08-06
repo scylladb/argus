@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
     import {
         faBusinessTime, faCopy, faPlay,
     } from "@fortawesome/free-solid-svg-icons";
@@ -8,10 +8,9 @@
     import { extractBuildNumber } from "../Common/RunUtils";
     import JenkinsBuildModal from "./Jenkins/JenkinsBuildModal.svelte";
     import JenkinsCloneModal from "./Jenkins/JenkinsCloneModal.svelte";
-    export let testRun = {};
-    export let testInfo;
-    let rebuildRequested = false;
-    let cloneRequested = false;
+    let { testRun = {}, testInfo } = $props();
+    let rebuildRequested = $state(false);
+    let cloneRequested = $state(false);
     /**
      * @typedef {Object} EnvBlock
      * @property {string} scylla-product
@@ -123,10 +122,10 @@
         {/if}
         <div class="col-6 p-2">
             <div class="btn-group">
-                <button class="btn btn-sm btn-outline-primary" on:click={() => (rebuildRequested = true)}
+                <button class="btn btn-sm btn-outline-primary" onclick={() => (rebuildRequested = true)}
                     ><Fa icon={faPlay} /> Rebuild</button
                 >
-                <button class="btn btn-sm btn-outline-primary" on:click={() => (cloneRequested = true)}
+                <button class="btn btn-sm btn-outline-primary" onclick={() => (cloneRequested = true)}
                     ><Fa icon={faCopy} /> Clone</button
                 >
                 <a

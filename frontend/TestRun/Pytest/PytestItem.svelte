@@ -5,10 +5,14 @@
     import { faChevronDown, faChevronUp, faClipboard, faCopy, faFilter } from "@fortawesome/free-solid-svg-icons";
     import humanizeDuration from "humanize-duration";
 
-    export let item: PytestData;
+    interface Props {
+        item: PytestData;
+    }
+
+    let { item }: Props = $props();
     type UserFields = Record<string, string>;
-    let testExpanded = false;
-    let showDetails = false;
+    let testExpanded = $state(false);
+    let showDetails = $state(false);
 
     const fetchUserFields = async function(name: string, id: string): Promise<UserFields> {
         try {
@@ -41,7 +45,7 @@
             {item.status}
         </div>
         <div class="ms-2">
-            <button class="btn btn-sm btn-primary" on:click={() => { showDetails = !showDetails; testExpanded = true; }}><Fa icon={showDetails ? faChevronUp : faChevronDown}/></button>
+            <button class="btn btn-sm btn-primary" onclick={() => { showDetails = !showDetails; testExpanded = true; }}><Fa icon={showDetails ? faChevronUp : faChevronDown}/></button>
         </div>
     </div>
     <div class:show={showDetails} class="rounded overflow-hidden bg-main collapse">
@@ -52,7 +56,7 @@
         </div>
         {#if item.message}
             <div class="mb-2 bg-white p-1">
-                <h6 class="mb-1">Message <button class="btn btn-sm btn-success" on:click={() => navigator.clipboard.writeText(item.message)}><Fa icon={faCopy}/></button></h6>
+                <h6 class="mb-1">Message <button class="btn btn-sm btn-success" onclick={() => navigator.clipboard.writeText(item.message)}><Fa icon={faCopy}/></button></h6>
                 <pre class="bg-main code rounded p-2 markdown-body" style="white-space: pre-wrap;">{item.message}</pre>
             </div>
         {/if}
@@ -87,7 +91,7 @@
                                         {/if}
                                         <button
                                             class="btn btn-sm btn-dark d-none"
-                                            on:click={() => navigator.clipboard.writeText(value)}
+                                            onclick={() => navigator.clipboard.writeText(value)}
                                         >
                                             <Fa icon={faCopy}/>
                                         </button>

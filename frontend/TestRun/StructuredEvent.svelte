@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
     import {faCheckCircle, faCopy, faDotCircle, faLink, faPlus} from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
     import { sendMessage } from "../Stores/AlertStore";
@@ -6,22 +6,34 @@
     import { createEventDispatcher } from "svelte";
 
 
-    export let event;
-    export let similars = [];
-    export let duplicates = 0;
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
-    export let toggleDuplicates = () => {};
-    export let display = true;
-    export let filterString = "";
+
+    interface Props {
+        event: any;
+        similars?: any;
+        duplicates?: number;
+        // eslint-disable-next-line @typescript-eslint/no-empty-function
+        toggleDuplicates?: any;
+        display?: boolean;
+        filterString?: string;
+    }
+
+    let {
+        event,
+        similars = [],
+        duplicates = 0,
+        toggleDuplicates = () => {},
+        display = true,
+        filterString = ""
+    }: Props = $props();
 
     const dispatch = createEventDispatcher();
 
     // Track if duplicates are shown for this event (local state)
-    let showingDuplicates = false;
+    let showingDuplicates = $state(false);
 
-    let showSimilars = false;
-    let fetchingIssues = false;
-    let similarRunsInfo = {};
+    let showSimilars = $state(false);
+    let fetchingIssues = $state(false);
+    let similarRunsInfo = $state({});
 
     const shouldFilter = function (filterString) {
         if (!filterString) return;
@@ -105,7 +117,7 @@
         {/each}
         <div class="ms-auto mb-2 rounded px-2 d-flex gap-2">
             {#if (event.severity === "ERROR" || event.severity === "CRITICAL") && similars.length > 0}
-                <button class="btn btn-warning btn-sm d-flex align-items-center gap-2" on:click={toggleSimilars}>
+                <button class="btn btn-warning btn-sm d-flex align-items-center gap-2" onclick={toggleSimilars}>
                     <Fa icon={faLink} /><span>View {similars.length} Similar Events</span>
                 </button>
             {/if}
@@ -114,7 +126,7 @@
                     class="btn btn-sm d-flex align-items-center gap-2"
                     class:btn-primary={showingDuplicates}
                     class:btn-info={!showingDuplicates}
-                    on:click={() => { showingDuplicates = !showingDuplicates; toggleDuplicates(event); }}>
+                    onclick={() => { showingDuplicates = !showingDuplicates; toggleDuplicates(event); }}>
                     <Fa icon={faCopy} />
                     <span>{showingDuplicates ? "Hide Duplicates" : `Show ${duplicates} Duplicates`}</span>
                 </button>
@@ -122,7 +134,7 @@
             <button
                 class="btn btn-light"
                 title="Copy event text"
-                on:click={() => {
+                onclick={() => {
                     navigator.clipboard.writeText(event.eventText);
                     sendMessage("success", "Event text has been copied to your clipboard");
                 }}
@@ -130,31 +142,31 @@
                 <Fa icon={faCopy} />
             </button>
         </div>
-        <div class="w-100" />
+        <div class="w-100"></div>
         <div class="ms-2 mb-2 rounded px-2 bg-light-two" title="Timestamp">{event.eventTimestamp}</div>
         {#if event.receiveTimestamp}
             <div class="ms-2 mb-2 rounded px-2 bg-light-two" title="Timestamp">Received: {event.receiveTimestamp}</div>
         {/if}
-        <div class="w-100" />
+        <div class="w-100"></div>
         {#if event.fields.node}
             <div class="ms-2 mb-2 rounded px-2 bg-light-two fs-6 justify-self-start">{event.fields.node}</div>
         {/if}
         {#if event.fields.target_node}
             <div class="ms-2 mb-2 rounded px-2 bg-light-two fs-6 justify-self-start">{event.fields.target_node}</div>
         {/if}
-        <div class="w-100" />
+        <div class="w-100"></div>
         {#if event.fields.known_issue}
             <div class="ms-2 mb-2 rounded px-2 bg-info fs-6 justify-self-start">
                 Known issue: <a href={event.fields.known_issue} class="link-dark">{event.fields.known_issue}</a>
             </div>
         {/if}
-        <div class="w-100" />
+        <div class="w-100"></div>
         {#if event.fields.nemesis_name}
             <div class="ms-2 mb-2 rounded px-2 bg-dark text-light fs-6 justify-self-start">
                 Nemesis: {event.fields.nemesis_name}
             </div>
         {/if}
-        <div class="w-100" />
+        <div class="w-100"></div>
         {#if event.fields.duration}
             <div class="ms-2 mb-2 rounded px-2 bg-light-two">
                 <div>Duration: {event.fields.duration}</div>
@@ -166,84 +178,88 @@
 
 {#if showSimilars}
     <ModalWindow widthClass="w-75" on:modalClose={closeSimilarModal}>
-        <svelte:fragment slot="title">
-            Similar Events ({Object.keys(similarRunsInfo).length})
-        </svelte:fragment>
-        <svelte:fragment slot="body">
-            {#if fetchingIssues}
-                <div class="d-flex justify-content-center align-items-center" style="min-height: 200px;">
-                    <div class="spinner-border" role="status">
-                        <span class="visually-hidden">Loading similar runs information...</span>
+        {#snippet title()}
+
+                Similar Events ({Object.keys(similarRunsInfo).length})
+
+            {/snippet}
+        {#snippet body()}
+
+                {#if fetchingIssues}
+                    <div class="d-flex justify-content-center align-items-center" style="min-height: 200px;">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading similar runs information...</span>
+                        </div>
+                        <span class="ms-3">Loading similar runs information...</span>
                     </div>
-                    <span class="ms-3">Loading similar runs information...</span>
-                </div>
-            {:else}
-                <div class="table-responsive">
-                    <table class="table table-striped table-hover">
-                        <thead>
-                            <tr>
-                                <th>Build ID</th>
-                                <th>Start Time</th>
-                                <th>Version</th>
-                                <th>Issues</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {#each similars.filter(runId => similarRunsInfo[runId]) as runId}
+                {:else}
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead>
                                 <tr>
-                                    <td>
-                                        <a href="/tests/scylla-cluster-tests/{runId}" target="_blank" title={runId}>
-                                            {similarRunsInfo[runId]?.build_id || runId}
-                                        </a>
-                                    </td>
-                                    <td class="date-column">
-                                        {#if similarRunsInfo[runId]?.start_time}
-                                            {new Date(similarRunsInfo[runId].start_time).toLocaleDateString("en-CA")}
-                                        {:else}
-                                            -
-                                        {/if}
-                                    </td>
-                                    <td>
-                                        {#if similarRunsInfo[runId]?.version}
-                                            {similarRunsInfo[runId].version}
-                                        {:else}
-                                            -
-                                        {/if}
-                                    </td>
-                                    <td>
-                                        {#if similarRunsInfo[runId]?.issues?.length}
-                                            {#each similarRunsInfo[runId].issues as issue}
-                                                <div class="mb-1 d-flex align-items-center">
-                                                    <div class="btn-group" style="width: 128px">
-                                                        <button
-                                                            class:btn-open={issue.state === "open"}
-                                                            class:btn-closed={issue.state !== "open"}
-                                                            class="btn btn-sm"
-                                                            title="Add this issue to the current run"
-                                                            on:click={() => dispatch("issueAttach", { url: issue.url })}
-                                                        >
-                                                            <Fa icon={faPlus}/>
-                                                        </button>
-                                                        <a href={issue.url} class:btn-open={issue.state === "open"} class:btn-closed={issue.state !== "open"} target="_blank" class="btn btn-sm">
-                                                            <Fa icon={issue.state === "open" ? faDotCircle : faCheckCircle}/> #{issue.number}
-                                                        </a>
-                                                    </div>
-                                                    <div class="ms-2 overflow-ellipsis text-truncate" style="max-width: 512px" title="{issue.title}">
-                                                        {issue.title}
-                                                    </div>
-                                                </div>
-                                            {/each}
-                                        {:else}
-                                            <span class="text-muted">No issues</span>
-                                        {/if}
-                                    </td>
+                                    <th>Build ID</th>
+                                    <th>Start Time</th>
+                                    <th>Version</th>
+                                    <th>Issues</th>
                                 </tr>
-                            {/each}
-                        </tbody>
-                    </table>
-                </div>
-            {/if}
-        </svelte:fragment>
+                            </thead>
+                            <tbody>
+                                {#each similars.filter(runId => similarRunsInfo[runId]) as runId}
+                                    <tr>
+                                        <td>
+                                            <a href="/tests/scylla-cluster-tests/{runId}" target="_blank" title={runId}>
+                                                {similarRunsInfo[runId]?.build_id || runId}
+                                            </a>
+                                        </td>
+                                        <td class="date-column">
+                                            {#if similarRunsInfo[runId]?.start_time}
+                                                {new Date(similarRunsInfo[runId].start_time).toLocaleDateString("en-CA")}
+                                            {:else}
+                                                -
+                                            {/if}
+                                        </td>
+                                        <td>
+                                            {#if similarRunsInfo[runId]?.version}
+                                                {similarRunsInfo[runId].version}
+                                            {:else}
+                                                -
+                                            {/if}
+                                        </td>
+                                        <td>
+                                            {#if similarRunsInfo[runId]?.issues?.length}
+                                                {#each similarRunsInfo[runId].issues as issue}
+                                                    <div class="mb-1 d-flex align-items-center">
+                                                        <div class="btn-group" style="width: 128px">
+                                                            <button
+                                                                class:btn-open={issue.state === "open"}
+                                                                class:btn-closed={issue.state !== "open"}
+                                                                class="btn btn-sm"
+                                                                title="Add this issue to the current run"
+                                                                onclick={() => dispatch("issueAttach", { url: issue.url })}
+                                                            >
+                                                                <Fa icon={faPlus}/>
+                                                            </button>
+                                                            <a href={issue.url} class:btn-open={issue.state === "open"} class:btn-closed={issue.state !== "open"} target="_blank" class="btn btn-sm">
+                                                                <Fa icon={issue.state === "open" ? faDotCircle : faCheckCircle}/> #{issue.number}
+                                                            </a>
+                                                        </div>
+                                                        <div class="ms-2 overflow-ellipsis text-truncate" style="max-width: 512px" title="{issue.title}">
+                                                            {issue.title}
+                                                        </div>
+                                                    </div>
+                                                {/each}
+                                            {:else}
+                                                <span class="text-muted">No issues</span>
+                                            {/if}
+                                        </td>
+                                    </tr>
+                                {/each}
+                            </tbody>
+                        </table>
+                    </div>
+                {/if}
+
+            {/snippet}
     </ModalWindow>
 {/if}
 

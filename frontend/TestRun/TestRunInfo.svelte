@@ -1,4 +1,6 @@
-<script>
+<script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import {
         faBusinessTime,
         faSearch,
@@ -16,12 +18,14 @@
     import JenkinsCloneModal from "./Jenkins/JenkinsCloneModal.svelte";
     import { createEventDispatcher } from "svelte";
     import { sendMessage } from "../Stores/AlertStore";
-    export let test_run = {};
-    export let release;
-    export let group;
-    export let test;
-    let rebuildRequested = false;
-    let cloneRequested = false;
+    let {
+        test_run = {},
+        release,
+        group,
+        test
+    } = $props();
+    let rebuildRequested = $state(false);
+    let cloneRequested = $state(false);
     const dispatch = createEventDispatcher();
 
     let cmd_hydraInvestigateShowMonitor = `hydra investigate show-monitor ${test_run.id}`;
@@ -33,20 +37,32 @@
         });
     };
 
-    let scyllaPackage = getScyllaPackage(test_run.packages);
-    $: scyllaPackage = getScyllaPackage(test_run.packages);
+    let scyllaPackage = $state(getScyllaPackage(test_run.packages));
+    run(() => {
+        scyllaPackage = getScyllaPackage(test_run.packages);
+    });
 
-    let operatorPackage = getOperatorPackage(test_run.packages);
-    $: operatorPackage = getOperatorPackage(test_run.packages);
-    let operatorHelmPackage = getOperatorHelmPackage(test_run.packages);
-    $: operatorHelmPackage = getOperatorHelmPackage(test_run.packages);
-    let operatorHelmRepoPackage = getOperatorHelmRepoPackage(test_run.packages);
-    $: operatorHelmRepoPackage = getOperatorHelmRepoPackage(test_run.packages);
+    let operatorPackage = $state(getOperatorPackage(test_run.packages));
+    run(() => {
+        operatorPackage = getOperatorPackage(test_run.packages);
+    });
+    let operatorHelmPackage = $state(getOperatorHelmPackage(test_run.packages));
+    run(() => {
+        operatorHelmPackage = getOperatorHelmPackage(test_run.packages);
+    });
+    let operatorHelmRepoPackage = $state(getOperatorHelmRepoPackage(test_run.packages));
+    run(() => {
+        operatorHelmRepoPackage = getOperatorHelmRepoPackage(test_run.packages);
+    });
 
-    let kernelPackage = getKernelPackage(test_run.packages);
-    $: kernelPackage = getKernelPackage(test_run.packages);
-    let upgradedPackage = getUpgradedScyllaPackage(test_run.packages);
-    $: upgradedPackage = getUpgradedScyllaPackage(test_run.packages);
+    let kernelPackage = $state(getKernelPackage(test_run.packages));
+    run(() => {
+        kernelPackage = getKernelPackage(test_run.packages);
+    });
+    let upgradedPackage = $state(getUpgradedScyllaPackage(test_run.packages));
+    run(() => {
+        upgradedPackage = getUpgradedScyllaPackage(test_run.packages);
+    });
 </script>
 
 <div class="container-fluid">
@@ -222,7 +238,7 @@
                             <button
                                 class="btn btn-success"
                                 type="button"
-                                on:click={() => {
+                                onclick={() => {
                                     navigator.clipboard.writeText(
                                         `ssh -i ~/.ssh/scylla_test_id_ed25519 ubuntu@${test_run.sct_runner_host.public_ip}`
                                     );
@@ -273,17 +289,17 @@
                         aria-current="page"
                         ><Fa icon={faSearch} /> Restore Monitoring Stack</a
                     >
-                    <button class="btn btn-sm btn-outline-primary" on:click={() => (rebuildRequested = true)}
+                    <button class="btn btn-sm btn-outline-primary" onclick={() => (rebuildRequested = true)}
                         ><Fa icon={faPlay} /> Rebuild</button
                     >
-                    <button class="btn btn-sm btn-outline-primary" on:click={() => (cloneRequested = true)}
+                    <button class="btn btn-sm btn-outline-primary" onclick={() => (cloneRequested = true)}
                         ><Fa icon={faCopy} /> Clone</button
                     >
                     {#if navigator.clipboard}
                         <button
                             type="button"
                             class="btn btn-outline-success"
-                            on:click={() => {
+                            onclick={() => {
                                 navigator.clipboard.writeText(
                                     cmd_hydraInvestigateShowMonitor
                                 );
@@ -293,7 +309,7 @@
                         <button
                             type="button"
                             class="btn btn-outline-success"
-                            on:click={() => {
+                            onclick={() => {
                                 navigator.clipboard.writeText(
                                     cmd_hydraInvestigateShowLogs
                                 );

@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
     import queryString from "query-string";
     import { sendMessage } from "../Stores/AlertStore";
     import Fa from "svelte-fa";
@@ -9,16 +9,15 @@
     import { createEventDispatcher, onMount } from "svelte";
     import { filterUser } from "../Common/SelectUtils";
 
-    export let plan;
-    export let release;
+    let { plan, release = $bindable() } = $props();
     const dispatch = createEventDispatcher();
-    let users = [];
+    let users = $state([]);
 
-    let selectedRelease = release.id;
-    let lastCheck;
-    let copy = Object.assign({}, plan);
-    let keepAssignees = false;
-    let replacements = {};
+    let selectedRelease = $state(release.id);
+    let lastCheck = $state();
+    let copy = $state(Object.assign({}, plan));
+    let keepAssignees = $state(false);
+    let replacements = $state({});
 
     const fetchReleases = async function() {
         try {
@@ -80,7 +79,7 @@
     };
 
 
-    let versionsPromise = fetchVersions();
+    let versionsPromise = $state(fetchVersions());
 
 
     const checkElegible = async function(releaseId) {
@@ -122,7 +121,7 @@
         replacements[original.id] = replacement.id;
     };
 
-    let elegiblePromise = checkElegible(selectedRelease);
+    let elegiblePromise = $state(checkElegible(selectedRelease));
 
     onMount(async () => {
         getUsers();
@@ -140,7 +139,7 @@
         <div class="col-6">
             <h6>Target Release</h6>
             <div>
-                <select class="form-control form-select" bind:value={selectedRelease} on:change={() => {
+                <select class="form-control form-select" bind:value={selectedRelease} onchange={() => {
                     elegiblePromise = checkElegible(selectedRelease);
                 }}>
                     <option value="{release.id}">{release.name}</option>
@@ -218,7 +217,7 @@
     <div class="row my-4">
         {#await elegiblePromise}
             <div class="col text-center p-2 d-flex align-items-center justify-content-center">
-                <span class="spinner-border text-dark" role="status" />
+                <span class="spinner-border text-dark" role="status"></span>
                 <div class="ms-2">Checking Eligibility...</div>
             </div>
         {:then checkResult}
@@ -259,14 +258,14 @@
     </div>
     <div class="row mb-2">
         <div class="col d-flex">
-            <button class="w-75 btn btn-primary" on:click={() => dispatch("copyConfirmed", {
+            <button class="w-75 btn btn-primary" onclick={() => dispatch("copyConfirmed", {
                 plan: copy,
                 keepParticipants: keepAssignees,
                 replacements: replacements,
                 targetReleaseId: lastCheck.targetRelease.id,
                 targetReleaseName: lastCheck.targetRelease.name,
             })}>Copy</button>
-            <button class="ms-2 w-25 btn btn-secondary" on:click={() => dispatch("copyCanceled")}>Cancel</button>
+            <button class="ms-2 w-25 btn btn-secondary" onclick={() => dispatch("copyCanceled")}>Cancel</button>
         </div>
     </div>
 </div>

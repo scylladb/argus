@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
     import Fa from "svelte-fa";
     import { createEventDispatcher, onDestroy, onMount } from "svelte";
     import { StatusBackgroundCSSClassMap } from "../Common/TestStatus";
@@ -7,21 +7,32 @@
     import { faArrowDown, faArrowUp } from "@fortawesome/free-solid-svg-icons";
     import { faTimesCircle } from "@fortawesome/free-regular-svg-icons";
 
-    export let release = {};
-    export let mode = "multi";
-    export let format = "list";
-    export let groupOnly = false;
-    export let existingPlans = [];
-    export let selectingFor;
-    let filterToParent = !!(selectingFor?.created_from);
-    let filterExecuted = false;
-    let clickedTests = {};
-    let clickedGroups = {};
-    let releaseStats;
-    let gridView;
-    let header;
+    interface Props {
+        release?: any;
+        mode?: string;
+        format?: string;
+        groupOnly?: boolean;
+        existingPlans?: any;
+        selectingFor: any;
+    }
+
+    let {
+        release = {},
+        mode = "multi",
+        format = "list",
+        groupOnly = false,
+        existingPlans = [],
+        selectingFor
+    }: Props = $props();
+    let filterToParent = $state(!!(selectingFor?.created_from));
+    let filterExecuted = $state(false);
+    let clickedTests = $state({});
+    let clickedGroups = $state({});
+    let releaseStats = $state();
+    let gridView = $state();
+    let header = $state();
     let observer;
-    let sticky = false;
+    let sticky = $state(false);
     let releaseStatsRefreshInterval;
     const dispatch = createEventDispatcher();
 
@@ -42,7 +53,7 @@
         return collapseState[collapseId] ?? false;
     };
 
-    let collapseState = loadCollapseState();
+    let collapseState = $state(loadCollapseState());
 
     const getGridView = async function () {
         let response = await fetch(`/api/v1/planning/release/${release.id}/gridview`, { cache: "reload" });
@@ -184,7 +195,7 @@
                             <span class="fw-bold">T</span> {gridView.tests[testId].name}
                         </div>
                         <div class="ms-1">
-                            <button class="btn btn-sm btn-primary" on:click={() => (clickedTests[testId] = false)}><Fa icon={faTimesCircle}/></button>
+                            <button class="btn btn-sm btn-primary" onclick={() => (clickedTests[testId] = false)}><Fa icon={faTimesCircle}/></button>
                         </div>
                     </div>
                 {/if}
@@ -197,14 +208,14 @@
                             <span class="fw-bold">G</span> {group.pretty_name || group.name}
                         </div>
                         <div class="ms-1">
-                            <button class="btn btn-sm btn-success" on:click={() => (clickedGroups[groupId] = false)}><Fa icon={faTimesCircle}/></button>
+                            <button class="btn btn-sm btn-success" onclick={() => (clickedGroups[groupId] = false)}><Fa icon={faTimesCircle}/></button>
                         </div>
                     </div>
                 {/if}
             {/each}
         </div>
         <div>
-            <button class="btn btn-primary w-100" on:click={onConfirmClick}>Confirm</button>
+            <button class="btn btn-primary w-100" onclick={onConfirmClick}>Confirm</button>
         </div>
     </div>
 {/if}
@@ -269,7 +280,7 @@
                             class:d-none={getCollapseState(`collapse-${groupStats.group.id}`, collapseState)}
                             class:ms-auto={!getCollapseState(`collapse-${groupStats.group.id}`, collapseState)}
                         >
-                            <button class="btn btn-dark btn-sm" on:click={() => onSelectGroupClick(group)}>Select Group</button>
+                            <button class="btn btn-dark btn-sm" onclick={() => onSelectGroupClick(group)}>Select Group</button>
                         </div>
                         <div
                             class:ms-2={!getCollapseState(`collapse-${groupStats.group.id}`, collapseState)}
@@ -280,7 +291,7 @@
                                     class="btn btn-sm"
                                     data-bs-toggle="collapse"
                                     data-bs-target="#collapse-{groupStats.group.id}"
-                                    on:click={() => toggleCollapse(`collapse-${groupStats.group.id}`)}
+                                    onclick={() => toggleCollapse(`collapse-${groupStats.group.id}`)}
                                 >
                                 {#if getCollapseState(`collapse-${groupStats.group.id}`, collapseState)}
                                     <Fa icon={faArrowDown}/>
@@ -301,10 +312,10 @@
                                         role="button"
                                         tabindex="0"
                                         class:d-none={shouldFilterIfParent(test, group, filterToParent) || shouldFilterIfExecuted(test, group, filterExecuted)}
-                                        on:keypress={() => {
+                                        onkeypress={() => {
                                             onTestClick(test);
                                         }}
-                                        on:click={() => {
+                                        onclick={() => {
                                             onTestClick(test);
                                         }}
                                     >
@@ -346,7 +357,7 @@
         </div>
     {:else}
         <div class="col d-flex align-items-center justify-content-center">
-            <div class="spinner-border me-3 text-muted" />
+            <div class="spinner-border me-3 text-muted"></div>
             <div class="display-6 text-muted">Loading...</div>
         </div>
     {/if}

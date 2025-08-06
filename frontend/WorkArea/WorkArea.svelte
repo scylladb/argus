@@ -4,9 +4,9 @@
     import { stateEncoder, stateDecoder } from "../Common/StateManagement";
     import TestRunsPanel from "./TestRunsPanel.svelte";
     import RunRelease from "./RunRelease.svelte";
-    let testRuns = [];
-    let releases;
-    let filterString = "";
+    let testRuns = $state([]);
+    let releases = $state();
+    let filterString = $state("");
 
     const fetchReleases = async function() {
         let res = await fetch("/api/v1/releases");
@@ -54,7 +54,7 @@
 </script>
 
 <svelte:window
-    on:popstate={() => {
+    onpopstate={() => {
         testRuns = stateDecoder();
     }}
 />
@@ -77,7 +77,7 @@
                         type="text"
                         placeholder="Filter releases"
                         bind:value={filterString}
-                        on:input={() => {
+                        oninput={() => {
                             releases = releases;
                         }}
                     />

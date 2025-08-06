@@ -7,12 +7,16 @@
     import { timestampToISODate } from "../../../Common/DateUtils";
     import { createEventDispatcher } from "svelte";
 
-    export let test: PytestResult;
+    interface Props {
+        test: PytestResult;
+    }
+
+    let { test }: Props = $props();
 
     const dispatch = createEventDispatcher();
     type UserFields = Record<string, string>;
 
-    let testExpanded = false;
+    let testExpanded = $state(false);
 
     const fetchUserFields = async function(name: string, id: string): Promise<UserFields> {
         try {
@@ -31,7 +35,7 @@
         return {};
     };
 
-    let showDetails = false;
+    let showDetails = $state(false);
 </script>
 
 <div class="p-1 bg-white rounded mb-2 p-2">
@@ -40,7 +44,7 @@
             {test.name}
             <button
                 class="btn btn-sm btn-dark d-none"
-                on:click={() => dispatch("testSelect", test.name)}
+                onclick={() => dispatch("testSelect", test.name)}
             >
                 <Fa icon={faSearch}/>
             </button>
@@ -58,18 +62,18 @@
             {test.status}
         </div>
         <div class="ms-2">
-            <button class="btn btn-sm btn-primary" on:click={() => { showDetails = !showDetails; testExpanded = true; }}><Fa icon={showDetails ? faChevronUp : faChevronDown}/></button>
+            <button class="btn btn-sm btn-primary" onclick={() => { showDetails = !showDetails; testExpanded = true; }}><Fa icon={showDetails ? faChevronUp : faChevronDown}/></button>
         </div>
     </div>
     <div class="mb-2">
         {#each test.markers as marker}
-            <button class="btn btn-sm btn-dark me-1" on:click={() => dispatch("markerSelect", { marker: marker })}>{marker}</button>
+            <button class="btn btn-sm btn-dark me-1" onclick={() => dispatch("markerSelect", { marker: marker })}>{marker}</button>
         {/each}
     </div>
     <div class:show={showDetails} class="rounded overflow-hidden bg-main collapse">
         {#if test.message}
             <div class="mb-2 bg-white p-1">
-                <h6 class="mb-1">Message <button class="btn btn-sm btn-success" on:click={() => navigator.clipboard.writeText(test.message)}><Fa icon={faCopy}/></button></h6>
+                <h6 class="mb-1">Message <button class="btn btn-sm btn-success" onclick={() => navigator.clipboard.writeText(test.message)}><Fa icon={faCopy}/></button></h6>
                 <pre class="bg-main code rounded p-2 markdown-body" style="white-space: pre-wrap;">{test.message}</pre>
             </div>
         {/if}
@@ -93,7 +97,7 @@
                                 <tr>
                                     <td class="key-cell">
                                         <span class="fw-bold">{key}</span>
-                                        <button class="btn btn-sm btn-dark d-none" on:click={() => dispatch("filterSelect", { filter: key, value: value })}>
+                                        <button class="btn btn-sm btn-dark d-none" onclick={() => dispatch("filterSelect", { filter: key, value: value })}>
                                             <Fa icon={faFilter} />
                                         </button>
                                     </td>
@@ -107,7 +111,7 @@
                                         {/if}
                                         <button
                                             class="btn btn-sm btn-dark d-none"
-                                            on:click={() => navigator.clipboard.writeText(value)}
+                                            onclick={() => navigator.clipboard.writeText(value)}
                                         >
                                             <Fa icon={faCopy}/>
                                         </button>

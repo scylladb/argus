@@ -1,15 +1,19 @@
-<script>
+<script lang="ts">
     import queryString from "query-string";
     import ViewSelectItem from "../AdminPanel/ViewSelectItem.svelte";
     import Select from "svelte-select";
     import { createEventDispatcher } from "svelte";
     import { ADD_ALL_ID } from "../Common/ViewTypes";
 
-    export let release;
-    export let mode = "single";
-    export let targetType = "test"; // can be group, test
+    interface Props {
+        release: any;
+        mode?: string;
+        targetType?: string; // can be group, test
+    }
 
-    let testSearcherValue;
+    let { release, mode = "single", targetType = "test" }: Props = $props();
+
+    let testSearcherValue = $state();
     let lastHits = [];
     let items = [];
     const dispatch = createEventDispatcher();

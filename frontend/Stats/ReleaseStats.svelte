@@ -1,11 +1,5 @@
-<script>
+<script lang="ts">
     import NumberStats from "./NumberStats.svelte";
-    export let DisplayItem = NumberStats;
-    export let showTestMap = false;
-    export let showReleaseStats = true;
-    export let horizontal = false;
-    export let hiddenStatuses = [];
-    export let displayExtendedStats = false;
 
     const releaseStatsDefault = {
         created: 0,
@@ -20,7 +14,25 @@
         tests: {},
         total: -1,
     };
-    export let releaseStats = releaseStatsDefault;
+    interface Props {
+        DisplayItem?: any;
+        showTestMap?: boolean;
+        showReleaseStats?: boolean;
+        horizontal?: boolean;
+        hiddenStatuses?: any;
+        displayExtendedStats?: boolean;
+        releaseStats?: any;
+    }
+
+    let {
+        DisplayItem = NumberStats,
+        showTestMap = false,
+        showReleaseStats = true,
+        horizontal = false,
+        hiddenStatuses = [],
+        displayExtendedStats = false,
+        releaseStats = releaseStatsDefault
+    }: Props = $props();
 
 </script>
 
@@ -28,12 +40,12 @@
     {#if releaseStats?.total > 0}
         {#if showReleaseStats}
             <div class="w-100 mb-2">
-                <svelte:component this={DisplayItem} stats={releaseStats} displayNumber={displayExtendedStats} displayInvestigations={displayExtendedStats} {hiddenStatuses} on:quickSelect/>
+                <DisplayItem stats={releaseStats} displayNumber={displayExtendedStats} displayInvestigations={displayExtendedStats} {hiddenStatuses} on:quickSelect/>
             </div>
         {/if}
     {:else if releaseStats?.total == -1}
-        <span class="spinner-border spinner-border-sm" />
+        <span class="spinner-border spinner-border-sm"></span>
     {:else}
-        <!-- svelte-ignore empty-block -->
+        <!-- svelte-ignore block_empty -->
     {/if}
 </div>

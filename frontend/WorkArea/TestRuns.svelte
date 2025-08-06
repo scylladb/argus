@@ -1,4 +1,6 @@
 <script>
+    import { run as run_1 } from 'svelte/legacy';
+
     import { createEventDispatcher, onMount, onDestroy } from "svelte";
     import queryString from "query-string";
     import { v4 as uuidv4 } from "uuid";
@@ -22,19 +24,32 @@
     import JenkinsCloneModal from "../TestRun/Jenkins/JenkinsCloneModal.svelte";
     import JenkinsBuildModal from "../TestRun/Jenkins/JenkinsBuildModal.svelte";
 
-    export let testId;
-    export let tab;
-    export let listId = uuidv4();
-    export let filtered = false;
-    export let removableRuns = false;
-    export let additionalRuns = [];
+    /**
+     * @typedef {Object} Props
+     * @property {any} testId
+     * @property {any} tab
+     * @property {any} [listId]
+     * @property {boolean} [filtered]
+     * @property {boolean} [removableRuns]
+     * @property {any} [additionalRuns]
+     */
+
+    /** @type {Props} */
+    let {
+        testId,
+        tab,
+        listId = uuidv4(),
+        filtered = false,
+        removableRuns = false,
+        additionalRuns = []
+    } = $props();
     /**
      * @type {{roles: string[]}}
      */
     let runRefreshInterval;
-    let runs = [];
+    let runs = $state([]);
     let runLimit = 10;
-    let testInfo;
+    let testInfo = $state();
 
     const states = {
         INIT: "INIT",
@@ -44,7 +59,7 @@
         FETCH_SUCCESS: "FETCH_SUCCESS",
         FETCH_TEST_INFO_FAILED: "FETCH_TEST_INFO_FAILED",
     };
-    let currentState = states.INIT;
+    let currentState = $state(states.INIT);
 
     const stateMap = {
         [states.INIT]: {
@@ -118,16 +133,18 @@
     };
 
     const dispatch = createEventDispatcher();
-    let selectedPlugin = "";
-    let configureRequested = false;
-    let cloneRequested = false;
-    let execRequested = false;
-    let open = true;
-    let pluginFixed = false;
-    let runsBody = undefined;
-    let clickedTestRuns = {};
-    let clickedGraph = false;
-    $: clickedTestRuns = loadAdditionalRuns(additionalRuns);
+    let selectedPlugin = $state("");
+    let configureRequested = $state(false);
+    let cloneRequested = $state(false);
+    let execRequested = $state(false);
+    let open = $state(true);
+    let pluginFixed = $state(false);
+    let runsBody = $state(undefined);
+    let clickedTestRuns = $state({});
+    let clickedGraph = $state(false);
+    run_1(() => {
+        clickedTestRuns = loadAdditionalRuns(additionalRuns);
+    });
 
     const fetchTestInfo = async function () {
         try {
@@ -308,8 +325,8 @@
             class:btn-testruns-open={open}
             role="button"
             tabindex="0"
-            on:keydown={() => {}}
-            on:click={() => {
+            onkeydown={() => {}}
+            onclick={() => {
                 open = !open;
                 new Collapse(`#collapse-${listId}`).toggle();
             }}
@@ -328,16 +345,16 @@
             {/if}
                 <div class="btn-group">
                     {#if applicationCurrentUser.roles.some(v => ["ROLE_ADMIN", "ROLE_MANAGER"].includes(v)) || testInfo.release.name.includes("staging")}
-                        <button class="btn" on:click={(e) => {configureRequested = true; e.stopPropagation();}}><Fa icon={faGear}/></button>
+                        <button class="btn" onclick={(e) => {configureRequested = true; e.stopPropagation();}}><Fa icon={faGear}/></button>
                     {/if}
-                    <button class="btn" on:click={(e) => {execRequested = true; e.stopPropagation();}}><Fa icon={faPlay} /></button>
-                    <button class="btn" on:click={(e) => {cloneRequested = true; e.stopPropagation();}}><Fa icon={faCopy} /></button>
+                    <button class="btn" onclick={(e) => {execRequested = true; e.stopPropagation();}}><Fa icon={faPlay} /></button>
+                    <button class="btn" onclick={(e) => {cloneRequested = true; e.stopPropagation();}}><Fa icon={faCopy} /></button>
                 </div>
             {#if removableRuns}
                 <div class="me-2" class:ms-1={runs.length > 0} class:ms-auto={runs.length == 0} >
                     <button
                         class="btn"
-                        on:click={(e) => { dispatch("testRunRemove", { testId: testId }); e.stopPropagation(); }}
+                        onclick={(e) => { dispatch("testRunRemove", { testId: testId }); e.stopPropagation(); }}
                     >
                         <Fa icon={faTimes}/>
                     </button>
@@ -394,7 +411,7 @@
                             </select>
                         </div>
                         <div>
-                            <button class="btn btn-success w-100" on:click={handlePluginFixup}>Save</button>
+                            <button class="btn btn-success w-100" onclick={handlePluginFixup}>Save</button>
                         </div>
                     {:else}
                         <div>
@@ -464,7 +481,7 @@
                 <div class="mx-2 p-2">
                     <button
                         class="d-inline-block btn btn-secondary"
-                        on:click={() => { dispatch("testRunRemove", { testId: testId }); }}
+                        onclick={() => { dispatch("testRunRemove", { testId: testId }); }}
                     >
                         Close
                     </button>

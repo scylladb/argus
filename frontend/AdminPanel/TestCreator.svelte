@@ -1,20 +1,28 @@
-<script>
+<script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import { createEventDispatcher } from "svelte";
     import * as urlSlug from "url-slug";
     import { AVAILABLE_PLUGINS } from "../Common/PluginDispatch";
-    export let groups = [];
-    export let releaseId = "";
-    export let groupId = "";
+    interface Props {
+        groups?: any;
+        releaseId?: string;
+        groupId?: string;
+    }
+
+    let { groups = [], releaseId = "", groupId = "" }: Props = $props();
     const dispatch = createEventDispatcher();
-    let newTest = {
+    let newTest = $state({
         test_name: "",
         pretty_name: "",
         group_id: groupId,
         build_id: "",
         build_url: "",
         plugin_name: "",
-    };
-    $: newTest.test_name = urlSlug.convert(newTest.pretty_name);
+    });
+    run(() => {
+        newTest.test_name = urlSlug.convert(newTest.pretty_name);
+    });
 
     const handleTestCreate = function() {
         dispatch("testCreate", Object.assign({
@@ -87,11 +95,11 @@
             <div class="mt-2 text-end">
                 <button
                     class="btn btn-secondary"
-                    on:click={handleTestCreationCancel}
+                    onclick={handleTestCreationCancel}
                 >
                     Cancel
                 </button>
-                <button class="btn btn-success" on:click={handleTestCreate}>
+                <button class="btn btn-success" onclick={handleTestCreate}>
                     Create
                 </button>
             </div>

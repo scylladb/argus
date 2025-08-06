@@ -1,8 +1,17 @@
-<script>
-    export let item = undefined;
-    export let isActive = false;
-    export let isFirst = false;
-    export let isHover = false;
+<script lang="ts">
+    interface Props {
+        item?: any;
+        isActive?: boolean;
+        isFirst?: boolean;
+        isHover?: boolean;
+    }
+
+    let {
+        item = undefined,
+        isActive = false,
+        isFirst = false,
+        isHover = false
+    }: Props = $props();
     const getPicture = function (id) {
         return id ? `/storage/picture/${id}` : "/s/no-user-picture.png";
     };
@@ -20,7 +29,7 @@
                 class="img-profile"
                 style="background-image: url({getPicture(item.picture_id)});"
                 title={item.label || item.username}
-            />
+></div>
         </div>
         <div class="ms-2 text-start">
             <div>{item.full_name ?? item.label}</div>

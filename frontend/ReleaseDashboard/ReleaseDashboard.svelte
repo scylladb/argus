@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
     import queryString from "query-string";
     import ReleaseStats from "../Stats/ReleaseStats.svelte";
     import ReleaseActivity from "./ReleaseActivity.svelte";
@@ -7,11 +7,11 @@
     import { sendMessage } from "../Stores/AlertStore";
     import TestDashboard from "./TestDashboard.svelte";
     import { TestStatus } from "../Common/TestStatus";
-    export let releaseData = {};
-    let clickedTests = {};
-    let issuesClicked = false;
-    let productVersion = queryString.parse(document.location.search)?.productVersion;
-    let stats;
+    let { releaseData = {} } = $props();
+    let clickedTests = $state({});
+    let issuesClicked = $state(false);
+    let productVersion = $state(queryString.parse(document.location.search)?.productVersion);
+    let stats = $state();
 
     const handleTestClick = function (detail) {
         if (detail.start_time == 0) {
@@ -73,7 +73,7 @@
                             type="button"
                             data-bs-toggle="collapse"
                             data-bs-target="#collapseIssues"
-                            on:click={() => issuesClicked = true}
+                            onclick={() => issuesClicked = true}
                         >
                             All Issues
                         </button>

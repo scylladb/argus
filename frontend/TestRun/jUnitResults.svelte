@@ -1,8 +1,8 @@
-<script>
+<script lang="ts">
     import { titleCase } from "../Common/TextUtils";
     import JUnitChart from "./jUnitChart.svelte";
 
-    export let results;
+    let { results } = $props();
 
     const statusInfo = {
         failure: {

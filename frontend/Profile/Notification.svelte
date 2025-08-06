@@ -4,11 +4,15 @@
     import NotificationCommentWrapper from "./NotificationCommentWrapper.svelte";
     import { ArgusNotification, ArgusShortSummary, NotificationSource, NotificationsState } from "../Common/ArgusNotification";
     import NotificationTestRunWrapper from "./NotificationTestRunWrapper.svelte";
-    export let summary: ArgusShortSummary;
+    interface Props {
+        summary: ArgusShortSummary;
+    }
 
-    let notification: ArgusNotification;
-    let supportDataReady = false;
-    let supportData: Object;
+    let { summary }: Props = $props();
+
+    let notification: ArgusNotification = $state();
+    let supportDataReady = $state(false);
+    let supportData: Object = $state();
 
     type ComponentSourceType = {
         [key in NotificationSource]: Object
@@ -82,8 +86,9 @@
             {@html notification.content}
         </p>
         {#if supportDataReady && supportData}
+            {@const SvelteComponent = ComponentSourceMap[notification.source]}
             <div class="support-component-container">
-                <svelte:component this={ComponentSourceMap[notification.source]} {supportData} />
+                <SvelteComponent {supportData} />
             </div>
         {/if}
     </div>

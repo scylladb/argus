@@ -9,12 +9,16 @@
     import { TeamManagerAPIError, TeamManagerException, TeamRoutes, type RawTeamDeleteResponse, type Team } from "./TeamUtils";
     import { sendMessage } from "../Stores/AlertStore";
     import { applicationCurrentUser } from "../argus";
-    export let team: Team;
-    export let selectedTeam: Team | null;
+    interface Props {
+        team: Team;
+        selectedTeam: Team | null;
+    }
+
+    let { team, selectedTeam }: Props = $props();
     const dispatch = createEventDispatcher();
-    let users: Users;
-    let deleting = false;
-    $: users = $userList;
+    let users: Users = $derived($userList);
+    let deleting = $state(false);
+
 
     let currentUser: IUser = applicationCurrentUser;
 
@@ -69,7 +73,7 @@
         </div>
     {/if}
     <div class="{currentUser.id == team.leader ? "ms-2" : "ms-auto"}">
-        <button class="btn btn-sm btn-success" on:click={handleOpen}><Fa icon={faFolderOpen} /></button>
+        <button class="btn btn-sm btn-success" onclick={handleOpen}><Fa icon={faFolderOpen} /></button>
     </div>
 </div>
 
@@ -78,12 +82,12 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="exampleModalLabel">Deleting a team</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" />
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">Are you sure you want to delete this team?</div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No</button>
-                <button type="button" class="btn btn-danger" data-bs-dismiss="modal" on:click={handleDelete}>Yes</button
+                <button type="button" class="btn btn-danger" data-bs-dismiss="modal" onclick={handleDelete}>Yes</button
                 >
             </div>
         </div>

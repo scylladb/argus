@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
     import {onMount, onDestroy, createEventDispatcher} from "svelte";
     import Fa from "svelte-fa";
     import {
@@ -16,18 +16,27 @@
     import GenericTestRunInfo from "./GenericTestRunInfo.svelte";
     import * as subtests from "./Subtest";
 
-    export let runId = "";
-    export let buildNumber = -1;
-    export let testInfo = {};
-    export let tab = "";
+    interface Props {
+        runId?: string;
+        buildNumber?: any;
+        testInfo?: any;
+        tab?: string;
+    }
+
+    let {
+        runId = "",
+        buildNumber = $bindable(-1),
+        testInfo = {},
+        tab = ""
+    }: Props = $props();
     const dispatch = createEventDispatcher();
-    let testRun = undefined;
+    let testRun = $state(undefined);
     let runRefreshInterval;
-    let activeTab = tab.toLowerCase() || "details";
-    let failedToLoad = false;
+    let activeTab = $state(tab.toLowerCase() || "details");
+    let failedToLoad = $state(false);
 
     // Track which tabs have been visited
-    let visitedTabs = {};
+    let visitedTabs = $state({});
     visitedTabs[activeTab] = true;
 
     const setActiveTab = (tabName) => {
@@ -97,7 +106,7 @@
             {/if}
         </div>
         <div class="ms-auto text-end">
-            <button class="btn btn-sm btn-outline-dark" title="Refresh" on:click={() => {
+            <button class="btn btn-sm btn-outline-dark" title="Refresh" onclick={() => {
                 fetchTestRunData();
             }}
             >
@@ -106,7 +115,7 @@
             >
         </div>
         <div class="ms-2 text-end">
-            <button class="btn btn-sm btn-outline-dark" title="Close" on:click={() => {
+            <button class="btn btn-sm btn-outline-dark" title="Close" onclick={() => {
                 dispatch("closeRun", { id: runId });
             }}
             >
@@ -146,16 +155,16 @@
                             data-bs-target="#nav-details-{runId}"
                             type="button"
                             role="tab"
-                            on:click={() => setActiveTab("details")}
-                            on:keydown={(e) => e.key === "Enter" && setActiveTab("details")}
-                    ><i class="fas fa-info-circle"/> Details
+                            onclick={() => setActiveTab("details")}
+                            onkeydown={(e) => e.key === "Enter" && setActiveTab("details")}
+                    ><i class="fas fa-info-circle"></i> Details
                     </button>
                     {#if testRun.sub_type}
                         {#each Object.entries(subtests.Cases) as [key, value]}
                             {#if value === testRun.sub_type}
-                                <svelte:component
-                                        on:tab-switched={(ev) => setActiveTab(ev.detail.tab)}
-                                        this={subtests.Tabs[value]} {runId}
+                                {@const SvelteComponent = subtests.Tabs[value]}
+                                <SvelteComponent
+                                        on:tab-switched={(ev) => setActiveTab(ev.detail.tab)} {runId}
                                 />
                             {/if}
                         {/each}
@@ -167,10 +176,10 @@
                             data-bs-toggle="tab"
                             data-bs-target="#nav-discuss-{runId}"
                             type="button"
-                            on:click={() => setActiveTab("discuss")}
-                            on:keydown={(e) => e.key === "Enter" && setActiveTab("discuss")}
+                            onclick={() => setActiveTab("discuss")}
+                            onkeydown={(e) => e.key === "Enter" && setActiveTab("discuss")}
                             role="tab"
-                    ><i class="fas fa-comments"/> Discussion
+                    ><i class="fas fa-comments"></i> Discussion
                     </button
                     >
                     <button
@@ -181,9 +190,9 @@
                             data-bs-target="#nav-issues-{runId}"
                             type="button"
                             role="tab"
-                            on:click={() => setActiveTab("issues")}
-                            on:keydown={(e) => e.key === "Enter" && setActiveTab("issues")}
-                    ><i class="fas fa-code-branch"/> Issues
+                            onclick={() => setActiveTab("issues")}
+                            onkeydown={(e) => e.key === "Enter" && setActiveTab("issues")}
+                    ><i class="fas fa-code-branch"></i> Issues
                     </button
                     >
                     <button
@@ -193,10 +202,10 @@
                             data-bs-toggle="tab"
                             data-bs-target="#nav-activity-{runId}"
                             type="button"
-                            on:click={() => setActiveTab("activity")}
-                            on:keydown={(e) => e.key === "Enter" && setActiveTab("activity")}
+                            onclick={() => setActiveTab("activity")}
+                            onkeydown={(e) => e.key === "Enter" && setActiveTab("activity")}
                             role="tab"
-                    ><i class="fas fa-exclamation-triangle"/> Activity
+                    ><i class="fas fa-exclamation-triangle"></i> Activity
                     </button
                     >
                 </div>
@@ -218,6 +227,7 @@
                 {#if testRun.sub_type}
                         {#each Object.entries(subtests.Cases) as [key, value]}
                             {#if value === testRun.sub_type && activeTab === value}
+                                {@const SvelteComponent_1 = subtests.TabBody[value]}
                                 <div
                                         class="tab-pane fade"
                                         class:show={activeTab === testRun.sub_type}
@@ -225,7 +235,7 @@
                                         id="nav-discuss-{runId}"
                                         role="tabpanel"
                                 >
-                                        <svelte:component this={subtests.TabBody[value]} {runId}/>
+                                        <SvelteComponent_1 {runId}/>
                                 </div>
                             {/if}
                         {/each}
@@ -279,7 +289,7 @@
         <div
                 class="text-center p-2 m-1 d-flex align-items-center justify-content-center"
         >
-            <span class="spinner-border me-4"/><span class="fs-4"
+            <span class="spinner-border me-4"></span><span class="fs-4"
         >Loading...</span
         >
         </div>

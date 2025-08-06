@@ -1,14 +1,12 @@
 <script>
+
     /**
-     * @type {{
-     * currentTestId: string,
-     * newName: string,
-     * target: string,
-     * group: string,
-     * advancedSettings: boolean | { [string]: string },
-     * }} args
+     * @typedef {Object} Props
+     * @property {any} args
      */
-    export let args;
+
+    /** @type {Props} */
+    let { args } = $props();
 
 </script>
 

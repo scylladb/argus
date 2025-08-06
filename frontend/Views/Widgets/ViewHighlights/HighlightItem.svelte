@@ -9,15 +9,13 @@
     import {markdownRendererOptions} from "../../../markdownOptions";
     import {MarkdownUserMention} from "../../../Discussion/MarkedMentionExtension";
 
-    export let highlight;
-    export let currentUserId;
-    export let users = {};
+    let { highlight = $bindable(), currentUserId, users = {} } = $props();
 
     let creator = users[highlight.creator_id] || {};
-    let isEditing = false;
+    let isEditing = $state(false);
     let newComment = '';
-    let showNewCommentEditor = false;
-    let newCommentBody = {
+    let showNewCommentEditor = $state(false);
+    let newCommentBody = $state({
         id: "",
         message: "",
         release: "",
@@ -27,8 +25,8 @@
         release_id: "",
         test_run_id: "",
         posted_at: new Date(),
-    };
-    let commentBody = {
+    });
+    let commentBody = $state({
         id: '',
         message: highlight.content,
         release: '',
@@ -38,7 +36,7 @@
         release_id: '',
         test_run_id: '',
         posted_at: new Date(),
-    };
+    });
     marked.use({
         extensions: [MarkdownUserMention]
     });
@@ -79,24 +77,24 @@
         {#if !isEditing}
             <div class="img-profile me-2" style="background-image: url('{getPicture(creator?.picture_id)}');"
                  data-bs-toggle="tooltip"
-                 title="{creator?.username}"/>
+                 title="{creator?.username}"></div>
             <div class="d-flex align-items-center flex-grow-1 no-bottom-margin-p markdown-body">
                 <span class="no-bottom-margin">{@html marked.parse(highlight.content, markdownRendererOptions)}</span>
             </div>
             <div class="d-flex align-items-center">
                 <small class="text-muted me-2">{highlight.createdAt.toLocaleDateString("en-CA")}</small>
-                <button class="btn btn-sm btn-outline-secondary me-1" on:click={toggleComments}>
+                <button class="btn btn-sm btn-outline-secondary me-1" onclick={toggleComments}>
                     <Fa icon={faComment}/>
                     <span class="ms-1">{highlight.comments_count}</span>
                 </button>
                 {#if !highlight.isArchived}
                     {#if highlight.creator_id === currentUserId}
-                        <button class="btn btn-sm btn-outline-secondary me-1" on:click={() => isEditing = !isEditing}>
+                        <button class="btn btn-sm btn-outline-secondary me-1" onclick={() => isEditing = !isEditing}>
                             <Fa icon={faEdit}/>
                         </button>
                     {/if}
                 {/if}
-                <button class="btn btn-sm btn-outline-secondary" on:click={toggleArchive}>
+                <button class="btn btn-sm btn-outline-secondary" onclick={toggleArchive}>
                     <Fa icon={highlight.isArchived ? faUndo : faArchive}/>
                 </button>
             </div>
@@ -131,7 +129,7 @@
                         />
                     </div>
                 {:else}
-                    <button class="btn btn-outline-primary w-100 mt-2" on:click={() => showNewCommentEditor = true}>
+                    <button class="btn btn-outline-primary w-100 mt-2" onclick={() => showNewCommentEditor = true}>
                         Add a comment
                     </button>
                 {/if}

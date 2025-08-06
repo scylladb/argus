@@ -2,9 +2,13 @@
 <script lang="ts">
     import { createEventDispatcher } from "svelte";
     import { TestRun } from "./Interfaces";
-    export let run: TestRun;
+    interface Props {
+        run: TestRun;
+    }
+
+    let { run }: Props = $props();
     const dispatch = createEventDispatcher();
-    let showFull = false;
+    let showFull = $state(false);
 
     function getStackTracePreview(stackTrace: string): string {
         return stackTrace ? stackTrace.split("\n").slice(0, 3).join("\n") : "";
@@ -19,7 +23,7 @@
     <pre class="stack-trace-preview" class:hidden={showFull}>{getStackTracePreview(run.stack_trace || "")}</pre>
     <pre class="stack-trace-full" class:hidden={!showFull}>{run.stack_trace}</pre>
     {#if hasMoreLines(run.stack_trace || "")}
-        <button class="btn btn-sm btn-outline-secondary mt-1" on:click={() => (showFull = !showFull)}>
+        <button class="btn btn-sm btn-outline-secondary mt-1" onclick={() => (showFull = !showFull)}>
             {showFull ? "Show Less" : "Show More"}
         </button>
     {/if}

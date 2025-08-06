@@ -1,15 +1,25 @@
 <script>
+    import { run } from 'svelte/legacy';
+
     import { createEventDispatcher } from "svelte";
     import * as urlSlug from "url-slug";
     const dispatch = createEventDispatcher();
-    export let releaseId = "";
-    let newGroup = {
+    /**
+     * @typedef {Object} Props
+     * @property {string} [releaseId]
+     */
+
+    /** @type {Props} */
+    let { releaseId = "" } = $props();
+    let newGroup = $state({
         group_name: "",
         pretty_name: "",
         build_system_id: "",
-    };
+    });
 
-    $: newGroup.group_name = urlSlug.convert(newGroup.pretty_name);
+    run(() => {
+        newGroup.group_name = urlSlug.convert(newGroup.pretty_name);
+    });
 
     const handleGroupCreate = function() {
         dispatch("groupCreate", Object.assign({
@@ -53,11 +63,11 @@
             <div class="mt-2 text-end">
                 <button
                     class="btn btn-secondary"
-                    on:click={handleGroupCreationCancel}
+                    onclick={handleGroupCreationCancel}
                 >
                     Cancel
                 </button>
-                <button class="btn btn-success" on:click={handleGroupCreate}>
+                <button class="btn btn-success" onclick={handleGroupCreate}>
                     Create
                 </button>
             </div>

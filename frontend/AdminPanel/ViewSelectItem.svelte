@@ -1,8 +1,17 @@
-<script>
-    export let item = undefined;
-    export let isActive = false;
-    export let isFirst = false;
-    export let isHover = false;
+<script lang="ts">
+    interface Props {
+        item?: any;
+        isActive?: boolean;
+        isFirst?: boolean;
+        isHover?: boolean;
+    }
+
+    let {
+        item = undefined,
+        isActive = false,
+        isFirst = false,
+        isHover = false
+    }: Props = $props();
 
     const ITEM_TYPES = {
         test: "T",

@@ -10,14 +10,18 @@
     import {MarkdownUserMention} from "../../../Discussion/MarkedMentionExtension";
     import {markdownRendererOptions} from "../../../markdownOptions";
 
-    export let action: any;
-    export let currentUserId: string;
-    export let users: Record<string, any> = {};
+    interface Props {
+        action: any;
+        currentUserId: string;
+        users?: Record<string, any>;
+    }
 
-    let isEditing = false;
+    let { action = $bindable(), currentUserId, users = {} }: Props = $props();
+
+    let isEditing = $state(false);
     let newComment = '';
-    let showNewCommentEditor = false;
-    let newCommentBody = {
+    let showNewCommentEditor = $state(false);
+    let newCommentBody = $state({
         id: '',
         message: '',
         release: '',
@@ -27,12 +31,12 @@
         release_id: '',
         test_run_id: '',
         posted_at: new Date(),
-    };
+    });
     let creator = action.creator_id ? users[action.creator_id] || {} : {};
     let assignee_id = action.assignee_id;
     let isArchived = action.isArchived;
     const dispatch = createEventDispatcher();
-    let commentBody = {
+    let commentBody = $state({
         id: '',
         message: action.content,
         release: '',
@@ -42,7 +46,7 @@
         release_id: '',
         test_run_id: '',
         posted_at: new Date(),
-    };
+    });
     marked.use({
         extensions: [MarkdownUserMention]
     });
@@ -80,10 +84,10 @@
     <div class="d-flex justify-content-between align-items-center">
         {#if !isEditing}
             <div class="img-profile me-2" style="background-image: url('{getPicture(creator?.picture_id)}');" data-bs-toggle="tooltip"
-                 title="{creator?.username}"/>
+                 title="{creator?.username}"></div>
             <div class="d-flex align-items-center flex-grow-1 markdown-body">
                 <input id="checkbox-{action.id}" class="form-check-input me-2 mt-0" type="checkbox" disabled={isArchived}
-                       bind:checked={action.isCompleted} on:change={toggleComplete}>
+                       bind:checked={action.isCompleted} onchange={toggleComplete}>
                 <label class="form-check-label no-bottom-margin"
                        for="checkbox-{action.id}">{@html marked.parse(action.content, markdownRendererOptions)}
                 </label>
@@ -93,18 +97,18 @@
                 <div class="select-width ">
                     <AssigneeSelector {assignee_id} on:select={handleAssignee} disabled={isArchived} on:clear={handleAssignee}/>
                 </div>
-                <button class="btn btn-sm btn-outline-secondary mx-1" on:click={toggleComments}>
+                <button class="btn btn-sm btn-outline-secondary mx-1" onclick={toggleComments}>
                     <Fa icon={faComment}/>
                     <span class="ms-1">{action.comments_count}</span>
                 </button>
                 {#if !action.isArchived}
                     {#if action.creator_id === currentUserId}
-                        <button class="btn btn-sm btn-outline-secondary me-1" on:click={() => isEditing = !isEditing}>
+                        <button class="btn btn-sm btn-outline-secondary me-1" onclick={() => isEditing = !isEditing}>
                             <Fa icon={faEdit}/>
                         </button>
                     {/if}
                 {/if}
-                <button class="btn btn-sm btn-outline-secondary" on:click={toggleArchive}>
+                <button class="btn btn-sm btn-outline-secondary" onclick={toggleArchive}>
                     <Fa icon={action.isArchived ? faUndo : faArchive}/>
                 </button>
             </div>
@@ -139,7 +143,7 @@
                             />
                         </div>
                     {:else}
-                        <button class="btn btn-outline-primary w-100 mt-2" on:click={() => showNewCommentEditor = true}>
+                        <button class="btn btn-outline-primary w-100 mt-2" onclick={() => showNewCommentEditor = true}>
                             Add a comment
                         </button>
                     {/if}

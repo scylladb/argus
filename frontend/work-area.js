@@ -1,6 +1,7 @@
 import WorkArea from "./WorkArea/WorkArea.svelte";
+import { mount } from "svelte";
 
-const app = new WorkArea({
+const app = mount(WorkArea, {
     target: document.querySelector("div#dashboard-body"),
     props: {
     }

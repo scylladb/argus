@@ -1,8 +1,12 @@
 <script>
+
     /**
-     * @type {{testId: string}} args
+     * @typedef {Object} Props
+     * @property {{testId: string}} args
      */
-    export let args;
+
+    /** @type {Props} */
+    let { args } = $props();
 </script>
 
 <div>

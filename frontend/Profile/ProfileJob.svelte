@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
     import { createEventDispatcher, onMount } from "svelte";
     import { fade } from "svelte/transition";
     import { sendMessage } from "../Stores/AlertStore";
@@ -8,12 +8,16 @@
     import Fa from "svelte-fa";
     import TestRuns from "../WorkArea/TestRuns.svelte";
 
-    export let jobId = "";
-    export let jobs = [];
+    interface Props {
+        jobId?: string;
+        jobs?: any;
+    }
+
+    let { jobId = "", jobs = [] }: Props = $props();
     const dispatch = createEventDispatcher();
-    let testInfo;
-    let failedFetch = false;
-    let investigating = false;
+    let testInfo = $state();
+    let failedFetch = $state(false);
+    let investigating = $state(false);
 
     const fetchTestInfo = async function () {
         try{
@@ -74,7 +78,7 @@
                 </div>
             </div>
             <div class="ms-2 text-end align-self-center">
-                <button class="btn btn-dark" on:click={() => investigating = !investigating}>
+                <button class="btn btn-dark" onclick={() => investigating = !investigating}>
                     {#if investigating}
                         <Fa icon={faChevronCircleUp}/>
                     {:else}

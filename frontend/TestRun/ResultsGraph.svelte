@@ -1,4 +1,7 @@
-<script>
+<script lang="ts">
+    import { run, createBubbler, stopPropagation } from 'svelte/legacy';
+
+    const bubble = createBubbler();
     import { Chart, registerables, Tooltip } from "chart.js";
     import { createEventDispatcher, onDestroy, onMount } from "svelte";
     import "chartjs-adapter-date-fns";
@@ -6,17 +9,30 @@
     import Fa from "svelte-fa";
     import {sendMessage} from "../Stores/AlertStore";
 
-    export let graph = {};
-    export let ticks = {};
-    export let index = 0;
-    export let test_id = "";
-    export let width = 500;
-    export let height = 350;
-    export let responsive = false;
-    export let releasesFilters = {};
+    interface Props {
+        graph?: any;
+        ticks?: any;
+        index?: number;
+        test_id?: string;
+        width?: number;
+        height?: number;
+        responsive?: boolean;
+        releasesFilters?: any;
+    }
+
+    let {
+        graph = $bindable({}),
+        ticks = {},
+        index = 0,
+        test_id = "",
+        width = 500,
+        height = 350,
+        responsive = false,
+        releasesFilters = {}
+    }: Props = $props();
     let chart;
-    let showModal = false;
-    let modalChart;
+    let showModal = $state(false);
+    let modalChart = $state();
     let activeTooltip = null;
 
     function openModal() {
@@ -314,41 +330,43 @@
         };
     });
 
-    $: if (showModal) {
-        let actions = {
-            onClick: handleChartClick,
-        };
-        setTimeout(() => {
-            const modalCanvas = document.getElementById(`modal-graph-${test_id}-${index}`);
-            if (modalCanvas) {
-                modalChart = new Chart(modalCanvas, {
-                    type: "scatter",
-                    data: graph.data,
-                    options: { ...graph.options, responsive: true, maintainAspectRatio: false, ...actions },
-                });
-            }
-        }, 0);
-    }
+    run(() => {
+        if (showModal) {
+            let actions = {
+                onClick: handleChartClick,
+            };
+            setTimeout(() => {
+                const modalCanvas = document.getElementById(`modal-graph-${test_id}-${index}`);
+                if (modalCanvas) {
+                    modalChart = new Chart(modalCanvas, {
+                        type: "scatter",
+                        data: graph.data,
+                        options: { ...graph.options, responsive: true, maintainAspectRatio: false, ...actions },
+                    });
+                }
+            }, 0);
+        }
+    });
 </script>
 
 <div class="graph-container">
-    <button class="copy-btn" on:click={copyToClipboard}>
+    <button class="copy-btn" onclick={copyToClipboard}>
         <Fa icon={faCopy}/>
     </button>
-    <button class="enlarge-btn" on:click={openModal}>
+    <button class="enlarge-btn" onclick={openModal}>
         <Fa icon={faExpand}/>
     </button>
-    <canvas id="graph-{test_id}-{index}" {width} {height}/>
+    <canvas id="graph-{test_id}-{index}" {width} {height}></canvas>
 </div>
 
 {#if showModal}
-    <div class="modal" on:click={closeModal}>
-        <div class="modal-content" on:click|stopPropagation>
-            <button class="close-btn" on:click={closeModal}>&times;</button>
-            <button class="modal-copy-btn" on:click={() => copyToClipboard(true)}>
+    <div class="modal" onclick={closeModal}>
+        <div class="modal-content" onclick={stopPropagation(bubble('click'))}>
+            <button class="close-btn" onclick={closeModal}>&times;</button>
+            <button class="modal-copy-btn" onclick={() => copyToClipboard(true)}>
                 <Fa icon={faCopy}/>
             </button>
-            <canvas id="modal-graph-{test_id}-{index}"/>
+            <canvas id="modal-graph-{test_id}-{index}"></canvas>
         </div>
     </div>
 {/if}

@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
     import { onMount } from "svelte";
     import sha1 from "js-sha1";
     import hljs from "highlight.js";
@@ -10,11 +10,10 @@
     import { Collapse } from "bootstrap";
     import { createScreenshotUrl } from "../../Common/RunUtils";
 
-    export let testRun = {};
-    export let testInfo = {};
+    let { testRun = {}, testInfo = {} } = $props();
 
 
-    let resultsByBrowser = {};
+    let resultsByBrowser = $state({});
 
     const normalize = function(val, max, min) {
         return (val - min) / (max - min);
@@ -109,7 +108,7 @@
                         </a>
                     </div>
                     <div>
-                        <button class="ms-2 btn btn-sm btn-danger" on:click={() => expandAllFailures(tableHash)}>
+                        <button class="ms-2 btn btn-sm btn-danger" onclick={() => expandAllFailures(tableHash)}>
                             <Fa icon={faCircleExclamation}/> Expand all failures
                         </button>
                     </div>
@@ -128,7 +127,7 @@
                         {@const blockHash = sha1(`testResults-${testRun.id}-${browserType}-${fileName}`).substring(0, 10)}
                         {@const hasErrors = resultList.filter(val => ["failed", "error", "aborted"].includes(val.status)).length > 0}
                         <tr>
-                            <!-- svelte-ignore a11y-no-noninteractive-element-to-interactive-role -->
+                            <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
                             <td
                                 data-bs-toggle="collapse"
                                 data-bs-target="#result-{blockHash}"

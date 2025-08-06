@@ -6,7 +6,7 @@
     import ReleaseManager from "./ReleaseManager.svelte";
     import ViewsManager from "./ViewsManager.svelte";
 
-    export let currentRoute;
+    let { currentRoute = $bindable() } = $props();
 
     const routes = {
         index: AdminPanelWelcome,
@@ -25,6 +25,8 @@
     onMount(() => {
         document.title = document.title.replace("%ROUTE", titleCase(currentRoute));
     });
+
+    const SvelteComponent = $derived(routes[currentRoute] ?? routes["index"]);
 </script>
 
 <div class="container-fluid">
@@ -36,7 +38,7 @@
                         class:btn-primary={currentRoute == "index"}
                         class:btn-outline-primary={currentRoute != "index"}
                         class="btn h-100 w-100"
-                        on:click={(e) => handleRouteClick("index", e)}
+                        onclick={(e) => handleRouteClick("index", e)}
                     >
                         Home
                     </button>
@@ -46,7 +48,7 @@
                         class:btn-primary={currentRoute == "users"}
                         class:btn-outline-primary={currentRoute != "users"}
                         class="btn h-100 w-100"
-                        on:click={(e) => handleRouteClick("users", e)}
+                        onclick={(e) => handleRouteClick("users", e)}
                     >
                         Users
                     </button>
@@ -56,7 +58,7 @@
                         class:btn-primary={currentRoute == "releases"}
                         class:btn-outline-primary={currentRoute != "releases"}
                         class="btn h-100 w-100"
-                        on:click={(e) => handleRouteClick("releases", e)}
+                        onclick={(e) => handleRouteClick("releases", e)}
                     >
                         Releases
                     </button>
@@ -66,7 +68,7 @@
                         class:btn-primary={currentRoute == "views"}
                         class:btn-outline-primary={currentRoute != "views"}
                         class="btn h-100 w-100"
-                        on:click={(e) => handleRouteClick("views", e)}
+                        onclick={(e) => handleRouteClick("views", e)}
                     >
                         Views
                     </button>
@@ -74,7 +76,7 @@
             </ul>
         </div>
         <div class="col-9 min-vh-100 ">
-            <svelte:component this={routes[currentRoute] ?? routes["index"]} />
+            <SvelteComponent />
         </div>
     </div>
 </div>

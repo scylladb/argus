@@ -10,14 +10,14 @@
 <button
     id="storeSuccess"
     class="btn btn-success"
-    on:click={() => {
+    onclick={() => {
 
     }}>Store Success</button
 >
 <button
     id="storeError"
     class="btn btn-danger"
-    on:click={() => {
+    onclick={() => {
         sendMessage("error", "Wowe it doesn't work.");
     }}>Store Error</button
 >

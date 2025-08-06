@@ -1,12 +1,12 @@
-<script>
+<script lang="ts">
     import { createEventDispatcher, onMount } from "svelte";
     import Select from "svelte-select";
     import Fa from "svelte-fa";
     import { faTimes } from "@fortawesome/free-solid-svg-icons";
     import User from "../Profile/User.svelte";
     import { filterUser } from "../Common/SelectUtils";
-    export let users = {};
-    let select;
+    let { users = {} } = $props();
+    let select = $state();
     const dispatch = createEventDispatcher();
     const prepareUsers = function (users) {
         return Object.values(users)
@@ -46,7 +46,7 @@
 <div
     class="mention-select bg-lighter p-1 rounded shadow d-flex align-items-center"
     bind:this={select}
-    on:keydown={handleKeypress}
+    onkeydown={handleKeypress}
 >
     <div class="flex-fill">
         <Select
@@ -59,7 +59,7 @@
     </div>
     <button
         class="ms-1 btn btn-dark"
-        on:click={(e) => {
+        onclick={(e) => {
             e.stopPropagation();
             dispatch("closeMention");
         }}

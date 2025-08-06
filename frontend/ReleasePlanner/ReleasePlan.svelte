@@ -1,4 +1,6 @@
-<script>
+<script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import { createEventDispatcher } from "svelte";
     import { getPicture, getUser } from "../Common/UserUtils";
     import { sendMessage } from "../Stores/AlertStore";
@@ -12,15 +14,21 @@
     import { GLOBAL_STATS_KEY } from "../Common/ViewTypes";
 
 
-    export let plan;
-    export let detached = false;
-    let users = {};
-    export let expandedPlans;
-    let planStats = {};
+    let users = $state({});
+    interface Props {
+        plan: any;
+        detached?: boolean;
+        expandedPlans: any;
+    }
 
-    let owner;
-    $: users = $userList;
-    $: owner = getUser(plan.owner, users);
+    let { plan, detached = false, expandedPlans = $bindable() }: Props = $props();
+    let planStats = $state({});
+
+    let owner = $derived(getUser(plan.owner, users));
+    run(() => {
+        users = $userList;
+    });
+
     const dispatch = createEventDispatcher();
 
     const fetchViewForPlan = async function (viewId) {
@@ -80,24 +88,24 @@
         {#if !detached}
             <div class="ms-2">
                 {#if planStats}
-                    <button on:click={() => { expandedPlans[plan.id] = (!expandedPlans[plan.id]); }} class="btn btn-primary"><Fa icon={expandedPlans[plan.id] ? faChevronUp : faChevronDown}/></button>
+                    <button onclick={() => { expandedPlans[plan.id] = (!expandedPlans[plan.id]); }} class="btn btn-primary"><Fa icon={expandedPlans[plan.id] ? faChevronUp : faChevronDown}/></button>
                 {:else}
                     <button class="btn btn-primary"><span class="spinner-grow spinner-grow-sm"></span></button>
                 {/if}
             </div>
             {#if !plan.created_from}
                 <div class="ms-2">
-                    <button class="btn btn-primary" on:click={() => { dispatch("createFromClick", plan); }}><Fa icon={faClone}/></button>
+                    <button class="btn btn-primary" onclick={() => { dispatch("createFromClick", plan); }}><Fa icon={faClone}/></button>
                 </div>
             {/if}
             <div class="ms-2">
-                <button class="btn btn-warning" on:click={() => { dispatch("editClick", plan); }}><Fa icon={faEdit}/></button>
+                <button class="btn btn-warning" onclick={() => { dispatch("editClick", plan); }}><Fa icon={faEdit}/></button>
             </div>
             <div class="ms-2">
-                <button class="btn btn-success" on:click={() => { dispatch("copyClick", plan); }}><Fa icon={faCopy}/></button>
+                <button class="btn btn-success" onclick={() => { dispatch("copyClick", plan); }}><Fa icon={faCopy}/></button>
             </div>
             <div class="ms-2">
-                <button on:click={() => { dispatch("deleteClick", plan); }} class="btn btn-danger"><Fa icon={faTrash}/></button>
+                <button onclick={() => { dispatch("deleteClick", plan); }} class="btn btn-danger"><Fa icon={faTrash}/></button>
             </div>
         {/if}
     </div>

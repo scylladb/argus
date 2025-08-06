@@ -1,21 +1,20 @@
-<script>
-    export let nemesisCollection = [];
-    export let resources = [];
+<script lang="ts">
     import sha1 from "js-sha1";
     import humanizeDuration from "humanize-duration";
     import { timestampToISODate } from "../Common/DateUtils";
     import { titleCase } from "../Common/TextUtils";
     import { NemesisStatusBackgrounds } from "../Common/TestStatus";
     import NemesisReason from "./NemesisReason.svelte";
+    let { nemesisCollection = $bindable([]), resources = [] } = $props();
     let sortHeaders = {
         "startTime": "start_time",
         "endTime": "end_time",
         "status": "status",
         "name": "name",
     };
-    let sortHeader = "startTime";
-    let sortAscending = false;
-    let filterString = "";
+    let sortHeader = $state("startTime");
+    let sortAscending = $state(false);
+    let filterString = $state("");
 
     const filterNemesis = function(nemesis) {
         let nemesisString = `${nemesis.name}${nemesis.target_node.name}${nemesis.status}${timestampToISODate(nemesis.start_time * 1000)}${timestampToISODate(nemesis.end_time * 1000)}`;
@@ -75,7 +74,7 @@
                 class="form-control"
                 type="text"
                 placeholder="Filter nemeses"
-                on:keyup={(e) => { filterString = e.target.value; nemesisCollection = nemesisCollection; }}
+                onkeyup={(e) => { filterString = e.target.value; nemesisCollection = nemesisCollection; }}
             >
         </div>
         <table class="table table-hover table-bordered">
@@ -85,7 +84,7 @@
                         role="button"
                         scope="col"
                         class="text-center align-middle"
-                        on:click={() => { sortHeader = "name"; sortAscending = !sortAscending; }}
+                        onclick={() => { sortHeader = "name"; sortAscending = !sortAscending; }}
                     >
                         {#if sortHeader == "name"}
                             <span
@@ -101,7 +100,7 @@
                         role="button"
                         scope="col"
                         class="text-center align-middle"
-                        on:click={() => { sortHeader = "node"; sortAscending = !sortAscending;  }}
+                        onclick={() => { sortHeader = "node"; sortAscending = !sortAscending;  }}
                     >
                         {#if sortHeader == "node"}
                             <span
@@ -117,7 +116,7 @@
                         role="button"
                         scope="col"
                         class="text-center align-middle"
-                        on:click={() => { sortHeader = "status"; sortAscending = !sortAscending;  }}
+                        onclick={() => { sortHeader = "status"; sortAscending = !sortAscending;  }}
                     >
                         {#if sortHeader == "status"}
                             <span
@@ -133,7 +132,7 @@
                         role="button"
                         scope="col"
                         class="text-center align-middle"
-                        on:click={() => { sortHeader = "startTime"; sortAscending = !sortAscending;  }}
+                        onclick={() => { sortHeader = "startTime"; sortAscending = !sortAscending;  }}
                     >
                         {#if sortHeader == "startTime"}
                             <span
@@ -149,7 +148,7 @@
                         role="button"
                         scope="col"
                         class="text-center align-middle"
-                        on:click={() => { sortHeader = "endTime"; sortAscending = !sortAscending;  }}
+                        onclick={() => { sortHeader = "endTime"; sortAscending = !sortAscending;  }}
                     >
                         {#if sortHeader == "endTime"}
                             <span

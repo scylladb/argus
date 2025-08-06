@@ -5,22 +5,26 @@
     import Filters from "../../../TestRun/Components/Filters.svelte";
     import queryString from "query-string";
 
-    export let settings: any = {};
-    export let testIds: string[] = [];
-    export let dashboardObject;
+    interface Props {
+        settings?: any;
+        testIds?: string[];
+        dashboardObject: any;
+    }
+
+    let { settings = {}, testIds = [], dashboardObject }: Props = $props();
 
     let startDate = "";
     let endDate = "";
-    let dateRange = 6;
+    let dateRange = $state(6);
     let width = 500;
     let height = 350;
-    let releasesFilters = {};
-    let testViews: Record<string, any[]> = {};
-    let expandedTests = new Set();
-    let expandedViews = new Set();
-    let filteredGraphsByTest: Record<string, Record<string, any[]>> = {};
+    let releasesFilters = $state({});
+    let testViews: Record<string, any[]> = $state({});
+    let expandedTests = $state(new Set());
+    let expandedViews = $state(new Set());
+    let filteredGraphsByTest: Record<string, Record<string, any[]>> = $state({});
     let graphCounter = 0; // for chart id's
-    let testsDetails: Record<string, any> = {};
+    let testsDetails: Record<string, any> = $state({});
 
     const generateGraphId = () => {
         graphCounter += 1;
@@ -158,9 +162,9 @@
         <div class="accordion" id="graphsAccordion">
             {#each Object.entries(testViews) as [testId, views]}
                 <div class="card mb-3">
-                    <div class="card-header bg-light" on:click={() => toggleTest(testId)}>
+                    <div class="card-header bg-light" onclick={() => toggleTest(testId)}>
                         <h5 class="mb-0 d-flex align-items-center">
-                            <i class="fas fa-chevron-{expandedTests.has(testId) ? 'down' : 'right'} me-2" />
+                            <i class="fas fa-chevron-{expandedTests.has(testId) ? 'down' : 'right'} me-2"></i>
                             <span>{testsDetails[testId]?.name || `Test ID: ${testId}`}</span>
                         </h5>
                     </div>
@@ -169,13 +173,13 @@
                         <div class="card-body">
                             {#each views as view}
                                 <div class="card mb-3">
-                                    <div class="card-header bg-transparent" on:click={() => toggleView(view.id)}>
+                                    <div class="card-header bg-transparent" onclick={() => toggleView(view.id)}>
                                         <div class="d-flex align-items-center">
                                             <i
                                                 class="fas fa-chevron-{expandedViews.has(view.id)
                                                     ? 'down'
                                                     : 'right'} me-2"
-                                            />
+></i>
                                             <h6 class="mb-0">{view.name}</h6>
                                         </div>
                                     </div>

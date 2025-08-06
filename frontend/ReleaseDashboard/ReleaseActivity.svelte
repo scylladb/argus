@@ -1,4 +1,6 @@
-<script>
+<script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import { onMount } from "svelte";
     import { userList } from "../Stores/UserlistSubscriber.js";
 
@@ -8,16 +10,18 @@
         TestRunCommentPosted: "ARGUS_TEST_RUN_COMMENT_POSTED",
     };
 
-    let users = {};
-    $: users = $userList;
-    let fetching = true;
-    let eventLimit = 10;
-    export let releaseName = undefined;
-    let activity = {
+    let users = $state({});
+    run(() => {
+        users = $userList;
+    });
+    let fetching = $state(true);
+    let eventLimit = $state(10);
+    let { releaseName = undefined } = $props();
+    let activity = $state({
         events: {},
         raw_events: [],
         release_name: "",
-    };
+    });
 
     const getPictureForId = function (id) {
         let picture_id = users[id]?.picture_id;
@@ -75,13 +79,13 @@
                                     type="button"
                                     value="Refresh"
                                     disabled={fetching}
-                                    on:click={fetchActivity}
+                                    onclick={fetchActivity}
                                 />
                                 <input
                                     class="btn btn-secondary"
                                     type="button"
                                     value="More"
-                                    on:click={() => {
+                                    onclick={() => {
                                         eventLimit += 10;
                                     }}
                                 />

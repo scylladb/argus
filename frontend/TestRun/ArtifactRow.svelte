@@ -1,11 +1,9 @@
-<script>
+<script lang="ts">
     import { onMount } from "svelte";
     import pretty from "prettysize";
-    export let artifactName;
-    export let artifactLink;
-    export let originalLink;
+    let { artifactName, artifactLink, originalLink } = $props();
 
-    let artifactSize;
+    let artifactSize = $state();
 
     const showArtifactSize = function (bytesCount) {
         if (!bytesCount) return "(N/A)";

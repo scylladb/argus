@@ -6,10 +6,14 @@
     };
 
     type CellType = "NUMBER" | "TEXT" | "LINK" | "IMAGE";
-    export let cell: Cell;
-    export let selectedScreenshot: string;
-    let value: string;
-    let type: CellType = "TEXT";
+    interface Props {
+        cell: Cell;
+        selectedScreenshot: string;
+    }
+
+    let { cell, selectedScreenshot = $bindable() }: Props = $props();
+    let value: string = $state();
+    let type: CellType = $state("TEXT");
     const durationToStr = (seconds: number) => {
         const hours = Math.floor(seconds / 3600);
         const minutes = Math.floor((seconds % 3600) / 60);
@@ -52,5 +56,5 @@
 {:else if type === "LINK"}
     <a href="{value}" target="_blank" rel="noopener noreferrer">link</a>
 {:else if type === "IMAGE"}
-    <button class="btn btn-primary btn-sm py-0" on:click={() => selectedScreenshot = value} data-link="{value}">view</button>
+    <button class="btn btn-primary btn-sm py-0" onclick={() => selectedScreenshot = value} data-link="{value}">view</button>
 {/if}

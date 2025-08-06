@@ -4,8 +4,12 @@
     import { faAnglesDown, faAnglesUp, faCheck, faCopy, faTimes } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
     import { titleCase } from "../Common/TextUtils";
-    export let suites: TestSuite[] = [];
-    export let internalFilter = "";
+    interface Props {
+        suites?: TestSuite[];
+        internalFilter?: string;
+    }
+
+    let { suites = [], internalFilter = $bindable("") }: Props = $props();
 
     interface ICaseSortPriorty {
         [key: string]: number
@@ -31,7 +35,7 @@
         skipped: 15,
     };
 
-    const statusInfo: IStatusDisplayInfo = {
+    const statusInfo: IStatusDisplayInfo = $state({
         failure: {
             show: true,
             testCount: 0,
@@ -57,9 +61,9 @@
             testCount: 0,
             class: "bg-dark",
         },
-    };
+    });
 
-    const expandedCases: ICaseExpansionInfo = {};
+    const expandedCases: ICaseExpansionInfo = $state({});
 
     const toggleStatus = function(status: string) {
         if (!statusInfo[status]) status = "disabled";
@@ -130,8 +134,8 @@
 
 <div class="d-flex my-2">
     {#each Object.entries(statusInfo) as [status, displayInfo]}
-        <!-- svelte-ignore a11y-click-events-have-key-events -->
-        <div class="ms-1 rounded px-2 py-1 {displayInfo.class} text-white cursor-pointer" on:click={() => toggleStatus(status)}>
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <div class="ms-1 rounded px-2 py-1 {displayInfo.class} text-white cursor-pointer" onclick={() => toggleStatus(status)}>
             {#if displayInfo.show}
                 <Fa icon={faCheck}/>
             {:else}
@@ -161,7 +165,7 @@
                     <button
                         class="ms-1 btn btn-primary"
                         title="More..."
-                        on:click={() => handleExpandButtonClick(testCase.name, testCase.classname)}
+                        onclick={() => handleExpandButtonClick(testCase.name, testCase.classname)}
                     >
                         {#if caseExpanded(testCase, expandedCases)}
                             <Fa icon={faAnglesUp} />
@@ -170,7 +174,7 @@
                         {/if}
                     </button>
                     {/if}
-                    <button class="ms-1 btn btn-success me-2" title="Copy all" on:click={() => handleCopyButtonClick(testCase)}>
+                    <button class="ms-1 btn btn-success me-2" title="Copy all" onclick={() => handleCopyButtonClick(testCase)}>
                         <Fa icon={faCopy} />
                     </button>
                 </div>

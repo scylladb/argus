@@ -13,7 +13,7 @@
     import ViewListItem from "./ViewListItem.svelte";
     import ModalWindow from "../Common/ModalWindow.svelte";
 
-    let allViews = [];
+    let allViews = $state([]);
 
     const VIEW_CREATE_TEMPLATE = {
         name: "",
@@ -26,17 +26,17 @@
     /**
      * @type {Widget[]}
      */
-    let newWidgets = [];
+    let newWidgets = $state([]);
     let lastHits = [];
-    let newView = Object.assign({}, VIEW_CREATE_TEMPLATE);
-    let selectedItems = [];
-    let lockForm = false;
-    let editingExistingView = false;
-    let testSearcherValue;
-    let errorPopup = false;
-    let errorTitle = "";
-    let errorMessage = "";
-    let errorCallback;
+    let newView = $state(Object.assign({}, VIEW_CREATE_TEMPLATE));
+    let selectedItems = $state([]);
+    let lockForm = $state(false);
+    let editingExistingView = $state(false);
+    let testSearcherValue = $state();
+    let errorPopup = $state(false);
+    let errorTitle = $state("");
+    let errorMessage = $state("");
+    let errorCallback = $state();
 
 
     const fetchAllViews = async function() {
@@ -371,27 +371,31 @@
         errorMessage = "";
         errorPopup = false;
     }}>
-        <div slot="title">
-            {errorTitle}
-        </div>
-        <div slot="body">
-            <p>{errorMessage}</p>
-            <div>
-                <button class="btn btn-danger" on:click={() => {
+        {#snippet title()}
+                <div >
+                {errorTitle}
+            </div>
+            {/snippet}
+        {#snippet body()}
+                <div >
+                <p>{errorMessage}</p>
+                <div>
+                    <button class="btn btn-danger" onclick={() => {
                     errorTitle = "";
                     errorMessage = "";
                     errorPopup = false;
                     errorCallback();
                     errorCallback = undefined;
                 }}>Edit Anyway</button>
-                <button class="btn btn-secondary" on:click={() => {
+                    <button class="btn btn-secondary" onclick={() => {
                     errorTitle = "";
                     errorMessage = "";
                     errorPopup = false;
                     errorCallback = undefined;
                 }}>Cancel</button>
+                </div>
             </div>
-        </div>
+            {/snippet}
     </ModalWindow>
 {/if}
 
@@ -405,8 +409,8 @@
             Create new
             <div class="d-flex flex-column flex-fill p-2">
                 <input class="form-control mb-2" type="text" placeholder="Name (internal)" disabled bind:value={newView.name}>
-                <input class="form-control mb-2" type="text" placeholder="Display name" on:change={() => newView.name = urlSlug.convert(newView.displayName)} bind:value={newView.displayName}>
-                <textarea class="form-control mb-2" type="text" placeholder="Description (optional)" bind:value={newView.description}/>
+                <input class="form-control mb-2" type="text" placeholder="Display name" onchange={() => newView.name = urlSlug.convert(newView.displayName)} bind:value={newView.displayName}>
+                <textarea class="form-control mb-2" type="text" placeholder="Description (optional)" bind:value={newView.description}></textarea>
                 <input class="form-control mb-2" type="text" placeholder="Plan ID (internal)" bind:value={newView.plan_id}>
                 <div class="mb-2">
                     <Select
@@ -424,7 +428,7 @@
                 </div>
                 <select class="form-select mb-2" size=10 multiple bind:value={selectedItems}>
                     {#each newView.items as item}
-                        <option value="{item.type}:{item.id}" on:dblclick={() => removeSelectedItem(item.id, `${item.type}:${item.id}`)}>
+                        <option value="{item.type}:{item.id}" ondblclick={() => removeSelectedItem(item.id, `${item.type}:${item.id}`)}>
                             [{titleCase(item.type).at(0)}] {item.pretty_name || item.display_name || item.name}
                             {#if item.release}
                                     - {item.release}
@@ -437,14 +441,14 @@
                         <option value="!!">No tests selected.</option>
                     {/each}
                 </select>
-                <button class="btn mb-2" class:btn-danger={newView.items.length} class:btn-secondary={!newView.items.length} disabled={newView.items.length == 0} on:click={() => (newView.items = [])}><Fa icon={faTrash}/> Remove all</button>
+                <button class="btn mb-2" class:btn-danger={newView.items.length} class:btn-secondary={!newView.items.length} disabled={newView.items.length == 0} onclick={() => (newView.items = [])}><Fa icon={faTrash}/> Remove all</button>
                 <div class="p-2">
                     <div>Widget builder</div>
                     <div class="rounded bg-light-one p-2" style="min-height: 256px; max-height: 512px; overflow-y: scroll">
                         <div class="text-end mb-3">
                             <button
                                 class="btn btn-success"
-                                on:click={() => createNewWidget()}
+                                onclick={() => createNewWidget()}
                             >
                                 <Fa icon={faPlus} />
                             </button>
@@ -454,8 +458,8 @@
                         {/each}
                     </div>
                 </div>
-                <button class="btn mb-2" class:btn-success={!editingExistingView} class:btn-warning={editingExistingView} on:click={viewActionDispatch}>{editingExistingView ? "Update" : "Create"} view</button>
-                <button class="btn btn-secondary" on:click={resetForm}>Reset</button>
+                <button class="btn mb-2" class:btn-success={!editingExistingView} class:btn-warning={editingExistingView} onclick={viewActionDispatch}>{editingExistingView ? "Update" : "Create"} view</button>
+                <button class="btn btn-secondary" onclick={resetForm}>Reset</button>
             </div>
         </div>
     </div>

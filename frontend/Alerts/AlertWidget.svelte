@@ -1,13 +1,13 @@
-<script>
+<script lang="ts">
     import { alertStore } from "../Stores/AlertStore.js";
     import { onDestroy } from "svelte";
     import AlertMessage from "./AlertMessage.svelte";
     import { v4 as uuidv4 } from "uuid";
-    export let flashes = [];
+    let { flashes = [] } = $props();
 
-    let messages = [];
-    let showOldMessages = false;
-    let oldMessages = [];
+    let messages = $state([]);
+    let showOldMessages = $state(false);
+    let oldMessages = $state([]);
     messages = flashes.map((val) => {
         return {
             id: uuidv4(),
@@ -42,7 +42,7 @@
 
 {#if oldMessages.length > 0}
     <div class="position-fixed" id="alertBucket">
-        <button class="btn btn-danger" on:click={() => (showOldMessages = true)}>Show errors</button>
+        <button class="btn btn-danger" onclick={() => (showOldMessages = true)}>Show errors</button>
     </div>
 {/if}
 
@@ -55,7 +55,7 @@
                     <div class="ms-auto">
                         <button
                             class="btn btn-close"
-                            on:click={() => {
+                            onclick={() => {
                                 showOldMessages = false;
                             }}
                         ></button>
@@ -72,7 +72,7 @@
                     </div>
                 {/each}
                 <div>
-                    <button class="btn btn-primary w-100" on:click={() => {
+                    <button class="btn btn-primary w-100" onclick={() => {
                         oldMessages = [];
                         showOldMessages = false;
                     }}>Clear all</button>

@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
     import {faMarkdown} from "@fortawesome/free-brands-svg-icons";
     import {faInfoCircle, faChartLine} from "@fortawesome/free-solid-svg-icons";
     import {ResultCellStatusStyleMap} from "../../Common/TestStatus";
@@ -10,22 +10,24 @@
     import GraphFilters from "./GraphFilters.svelte";
     import ModalWindow from "../../Common/ModalWindow.svelte";
 
-    export let table_name;
-    export let result;
-    export let selectedScreenshot;
-    export let test_id;
+    let {
+        table_name,
+        result,
+        selectedScreenshot = $bindable(),
+        test_id
+    } = $props();
 
-    let showDescription = false;
-    let showGraphModal = false;
-    let graph = null;
-    let ticks = {};
-    let releasesFilters = {};
-    let selectedColumnName = "";
-    let dateRange = 6;
+    let showDescription = $state(false);
+    let showGraphModal = $state(false);
+    let graph = $state(null);
+    let ticks = $state({});
+    let releasesFilters = $state({});
+    let selectedColumnName = $state("");
+    let dateRange = $state(6);
     let startDate = "";
     let endDate = "";
-    let redraw = 0;
-    let resultTableElement;
+    let redraw = $state(0);
+    let resultTableElement = $state();
 
     const tableStyleToColor = {
         "table-success": "green",
@@ -175,7 +177,7 @@
     <div class="result-content">
         <div class="table-header">
             <h5>{table_name}</h5>
-            <button class="btn btn-link p-0 ms-1" on:click={toggleDescription}>
+            <button class="btn btn-link p-0 ms-1" onclick={toggleDescription}>
                 <Fa icon={faInfoCircle} size="sm"/>
             </button>
         </div>
@@ -188,13 +190,13 @@
                     <thead class="thead-dark">
                     <tr>
                         <th>
-                            <button class="btn btn-link p-1" on:click={copyResultTableAsMarkdown}>
+                            <button class="btn btn-link p-1" onclick={copyResultTableAsMarkdown}>
                                 <Fa icon={faMarkdown} size="sm"/>
                             </button>
                         </th>
                         {#each result.columns as col}
                             {#if col.type !== "TEXT"}
-                                <th class="clickable" on:click={() => openGraphModal(col.name)} title="Show metric history">
+                                <th class="clickable" onclick={() => openGraphModal(col.name)} title="Show metric history">
                                     <div class="column-header">
                                         {col.name}<span
                                             class="unit">{col.unit ? `[${col.unit}]` : ""}</span>
@@ -234,32 +236,36 @@
 
 {#if showGraphModal}
     <ModalWindow widthClass="w-75" on:modalClose={closeGraphModal}>
-        <div slot="title">
-            {table_name}
-            {selectedColumnName ? `- ${selectedColumnName}` : ""}
-        </div>
-        <div slot="body" style="min-height: 800px;">
-            <GraphFilters
-                    bind:dateRange
-                    bind:releasesFilters
-                    on:dateChange={handleDateChange}
-                    on:releaseChange={handleReleaseChange}
-            />
-            {#if graph}
-                {#key redraw}
-                    <ResultsGraph
-                            {graph}
-                            {ticks}
-                            {test_id}
-                            width={1400}
-                            height={700}
-                            {releasesFilters}
-                            responsive={true}
-                            on:runClick={dispatchRunClick}
-                    />
-                {/key}
-            {/if}
-        </div>
+        {#snippet title()}
+                <div >
+                {table_name}
+                {selectedColumnName ? `- ${selectedColumnName}` : ""}
+            </div>
+            {/snippet}
+        {#snippet body()}
+                <div  style="min-height: 800px;">
+                <GraphFilters
+                        bind:dateRange
+                        bind:releasesFilters
+                        on:dateChange={handleDateChange}
+                        on:releaseChange={handleReleaseChange}
+                />
+                {#if graph}
+                    {#key redraw}
+                        <ResultsGraph
+                                {graph}
+                                {ticks}
+                                {test_id}
+                                width={1400}
+                                height={700}
+                                {releasesFilters}
+                                responsive={true}
+                                on:runClick={dispatchRunClick}
+                        />
+                    {/key}
+                {/if}
+            </div>
+            {/snippet}
     </ModalWindow>
 {/if}
 

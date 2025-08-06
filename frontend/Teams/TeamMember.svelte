@@ -9,12 +9,16 @@
     import ProfileJobs from "../Profile/ProfileJobs.svelte";
     import { sendMessage } from "../Stores/AlertStore";
     import { TeamManagerAPIError, TeamManagerException, TeamRoutes, type Member, type RawUserJobsResponse, type ShortJob } from "./TeamUtils";
-    export let member: Member;
-    let userJobs: ShortJob[];
-    let failed = false;
-    let requestedDetail = false;
-    let showInvestigatedDetailedStats = false;
-    let showNotInvestigatedDetailedStats = false;
+    interface Props {
+        member: Member;
+    }
+
+    let { member }: Props = $props();
+    let userJobs: ShortJob[] = $state();
+    let failed = $state(false);
+    let requestedDetail = $state(false);
+    let showInvestigatedDetailedStats = $state(false);
+    let showNotInvestigatedDetailedStats = $state(false);
 
     const fetchUserJobs = async function() {
         try {
@@ -78,7 +82,7 @@
     {#if userJobs}
         <div class="ms-auto d-flex border p-1 rounded">
             {#await aggregateJobs(userJobs, (job) => job.investigation_status == TestInvestigationStatus.NOT_INVESTIGATED && job.status != TestStatus.PASSED) then stats}
-                <div class="px-2" role="button" class:border-end={showNotInvestigatedDetailedStats} on:click={() => (showNotInvestigatedDetailedStats = !showNotInvestigatedDetailedStats)}>
+                <div class="px-2" role="button" class:border-end={showNotInvestigatedDetailedStats} onclick={() => (showNotInvestigatedDetailedStats = !showNotInvestigatedDetailedStats)}>
                     <Fa icon={faEyeSlash} /> {stats.total}
                 </div>
                 <div class:d-flex={showNotInvestigatedDetailedStats} class:d-none={!showNotInvestigatedDetailedStats}>
@@ -102,7 +106,7 @@
         </div>
         <div class="ms-2 d-flex border p-1 rounded">
             {#await aggregateJobs(userJobs, (job) => job.investigation_status == TestInvestigationStatus.INVESTIGATED || job.status == TestStatus.PASSED) then stats}
-                <div class="px-2" class:border-end={showInvestigatedDetailedStats} role="button" on:click={() => (showInvestigatedDetailedStats = !showInvestigatedDetailedStats)}>
+                <div class="px-2" class:border-end={showInvestigatedDetailedStats} role="button" onclick={() => (showInvestigatedDetailedStats = !showInvestigatedDetailedStats)}>
                     <Fa icon={faEye} /> {stats.total}
                 </div>
                 <div class:d-flex={showInvestigatedDetailedStats} class:d-none={!showInvestigatedDetailedStats}>
@@ -137,7 +141,7 @@
         class="ms-2 btn btn-sm btn-primary"
         data-bs-toggle="collapse"
         data-bs-target="#showAllJobs-{member.id}"
-        on:click={() => requestedDetail = !requestedDetail}
+        onclick={() => requestedDetail = !requestedDetail}
     >
         <Fa icon={faFolderOpen}/>
     </button>

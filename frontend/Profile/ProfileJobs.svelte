@@ -1,4 +1,6 @@
-<script>
+<script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import { faCalendar, faCheck, faSearch } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
     import { sendMessage } from "../Stores/AlertStore";
@@ -7,17 +9,16 @@
     import { TestInvestigationStatus } from "../Common/TestStatus";
     import PlannedJobs from "./PlannedJobs.svelte";
     import queryString from "query-string";
-    export let jobs;
-    export let userId;
+    let { jobs = $bindable(), userId } = $props();
 
-    let activeTab = queryString.parse(document.location.search).activeTab ||  "todo";
-    let jobsToDo = [];
-    let jobsDone = [];
-    let plannedJobIndicator = 0;
+    let activeTab = $state(queryString.parse(document.location.search).activeTab ||  "todo");
+    let jobsToDo = $state([]);
+    let jobsDone = $state([]);
+    let plannedJobIndicator = $state(0);
 
-    $: {
+    run(() => {
         history.pushState(undefined, null, `?${queryString.stringify({ activeTab })}`);
-    }
+    });
 
     const fetchUserJobs = async function() {
         if (jobs) {
@@ -82,21 +83,21 @@
                 <button
                     class="btn btn-dark"
                     class:active={activeTab == "todo"}
-                    on:click={() => (activeTab = "todo")}
+                    onclick={() => (activeTab = "todo")}
                 >
                     <Fa icon={faSearch}/> To Do
                 </button>
                 <button
                     class="btn btn-dark"
                     class:active={activeTab == "done"}
-                    on:click={() => (activeTab = "done")}
+                    onclick={() => (activeTab = "done")}
                 >
                     <Fa icon={faCheck}/> Done
                 </button>
                 <button
                     class="btn btn-dark"
                     class:active={activeTab == "planned"}
-                    on:click={() => (activeTab = "planned")}
+                    onclick={() => (activeTab = "planned")}
                 >
                     <Fa icon={faCalendar}/> Planned {#if plannedJobIndicator > 0}
                         <div class="d-inline-block bg-danger p-1" style="border-radius: 10%">{plannedJobIndicator}</div>

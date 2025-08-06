@@ -1,13 +1,17 @@
 <script>
+    import { run } from 'svelte/legacy';
+
     import { createEventDispatcher } from "svelte";
     import * as urlSlug from "url-slug";
     const dispatch = createEventDispatcher();
-    let newRelease = {
+    let newRelease = $state({
         release_name: "",
         pretty_name: "",
         perpetual: false,
-    };
-    $: newRelease.release_name = urlSlug.convert(newRelease.pretty_name);
+    });
+    run(() => {
+        newRelease.release_name = urlSlug.convert(newRelease.pretty_name);
+    });
 
     const handleReleaseCreate = function() {
         dispatch("releaseCreate", newRelease);
@@ -49,11 +53,11 @@
             <div class="mt-2 text-end">
                 <button
                     class="btn btn-secondary"
-                    on:click={handleReleaseCreationCancel}
+                    onclick={handleReleaseCreationCancel}
                 >
                     Cancel
                 </button>
-                <button class="btn btn-success" on:click={handleReleaseCreate}>
+                <button class="btn btn-success" onclick={handleReleaseCreate}>
                     Create
                 </button>
             </div>
