@@ -1,12 +1,12 @@
-<script>
+<script lang="ts">
     import { onMount } from "svelte";
     import { sendMessage } from "../../../Stores/AlertStore";
     import { getScyllaPackage } from "../../../Common/RunUtils";
 
-    export let testRun;
+    let { testRun } = $props();
     let performanceResults;
     let performanceHistory = [];
-    let resultsByVersion;
+    let resultsByVersion = $state();
 
     const MONITORED_METRICS = [
         "perf_op_rate_total",

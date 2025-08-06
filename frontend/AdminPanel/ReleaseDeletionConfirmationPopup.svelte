@@ -1,9 +1,9 @@
-<script>
+<script lang="ts">
     import { createEventDispatcher } from "svelte";
     import { sendMessage } from "../Stores/AlertStore";
     const dispatch = createEventDispatcher();
-    export let releaseData;
-    let releaseNameForConfirmation = "";
+    let { releaseData } = $props();
+    let releaseNameForConfirmation = $state("");
 
     const confirm = function() {
         if (releaseNameForConfirmation != releaseData.name) {
@@ -39,12 +39,12 @@
                 </div>
             </div>
             <div class="mt-2 mb-1">
-                <button class="btn btn-danger w-100" on:click={() => confirm()}>
+                <button class="btn btn-danger w-100" onclick={() => confirm()}>
                     I understand. Delete the release.
                 </button>
             </div>
             <div>
-                <button class="btn btn-secondary w-100" on:click={() => cancel()}>
+                <button class="btn btn-secondary w-100" onclick={() => cancel()}>
                     Cancel
                 </button>
             </div>

@@ -7,8 +7,12 @@
     import TestRuns from "../WorkArea/TestRuns.svelte";
     import { timestampToISODate } from "../Common/DateUtils";
 
-    export let test: PlannedTest;
-    let expanded = false;
+    interface Props {
+        test: PlannedTest;
+    }
+
+    let { test }: Props = $props();
+    let expanded = $state(false);
     let status = (test?.last_run?.status ?? TestStatus.NOT_RUN) as keyof typeof StatusBackgroundCSSClassMap;
 </script>
 
@@ -31,7 +35,7 @@
         </a>
     </div>
     <div class="me-2">
-        <button class="btn btn-sm btn-primary" on:click={() => (expanded = !expanded)}>
+        <button class="btn btn-sm btn-primary" onclick={() => (expanded = !expanded)}>
             <Fa icon={expanded ? faChevronUp : faChevronDown} /></button>
     </div>
 

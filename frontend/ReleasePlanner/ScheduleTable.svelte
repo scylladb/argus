@@ -1,18 +1,20 @@
-<script>
+<script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import { createEventDispatcher, onMount } from "svelte";
     import * as chrono from "chrono-node";
     import Schedule from "./Schedule.svelte";
 
-    export let schedules = [];
-    export let releaseData = {};
-    export let users = {};
+    let { schedules = [], releaseData = {}, users = {} } = $props();
     const dispatch = createEventDispatcher();
-    let dates = [];
-    let groups = {};
-    let clickedCell = "";
-    let selectedGroups = {};
-    let today = new Date();
-    $: today.setHours(0, today.getTimezoneOffset() * -1, 0, 0);
+    let dates = $state([]);
+    let groups = $state({});
+    let clickedCell = $state("");
+    let selectedGroups = $state({});
+    let today = $state(new Date());
+    run(() => {
+        today.setHours(0, today.getTimezoneOffset() * -1, 0, 0);
+    });
 
     const generateDates = function () {
         const weekRange = Array.from({ length: 18 }, (v, k) => -4 + k);
@@ -87,8 +89,12 @@
         });
     };
 
-    $: generateDates(today);
-    $: prepareGroups(schedules);
+    run(() => {
+        generateDates(today);
+    });
+    run(() => {
+        prepareGroups(schedules);
+    });
 </script>
 
 <div class="my-2 table-main">
@@ -102,7 +108,7 @@
                 type="date"
                 id="dateTableSelection"
                 value={today.toISOString().split("T").shift()}
-                on:change={(e) => {
+                onchange={(e) => {
                     today = new Date(e.target.value);
                 }}
             />
@@ -137,7 +143,7 @@
                             class:table-warning={(selectedGroups[date.dateKey] ?? []).includes(group.name)}
                             class:table-secondary={date.dateIndex < 0 && !group.schedules[date.dateKey]}
                             class="cell-sm cursor-pointer position-relative border-dark"
-                            on:click={() => {onAssigneeCellClick(group.schedules[date.dateKey], group, date)}}
+                            onclick={() => {onAssigneeCellClick(group.schedules[date.dateKey], group, date)}}
                         >
                             {#if group.schedules[date.dateKey]}
                                 {users[group.schedules[date.dateKey].assignees[0]]?.full_name ?? "#EMPTY"}

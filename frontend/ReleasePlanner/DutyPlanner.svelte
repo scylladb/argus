@@ -1,4 +1,6 @@
-<script>
+<script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import { onMount } from "svelte";
     import Select from "svelte-select";
     import User from "../Profile/User.svelte";
@@ -13,12 +15,13 @@
     } from "../Common/DateUtils";
     import { faArrowAltCircleRight, faCalendar, faFlagCheckered } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
-    export let releaseData = {};
-    export let schedules = [];
-    let users = {};
-    $: users = $userList;
-    let selectedGroups = [];
-    let selectedTests = [];
+    let { releaseData = {}, schedules = $bindable([]) } = $props();
+    let users = $state({});
+    run(() => {
+        users = $userList;
+    });
+    let selectedGroups = $state([]);
+    let selectedTests = $state([]);
 
     const PayloadTemplate = {
         releaseId: releaseData.release.id,
@@ -39,8 +42,8 @@
     };
 
     let newSchedule = Object.assign(PayloadTemplate);
-    let newScheduleDate = startDate(releaseData.release);
-    let newScheduleEndDate = endDate(releaseData.release, newScheduleDate);
+    let newScheduleDate = $state(startDate(releaseData.release));
+    let newScheduleEndDate = $state(endDate(releaseData.release, newScheduleDate));
 
     const fetchSchedules = async function () {
         try {
@@ -339,13 +342,13 @@
                 <div class="mb-3 w-100">
                     <button
                         class="btn btn-success w-100"
-                        on:click={submitNewSchedule}>Create</button
+                        onclick={submitNewSchedule}>Create</button
                     >
                 </div>
             </div>
         {:else}
             <div class="col d-flex align-items-center justify-content-center">
-                <div class="spinner-border me-3 text-muted" />
+                <div class="spinner-border me-3 text-muted"></div>
                 <div class="display-6 text-muted">Fetching users...</div>
             </div>
         {/if}

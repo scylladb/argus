@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
     import Select from "svelte-select";
     import User from "../Profile/User.svelte";
     import { createEventDispatcher, onMount } from "svelte";
@@ -15,16 +15,13 @@
     import ViewSelect from "../Views/ViewSelect.svelte";
 
 
-    export let release;
-    export let plans = [];
-    let gridViewOpen = false;
-    export let mode = "create";
-    let users = [];
-    let testSearcherValue;
+    let gridViewOpen = $state(false);
+    let users = $state([]);
+    let testSearcherValue = $state();
     let lastHits = [];
-    let participants = [];
-    let items = [];
-    let views = [];
+    let participants = $state([]);
+    let items = $state([]);
+    let views = $state([]);
     const dispatch = createEventDispatcher();
 
     const TYPE_MARKER = {
@@ -45,7 +42,7 @@
         assignments: {},
     };
 
-    let PLAN_VALIDATION_RULES = {
+    let PLAN_VALIDATION_RULES = $state({
         name: {
             validated: true,
             soft: false,
@@ -102,7 +99,7 @@
             message: "No tests or groups have been selected",
             validate: (plan) => plan.tests.length > 0 || plan.groups.length > 0,
         }
-    };
+    });
 
 
     const createPlan = async function () {
@@ -395,7 +392,19 @@
         return json.response;
     };
 
-    export let plan = Object.assign({}, NEW_PLAN_TEMPLATE);
+    interface Props {
+        release: any;
+        plans?: any;
+        mode?: string;
+        plan?: any;
+    }
+
+    let {
+        release,
+        plans = [],
+        mode = "create",
+        plan = $bindable(Object.assign({}, NEW_PLAN_TEMPLATE))
+    }: Props = $props();
 
     onMount(async () => {
         await getUsers();
@@ -414,10 +423,14 @@
 
 {#if gridViewOpen}
     <ModalWindow widthClass="w-75" on:modalClose={() => (gridViewOpen = false)}>
-        <div slot="title">Grid View</div>
-        <div slot="body">
-            <ReleasePlannerGridView existingPlans={plans} {release} selectingFor={plan} on:gridViewConfirmed={handleGridConfirmation}/>
-        </div>
+        {#snippet title()}
+                <div >Grid View</div>
+            {/snippet}
+        {#snippet body()}
+                <div >
+                <ReleasePlannerGridView existingPlans={plans} {release} selectingFor={plan} on:gridViewConfirmed={handleGridConfirmation}/>
+            </div>
+            {/snippet}
     </ModalWindow>
 {/if}
 
@@ -532,7 +545,7 @@
                     on:select={handleItemSelect}
                 />
             </div>
-            <button class="ms-2 btn btn-primary" on:click={() => (gridViewOpen = true)}>
+            <button class="ms-2 btn btn-primary" onclick={() => (gridViewOpen = true)}>
                 <Fa icon={faThLarge}/>
             </button>
         </div>
@@ -550,7 +563,7 @@
     <div class="border form-control mb-2 bg-light-three" style="min-height: 192px; max-height: 768px; overflow-y: scroll">
         {#if items.length > 0}
             <div class="mb-2">
-                <button on:click={handleClearAll} class="w-100 btn btn-sm btn-danger"><Fa icon={faTrash}/>Remove all</button>
+                <button onclick={handleClearAll} class="w-100 btn btn-sm btn-danger"><Fa icon={faTrash}/>Remove all</button>
             </div>
         {/if}
         {#each items as item}
@@ -587,9 +600,9 @@
                     />
                 </div>
                 {#if item.type == "group"}
-                    <button class="ms-2 btn btn-sm btn-primary" on:click={() => explodeGroup(item.id)}><Fa icon={faExpand}/></button>
+                    <button class="ms-2 btn btn-sm btn-primary" onclick={() => explodeGroup(item.id)}><Fa icon={faExpand}/></button>
                 {/if}
-                <button class="ms-2 btn btn-sm btn-warning" on:click={() => removeSelectedItem(item.id)}><Fa icon={faTrash}/></button>
+                <button class="ms-2 btn btn-sm btn-warning" onclick={() => removeSelectedItem(item.id)}><Fa icon={faTrash}/></button>
             </div>
         {:else}
             <option value="!!">No tests selected.</option>
@@ -597,9 +610,9 @@
     </div>
     <div>
         {#if mode != "edit"}
-            <button class="btn btn-success w-100" on:click={handleCreatePlan}>Create</button>
+            <button class="btn btn-success w-100" onclick={handleCreatePlan}>Create</button>
         {:else}
-            <button class="btn btn-warning w-100" on:click={handleUpdatePlan}>Edit</button>
+            <button class="btn btn-warning w-100" onclick={handleUpdatePlan}>Edit</button>
         {/if}
     </div>
 </div>

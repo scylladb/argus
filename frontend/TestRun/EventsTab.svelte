@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
     import { faCheck, faTimes } from "@fortawesome/free-solid-svg-icons";
     import { onMount } from "svelte";
     import Fa from "svelte-fa";
@@ -6,26 +6,26 @@
     import StructuredEvent from "./StructuredEvent.svelte";
     import dayjs from "dayjs";
     import {sendMessage} from "../Stores/AlertStore";
-    export let testRun;
+    let { testRun } = $props();
 
-    let parsedEvents = [];
-    let filterString = "";
+    let parsedEvents = $state([]);
+    let filterString = $state("");
     let nemesisByKey = {};
     let nemesisPeriods = {};
     let eventEmbeddings = {};
     let eventDuplicates = {};
-    let distinctEvents = { ERROR: {}, CRITICAL: {}, WARNING: {}, NORMAL: {}, DEBUG: {} };
-    let shownDuplicates = {
+    let distinctEvents = $state({ ERROR: {}, CRITICAL: {}, WARNING: {}, NORMAL: {}, DEBUG: {} });
+    let shownDuplicates = $state({
         ERROR: new Set(),
         CRITICAL: new Set(),
         WARNING: new Set(),
         NORMAL: new Set(),
         DEBUG: new Set(),
-    };
-    let hasSimilarEventsData = false;
-    let isLoading = true;
+    });
+    let hasSimilarEventsData = $state(false);
+    let isLoading = $state(true);
 
-    const displayCategories = {
+    const displayCategories = $state({
         CRITICAL: {
             show: true,
             totalEvents: 0,
@@ -51,7 +51,7 @@
             totalEvents: 0,
             eventsSubmitted: 0,
         },
-    };
+    });
 
     /* OH GDO */
     const eventRegex = /(?<eventTimestamp>\d{2,4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})( <(?<receiveTimestamp>\d{2,4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})>)?: \((?<eventType>\w+) Severity\.(?<severity>[A-Z]+)\) (?<rawFields>.+)\n?/s;
@@ -366,10 +366,10 @@
     <div class="p-2 event-container">
         <div class="d-flex justify-content-end mb-2 rounded bg-light p-1">
             {#each Object.entries(displayCategories) as [category, info]}
-                <!-- svelte-ignore a11y-label-has-associated-control -->
+                <!-- svelte-ignore a11y_label_has_associated_control -->
                 <button
                     class="ms-2 px-2 py-1 btn severity-{category.toLowerCase()}"
-                    on:click={() => (info.show = !info.show)}
+                    onclick={() => (info.show = !info.show)}
                 >
                     {#if info.show}
                         <Fa icon={faCheck} />
@@ -408,7 +408,7 @@
     </div>
 {:else if isLoading}
     <div class="text-center p-2 m-1 d-flex align-items-center justify-content-center event-container">
-        <span class="spinner-border me-4" /><span class="fs-4">Loading...</span>
+        <span class="spinner-border me-4"></span><span class="fs-4">Loading...</span>
     </div>
 {:else}
     <div class="text-center p-1 text-muted">No events submitted yet.</div>

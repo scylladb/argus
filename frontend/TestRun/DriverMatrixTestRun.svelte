@@ -1,4 +1,4 @@
-    <script>
+    <script lang="ts">
     import { onMount, onDestroy, createEventDispatcher } from "svelte";
     import Fa from "svelte-fa";
     import {
@@ -21,18 +21,27 @@
     import DriverMatrixTestCollection from "./DriverMatrixTestCollection.svelte";
     import IssueTab from "./IssueTab.svelte";
 
-    export let runId = "";
-    export let buildNumber = -1;
-    export let testInfo = {};
-    export let tab = "";
+    interface Props {
+        runId?: string;
+        buildNumber?: any;
+        testInfo?: any;
+        tab?: string;
+    }
+
+    let {
+        runId = "",
+        buildNumber = $bindable(-1),
+        testInfo = {},
+        tab = ""
+    }: Props = $props();
     const dispatch = createEventDispatcher();
-    let testRun = undefined;
+    let testRun = $state(undefined);
     let runRefreshInterval;
-    let activeTab = tab.toLowerCase() || "details";
-    let failedToLoad = false;
+    let activeTab = $state(tab.toLowerCase() || "details");
+    let failedToLoad = $state(false);
 
     // Track which tabs have been visited
-    let visitedTabs = {};
+    let visitedTabs = $state({});
     visitedTabs[activeTab] = true;
 
     const setActiveTab = (tabName) => {
@@ -100,14 +109,14 @@
             {/if}
         </div>
         <div class="ms-auto text-end">
-            <button class="btn btn-sm btn-outline-dark" title="Refresh" on:click={() => {
+            <button class="btn btn-sm btn-outline-dark" title="Refresh" onclick={() => {
                 fetchTestRunData();
             }}
                 ><Fa icon={faRefresh} /></button
             >
         </div>
         <div class="ms-2 text-end">
-            <button class="btn btn-sm btn-outline-dark" title="Close" on:click={() => {
+            <button class="btn btn-sm btn-outline-dark" title="Close" onclick={() => {
                 dispatch("closeRun", { id: runId });
             }}
                 ><Fa icon={faTimes} /></button
@@ -145,8 +154,8 @@
                         data-bs-target="#nav-details-{runId}"
                         type="button"
                         role="tab"
-                        on:click={() => setActiveTab("details")}
-                        on:keydown={(e) => e.key === "Enter" && setActiveTab("details")}
+                        onclick={() => setActiveTab("details")}
+                        onkeydown={(e) => e.key === "Enter" && setActiveTab("details")}
                         ><Fa icon={faInfoCircle}/> Details</button
                     >
                     <button
@@ -157,8 +166,8 @@
                         data-bs-target="#nav-tests-{runId}"
                         type="button"
                         role="tab"
-                        on:click={() => setActiveTab("tests")}
-                        on:keydown={(e) => e.key === "Enter" && setActiveTab("tests")}
+                        onclick={() => setActiveTab("tests")}
+                        onkeydown={(e) => e.key === "Enter" && setActiveTab("tests")}
                         ><Fa icon={faBoxes}/> Tests</button
                     >
                     <button
@@ -168,8 +177,8 @@
                         data-bs-toggle="tab"
                         data-bs-target="#nav-discuss-{runId}"
                         type="button"
-                        on:click={() => setActiveTab("discuss")}
-                        on:keydown={(e) => e.key === "Enter" && setActiveTab("discuss")}
+                        onclick={() => setActiveTab("discuss")}
+                        onkeydown={(e) => e.key === "Enter" && setActiveTab("discuss")}
                         role="tab"
                         ><Fa icon={faComments}/> Discussion</button
                     >
@@ -181,8 +190,8 @@
                         data-bs-target="#nav-issues-{runId}"
                         type="button"
                         role="tab"
-                        on:click={() => setActiveTab("issues")}
-                        on:keydown={(e) => e.key === "Enter" && setActiveTab("issues")}
+                        onclick={() => setActiveTab("issues")}
+                        onkeydown={(e) => e.key === "Enter" && setActiveTab("issues")}
                         ><Fa icon={faCodeBranch}/> Issues</button
                     >
                     <button
@@ -192,8 +201,8 @@
                         data-bs-toggle="tab"
                         data-bs-target="#nav-activity-{runId}"
                         type="button"
-                        on:click={() => setActiveTab("activity")}
-                        on:keydown={(e) => e.key === "Enter" && setActiveTab("activity")}
+                        onclick={() => setActiveTab("activity")}
+                        onkeydown={(e) => e.key === "Enter" && setActiveTab("activity")}
                         role="tab"
                         ><Fa icon={faExclamationTriangle}/> Activity</button
                     >
@@ -270,7 +279,7 @@
         <div
             class="text-center p-2 m-1 d-flex align-items-center justify-content-center"
         >
-            <span class="spinner-border me-4" /><span class="fs-4"
+            <span class="spinner-border me-4"></span><span class="fs-4"
                 >Loading...</span
             >
         </div>

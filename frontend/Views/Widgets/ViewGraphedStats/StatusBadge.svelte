@@ -3,7 +3,11 @@
     import { subUnderscores, titleCase } from "../../../Common/TextUtils";
     import { TestRun } from "./Interfaces";
 
-    export let run: TestRun;
+    interface Props {
+        run: TestRun;
+    }
+
+    let { run }: Props = $props();
 
     const status = run?.status || "";
 </script>

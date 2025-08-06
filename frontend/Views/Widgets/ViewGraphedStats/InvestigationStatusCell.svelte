@@ -5,7 +5,11 @@
     } from "../../../Common/TestStatus";
     import type { TestRun } from "./Interfaces";
 
-    export let run: TestRun;
+    interface Props {
+        run: TestRun;
+    }
+
+    let { run }: Props = $props();
 
     const status = run.investigation_status;
     const statusText = TestInvestigationStatusStrings[status as keyof typeof TestInvestigationStatusStrings] || status;

@@ -1,10 +1,16 @@
-<script>
+<script lang="ts">
     import { createEventDispatcher } from "svelte";
     import { onMount, onDestroy } from "svelte";
 
     const dispatch = createEventDispatcher();
 
-    export let widthClass = "h-50";
+    interface Props {
+        widthClass?: string;
+        title?: import('svelte').Snippet;
+        body?: import('svelte').Snippet;
+    }
+
+    let { widthClass = "h-50", title, body }: Props = $props();
 
     function handleKeyDown(event) {
         if (event.key === "Escape") {
@@ -13,25 +19,25 @@
     }
 </script>
 
-<svelte:window on:keydown={handleKeyDown} />
+<svelte:window onkeydown={handleKeyDown} />
 <div class="modal-window">
     <div class="d-flex align-items-center justify-content-center p-4">
         <div class="rounded bg-white p-4 {widthClass}">
             <div class="mb-2 d-flex border-bottom pb-2">
                 <h5>
-                    <slot name="title"><!-- optional fallback --></slot>
+                    {#if title}{@render title()}{:else}<!-- optional fallback -->{/if}
                 </h5>
                 <div class="ms-auto">
                     <button
                         class="btn btn-close"
-                        on:click={() => {
+                        onclick={() => {
                             dispatch("modalClose");
                         }}
                     ></button>
                 </div>
             </div>
             <div>
-                <slot name="body"><!-- optional fallback --></slot>
+                {#if body}{@render body()}{:else}<!-- optional fallback -->{/if}
             </div>
         </div>
     </div>

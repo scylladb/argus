@@ -1,6 +1,6 @@
-<script>
+<script lang="ts">
     import { getPicture } from "../Common/UserUtils";
-    export let user;
+    let { user } = $props();
 </script>
 
 <div class="d-flex align-items-center px-2">

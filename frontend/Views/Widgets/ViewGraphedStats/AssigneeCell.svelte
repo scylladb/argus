@@ -1,16 +1,24 @@
 <script lang="ts">
+    import { run as run_1 } from 'svelte/legacy';
+
     import { getUser, getPicture } from "../../../Common/UserUtils";
     import { userList } from "../../../Stores/UserlistSubscriber";
     import type { TestRun } from "./Interfaces";
 
-    export let run: TestRun;
+    interface Props {
+        run: TestRun;
+    }
 
-    let users = {};
-    $: users = $userList;
+    let { run }: Props = $props();
+
+    let users = $state({});
+    run_1(() => {
+        users = $userList;
+    });
 
     const assignee = run.assignee;
-    $: user = assignee && assignee !== "Unassigned" ? getUser(assignee, users) : null;
-    $: pictureUrl = user ? getPicture(user.picture_id) : "";
+    let user = $derived(assignee && assignee !== "Unassigned" ? getUser(assignee, users) : null);
+    let pictureUrl = $derived(user ? getPicture(user.picture_id) : "");
 </script>
 
 {#if !assignee || assignee === "Unassigned"}

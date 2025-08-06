@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
     import { createEventDispatcher, onMount } from "svelte";
     import Select from "svelte-select";
     import { endDate, startDate, timestampToISODate } from "../Common/DateUtils";
@@ -9,12 +9,14 @@
     import { filterUser } from "../Common/SelectUtils";
     import ModalWindow from "../Common/ModalWindow.svelte";
 
-    export let selectedTests = [];
-    export let clickedTests = {};
-    export let selectedAssignee;
-    export let releaseData = {};
-    export let plannerData = {};
-    export let users = {};
+    let {
+        selectedTests = $bindable([]),
+        clickedTests = $bindable({}),
+        selectedAssignee = $bindable(),
+        releaseData = {},
+        plannerData = {},
+        users = $bindable({})
+    } = $props();
     let oldSchedule;
 
     export const enterEditMode = function (schedule) {
@@ -36,9 +38,9 @@
     export const getCurrentMode = () => mode;
     export const getCurrentScheduleId = () => newSchedule.id;
 
-    let mode = "create"; // create, edit
-    let deleting = false;
-    let lockButtons = false;
+    let mode = $state("create"); // create, edit
+    let deleting = $state(false);
+    let lockButtons = $state(false);
 
     const getAllComments = function () {
         return plannerData.tests
@@ -74,7 +76,7 @@
         }, []);
     };
 
-    let autocompleteVersions = [];
+    let autocompleteVersions = $state([]);
     let autocompleteComments = getAllComments();
 
     const dispatch = createEventDispatcher();
@@ -89,7 +91,7 @@
         tag: "",
     };
 
-    let newSchedule = Object.assign(PayloadTemplate);
+    let newSchedule = $state(Object.assign(PayloadTemplate));
 
     const submitNewSchedule = async function () {
         try {
@@ -239,17 +241,21 @@
 </script>
 {#if deleting}
     <ModalWindow on:modalClose={() => deleting = false}>
-        <span slot="title">Deleting schedule</span>
-        <div slot="body">
-            <div>Are you sure you want to delete this schedule?</div>
-            {#if lockButtons}
-                <div><span class="spinner-border spinner-border-sm"></span> Working...</div>
-            {/if}
-            <div class="text-end">
-                <button class="btn btn-danger" disabled={lockButtons} on:click={() => deleteSchedule(newSchedule.id)}>Confirm</button>
-                <button class="btn btn-secondary" disabled={lockButtons} on:click={() => deleting = false}>Cancel</button>
+        {#snippet title()}
+                <span >Deleting schedule</span>
+            {/snippet}
+        {#snippet body()}
+                <div >
+                <div>Are you sure you want to delete this schedule?</div>
+                {#if lockButtons}
+                    <div><span class="spinner-border spinner-border-sm"></span> Working...</div>
+                {/if}
+                <div class="text-end">
+                    <button class="btn btn-danger" disabled={lockButtons} onclick={() => deleteSchedule(newSchedule.id)}>Confirm</button>
+                    <button class="btn btn-secondary" disabled={lockButtons} onclick={() => deleting = false}>Cancel</button>
+                </div>
             </div>
-        </div>
+            {/snippet}
     </ModalWindow>
 {/if}
 <div class="my-2 bg-light-one p-2 rounded shadow-sm">
@@ -263,17 +269,17 @@
     {#if Object.values(users).length > 0}
         {#if mode == "create"}
             <div class="mb-2 w-100">
-                <button class="btn btn-success w-100" on:click={submitNewSchedule} disabled={lockButtons}>{#if lockButtons}
+                <button class="btn btn-success w-100" onclick={submitNewSchedule} disabled={lockButtons}>{#if lockButtons}
                     <span class="spinner-border spinner-border-sm"></span>
                 {/if} Create</button>
             </div>
         {:else if mode == "edit"}
             <div class="mb-2 btn-group w-100">
-                <button class="btn btn-warning" disabled={lockButtons} on:click={() => updateSchedule()}>{#if lockButtons}
+                <button class="btn btn-warning" disabled={lockButtons} onclick={() => updateSchedule()}>{#if lockButtons}
                     <span class="spinner-border spinner-border-sm"></span>
                 {/if} Update</button>
-                <button class="btn btn-secondary" disabled={lockButtons} on:click={() => exitEditMode()}>Cancel</button>
-                <button class="btn btn-danger" disabled={lockButtons} on:click={() => deleting = true}>Delete</button>
+                <button class="btn btn-secondary" disabled={lockButtons} onclick={() => exitEditMode()}>Cancel</button>
+                <button class="btn btn-danger" disabled={lockButtons} onclick={() => deleting = true}>Delete</button>
             </div>
         {/if}
         <div class="d-flex mb-1">
@@ -284,7 +290,7 @@
                     id="newScheduleComment"
                     style="resize: none;"
                     bind:value={newSchedule.tag}
-                />
+></textarea>
             </div>
         </div>
         <div class="mb-2">
@@ -327,7 +333,7 @@
                 </datalist>
                 {#if selectedTests.length > 0}
                         <div class="w-100 mb-1">
-                            <button class="w-100 btn btn-danger" disabled={lockButtons} on:click={() => handleTestsClear()}><Fa icon={faTrash}/> Clear All</button>
+                            <button class="w-100 btn btn-danger" disabled={lockButtons} onclick={() => handleTestsClear()}><Fa icon={faTrash}/> Clear All</button>
                         </div>
                 {/if}
                 <ul class="list-group">
@@ -339,7 +345,7 @@
                                     <button
                                         class="btn btn-dark btn-sm"
                                         disabled={lockButtons}
-                                        on:click={() => {
+                                        onclick={() => {
                                             selectedTests = selectedTests.filter(v => v.id != test.id);
                                             clickedTests[test.id] = false;
                                         }}
@@ -351,7 +357,7 @@
                             <div>
                                 <div class="input-group">
                                     <input type="text" class="form-control" placeholder="Comment" list="comment-autocomplete" bind:value={test.comment}>
-                                    <button class="btn btn-secondary" disabled={lockButtons} on:click={() => selectedTests.forEach(v => {
+                                    <button class="btn btn-secondary" disabled={lockButtons} onclick={() => selectedTests.forEach(v => {
                                         v.comment = test.comment;
                                         selectedTests = selectedTests;
                                     })}>All</button>
@@ -366,7 +372,7 @@
         </div>
     {:else}
         <div class="col d-flex align-items-center justify-content-center">
-            <div class="spinner-border me-3 text-muted" />
+            <div class="spinner-border me-3 text-muted"></div>
             <div class="display-6 text-muted">Fetching users...</div>
         </div>
     {/if}

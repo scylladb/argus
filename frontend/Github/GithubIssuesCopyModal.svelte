@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
     import Fa from "svelte-fa";
     import {faClipboard, faCopy} from "@fortawesome/free-solid-svg-icons";
 
@@ -7,11 +7,22 @@
     import {titleCase} from "../Common/TextUtils";
     import Color from "color";
 
-    export let sortedIssues = {};
-    export let currentPage = 0;
-    export let selectedLabels = [];
-    export let btnClass = "btn-success";
-    let issueCopy = false;
+    interface Props {
+        sortedIssues?: any;
+        currentPage?: number;
+        selectedLabels?: any;
+        btnClass?: string;
+        children?: import('svelte').Snippet;
+    }
+
+    let {
+        sortedIssues = {},
+        currentPage = 0,
+        selectedLabels = [],
+        btnClass = "btn-success",
+        children
+    }: Props = $props();
+    let issueCopy = $state(false);
 
 
     const copyIssueTableAsMarkdown = function () {
@@ -44,68 +55,72 @@
     };
 </script>
 
-<button class="btn {btnClass}" on:click={() => issueCopy = true}>
-    <slot></slot>
+<button class="btn {btnClass}" onclick={() => issueCopy = true}>
+    {@render children?.()}
 </button>
 
 {#if issueCopy}
     <ModalWindow on:modalClose={() => issueCopy = false}>
-        <div class="" slot="title">
-            Issues
-        </div>
-        <div class="" slot="body">
-            <div class="mb-2 text-end">
-                <button class="btn btn-outline-primary" on:click={copyIssueTableAsHTML}>
-                    <Fa icon={faHtml5}/>
-                    Copy as HTML
-                </button>
-                <button class="btn btn-outline-primary" on:click={copyIssueTableAsMarkdown}>
-                    <Fa icon={faMarkdown}/>
-                    Copy as Markdown
-                </button>
-                <button class="btn btn-outline-primary" on:click={copyIssueTableAsText}>
-                    <Fa icon={faClipboard}/>
-                    Copy as Text
-                </button>
+        {#snippet title()}
+                <div class="" >
+                Issues
             </div>
-            <div id="modalTableIssueView">
-                <table class="table" style="border: solid 1px black">
-                    <thead>
-                        <tr>
-                            <th style="border: solid 1px black">State</th>
-                            <th style="border: solid 1px black">Issue</th>
-                            <th style="border: solid 1px black">Title</th>
-                            <th style="border: solid 1px black">Tags</th>
-                            <th style="border: solid 1px black">Assignee</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    {#each sortedIssues[currentPage] ?? [] as issue (issue.id)}
-                        <tr>
-                            <td style="border: solid 1px black">{titleCase(issue?.state)}</td>
-                            <td style="border: solid 1px black">
-                                <a class="link-primary" href="{issue.url}">{issue.owner}/{issue.repo}#{issue.number}</a>
-                            </td>
-                            <td style="border: solid 1px black">
-                                {issue.title}
-                            </td>
-                            <td style="border: solid 1px black">
-                                {#each issue.labels as label}
-                                    <span style="text-decoration: underline; color: {Color(`#${label.color}`).darken(0.50)}">{label.name}</span><br>
-                                {/each}
-                            </td>
-                            <td style="border: solid 1px black">
-                                {#each issue.assignees as assignee}
-                                    <a href="{assignee.html_url}">@{assignee.login}</a>
-                                {:else}
-                                    None
-                                {/each}
-                            </td>
-                        </tr>
-                    {/each}
-                    </tbody>
-                </table>
+            {/snippet}
+        {#snippet body()}
+                <div class="" >
+                <div class="mb-2 text-end">
+                    <button class="btn btn-outline-primary" onclick={copyIssueTableAsHTML}>
+                        <Fa icon={faHtml5}/>
+                        Copy as HTML
+                    </button>
+                    <button class="btn btn-outline-primary" onclick={copyIssueTableAsMarkdown}>
+                        <Fa icon={faMarkdown}/>
+                        Copy as Markdown
+                    </button>
+                    <button class="btn btn-outline-primary" onclick={copyIssueTableAsText}>
+                        <Fa icon={faClipboard}/>
+                        Copy as Text
+                    </button>
+                </div>
+                <div id="modalTableIssueView">
+                    <table class="table" style="border: solid 1px black">
+                        <thead>
+                            <tr>
+                                <th style="border: solid 1px black">State</th>
+                                <th style="border: solid 1px black">Issue</th>
+                                <th style="border: solid 1px black">Title</th>
+                                <th style="border: solid 1px black">Tags</th>
+                                <th style="border: solid 1px black">Assignee</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        {#each sortedIssues[currentPage] ?? [] as issue (issue.id)}
+                            <tr>
+                                <td style="border: solid 1px black">{titleCase(issue?.state)}</td>
+                                <td style="border: solid 1px black">
+                                    <a class="link-primary" href="{issue.url}">{issue.owner}/{issue.repo}#{issue.number}</a>
+                                </td>
+                                <td style="border: solid 1px black">
+                                    {issue.title}
+                                </td>
+                                <td style="border: solid 1px black">
+                                    {#each issue.labels as label}
+                                        <span style="text-decoration: underline; color: {Color(`#${label.color}`).darken(0.50)}">{label.name}</span><br>
+                                    {/each}
+                                </td>
+                                <td style="border: solid 1px black">
+                                    {#each issue.assignees as assignee}
+                                        <a href="{assignee.html_url}">@{assignee.login}</a>
+                                    {:else}
+                                        None
+                                    {/each}
+                                </td>
+                            </tr>
+                        {/each}
+                        </tbody>
+                    </table>
+                </div>
             </div>
-        </div>
+            {/snippet}
     </ModalWindow>
 {/if}

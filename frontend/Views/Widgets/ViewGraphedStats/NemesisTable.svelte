@@ -4,11 +4,15 @@
     import StatusBadge from "./StatusBadge.svelte";
     import type { NemesisData } from "./Interfaces";
 
-    export let nemesisName: string | null;
-    export let nemesisData: NemesisData[];
-    export let onClose: () => void;
+    interface Props {
+        nemesisName: string | null;
+        nemesisData: NemesisData[];
+        onClose: () => void;
+    }
 
-    $: items = nemesisName ? nemesisData.filter((n) => n.name === nemesisName) : [];
+    let { nemesisName, nemesisData, onClose }: Props = $props();
+
+    let items = $derived(nemesisName ? nemesisData.filter((n) => n.name === nemesisName) : []);
 
     const columns = [
         {

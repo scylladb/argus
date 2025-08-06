@@ -1,11 +1,8 @@
 <script>
-    import { createEventDispatcher } from "svelte";
-    export let tests;
-    export let groups;
-    const dispatch = createEventDispatcher();
+    let { tests, groups } = $props();
 
-    let selectedGroup = tests.length > 0 ? tests[0].group_id : undefined;
-    let selectedTests = [];
+    let selectedGroup = $state(tests.length > 0 ? tests[0].group_id : undefined);
+    let selectedTests = $state([]);
 
     const handleTestsMove = function () {
         dispatch("testsMove", {
@@ -49,10 +46,10 @@
                 </select>
             </div>
             <div class="form-group text-end">
-                <button class="btn btn-secondary" on:click={handleCancel}>
+                <button class="btn btn-secondary" onclick={handleCancel}>
                     Cancel
                 </button>
-                <button class="btn btn-success" on:click={handleTestsMove}>
+                <button class="btn btn-success" onclick={handleTestsMove}>
                     Move
                 </button>
             </div>

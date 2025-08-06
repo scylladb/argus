@@ -5,15 +5,24 @@
     import Fa from "svelte-fa";
     import { createEventDispatcher, onMount } from "svelte";
 
-    export let testData: PytestResult[] = [];
-    export let fetching = false;
     const dispatch = createEventDispatcher();
 
     let PAGE_SIZE = 50;
-    let currentPage = 1;
-    export let filterString = "";
-    export let testString = "";
-    let dirty = false;
+    let currentPage = $state(1);
+    interface Props {
+        testData?: PytestResult[];
+        fetching?: boolean;
+        filterString?: string;
+        testString?: string;
+    }
+
+    let {
+        testData = [],
+        fetching = false,
+        filterString = $bindable(""),
+        testString = $bindable("")
+    }: Props = $props();
+    let dirty = $state(false);
     const shouldFilter = function () {
         dispatch("queryUpdated", { query: filterString} );
         dirty = false;
@@ -48,18 +57,18 @@
         return data;
     };
 
-    $: pagedTests = paginateTestData(testData);
+    let pagedTests = $derived(paginateTestData(testData));
 
 </script>
 
 <div class="rounded bg-light-one p-2">
     <div class="rounded bg-white p-2 mb-2 input-group">
-        <input class="form-control form-input" type="text" placeholder="Filter test by name" bind:value={testString} on:input={() => dirty = true}>
-        <button class="btn btn-primary" on:click={shouldSearch} disabled={(testString.length == 0 || fetching) && !dirty}><Fa icon={faSearch}/>Search Specific Test</button>
+        <input class="form-control form-input" type="text" placeholder="Filter test by name" bind:value={testString} oninput={() => dirty = true}>
+        <button class="btn btn-primary" onclick={shouldSearch} disabled={(testString.length == 0 || fetching) && !dirty}><Fa icon={faSearch}/>Search Specific Test</button>
     </div>
     <div class="rounded bg-white p-2 mb-2 input-group">
-        <input class="form-control form-input" type="text" placeholder="Filter test body" bind:value={filterString} on:input={() => dirty = true}>
-        <button class="btn btn-primary" on:click={shouldFilter} disabled={(filterString.length == 0 || fetching) && !dirty}><Fa icon={faSearch}/>Search</button>
+        <input class="form-control form-input" type="text" placeholder="Filter test body" bind:value={filterString} oninput={() => dirty = true}>
+        <button class="btn btn-primary" onclick={shouldFilter} disabled={(filterString.length == 0 || fetching) && !dirty}><Fa icon={faSearch}/>Search</button>
     </div>
     <div class="rounded bg-white p-2">
         <div class="p-1 rounded bg-light-one">
@@ -78,7 +87,7 @@
 
     {#if pagedTests.length > 1}
         <div class="my-2">
-                <button class="w-100 btn btn-primary me-1 mb-1" on:click={() => currentPage += 1}>Show more...</button>
+                <button class="w-100 btn btn-primary me-1 mb-1" onclick={() => currentPage += 1}>Show more...</button>
         </div>
     {/if}
 </div>

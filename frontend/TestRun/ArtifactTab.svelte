@@ -1,15 +1,14 @@
-<script>
+<script lang="ts">
     import { faPlus } from "@fortawesome/free-solid-svg-icons";
     import ArtifactRow from "./ArtifactRow.svelte";
     import { sendMessage } from "../Stores/AlertStore";
     import { createEventDispatcher } from "svelte";
     import Fa from "svelte-fa";
 
-    export let testRun;
-    export let testInfo;
+    let { testRun, testInfo } = $props();
 
-    let logName = "";
-    let logLink = "";
+    let logName = $state("");
+    let logLink = $state("");
     const dispatch = createEventDispatcher();
 
     const addLogLink = async function() {
@@ -80,7 +79,7 @@
                 class="btn btn-sm btn-primary"
                 data-bs-toggle="collapse"
                 data-bs-target="#collapseAddLink-{testRun.id}"
-                on:click={addLogLink}>
+                onclick={addLogLink}>
                 Submit
             </button>
         </div>

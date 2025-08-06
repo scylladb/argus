@@ -1,7 +1,4 @@
-<script>
-    export let resources;
-    export let backend;
-    export let run_id;
+<script lang="ts">
     import { timestampToISODate } from "../Common/DateUtils";
     import { titleCase } from "../Common/TextUtils";
     import Fa from "svelte-fa";
@@ -10,6 +7,7 @@
         faPlay,
     } from "@fortawesome/free-solid-svg-icons";
     import { sendMessage } from "../Stores/AlertStore";
+    let { resources = $bindable(), backend, run_id } = $props();
     let sortHeaders = {
         creationTime: ["instance_info", "creation_time"],
         terminationTime: ["instance_info", "termination_time"],
@@ -25,9 +23,9 @@
         publicIp: ["instance_info", "public_ip"],
         privateIp: ["instance_info", "private_ip"],
     };
-    let sortHeader = "name";
-    let sortAscending = false;
-    let filterString = "";
+    let sortHeader = $state("name");
+    let sortAscending = $state(false);
+    let filterString = $state("");
 
     const tableStates = {
         running: "table-success",
@@ -88,7 +86,7 @@
         <button
             type="button"
             class="btn btn-outline-success me-2"
-            on:click={() => {
+            onclick={() => {
                 navigator.clipboard.writeText(
                     CMD_CLEAN_RESOURCES
                 );
@@ -110,7 +108,7 @@
         class="form-control"
         type="text"
         placeholder="Filter resources"
-        on:keyup={(e) => {
+        onkeyup={(e) => {
             filterString = e.target.value;
             resources = resources;
         }}
@@ -123,7 +121,7 @@
                 role="button"
                 scope="col"
                 class="text-center align-middle"
-                on:click={() => {
+                onclick={() => {
                     sortHeader = "provider";
                     sortAscending = !sortAscending;
                 }}
@@ -142,7 +140,7 @@
                 role="button"
                 scope="col"
                 class="text-center align-middle"
-                on:click={() => {
+                onclick={() => {
                     sortHeader = "type";
                     sortAscending = !sortAscending;
                 }}
@@ -161,7 +159,7 @@
                 role="button"
                 scope="col"
                 class="text-center align-middle"
-                on:click={() => {
+                onclick={() => {
                     sortHeader = "name";
                     sortAscending = !sortAscending;
                 }}
@@ -180,7 +178,7 @@
                 role="button"
                 scope="col"
                 class="text-center align-middle"
-                on:click={() => {
+                onclick={() => {
                     sortHeader = "region";
                     sortAscending = !sortAscending;
                 }}
@@ -199,7 +197,7 @@
                 role="button"
                 scope="col"
                 class="text-center align-middle"
-                on:click={() => {
+                onclick={() => {
                     sortHeader = "dcName";
                     sortAscending = !sortAscending;
                 }}
@@ -218,7 +216,7 @@
                 role="button"
                 scope="col"
                 class="text-center align-middle"
-                on:click={() => {
+                onclick={() => {
                     sortHeader = "rackName";
                     sortAscending = !sortAscending;
                 }}
@@ -237,7 +235,7 @@
                 role="button"
                 scope="col"
                 class="text-center align-middle"
-                on:click={() => {
+                onclick={() => {
                     sortHeader = "shards";
                     sortAscending = !sortAscending;
                 }}
@@ -256,7 +254,7 @@
                 role="button"
                 scope="col"
                 class="text-center align-middle"
-                on:click={() => {
+                onclick={() => {
                     sortHeader = "publicIp";
                     sortAscending = !sortAscending;
                 }}
@@ -275,7 +273,7 @@
                 role="button"
                 scope="col"
                 class="text-center align-middle"
-                on:click={() => {
+                onclick={() => {
                     sortHeader = "privateIp";
                     sortAscending = !sortAscending;
                 }}
@@ -294,7 +292,7 @@
                 role="button"
                 scope="col"
                 class="text-center align-middle"
-                on:click={() => {
+                onclick={() => {
                     sortHeader = "state";
                     sortAscending = !sortAscending;
                 }}
@@ -313,7 +311,7 @@
                 role="button"
                 scope="col"
                 class="text-center align-middle"
-                on:click={() => {
+                onclick={() => {
                     sortHeader = "creationTime";
                     sortAscending = !sortAscending;
                 }}
@@ -332,7 +330,7 @@
                 role="button"
                 scope="col"
                 class="text-center align-middle"
-                on:click={() => {
+                onclick={() => {
                     sortHeader = "terminationTime";
                     sortAscending = !sortAscending;
                 }}
@@ -351,7 +349,7 @@
                 role="button"
                 scope="col"
                 class="text-center align-middle"
-                on:click={() => {
+                onclick={() => {
                     sortHeader = "terminationReason";
                     sortAscending = !sortAscending;
                 }}

@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
     import { createEventDispatcher } from "svelte";
     import NumberStats from "../Stats/NumberStats.svelte";
     import { getPicture } from "../Common/UserUtils";
@@ -6,15 +6,29 @@
     import { faArrowDown, faArrowUp } from "@fortawesome/free-solid-svg-icons";
     import TestDashboardTest from "./TestDashboardTest.svelte";
 
-    export let stats;
-    export let groupStats;
-    export let collapsed;
-    export let filtered = false;
-    export let dashboardObjectType = "release";
-    export let assigneeList;
-    export let users;
-    export let doFilters;
-    export let clickedTests;
+    interface Props {
+        stats: any;
+        groupStats: any;
+        collapsed: any;
+        filtered?: boolean;
+        dashboardObjectType?: string;
+        assigneeList: any;
+        users: any;
+        doFilters: any;
+        clickedTests: any;
+    }
+
+    let {
+        stats,
+        groupStats,
+        collapsed,
+        filtered = false,
+        dashboardObjectType = "release",
+        assigneeList,
+        users,
+        doFilters,
+        clickedTests = $bindable()
+    }: Props = $props();
 
     const dispatch = createEventDispatcher();
 
@@ -73,7 +87,7 @@
                     class="btn btn-sm"
                     data-bs-toggle="collapse"
                     data-bs-target="#collapse-{groupStats.group.id}"
-                    on:click={() => {
+                    onclick={() => {
                         dispatch("toggleCollapse", `collapse-${groupStats.group.id}`);
                     }}
                 >

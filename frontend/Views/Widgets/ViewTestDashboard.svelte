@@ -1,14 +1,16 @@
-<script>
-    export let dashboardObject;
-    export let dashboardObjectType;
-    export let stats;
-    export let settings;
-    export let productVersion;
-    export let clickedTests;
-    export let widgetId;
+<script lang="ts">
 
     import TestDashboard from "../../ReleaseDashboard/TestDashboard.svelte";
     import TestPopoutSelector from "../../ReleaseDashboard/TestPopoutSelector.svelte";
+    let {
+        dashboardObject,
+        dashboardObjectType,
+        stats = $bindable(),
+        settings,
+        productVersion = $bindable(),
+        clickedTests = $bindable(),
+        widgetId
+    } = $props();
 
 </script>
 <div class="row mb-2">

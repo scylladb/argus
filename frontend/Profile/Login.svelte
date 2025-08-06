@@ -2,15 +2,17 @@
     import { faGithub } from "@fortawesome/free-brands-svg-icons";
     import Fa from "svelte-fa";
 
-    export let csrfToken;
-    export let githubCid;
-    export let githubScopes;
-    export let methods = [];
+    let {
+        csrfToken,
+        githubCid,
+        githubScopes,
+        methods = []
+    } = $props();
 
     /**
      * @type {boolean}
      */
-    let disableRepoAccess = JSON.parse(localStorage.getItem("loginPageDisableFullRepoAccess")) ?? false;
+    let disableRepoAccess = $state(JSON.parse(localStorage.getItem("loginPageDisableFullRepoAccess")) ?? false);
 
     /**
      * @param {string} rawScopes
@@ -69,7 +71,7 @@
                         type="checkbox"
                         class="form-check-input"
                         bind:checked={disableRepoAccess}
-                        on:change={() => {
+                        onchange={() => {
                             localStorage.setItem("loginPageDisableFullRepoAccess", `${disableRepoAccess}`);
                         }}
                     >

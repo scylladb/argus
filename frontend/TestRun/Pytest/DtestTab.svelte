@@ -1,10 +1,10 @@
-<script>
+<script lang="ts">
     import { faEye } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
     import {createEventDispatcher} from "svelte";
     import {Cases} from "../Generic/Subtest";
 
-    export let testRun;
+    let { testRun } = $props();
 
     const dispatcher = createEventDispatcher();
 
@@ -17,6 +17,6 @@
     data-bs-target="#nav-gemini-{testRun}"
     type="button"
     role="tab"
-    on:click={() => dispatcher("tab-switched", {tab: Cases.DTEST})}
+    onclick={() => dispatcher("tab-switched", {tab: Cases.DTEST})}
     ><Fa icon={faEye}/> DTest </button
 >

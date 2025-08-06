@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
     import * as marked from "marked";
     import Fa from "svelte-fa";
     import { faEdit, faArrowAltCircleLeft, faTrashAlt } from "@fortawesome/free-regular-svg-icons";
@@ -10,8 +10,16 @@
     import { markdownRendererOptions } from "../markdownOptions";
     import { MarkdownUserMention } from "./MarkedMentionExtension";
     import { applicationCurrentUser } from "../argus";
-    export let users = {};
-    export let commentBody = {
+    interface Props {
+        users?: any;
+        commentBody?: any;
+        hideReplyButton?: boolean;
+        hideUserActions?: boolean;
+    }
+
+    let {
+        users = {},
+        commentBody = {
         id: "",
         message: "",
         release: "",
@@ -21,19 +29,20 @@
         release_id: "",
         test_run_id: "",
         posted_at: new Date(),
-    };
-    export let hideReplyButton = false;
-    export let hideUserActions = false;
+    },
+        hideReplyButton = false,
+        hideUserActions = false
+    }: Props = $props();
     marked.use({
         extensions: [MarkdownUserMention]
     });
 
     const dispatch = createEventDispatcher();
-    let editing = false;
-    let deleting = false;
+    let editing = $state(false);
+    let deleting = $state(false);
     let commentDate = new Date(commentBody.posted_at * 1000);
     let dateIntervalId;
-    let now = new Date();
+    let now = $state(new Date());
 
     const getUser = function () {
         return users[commentBody.user_id];
@@ -62,7 +71,7 @@
                 class="bg-blur text-muted text-center p-2 fs-4 h-100 d-flex align-items-center"
             >
                 <div class="flex-fill">
-                    <span class="spinner-grow" /> Deleting...
+                    <span class="spinner-grow"></span> Deleting...
                 </div>
             </div>
         </div>
@@ -77,7 +86,7 @@
             class="ms-2 border shadow-sm bg-light p-1 rounded fs-7 text-dark"
             title="{timestampToISODate(commentBody.posted_at * 1000)} UTC+0"
         >
-            {#if (now.getTime() - commentDate.getTime()) > 60000 }
+            {#if (now.getTime() - commentDate.getTime()) > 60000}
                 {humanizeDuration(now - commentDate, {
                     round: true,
                     units: ["y", "mo", "w", "d", "h", "m"],
@@ -92,7 +101,7 @@
                 <button
                     class="btn btn-light bg-editor"
                     title="Quote Reply"
-                    on:click={() => (dispatch("commentReply", { message: commentBody.message, author: commentBody.user_id }))}
+                    onclick={() => (dispatch("commentReply", { message: commentBody.message, author: commentBody.user_id }))}
                 >
                     <Fa icon={faArrowAltCircleLeft} />
                 </button>
@@ -103,7 +112,7 @@
                 <button
                     class="btn btn-light bg-editor"
                     title="Edit"
-                    on:click={() => {
+                    onclick={() => {
                         editing = true;
                         dispatch("commentEditing");
                     }}
@@ -153,7 +162,7 @@
                     class="btn-close"
                     data-bs-dismiss="modal"
                     aria-label="Close"
-                />
+></button>
             </div>
             <div class="modal-body">
                 <p>Are you sure you want to remove this comment?</p>
@@ -168,7 +177,7 @@
                     type="button"
                     class="btn btn-danger"
                     data-bs-dismiss="modal"
-                    on:click={() => {
+                    onclick={() => {
                         deleting = true;
                         dispatch("commentDelete", commentBody);
                     }}

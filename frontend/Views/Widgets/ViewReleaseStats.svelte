@@ -1,7 +1,6 @@
-<script>
+<script lang="ts">
     import ReleaseStats from "../../Stats/ReleaseStats.svelte";
-    export let settings;
-    export let stats;
+    let { settings, stats = $bindable() } = $props();
 
 </script>
 

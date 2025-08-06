@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import {onMount} from "svelte";
     import Fa from 'svelte-fa';
     import Select from "svelte-select";
@@ -19,34 +21,32 @@
     import ResultTable from "../../../TestRun/Components/ResultTable.svelte";
     import RunIssues from "./RunIssues.svelte";
 
-    export let dashboardObject;
+    let { dashboardObject } = $props();
 
-    let versions = [];
+    let versions = $state([]);
     let versioned_runs = {};
     let test_info = {};
-    let selectedVersionTestInfo = {};
-    let currentVersionIndex = 0;
-    let runResults = {};
-    let selectedScreenshot = "";
-    let expandedTests = {};
-    let currentVersionRuns = {};
-    let filters = {};
-    let selectedFilters = {};
-    let filteredTables = {};
-    let showFilters = {};
-    let versionItems = [];
-    let selectedVersionItem = {};
+    let selectedVersionTestInfo = $state({});
+    let currentVersionIndex = $state(0);
+    let runResults = $state({});
+    let selectedScreenshot = $state("");
+    let expandedTests = $state({});
+    let currentVersionRuns = $state({});
+    let filters = $state({});
+    let selectedFilters = $state({});
+    let filteredTables = $state({});
+    let showFilters = $state({});
+    let versionItems = $state([]);
+    let selectedVersionItem = $state({});
     type TestInfo = {
         build_id: string;
         name: string | null;
     };
 
-    $: currentVersionIndex = selectedVersionItem.value;
 
     onMount(async () => {
         await fetchResults();
     });
-    $: if (versions.length > 0) fetchRunResults(currentVersionIndex);
 
     /**
      * Assigns a name to each test if it is null and sorts the test info by test name.
@@ -249,6 +249,12 @@
         expandedTests[testId] = !expandedTests[testId];
         expandedTests = {...expandedTests};
     }
+    run(() => {
+        currentVersionIndex = selectedVersionItem.value;
+    });
+    run(() => {
+        if (versions.length > 0) fetchRunResults(currentVersionIndex);
+    });
 </script>
 
 <div class="card shadow-sm">
@@ -265,7 +271,7 @@
                 <h3 class="mb-0 text-white">Test Results Summary</h3>
                 <div class="d-flex align-items-center">
                     <button class="btn btn-outline-light me-2"
-                            on:click={() => selectedVersionItem = versionItems[currentVersionIndex-1]}
+                            onclick={() => selectedVersionItem = versionItems[currentVersionIndex-1]}
                             disabled={currentVersionIndex === 0}>
                         <Fa icon={faChevronLeft}/>
                     </button>
@@ -273,7 +279,7 @@
                         <Select bind:value={selectedVersionItem} items={versionItems} isClearable={false}/>
                     </div>
                     <button class="btn btn-outline-light ms-2"
-                            on:click={() => selectedVersionItem = versionItems[currentVersionIndex+1]}
+                            onclick={() => selectedVersionItem = versionItems[currentVersionIndex+1]}
                             disabled={currentVersionIndex === versions.length - 1}>
                         <Fa icon={faChevronRight}/>
                     </button>
@@ -294,7 +300,7 @@
                                 <Fa icon={faCheckCircle} class="text-success ms-2"/>
                             {/if}
                         </span>
-                        <button class="btn btn-outline-secondary" on:click={() => toggleTest(testId)}>
+                        <button class="btn btn-outline-secondary" onclick={() => toggleTest(testId)}>
                             <Fa icon={expandedTests[testId] ? faChevronUp : faChevronDown}/>
                         </button>
                     </h4>
@@ -302,13 +308,13 @@
                         {#if showFilters[testId]}
                             <div class="filters-container">
                                 <button class="btn btn-outline-dark colored"
-                                        on:click={() => { selectedFilters[testId] = []; filterTablesPerTest(); }}>X
+                                        onclick={() => { selectedFilters[testId] = []; filterTablesPerTest(); }}>X
                                 </button>
                                 {#each filters[testId] as filterGroup}
                                     {#each filterGroup.items as filter}
                                         <button
                                                 class="btn btn-outline-dark colored"
-                                                on:click={() => toggleFilter(testId, filter, filterGroup.level)}
+                                                onclick={() => toggleFilter(testId, filter, filterGroup.level)}
                                                 class:selected={selectedFilters[testId].some(f => f.name === filter && f.level === filterGroup.level)}
                                                 style="background-color: {getFilterColor(filterGroup.level)}"
                                         >

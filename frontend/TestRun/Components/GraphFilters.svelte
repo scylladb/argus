@@ -1,13 +1,19 @@
-<script>
+<script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import dayjs from "dayjs";
     import {createEventDispatcher, onMount} from "svelte";
 
-    export let dateRange = 6;
-    export let releasesFilters = {};
+    interface Props {
+        dateRange?: number;
+        releasesFilters?: any;
+    }
 
-    let showCustomInputs = false;
-    let startDate = "";
-    let endDate = "";
+    let { dateRange = $bindable(6), releasesFilters = $bindable({}) }: Props = $props();
+
+    let showCustomInputs = $state(false);
+    let startDate = $state("");
+    let endDate = $state("");
 
     const dispatch = createEventDispatcher();
 
@@ -33,7 +39,9 @@
         setDateRange(dateRange);
     });
 
-    $: setDateRange(dateRange);
+    run(() => {
+        setDateRange(dateRange);
+    });
 </script>
 
 <div class="filters-container">
@@ -41,44 +49,44 @@
     <div class="input-group input-group-inline input-group-sm mx-2">
         <button class="btn btn-outline-primary btn-sm"
                 class:active={dateRange === 1}
-                on:click={() => dateRange = 1}>
+                onclick={() => dateRange = 1}>
             Last Month
         </button>
         <button class="btn btn-outline-primary btn-sm"
                 class:active={dateRange === 3}
-                on:click={() => dateRange = 3}>
+                onclick={() => dateRange = 3}>
             Last 3 Months
         </button>
         <button class="btn btn-outline-primary btn-sm"
                 class:active={dateRange === 6}
-                on:click={() => dateRange = 6}>
+                onclick={() => dateRange = 6}>
             Last 6 Months
         </button>
         <button class="btn btn-outline-primary btn-sm"
                 class:active={dateRange === 12}
-                on:click={() => dateRange = 12}>
+                onclick={() => dateRange = 12}>
             Last year
         </button>
         <button class="btn btn-outline-primary btn-sm"
                 class:active={dateRange === 24}
-                on:click={() => dateRange = 24}>
+                onclick={() => dateRange = 24}>
             Last 2 years
         </button>
         <button class="btn btn-outline-primary btn-sm"
-                on:click={() => dateRange = -1}
+                onclick={() => dateRange = -1}
                 class:active={showCustomInputs}>
             Custom
         </button>
         {#if showCustomInputs}
-            <input type="date" class="form-control date-input" bind:value={startDate} on:change={() => dispatch('dateChange', { startDate, endDate })}/>
-            <input type="date" class="form-control date-input" bind:value={endDate} on:change={() => dispatch('dateChange', { startDate, endDate })}/>
+            <input type="date" class="form-control date-input" bind:value={startDate} onchange={() => dispatch('dateChange', { startDate, endDate })}/>
+            <input type="date" class="form-control date-input" bind:value={endDate} onchange={() => dispatch('dateChange', { startDate, endDate })}/>
         {/if}
     </div>
     <span class="my-auto">Releases:</span>
     <div class="input-group input-group-inline input-group-sm mx-2">
         {#each Object.keys(releasesFilters) as release}
             <button class="btn btn-sm btn-outline-dark"
-                    on:click={() => toggleReleaseFilter(release)}
+                    onclick={() => toggleReleaseFilter(release)}
                     class:active={releasesFilters[release]}
             >
                 {release}

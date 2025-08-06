@@ -2,9 +2,13 @@
     import { derived } from "svelte/store";
     import type { DataResponse } from "./Interfaces";
 
-    export let allData: DataResponse;
-    export let selectedFilter: string;
-    export let onFilterChange: (filter: string) => void;
+    interface Props {
+        allData: DataResponse;
+        selectedFilter: string;
+        onFilterChange: (filter: string) => void;
+    }
+
+    let { allData, selectedFilter, onFilterChange }: Props = $props();
 
     const versions = derived(
         { subscribe: (fn) => () => {} }, // Dummy store for derived since allData is a prop
@@ -20,13 +24,13 @@
         <button
             class:active={selectedFilter === ""}
             class="btn btn-outline-secondary"
-            on:click={() => onFilterChange("")}>All</button
+            onclick={() => onFilterChange("")}>All</button
         >
         {#each $releases as release}
             <button
                 class:active={selectedFilter === release}
                 class="btn btn-outline-secondary"
-                on:click={() => onFilterChange(release)}>{release}</button
+                onclick={() => onFilterChange(release)}>{release}</button
             >
         {/each}
     </div>
@@ -35,9 +39,9 @@
             <button
                 class:active={selectedFilter === version}
                 class="btn btn-outline-primary btn-sm"
-                on:click={() => onFilterChange(version)}>{version}</button
+                onclick={() => onFilterChange(version)}>{version}</button
             >
         {/each}
     </div>
-    <button class="btn btn-sm btn-outline-secondary ms-2" on:click={() => onFilterChange("")}> Reset Filters </button>
+    <button class="btn btn-sm btn-outline-secondary ms-2" onclick={() => onFilterChange("")}> Reset Filters </button>
 </div>

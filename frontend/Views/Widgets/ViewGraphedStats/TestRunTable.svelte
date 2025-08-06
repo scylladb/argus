@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { run as run_1 } from 'svelte/legacy';
+
     import PaginatedTable from "./PaginatedTable.svelte";
     import AssigneeCell from "./AssigneeCell.svelte";
     import StatusCell from "./StatusCell.svelte";
@@ -6,12 +8,16 @@
     import InvestigationStatusCell from "./InvestigationStatusCell.svelte";
     import type { TestRun, RunDetails } from "./Interfaces";
 
-    export let testRuns: TestRun[];
-    export let onClose: () => void;
+    interface Props {
+        testRuns: TestRun[];
+        onClose: () => void;
+    }
 
-    let enrichedTestRuns: TestRun[] = [];
-    let loading = true;
-    let error = "";
+    let { testRuns, onClose }: Props = $props();
+
+    let enrichedTestRuns: TestRun[] = $state([]);
+    let loading = $state(true);
+    let error = $state("");
 
     /**
      * Fetches detailed information for test runs including assignees and issues
@@ -124,9 +130,11 @@
     const sortDirection = "desc";
 
     // Reactive statement to fetch details when testRuns change
-    $: if (testRuns) {
-        fetchRunDetails();
-    }
+    run_1(() => {
+        if (testRuns) {
+            fetchRunDetails();
+        }
+    });
 </script>
 
 {#if error}

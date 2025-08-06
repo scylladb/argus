@@ -1,15 +1,14 @@
-<script type="ts">
+<script lang="ts" type="ts">
     import Fa from "svelte-fa";
     import {onMount} from "svelte";
     import GithubIssue from "../../../Github/GithubIssue.svelte";
     import {faBug} from "@fortawesome/free-solid-svg-icons";
     import GithubIssuesCopyModal from "../../../Github/GithubIssuesCopyModal.svelte";
 
-    export let runId;
-    export let runStatus;
-    let issues = [];
-    let fetching = true;
-    $: paginatedIssues = [issues];
+    let { runId, runStatus } = $props();
+    let issues = $state([]);
+    let fetching = $state(true);
+    let paginatedIssues = $derived([issues]);
 
 
     const fetchIssues = async function () {

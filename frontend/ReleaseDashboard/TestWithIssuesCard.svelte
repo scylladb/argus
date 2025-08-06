@@ -1,10 +1,9 @@
-<script>
+<script lang="ts">
     import GithubIssue from "../Github/GithubIssue.svelte";
-    export let test = {
 
-    };
+    let { test = {
 
-    export let issues = [];
+    }, issues = [] } = $props();
 </script>
 
 <div class="border rounded p-2 shadow-sm">

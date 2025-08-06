@@ -1,16 +1,17 @@
-<script>
+<script lang="ts">
+    import { self } from 'svelte/legacy';
+
     import { createEventDispatcher, onMount } from "svelte";
     import Fa from "svelte-fa";
     import { Modal } from "bootstrap/dist/js/bootstrap.esm";
     import { faEdit, faTrash } from "@fortawesome/free-solid-svg-icons";
-    export let group;
-    export let groups;
+    let { group = $bindable(), groups } = $props();
     const dispatch = createEventDispatcher();
-    let editing = false;
-    let editedGroup = Object.assign({}, group);
-    let modal;
-    let deleteTests = true;
-    let newGroupId = "";
+    let editing = $state(false);
+    let editedGroup = $state(Object.assign({}, group));
+    let modal = $state();
+    let deleteTests = $state(true);
+    let newGroupId = $state("");
 
     const handleGroupUpdate = function (e) {
         e.stopPropagation();
@@ -53,14 +54,14 @@
     </div>
     <div class="ms-auto">
         <div class="form-check form-switch">
-            <input class="form-check-input" type="checkbox" role="switch" on:click={handleVisibilityToggle} bind:checked={group.enabled}>
+            <input class="form-check-input" type="checkbox" role="switch" onclick={handleVisibilityToggle} bind:checked={group.enabled}>
         </div>
     </div>
     <div class="ms-2">
         <button
             class="btn btn-light"
             title="Edit"
-            on:click={(e) => {
+            onclick={(e) => {
                 e.stopPropagation();
                 editing = true;
             }}
@@ -72,7 +73,7 @@
         <button
             class="btn btn-light"
             title="Delete"
-            on:click={(e) => {
+            onclick={(e) => {
                 e.stopPropagation();
                 Modal.getOrCreateInstance(modal).show();
             }}
@@ -82,12 +83,12 @@
     </div>
 </div>
 
-<div class="position-fixed popup-group-editor" class:d-none={!editing}  on:click={(e) => e.stopPropagation()}>
+<div class="position-fixed popup-group-editor" class:d-none={!editing}  onclick={(e) => e.stopPropagation()}>
     <div
         class="row justify-content-center align-items-center h-100"
-        on:mousedown|self={() => {
+        onmousedown={self(() => {
             editing = false;
-        }}
+        })}
     >
         <div class="col-4 mt-6 bg-white rounded shadow-sm shadow-light p-2">
             <div class="fs-6 text-muted mb-2">
@@ -128,11 +129,11 @@
             <div class="mt-2 text-end">
                 <button
                     class="btn btn-secondary"
-                    on:click={() => (editing = false)}
+                    onclick={() => (editing = false)}
                 >
                     Cancel
                 </button>
-                <button class="btn btn-success" on:click={handleGroupUpdate}>
+                <button class="btn btn-success" onclick={handleGroupUpdate}>
                     Update
                 </button>
             </div>
@@ -145,7 +146,7 @@
     tabindex="-1"
     bind:this={modal}
     id="modalGroupConfirmDelete-{editedGroup.id}"
-    on:click={(e) => e.stopPropagation()}
+    onclick={(e) => e.stopPropagation()}
 >
     <div class="modal-dialog">
         <div class="modal-content">
@@ -156,7 +157,7 @@
                     class="btn-close"
                     data-bs-dismiss="modal"
                     aria-label="Close"
-                />
+></button>
             </div>
             <div class="modal-body">
                 <p>
@@ -200,7 +201,7 @@
                     type="button"
                     class="btn btn-danger"
                     data-bs-dismiss="modal"
-                    on:click={handleGroupDelete}
+                    onclick={handleGroupDelete}
                 >
                     Yes
                 </button>

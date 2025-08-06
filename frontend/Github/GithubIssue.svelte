@@ -1,4 +1,6 @@
-<script>
+<script lang="ts">
+    import { run as run_1 } from 'svelte/legacy';
+
     import { createEventDispatcher } from "svelte";
     import Color from "color";
     import Fa from "svelte-fa";
@@ -17,8 +19,10 @@
     import { stateEncoder } from "../Common/StateManagement";
 
     const dispatch = createEventDispatcher();
-    let users = {};
-    $: users = $userList;
+    let users = $state({});
+    run_1(() => {
+        users = $userList;
+    });
     let githubToken;
     const IssueColorMap = {
         open: "issue-open",
@@ -29,7 +33,16 @@
         open: faDotCircle,
         closed: faCheckCircle,
     };
-    export let issue = {
+
+    interface Props {
+        issue?: any;
+        runId: any;
+        deleteEnabled?: boolean;
+        aggregated?: boolean;
+    }
+
+    let {
+        issue = {
         id: "",
         number: -1,
         state: "unknown",
@@ -42,14 +55,14 @@
         url: "https://github.com/",
         user_id: "",
         added_on: "Mon, 1 Jan 1970 9:00:00 GMT",
-    };
+    },
+        runId,
+        deleteEnabled = true,
+        aggregated = false
+    }: Props = $props();
 
-    export let runId;
-    export let deleteEnabled = true;
-    export let aggregated = false;
-
-    let deleting = false;
-    let showRuns = false;
+    let deleting = $state(false);
+    let showRuns = $state(false);
 
     let resolvedRuns;
 
@@ -155,7 +168,7 @@
                     <button
                         class="align-items-center me-1 px-2 label-text border border-dark cursor-pointer"
                         style="color: {Color(`#${label.color}`).isDark() ? 'white' : 'black'}; background-color: #{label.color};"
-                        on:click={() => {
+                        onclick={() => {
                             dispatch("labelClick", label);
                         }}
                     >
@@ -198,9 +211,9 @@
                 {#if aggregated}
                     <div class="text-end my-2">
                         {#if runId}
-                            <button class="btn btn-primary" on:click={() => dispatch("submitToCurrent", issue.url)}>Add to current run</button>
+                            <button class="btn btn-primary" onclick={() => dispatch("submitToCurrent", issue.url)}>Add to current run</button>
                         {/if}
-                        <button class="btn btn-primary" on:click={() => (showRuns = true)}>View {issue.links.length} runs</button>
+                        <button class="btn btn-primary" onclick={() => (showRuns = true)}>View {issue.links.length} runs</button>
                     </div>
                 {/if}
             </div>
@@ -217,7 +230,7 @@
                     <div class="ms-auto">
                         <button
                             class="btn btn-close"
-                            on:click={() => {
+                            onclick={() => {
                                 showRuns = false;
                             }}
                         ></button>
@@ -268,7 +281,7 @@
                     class="btn-close"
                     data-bs-dismiss="modal"
                     aria-label="Close"
-                />
+></button>
             </div>
             <div class="modal-body">
                 <p>
@@ -287,7 +300,7 @@
                     type="button"
                     class="btn btn-danger"
                     data-bs-dismiss="modal"
-                    on:click={deleteIssue}
+                    onclick={deleteIssue}
                 >
                     Yes
                 </button>

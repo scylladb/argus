@@ -1,8 +1,12 @@
 <script>
+
     /**
-     * @type {{buildId: string, buildNumber: string}} args
+     * @typedef {Object} Props
+     * @property {{buildId: string, buildNumber: string}} args
      */
-    export let args;
+
+    /** @type {Props} */
+    let { args } = $props();
 </script>
 
 <div>

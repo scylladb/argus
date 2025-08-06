@@ -8,9 +8,15 @@
     import { faExclamationCircle, faMinus, faPlus, faQuestionCircle } from "@fortawesome/free-solid-svg-icons";
     import DummyCheckParam from "./DummyCheckParam.svelte";
 
-    /**@type {{[string]: string}}*/
-    export let params = {};
-    export let rawParams = [];
+
+    /**
+     * @typedef {Object} Props
+     * @property {{[string]: string}} [params]
+     * @property {any} [rawParams]
+     */
+
+    /** @type {Props} */
+    let { params = $bindable({}), rawParams = [] } = $props();
 
     const determineVersionSource = function(params) {
         const keysToCheck = {
@@ -76,7 +82,7 @@
         return (BACKEND_GROUPS[group] ?? []).includes(backend);
     };
 
-    let paramDefinitions = {
+    let paramDefinitions = $state({
         environment: {
             name: "Environment",
             params: {
@@ -514,7 +520,7 @@
                 },
             }
         }
-    };
+    });
 
     export function validate() {
         const errors = {};
@@ -544,7 +550,7 @@
                 <button
                     class="ms-auto btn btn-outline-dark"
                     type="button"
-                    on:click={() => {
+                    onclick={() => {
                         paramDef.show = !paramDef.show;
                         new Collapse(`#collapse-${paramCategoryName}`).toggle();
                     }}
@@ -568,7 +574,7 @@
                                     </span>
                                 {/if}
                             </div>
-                            <svelte:component this={param.type} bind:definition={param} bind:params={params} wrapper={onChangeWrapper}/>
+                            <param.type bind:definition={param} bind:params={params} wrapper={onChangeWrapper}/>
                             <div id="paramHelp{sanitizeSelector(param.internalName ?? "")}" class="form-text">{@html param.description ?? rawParams.find(v => v.name == param.internalName)?.description ?? ""}</div>
                             {#if !param.validated && param.requiresValidation}
                                 <div class="alert alert-danger">

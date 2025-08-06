@@ -1,5 +1,5 @@
-<script>
-    export let packages;
+<script lang="ts">
+    let { packages = $bindable() } = $props();
     let sortHeaders = {
         date: "date",
         revisionId: "revision_id",
@@ -7,9 +7,9 @@
         version: "version",
         name: "name",
     };
-    let sortHeader = "name";
-    let sortAscending = false;
-    let filterString = "";
+    let sortHeader = $state("name");
+    let sortAscending = $state(false);
+    let filterString = $state("");
 
 
     const filterColumn = function (pkg) {
@@ -58,7 +58,7 @@
         class="form-control"
         type="text"
         placeholder="Filter packages"
-        on:keyup={(e) => {
+        onkeyup={(e) => {
             filterString = e.target.value;
             packages = packages;
         }}
@@ -71,7 +71,7 @@
                 role="button"
                 scope="col"
                 class="text-center align-middle"
-                on:click={() => {
+                onclick={() => {
                     sortHeader = "name";
                     sortAscending = !sortAscending;
                 }}
@@ -90,7 +90,7 @@
                 role="button"
                 scope="col"
                 class="text-center align-middle"
-                on:click={() => {
+                onclick={() => {
                     sortHeader = "version";
                     sortAscending = !sortAscending;
                 }}
@@ -109,7 +109,7 @@
                 role="button"
                 scope="col"
                 class="text-center align-middle"
-                on:click={() => {
+                onclick={() => {
                     sortHeader = "date";
                     sortAscending = !sortAscending;
                 }}
@@ -128,7 +128,7 @@
                 role="button"
                 scope="col"
                 class="text-center align-middle"
-                on:click={() => {
+                onclick={() => {
                     sortHeader = "buildId";
                     sortAscending = !sortAscending;
                 }}
@@ -147,7 +147,7 @@
                 role="button"
                 scope="col"
                 class="text-center align-middle"
-                on:click={() => {
+                onclick={() => {
                     sortHeader = "revisionId";
                     sortAscending = !sortAscending;
                 }}

@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import { faCalendar, faEdit, faSave, faTimes, faUserPlus } from "@fortawesome/free-solid-svg-icons";
     import { marked as parse } from "marked";
     import DOMPurify from "dompurify";
@@ -16,15 +18,21 @@
     import User from "../Profile/User.svelte";
     import { createEventDispatcher } from "svelte";
 
-    export let team: Team;
+    interface Props {
+        team: Team;
+    }
+
+    let { team = $bindable() }: Props = $props();
     const dispatch = createEventDispatcher();
     let currentUser: IUser = applicationCurrentUser;
-    let users: Users;
-    $: users = $userList;
-    let newMotdText = team.motd;
-    let newName = team.name;
-    let editingName = false;
-    let newMembers: UserSelectItem[] | undefined;
+    let users: Users = $state();
+    run(() => {
+        users = $userList;
+    });
+    let newMotdText = $state(team.motd);
+    let newName = $state(team.name);
+    let editingName = $state(false);
+    let newMembers: UserSelectItem[] | undefined = $state();
 
     const resolveUsers = function(members: string[], users: Users): IUser[] {
         return members.map((memberId) => {
@@ -134,14 +142,14 @@
         {#if editingName}
             <div class="d-flex">
                 <input type="text" bind:value={newName}>
-                <button class="ms-2 btn btn-sm btn-success" on:click={handleUpdateTeamName}><Fa icon={faSave}/></button>
-                <button class="ms-2 btn btn-sm btn-secondary" on:click={() => (editingName = false)}><Fa icon={faTimes}/></button>
+                <button class="ms-2 btn btn-sm btn-success" onclick={handleUpdateTeamName}><Fa icon={faSave}/></button>
+                <button class="ms-2 btn btn-sm btn-secondary" onclick={() => (editingName = false)}><Fa icon={faTimes}/></button>
             </div>
         {:else}
             <div class="d-flex">
                 <div>{team.name}</div>
                 {#if currentUser.id == team.leader}
-                    <button class="ms-2 btn btn-sm btn-primary" on:click={() => (editingName = true)}><Fa icon={faEdit}/></button>
+                    <button class="ms-2 btn btn-sm btn-primary" onclick={() => (editingName = true)}><Fa icon={faEdit}/></button>
                 {/if}
             </div>
         {/if}
@@ -156,7 +164,7 @@
                     class="btn btn-sm btn-primary"
                     data-bs-toggle="modal"
                     data-bs-target="#modalEditMembers-{team.id}"
-                    on:click={() => newMembers = createUserSelectList(resolveUsers(team.members, users ?? {}), currentUser)}
+                    onclick={() => newMembers = createUserSelectList(resolveUsers(team.members, users ?? {}), currentUser)}
                     ><Fa icon={faUserPlus}/> Edit Members
                 </button>
             </div>
@@ -204,7 +212,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="exampleModalLabel">Edit Message of the Day</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" />
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <div>
@@ -213,7 +221,7 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-danger" data-bs-dismiss="modal" on:click={handleUpdateMotd}>Update</button
+                <button type="button" class="btn btn-danger" data-bs-dismiss="modal" onclick={handleUpdateMotd}>Update</button
                 >
             </div>
         </div>
@@ -225,7 +233,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="exampleModalLabel">Update members</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" />
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <Select
@@ -238,7 +246,7 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-success" data-bs-dismiss="modal" on:click={handleUpdateMembers}>Save</button
+                <button type="button" class="btn btn-success" data-bs-dismiss="modal" onclick={handleUpdateMembers}>Save</button
                 >
             </div>
         </div>

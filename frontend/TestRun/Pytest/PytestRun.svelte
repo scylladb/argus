@@ -9,15 +9,19 @@
     import { titleCase } from "../../Common/TextUtils";
     import { PytestBtnStyles } from "../../Common/TestStatus";
 
-    export let runId: string;
+    interface Props {
+        runId: string;
+    }
+
+    let { runId }: Props = $props();
 
     const PAGE_SIZE_STEP = 100;
 
-    let data: PytestData[] | null = null;
+    let data: PytestData[] | null = $state(null);
     let refreshInterval: any = null;
-    let failedToLoad = false;
-    let pageSize = PAGE_SIZE_STEP;
-    let filters = {
+    let failedToLoad = $state(false);
+    let pageSize = $state(PAGE_SIZE_STEP);
+    let filters = $state({
         search: "",
         status: {
             [PytestStatus.PASSED]: false,
@@ -31,17 +35,17 @@
             [PytestStatus.ERROR_ERROR]: true,
             [PytestStatus.SKIPPED]: false,
         },
-    };
+    });
 
 
-    $: filteredData = data?.filter((test) => {
+    let filteredData = $derived(data?.filter((test) => {
         const status = test.status;
         if (filters.search.length === 0) {
             return filters.status[status];
         }
 
         return filters.status[status] && test.name.toLowerCase().includes(filters.search.toLowerCase());
-    });
+    }));
 
     const fetchData = async () => {
         try {
@@ -120,7 +124,7 @@
             <div class="col">
                 <div class="d-flex flex-wrap">
                     {#each PytestStatuses as status}
-                        <button class="btn btn-sm {PytestBtnStyles[status]} me-2 mb-2" on:click={() => onStatusFilterChange(status)}>
+                        <button class="btn btn-sm {PytestBtnStyles[status]} me-2 mb-2" onclick={() => onStatusFilterChange(status)}>
                             <Fa icon={filters.status[status] ? faCheck : faTimes} /> {titleCase(status)}
                         </button>
                     {/each}
@@ -137,17 +141,19 @@
             </div>
         {:else}
             <div class="mb-2">
-                <IntersectionObserver let:intersecting top={20}>
-                    {#each filteredData.slice(0, pageSize) as test (`${test.name}-${test.id}`)}
-                        {#if intersecting}
-                            <PytestItem item={test}/>
-                        {/if}
-                    {/each}
-                </IntersectionObserver>
+                <IntersectionObserver  top={20}>
+                    {#snippet children({ intersecting })}
+                                        {#each filteredData.slice(0, pageSize) as test (`${test.name}-${test.id}`)}
+                            {#if intersecting}
+                                <PytestItem item={test}/>
+                            {/if}
+                        {/each}
+                                                        {/snippet}
+                                </IntersectionObserver>
             </div>
             {#if filteredData.length > PAGE_SIZE_STEP}
                 <div>
-                    <button class="btn btn-primary w-100" on:click={() => pageSize += PAGE_SIZE_STEP}>Show more</button>
+                    <button class="btn btn-primary w-100" onclick={() => pageSize += PAGE_SIZE_STEP}>Show more</button>
                 </div>
             {/if}
         {/if}
@@ -158,7 +164,7 @@
         </div>
     {:else}
         <div class="text-center p-2 m-1 d-flex align-items-center justify-content-center">
-            <span class="spinner-border me-4"/><span class="fs-4">Loading...</span>
+            <span class="spinner-border me-4"></span><span class="fs-4">Loading...</span>
         </div>
     {/if}
 </div>

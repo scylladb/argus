@@ -12,12 +12,12 @@
     import { userList as UserStore } from "../Stores/UserlistSubscriber";
     import Notification from "./Notification.svelte";
     import NotificationSender from "./NotificationSender.svelte";
-    let users: UserList;
-    $: users = $UserStore;
-    let notifications: Array<ArgusShortSummary> = [];
-    let selectedNotification: ArgusShortSummary | null;
-    let prevPage: string = "";
-    let nextPage: string = "";
+    let users: UserList = $derived($UserStore);
+
+    let notifications: Array<ArgusShortSummary> = $state([]);
+    let selectedNotification: ArgusShortSummary | null = $state();
+    let prevPage: string = $state("");
+    let nextPage: string = $state("");
     let perPageLimit = 10;
 
     interface UserList {
@@ -58,7 +58,7 @@
                             class="list-group-item"
                             role=button
                             class:active={n.id == selectedNotification?.id}
-                            on:click={() => {
+                            onclick={() => {
                                 n.state = NotificationsState.READ
                                 selectedNotification = null;
                                 setTimeout(() => {
@@ -90,7 +90,7 @@
                     <div class="d-flex justify-content-center align-items-between p-4">
                         <button
                         class="btn btn-primary"
-                        on:click={() => {
+                        onclick={() => {
                             nextPage = prevPage;
                             fetchNotifications();
                             }}
@@ -99,7 +99,7 @@
                         </button>
                         <button
                             class="ms-auto btn btn-primary"
-                            on:click={() => {
+                            onclick={() => {
                                 prevPage = notifications[0].id;
                                 nextPage = notifications[notifications.length - 1].id;
                                 fetchNotifications();

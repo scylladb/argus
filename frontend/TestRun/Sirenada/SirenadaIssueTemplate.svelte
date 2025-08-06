@@ -1,12 +1,12 @@
-<script>
-    export let test_run = {};
+<script lang="ts">
     import Fa from "svelte-fa";
     import { faCopy } from "@fortawesome/free-solid-svg-icons";
     import { parse } from "marked";
     import { onMount } from "svelte";
     import { markdownRendererOptions } from "../../markdownOptions";
-    let renderedElement;
-    let templateElement;
+    let { test_run = {} } = $props();
+    let renderedElement = $state();
+    let templateElement = $state();
     let issueTemplateText = "";
 
 
@@ -35,7 +35,7 @@
                 <button
                     type="button"
                     class="btn btn-input-group btn-success"
-                    on:click={copyTemplateToClipboard}
+                    onclick={copyTemplateToClipboard}
                     ><Fa icon={faCopy} /></button
                 >
             </div>
@@ -80,7 +80,7 @@
                             <div class="p-1 mb-2">
                                 <button
                                     class="btn btn-sm btn-primary"
-                                    on:click={() => {
+                                    onclick={() => {
                                         let range = document.createRange();
                                         range.selectNodeContents(templateElement);
                                         let selection = window.getSelection();
@@ -144,7 +144,7 @@
                                 class="p-2 markdown-body"
                                 bind:this={renderedElement}
                                 id="issueTemplateRendered-{test_run.id}"
-                            />
+></div>
                         </div>
                     </div>
                 </div>

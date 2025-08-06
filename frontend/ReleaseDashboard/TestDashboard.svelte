@@ -1,4 +1,4 @@
-<script context="module">
+<script module>
     export const getAssigneesForTest = function (assigneeList, testId, groupId, last_runs) {
         let testAssignees = assigneeList.tests?.[testId] ?? [];
         let groupAssignees = assigneeList.groups?.[groupId] ?? [];
@@ -25,7 +25,9 @@
 
 </script>
 
-<script>
+<script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import { createEventDispatcher, onDestroy, onMount } from "svelte";
     import queryString from "query-string";
     import sha1 from "js-sha1";
@@ -64,21 +66,35 @@
     import Select from "svelte-select";
     import { Collapse } from "bootstrap";
     import { titleCase } from "../Common/TextUtils";
-    export let dashboardObject;
-    export let dashboardObjectType = "release";
-    export let widgetId;
-    export let clickedTests = {};
-    export let productVersion;
-    export let settings = {};
-    export let stats;
-    let imageId = null;
+    interface Props {
+        dashboardObject: any;
+        dashboardObjectType?: string;
+        widgetId: any;
+        clickedTests?: any;
+        productVersion: any;
+        settings?: any;
+        stats: any;
+    }
+
+    let {
+        dashboardObject,
+        dashboardObjectType = "release",
+        widgetId,
+        clickedTests = $bindable({}),
+        productVersion = $bindable(),
+        settings = {},
+        stats = $bindable()
+    }: Props = $props();
+    let imageId = $state(null);
     let dashboardFilterShow = false;
     let statRefreshInterval;
     let statsFetchedOnce = false;
-    let versionsIncludeNoVersion = JSON.parse(window.localStorage.getItem(`releaseDashIncludeNoVersions-${dashboardObject.id}`)) ?? (settings.versionsIncludeNoVersion || true);
-    let versionsFilterExtraVersions = JSON.parse(window.localStorage.getItem(`releaseDashFilterExtraVersions-${dashboardObject.id}`)) ?? true;
-    let users = {};
-    $: users = $userList;
+    let versionsIncludeNoVersion = $state(JSON.parse(window.localStorage.getItem(`releaseDashIncludeNoVersions-${dashboardObject.id}`)) ?? (settings.versionsIncludeNoVersion || true));
+    let versionsFilterExtraVersions = $state(JSON.parse(window.localStorage.getItem(`releaseDashFilterExtraVersions-${dashboardObject.id}`)) ?? true);
+    let users = $state({});
+    run(() => {
+        users = $userList;
+    });
 
     const PANEL_MODES = {
         release: {
@@ -93,7 +109,7 @@
         }
     };
 
-    const FILTER_STACK = {
+    const FILTER_STACK = $state({
         user: {
             f: function (test) {
                 if (!this.state) return true;
@@ -131,7 +147,7 @@
                 return Array.from(new Set(backends));
             },
         },
-    };
+    });
 
 
     const generateCollapseKey = function(dashboardObject, dashboardObjectType) {
@@ -155,23 +171,23 @@
         });
     }
 
-    $: {
+    run(() => {
         let state = Object.entries(FILTER_STACK).reduce((acc, [key, filter]) => {
             acc[key] = filter.state;
             return acc;
         }, {});
         const serializedState = JSON.stringify(state);
         window.localStorage.setItem(`testDashFilterState-${dashboardObject.id}`, serializedState);
-    }
+    });
 
-    let assigneeList = {
+    let assigneeList = $state({
         groups: {
 
         },
         tests: {
 
         }
-    };
+    });
 
     const doFilters = function(test, stack) {
         let filterState = Object.values(stack).map(filter => {
@@ -221,7 +237,7 @@
         return true;
     };
 
-    let collapseState = loadCollapseState();
+    let collapseState = $state(loadCollapseState());
 
 
     const fetchStats = async function (force = false) {
@@ -480,21 +496,21 @@
 </script>
 <div class="rounded bg-light-one shadow-sm p-2">
     <div class="text-end mb-2">
-        <button title="Refresh" class="btn btn-sm btn-outline-dark" on:click={handleDashboardRefreshClick}>
+        <button title="Refresh" class="btn btn-sm btn-outline-dark" onclick={handleDashboardRefreshClick}>
             <Fa icon={faRefresh}/>
         </button>
         {#if stats}
             {#if allCollapsed(collapseState)}
                 <button
                     class="btn btn-outline-dark btn-sm"
-                    on:click={() => toggleAllCollapses(false)}
+                    onclick={() => toggleAllCollapses(false)}
                 >
                     Expand all groups
                 </button>
             {:else}
                 <button
                     class="btn btn-outline-dark btn-sm"
-                    on:click={() => toggleAllCollapses(true)}
+                    onclick={() => toggleAllCollapses(true)}
                 >
                     Collapse all groups
                 </button>
@@ -510,12 +526,12 @@
                     class="btn me-2"
                     class:btn-primary={!productVersion}
                     class:btn-light={productVersion}
-                    on:click={() => { handleVersionClick(""); }}>All</button>
+                    onclick={() => { handleVersionClick(""); }}>All</button>
                 <button
                 class="btn me-2"
                 class:btn-success={versionsIncludeNoVersion}
                 class:btn-danger={!versionsIncludeNoVersion}
-                on:click={() => {
+                onclick={() => {
                     versionsIncludeNoVersion = !versionsIncludeNoVersion;
                     saveCheckboxState(`releaseDashIncludeNoVersions-${dashboardObject.id}`, versionsIncludeNoVersion);
                     handleVersionClick(productVersion);
@@ -530,7 +546,7 @@
                         class="btn btn-light me-2"
                         class:btn-primary={productVersion == version}
                         class:btn-light={productVersion != version}
-                        on:click={() => { handleVersionClick(version); }}>{version}</button>
+                        onclick={() => { handleVersionClick(version); }}>{version}</button>
                     {/if}
                 {/each}
                 {#if stats?.release?.valid_version_regex}
@@ -538,7 +554,7 @@
                         class="btn me-2 flex-grow-1 flex-shrink-0"
                         class:btn-primary={productVersion == "!noVersion"}
                         class:btn-light={productVersion != "!noVersion"}
-                        on:click={() => {
+                        onclick={() => {
                                 versionsFilterExtraVersions = !versionsFilterExtraVersions;
                                 saveCheckboxState(`releaseDashFilterExtraVersions-${dashboardObject.id}`, versionsFilterExtraVersions);
                             }}
@@ -566,19 +582,19 @@
                 </div>
                 <div class="p-2">
                     <div class="btn-group" role="group">
-                        <button class="btn btn-primary btn-sm" on:click={() => quickTestFilter(stats, (v) => v?.investigation_status == TestInvestigationStatus.NOT_INVESTIGATED && [TestStatus.FAILED, TestStatus.TEST_ERROR].includes(v?.status))}>
+                        <button class="btn btn-primary btn-sm" onclick={() => quickTestFilter(stats, (v) => v?.investigation_status == TestInvestigationStatus.NOT_INVESTIGATED && [TestStatus.FAILED, TestStatus.TEST_ERROR].includes(v?.status))}>
                             <Fa color="#fff" icon={faEyeSlash} />
                             Failed and Not Investigated
                         </button>
-                        <button class="btn btn-primary btn-sm" on:click={() => quickTestFilter(stats, (v) => v?.investigation_status == TestInvestigationStatus.INVESTIGATED && [TestStatus.FAILED, TestStatus.TEST_ERROR].includes(v?.status) && !v.hasBugReport)}>
+                        <button class="btn btn-primary btn-sm" onclick={() => quickTestFilter(stats, (v) => v?.investigation_status == TestInvestigationStatus.INVESTIGATED && [TestStatus.FAILED, TestStatus.TEST_ERROR].includes(v?.status) && !v.hasBugReport)}>
                             <Fa color="#fff" icon={faQuestion} />
                             Investigated w/o Issues
                         </button>
-                        <button class="btn btn-primary btn-sm" on:click={() => quickTestFilter(stats, (v) => v["hasBugReport"])}>
+                        <button class="btn btn-primary btn-sm" onclick={() => quickTestFilter(stats, (v) => v["hasBugReport"])}>
                             <Fa color="#fff" icon={faBug} />
                             All w/ Issues
                         </button>
-                        <button class="btn btn-primary btn-sm" on:click={() => quickTestFilter(stats, (v) => v["hasComments"])}>
+                        <button class="btn btn-primary btn-sm" onclick={() => quickTestFilter(stats, (v) => v["hasComments"])}>
                             <Fa color="#fff" icon={faComment} />
                             All w/ Comments
                         </button>
@@ -607,7 +623,7 @@
                                     {#each Object.entries(TestStatus) as [name, status]}
                                         <button
                                             class="ms-2 mb-2 btn btn-sm {StatusButtonCSSClassMap?.[status]}"
-                                            on:click={() => FILTER_STACK.status.state[status] = !FILTER_STACK.status.state[status]}
+                                            onclick={() => FILTER_STACK.status.state[status] = !FILTER_STACK.status.state[status]}
                                         >
                                             {#if FILTER_STACK.status.state[status]}
                                                 <Fa icon={faCheckSquare}/>
@@ -670,10 +686,11 @@
             </div>
         </div>
         </div>
-        <svelte:component this={settings.flatView ? FlatViewHelper : GroupedViewHelper}>
+        {@const SvelteComponent_1 = settings.flatView ? FlatViewHelper : GroupedViewHelper}
+        <SvelteComponent_1>
             {#each sortedGroups(stats.groups) as groupStats (groupStats.group.id)}
-                <svelte:component
-                    this={settings.flatView ? TestDashboardFlatView : TestDashboardGroup}
+                {@const SvelteComponent = settings.flatView ? TestDashboardFlatView : TestDashboardGroup}
+                <SvelteComponent
                     {assigneeList}
                     {groupStats}
                     {stats}
@@ -688,7 +705,7 @@
                     on:testClick={e => handleTestClick(e.detail.testStats, e.detail.groupStats)}
                 />
             {/each}
-        </svelte:component>
+        </SvelteComponent_1>
     {:else}
         <div class="d-flex align-items-center justify-content-center text-center">
             <div class="spinner-grow"></div>

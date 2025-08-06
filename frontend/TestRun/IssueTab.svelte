@@ -1,4 +1,4 @@
-<script context="module">
+<script module>
     export const submitIssue = async function (url, runId, testId) {
         try {
             if (!testId) return;
@@ -39,12 +39,11 @@
     };
 </script>
 
-<script>
+<script lang="ts">
     import GithubIssues from "../Github/GithubIssues.svelte";
     import { sendMessage } from "../Stores/AlertStore";
 
-    export let runId;
-    export let testInfo;
+    let { runId, testInfo } = $props();
 
     const submitIssueLocal = async function (url, runId, testId) {
         await submitIssue(url, runId, testId);
@@ -52,8 +51,8 @@
         aggregatedIssuesComponent.fetchIssues();
     };
 
-    let aggregatedIssuesComponent;
-    let runIssuesComponent;
+    let aggregatedIssuesComponent = $state();
+    let runIssuesComponent = $state();
 
 </script>
 
