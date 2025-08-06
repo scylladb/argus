@@ -81,12 +81,15 @@ data-bs-target="#createTeamCollapse"
         <label class="form-label" for="teamName">Members</label>
         <Select
             items={createUserSelectList(Object.values(users), currentUser)}
-            Item={User}
-            isMulti={true}
+            multiple={true}
             placeholder="Members"
             bind:value={selectedUsers}
             on:select={() => { console.log(selectedUsers); }}
-        />
+        >
+            <div slot="item" let:item let:index>
+                <User {item} />
+            </div>
+        </Select>
     </div>
     <div>
         <button class="btn btn-success btn-sm" onclick={handleSubmitNewTeam}>Create</button>

@@ -1,4 +1,6 @@
 <script>
+    import { createEventDispatcher } from "svelte";
+    const dispatch = createEventDispatcher();
     let { tests, groups } = $props();
 
     let selectedGroup = $state(tests.length > 0 ? tests[0].group_id : undefined);

@@ -418,13 +418,20 @@
                         inputAttributes={{ class: "form-control" }}
                         bind:value={testSearcherValue}
                         placeholder="Search for tests..."
-                        noOptionsMessage="Type to search. Can be: Test name, Release name, Group name."
-                        labelIdentifier="name"
-                        optionIdentifier="id"
-                        Item={ViewSelectItem}
+                        label="name"
+                        itemId="id"
                         loadOptions={testLookup}
                         on:select={handleItemSelect}
-                    />
+                    >
+                        <div slot="empty">
+                            <div class="p-2 text-muted text-center">
+                                Type to search. Can be: Test name, Release name, Group name.
+                            </div>
+                        </div>
+                        <div slot="item" let:item let:index>
+                            <ViewSelectItem {item} />
+                        </div>
+                    </Select>
                 </div>
                 <select class="form-select mb-2" size=10 multiple bind:value={selectedItems}>
                     {#each newView.items as item}

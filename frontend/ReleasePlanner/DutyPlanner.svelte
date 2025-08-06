@@ -300,7 +300,7 @@
                             <div class="form-label">Groups</div>
                             <Select
                                 items={extractGroups(releaseData)}
-                                isMulti={true}
+                                multiple={true}
                                 placeholder="Select groups"
                                 on:select={handleGroupSelect}
                                 bind:value={selectedGroups}
@@ -310,7 +310,7 @@
                             <div class="form-label">Tests</div>
                             <Select
                                 items={extractTests(releaseData)}
-                                isMulti={true}
+                                multiple={true}
                                 placeholder="Select tests"
                                 bind:value={selectedTests}
                                 on:select={handleTestSelect}
@@ -330,12 +330,15 @@
                         <div class="mb-3">
                             <div class="form-label">Assignee</div>
                             <Select
-                                Item={User}
                                 items={prepareUsers(users)}
                                 itemFilter={filterUser}
                                 placeholder="Select assignee"
                                 on:select={handleAssigneeSelect}
-                            />
+                            >
+                                <div slot="item" let:item let:index>
+                                    <User {item} />
+                                </div>
+                            </Select>
                         </div>
                     </div>
                 </div>

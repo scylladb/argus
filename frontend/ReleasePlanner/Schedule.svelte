@@ -243,12 +243,15 @@
                     {#if !updating}
                         <div class="flex-fill">
                             <Select
-                                Item={User}
                                 items={prepareUsers(users)}
                                 bind:value={reassigned}
-                                isMulti={true}
+                                multiple={true}
                                 placeholder="Re-assign assignees"
-                            />
+                            >
+                                <div slot="item" let:item let:index>
+                                    <User {item} />
+                                </div>
+                            </Select>
                         </div>
                         <div class="ms-1">
                             <button

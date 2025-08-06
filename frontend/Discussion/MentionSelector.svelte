@@ -46,16 +46,21 @@
 <div
     class="mention-select bg-lighter p-1 rounded shadow d-flex align-items-center"
     bind:this={select}
+    role="button"
+    tabindex="0"
     onkeydown={handleKeypress}
 >
     <div class="flex-fill">
         <Select
-            Item={User}
             items={prepareUsers(users)}
             itemFilter={filterUser}
             placeholder="@..."
             on:select={handleMention}
-        />
+        >
+            <div slot="item" let:item let:index>
+                <User {item} />
+            </div>
+        </Select>
     </div>
     <button
         class="ms-1 btn btn-dark"
