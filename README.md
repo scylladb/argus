@@ -61,7 +61,7 @@ yarn install
 Compile frontend files from `/frontend` into `/public/dist`
 
 ```bash
-yarn webpack
+yarn rollup -c
 ```
 
 Create a `argus.local.yaml` configuration file (used to configure database connection) and a `argus_web.yaml` (used for webapp secrets) in your application install directory.

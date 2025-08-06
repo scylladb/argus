@@ -1,7 +1,7 @@
 ARG PYTHON_VERSION=3.10.4-bullseye
 
 FROM python:${PYTHON_VERSION}
-ENV WEBPACK_ENVIRONMENT=production
+ENV ROLLUP_ENV=production
 ENV FLASK_ENV=production
 ENV CQLENG_ALLOW_SCHEMA_MANAGEMENT=1
 ENV ARGUS_USER=argus
@@ -29,7 +29,7 @@ WORKDIR /app
 # Build project
 RUN uv sync --extra web-backend --extra docker-image \
     && yarn \
-    && WEBPACK_ENVIRONMENT=${WEBPACK_ENVIRONMENT} yarn webpack \
+    && ROLLUP_ENV=${ROLLUP_ENV} yarn rollup -c \
     && mkdir /app/nginx
 VOLUME [ "/app/storage", "/app/config" ]
 EXPOSE 8000/tcp
