@@ -119,14 +119,16 @@
                 <div class="mb-2">
                     <table class="table table-bordered">
                         <thead>
-                            <th>Current Result</th>
-                            <th>Compared Version</th>
-                            <th>Best</th>
-                            <th>Diff</th>
-                            <th>Commit, Date</th>
-                            <th>last</th>
-                            <th>Diff</th>
-                            <th>Commit, Date</th>
+                            <tr>
+                                <th>Current Result</th>
+                                <th>Compared Version</th>
+                                <th>Best</th>
+                                <th>Diff</th>
+                                <th>Commit, Date</th>
+                                <th>last</th>
+                                <th>Diff</th>
+                                <th>Commit, Date</th>
+                            </tr>
                         </thead>
                         <tbody>
                             {#each Object.entries(resultsByMetric) as [versionName, results] (versionName)}

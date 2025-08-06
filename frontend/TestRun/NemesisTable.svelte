@@ -80,86 +80,88 @@
         </div>
         <table class="table table-hover table-bordered">
             <thead>
-                <th
-                    role="button"
-                    scope="col"
-                    class="text-center align-middle"
-                    on:click={() => { sortHeader = "name"; sortAscending = !sortAscending; }}
-                >
-                    {#if sortHeader == "name"}
-                        <span
-                            class="d-inline-block"
-                            class:invertArrow={ sortAscending }
-                        >
-                            &#x25B2;
-                        </span>
-                    {/if}
-                    Nemesis Name
-                </th>
-                <th
-                    role="button"
-                    scope="col"
-                    class="text-center align-middle"
-                    on:click={() => { sortHeader = "node"; sortAscending = !sortAscending;  }}
-                >
-                    {#if sortHeader == "node"}
-                        <span
-                            class="d-inline-block"
-                            class:invertArrow={ sortAscending }
-                        >
-                            &#x25B2;
-                        </span>
-                    {/if}
-                    Target node
-                </th>
-                <th
-                    role="button"
-                    scope="col"
-                    class="text-center align-middle"
-                    on:click={() => { sortHeader = "status"; sortAscending = !sortAscending;  }}
-                >
-                    {#if sortHeader == "status"}
-                        <span
-                            class="d-inline-block"
-                            class:invertArrow={ sortAscending }
-                        >
-                            &#x25B2;
-                        </span>
-                    {/if}
-                    Status
-                </th>
-                <th
-                    role="button"
-                    scope="col"
-                    class="text-center align-middle"
-                    on:click={() => { sortHeader = "startTime"; sortAscending = !sortAscending;  }}
-                >
-                    {#if sortHeader == "startTime"}
-                        <span
-                            class="d-inline-block"
-                            class:invertArrow={ sortAscending }
-                        >
-                            &#x25B2;
-                        </span>
-                    {/if}
-                    Start
-                </th>
-                <th
-                    role="button"
-                    scope="col"
-                    class="text-center align-middle"
-                    on:click={() => { sortHeader = "endTime"; sortAscending = !sortAscending;  }}
-                >
-                    {#if sortHeader == "endTime"}
-                        <span
-                            class="d-inline-block"
-                            class:invertArrow={ sortAscending }
-                        >
-                            &#x25B2;
-                        </span>
-                    {/if}
-                    End
-                </th>
+                    <tr>
+                    <th
+                        role="button"
+                        scope="col"
+                        class="text-center align-middle"
+                        on:click={() => { sortHeader = "name"; sortAscending = !sortAscending; }}
+                    >
+                        {#if sortHeader == "name"}
+                            <span
+                                class="d-inline-block"
+                                class:invertArrow={ sortAscending }
+                            >
+                                &#x25B2;
+                            </span>
+                        {/if}
+                        Nemesis Name
+                    </th>
+                    <th
+                        role="button"
+                        scope="col"
+                        class="text-center align-middle"
+                        on:click={() => { sortHeader = "node"; sortAscending = !sortAscending;  }}
+                    >
+                        {#if sortHeader == "node"}
+                            <span
+                                class="d-inline-block"
+                                class:invertArrow={ sortAscending }
+                            >
+                                &#x25B2;
+                            </span>
+                        {/if}
+                        Target node
+                    </th>
+                    <th
+                        role="button"
+                        scope="col"
+                        class="text-center align-middle"
+                        on:click={() => { sortHeader = "status"; sortAscending = !sortAscending;  }}
+                    >
+                        {#if sortHeader == "status"}
+                            <span
+                                class="d-inline-block"
+                                class:invertArrow={ sortAscending }
+                            >
+                                &#x25B2;
+                            </span>
+                        {/if}
+                        Status
+                    </th>
+                    <th
+                        role="button"
+                        scope="col"
+                        class="text-center align-middle"
+                        on:click={() => { sortHeader = "startTime"; sortAscending = !sortAscending;  }}
+                    >
+                        {#if sortHeader == "startTime"}
+                            <span
+                                class="d-inline-block"
+                                class:invertArrow={ sortAscending }
+                            >
+                                &#x25B2;
+                            </span>
+                        {/if}
+                        Start
+                    </th>
+                    <th
+                        role="button"
+                        scope="col"
+                        class="text-center align-middle"
+                        on:click={() => { sortHeader = "endTime"; sortAscending = !sortAscending;  }}
+                    >
+                        {#if sortHeader == "endTime"}
+                            <span
+                                class="d-inline-block"
+                                class:invertArrow={ sortAscending }
+                            >
+                                &#x25B2;
+                            </span>
+                        {/if}
+                        End
+                    </th>
+                </tr>
             </thead>
             <tbody>
                 {#each sortNemesesByKey(nemesisCollection, sortHeader, sortAscending) as nemesis (createCollapseId(nemesis))}

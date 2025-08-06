@@ -71,11 +71,13 @@
             <div id="modalTableIssueView">
                 <table class="table" style="border: solid 1px black">
                     <thead>
-                    <th style="border: solid 1px black">State</th>
-                    <th style="border: solid 1px black">Issue</th>
-                    <th style="border: solid 1px black">Title</th>
-                    <th style="border: solid 1px black">Tags</th>
-                    <th style="border: solid 1px black">Assignee</th>
+                        <tr>
+                            <th style="border: solid 1px black">State</th>
+                            <th style="border: solid 1px black">Issue</th>
+                            <th style="border: solid 1px black">Title</th>
+                            <th style="border: solid 1px black">Tags</th>
+                            <th style="border: solid 1px black">Assignee</th>
+                        </tr>
                     </thead>
                     <tbody>
                     {#each sortedIssues[currentPage] ?? [] as issue (issue.id)}

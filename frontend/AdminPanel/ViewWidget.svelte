@@ -74,7 +74,7 @@
                         </div>
                         <select class="form-select" multiple size=10 bind:value={widgetSettings.filter}>
                             {#each items as item}
-                                <option value="{item.id}"><span class="fw-bold">[{titleCase(item.type)}]</span> {item.pretty_name || item.name}</option>
+                                <option value="{item.id}">[{titleCase(item.type)}] {item.pretty_name || item.name}</option>
                             {/each}
                         </select>
                     </div>
