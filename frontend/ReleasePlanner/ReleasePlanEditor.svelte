@@ -314,14 +314,17 @@
             <div class="mb-3">
                 <div class="form-label">Assignee</div>
                 <Select
-                    Item={User}
                     items={Object.values(users)}
-                    optionIdentifier="id"
-                    labelIdentifier="full_name"
+                    itemId="id"
+                    label="full_name"
                     itemFilter={filterUser}
                     placeholder="Select assignee"
                     bind:value={selectedAssignee}
-                />
+                >
+                    <div slot="item" let:item let:index>
+                        <User {item} />
+                    </div>
+                </Select>
             </div>
         </div>
         <div>

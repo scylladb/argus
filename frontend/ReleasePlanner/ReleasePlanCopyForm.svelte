@@ -207,11 +207,14 @@
                 value={users.find(u => u.id == plan.owner)}
                 on:select={(e) => copy.owner = e.detail.id}
                 items={users}
-                Item={User}
                 itemFilter={filterUser}
-                labelIdentifier="username"
-                optionIdentifier="id"
-            />
+                label="username"
+                itemId="id"
+            >
+                <div slot="item" let:item let:index>
+                    <User {item} />
+                </div>
+            </Select>
         </div>
     </div>
     <div class="row my-4">

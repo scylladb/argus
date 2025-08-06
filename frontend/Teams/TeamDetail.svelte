@@ -238,11 +238,14 @@
             <div class="modal-body">
                 <Select
                     items={createUserSelectList(Object.values(users), currentUser)}
-                    Item={User}
-                    isMulti={true}
+                    multiple={true}
                     placeholder="Members"
                     bind:value={newMembers}
-                />
+                >
+                    <div slot="item" let:item let:index>
+                        <User {item} />
+                    </div>
+                </Select>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>

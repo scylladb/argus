@@ -23,14 +23,17 @@
         value={user}
         itemFilter={filterUser}
         placeholder="Filter..."
-        labelIdentifier="username"
-        optionIdentifier="id"
-        Item={User}
+        label="username"
+        itemId="id"
         items={Object.values(users)}
         hideEmptyState={true}
-        isClearable={true}
-        isSearchable={true}
+        clearable={true}
+        searchable={true}
         on:select={handleFilter}
         on:clear={handleFilter}
-    />
+    >
+        <div slot="item" let:item let:index>
+            <User {item} />
+        </div>
+    </Select>
 </div>

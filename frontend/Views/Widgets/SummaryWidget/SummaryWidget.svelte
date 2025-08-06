@@ -276,7 +276,7 @@
                         <Fa icon={faChevronLeft}/>
                     </button>
                     <div style="width: 380px">
-                        <Select bind:value={selectedVersionItem} items={versionItems} isClearable={false}/>
+                        <Select bind:value={selectedVersionItem} items={versionItems} clearable={false}/>
                     </div>
                     <button class="btn btn-outline-light ms-2"
                             onclick={() => selectedVersionItem = versionItems[currentVersionIndex+1]}

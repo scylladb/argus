@@ -97,13 +97,20 @@
         inputAttributes={{ class: "form-control" }}
         bind:value={testSearcherValue}
         placeholder="Type to search. Can be: Test name, Release name, Group name."
-        noOptionsMessage='Examples: "release:5.4 artifacts" (any test or group inside 5.4 named artifacts), "group:artifacts centos release:5.3" (tests that contain centos substring inside 5.3 in the artifacts groups), "<test_uuid>" (specific test run id)'
-        labelIdentifier="name"
-        optionIdentifier="id"
-        Item={ViewSelectItem}
+        label="name"
+        itemId="id"
         loadOptions={testLookup}
         on:select={handleItemSelect}
-    />
+    >
+        <div slot="empty">
+            <div class="p-2 text-muted text-center">
+                Examples: "release:5.4 artifacts" (any test or group inside 5.4 named artifacts), "group:artifacts centos release:5.3" (tests that contain centos substring inside 5.3 in the artifacts groups), "&lt;test_uuid&gt;" (specific test run id)
+            </div>
+        </div>
+        <div slot="item" let:item let:index>
+            <ViewSelectItem {item} />
+        </div>
+    </Select>
 </div>
 
 

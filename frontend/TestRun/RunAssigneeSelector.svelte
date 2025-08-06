@@ -143,16 +143,19 @@
                     <div class="flex-fill">
                         <Select
                             itemFilter={filterUser}
-                            Item={User}
                             value={currentAssignee.value}
                             items={Object.values(
                                 userSelect
                             )}
                             hideEmptyState={true}
-                            isClearable={false}
-                            isSearchable={true}
+                            clearable={false}
+                            searchable={true}
                             on:select={handleAssign}
-                        />
+                        >
+                            <div slot="item" let:item let:index>
+                                <User {item} />
+                            </div>
+                        </Select>
                     </div>
                 </div>
             </div>

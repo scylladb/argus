@@ -470,11 +470,14 @@
                 value={users.find(u => u.id == plan.owner)}
                 on:select={(e) => plan.owner = e.detail.id}
                 items={users}
-                Item={User}
                 itemFilter={filterUser}
-                labelIdentifier="username"
-                optionIdentifier="id"
-            />
+                label="username"
+                itemId="id"
+            >
+                <div slot="item" let:item let:index>
+                    <User {item} />
+                </div>
+            </Select>
         </div>
     </div>
     {#if !PLAN_VALIDATION_RULES["target_version"].validated}
@@ -508,12 +511,15 @@
             <Select
                 bind:value={participants}
                 items={users}
-                Item={User}
                 itemFilter={filterUser}
-                isMulti={true}
-                labelIdentifier="username"
-                optionIdentifier="id"
-            />
+                multiple={true}
+                label="username"
+                itemId="id"
+            >
+                <div slot="item" let:item let:index>
+                    <User {item} />
+                </div>
+            </Select>
         </div>
     </div>
     <div class="d-flex align-items-center mb-2">
@@ -523,10 +529,13 @@
                 value={views.find(p => p.id == plan.view_id)}
                 on:select={(e) => plan.view_id = e.detail.id}
                 items={views}
-                Item={ViewSelect}
-                labelIdentifier="display_name"
-                optionIdentifier="id"
-            />
+                label="display_name"
+                itemId="id"
+            >
+                <div slot="item" let:item let:index>
+                    <ViewSelect {item} />
+                </div>
+            </Select>
         </div>
     </div>
     <div class="mb-2">
@@ -537,13 +546,18 @@
                     inputAttributes={{ class: "form-control" }}
                     bind:value={testSearcherValue}
                     placeholder="Search for tests..."
-                    noOptionsMessage="Type to search. Can be: Test name, Release name, Group name."
-                    labelIdentifier="name"
-                    optionIdentifier="id"
-                    Item={ViewSelectItem}
+                    label="name"
+                    itemId="id"
                     loadOptions={testLookup}
                     on:select={handleItemSelect}
-                />
+                >
+                    <div class="text-muted text-center p-2">
+                        Type to search. Can be: Test name, Release name, Group name.
+                    </div>
+                    <div slot="item" let:item let:index>
+                        <ViewSelectItem {item} />
+                    </div>
+                </Select>
             </div>
             <button class="ms-2 btn btn-primary" onclick={() => (gridViewOpen = true)}>
                 <Fa icon={faThLarge}/>
@@ -594,10 +608,13 @@
                         }}
                         items={participants}
                         itemFilter={filterUser}
-                        Item={User}
-                        labelIdentifier="username"
-                        optionIdentifier="id"
-                    />
+                        label="username"
+                        itemId="id"
+                    >
+                        <div slot="item" let:item let:index>
+                            <User {item} />
+                        </div>
+                    </Select>
                 </div>
                 {#if item.type == "group"}
                     <button class="ms-2 btn btn-sm btn-primary" onclick={() => explodeGroup(item.id)}><Fa icon={faExpand}/></button>

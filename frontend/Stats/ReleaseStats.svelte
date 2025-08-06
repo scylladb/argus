@@ -1,19 +1,6 @@
 <script lang="ts">
     import NumberStats from "./NumberStats.svelte";
 
-    const releaseStatsDefault = {
-        created: 0,
-        running: 0,
-        passed: 0,
-        failed: 0,
-        aborted: 0,
-        lastStatus: "unknown",
-        disabled: true,
-        limited: !showTestMap,
-        groups: {},
-        tests: {},
-        total: -1,
-    };
     interface Props {
         DisplayItem?: any;
         showTestMap?: boolean;
@@ -31,8 +18,22 @@
         horizontal = false,
         hiddenStatuses = [],
         displayExtendedStats = false,
-        releaseStats = releaseStatsDefault
+        releaseStats,
     }: Props = $props();
+
+    const releaseStatsDefault = {
+        created: 0,
+        running: 0,
+        passed: 0,
+        failed: 0,
+        aborted: 0,
+        lastStatus: "unknown",
+        disabled: true,
+        limited: !showTestMap,
+        groups: {},
+        tests: {},
+        total: -1,
+    };
 
 </script>
 

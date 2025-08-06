@@ -656,8 +656,8 @@
                                     }}
                                     placeholder="ImageId"
                                     hideEmptyState={true}
-                                    isClearable={true}
-                                    isSearchable={true}
+                                    clearable={true}
+                                    searchable={true}
                                 />
                                 {:catch err}
                                     <div class="">
@@ -676,8 +676,8 @@
                                     placeholder="Backend"
                                     items={FILTER_STACK.backend.options.map(id => { return { label: id, value: id};})}
                                     hideEmptyState={true}
-                                    isClearable={true}
-                                    isSearchable={true}
+                                    clearable={true}
+                                    searchable={true}
                                 />
                             </div>
                         </div>

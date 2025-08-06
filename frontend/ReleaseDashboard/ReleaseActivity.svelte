@@ -23,15 +23,15 @@
         release_name: "",
     });
 
-    const getPictureForId = function (id) {
+    const getPictureForId = function (id: string) {
         let picture_id = users[id]?.picture_id;
         return picture_id
             ? `/storage/picture/${picture_id}`
             : "/s/no-user-picture.png";
     };
 
-    const reverseArray = function (array) {
-        let arrayCopy = array;
+    const reverseArray = function (array: any[]) {
+        let arrayCopy = Array.from(array);
         arrayCopy.reverse();
         return arrayCopy;
     };
