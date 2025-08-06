@@ -574,7 +574,8 @@
                                     </span>
                                 {/if}
                             </div>
-                            <param.type bind:definition={param} bind:params={params} wrapper={onChangeWrapper}/>
+                            <!-- FIXME: bind is gone -->
+                            <param.type definition={param} bind:params={params} wrapper={onChangeWrapper}/>
                             <div id="paramHelp{sanitizeSelector(param.internalName ?? "")}" class="form-text">{@html param.description ?? rawParams.find(v => v.name == param.internalName)?.description ?? ""}</div>
                             {#if !param.validated && param.requiresValidation}
                                 <div class="alert alert-danger">

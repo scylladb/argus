@@ -322,8 +322,8 @@
                 </div>
             </div>
             <div class="row">
-                {#each sortedIssues[currentPage] ?? [] as issue (issue.id)}
-                    <GithubIssue {runId} bind:issue={issue} aggregated={aggregateByIssue} deleteEnabled={!submitDisabled} on:submitToCurrent on:issueDeleted={fetchIssues} on:labelClick={(e) => handleLabelClick(e.detail)}/>
+                {#each sortedIssues[currentPage] ?? [] as issue, idx (issue.id)}
+                    <GithubIssue {runId} bind:issue={sortedIssues[currentPage][idx]} aggregated={aggregateByIssue} deleteEnabled={!submitDisabled} on:submitToCurrent on:issueDeleted={fetchIssues} on:labelClick={(e) => handleLabelClick(e.detail)}/>
                 {/each}
             </div>
             <div class="d-flex ">
