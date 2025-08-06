@@ -42,7 +42,7 @@
     }
 
     let {
-        issue = {
+        issue = $bindable({
         id: "",
         number: -1,
         state: "unknown",
@@ -55,7 +55,7 @@
         url: "https://github.com/",
         user_id: "",
         added_on: "Mon, 1 Jan 1970 9:00:00 GMT",
-    },
+    }),
         runId,
         deleteEnabled = true,
         aggregated = false

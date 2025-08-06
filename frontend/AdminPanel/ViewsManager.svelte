@@ -453,8 +453,8 @@
                                 <Fa icon={faPlus} />
                             </button>
                         </div>
-                        {#each newWidgets as widget (widget.position)}
-                            <ViewWidget bind:widgetSettings={widget} items={newView.items} on:removeWidget={removeWidget}/>
+                        {#each newWidgets as widget, idx (widget.position)}
+                            <ViewWidget bind:widgetSettings={newWidgets[idx]} items={newView.items} on:removeWidget={removeWidget}/>
                         {/each}
                     </div>
                 </div>
