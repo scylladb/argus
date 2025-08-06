@@ -92,8 +92,10 @@
     class="table table-bordered table-sm text-center"
 >
     <thead>
-        <th>Log Type</th>
-        <th>Log URL</th>
+        <tr>
+            <th>Log Type</th>
+            <th>Log URL</th>
+        </tr>
     </thead>
     <tbody>
         {#each testRun.logs as [name, link], idx}

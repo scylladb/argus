@@ -302,10 +302,13 @@
     <div
         class="border-none mb-2"
     >
-        <button
+        <div
             class="btn w-100 rounded d-flex align-items-center { removableRuns ? "shadow-sm" : "p-2"}"
             class:btn-light={!open}
             class:btn-testruns-open={open}
+            role="button"
+            tabindex="0"
+            on:keydown={() => {}}
             on:click={() => {
                 open = !open;
                 new Collapse(`#collapse-${listId}`).toggle();
@@ -340,7 +343,7 @@
                     </button>
                 </div>
             {/if}
-        </button>
+        </div>
     </div>
     {#if configureRequested}
         <JobConfigureModal

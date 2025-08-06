@@ -83,8 +83,10 @@
                 {#if userFields.length > 0}
                     <table class="table table-responsive table-bordered table-striped table-hover">
                         <thead>
-                            <th>Key</th>
-                            <th>Value</th>
+                            <tr>
+                                <th>Key</th>
+                                <th>Value</th>
+                            </tr>
                         </thead>
                         <tbody>
                             {#each userFields as [key, value] (key)}

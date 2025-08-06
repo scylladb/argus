@@ -66,101 +66,103 @@
 </div>
 <table class="table table-bordered border">
     <thead>
-        <th
-            role="button"
-            scope="col"
-            class="text-center align-middle"
-            on:click={() => {
-                sortHeader = "name";
-                sortAscending = !sortAscending;
-            }}
-        >
-            {#if sortHeader == "name"}
-                <span
-                    class="d-inline-block"
-                    class:invertArrow={sortAscending}
-                >
-                    &#x25B2;
-                </span>
-            {/if}
-            Name
-        </th>
-        <th
-            role="button"
-            scope="col"
-            class="text-center align-middle"
-            on:click={() => {
-                sortHeader = "version";
-                sortAscending = !sortAscending;
-            }}
-        >
-            {#if sortHeader == "version"}
-                <span
-                    class="d-inline-block"
-                    class:invertArrow={sortAscending}
-                >
-                    &#x25B2;
-                </span>
-            {/if}
-            Version
-        </th>
-        <th
-            role="button"
-            scope="col"
-            class="text-center align-middle"
-            on:click={() => {
-                sortHeader = "date";
-                sortAscending = !sortAscending;
-            }}
-        >
-            {#if sortHeader == "date"}
-                <span
-                    class="d-inline-block"
-                    class:invertArrow={sortAscending}
-                >
-                    &#x25B2;
-                </span>
-            {/if}
-            Date
-        </th>
-        <th
-            role="button"
-            scope="col"
-            class="text-center align-middle"
-            on:click={() => {
-                sortHeader = "buildId";
-                sortAscending = !sortAscending;
-            }}
-        >
-            {#if sortHeader == "buildId"}
-                <span
-                    class="d-inline-block"
-                    class:invertArrow={sortAscending}
-                >
-                    &#x25B2;
-                </span>
-            {/if}
-            Build ID
-        </th>
-        <th
-            role="button"
-            scope="col"
-            class="text-center align-middle"
-            on:click={() => {
-                sortHeader = "revisionId";
-                sortAscending = !sortAscending;
-            }}
-        >
-            {#if sortHeader == "revisionId"}
-                <span
-                    class="d-inline-block"
-                    class:invertArrow={sortAscending}
-                >
-                    &#x25B2;
-                </span>
-            {/if}
-            SCM Revision
-        </th>
+        <tr>
+            <th
+                role="button"
+                scope="col"
+                class="text-center align-middle"
+                on:click={() => {
+                    sortHeader = "name";
+                    sortAscending = !sortAscending;
+                }}
+            >
+                {#if sortHeader == "name"}
+                    <span
+                        class="d-inline-block"
+                        class:invertArrow={sortAscending}
+                    >
+                        &#x25B2;
+                    </span>
+                {/if}
+                Name
+            </th>
+            <th
+                role="button"
+                scope="col"
+                class="text-center align-middle"
+                on:click={() => {
+                    sortHeader = "version";
+                    sortAscending = !sortAscending;
+                }}
+            >
+                {#if sortHeader == "version"}
+                    <span
+                        class="d-inline-block"
+                        class:invertArrow={sortAscending}
+                    >
+                        &#x25B2;
+                    </span>
+                {/if}
+                Version
+            </th>
+            <th
+                role="button"
+                scope="col"
+                class="text-center align-middle"
+                on:click={() => {
+                    sortHeader = "date";
+                    sortAscending = !sortAscending;
+                }}
+            >
+                {#if sortHeader == "date"}
+                    <span
+                        class="d-inline-block"
+                        class:invertArrow={sortAscending}
+                    >
+                        &#x25B2;
+                    </span>
+                {/if}
+                Date
+            </th>
+            <th
+                role="button"
+                scope="col"
+                class="text-center align-middle"
+                on:click={() => {
+                    sortHeader = "buildId";
+                    sortAscending = !sortAscending;
+                }}
+            >
+                {#if sortHeader == "buildId"}
+                    <span
+                        class="d-inline-block"
+                        class:invertArrow={sortAscending}
+                    >
+                        &#x25B2;
+                    </span>
+                {/if}
+                Build ID
+            </th>
+            <th
+                role="button"
+                scope="col"
+                class="text-center align-middle"
+                on:click={() => {
+                    sortHeader = "revisionId";
+                    sortAscending = !sortAscending;
+                }}
+            >
+                {#if sortHeader == "revisionId"}
+                    <span
+                        class="d-inline-block"
+                        class:invertArrow={sortAscending}
+                    >
+                        &#x25B2;
+                    </span>
+                {/if}
+                SCM Revision
+            </th>
+        </tr>
     </thead>
     <tbody>
         {#each sortPackagesByKey(packages, sortHeader, sortAscending) as pkg (pkg.name)}

@@ -117,8 +117,10 @@
             </div>
             <table class="table table-hover bg-white rounded">
                 <thead>
-                    <th>File</th>
-                    <th>Status</th>
+                    <tr>
+                        <th>File</th>
+                        <th>Status</th>
+                    </tr>
                 </thead>
                 <tbody>
                     {#each Object.entries(testsByClass) as [fileName, resultList], idx (fileName)}
@@ -144,10 +146,12 @@
                                 <div class="bg-white">
                                     <table class="table table-hover rounded overflow-hidden">
                                         <thead>
-                                            <th>Test</th>
-                                            <th>Class Name</th>
-                                            <th>Duration</th>
-                                            <th>Status</th>
+                                            <tr>
+                                                <th>Test</th>
+                                                <th>Class Name</th>
+                                                <th>Duration</th>
+                                                <th>Status</th>
+                                            </tr>
                                         </thead>
                                         <tbody>
                                             {#each resultList as result}
