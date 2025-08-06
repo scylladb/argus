@@ -2,7 +2,7 @@ import svelte from "rollup-plugin-svelte";
 import resolve from "@rollup/plugin-node-resolve";
 import css from "rollup-plugin-import-css";
 import typescript from "@rollup/plugin-typescript";
-import autoPreprocess from "svelte-preprocess";
+import { sveltePreprocess } from "svelte-preprocess";
 import commonjs from '@rollup/plugin-commonjs';
 
 
@@ -13,6 +13,7 @@ export default {
         main: "./frontend/argus.js",
         fontAwesome: "./frontend/font-awesome.js",
         //noto: "./frontend/fonts/noto.css",
+        globalAlert: "./frontend/Alert.js",
         notificationCounter: "./frontend/notification-counter.js",
         flashDebug: "./frontend/flashDebug.js",
         login: "./frontend/login.js",
@@ -41,14 +42,19 @@ export default {
         format: "esm",
         entryFileNames: "[name].bundle.js",
         assetFileNames: "public/dist/assets/[name][extname]",
+        globals: {
+            globalAlert: 'sendMessage'
+        }
     },
     plugins: [
         commonjs(),
-        css(),
+        css({
+            output: "styles.css",
+        }),
         typescript(),
         resolve({ browser: true, exportConditions: ['svelte'], }),
         svelte({
-            preprocess: autoPreprocess(),
+            preprocess: sveltePreprocess(),
             include: "/**/*.svelte",
         }),
     ]
