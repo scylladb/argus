@@ -9,7 +9,7 @@ Duty Planner for {{ release_name }}
 <script>
     const releaseData = JSON.parse('{{ data | tojson | safe }}');
 </script>
-<script defer src="/s/dist/dutyPlanner.bundle.js"></script>
+<script defer type="module" src="/s/dist/dutyPlanner.bundle.js"></script>
 {% endblock javascripts %}
 
 {% block body %}

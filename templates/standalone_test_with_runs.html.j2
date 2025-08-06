@@ -10,7 +10,7 @@ Test Run
     const gTestId = "{{ test_id }}";
     const additionalRuns = JSON.parse('{{ additional_runs | tojson | safe }}');
 </script>
-<script defer src="/s/dist/testRunsStandalone.bundle.js"></script>
+<script defer type="module" src="/s/dist/testRunsStandalone.bundle.js"></script>
 {% endblock javascripts %}
 
 {% block body %}

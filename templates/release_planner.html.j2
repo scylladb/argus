@@ -9,7 +9,7 @@ Release Planner for {{ release_name }}
 <script>
     window.releaseData = JSON.parse('{{ planner_data | tojson | safe }}');
 </script>
-<script defer src="/s/dist/releasePlanner.bundle.js"></script>
+<script defer type="module" src="/s/dist/releasePlanner.bundle.js"></script>
 {% endblock javascripts %}
 
 {% block body %}
