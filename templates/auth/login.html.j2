@@ -6,7 +6,7 @@
 
 {% block javascripts %}
 {{ super() }}
-<script defer src="/s/dist/login.bundle.js"></script>
+<script defer type="module" src="/s/dist/login.bundle.js"></script>
 <script>
   const GITHUB_SCOPES = "{{ github_scopes }}";
   const GITHUB_CLIENT_ID = "{{ github_cid }}";

@@ -9,7 +9,7 @@ Release Calendar for {{ release_name }}
 <script>
     const releaseData = JSON.parse('{{ data | tojson | safe }}');
 </script>
-<script defer src="/s/dist/releaseScheduler.bundle.js"></script>
+<script defer type="module" src="/s/dist/releaseScheduler.bundle.js"></script>
 {% endblock javascripts %}
 
 {% block body %}

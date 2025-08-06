@@ -9,7 +9,7 @@ My Schedule
     var globalSchedules = JSON.parse('{{ schedules | tojson | safe}}');
 </script>
 {{super()}}
-<script defer src="/s/dist/profileSchedules.bundle.js"></script>
+<script defer type="module" src="/s/dist/profileSchedules.bundle.js"></script>
 {% endblock javascripts %}
 
 {% block body %}
