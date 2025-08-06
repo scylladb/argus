@@ -5,7 +5,7 @@ import typescript from "@rollup/plugin-typescript";
 import { sveltePreprocess } from "svelte-preprocess";
 import commonjs from '@rollup/plugin-commonjs';
 
-
+const environment = process.env.ROLLUP_ENV || "production";
 
 export default {
     logLevel: "trace",
@@ -37,7 +37,8 @@ export default {
         teams: "./frontend/teams.js",
     },
     output: {
-        sourcemap: true,
+        sourcemap: environment !== "production",
+        compact: environment === "production",
         dir: "public/dist",
         format: "esm",
         entryFileNames: "[name].bundle.js",
