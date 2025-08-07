@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import {onMount} from "svelte";
     import Fa from "svelte-fa";
     import {faPlus, faChevronDown, faChevronUp} from "@fortawesome/free-solid-svg-icons";
@@ -8,11 +10,10 @@
     import ActionItem from "./ActionItem.svelte";
     import CommentEditor from "../../../Discussion/CommentEditor.svelte";
 
-    export let dashboardObject;
-    export let settings;
+    let { dashboardObject, settings } = $props();
     let index = settings.index;
-    let redraw = 0;
-    let users = {};
+    let redraw = $state(0);
+    let users = $state({});
 
     interface Entry {
         id: string;
@@ -38,23 +39,23 @@
         createdAt: Date;
     }
 
-    let highlights: Entry[] = [];
-    let actionItems: Entry[] = [];
-    let showNewHighlight = false;
-    let showNewActionItem = false;
-    let showArchivedHighlights = false;
-    let showArchivedActionItems = false;
+    let highlights: Entry[] = $state([]);
+    let actionItems: Entry[] = $state([]);
+    let showNewHighlight = $state(false);
+    let showNewActionItem = $state(false);
+    let showArchivedHighlights = $state(false);
+    let showArchivedActionItems = $state(false);
     let newHighlight = "";
     let newActionItem = "";
     let newActionInput: HTMLInputElement;
     let newHighlightInput: HTMLInputElement;
 
-    $: {
+    run(() => {
         if (Object.keys(users).length === 0 && Object.keys($userList).length > 0) {
             users = $userList;
             redraw++
         }
-    }
+    });
 
     onMount(async () => {
         const response = await fetch(`/api/v1/views/widgets/highlights?view_id=${dashboardObject.id}&index=${index}`);
@@ -294,13 +295,17 @@
         }
     };
 
-    $: if (showNewActionItem && newActionInput) {
-        newActionInput.focus();
-    }
+    run(() => {
+        if (showNewActionItem && newActionInput) {
+            newActionInput.focus();
+        }
+    });
 
-    $: if (showNewHighlight && newHighlightInput) {
-        newHighlightInput.focus();
-    }
+    run(() => {
+        if (showNewHighlight && newHighlightInput) {
+            newHighlightInput.focus();
+        }
+    });
 </script>
 
 
@@ -333,7 +338,7 @@
                                 />
                             </div>
                         {:else}
-                            <button class="btn w-100 text-start text-muted" on:click={() => showNewHighlight = true}>
+                            <button class="btn w-100 text-start text-muted" onclick={() => showNewHighlight = true}>
                                 <Fa icon={faPlus}/>
                                 Add Highlight
                             </button>
@@ -343,7 +348,7 @@
                 {#if highlights.some(h => h.isArchived)}
                     <div class="mt-3">
                         <button class="btn w-100 text-start"
-                                on:click={() => showArchivedHighlights = !showArchivedHighlights}>
+                                onclick={() => showArchivedHighlights = !showArchivedHighlights}>
                             <Fa icon={showArchivedHighlights ? faChevronUp : faChevronDown}/>
                             {showArchivedHighlights ? "Hide Archived Highlights" : "Show Archived Highlights"}
                         </button>
@@ -395,7 +400,7 @@
                                 />
                             </div>
                         {:else}
-                            <button class="btn w-100 text-start text-muted" on:click={() => showNewActionItem = true}>
+                            <button class="btn w-100 text-start text-muted" onclick={() => showNewActionItem = true}>
                                 <Fa icon={faPlus}/>
                                 Add Action Item
                             </button>
@@ -405,7 +410,7 @@
                 {#if actionItems.some(a => a.isArchived)}
                     <div class="mt-3">
                         <button class="btn w-100 text-start"
-                                on:click={() => showArchivedActionItems = !showArchivedActionItems}>
+                                onclick={() => showArchivedActionItems = !showArchivedActionItems}>
                             <Fa icon={showArchivedActionItems ? faChevronUp : faChevronDown}/>
                             {showArchivedActionItems ? "Hide Archived Action Items" : "Show Archived Action Items"}
                         </button>

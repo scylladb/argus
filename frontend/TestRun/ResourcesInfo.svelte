@@ -1,7 +1,4 @@
-<script>
-    export let resources;
-    export let backend;
-    export let run_id;
+<script lang="ts">
     import { timestampToISODate } from "../Common/DateUtils";
     import { titleCase } from "../Common/TextUtils";
     import Fa from "svelte-fa";
@@ -10,6 +7,7 @@
         faPlay,
     } from "@fortawesome/free-solid-svg-icons";
     import { sendMessage } from "../Stores/AlertStore";
+    let { resources = $bindable(), backend, run_id } = $props();
     let sortHeaders = {
         creationTime: ["instance_info", "creation_time"],
         terminationTime: ["instance_info", "termination_time"],
@@ -25,9 +23,9 @@
         publicIp: ["instance_info", "public_ip"],
         privateIp: ["instance_info", "private_ip"],
     };
-    let sortHeader = "name";
-    let sortAscending = false;
-    let filterString = "";
+    let sortHeader = $state("name");
+    let sortAscending = $state(false);
+    let filterString = $state("");
 
     const tableStates = {
         running: "table-success",
@@ -88,7 +86,7 @@
         <button
             type="button"
             class="btn btn-outline-success me-2"
-            on:click={() => {
+            onclick={() => {
                 navigator.clipboard.writeText(
                     CMD_CLEAN_RESOURCES
                 );
@@ -110,7 +108,7 @@
         class="form-control"
         type="text"
         placeholder="Filter resources"
-        on:keyup={(e) => {
+        onkeyup={(e) => {
             filterString = e.target.value;
             resources = resources;
         }}
@@ -118,253 +116,255 @@
 </div>
 <table class="table table-bordered border">
     <thead>
-        <th
-            role="button"
-            scope="col"
-            class="text-center align-middle"
-            on:click={() => {
-                sortHeader = "provider";
-                sortAscending = !sortAscending;
-            }}
-        >
-            {#if sortHeader == "provider"}
-                <span
-                    class="d-inline-block"
-                    class:invertArrow={sortAscending}
-                >
-                    &#x25B2;
-                </span>
-            {/if}
-            Provider
-        </th>
-        <th
-            role="button"
-            scope="col"
-            class="text-center align-middle"
-            on:click={() => {
-                sortHeader = "type";
-                sortAscending = !sortAscending;
-            }}
-        >
-            {#if sortHeader == "type"}
-                <span
-                    class="d-inline-block"
-                    class:invertArrow={sortAscending}
-                >
-                    &#x25B2;
-                </span>
-            {/if}
-            Instance Type
-        </th>
-        <th
-            role="button"
-            scope="col"
-            class="text-center align-middle"
-            on:click={() => {
-                sortHeader = "name";
-                sortAscending = !sortAscending;
-            }}
-        >
-            {#if sortHeader == "name"}
-                <span
-                    class="d-inline-block"
-                    class:invertArrow={sortAscending}
-                >
-                    &#x25B2;
-                </span>
-            {/if}
-            Resource name
-        </th>
-        <th
-            role="button"
-            scope="col"
-            class="text-center align-middle"
-            on:click={() => {
-                sortHeader = "region";
-                sortAscending = !sortAscending;
-            }}
-        >
-            {#if sortHeader == "region"}
-                <span
-                    class="d-inline-block"
-                    class:invertArrow={sortAscending}
-                >
-                    &#x25B2;
-                </span>
-            {/if}
-            Region
-        </th>
-        <th
-            role="button"
-            scope="col"
-            class="text-center align-middle"
-            on:click={() => {
-                sortHeader = "dcName";
-                sortAscending = !sortAscending;
-            }}
-        >
-            {#if sortHeader == "dcName"}
-                <span
-                    class="d-inline-block"
-                    class:invertArrow={sortAscending}
-                >
-                    &#x25B2;
-                </span>
-            {/if}
-            DC Name
-        </th>
-        <th
-            role="button"
-            scope="col"
-            class="text-center align-middle"
-            on:click={() => {
-                sortHeader = "rackName";
-                sortAscending = !sortAscending;
-            }}
-        >
-            {#if sortHeader == "rackName"}
-                <span
-                    class="d-inline-block"
-                    class:invertArrow={sortAscending}
-                >
-                    &#x25B2;
-                </span>
-            {/if}
-            Rack Name
-        </th>
-        <th
-            role="button"
-            scope="col"
-            class="text-center align-middle"
-            on:click={() => {
-                sortHeader = "shards";
-                sortAscending = !sortAscending;
-            }}
-        >
-            {#if sortHeader == "shards"}
-                <span
-                    class="d-inline-block"
-                    class:invertArrow={sortAscending}
-                >
-                    &#x25B2;
-                </span>
-            {/if}
-            Shards
-        </th>
-        <th
-            role="button"
-            scope="col"
-            class="text-center align-middle"
-            on:click={() => {
-                sortHeader = "publicIp";
-                sortAscending = !sortAscending;
-            }}
-        >
-            {#if sortHeader == "publicIp"}
-                <span
-                    class="d-inline-block"
-                    class:invertArrow={sortAscending}
-                >
-                    &#x25B2;
-                </span>
-            {/if}
-            Public IP
-        </th>
-        <th
-            role="button"
-            scope="col"
-            class="text-center align-middle"
-            on:click={() => {
-                sortHeader = "privateIp";
-                sortAscending = !sortAscending;
-            }}
-        >
-            {#if sortHeader == "privateIp"}
-                <span
-                    class="d-inline-block"
-                    class:invertArrow={sortAscending}
-                >
-                    &#x25B2;
-                </span>
-            {/if}
-            Private IP
-        </th>
-        <th
-            role="button"
-            scope="col"
-            class="text-center align-middle"
-            on:click={() => {
-                sortHeader = "state";
-                sortAscending = !sortAscending;
-            }}
-        >
-            {#if sortHeader == "state"}
-                <span
-                    class="d-inline-block"
-                    class:invertArrow={sortAscending}
-                >
-                    &#x25B2;
-                </span>
-            {/if}
-            State
-        </th>
-        <th
-            role="button"
-            scope="col"
-            class="text-center align-middle"
-            on:click={() => {
-                sortHeader = "creationTime";
-                sortAscending = !sortAscending;
-            }}
-        >
-            {#if sortHeader == "creationTime"}
-                <span
-                    class="d-inline-block"
-                    class:invertArrow={sortAscending}
-                >
-                    &#x25B2;
-                </span>
-            {/if}
-            Created at
-        </th>
-        <th
-            role="button"
-            scope="col"
-            class="text-center align-middle"
-            on:click={() => {
-                sortHeader = "terminationTime";
-                sortAscending = !sortAscending;
-            }}
-        >
-            {#if sortHeader == "terminationTime"}
-                <span
-                    class="d-inline-block"
-                    class:invertArrow={sortAscending}
-                >
-                    &#x25B2;
-                </span>
-            {/if}
-            Terminated at
-        </th>
-        <th
-            role="button"
-            scope="col"
-            class="text-center align-middle"
-            on:click={() => {
-                sortHeader = "terminationReason";
-                sortAscending = !sortAscending;
-            }}
-        >
-            {#if sortHeader == "terminationReason"}
-                <span
-                    class="d-inline-block"
-                    class:invertArrow={sortAscending}
-                >
-                    &#x25B2;
-                </span>
-            {/if}
-            Termination reason
-        </th>
+        <tr>
+            <th
+                role="button"
+                scope="col"
+                class="text-center align-middle"
+                onclick={() => {
+                    sortHeader = "provider";
+                    sortAscending = !sortAscending;
+                }}
+            >
+                {#if sortHeader == "provider"}
+                    <span
+                        class="d-inline-block"
+                        class:invertArrow={sortAscending}
+                    >
+                        &#x25B2;
+                    </span>
+                {/if}
+                Provider
+            </th>
+            <th
+                role="button"
+                scope="col"
+                class="text-center align-middle"
+                onclick={() => {
+                    sortHeader = "type";
+                    sortAscending = !sortAscending;
+                }}
+            >
+                {#if sortHeader == "type"}
+                    <span
+                        class="d-inline-block"
+                        class:invertArrow={sortAscending}
+                    >
+                        &#x25B2;
+                    </span>
+                {/if}
+                Instance Type
+            </th>
+            <th
+                role="button"
+                scope="col"
+                class="text-center align-middle"
+                onclick={() => {
+                    sortHeader = "name";
+                    sortAscending = !sortAscending;
+                }}
+            >
+                {#if sortHeader == "name"}
+                    <span
+                        class="d-inline-block"
+                        class:invertArrow={sortAscending}
+                    >
+                        &#x25B2;
+                    </span>
+                {/if}
+                Resource name
+            </th>
+            <th
+                role="button"
+                scope="col"
+                class="text-center align-middle"
+                onclick={() => {
+                    sortHeader = "region";
+                    sortAscending = !sortAscending;
+                }}
+            >
+                {#if sortHeader == "region"}
+                    <span
+                        class="d-inline-block"
+                        class:invertArrow={sortAscending}
+                    >
+                        &#x25B2;
+                    </span>
+                {/if}
+                Region
+            </th>
+            <th
+                role="button"
+                scope="col"
+                class="text-center align-middle"
+                onclick={() => {
+                    sortHeader = "dcName";
+                    sortAscending = !sortAscending;
+                }}
+            >
+                {#if sortHeader == "dcName"}
+                    <span
+                        class="d-inline-block"
+                        class:invertArrow={sortAscending}
+                    >
+                        &#x25B2;
+                    </span>
+                {/if}
+                DC Name
+            </th>
+            <th
+                role="button"
+                scope="col"
+                class="text-center align-middle"
+                onclick={() => {
+                    sortHeader = "rackName";
+                    sortAscending = !sortAscending;
+                }}
+            >
+                {#if sortHeader == "rackName"}
+                    <span
+                        class="d-inline-block"
+                        class:invertArrow={sortAscending}
+                    >
+                        &#x25B2;
+                    </span>
+                {/if}
+                Rack Name
+            </th>
+            <th
+                role="button"
+                scope="col"
+                class="text-center align-middle"
+                onclick={() => {
+                    sortHeader = "shards";
+                    sortAscending = !sortAscending;
+                }}
+            >
+                {#if sortHeader == "shards"}
+                    <span
+                        class="d-inline-block"
+                        class:invertArrow={sortAscending}
+                    >
+                        &#x25B2;
+                    </span>
+                {/if}
+                Shards
+            </th>
+            <th
+                role="button"
+                scope="col"
+                class="text-center align-middle"
+                onclick={() => {
+                    sortHeader = "publicIp";
+                    sortAscending = !sortAscending;
+                }}
+            >
+                {#if sortHeader == "publicIp"}
+                    <span
+                        class="d-inline-block"
+                        class:invertArrow={sortAscending}
+                    >
+                        &#x25B2;
+                    </span>
+                {/if}
+                Public IP
+            </th>
+            <th
+                role="button"
+                scope="col"
+                class="text-center align-middle"
+                onclick={() => {
+                    sortHeader = "privateIp";
+                    sortAscending = !sortAscending;
+                }}
+            >
+                {#if sortHeader == "privateIp"}
+                    <span
+                        class="d-inline-block"
+                        class:invertArrow={sortAscending}
+                    >
+                        &#x25B2;
+                    </span>
+                {/if}
+                Private IP
+            </th>
+            <th
+                role="button"
+                scope="col"
+                class="text-center align-middle"
+                onclick={() => {
+                    sortHeader = "state";
+                    sortAscending = !sortAscending;
+                }}
+            >
+                {#if sortHeader == "state"}
+                    <span
+                        class="d-inline-block"
+                        class:invertArrow={sortAscending}
+                    >
+                        &#x25B2;
+                    </span>
+                {/if}
+                State
+            </th>
+            <th
+                role="button"
+                scope="col"
+                class="text-center align-middle"
+                onclick={() => {
+                    sortHeader = "creationTime";
+                    sortAscending = !sortAscending;
+                }}
+            >
+                {#if sortHeader == "creationTime"}
+                    <span
+                        class="d-inline-block"
+                        class:invertArrow={sortAscending}
+                    >
+                        &#x25B2;
+                    </span>
+                {/if}
+                Created at
+            </th>
+            <th
+                role="button"
+                scope="col"
+                class="text-center align-middle"
+                onclick={() => {
+                    sortHeader = "terminationTime";
+                    sortAscending = !sortAscending;
+                }}
+            >
+                {#if sortHeader == "terminationTime"}
+                    <span
+                        class="d-inline-block"
+                        class:invertArrow={sortAscending}
+                    >
+                        &#x25B2;
+                    </span>
+                {/if}
+                Terminated at
+            </th>
+            <th
+                role="button"
+                scope="col"
+                class="text-center align-middle"
+                onclick={() => {
+                    sortHeader = "terminationReason";
+                    sortAscending = !sortAscending;
+                }}
+            >
+                {#if sortHeader == "terminationReason"}
+                    <span
+                        class="d-inline-block"
+                        class:invertArrow={sortAscending}
+                    >
+                        &#x25B2;
+                    </span>
+                {/if}
+                Termination reason
+            </th>
+        </tr>
     </thead>
     <tbody>
         {#each sortResourcesByKey(resources, sortHeader, sortAscending) as resource (resource.name)}

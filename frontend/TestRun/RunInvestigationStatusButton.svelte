@@ -1,12 +1,12 @@
-<script>
+<script lang="ts">
     import { createEventDispatcher } from "svelte";
     import Fa from "svelte-fa";
     import { InvestigationButtonCSSClassMap, InvestigationStatusIcon, TestInvestigationStatus, TestInvestigationStatusStrings } from "../Common/TestStatus";
     import { sendMessage } from "../Stores/AlertStore";
 
-    export let testRun;
+    let { testRun } = $props();
     const dispatch = createEventDispatcher();
-    let disableButtons = false;
+    let disableButtons = $state(false);
 
     const handleInvestigationStatus = async function (newInvestigationStatus) {
         disableButtons = true;
@@ -73,7 +73,7 @@
                 <button
                     class="dropdown-item"
                     disabled={disableButtons}
-                    on:click={() => {
+                    onclick={() => {
                         handleInvestigationStatus(status);
                     }}
                     >{TestInvestigationStatusStrings[

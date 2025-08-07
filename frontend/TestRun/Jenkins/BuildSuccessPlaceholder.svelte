@@ -6,19 +6,19 @@
     import Fa from "svelte-fa";
     import { faArrowCircleRight } from "@fortawesome/free-solid-svg-icons";
 
+
     /**
-     * @type {{
-     *  queueItem: number,
-     *  isFirst: boolean,
-     *  plugin: string,
-     * }}
+     * @typedef {Object} Props
+     * @property {any} args
      */
-    export let args;
+
+    /** @type {Props} */
+    let { args } = $props();
     const dispatch = createEventDispatcher();
 
-    let fetching = true;
+    let fetching = $state(true);
     let retrySeconds = 5;
-    let buildInfo = {};
+    let buildInfo = $state({});
     let resultRetryTimeout;
 
     /**
@@ -93,7 +93,7 @@
                     <div>
                         This is a first build, which will require a re-run to actually start.
                         <div class="my-2 p-2">
-                            <button class="w-100 btn btn-success" on:click={() => dispatch("exit", { firstBuildRestart: true, buildNumber: buildInfo.number })}>
+                            <button class="w-100 btn btn-success" onclick={() => dispatch("exit", { firstBuildRestart: true, buildNumber: buildInfo.number })}>
                                 <Fa icon={faArrowCircleRight} /> Start build #2
                             </button>
                         </div>
@@ -101,7 +101,7 @@
                 {:else}
                     <div>
                         <div class="my-2 p-2">
-                            <button class="w-100 btn btn-success" on:click={() => dispatch("exit", { firstBuildRestart: false, buildNumber: buildInfo.number })}>
+                            <button class="w-100 btn btn-success" onclick={() => dispatch("exit", { firstBuildRestart: false, buildNumber: buildInfo.number })}>
                                 <Fa icon={faArrowCircleRight} /> Exit and add the test to workspace
                             </button>
                         </div>

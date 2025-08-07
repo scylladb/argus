@@ -14,17 +14,17 @@
     import GroupCreator from "./GroupCreator.svelte";
     import TestCreator from "./TestCreator.svelte";
     import ReleaseEditor from "./ReleaseEditor.svelte";
-    let releases = [];
-    let currentRelease;
-    let currentReleaseId;
+    let releases = $state([]);
+    let currentRelease = $state();
+    let currentReleaseId = $state();
     let currentReleaseData;
-    let currentGroup;
-    let creatingRelease = false;
-    let editingRelease = false;
-    let creatingGroup = false;
-    let creatingTest = false;
-    let moving = false;
-    let fetching = false;
+    let currentGroup = $state();
+    let creatingRelease = $state(false);
+    let editingRelease = $state(false);
+    let creatingGroup = $state(false);
+    let creatingTest = $state(false);
+    let moving = $state(false);
+    let fetching = $state(false);
 
     let groups = [];
     let tests = [];
@@ -337,7 +337,7 @@
             <select
                 class="form-select"
                 bind:value={currentReleaseId}
-                on:change={handleReleaseSelection}
+                onchange={handleReleaseSelection}
             >
                 {#each releases as release (release.id)}
                     <option value={release.id}
@@ -355,7 +355,7 @@
                         role="switch"
                         title="Whether this is a trunk branch, e.g. master"
                         bind:checked={currentRelease.perpetual}
-                        on:change={handleReleasePerpetualityChange}
+                        onchange={handleReleasePerpetualityChange}
                         id="releaseManagerSwitchPerpetual"
                     />
                     <label
@@ -370,7 +370,7 @@
                         role="switch"
                         title="Whether or not fetch stats for this release in some cases"
                         bind:checked={currentRelease.dormant}
-                        on:change={handleReleaseDormancyChange}
+                        onchange={handleReleaseDormancyChange}
                         id="releaseManagerSwitchDormant"
                     />
                     <label
@@ -385,7 +385,7 @@
                         role="switch"
                         title="Hide this release from Workspace and Releases page"
                         bind:checked={currentRelease.enabled}
-                        on:change={handleReleaseStateChange}
+                        onchange={handleReleaseStateChange}
                         id="releaseManagerSwitchEnabled"
                     />
                     <label
@@ -400,7 +400,7 @@
                 <div class="mx-2">
                     <button
                         class="btn btn-primary"
-                        on:click={() => (editingRelease = true)}
+                        onclick={() => (editingRelease = true)}
                     >
                         Edit
                     </button>
@@ -416,7 +416,7 @@
             {/if}
             <button
                 class="btn btn-success"
-                on:click={() => (creatingRelease = true)}
+                onclick={() => (creatingRelease = true)}
             >
                 New Release
             </button>
@@ -432,7 +432,7 @@
         <div class="row border-top mt-2">
             <div class="col">
                 <div class="d-flex align-items-center justify-content-center bg-white py-4">
-                    <span class="spinner-border spinner-border-sm" /> <span class="ms-2">Working...</span>
+                    <span class="spinner-border spinner-border-sm"></span> <span class="ms-2">Working...</span>
                 </div>
             </div>
         </div>
@@ -442,7 +442,7 @@
             <row class="border-top mt-2">
                 <div class="col">
                     <div class="text-muted text-center mt-4">
-                        <span class="spinner-border spinner-border-sm" /> Loading...
+                        <span class="spinner-border spinner-border-sm"></span> Loading...
                     </div>
                 </div>
             </row>
@@ -455,7 +455,7 @@
                             <button
                                 class="ms-2 btn btn-sm btn-success"
                                 title="Create new"
-                                on:click={() => (creatingGroup = true)}
+                                onclick={() => (creatingGroup = true)}
                             >
                                 New Group
                             </button>
@@ -474,7 +474,7 @@
                                 class="list-group-item d-flex"
                                 role="button"
                                 class:selected={currentGroup?.id == group.id}
-                                on:click={() => handleGroupChange(group)}
+                                onclick={() => handleGroupChange(group)}
                             >
                                 <ReleaseManagerGroup
                                     {group}
@@ -493,7 +493,7 @@
                     <div class="col-6">
                         {#await fetchGroupTests(currentGroup)}
                             <div class="text-center text-muted mt-4">
-                                <span class="spinner-border spinner-border-sm" /> Loading...
+                                <span class="spinner-border spinner-border-sm"></span> Loading...
                             </div>
                         {:then groupTests}
                             <div class="d-flex align-items-center mb-2 my-2">
@@ -501,7 +501,7 @@
                                 <button
                                     class="ms-2 btn btn-sm btn-success"
                                     title="Batch move"
-                                    on:click={() => (moving = true)}
+                                    onclick={() => (moving = true)}
                                     ><Fa icon={faDolly} /></button
                                 >
                                 {#if moving}
@@ -516,7 +516,7 @@
                                     <button
                                         class="ms-2 btn btn-sm btn-success"
                                         title="Create new"
-                                        on:click={() => (creatingTest = true)}
+                                        onclick={() => (creatingTest = true)}
                                         >New Test</button
                                     >
                                     {#if creatingTest}

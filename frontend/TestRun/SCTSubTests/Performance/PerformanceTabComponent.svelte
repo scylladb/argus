@@ -1,8 +1,8 @@
-<script>
+<script lang="ts">
     import { faChartSimple } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
 
-    export let testRun;
+    let { testRun } = $props();
 </script>
 
 <button

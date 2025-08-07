@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
     import { createEventDispatcher, onMount } from "svelte";
     import { sendMessage } from "../../Stores/AlertStore";
     import BuildStartPlaceholder from "./BuildStartPlaceholder.svelte";
@@ -13,18 +13,20 @@
     import ModalError from "./ModalError.svelte";
     import CloneSuccess from "./CloneSuccess.svelte";
 
-    export let buildId;
-    export let buildNumber;
-    export let pluginName;
-    export let testId;
-    export let oldTestName;
-    export let releaseId;
-    export let groupId;
+    let {
+        buildId,
+        buildNumber,
+        pluginName,
+        testId,
+        oldTestName,
+        releaseId,
+        groupId
+    } = $props();
     let newBuildId;
     let newTestId;
     let shouldRestartFromParams = false;
 
-    let currentState = "none";
+    let currentState = $state("none");
     const dispatch = createEventDispatcher();
 
     const STATES = {
@@ -42,7 +44,7 @@
         ERROR: "error",
     };
 
-    const STATE_MACHINE = {
+    const STATE_MACHINE = $state({
         [STATES.LOAD_TARGETS]: {
             component: LoadTargetsPlaceholder,
             onEnter: async function () {
@@ -244,7 +246,7 @@
             },
             args: {},
         }
-    };
+    });
 
     const setState = function(newState, init) {
         currentState = newState;
@@ -321,6 +323,8 @@
     onMount(() => {
         setState(STATES.LOAD_TARGETS, {});
     });
+
+    const SvelteComponent = $derived(STATE_MACHINE[currentState].component);
 </script>
 
 <div class="clone-modal">
@@ -335,13 +339,13 @@
                 <div class="ms-auto">
                     <button
                         class="btn btn-close"
-                        on:click={() => {
+                        onclick={() => {
                             dispatch("cloneCancel");
                         }}
                     ></button>
                 </div>
             </div>
-            <svelte:component this={STATE_MACHINE[currentState].component} args={STATE_MACHINE[currentState].args} on:exit={STATE_MACHINE[currentState].onExit}/>
+            <SvelteComponent args={STATE_MACHINE[currentState].args} on:exit={STATE_MACHINE[currentState].onExit}/>
         </div>
     </div>
 </div>

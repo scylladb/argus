@@ -1,25 +1,37 @@
-<script>
+<script lang="ts">
     import { StatusSortPriority } from "../Common/TestStatus";
     import { apiMethodCall } from "../Common/ApiUtils";
     import NumberStats from "../Stats/NumberStats.svelte";
     import AssigneeList from "./AssigneeList.svelte";
     import Test from "./Test.svelte";
     import { sanitizeSelector } from "../Common/TextUtils";
-    export let release = "";
-    export let group = {
+    interface Props {
+        release?: string;
+        group?: any;
+        filtered?: boolean;
+        assigneeList?: any;
+        runs?: any;
+        groupStats: any;
+        releaseObject: any;
+    }
+
+    let {
+        release = "",
+        group = {
         name: "",
         pretty_name: "",
         id: "",
-    };
-    export let filtered = false;
-    export let assigneeList = [];
-    export let runs = [];
-    export let groupStats;
-    export let releaseObject;
+    },
+        filtered = false,
+        assigneeList = [],
+        runs = $bindable([]),
+        groupStats,
+        releaseObject
+    }: Props = $props();
 
-    let groupClicked = false;
-    let testAssignees = {};
-    let tests = [];
+    let groupClicked = $state(false);
+    let testAssignees = $state({});
+    let tests = $state([]);
 
     const sortTestsByStatus = function (tests) {
         if (tests.length == 0 || !groupStats) return tests;
@@ -72,7 +84,7 @@
         }
     };
 
-    let filterString = "";
+    let filterString = $state("");
     const isFiltered = function (name = "") {
         if (filterString == "") {
             return false;
@@ -92,7 +104,7 @@
             class="accordion-button collapsed"
             data-bs-toggle="collapse"
             data-bs-target="#collapse-{group.id}"
-            on:click={handleGroupClick}
+            onclick={handleGroupClick}
         >
             <div class="d-flex flex-column w-100">
                 <div class="mb-1">
@@ -103,13 +115,13 @@
                         {#if groupStats?.total > 0}
                             <NumberStats stats={groupStats} />
                         {:else if groupStats?.disabled ?? false}
-                            <!-- svelte-ignore empty-block -->
+                            <!-- svelte-ignore block_empty -->
                         {:else if groupStats?.total == 0}
-                            <!-- svelte-ignore empty-block -->
+                            <!-- svelte-ignore block_empty -->
                         {:else if !releaseObject.enabled || releaseObject.dormant}
-                            <!-- svelte-ignore empty-block -->
+                            <!-- svelte-ignore block_empty -->
                         {:else}
-                            <span class="spinner-border spinner-border-sm" />
+                            <span class="spinner-border spinner-border-sm"></span>
                         {/if}
                     </div>
                     <div class="ms-auto me-4">
@@ -127,7 +139,7 @@
         {#await fetchTests()}
             <div class="row">
                 <div class="col text-center p-1">
-                    <span class="spinner-border spinner-border-sm" /> Loading...
+                    <span class="spinner-border spinner-border-sm"></span> Loading...
                 </div>
             </div>
         {:then}
@@ -137,7 +149,7 @@
                     type="text"
                     placeholder="Filter tests"
                     bind:value={filterString}
-                    on:input={() => {
+                    oninput={() => {
                         tests = tests;
                     }}
                 />

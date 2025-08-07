@@ -1,24 +1,28 @@
-<script>
+<script lang="ts">
     import { onDestroy, onMount } from "svelte";
     import { sanitizeSelector } from  "../Common/TextUtils";
     import NumberStats from "../Stats/NumberStats.svelte";
     import { apiMethodCall } from "../Common/ApiUtils";
     import RunGroup from "./RunGroup.svelte";
 
-    export let release = {
+    interface Props {
+        release?: any;
+        filtered?: boolean;
+        runs?: any;
+    }
+
+    let { release = {
         name: "undefined",
         pretty_name: "undefined",
-    };
-    export let filtered = false;
-    export let runs = [];
-    let releaseStats;
-    let statsFetched = false;
+    }, filtered = false, runs = $bindable([]) }: Props = $props();
+    let releaseStats = $state();
+    let statsFetched = $state(false);
 
-    let releaseClicked = false;
-    let releaseGroups = [];
+    let releaseClicked = $state(false);
+    let releaseGroups = $state([]);
 
-    let filterString = "";
-    let assigneeList = {};
+    let filterString = $state("");
+    let assigneeList = $state({});
 
     const isFiltered = function (name = "") {
         if (filterString == "") {
@@ -92,7 +96,7 @@
             data-argus-release={release.name}
             data-bs-toggle="collapse"
             data-bs-target="#collapse-{release.id}"
-            on:click={handleReleaseClick}
+            onclick={handleReleaseClick}
             >
                 <div class="d-flex flex-column">
                     <div class="mb-1">
@@ -103,12 +107,12 @@
                             {#if releaseStats?.total > 0}
                                 <NumberStats stats={releaseStats} />
                             {:else if releaseStats?.total == 0}
-                                <!-- svelte-ignore empty-block -->
+                                <!-- svelte-ignore block_empty -->
                             {/if}
                         {:else if !statsFetched && releaseClicked}
-                            <span class="spinner-border spinner-border-sm" /> Loading stats.
+                            <span class="spinner-border spinner-border-sm"></span> Loading stats.
                         {:else}
-                                <!-- svelte-ignore empty-block -->
+                                <!-- svelte-ignore block_empty -->
                         {/if}
                     </div>
                 </div>
@@ -123,7 +127,7 @@
             <a href="/dashboard/{release.name}" class="btn btn-sm btn-dark"
                 >Dashboard</a
             >
-            <button class="btn btn-sm btn-dark" on:click={refreshReleaseStats}
+            <button class="btn btn-sm btn-dark" onclick={refreshReleaseStats}
                 >Update Stats</button
             >
         </div>
@@ -133,7 +137,7 @@
                 type="text"
                 placeholder="Filter groups"
                 bind:value={filterString}
-                on:input={() => {
+                oninput={() => {
                     releaseGroups = releaseGroups;
                 }}
             />
@@ -147,7 +151,7 @@
                 {#await fetchGroups()}
                     <div class="row">
                         <div class="col text-center p-1">
-                            <span class="spinner-border spinner-border-sm" /> Getting groups...
+                            <span class="spinner-border spinner-border-sm"></span> Getting groups...
                         </div>
                     </div>
                 {:then}

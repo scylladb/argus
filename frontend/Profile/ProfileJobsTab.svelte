@@ -1,4 +1,6 @@
-<script>
+<script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import { faCircle, faInfoCircle} from "@fortawesome/free-solid-svg-icons";
     import ProfileJob from "./ProfileJob.svelte";
     import Fa from "svelte-fa";
@@ -6,19 +8,18 @@
     import { titleCase } from "../Common/TextUtils";
     import { createEventDispatcher } from "svelte";
 
-    export let jobs = [];
-    export let filterExpr = () => true;
+    let { jobs = $bindable([]), filterExpr = () => true } = $props();
     const dispatch = createEventDispatcher();
-    let currentPage = 0;
-    let pagedData = [];
-    let filterString = "";
+    let currentPage = $state(0);
+    let pagedData = $state([]);
+    let filterString = $state("");
     let testIdMap = {};
-    let releaseIdMap = {};
-    let allVersions = {};
+    let releaseIdMap = $state({});
+    let allVersions = $state({});
 
-    let enabledReleases = {};
-    let enabledVersions = {};
-    let stats = {};
+    let enabledReleases = $state({});
+    let enabledVersions = $state({});
+    let stats = $state({});
 
     const testIdResolved = function(e) {
         let testInfo = e.detail.record;
@@ -164,9 +165,15 @@
     };
 
 
-    $: prepareFilters(jobs);
-    $: pagedData = paginateData(filterAndAggregateJobs(filterJobsByBranchOrVersion(jobs, enabledReleases, enabledVersions), filterExpr, filterString));
-    $: stats = prepareStats(jobs, enabledReleases, enabledVersions);
+    run(() => {
+        prepareFilters(jobs);
+    });
+    run(() => {
+        pagedData = paginateData(filterAndAggregateJobs(filterJobsByBranchOrVersion(jobs, enabledReleases, enabledVersions), filterExpr, filterString));
+    });
+    run(() => {
+        stats = prepareStats(jobs, enabledReleases, enabledVersions);
+    });
 </script>
 
 <div class="mb-2 p-2">
@@ -203,8 +210,8 @@
                 class="btn btn-{enabledReleases[releaseId] ? "success" : "light"} ms-2 mb-2 text-truncate"
                 title="Branch {releaseName}"
                 style="flex: 0 0 15%"
-                on:click={() => (enabledReleases[releaseId] = !enabledReleases[releaseId])}
-                on:dblclick={() => (selectOneRelease(releaseId))}
+                onclick={() => (enabledReleases[releaseId] = !enabledReleases[releaseId])}
+                ondblclick={() => (selectOneRelease(releaseId))}
             >
                 {releaseName}
             </button>
@@ -219,8 +226,8 @@
                 class="btn btn-{enabledVersions[version] ? "primary" : "light"} ms-2 mb-2"
                 style="flex: 0 0 10%"
                 title="Product Version"
-                on:click={() => (enabledVersions[version] = !enabledVersions[version])}
-                on:dblclick={() => (selectOneVersion(version))}
+                onclick={() => (enabledVersions[version] = !enabledVersions[version])}
+                ondblclick={() => (selectOneVersion(version))}
             >
                 {version ? version : "No version"}
             </button>
@@ -244,7 +251,7 @@
             <button
                 class="me-2 btn btn-sm btn-primary p-1 mb-1"
                 style="flex: 0 0 2.5%;"
-                on:click={() => (currentPage = idx)}
+                onclick={() => (currentPage = idx)}
             >
                 {idx + 1}
             </button>

@@ -1,11 +1,13 @@
 <script>
     import { createEventDispatcher, } from "svelte";
+
     /**
-     * @type {{
-     * result: Object | undefined
-     * }} args
+     * @typedef {Object} Props
+     * @property {any} args
      */
-    export let args;
+
+    /** @type {Props} */
+    let { args } = $props();
     const dispatch = createEventDispatcher();
 
 </script>
@@ -19,7 +21,7 @@
             </div>
         </div>
         <div>
-            <button class="btn btn-success w-100" on:click={() => {
+            <button class="btn btn-success w-100" onclick={() => {
                 dispatch("exit", {
                     newBuildId: args.result.new_entity.build_system_id,
                     newTestId: args.result.new_entity.id,

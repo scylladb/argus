@@ -1,16 +1,20 @@
-<script>
+<script lang="ts">
     import { v4 as uuidv4 } from 'uuid';
     import { onMount } from "svelte";
     import TestWithIssuesCard from "./TestWithIssuesCard.svelte";
     import { Base64 } from "js-base64";
     import Fa from "svelte-fa";
     import { faExternalLinkSquareAlt } from "@fortawesome/free-solid-svg-icons";
-    export let release_id = "";
-    export let tests = [];
-    export let release_name = "";
-    let assortedIssues = [];
-    let fetchComplete = false;
-    let serializedState = Base64.encode("{}", true);
+    interface Props {
+        release_id?: string;
+        tests?: any;
+        release_name?: string;
+    }
+
+    let { release_id = "", tests = [], release_name = "" }: Props = $props();
+    let assortedIssues = $state([]);
+    let fetchComplete = $state(false);
+    let serializedState = $state(Base64.encode("{}", true));
 
     const prepareWorkAreaState = function() {
         let state = assortedIssues.reduce((acc, val) => {

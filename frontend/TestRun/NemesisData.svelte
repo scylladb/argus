@@ -1,5 +1,5 @@
-<script>
-    export let nemesis_data = [];
+<script lang="ts">
+    let { nemesis_data = [] } = $props();
 
     const sortByFailed = function (a, b) {
         if (a.status == "failed") {
@@ -68,7 +68,7 @@
                 </div>
             </div>
             {#if (idx + 1) % 2 == 0}
-                <div class="w-100" />
+                <div class="w-100"></div>
             {/if}
         {:else}
             <div class="row">

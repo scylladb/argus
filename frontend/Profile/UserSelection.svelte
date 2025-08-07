@@ -1,6 +1,6 @@
-<script>
+<script lang="ts">
     import { getPicture } from "../Common/UserUtils";
-    export let item;
+    let { item } = $props();
 </script>
 
 {#if item.value === undefined}

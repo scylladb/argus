@@ -1,4 +1,6 @@
-<script>
+<script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import Fa from "svelte-fa";
     import { createEventDispatcher, onDestroy, onMount } from "svelte";
     import { getPicture } from "../Common/UserUtils";
@@ -7,12 +9,14 @@
     import { timestampToISODate } from "../Common/DateUtils";
     import { faArrowDown, faArrowUp } from "@fortawesome/free-solid-svg-icons";
 
-    export let schedules = [];
-    export let users = {};
-    export let plannerData = {};
-    export let releaseData = {};
-    export let clickedTests = {};
-    let releaseStats;
+    let {
+        schedules = [],
+        users = {},
+        plannerData = {},
+        releaseData = {},
+        clickedTests = {}
+    } = $props();
+    let releaseStats = $state();
     let releaseStatsRefreshInterval;
 
 
@@ -33,7 +37,7 @@
         return collapseState[collapseId] ?? false;
     };
 
-    let collapseState = loadCollapseState();
+    let collapseState = $state(loadCollapseState());
 
     const fetchStats = async function () {
         let params = new URLSearchParams({
@@ -49,7 +53,7 @@
         releaseStats = json.response;
     };
 
-    let schedulesByTest = {};
+    let schedulesByTest = $state({});
     const dispatch = createEventDispatcher();
 
     const getTestsById = function(plannerData) {
@@ -111,7 +115,9 @@
         });
     };
 
-    $: sortSchedulesByTest(schedules);
+    run(() => {
+        sortSchedulesByTest(schedules);
+    });
 
     onMount(() => {
         fetchStats();
@@ -145,7 +151,7 @@
                             class:d-none={getCollapseState(`collapse-${groupStats.group.id}`, collapseState)}
                             class:ms-auto={!getCollapseState(`collapse-${groupStats.group.id}`, collapseState)}
                         >
-                            <button class="btn btn-dark btn-sm" on:click={() => onSelectAllClick(tests)}>Select All</button>
+                            <button class="btn btn-dark btn-sm" onclick={() => onSelectAllClick(tests)}>Select All</button>
                         </div>
                         <div
                             class:ms-2={!getCollapseState(`collapse-${groupStats.group.id}`, collapseState)}
@@ -155,7 +161,7 @@
                                 class="btn btn-sm"
                                 data-bs-toggle="collapse"
                                 data-bs-target="#collapse-{groupStats.group.id}"
-                                on:click={() => toggleCollapse(`collapse-${groupStats.group.id}`)}
+                                onclick={() => toggleCollapse(`collapse-${groupStats.group.id}`)}
                             >
                             {#if getCollapseState(`collapse-${groupStats.group.id}`, collapseState)}
                                 <Fa icon={faArrowDown}/>
@@ -175,10 +181,10 @@
                                     class:border-assigned={testSchedule}
                                     role="button"
                                     tabindex="0"
-                                    on:keypress={() => {
+                                    onkeypress={() => {
                                         testSchedule ? onScheduledTestClick(testSchedule, test) : onTestClick(test);
                                     }}
-                                    on:click={() => {
+                                    onclick={() => {
                                         testSchedule ? onScheduledTestClick(testSchedule, test) : onTestClick(test);
                                     }}
                                 >
@@ -231,7 +237,7 @@
         </div>
     {:else}
         <div class="col d-flex align-items-center justify-content-center">
-            <div class="spinner-border me-3 text-muted" />
+            <div class="spinner-border me-3 text-muted"></div>
             <div class="display-6 text-muted">Loading...</div>
         </div>
     {/if}

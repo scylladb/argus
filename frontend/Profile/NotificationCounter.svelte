@@ -1,7 +1,7 @@
 <script>
     import { onDestroy, onMount } from "svelte";
     import { apiMethodCall } from "../Common/ApiUtils";
-    let unreadCount = 0;
+    let unreadCount = $state(0);
     let notificationCheckInterval;
     const getUnreadNotificationsCount = async function () {
         let result = await apiMethodCall("/api/v1/notifications/get_unread", undefined, "GET");

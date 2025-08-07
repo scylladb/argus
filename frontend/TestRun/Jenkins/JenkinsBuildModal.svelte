@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
     import { createEventDispatcher, onMount } from "svelte";
     import BuildStartPlaceholder from "./BuildStartPlaceholder.svelte";
     import BuildSuccessPlaceholder from "./BuildSuccessPlaceholder.svelte";
@@ -7,10 +7,8 @@
     import ModalError from "./ModalError.svelte";
     import BuildConfirmationDialog from "./BuildConfirmationDialog.svelte";
 
-    export let buildId;
-    export let buildNumber;
-    export let pluginName;
-    let currentState = "none";
+    let { buildId, buildNumber, pluginName } = $props();
+    let currentState = $state("none");
     const dispatch = createEventDispatcher();
 
     const STATES = {
@@ -22,7 +20,7 @@
         ERROR: "error",
     };
 
-    const STATE_MACHINE = {
+    const STATE_MACHINE = $state({
         [STATES.PARAM_FETCH]: {
             component: ParamFetchPlaceholder,
             onEnter: async function () {
@@ -146,7 +144,7 @@
             },
             args: {},
         }
-    };
+    });
 
     const setState = function(newState, init) {
         currentState = newState;
@@ -199,6 +197,8 @@
     onMount(() => {
         setState(STATES.PARAM_FETCH, {});
     });
+
+    const SvelteComponent = $derived(STATE_MACHINE[currentState].component);
 </script>
 
 <div class="build-modal">
@@ -213,13 +213,13 @@
                 <div class="ms-auto">
                     <button
                         class="btn btn-close"
-                        on:click={() => {
+                        onclick={() => {
                             dispatch("rebuildCancel");
                         }}
                     ></button>
                 </div>
             </div>
-            <svelte:component this={STATE_MACHINE[currentState].component} args={STATE_MACHINE[currentState].args} on:exit={STATE_MACHINE[currentState].onExit}/>
+            <SvelteComponent args={STATE_MACHINE[currentState].args} on:exit={STATE_MACHINE[currentState].onExit}/>
         </div>
     </div>
 </div>

@@ -1,12 +1,12 @@
-<script>
+<script lang="ts">
     import { createEventDispatcher } from "svelte";
     import { timestampToISODate } from "../Common/DateUtils";
     import { InProgressStatuses, StatusButtonCSSClassMap, TestStatusChangeable } from "../Common/TestStatus";
     import { sendMessage } from "../Stores/AlertStore";
-    export let testRun;
+    let { testRun } = $props();
 
     const dispatch = createEventDispatcher();
-    let disableButtons = false;
+    let disableButtons = $state(false);
 
     const handleStatus = async function (newStatus) {
         disableButtons = true;
@@ -63,7 +63,7 @@
         {#if InProgressStatuses.find((status) => status == testRun.status)}
             <span
                 class="spinner-border spinner-border-sm d-inline-block"
-            />
+></span>
         {/if}
     </button>
     <ul class="dropdown-menu">
@@ -72,7 +72,7 @@
                 <button
                     class="dropdown-item"
                     disabled={disableButtons}
-                    on:click={() => {
+                    onclick={() => {
                         handleStatus(status.toLowerCase());
                     }}>{status.replaceAll("_", "-")}</button
                 >

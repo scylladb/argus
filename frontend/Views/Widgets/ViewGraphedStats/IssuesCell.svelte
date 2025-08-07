@@ -1,7 +1,11 @@
 <script lang="ts">
     import type { TestRun } from "./Interfaces";
 
-    export let run: TestRun;
+    interface Props {
+        run: TestRun;
+    }
+
+    let { run }: Props = $props();
 
     const issues = run.issues || [];
     const hasIssues = issues.length > 0;

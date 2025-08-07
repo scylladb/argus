@@ -1,3 +1,5 @@
+<!-- @migration-task Error while migrating Svelte code: can't migrate `let deleting = false;` to `$state` because there's a variable named state.
+     Rename the variable and try again or migrate by hand. -->
 <script>
     import Fa from "svelte-fa";
     import {
@@ -241,12 +243,15 @@
                     {#if !updating}
                         <div class="flex-fill">
                             <Select
-                                Item={User}
                                 items={prepareUsers(users)}
                                 bind:value={reassigned}
-                                isMulti={true}
+                                multiple={true}
                                 placeholder="Re-assign assignees"
-                            />
+                            >
+                                <div slot="item" let:item let:index>
+                                    <User {item} />
+                                </div>
+                            </Select>
                         </div>
                         <div class="ms-1">
                             <button

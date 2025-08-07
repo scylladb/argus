@@ -1,14 +1,24 @@
-<script>
+<script lang="ts">
     import Fa from "svelte-fa";
     import { faEdit, faSave } from "@fortawesome/free-solid-svg-icons";
     import { sendMessage } from "../Stores/AlertStore";
-    export let release = "";
-    export let group = "";
-    export let test = "";
-    export let commentText = "";
-    export let autocompleteList = [];
-    let editing = false;
-    let updating = false;
+    interface Props {
+        release?: string;
+        group?: string;
+        test?: string;
+        commentText?: string;
+        autocompleteList?: any;
+    }
+
+    let {
+        release = "",
+        group = "",
+        test = "",
+        commentText = $bindable(""),
+        autocompleteList = []
+    }: Props = $props();
+    let editing = $state(false);
+    let updating = $state(false);
 
     const updateScheduleComment = async function() {
         editing = false;
@@ -78,7 +88,7 @@
         {#if editing}
             <button
                 class="btn btn-success btn-sm"
-                on:click={() => { updateScheduleComment(); }}
+                onclick={() => { updateScheduleComment(); }}
             >
                 <Fa icon={faSave} />
             </button>
@@ -87,7 +97,7 @@
         {:else}
             <button
                 class="btn btn-dark btn-sm"
-                on:click={() => { editing = true; }}
+                onclick={() => { editing = true; }}
             >
                 <Fa icon={faEdit} />
             </button>

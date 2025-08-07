@@ -5,10 +5,14 @@
     import WizardUnavailable from "./WizardUnavailable.svelte";
     import { sendMessage } from "../../Stores/AlertStore";
 
+
     /**
-     * @type {{params: {_class: string, name: string, value: string, description: string}[]}}
+     * @typedef {Object} Props
+     * @property {{params: {_class: string, name: string, value: string, description: string}[]}} args
      */
-    export let args;
+
+    /** @type {Props} */
+    let { args } = $props();
 
     const WIZARDS = {
         "scylla-cluster-tests": SctParameterWizard,
@@ -16,12 +20,12 @@
     };
 
 
-    let wizard;
-    let paramTab = 0;
-    let buildParams = args.params.reduce((acc, val) => {
+    let wizard = $state();
+    let paramTab = $state(0);
+    let buildParams = $state(args.params.reduce((acc, val) => {
         acc[val.name] = val.value;
         return acc;
-    }, {});
+    }, {}));
     const dispatch = createEventDispatcher();
 
 
@@ -45,27 +49,28 @@
                 class="btn"
                 class:btn-primary={paramTab == 0}
                 class:btn-outline-primary={paramTab != 0}
-                on:click={() => (paramTab = 0)}
+                onclick={() => (paramTab = 0)}
             >Wizard</button>
             <button
                 type="button"
                 class="btn"
                 class:btn-primary={paramTab == 1}
                 class:btn-outline-primary={paramTab != 1}
-                on:click={() => (paramTab = 1)}
+                onclick={() => (paramTab = 1)}
             >This build parameters</button>
             <button
                 type="button"
                 class="btn"
                 class:btn-primary={paramTab == 2}
                 class:btn-outline-primary={paramTab != 2}
-                on:click={() => (paramTab = 2)}
+                onclick={() => (paramTab = 2)}
             >All parameters</button>
         </div>
     </div>
     <div class="mb-2">
         {#if paramTab == 0}
-            <svelte:component bind:this={wizard} this={WIZARDS[args.pluginName] ?? WIZARDS.unsupported} params={buildParams} rawParams={args.params}/>
+            {@const SvelteComponent = WIZARDS[args.pluginName] ?? WIZARDS.unsupported}
+            <SvelteComponent bind:this={wizard} params={buildParams} rawParams={args.params}/>
         {:else}
             {#each args.params as param}
                 {#if param.value || paramTab == 2}
@@ -85,7 +90,7 @@
     <div class="text-end">
         <button
             class="btn btn-success w-100 mb-1"
-            on:click={handleParameterSubmit}
+            onclick={handleParameterSubmit}
         >Build</button>
     </div>
 </div>

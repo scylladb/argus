@@ -1,19 +1,22 @@
-<script>
+<script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import { onDestroy, onMount } from "svelte";
     import Comment from "../Discussion/Comment.svelte";
     import { userList } from "../Stores/UserlistSubscriber";
     import { sendMessage } from "../Stores/AlertStore";
     import CommentEditor from "../Discussion/CommentEditor.svelte";
 
-    export let testInfo;
-    export let testRun;
+    let { testInfo, testRun } = $props();
     let fetchIntervalId;
-    let suppressFetch = false;
-    let comments = [];
-    let users = {};
-    let fetching = false;
+    let suppressFetch = $state(false);
+    let comments = $state([]);
+    let users = $state({});
+    let fetching = $state(false);
     let hideReplyButton = false;
-    $: users = $userList;
+    run(() => {
+        users = $userList;
+    });
     const newCommentTemplate = {
         id: "",
         message: "",
@@ -26,7 +29,7 @@
         posted_at: new Date(),
     };
 
-    let newCommentBody = Object.assign({}, newCommentTemplate);
+    let newCommentBody = $state(Object.assign({}, newCommentTemplate));
 
     const fetchComments = async function () {
         try {
@@ -214,7 +217,7 @@
     {:else}
         <div class="col m-1">
             <div class="text-muted text-center p-2 fs-4">
-                <span class="spinner-grow" /> Loading...
+                <span class="spinner-grow"></span> Loading...
             </div>
         </div>
     {/if}
@@ -231,7 +234,7 @@
         {:else}
             <div class="col m-1">
                 <div class="text-muted text-center p-2 fs-4">
-                    <span class="spinner-grow" /> Loading...
+                    <span class="spinner-grow"></span> Loading...
                 </div>
             </div>
         {/if}

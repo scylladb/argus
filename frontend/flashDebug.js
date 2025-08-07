@@ -1,8 +1,9 @@
 import FlashDebugComponent from "./Debug/FlashDebugComponent.svelte"
+import { mount } from "svelte";
 
 document.addEventListener("DOMContentLoaded", () => {
-    const flashDebugComponent = new FlashDebugComponent({
-        target: document.querySelector("#flashDebug"),
-        props: {}
-    })
+    const flashDebugComponent = mount(FlashDebugComponent, {
+            target: document.querySelector("#flashDebug"),
+            props: {}
+        })
 });

@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
     import { createEventDispatcher, onMount } from "svelte";
     import Fa from "svelte-fa";
     import {faBan, faChartLine, faPlus, faRefresh, faTimes} from "@fortawesome/free-solid-svg-icons";
@@ -7,17 +7,19 @@
     import { Modal } from "bootstrap";
     import { sendMessage } from "../Stores/AlertStore";
 
-    export let testInfo = {};
-    export let testId;
-    export let runs = [];
-    export let clickedTestRuns = {};
+    let {
+        testInfo = {},
+        testId,
+        runs = [],
+        clickedTestRuns = {}
+    } = $props();
 
     const dispatch = createEventDispatcher();
-    let sticky = false;
-    let header;
-    let ignoreReason = "";
-    let modal;
-    let showGraphButton = false;
+    let sticky = $state(false);
+    let header = $state();
+    let ignoreReason = $state("");
+    let modal = $state();
+    let showGraphButton = $state(false);
 
     const showGraphsButtonIfResultsExist = async function () {
         try {
@@ -61,7 +63,7 @@
         <div class="me-2 mb-2 d-inline-block">
             <button
                     class="btn btn-light"
-                    on:click={() => {
+                    onclick={() => {
                 dispatch("showGraph");
             }}
             >
@@ -76,7 +78,7 @@
                     class:active={clickedTestRuns[run.id]}
                     class="btn {StatusButtonCSSClassMap[run.status]}"
                     type="button"
-                    on:click={() => dispatch("runClick", { runId: run.id })}
+                    onclick={() => dispatch("runClick", { runId: run.id })}
                 >
                     #{extractBuildNumber(run)}
                 </button>
@@ -84,7 +86,7 @@
                     <button
                         class="btn border-start-dark {StatusButtonCSSClassMap[run.status]}"
                         data-run-id={run.id}
-                        on:click={() => {
+                        onclick={() => {
                             dispatch("closeRun", { id: run.id });
                         }}
                     >
@@ -97,7 +99,7 @@
     <div class="me-2 mb-2 d-inline-block">
         <button
             class="btn btn-light"
-            on:click={() => {
+            onclick={() => {
                 dispatch("increaseLimit");
             }}
         >
@@ -108,7 +110,7 @@
         <button
             class="btn btn-light"
             title="Ignore failed runs"
-            on:click={() => {
+            onclick={() => {
                 modal = new Modal(`#modalIgnoreRuns-${testInfo.test.id}`);
                 modal.show();
             }}
@@ -119,7 +121,7 @@
     <div class="d-inline-block">
         <button
             class="btn btn-light"
-            on:click={() => dispatch("fetchNewRuns")}
+            onclick={() => dispatch("fetchNewRuns")}
             title="Fetch Runs"
         >
             <Fa icon={faRefresh}/>
@@ -143,7 +145,7 @@
                 <button
                     type="button"
                     class="btn btn-secondary"
-                    on:click={() => {
+                    onclick={() => {
                         modal.hide();
                         ignoreReason = "";
                     }}
@@ -153,7 +155,7 @@
                 <button
                     type="button"
                     class="btn btn-danger"
-                    on:click={() => {
+                    onclick={() => {
                         if (!ignoreReason) {
                             sendMessage("error", "Ignore reason cannot be empty", "TestRuns::component");
                             return;

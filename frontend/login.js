@@ -1,7 +1,7 @@
 import Login from "./Profile/Login.svelte";
+import { mount } from "svelte";
 
-
-const app = new Login({
+const app = mount(Login, {
     target: document.querySelector("div#loginContainer"),
     props: {
         csrfToken: CSRF_TOKEN,

@@ -9,7 +9,7 @@
 <script>
     globalThis.ARGUS_PLAN_DATA = {{ data | tojson | safe }};
 </script>
-<script defer src="/s/dist/plan.bundle.js"></script>
+<script defer type="module" src="/s/dist/plan.bundle.js"></script>
 {% endblock javascripts %}
 
 {% block body %}

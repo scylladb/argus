@@ -1,6 +1,6 @@
-<script>
-    export let test_run = {};
-    export let test;
+<script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import Fa from "svelte-fa";
     import { faCopy } from "@fortawesome/free-solid-svg-icons";
     import { parse } from "marked";
@@ -10,10 +10,11 @@
     } from "../Common/RunUtils";
     import { markdownRendererOptions } from "../markdownOptions";
     import { sendMessage } from "../Stores/AlertStore";
-    let renderedElement;
-    let renderedShortElement;
-    let templateElement;
-    let shortTemplateElement;
+    let { test_run = {}, test } = $props();
+    let renderedElement = $state();
+    let renderedShortElement = $state();
+    let templateElement = $state();
+    let shortTemplateElement = $state();
     let issueTemplateText = "";
 
     const filterDbNodes = function (resources) {
@@ -37,21 +38,35 @@
     };
 
 
-    let scyllaServerPackage = getScyllaPackage(test_run.packages);
-    let kernelPackage = getKernelPackage(test_run.packages);
-    let relocatablePackage = getRelocatableScyllaPackage(test_run.packages);
-    let upgradedPackage = getUpgradedScyllaPackage(test_run.packages);
-    $: scyllaServerPackage = getScyllaPackage(test_run.packages);
-    $: kernelPackage = getKernelPackage(test_run.packages);
-    $: relocatablePackage = getRelocatableScyllaPackage(test_run.packages);
-    $: upgradedPackage = getUpgradedScyllaPackage(test_run.packages);
+    let scyllaServerPackage = $state(getScyllaPackage(test_run.packages));
+    let kernelPackage = $state(getKernelPackage(test_run.packages));
+    let relocatablePackage = $state(getRelocatableScyllaPackage(test_run.packages));
+    let upgradedPackage = $state(getUpgradedScyllaPackage(test_run.packages));
+    run(() => {
+        scyllaServerPackage = getScyllaPackage(test_run.packages);
+    });
+    run(() => {
+        kernelPackage = getKernelPackage(test_run.packages);
+    });
+    run(() => {
+        relocatablePackage = getRelocatableScyllaPackage(test_run.packages);
+    });
+    run(() => {
+        upgradedPackage = getUpgradedScyllaPackage(test_run.packages);
+    });
 
-    let operatorPackage = getOperatorPackage(test_run.packages);
-    $: operatorPackage = getOperatorPackage(test_run.packages);
-    let operatorHelmPackage = getOperatorHelmPackage(test_run.packages);
-    $: operatorHelmPackage = getOperatorHelmPackage(test_run.packages);
-    let operatorHelmRepoPackage = getOperatorHelmRepoPackage(test_run.packages);
-    $: operatorHelmRepoPackage = getOperatorHelmRepoPackage(test_run.packages);
+    let operatorPackage = $state(getOperatorPackage(test_run.packages));
+    run(() => {
+        operatorPackage = getOperatorPackage(test_run.packages);
+    });
+    let operatorHelmPackage = $state(getOperatorHelmPackage(test_run.packages));
+    run(() => {
+        operatorHelmPackage = getOperatorHelmPackage(test_run.packages);
+    });
+    let operatorHelmRepoPackage = $state(getOperatorHelmRepoPackage(test_run.packages));
+    run(() => {
+        operatorHelmRepoPackage = getOperatorHelmRepoPackage(test_run.packages);
+    });
 
     onMount(() => {
         renderedElement.innerHTML = parse(templateElement.innerHTML, markdownRendererOptions);
@@ -75,13 +90,13 @@
                 <button
                     type="button"
                     class="btn btn-input-group btn-success"
-                    on:click={copyShortTemplateToClipboard}
+                    onclick={copyShortTemplateToClipboard}
                     ><Fa icon={faCopy} /> Short</button
                 >
                 <button
                     type="button"
                     class="btn btn-input-group btn-success"
-                    on:click={copyTemplateToClipboard}
+                    onclick={copyTemplateToClipboard}
                     ><Fa icon={faCopy} /> Full</button
                 >
             </div>
@@ -151,7 +166,7 @@
                             <div class="p-1 mb-2">
                                 <button
                                     class="btn btn-sm btn-primary"
-                                    on:click={() => {
+                                    onclick={() => {
                                         let range = document.createRange();
                                         range.selectNodeContents(templateElement);
                                         let selection = window.getSelection();
@@ -245,7 +260,7 @@ Logs and commands
                                 class="p-2 markdown-body"
                                 bind:this={renderedElement}
                                 id="issueTemplateRendered-{test_run.id}"
-                            />
+></div>
                         </div>
                         <div
                             class="tab-pane fade"
@@ -255,7 +270,7 @@ Logs and commands
                             <div class="p-1 mb-2">
                                 <button
                                     class="btn btn-sm btn-primary"
-                                    on:click={() => {
+                                    onclick={() => {
                                         let range = document.createRange();
                                         range.selectNodeContents(shortTemplateElement);
                                         let selection = window.getSelection();
@@ -326,7 +341,7 @@ Test config file(s):
                                 class="p-2 markdown-body"
                                 bind:this={renderedShortElement}
                                 id="issueTemplateRendered-{test_run.id}"
-                            />
+></div>
                         </div>
                     </div>
                 </div>

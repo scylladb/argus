@@ -1,3 +1,5 @@
+<!-- @migration-task Error while migrating Svelte code: The arguments keyword cannot be used within the template or at the top level of a component
+https://svelte.dev/e/invalid_arguments_usage -->
 <script lang="ts" context="module">
     interface CloudNodesInfo {
         image_id: string,

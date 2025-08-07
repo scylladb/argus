@@ -1,12 +1,12 @@
-<script>
+<script lang="ts">
     import { onMount } from "svelte";
     import { sendMessage } from "../../../Stores/AlertStore";
     import { getScyllaPackage } from "../../../Common/RunUtils";
 
-    export let testRun;
+    let { testRun } = $props();
     let performanceResults;
     let performanceHistory = [];
-    let resultsByVersion;
+    let resultsByVersion = $state();
 
     const MONITORED_METRICS = [
         "perf_op_rate_total",
@@ -119,14 +119,16 @@
                 <div class="mb-2">
                     <table class="table table-bordered">
                         <thead>
-                            <th>Current Result</th>
-                            <th>Compared Version</th>
-                            <th>Best</th>
-                            <th>Diff</th>
-                            <th>Commit, Date</th>
-                            <th>last</th>
-                            <th>Diff</th>
-                            <th>Commit, Date</th>
+                            <tr>
+                                <th>Current Result</th>
+                                <th>Compared Version</th>
+                                <th>Best</th>
+                                <th>Diff</th>
+                                <th>Commit, Date</th>
+                                <th>last</th>
+                                <th>Diff</th>
+                                <th>Commit, Date</th>
+                            </tr>
                         </thead>
                         <tbody>
                             {#each Object.entries(resultsByMetric) as [versionName, results] (versionName)}

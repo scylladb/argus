@@ -1,4 +1,6 @@
-<script>
+<script lang="ts">
+    import { run as run_1 } from 'svelte/legacy';
+
     import Fa from "svelte-fa";
     import { StatusCSSClassMap } from "../Common/TestStatus";
     import { timestampToISODate } from "../Common/DateUtils";
@@ -16,11 +18,15 @@
         faArrowUp,
     } from "@fortawesome/free-solid-svg-icons";
     import { faGithub } from "@fortawesome/free-brands-svg-icons";
-    export let tests = {};
-    export let releaseName = "";
-    let encodedState = "e30";
-    let top;
-    let sticky = false;
+    interface Props {
+        tests?: any;
+        releaseName?: string;
+    }
+
+    let { tests = $bindable({}), releaseName = "" }: Props = $props();
+    let encodedState = $state("e30");
+    let top = $state();
+    let sticky = $state(false);
     let observer = new IntersectionObserver((entries) => {
         let entry = entries[0];
         if (!entry) return;
@@ -33,9 +39,11 @@
         threshold: [0, 0.25, 0.5, 0.75, 1]
     });
 
-    $: encodedState = stateEncoder(
-        Object.values(tests).map(v => v.id)
-    );
+    run_1(() => {
+        encodedState = stateEncoder(
+            Object.values(tests).map(v => v.id)
+        );
+    });
 
     const dispatch = createEventDispatcher();
     const handleTrashClick = function (id) {
@@ -44,12 +52,14 @@
         });
     };
 
-    $: top ? observer.observe(top) : observer.disconnect();
+    run_1(() => {
+        top ? observer.observe(top) : observer.disconnect();
+    });
 
 </script>
 
 <div class="position-fixed" style="top: 95%; left: 98%" class:d-none={!sticky}>
-    <button class="btn btn-primary" on:click={() => window.scrollTo({behavior: "smooth", top: 0 })}><Fa icon={faArrowUp}/></button>
+    <button class="btn btn-primary" onclick={() => window.scrollTo({behavior: "smooth", top: 0 })}><Fa icon={faArrowUp}/></button>
 </div>
 <div class="">
     <div bind:this={top}></div>
@@ -64,7 +74,7 @@
                     >
                     <button
                         class="btn btn-danger w-25"
-                        on:click={() => tests = {}}
+                        onclick={() => tests = {}}
                         ><Fa icon={faTrash} /> Remove All</button
                     >
                 </div>
@@ -95,7 +105,7 @@
                             <button
                                 class="ms-1 btn btn-secondary btn-sm"
                                 title="Dismiss"
-                                on:click={() => handleTrashClick(test.id)}
+                                onclick={() => handleTrashClick(test.id)}
                                 ><Fa icon={faTimes} /></button
                             >
                         </div>

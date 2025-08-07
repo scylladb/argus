@@ -135,7 +135,7 @@ can be ignored.
 ## Run the application
 Compile frontend files from `/frontend` into `/public/dist`. Add --watch to recompile files on change.
 ```bash
-WEBPACK_ENVIRONMENT=development yarn webpack --watch
+ROLLUP_ENV=development yarn rollup -c --watch
 ```
 
 ```bash

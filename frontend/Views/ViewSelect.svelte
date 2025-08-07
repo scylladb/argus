@@ -1,11 +1,20 @@
-<script>
+<script lang="ts">
     import { faObjectGroup } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
 
-    export let item = undefined;
-    export let isActive = false;
-    export let isFirst = false;
-    export let isHover = false;
+    interface Props {
+        item?: any;
+        isActive?: boolean;
+        isFirst?: boolean;
+        isHover?: boolean;
+    }
+
+    let {
+        item = undefined,
+        isActive = false,
+        isFirst = false,
+        isHover = false
+    }: Props = $props();
 </script>
 
 <div

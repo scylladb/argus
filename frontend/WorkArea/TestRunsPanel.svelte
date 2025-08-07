@@ -1,18 +1,26 @@
-<script>
+<script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import queryString from "query-string";
     import ModalWindow from "../Common/ModalWindow.svelte";
     import { stateEncoder } from "../Common/StateManagement";
     import ReleasePlannerGridView from "../ReleasePlanner/ReleasePlannerGridView.svelte";
     import SearchBar from "../ReleasePlanner/SearchBar.svelte";
     import TestRuns from "./TestRuns.svelte";
-    export let testRuns = [];
-    export let workAreaAttached = false;
-    let additionalRuns = {};
-    let serializedState = "";
-    $: serializedState = stateEncoder(testRuns);
+    interface Props {
+        testRuns?: any;
+        workAreaAttached?: boolean;
+    }
 
-    let selectingFromGrid = false;
-    let release = null;
+    let { testRuns = $bindable([]), workAreaAttached = false }: Props = $props();
+    let additionalRuns = $state({});
+    let serializedState = $state("");
+    run(() => {
+        serializedState = stateEncoder(testRuns);
+    });
+
+    let selectingFromGrid = $state(false);
+    let release = $state(null);
 
     const updateUrl = function () {
         serializedState = stateEncoder(testRuns);
@@ -92,10 +100,14 @@
 
 {#if selectingFromGrid}
     <ModalWindow widthClass="w-75" on:modalClose={() => {selectingFromGrid = false; release = null; }}>
-        <div slot="title">Grid View</div>
-        <div slot="body">
-            <ReleasePlannerGridView format="map" {release} on:gridViewConfirmed={handleGridSelect}/>
-        </div>
+        {#snippet title()}
+                <div >Grid View</div>
+            {/snippet}
+        {#snippet body()}
+                <div >
+                <ReleasePlannerGridView format="map" {release} on:gridViewConfirmed={handleGridSelect}/>
+            </div>
+            {/snippet}
     </ModalWindow>
 {/if}
 

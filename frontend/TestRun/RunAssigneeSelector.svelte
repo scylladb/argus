@@ -1,4 +1,6 @@
-<script>
+<script lang="ts">
+    import { run as run_1 } from 'svelte/legacy';
+
     import { createEventDispatcher } from "svelte";
     import Select from "svelte-select";
     import { getPicture } from "../Common/UserUtils";
@@ -7,14 +9,12 @@
     import { filterUser } from "../Common/SelectUtils";
 
     import { userList } from "../Stores/UserlistSubscriber";
-    export let testRun;
+    let { testRun } = $props();
     const dispatch = createEventDispatcher();
 
-    let userSelect = {};
-    let users = {};
+    let userSelect = $state({});
+    let users = $state({});
 
-    $: users = $userList;
-    $: userSelect = createUserSelectCollection(users);
 
     const createUserSelectCollection = function (users) {
         const dummyUser = {
@@ -63,8 +63,7 @@
         return placeholder;
     };
 
-    let currentAssignee = "unassigned";
-    $: currentAssignee = findAssignee(testRun, userSelect);
+    let currentAssignee = $state("unassigned");
 
 
     const handleAssign = async function (event) {
@@ -111,6 +110,15 @@
         }
     };
 
+    run_1(() => {
+        users = $userList;
+    });
+    run_1(() => {
+        userSelect = createUserSelectCollection(users);
+    });
+    run_1(() => {
+        currentAssignee = findAssignee(testRun, userSelect);
+    });
 </script>
 
 <div class="row mb-2 text-sm justify-content-end">
@@ -135,16 +143,19 @@
                     <div class="flex-fill">
                         <Select
                             itemFilter={filterUser}
-                            Item={User}
                             value={currentAssignee.value}
                             items={Object.values(
                                 userSelect
                             )}
                             hideEmptyState={true}
-                            isClearable={false}
-                            isSearchable={true}
+                            clearable={false}
+                            searchable={true}
                             on:select={handleAssign}
-                        />
+                        >
+                            <div slot="item" let:item let:index>
+                                <User {item} />
+                            </div>
+                        </Select>
                     </div>
                 </div>
             </div>

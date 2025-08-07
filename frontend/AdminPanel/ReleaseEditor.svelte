@@ -1,10 +1,10 @@
-<script>
+<script lang="ts">
     import { createEventDispatcher } from "svelte";
     import ReleaseDeletionConfirmationPopup from "./ReleaseDeletionConfirmationPopup.svelte";
     const dispatch = createEventDispatcher();
-    export let releaseData;
+    let { releaseData = $bindable() } = $props();
 
-    let awaitingConfirmation = false;
+    let awaitingConfirmation = $state(false);
 
     const handleReleaseEdit = function() {
         dispatch("releaseEdit", releaseData);
@@ -70,7 +70,7 @@
             <div class="mt-2 text-end">
                 <button
                     class="btn btn-danger"
-                    on:click={() => (awaitingConfirmation = true)}
+                    onclick={() => (awaitingConfirmation = true)}
                 >
                     Delete Release
                 </button>
@@ -79,11 +79,11 @@
                 {/if}
                 <button
                     class="btn btn-secondary"
-                    on:click={handleReleaseEditCancel}
+                    onclick={handleReleaseEditCancel}
                 >
                     Cancel
                 </button>
-                <button class="btn btn-success" on:click={handleReleaseEdit}>
+                <button class="btn btn-success" onclick={handleReleaseEdit}>
                     Update
                 </button>
             </div>

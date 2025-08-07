@@ -11,7 +11,7 @@ Test Run
     const gRun = {{ [run.id] | tojson | safe }}
     const gTab = "{{ tab }}";
 </script>
-<script defer src="/s/dist/runByPlugin.bundle.js"></script>
+<script defer type="module" src="/s/dist/runByPlugin.bundle.js"></script>
 {% endblock javascripts %}
 
 {% block body %}

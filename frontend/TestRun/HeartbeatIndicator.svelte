@@ -1,21 +1,25 @@
-<script>
+<script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import humanizeDuration from "humanize-duration";
     import { onDestroy, onMount } from "svelte";
     import { InProgressStatuses } from "../Common/TestStatus";
-    export let testRun;
+    let { testRun } = $props();
 
     let clockInterval;
-    let heartbeatHuman = "";
-    let currentTime = new Date();
+    let heartbeatHuman = $state("");
+    let currentTime = $state(new Date());
 
-    $: heartbeatHuman = humanizeDuration(
-        currentTime - testRun?.heartbeat * 1000,
-        { round: true }
-    );
-    $: startedAtHuman = humanizeDuration(
+    run(() => {
+        heartbeatHuman = humanizeDuration(
+            currentTime - testRun?.heartbeat * 1000,
+            { round: true }
+        );
+    });
+    let startedAtHuman = $derived(humanizeDuration(
         currentTime - new Date(testRun?.start_time) ,
         { round: true }
-    );
+    ));
 
     onMount(() => {
         clockInterval = setInterval(() => {

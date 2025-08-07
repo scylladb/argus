@@ -1,4 +1,6 @@
-<script>
+<script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import { createEventDispatcher, onMount } from "svelte";
     import { parse as markdownParse } from "marked";
     import Fa from "svelte-fa";
@@ -20,9 +22,17 @@
     import MentionSelector from "./MentionSelector.svelte";
     import { userList } from "../Stores/UserlistSubscriber";
     import { markdownRendererOptions } from "../markdownOptions";
-    export let mode = "post";
-    export let runId = "";
-    export let commentBody = {
+    interface Props {
+        mode?: string;
+        runId?: string;
+        commentBody?: any;
+        entryType?: string;
+    }
+
+    let {
+        mode = "post",
+        runId = "",
+        commentBody = $bindable({
         id: "",
         message: "",
         release: "",
@@ -32,8 +42,9 @@
         release_id: "",
         test_run_id: "",
         posted_at: new Date(),
-    };
-    export let entryType = "comment";
+    }),
+        entryType = "comment"
+    }: Props = $props();
 
     onMount(() => {
         textArea?.focus();
@@ -99,9 +110,9 @@
         at: [putAction, "@"],
     };
     const dispatch = createEventDispatcher();
-    let textArea;
-    let mentioning = false;
-    let mentionKeyPressed = false;
+    let textArea = $state();
+    let mentioning = $state(false);
+    let mentionKeyPressed = $state(false);
 
     const performButtonAction = function (buttonName, markupOverride) {
         let cursorStart = textArea.selectionStart;
@@ -128,8 +139,10 @@
     };
 
     let elementKey = sha1(`${runId}${commentBody.id}`).slice(0, 8);
-    let users = {};
-    $: users = $userList;
+    let users = $state({});
+    run(() => {
+        users = $userList;
+    });
 
     const handleMention = function (e) {
         let user = e.detail;
@@ -214,67 +227,67 @@
                 >
                     <button
                         class="btn btn-sm btn-outline-dark ms-1"
-                        on:click={() => performButtonAction("heading")}
+                        onclick={() => performButtonAction("heading")}
                     >
                         <Fa icon={faHeading} />
                     </button>
                     <button
                         class="btn btn-sm btn-outline-dark ms-1"
-                        on:click={() => performButtonAction("bold")}
+                        onclick={() => performButtonAction("bold")}
                     >
                         <Fa icon={faBold} />
                     </button>
                     <button
                         class="btn btn-sm btn-outline-dark ms-1"
-                        on:click={() => performButtonAction("italic")}
+                        onclick={() => performButtonAction("italic")}
                     >
                         <Fa icon={faItalic} />
                     </button>
                     <button
                         class="btn btn-sm btn-outline-dark ms-1"
-                        on:click={() => performButtonAction("underline")}
+                        onclick={() => performButtonAction("underline")}
                     >
                         <Fa icon={faUnderline} />
                     </button>
                     <button
                         class="btn btn-sm btn-outline-dark ms-1"
-                        on:click={() => performButtonAction("quote")}
+                        onclick={() => performButtonAction("quote")}
                     >
                         <Fa icon={faQuoteLeft} />
                     </button>
                     <button
                         class="btn btn-sm btn-outline-dark ms-1"
-                        on:click={() => performButtonAction("code")}
+                        onclick={() => performButtonAction("code")}
                     >
                         <Fa icon={faCode} />
                     </button>
                     <button
                         class="btn btn-sm btn-outline-dark ms-1"
-                        on:click={() => performButtonAction("link")}
+                        onclick={() => performButtonAction("link")}
                     >
                         <Fa icon={faLink} />
                     </button>
                     <button
                         class="btn btn-sm btn-outline-dark ms-1"
-                        on:click={() => performButtonAction("listOl")}
+                        onclick={() => performButtonAction("listOl")}
                     >
                         <Fa icon={faListOl} />
                     </button>
                     <button
                         class="btn btn-sm btn-outline-dark ms-1"
-                        on:click={() => performButtonAction("listUl")}
+                        onclick={() => performButtonAction("listUl")}
                     >
                         <Fa icon={faListUl} />
                     </button>
                     <button
                         class="btn btn-sm btn-outline-dark ms-1"
-                        on:click={() => performButtonAction("tasks")}
+                        onclick={() => performButtonAction("tasks")}
                     >
                         <Fa icon={faTasks} />
                     </button>
                     <button
                         class="btn btn-sm btn-outline-dark ms-1"
-                        on:click={() => (mentioning = true)}
+                        onclick={() => (mentioning = true)}
                     >
                         <Fa icon={faAt} />
                         {#if mentioning}
@@ -305,9 +318,9 @@
                         class="w-100 form-control"
                         rows="6"
                         bind:value={commentBody.message}
-                        on:keydown={editorHandleKeyDown}
-                        on:beforeinput={editorBeforeInput}
-                    />
+                        onkeydown={editorHandleKeyDown}
+                        onbeforeinput={editorBeforeInput}
+></textarea>
                 </div>
             </div>
         </div>
@@ -340,12 +353,12 @@
             {#if mode == "edit" || entryType != "comment"}
                 <button
                     class="btn btn-danger"
-                    on:click={() => {
+                    onclick={() => {
                         dispatch("cancelEditing");
                     }}>Cancel editing</button
                 >
             {/if}
-            <button class="btn btn-success" on:click={handleSubmitComment}
+            <button class="btn btn-success" onclick={handleSubmitComment}
             >{mode == "post" ? "Submit" : "Update"} {entryType}</button
             >
         </div>

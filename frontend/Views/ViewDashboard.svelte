@@ -1,18 +1,27 @@
-<script>
+<script lang="ts">
     import Fa from "svelte-fa";
     import { sendMessage } from "../Stores/AlertStore";
     import { faLink } from "@fortawesome/free-solid-svg-icons";
     import { GLOBAL_STATS_KEY, WIDGET_TYPES } from "../Common/ViewTypes";
     import sha1 from "js-sha1";
-    export let view;
-    export let stats = {};
-    export let productVersion;
-    export let embedded = false;
-    let clickedTests = {};
+    interface Props {
+        view: any;
+        stats?: any;
+        productVersion: any;
+        embedded?: boolean;
+    }
+
+    let {
+        view,
+        stats = $bindable({}),
+        productVersion,
+        embedded = false
+    }: Props = $props();
+    let clickedTests = $state({});
     let resolvedTests = [];
-    const versionDispatch = {
+    const versionDispatch = $state({
         [GLOBAL_STATS_KEY]: productVersion,
-    };
+    });
 
     const handleTestClick = function (detail) {
         if (detail.start_time == 0) {
@@ -122,8 +131,8 @@
                 {#await filterViewForWidget(widget)}
                     <span class="spinner-grow spinner-grow-sm"></span> Loading...
                 {:then view}
-                    <svelte:component
-                        this={WIDGET_TYPES[widget.type]?.type ?? WIDGET_TYPES.UNSUPPORTED.type}
+                    {@const SvelteComponent = WIDGET_TYPES[widget.type]?.type ?? WIDGET_TYPES.UNSUPPORTED.type}
+                    <SvelteComponent
                         widgetId={widget.position}
                         dashboardObject={view}
                         dashboardObjectType="view"

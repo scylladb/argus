@@ -1,25 +1,35 @@
-<script>
+<script lang="ts">
     import Fa from "svelte-fa";
     import { TestStatus, StatusBackgroundCSSClassMap, TestInvestigationStatus, TestInvestigationStatusStrings, StatusCSSClassMap, InvestigationStatusIcon } from "../Common/TestStatus";
     import { titleCase, subUnderscores } from "../Common/TextUtils";
     import { Collapse } from "bootstrap";
     import { createEventDispatcher } from "svelte";
     import { faChevronRight } from "@fortawesome/free-solid-svg-icons";
-    export let displayNumber = false;
-    export let displayPercentage = false;
-    export let displayInvestigations = false;
-    export let hiddenStatuses = [];
-    export let stats = {
+    interface Props {
+        displayNumber?: boolean;
+        displayPercentage?: boolean;
+        displayInvestigations?: boolean;
+        hiddenStatuses?: any;
+        stats?: any;
+    }
+
+    let {
+        displayNumber = false,
+        displayPercentage = false,
+        displayInvestigations = false,
+        hiddenStatuses = [],
+        stats = {
         created: 0,
         running: 0,
         passed: 0,
         failed: 0,
         lastStatus: "unknown",
         total: -1,
-    };
+    }
+    }: Props = $props();
 
-    let shortBlock;
-    let extendedBlock;
+    let shortBlock = $state();
+    let extendedBlock = $state();
 
     const dispatch = createEventDispatcher();
     const normalize = function(val, max, min) {
@@ -106,7 +116,7 @@
         >
             <div
                 class="align-self-start d-inline-flex shadow-sm overflow-hidden border rounded cursor-pointer"
-                on:click={toggleExtendedInvestigations}
+                onclick={toggleExtendedInvestigations}
             >
                 {#each Object.values(TestInvestigationStatus) as investigationStatus, idx}
                     {@const statusStats = calculateStatusStats(stats, investigationStatus, allowedStatuses)}
@@ -140,7 +150,7 @@
                                             <div class="me-4">
                                                 <button
                                                     class="btn btn-sm btn-light mb-1"
-                                                    on:click={() => {
+                                                    onclick={() => {
                                                         dispatch("quickSelect", { tests: getTestsForStatus(stats, investigationStatus, status) });
                                                     }}
                                                 >
@@ -156,7 +166,7 @@
                         </div>
                     {/each}
                 </div>
-                <button class="btn btn-dark mt-2" on:click={toggleExtendedInvestigations}>Hide</button>
+                <button class="btn btn-dark mt-2" onclick={toggleExtendedInvestigations}>Hide</button>
             </div>
         </div>
     {/if}

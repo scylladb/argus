@@ -1,14 +1,16 @@
-<script>
+<script lang="ts">
     import GithubIssues from "../../Github/GithubIssues.svelte";
-    export let dashboardObject;
-    export let dashboardObjectType;
-    export let stats;
-    export let settings;
-    export let productVersion;
-    export let clickedTests;
+    let {
+        dashboardObject,
+        dashboardObjectType,
+        stats,
+        settings,
+        productVersion,
+        clickedTests
+    } = $props();
 
 
-    let issuesClicked = false;
+    let issuesClicked = $state(false);
 </script>
 
 <div class="accordion">
@@ -19,7 +21,7 @@
                 type="button"
                 data-bs-toggle="collapse"
                 data-bs-target="#collapseIssues"
-                on:click={() => issuesClicked = true}
+                onclick={() => issuesClicked = true}
             >
                 All Issues
             </button>

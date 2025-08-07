@@ -1,8 +1,13 @@
 <script lang="ts">
     import { Collapse } from "bootstrap";
     import { createEventDispatcher } from "svelte";
+    interface Props {
+        children?: import('svelte').Snippet;
+    }
 
-    let collapse: Element;
+    let { children }: Props = $props();
+
+    let collapse: Element = $state();
     let firstTime = true;
     const dispatch = createEventDispatcher();
 
@@ -19,11 +24,11 @@
 <div class="accordion">
     <div class="accordion-item">
         <h2 class="accordion-header" id="headingOne">
-            <button class="accordion-button collapsed" type="button" on:click={handleAccordionOpen}> Pytest Overview </button>
+            <button class="accordion-button collapsed" type="button" onclick={handleAccordionOpen}> Pytest Overview </button>
         </h2>
         <div bind:this={collapse} class="accordion-collapse collapse">
             <div class="accordion-body">
-                <slot />
+                {@render children?.()}
             </div>
         </div>
     </div>

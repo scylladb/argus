@@ -1,13 +1,17 @@
-<script>
+<script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import { createEventDispatcher } from "svelte";
     import Select from "svelte-select";
     import User from "../Profile/User.svelte";
     import { userList } from "../Stores/UserlistSubscriber";
     import { filterUser } from "../Common/SelectUtils";
-    export let user;
+    let { user } = $props();
     const dispatch = createEventDispatcher();
-    let users = {};
-    $: users = $userList;
+    let users = $state({});
+    run(() => {
+        users = $userList;
+    });
 
     const handleFilter = function(e) {
         dispatch("selected", e.detail);
@@ -19,14 +23,17 @@
         value={user}
         itemFilter={filterUser}
         placeholder="Filter..."
-        labelIdentifier="username"
-        optionIdentifier="id"
-        Item={User}
+        label="username"
+        itemId="id"
         items={Object.values(users)}
         hideEmptyState={true}
-        isClearable={true}
-        isSearchable={true}
+        clearable={true}
+        searchable={true}
         on:select={handleFilter}
         on:clear={handleFilter}
-    />
+    >
+        <div slot="item" let:item let:index>
+            <User {item} />
+        </div>
+    </Select>
 </div>

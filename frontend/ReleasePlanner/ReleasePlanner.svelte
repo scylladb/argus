@@ -1,4 +1,6 @@
-<script>
+<script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import ModalWindow from "../Common/ModalWindow.svelte";
     import { sendMessage } from "../Stores/AlertStore";
     import { userList } from "../Stores/UserlistSubscriber";
@@ -7,23 +9,24 @@
     import ReleasePlan from "./ReleasePlan.svelte";
 
 
-    export let release;
-    export let plans;
+    let { release, plans = $bindable() } = $props();
 
-    let users = {};
+    let users = $state({});
 
-    $: users = $userList;
+    run(() => {
+        users = $userList;
+    });
 
-    let creatingPlan = false;
-    let deletingPlan = false;
-    let editingPlan = false;
-    let copyingPlan = false;
-    let createFromPlan = false;
-    let deleteViewForPlan = true;
-    let selectedPlan;
-    let releaseRedirect = "";
+    let creatingPlan = $state(false);
+    let deletingPlan = $state(false);
+    let editingPlan = $state(false);
+    let copyingPlan = $state(false);
+    let createFromPlan = $state(false);
+    let deleteViewForPlan = $state(true);
+    let selectedPlan = $state();
+    let releaseRedirect = $state("");
 
-    let expandedPlans = {};
+    let expandedPlans = $state({});
 
     const sortPlans = function(lhs, rhs) {
         if (!lhs.target_version && !rhs.target_version) return 0;
@@ -145,107 +148,131 @@
 
 {#if creatingPlan}
     <ModalWindow on:modalClose={() => (creatingPlan = false)}>
-        <div slot="title">
-            Creating a release plan
-        </div>
-        <div slot="body">
-            <ReleasePlanCreator {release} {plans} on:planCreated={() => {
-                creatingPlan = false;
-                fetchAllPlans();
-            }}/>
-        </div>
+        {#snippet title()}
+                <div >
+                Creating a release plan
+            </div>
+            {/snippet}
+        {#snippet body()}
+                <div >
+                <ReleasePlanCreator {release} {plans} on:planCreated={() => {
+                    creatingPlan = false;
+                    fetchAllPlans();
+                }}/>
+            </div>
+            {/snippet}
     </ModalWindow>
 {/if}
 
 {#if createFromPlan}
     <ModalWindow on:modalClose={() => {selectedPlan = undefined; createFromPlan = false;}}>
-        <div slot="title">
-            Creating <span class="fw-bold">Execution plan</span> from <span class="fw-bold">{selectedPlan.name}</span>
-        </div>
-        <div slot="body">
-            <ReleasePlanCreator mode="createFrom" {release} {plans} plan={Object.assign({}, selectedPlan)} on:planCreated={() => {
-                createFromPlan = false;
-                selectedPlan = undefined;
-                fetchAllPlans();
-            }}/>
-        </div>
+        {#snippet title()}
+                <div >
+                Creating <span class="fw-bold">Execution plan</span> from <span class="fw-bold">{selectedPlan.name}</span>
+            </div>
+            {/snippet}
+        {#snippet body()}
+                <div >
+                <ReleasePlanCreator mode="createFrom" {release} {plans} plan={Object.assign({}, selectedPlan)} on:planCreated={() => {
+                    createFromPlan = false;
+                    selectedPlan = undefined;
+                    fetchAllPlans();
+                }}/>
+            </div>
+            {/snippet}
     </ModalWindow>
 {/if}
 
 {#if copyingPlan}
     <ModalWindow on:modalClose={() => { selectedPlan = undefined; copyingPlan = false; }}>
-        <div slot="title">
-            Copying plan...
-        </div>
-        <div slot="body">
-            <ReleasePlanCopyForm {release} plan={selectedPlan} on:copyCanceled={() => { selectedPlan = undefined; copyingPlan = false; }} on:copyConfirmed={handlePlanCopy} />
-        </div>
+        {#snippet title()}
+                <div >
+                Copying plan...
+            </div>
+            {/snippet}
+        {#snippet body()}
+                <div >
+                <ReleasePlanCopyForm {release} plan={selectedPlan} on:copyCanceled={() => { selectedPlan = undefined; copyingPlan = false; }} on:copyConfirmed={handlePlanCopy} />
+            </div>
+            {/snippet}
     </ModalWindow>
 {/if}
 
 {#if releaseRedirect}
     <ModalWindow on:modalClose={() => releaseRedirect = ""}>
-        <div slot="title">
-            Plan copied!
-        </div>
-        <div slot="body">
-            You have copied a plan into another release. <a href="/release/{releaseRedirect}/planner">Click here</a> to go to that release planning page.
-        </div>
+        {#snippet title()}
+                <div >
+                Plan copied!
+            </div>
+            {/snippet}
+        {#snippet body()}
+                <div >
+                You have copied a plan into another release. <a href="/release/{releaseRedirect}/planner">Click here</a> to go to that release planning page.
+            </div>
+            {/snippet}
     </ModalWindow>
 {/if}
 
 {#if editingPlan}
     <ModalWindow on:modalClose={() => {selectedPlan = undefined; editingPlan = false;}}>
-        <div slot="title">
-            Editing <span class="fw-bold">{selectedPlan.name}</span>
-        </div>
-        <div slot="body">
-            <ReleasePlanCreator mode="edit" {plans} {release} plan={Object.assign({}, selectedPlan)} on:planUpdated={() => {
-                editingPlan = false;
-                selectedPlan = undefined;
-                fetchAllPlans();
-            }}/>
-        </div>
+        {#snippet title()}
+                <div >
+                Editing <span class="fw-bold">{selectedPlan.name}</span>
+            </div>
+            {/snippet}
+        {#snippet body()}
+                <div >
+                <ReleasePlanCreator mode="edit" {plans} {release} plan={Object.assign({}, selectedPlan)} on:planUpdated={() => {
+                    editingPlan = false;
+                    selectedPlan = undefined;
+                    fetchAllPlans();
+                }}/>
+            </div>
+            {/snippet}
     </ModalWindow>
 {/if}
 
 {#if deletingPlan}
     <ModalWindow on:modalClose={() => { selectedPlan = undefined; deletingPlan = false; }}>
-        <div slot="title">
-            Deleting plan <span class="fw-bold">{selectedPlan.name}</span>
-        </div>
-        <div slot="body">
-            <div>Are you sure you want to delete this plan?</div>
-            <div class="my-2 fw-bold p-2">
-                <label class="form-check-label" for="planDeleteViewCheckbox">Delete attached view</label>
-                <input class="form-check-input" type="checkbox" id="planDeleteViewCheckbox" bind:checked={deleteViewForPlan}>
+        {#snippet title()}
+                <div >
+                Deleting plan <span class="fw-bold">{selectedPlan.name}</span>
             </div>
+            {/snippet}
+        {#snippet body()}
+                <div >
+                <div>Are you sure you want to delete this plan?</div>
+                <div class="my-2 fw-bold p-2">
+                    <label class="form-check-label" for="planDeleteViewCheckbox">Delete attached view</label>
+                    <input class="form-check-input" type="checkbox" id="planDeleteViewCheckbox" bind:checked={deleteViewForPlan}>
+                </div>
 
-            <div class="d-flex p-2">
-                <button
-                    on:click={handlePlanDelete}
-                    class="btn btn-danger w-75"
-                >
-                    Confirm
-                </button>
-                <button
-                    on:click={() => {
+                <div class="d-flex p-2">
+                    <button
+                        onclick={handlePlanDelete}
+                        class="btn btn-danger w-75"
+                    >
+                        Confirm
+                    </button>
+                    <button
+                        onclick={() => {
                         deletingPlan = false;
                         selectedPlan = undefined;
                     }}
-                    class="ms-1 btn btn-secondary w-25"
-                >
-                    Cancel
-                </button>
+                        class="ms-1 btn btn-secondary w-25"
+                    >
+                        Cancel
+                    </button>
+                </div>
             </div>
-        </div>
+            {/snippet}
     </ModalWindow>
 {/if}
 
 <div class="bg-white rounded shadow-sm m-2 p-2">
     <h1>{release.name}</h1>
     <div class="mb-2">
-        <button class="btn btn-success" on:click={() => (creatingPlan = true)}>New Plan</button>
+        <button class="btn btn-success" onclick={() => (creatingPlan = true)}>New Plan</button>
     </div>
     <div class="p-2 bg-light-three rounded">
         {#each plans.sort(sortPlans) as plan (plan.id)}

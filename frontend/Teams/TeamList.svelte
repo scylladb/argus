@@ -6,10 +6,14 @@
     import TeamShort from "./TeamShort.svelte";
     import { createEventDispatcher, onMount } from "svelte";
     import TeamCreateForm from "./TeamCreateForm.svelte";
-    export let currentUser: User;
-    export let selectedTeam: Team | null;
     const dispatch = createEventDispatcher();
-    export let teams: Team[];
+    interface Props {
+        currentUser: User;
+        selectedTeam: Team | null;
+        teams: Team[];
+    }
+
+    let { currentUser, selectedTeam, teams = $bindable() }: Props = $props();
 
     const fetchUserTeams = async function(): Promise<Team[]> {
         try {

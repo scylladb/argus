@@ -1,10 +1,18 @@
-<script>
+<script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import { getUser, getPicture } from "../Common/UserUtils";
     import { userList } from "../Stores/UserlistSubscriber";
-    export let assignees = [];
-    export let smallImage = false;
-    let users = {};
-    $: users = $userList;
+    interface Props {
+        assignees?: any;
+        smallImage?: boolean;
+    }
+
+    let { assignees = [], smallImage = false }: Props = $props();
+    let users = $state({});
+    run(() => {
+        users = $userList;
+    });
 </script>
 
 {#if Object.keys(users).length > 0}
@@ -17,7 +25,7 @@
                     class:img-smaller={smallImage}
                     alt="{getUser(assignee, users).full_name}"
                     style="background-image: url({getPicture(getUser(assignee, users).picture_id)});"
-                />
+></div>
             </div>
         {/each}
     </div>

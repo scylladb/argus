@@ -1,4 +1,4 @@
-<script context="module" lang="ts">
+<script module lang="ts">
 
     export interface PlannedTest {
         id: string,
@@ -35,10 +35,14 @@
     import PlannedJob from "./PlannedJob.svelte";
     import { TestStatus } from "../Common/TestStatus";
 
-    let plannedTests: PlannedTest[] = [];
-    export let jobCount = 0;
-    let fetching = false;
-    let pageSize = 10;
+    let plannedTests: PlannedTest[] = $state([]);
+    interface Props {
+        jobCount?: number;
+    }
+
+    let { jobCount = $bindable(0) }: Props = $props();
+    let fetching = $state(false);
+    let pageSize = $state(10);
 
     const sortJobs = function (a: PlannedTest, b: PlannedTest) {
         const lhs = STATUS_SORT_ORDER[a?.last_run?.status || TestStatus.NOT_RUN];
@@ -87,12 +91,12 @@
         {/each}
     {:else}
         <div class="text-center p-4">
-            <span class="spinner-border spinner-border-sm" /> Getting jobs...
+            <span class="spinner-border spinner-border-sm"></span> Getting jobs...
         </div>
     {/if}
     {#if plannedTests.length > pageSize}
         <div>
-            <button class="btn btn-primary d-block w-100" on:click={() => pageSize += pageSize}>
+            <button class="btn btn-primary d-block w-100" onclick={() => pageSize += pageSize}>
                 Load More...
             </button>
         </div>

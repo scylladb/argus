@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
     import { faArrowRight } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
     import ModalWindow from "../Common/ModalWindow.svelte";
@@ -6,12 +6,16 @@
     import { createEventDispatcher } from "svelte";
     import SearchBar from "./SearchBar.svelte";
 
-    export let entityType = "test";
-    export let entity;
-    export let targetRelease;
+    interface Props {
+        entityType?: string;
+        entity: any;
+        targetRelease: any;
+    }
 
-    let gridView = false;
-    let replacement;
+    let { entityType = "test", entity, targetRelease }: Props = $props();
+
+    let gridView = $state(false);
+    let replacement = $state();
     const dispatch = createEventDispatcher();
 
 
@@ -29,15 +33,19 @@
 
 {#if gridView}
     <ModalWindow on:modalClose={() => gridView = false}>
-        <div slot="title">
-            Replacing {entity.pretty_name || entity.display_name || entity.name}
-        </div>
-        <div slot="body">
-            <div>
-                <SearchBar release={targetRelease} mode="single" targetType={entityType} on:selected={handleGridPick} />
+        {#snippet title()}
+                <div >
+                Replacing {entity.pretty_name || entity.display_name || entity.name}
             </div>
-            <ReleasePlannerGridView release={targetRelease} mode={"single"} groupOnly={entityType == "group"} on:gridViewConfirmed={handleGridPick}/>
-        </div>
+            {/snippet}
+        {#snippet body()}
+                <div >
+                <div>
+                    <SearchBar release={targetRelease} mode="single" targetType={entityType} on:selected={handleGridPick} />
+                </div>
+                <ReleasePlannerGridView release={targetRelease} mode={"single"} groupOnly={entityType == "group"} on:gridViewConfirmed={handleGridPick}/>
+            </div>
+            {/snippet}
     </ModalWindow>
 {/if}
 
@@ -52,7 +60,7 @@
         {/if}
     </div>
     <div class="ms-auto p-2 border-start" class:border-end={!!replacement}>
-        <button class="btn btn-success" on:click={() => gridView = true}>Replace <Fa icon={faArrowRight} /></button>
+        <button class="btn btn-success" onclick={() => gridView = true}>Replace <Fa icon={faArrowRight} /></button>
     </div>
     {#if replacement}
         <div class="ms-auto p-2">

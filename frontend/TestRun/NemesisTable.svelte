@@ -1,21 +1,20 @@
-<script>
-    export let nemesisCollection = [];
-    export let resources = [];
+<script lang="ts">
     import sha1 from "js-sha1";
     import humanizeDuration from "humanize-duration";
     import { timestampToISODate } from "../Common/DateUtils";
     import { titleCase } from "../Common/TextUtils";
     import { NemesisStatusBackgrounds } from "../Common/TestStatus";
     import NemesisReason from "./NemesisReason.svelte";
+    let { nemesisCollection = $bindable([]), resources = [] } = $props();
     let sortHeaders = {
         "startTime": "start_time",
         "endTime": "end_time",
         "status": "status",
         "name": "name",
     };
-    let sortHeader = "startTime";
-    let sortAscending = false;
-    let filterString = "";
+    let sortHeader = $state("startTime");
+    let sortAscending = $state(false);
+    let filterString = $state("");
 
     const filterNemesis = function(nemesis) {
         let nemesisString = `${nemesis.name}${nemesis.target_node.name}${nemesis.status}${timestampToISODate(nemesis.start_time * 1000)}${timestampToISODate(nemesis.end_time * 1000)}`;
@@ -75,91 +74,93 @@
                 class="form-control"
                 type="text"
                 placeholder="Filter nemeses"
-                on:keyup={(e) => { filterString = e.target.value; nemesisCollection = nemesisCollection; }}
+                onkeyup={(e) => { filterString = e.target.value; nemesisCollection = nemesisCollection; }}
             >
         </div>
         <table class="table table-hover table-bordered">
             <thead>
-                <th
-                    role="button"
-                    scope="col"
-                    class="text-center align-middle"
-                    on:click={() => { sortHeader = "name"; sortAscending = !sortAscending; }}
-                >
-                    {#if sortHeader == "name"}
-                        <span
-                            class="d-inline-block"
-                            class:invertArrow={ sortAscending }
-                        >
-                            &#x25B2;
-                        </span>
-                    {/if}
-                    Nemesis Name
-                </th>
-                <th
-                    role="button"
-                    scope="col"
-                    class="text-center align-middle"
-                    on:click={() => { sortHeader = "node"; sortAscending = !sortAscending;  }}
-                >
-                    {#if sortHeader == "node"}
-                        <span
-                            class="d-inline-block"
-                            class:invertArrow={ sortAscending }
-                        >
-                            &#x25B2;
-                        </span>
-                    {/if}
-                    Target node
-                </th>
-                <th
-                    role="button"
-                    scope="col"
-                    class="text-center align-middle"
-                    on:click={() => { sortHeader = "status"; sortAscending = !sortAscending;  }}
-                >
-                    {#if sortHeader == "status"}
-                        <span
-                            class="d-inline-block"
-                            class:invertArrow={ sortAscending }
-                        >
-                            &#x25B2;
-                        </span>
-                    {/if}
-                    Status
-                </th>
-                <th
-                    role="button"
-                    scope="col"
-                    class="text-center align-middle"
-                    on:click={() => { sortHeader = "startTime"; sortAscending = !sortAscending;  }}
-                >
-                    {#if sortHeader == "startTime"}
-                        <span
-                            class="d-inline-block"
-                            class:invertArrow={ sortAscending }
-                        >
-                            &#x25B2;
-                        </span>
-                    {/if}
-                    Start
-                </th>
-                <th
-                    role="button"
-                    scope="col"
-                    class="text-center align-middle"
-                    on:click={() => { sortHeader = "endTime"; sortAscending = !sortAscending;  }}
-                >
-                    {#if sortHeader == "endTime"}
-                        <span
-                            class="d-inline-block"
-                            class:invertArrow={ sortAscending }
-                        >
-                            &#x25B2;
-                        </span>
-                    {/if}
-                    End
-                </th>
+                    <tr>
+                    <th
+                        role="button"
+                        scope="col"
+                        class="text-center align-middle"
+                        onclick={() => { sortHeader = "name"; sortAscending = !sortAscending; }}
+                    >
+                        {#if sortHeader == "name"}
+                            <span
+                                class="d-inline-block"
+                                class:invertArrow={ sortAscending }
+                            >
+                                &#x25B2;
+                            </span>
+                        {/if}
+                        Nemesis Name
+                    </th>
+                    <th
+                        role="button"
+                        scope="col"
+                        class="text-center align-middle"
+                        onclick={() => { sortHeader = "node"; sortAscending = !sortAscending;  }}
+                    >
+                        {#if sortHeader == "node"}
+                            <span
+                                class="d-inline-block"
+                                class:invertArrow={ sortAscending }
+                            >
+                                &#x25B2;
+                            </span>
+                        {/if}
+                        Target node
+                    </th>
+                    <th
+                        role="button"
+                        scope="col"
+                        class="text-center align-middle"
+                        onclick={() => { sortHeader = "status"; sortAscending = !sortAscending;  }}
+                    >
+                        {#if sortHeader == "status"}
+                            <span
+                                class="d-inline-block"
+                                class:invertArrow={ sortAscending }
+                            >
+                                &#x25B2;
+                            </span>
+                        {/if}
+                        Status
+                    </th>
+                    <th
+                        role="button"
+                        scope="col"
+                        class="text-center align-middle"
+                        onclick={() => { sortHeader = "startTime"; sortAscending = !sortAscending;  }}
+                    >
+                        {#if sortHeader == "startTime"}
+                            <span
+                                class="d-inline-block"
+                                class:invertArrow={ sortAscending }
+                            >
+                                &#x25B2;
+                            </span>
+                        {/if}
+                        Start
+                    </th>
+                    <th
+                        role="button"
+                        scope="col"
+                        class="text-center align-middle"
+                        onclick={() => { sortHeader = "endTime"; sortAscending = !sortAscending;  }}
+                    >
+                        {#if sortHeader == "endTime"}
+                            <span
+                                class="d-inline-block"
+                                class:invertArrow={ sortAscending }
+                            >
+                                &#x25B2;
+                            </span>
+                        {/if}
+                        End
+                    </th>
+                </tr>
             </thead>
             <tbody>
                 {#each sortNemesesByKey(nemesisCollection, sortHeader, sortAscending) as nemesis (createCollapseId(nemesis))}

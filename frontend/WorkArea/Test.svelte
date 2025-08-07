@@ -1,10 +1,19 @@
-<script>
+<script lang="ts">
     import { createEventDispatcher } from "svelte";
     import { StatusBackgroundCSSClassMap } from "../Common/TestStatus.js";
     import { timestampToISODate } from "../Common/DateUtils";
     import AssigneeList from "./AssigneeList.svelte";
-    export let filtered = false;
-    export let test = {
+    interface Props {
+        filtered?: boolean;
+        test?: any;
+        testStats: any;
+        runs?: any;
+        assigneeList?: any;
+    }
+
+    let {
+        filtered = false,
+        test = {
         assignee: [],
         description: null,
         group_id: null,
@@ -12,12 +21,13 @@
         pretty_name: null,
         release_id: null,
         id: "",
-    };
-    export let testStats;
-    export let runs = [];
-    export let assigneeList = [];
+    },
+        testStats,
+        runs = [],
+        assigneeList = []
+    }: Props = $props();
     const dispatch = createEventDispatcher();
-    let fetching = false;
+    let fetching = $state(false);
 
     const titleCase = function (string) {
         return string[0].toUpperCase() + string.slice(1).toLowerCase();
@@ -43,7 +53,7 @@
     class:active={runs.find(v => v == test.id)}
     class:active-test-text={runs.find(v => v == test.id)}
     class="list-group-item argus-test"
-    on:click={handleTestClick}
+    onclick={handleTestClick}
 >
     <div class="container-fluid p-0 m-0">
         <div class="row p-0 m-0 align-items-center">
@@ -75,7 +85,7 @@
             </div>
             <div class="col-1 text-center">
                 {#if fetching}
-                    <span class="spinner-border spinner-border-sm text-dark" />
+                    <span class="spinner-border spinner-border-sm text-dark"></span>
                 {/if}
             </div>
         </div>

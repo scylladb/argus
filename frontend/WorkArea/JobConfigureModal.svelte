@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
     import { createEventDispatcher, onMount } from "svelte";
     import { sendMessage } from "../Stores/AlertStore";
     import queryString from "query-string";
@@ -6,14 +6,13 @@
     import { faCheck, faTimes } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
 
-    export let buildId;
-    export let testName;
-    let settings;
-    let failed = false;
-    let failMessage = "";
+    let { buildId, testName } = $props();
+    let settings = $state();
+    let failed = $state(false);
+    let failMessage = $state("");
     let validationState = "validationCompleted";
-    let validated = false;
-    let validationMessage = "";
+    let validated = $state(false);
+    let validationMessage = $state("");
     const dispatch = createEventDispatcher();
 
     const fetchOldJobSettings = async function() {
@@ -148,7 +147,7 @@
                 <div class="ms-auto">
                     <button
                         class="btn btn-close"
-                        on:click={() => {
+                        onclick={() => {
                             dispatch("configureCancel");
                         }}
                     ></button>
@@ -181,7 +180,7 @@
                     <div class="mb-2">
                         <button
                         class="btn btn-primary w-100"
-                            on:click={handleValidation}
+                            onclick={handleValidation}
                         >
                             {#if validated}
                                 <Fa icon={faCheck}/>
@@ -192,7 +191,7 @@
                         </button>
                     </div>
                     <div>
-                        <button class="btn btn-success w-100" on:click={handleSettingsChange} disabled={!validated}>Next</button>
+                        <button class="btn btn-success w-100" onclick={handleSettingsChange} disabled={!validated}>Next</button>
                     </div>
                 {:else}
                     <div>

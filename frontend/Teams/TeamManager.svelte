@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import format from "string-template";
     import { onMount } from "svelte";
     import { applicationCurrentUser } from "../argus";
@@ -8,12 +10,14 @@
     import TeamList from "./TeamList.svelte";
     import { TeamRoutes, type RawTeamGetResponse, type Team } from "./TeamUtils";
 
-    let users: Users = {};
-    $: users = $userList;
+    let users: Users = $state({});
+    run(() => {
+        users = $userList;
+    });
 
     let currentUser: IUser = applicationCurrentUser;
-    let selectedTeam: Team | null;
-    let teams: Team[] = [];
+    let selectedTeam: Team | null = $state();
+    let teams: Team[] = $state([]);
 
 
     const getSelectedTeam = async function(params: string) {

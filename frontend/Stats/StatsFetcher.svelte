@@ -1,8 +1,7 @@
-<script>
+<script lang="ts">
     import queryString from "query-string";
     import ReleaseStats from "./ReleaseStats.svelte";
-    export let releaseName;
-    export let productVersion;
+    let { releaseName, productVersion } = $props();
 
     const fetchStats = async function (force = false) {
         if (!document.hasFocus()) return Promise.reject(new Error("#noFocus"));
@@ -23,7 +22,7 @@
 </script>
 
 {#await fetchStats()}
-    <span class="spinner-border spinner-border-sm" /> Loading statistics...
+    <span class="spinner-border spinner-border-sm"></span> Loading statistics...
 {:then releaseStats}
     <ReleaseStats {releaseStats}/>
 {:catch err}

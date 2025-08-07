@@ -1,4 +1,7 @@
 <script lang="ts">
+    import { createBubbler, stopPropagation } from 'svelte/legacy';
+
+    const bubble = createBubbler();
     import {createEventDispatcher} from "svelte";
     import queryString from "query-string";
     import {sendMessage} from "../Stores/AlertStore";
@@ -8,17 +11,21 @@
     import Fa from "svelte-fa";
     import GraphFilters from "./Components/GraphFilters.svelte";
 
-    export let test_id: string = "";
-    let graphs: any[] = [];
+    interface Props {
+        test_id?: string;
+    }
+
+    let { test_id = "" }: Props = $props();
+    let graphs: any[] = $state([]);
     let allGraphs: any[] = [];
-    let filteredGraphs: any[] = [];
-    let releasesFilters: Record<string, boolean> = {};
-    let ticks: Record<string, any> = {};
+    let filteredGraphs: any[] = $state([]);
+    let releasesFilters: Record<string, boolean> = $state({});
+    let ticks: Record<string, any> = $state({});
     let width = 500;
     let height = 350;
     let startDate = "";
     let endDate = "";
-    let dateRange = 6;
+    let dateRange = $state(6);
     let showCustomInputs = false;
     let graphViews: {
         test_id: string;
@@ -26,16 +33,16 @@
         name: string;
         description: string;
         graphs: Record<string, any>;
-    }[] = [];
-    let showModal = false;
-    let activeTab = 0;
-    let form = {name: "", description: ""};
-    let showAddGraphModal = false;
-    let showRemoveGraphModal = false;
-    let selectedGraph: any;
-    let selectedView = "";
+    }[] = $state([]);
+    let showModal = $state(false);
+    let activeTab = $state(0);
+    let form = $state({name: "", description: ""});
+    let showAddGraphModal = $state(false);
+    let showRemoveGraphModal = $state(false);
+    let selectedGraph: any = $state();
+    let selectedView = $state("");
 
-    $: allTabs = ["All Graphs", ...graphViews.map((v) => v.name), "+ View"];
+    let allTabs = $derived(["All Graphs", ...graphViews.map((v) => v.name), "+ View"]);
     const dispatch = createEventDispatcher();
 
     const dispatchRunClick = (e) => {
@@ -210,7 +217,7 @@
 <ul class="nav nav-tabs mb-3">
     {#each allTabs as t, i}
         <li class="nav-item">
-            <a class="nav-link {activeTab === i ? 'active' : ''}" on:click={() => handleTabClick(i)}>{t}</a>
+            <a class="nav-link {activeTab === i ? 'active' : ''}" onclick={() => handleTabClick(i)}>{t}</a>
         </li>
     {/each}
 </ul>
@@ -224,11 +231,11 @@
         <div class="chart-container"
              class:big-size={filteredGraphs.length < 2}>
             {#if activeTab === 0}
-                    <button class="add-btn" on:click={() => openAddGraphModal(graph)} title="add to graph view">
+                    <button class="add-btn" onclick={() => openAddGraphModal(graph)} title="add to graph view">
                         <Fa icon={faPlus}/>
                     </button>
                 {:else}
-                    <button class="add-btn" on:click={() => openRemoveGraphModal(graph)} title="Remove from graph view">
+                    <button class="add-btn" onclick={() => openRemoveGraphModal(graph)} title="Remove from graph view">
                         <Fa icon={faMinus}/>
                     </button>
                 {/if}
@@ -248,12 +255,12 @@
 </div>
 
 {#if showModal}
-    <div class="modal show d-block" tabindex="-1" role="dialog" on:click={closeModal}>
-        <div class="modal-dialog" role="document" on:click|stopPropagation>
+    <div class="modal show d-block" tabindex="-1" role="dialog" onclick={closeModal}>
+        <div class="modal-dialog" role="document" onclick={stopPropagation(bubble('click'))}>
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">New View</h5>
-                    <button type="button" class="close" on:click={closeModal}>&times;</button>
+                    <button type="button" class="close" onclick={closeModal}>&times;</button>
                 </div>
                 <div class="modal-body">
                     <div class="form-group">
@@ -266,8 +273,8 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-primary" on:click={saveNewView}>Save</button>
-                    <button type="button" class="btn btn-secondary" on:click={closeModal}>Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick={saveNewView}>Save</button>
+                    <button type="button" class="btn btn-secondary" onclick={closeModal}>Cancel</button>
                 </div>
             </div>
         </div>
@@ -275,12 +282,12 @@
 {/if}
 
 {#if showAddGraphModal}
-    <div class="modal show d-block" tabindex="-1" role="dialog" on:click={closeAddGraphModal}>
-        <div class="modal-dialog" role="document" on:click|stopPropagation>
+    <div class="modal show d-block" tabindex="-1" role="dialog" onclick={closeAddGraphModal}>
+        <div class="modal-dialog" role="document" onclick={stopPropagation(bubble('click'))}>
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Add Graph to View</h5>
-                    <button type="button" class="close" on:click={closeAddGraphModal}>&times;</button>
+                    <button type="button" class="close" onclick={closeAddGraphModal}>&times;</button>
                 </div>
                 <div class="modal-body">
                     <div class="form-group">
@@ -294,8 +301,8 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-primary" on:click={addGraphToView}>Add</button>
-                    <button class="btn btn-secondary" on:click={closeAddGraphModal}>Cancel</button>
+                    <button class="btn btn-primary" onclick={addGraphToView}>Add</button>
+                    <button class="btn btn-secondary" onclick={closeAddGraphModal}>Cancel</button>
                 </div>
             </div>
         </div>
@@ -303,19 +310,19 @@
 {/if}
 
 {#if showRemoveGraphModal}
-    <div class="modal show d-block" tabindex="-1" role="dialog" on:click={closeRemoveGraphModal}>
-        <div class="modal-dialog" role="document" on:click|stopPropagation>
+    <div class="modal show d-block" tabindex="-1" role="dialog" onclick={closeRemoveGraphModal}>
+        <div class="modal-dialog" role="document" onclick={stopPropagation(bubble('click'))}>
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Remove Graph?</h5>
-                    <button type="button" class="close" on:click={closeRemoveGraphModal}>&times;</button>
+                    <button type="button" class="close" onclick={closeRemoveGraphModal}>&times;</button>
                 </div>
                 <div class="modal-body">
                     <p>Remove <strong>{selectedGraph?.options?.plugins?.title?.text}</strong> from this view?</p>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-danger" on:click={removeGraph}>Remove</button>
-                    <button class="btn btn-secondary" on:click={closeRemoveGraphModal}>Cancel</button>
+                    <button class="btn btn-danger" onclick={removeGraph}>Remove</button>
+                    <button class="btn btn-secondary" onclick={closeRemoveGraphModal}>Cancel</button>
                 </div>
             </div>
         </div>

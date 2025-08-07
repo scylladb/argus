@@ -1,4 +1,6 @@
-<script>
+<script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import { onMount } from "svelte";
     import Fa from "svelte-fa";
     import { faCalendar, faDashboard} from "@fortawesome/free-solid-svg-icons";
@@ -7,17 +9,18 @@
     import { sendMessage } from "../Stores/AlertStore";
     import ReleasePlanEditor from "./ReleasePlanEditor.svelte";
 
-    export let releaseData = {};
-    export let schedules = [];
-    let users = {};
-    $: users = $userList;
-    let selectedTests = [];
-    let clickedTests = {};
-    let plannerData = {};
+    let { releaseData = {}, schedules = $bindable([]) } = $props();
+    let users = $state({});
+    run(() => {
+        users = $userList;
+    });
+    let selectedTests = $state([]);
+    let clickedTests = $state({});
+    let plannerData = $state({});
     let editorMode = "create";
-    let selectedAssignee;
+    let selectedAssignee = $state();
 
-    let releasePlanEditorComponent;
+    let releasePlanEditorComponent = $state();
 
     const fetchPlannerData = async function () {
         try {

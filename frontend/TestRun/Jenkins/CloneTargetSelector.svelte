@@ -6,33 +6,27 @@
     import Fa from "svelte-fa";
     import { faCheck, faTimes } from "@fortawesome/free-solid-svg-icons";
     import { JENKINS_ADVANCED_SETTINGS } from "../../Common/JenkinsSettingsHelp";
-    /**
-     * @type {{
-     * pluginName: string,
-     * releaseId: string,
-     * groupId: string,
-     * oldTestName: string,
-     * buildId: string,
-     * targets: {
-     *  name: string,
-     *  id: string,
-     *  pretty_name: string,
-     * }[]}} args
-     */
-    export let args;
-    const dispatch = createEventDispatcher();
-    let advancedSettings = false;
-    let advancedSettingsBody = {};
-    let newTestName = args.oldTestName;
-    let groups;
-    let target = args.releaseId;
-    let targetRelease = "";
-    let group = args.groupId;
 
-    let groupState = "targetSelect";
-    let validationState = "validationCompleted";
-    let validated = false;
-    let validationMessage = "";
+    /**
+     * @typedef {Object} Props
+     * @property {any} args
+     */
+
+    /** @type {Props} */
+    let { args } = $props();
+    const dispatch = createEventDispatcher();
+    let advancedSettings = $state(false);
+    let advancedSettingsBody = $state({});
+    let newTestName = $state(args.oldTestName);
+    let groups = $state();
+    let target = $state(args.releaseId);
+    let targetRelease = "";
+    let group = $state(args.groupId);
+
+    let groupState = $state("targetSelect");
+    let validationState = $state("validationCompleted");
+    let validated = $state(false);
+    let validationMessage = $state("");
     let stateMessages = {
         targetSelect: {
             shown: false,
@@ -206,7 +200,7 @@
     </div>
     <div class="mb-2">
         <label for="" class="form-label">Release</label>
-        <select class="form-select" bind:value={target} on:change={fetchCategoriesForTarget}>
+        <select class="form-select" bind:value={target} onchange={fetchCategoriesForTarget}>
             {#each args.targets as release (release.id)}
                 {#if release.enabled}
                     <option value="{release.id}">{release.pretty_name ? release.pretty_name: release.name}</option>
@@ -273,7 +267,7 @@
         <div class="mb-2">
             <button
             class="btn btn-primary w-100"
-                on:click={handleValidation}
+                onclick={handleValidation}
             >
                 {#if validated}
                     <Fa icon={faCheck}/>
@@ -285,6 +279,6 @@
         </div>
     {/if}
     <div>
-        <button class="btn btn-success w-100" on:click={handleClone} disabled={!(group && target) || (advancedSettings && !validated)}>Next</button>
+        <button class="btn btn-success w-100" onclick={handleClone} disabled={!(group && target) || (advancedSettings && !validated)}>Next</button>
     </div>
 </div>

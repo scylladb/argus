@@ -1,12 +1,16 @@
 <script lang="ts">
     import {onMount} from 'svelte';
 
-    export let graphs: any[] = [];
-    export let filteredGraphs: any[] = [];
-    let tableFilters: { level: number; items: string[] }[] = [];
-    let columnFilters: string[] = [];
-    let selectedTableFilters: { name: string; level: number }[] = [];
-    let selectedColumnFilters: string[] = [];
+    interface Props {
+        graphs?: any[];
+        filteredGraphs?: any[];
+    }
+
+    let { graphs = [], filteredGraphs = $bindable([]) }: Props = $props();
+    let tableFilters: { level: number; items: string[] }[] = $state([]);
+    let columnFilters: string[] = $state([]);
+    let selectedTableFilters: { name: string; level: number }[] = $state([]);
+    let selectedColumnFilters: string[] = $state([]);
 
     function extractTableFilters() {
         let fltrs = new Map<number, Set<string>>();
@@ -87,14 +91,14 @@
 <span>Filters:</span>
 <div class="filters-container">
     <div class="input-group input-group-inline input-group-sm mx-1">
-        <button class="btn btn-outline-dark colored" on:click={clearTableFilters}>X</button>
+        <button class="btn btn-outline-dark colored" onclick={clearTableFilters}>X</button>
     </div>
     {#each tableFilters as group}
         <div class="input-group input-group-inline input-group-sm mx-1">
             {#each group.items as filter}
                 <button
                         class="btn btn-outline-dark colored"
-                        on:click={()=>toggleTableFilter(filter,group.level)}
+                        onclick={()=>toggleTableFilter(filter,group.level)}
                         class:selected={selectedTableFilters.some(f=>f.name===filter)}
                         style="background-color:{getTableFilterColor(group.level)}">
                     {filter}
@@ -107,13 +111,13 @@
 <span>Metrics:</span>
 <div class="filters-container">
     <div class="input-group input-group-inline input-group-sm mx-1">
-        <button class="btn btn-outline-dark colored" on:click={clearColumnFilters}>X</button>
+        <button class="btn btn-outline-dark colored" onclick={clearColumnFilters}>X</button>
     </div>
     <div class="input-group input-group-inline input-group-sm mx-1">
         {#each columnFilters as filter}
             <button
                     class="btn btn-outline-dark colored"
-                    on:click={()=>toggleColumnFilter(filter)}
+                    onclick={()=>toggleColumnFilter(filter)}
                     class:selected={selectedColumnFilters.includes(filter)}
                     style="background-color: #a3e2cc">
                 {filter}

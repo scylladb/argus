@@ -1,10 +1,12 @@
 <script>
+
     /**
-     * @type {{
-     *  message: string,
-     * }}
+     * @typedef {Object} Props
+     * @property {any} args
      */
-    export let args;
+
+    /** @type {Props} */
+    let { args } = $props();
 </script>
 
 <div class="alert alert-danger">

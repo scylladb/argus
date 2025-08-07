@@ -1,5 +1,5 @@
-<script>
-    export let supportData;
+<script lang="ts">
+    let { supportData } = $props();
 </script>
 
 <div>

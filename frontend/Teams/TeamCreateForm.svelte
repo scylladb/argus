@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import { faPlusSquare } from "@fortawesome/free-solid-svg-icons";
     import { createEventDispatcher } from "svelte";
     import Fa from "svelte-fa";
@@ -11,10 +13,12 @@
     import { createUserSelectList, TeamManagerAPIError, TeamManagerException, TeamRoutes, type RawTeamCreateResponse, type UserSelectItem } from "./TeamUtils";
     const dispatch = createEventDispatcher();
     let currentUser: IUser = applicationCurrentUser;
-    let users: Users = $userList;
-    $: users = $userList;
-    let selectedUsers: UserSelectItem[] | undefined;
-    let newTeamName: string;
+    let users: Users = $state($userList);
+    run(() => {
+        users = $userList;
+    });
+    let selectedUsers: UserSelectItem[] | undefined = $state();
+    let newTeamName: string = $state();
 
     const handleSubmitNewTeam = async function() {
         if (!newTeamName) {
@@ -77,15 +81,18 @@ data-bs-target="#createTeamCollapse"
         <label class="form-label" for="teamName">Members</label>
         <Select
             items={createUserSelectList(Object.values(users), currentUser)}
-            Item={User}
-            isMulti={true}
+            multiple={true}
             placeholder="Members"
             bind:value={selectedUsers}
             on:select={() => { console.log(selectedUsers); }}
-        />
+        >
+            <div slot="item" let:item let:index>
+                <User {item} />
+            </div>
+        </Select>
     </div>
     <div>
-        <button class="btn btn-success btn-sm" on:click={handleSubmitNewTeam}>Create</button>
+        <button class="btn btn-success btn-sm" onclick={handleSubmitNewTeam}>Create</button>
     </div>
 {:else}
     Fetching users...

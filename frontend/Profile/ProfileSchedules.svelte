@@ -1,11 +1,11 @@
-<script>
-    export let schedules = [];
+<script lang="ts">
     import Fa from "svelte-fa";
     import {
         faExternalLinkAlt,
         faTasks,
     } from "@fortawesome/free-solid-svg-icons";
     import { stateEncoder } from "../Common/StateManagement";
+    let { schedules = [] } = $props();
     const generateJenkinsGroupUrl = function(details, releaseDetails) {
         const baseURL = "https://jenkins.scylladb.com/";
         let group = details;

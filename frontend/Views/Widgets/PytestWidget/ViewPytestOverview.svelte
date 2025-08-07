@@ -1,4 +1,4 @@
-<script context="module" lang="ts">
+<script module lang="ts">
     import { PytestBtnStyles, PytestColors, PytestStatus } from "../../../Common/TestStatus";
     export interface PytestResult {
         duration: number;
@@ -51,6 +51,8 @@
 </script>
 
 <script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import { Chart } from "chart.js";
     import { onMount } from "svelte";
     import { titleCase } from "../../../Common/TextUtils";
@@ -61,22 +63,27 @@
     import PytestCalendarSelector from "./PytestCalendarSelector.svelte";
     import dayjs from "dayjs";
 
-    export let dashboardObject: Record<string, unknown>;
-    /**
+
+    interface Props {
+        dashboardObject: Record<string, unknown>;
+        /**
      * @type {string}
      */
-    export let dashboardObjectType: string;
-    export let settings: {
+        dashboardObjectType: string;
+        settings: {
         enabledStatuses: string[]
     };
+    }
 
-    let pytestBarStatsCanvas: HTMLCanvasElement;
+    let { dashboardObject, dashboardObjectType, settings }: Props = $props();
+
+    let pytestBarStatsCanvas: HTMLCanvasElement = $state();
     let pytestBarChart: Chart<"bar">;
-    let pytestPieChartCanvas: HTMLCanvasElement;
+    let pytestPieChartCanvas: HTMLCanvasElement = $state();
     let pytestPieChart: Chart<"pie">;
-    let dirty = false;
-    let fetching = false;
-    let total = 0;
+    let dirty = $state(false);
+    let fetching = $state(false);
+    let total = $state(0);
 
     interface IRoutes {
         [key: string]: string;
@@ -87,7 +94,7 @@
         view: "/api/v1/views/widgets/pytest/view/$id/results",
     };
 
-    let testData: PytestResult[] = [];
+    let testData: PytestResult[] = $state([]);
 
     const defaultAfterDate = function (days = 30) {
         return dayjs().subtract(days, "days").unix();
@@ -114,7 +121,7 @@
     };
 
 
-    let widgetState: IWidgetState = loadPytestDashState() as IWidgetState;
+    let widgetState: IWidgetState = $state(loadPytestDashState() as IWidgetState);
 
     const fetchPytestStats = async function () {
         try {
@@ -287,7 +294,7 @@
         dirty = true;
     };
 
-    $: {
+    run(() => {
         const qs = queryString.parse(document.location.search, { arrayFormat: "bracket" });
         const newQs = {
             ...qs,
@@ -302,7 +309,7 @@
         };
         const search = queryString.stringify(newQs, { arrayFormat: "bracket" });
         window.history.pushState(null, "", `?${search}`);
-    }
+    });
 
     onMount(async () => {
         //empty
@@ -322,7 +329,7 @@
                     {#each Object.entries(widgetState.status) as [status, state]}
                         <button
                             class="mb-2 ms-2 btn btn-sm {PytestBtnStyles[status] || PytestBtnStyles.skipped}"
-                            on:click={() => {widgetState.status[status] = !state; dirty = true;}}
+                            onclick={() => {widgetState.status[status] = !state; dirty = true;}}
                         >
                             <Fa icon={widgetState.status[status] ? faCheck : faTimes}/>
                             {status.split(" ").map(v => titleCase(v)).join(" ")}
@@ -334,7 +341,7 @@
                 <PytestCalendarSelector bind:before={widgetState.before} bind:after={widgetState.after} on:setDirty={() => (dirty = true)}/>
                 {#if dirty}
                     <div class="text-end">
-                        <button class="btn btn-primary" on:click={forceRefresh} disabled={fetching}><span class:fetching><Fa icon={faRefresh}/></span> Refresh</button>
+                        <button class="btn btn-primary" onclick={forceRefresh} disabled={fetching}><span class:fetching><Fa icon={faRefresh}/></span> Refresh</button>
                     </div>
                 {/if}
             </div>
@@ -342,10 +349,10 @@
     {/await}
     <div class="d-flex p-2">
         <div class="w-25">
-            <canvas bind:this={pytestPieChartCanvas} />
+            <canvas bind:this={pytestPieChartCanvas}></canvas>
         </div>
         <div class="ms-2 w-75">
-            <canvas bind:this={pytestBarStatsCanvas} />
+            <canvas bind:this={pytestBarStatsCanvas}></canvas>
         </div>
     </div>
     <div>
@@ -359,7 +366,7 @@
                             <button class="btn btn-sm btn-dark">
                                 {marker}
                             </button>
-                            <button class="btn btn-sm btn-dark" on:click={() => {
+                            <button class="btn btn-sm btn-dark" onclick={() => {
                                 widgetState.markers = widgetState.markers.filter(m => m != marker);
                                 dirty = true;
                             }}>
@@ -381,7 +388,7 @@
                         {#each widgetState.filters as filter}
                             {@const [filterName, filterValue, negated] = parseFilter(filter)}
                             <div class="btn-group me-1 mb-1">
-                                <button class="btn btn-sm btn-dark" on:click={() => alterFilter(filter)}>
+                                <button class="btn btn-sm btn-dark" onclick={() => alterFilter(filter)}>
                                     {#if negated}
                                         <Fa icon={faExclamation}/>
                                     {:else}
@@ -391,7 +398,7 @@
                                 <button class="btn btn-sm btn-dark">
                                     {filterName} = {filterValue}
                                 </button>
-                                <button class="btn btn-sm btn-dark" on:click={() => {
+                                <button class="btn btn-sm btn-dark" onclick={() => {
                                     widgetState.filters = widgetState.filters.filter(m => m != filter);
                                     dirty = true;
                                 }}>

@@ -1,14 +1,16 @@
-<script>
+<script lang="ts">
     import {
         faBusinessTime,
     } from "@fortawesome/free-solid-svg-icons";
     import humanizeDuration from "humanize-duration";
     import Fa from "svelte-fa";
     import { timestampToISODate } from "../../Common/DateUtils";
-    export let test_run = {};
-    export let release;
-    export let group;
-    export let test;
+    let {
+        test_run = {},
+        release,
+        group,
+        test
+    } = $props();
 </script>
 
 <div class="container-fluid">

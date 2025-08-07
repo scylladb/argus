@@ -9,7 +9,7 @@
 <script>
     globalThis.ARGUS_VIEW_DATA = {{ data | tojson | safe }};
 </script>
-<script defer src="/s/dist/viewDashboard.bundle.js"></script>
+<script defer type="module" src="/s/dist/viewDashboard.bundle.js"></script>
 {% endblock javascripts %}
 
 {% block body %}

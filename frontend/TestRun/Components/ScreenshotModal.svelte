@@ -3,7 +3,11 @@
     import Fa from "svelte-fa";
     import {onMount, onDestroy} from "svelte";
 
-    export let selectedScreenshot: string;
+    interface Props {
+        selectedScreenshot: string;
+    }
+
+    let { selectedScreenshot = $bindable() }: Props = $props();
     function handleKeyDown(event: KeyboardEvent) {
         if (event.key === "Escape") {
             selectedScreenshot = "";
@@ -11,7 +15,7 @@
     }
 </script>
 
-<svelte:window on:keydown={handleKeyDown} />
+<svelte:window onkeydown={handleKeyDown} />
 {#if selectedScreenshot}
     <div class="screenshot-modal">
         <div class="text-end">
@@ -22,7 +26,7 @@
             </div>
             <div
                     class="d-inline-block screenshot-button"
-                    on:click={() => {
+                    onclick={() => {
                 selectedScreenshot = "";
             }}
             >

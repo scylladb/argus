@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Argus - {%block title%}{%endblock%}</title>
     <link rel="stylesheet" href="/s/dist/main.css">
+    <link rel="stylesheet" href="/s/dist/styles.css">
     <link rel="stylesheet" href="/s/dist/noto.css">
     <link rel="stylesheet" href="/s/dist/fontAwesome.css">
     <link rel="shortcut icon" href="/s/argus.png" type="image/png">
@@ -18,9 +19,9 @@
     </script>
     {% endif %}
     <script src="/s/dist/fontAwesome.bundle.js"></script>
-    <script src="/s/dist/main.bundle.js"></script>
-    <script src="/s/dist/globalAlert.bundle.js"></script>
-    <script defer src="/s/dist/notificationCounter.bundle.js"></script>
+    <script type="module" src="/s/dist/main.bundle.js"></script>
+    <script type="module" src="/s/dist/globalAlert.bundle.js"></script>
+    <script type="module" defer src="/s/dist/notificationCounter.bundle.js"></script>
     {% endblock javascripts %}
 </head>
 <body class="bg-lighter">

@@ -1,6 +1,6 @@
-<script>
+<script lang="ts">
     import { NemesisStatuses } from "../Common/TestStatus";
-    export let nemesis;
+    let { nemesis } = $props();
 </script>
 
 <li>

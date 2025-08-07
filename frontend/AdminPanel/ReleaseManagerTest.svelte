@@ -1,4 +1,6 @@
-<script>
+<script lang="ts">
+    import { self } from 'svelte/legacy';
+
     import { createEventDispatcher } from "svelte";
     import Fa from "svelte-fa";
     import {
@@ -6,11 +8,10 @@
         faTrash,
     } from "@fortawesome/free-solid-svg-icons";
     import { AVAILABLE_PLUGINS } from "../Common/PluginDispatch";
-    export let test;
-    export let groups;
+    let { test = $bindable(), groups } = $props();
     const dispatch = createEventDispatcher();
-    let editing = false;
-    let editedTest = Object.assign({}, test);
+    let editing = $state(false);
+    let editedTest = $state(Object.assign({}, test));
 
     const handleTestUpdate = function () {
         editing = false;
@@ -54,14 +55,14 @@
     </div>
     <div class="ms-auto">
         <div class="form-check form-switch">
-            <input class="form-check-input" type="checkbox" role="switch" bind:checked={test.enabled} on:click={handleVisibilityToggle}>
+            <input class="form-check-input" type="checkbox" role="switch" bind:checked={test.enabled} onclick={handleVisibilityToggle}>
         </div>
     </div>
     <div class="ms-2">
         <button
             class="btn btn-light"
             title="Edit"
-            on:click={() => (editing = true)}
+            onclick={() => (editing = true)}
         >
             <Fa icon={faEdit} />
         </button>
@@ -81,9 +82,9 @@
 <div class="position-fixed popup-test-editor" class:d-none={!editing}>
     <div
         class="row justify-content-center align-items-center h-100"
-        on:mousedown|self={() => {
+        onmousedown={self(() => {
             editing = false;
-        }}
+        })}
     >
         <div class="col-4 mt-6 bg-white rounded shadow-sm shadow-light p-2">
             <div class="fs-6 text-muted mb-2">
@@ -157,11 +158,11 @@
             <div class="mt-2 text-end">
                 <button
                     class="btn btn-secondary"
-                    on:click={() => (editing = false)}
+                    onclick={() => (editing = false)}
                 >
                     Cancel
                 </button>
-                <button class="btn btn-success" on:click={handleTestUpdate}>
+                <button class="btn btn-success" onclick={handleTestUpdate}>
                     Update
                 </button>
             </div>
@@ -179,7 +180,7 @@
                     class="btn-close"
                     data-bs-dismiss="modal"
                     aria-label="Close"
-                />
+></button>
             </div>
             <div class="modal-body">
                 <p>
@@ -198,7 +199,7 @@
                     type="button"
                     class="btn btn-danger"
                     data-bs-dismiss="modal"
-                    on:click={handleTestDelete}
+                    onclick={handleTestDelete}
                 >
                     Yes
                 </button>

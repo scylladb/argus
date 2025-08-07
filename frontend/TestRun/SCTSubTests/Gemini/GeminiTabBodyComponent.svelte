@@ -1,8 +1,8 @@
-<script>
+<script lang="ts">
     import { faCopy } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
 
-    export let testRun;
+    let { testRun } = $props();
 </script>
 
 <div
@@ -23,7 +23,7 @@
                 <button
                     class="btn btn-success"
                     type="button"
-                    on:click={() => {
+                    onclick={() => {
                         navigator.clipboard.writeText(
                             testRun.gemini_command
                         );

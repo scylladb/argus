@@ -2,7 +2,11 @@
     import { StatusBackgroundCSSClassMap } from "../../../Common/TestStatus";
     import type { TestRun } from "./Interfaces";
 
-    export let run: TestRun;
+    interface Props {
+        run: TestRun;
+    }
+
+    let { run }: Props = $props();
 
     const status = run.status?.toLowerCase();
     const badgeClass = getBadgeClass(status);

@@ -1,20 +1,24 @@
-<script>
+<script lang="ts">
     import {onMount} from "svelte";
     import ScreenshotModal from "./Components/ScreenshotModal.svelte";
     import ResultTable from "./Components/ResultTable.svelte";
     import Fa from "svelte-fa";
     import { faMarkdown } from "@fortawesome/free-brands-svg-icons";
 
-    let fetching = true;
-    export let id = "";
-    export let test_id = "";
+    let fetching = $state(true);
+    interface Props {
+        id?: string;
+        test_id?: string;
+    }
+
+    let { id = "", test_id = "" }: Props = $props();
     let results = {};
-    let filters = [];
-    let selectedFilters = [];
-    let filteredTables = {};
-    let selectedScreenshot = "";
-    let showFilters = false;
-    let resultTables = {};
+    let filters = $state([]);
+    let selectedFilters = $state([]);
+    let filteredTables = $state({});
+    let selectedScreenshot = $state("");
+    let showFilters = $state(false);
+    let resultTables = $state({});
 
     const fetchResults = async function () {
         fetching = true;
@@ -137,14 +141,14 @@
     }
 </style>
 
-{#if !fetching }
+{#if !fetching}
     <div class="p-2">
         <div class="filters-container" class:d-none={!showFilters}>
-            <button on:click={() => { selectedFilters = []; filterTables();  }}>Show All</button>
+            <button onclick={() => { selectedFilters = []; filterTables();  }}>Show All</button>
             {#each filters as filterGroup}
                 {#each filterGroup.items as filter}
                     <button
-                            on:click={() => toggleFilter(filter, filterGroup.level)}
+                            onclick={() => toggleFilter(filter, filterGroup.level)}
                             class:selected={selectedFilters.some(f => f.name === filter)}
                             style="background-color: {getFilterColor(filterGroup.level)}"
                     >
@@ -154,7 +158,7 @@
             {/each}
         </div>
         <div class="mb-2">
-            <button class="btn btn-sm btn-primary" on:click={() => copyAllTablesAsMarkdown()}><Fa icon={faMarkdown}/> Copy all tables as Markdown</button>
+            <button class="btn btn-sm btn-primary" onclick={() => copyAllTablesAsMarkdown()}><Fa icon={faMarkdown}/> Copy all tables as Markdown</button>
         </div>
         <ul class="result-list">
             {#each Object.entries(filteredTables) as [table_name, result]}

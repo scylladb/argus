@@ -7,15 +7,25 @@
     import { marked } from "marked";
     import { markdownRendererOptions } from "../../../markdownOptions";
 
-    export let comment: any;
-    export let currentUserId: string;
-    export let action: any;
-    export let highlight: any;
-    export let users: Record<string, any> = {};
+    interface Props {
+        comment: any;
+        currentUserId: string;
+        action: any;
+        highlight: any;
+        users?: Record<string, any>;
+    }
+
+    let {
+        comment = $bindable(),
+        currentUserId,
+        action,
+        highlight,
+        users = {}
+    }: Props = $props();
 
     let creator = comment.creator_id ? users[comment.creator_id] || {} : {};
     let isArchived = action?.isArchived || highlight?.isArchived;
-    let isEditing = false;
+    let isEditing = $state(false);
     let commentTimeStr = comment.createdAt.toLocaleDateString("en-CA") + " " + comment.createdAt.toLocaleTimeString("en-GB");
     let commentBody = {
         id: comment.id || "",
@@ -54,7 +64,7 @@
     {:else}
         <div class="d-flex">
             <div class="flex-fill d-inline-flex align-items-start">
-                <div class="img-profile me-2" style="background-image: url('{getPicture(creator?.picture_id)}');" data-bs-toggle="tooltip" title="{creator?.username}" />
+                <div class="img-profile me-2" style="background-image: url('{getPicture(creator?.picture_id)}');" data-bs-toggle="tooltip" title="{creator?.username}"></div>
                 <small class="text-muted ms-2">{commentTimeStr}</small>
             </div>
         </div>
@@ -64,10 +74,10 @@
             </div>
             {#if comment.creator_id === currentUserId && !isArchived}
             <div class="d-flex align-items-start ms-2">
-                <button class="btn btn-sm btn-outline-secondary me-1" on:click={() => isEditing = !isEditing}>
+                <button class="btn btn-sm btn-outline-secondary me-1" onclick={() => isEditing = !isEditing}>
                     <Fa icon={faEdit}/>
                 </button>
-                <button class="btn btn-sm btn-outline-danger" on:click={deleteComment}>
+                <button class="btn btn-sm btn-outline-danger" onclick={deleteComment}>
                     <Fa icon={faTrash}/>
                 </button>
             </div>

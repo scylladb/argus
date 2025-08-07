@@ -2,19 +2,16 @@
     import { faQuestionCircle } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
 
+
     /**
-     * @type {{
-     *  default: any[],
-     *  help: string,
-     *  displayName: string,
-     *  type: Object,
-     *  values: string[],
-     *  labels: string[],
-     * }}
+     * @typedef {Object} Props
+     * @property {any} settingName
+     * @property {any} definition
+     * @property {any} settings
      */
-    export let settingName;
-    export let definition;
-    export let settings;
+
+    /** @type {Props} */
+    let { settingName, definition, settings = $bindable() } = $props();
 </script>
 
 <div>

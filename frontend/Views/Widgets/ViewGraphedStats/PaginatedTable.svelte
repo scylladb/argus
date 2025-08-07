@@ -4,30 +4,47 @@
     import { timestampToISODate } from "../../../Common/DateUtils.js";
     import type { NemesisData, TestRun } from "./Interfaces";
 
-    /** @description Array of items to display (either NemesisData or TestRun) */
-    export let items: (NemesisData | TestRun)[];
 
-    /** @description Number of items to show per page */
-    export let itemsPerPage: number = 20;
 
-    /** @description Table title */
-    export let title: string;
-    export let sortField: string;
-    export let sortDirection: "asc" | "desc";
-    /**
+
+
+
+
+
+
+    interface Props {
+        /** @description Array of items to display (either NemesisData or TestRun) */
+        items: (NemesisData | TestRun)[];
+        /** @description Number of items to show per page */
+        itemsPerPage?: number;
+        /** @description Table title */
+        title: string;
+        sortField: string;
+        sortDirection: "asc" | "desc";
+        /**
      * @description Table column definitions
      * @type {Array<{key: string, label: string, sort?: (a: any, b: any) => number, component?: any, width?: string}>}
      */
-    export let columns: {
+        columns: {
         key: string;
         label: string;
         sort?: (a: any, b: any) => number;
         component?: any;
         width?: string;
     }[];
+        /** @description Callback to close the table */
+        onClose: () => void;
+    }
 
-    /** @description Callback to close the table */
-    export let onClose: () => void;
+    let {
+        items,
+        itemsPerPage = 20,
+        title,
+        sortField,
+        sortDirection,
+        columns,
+        onClose
+    }: Props = $props();
 
     /**
      * @description Reactive state store for pagination and sorting
@@ -72,13 +89,13 @@
     }
 
     /** @description Reactively sorted items based on current sort state */
-    $: sortedItems = sortItems(items, $state.sortField, $state.sortDirection);
+    let sortedItems = $derived(sortItems(items, $state.sortField, $state.sortDirection));
 
     /** @description Reactively paginated items for current page */
-    $: paginatedItems = sortedItems.slice(($state.currentPage - 1) * itemsPerPage, $state.currentPage * itemsPerPage);
+    let paginatedItems = $derived(sortedItems.slice(($state.currentPage - 1) * itemsPerPage, $state.currentPage * itemsPerPage));
 
     /** @description Total number of pages based on items and itemsPerPage */
-    $: totalPages = Math.ceil(items.length / itemsPerPage);
+    let totalPages = $derived(Math.ceil(items.length / itemsPerPage));
 
     /**
      * @description Gets display value for an item property
@@ -95,7 +112,7 @@
 <div class="details mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h5>{title}</h5>
-        <button class="btn btn-sm btn-outline-secondary" on:click={onClose}><i class="bi bi-x" /> Close</button>
+        <button class="btn btn-sm btn-outline-secondary" onclick={onClose}><i class="bi bi-x"></i> Close</button>
     </div>
     <div class="table-responsive">
         {#key sortedItems}
@@ -105,7 +122,7 @@
                         {#each columns as column, i}
                             <th
                                 class:sortable={column.sort !== undefined}
-                                on:click={() => column.sort && toggleSort(column.key)}
+                                onclick={() => column.sort && toggleSort(column.key)}
                                 title={column.label}
                                 style={column.width
                                     ? `width: ${column.width}; min-width: ${column.width};`
@@ -115,7 +132,7 @@
                             >
                                 {column.label}
                                 {#if column.sort && $state.sortField === column.key}
-                                    <i class="fas fa-sort-{$state.sortDirection === 'desc' ? 'down' : 'up'}" />
+                                    <i class="fas fa-sort-{$state.sortDirection === 'desc' ? 'down' : 'up'}"></i>
                                 {/if}
                             </th>
                         {/each}
@@ -127,7 +144,7 @@
                             {#each columns as column}
                                 <td>
                                     {#if column.component}
-                                        <svelte:component this={column.component} run={item} />
+                                        <column.component run={item} />
                                     {:else if column.key === "duration"}
                                         {item[column.key] === 0
                                             ? "unknown"
@@ -153,19 +170,19 @@
                 <li class="page-item {$state.currentPage === 1 ? 'disabled' : ''}">
                     <button
                         class="page-link"
-                        on:click={() => ($state.currentPage -= 1)}
+                        onclick={() => ($state.currentPage -= 1)}
                         disabled={$state.currentPage === 1}>Previous</button
                     >
                 </li>
                 {#each Array(totalPages) as _, i}
                     <li class="page-item {$state.currentPage === i + 1 ? 'active' : ''}">
-                        <button class="page-link" on:click={() => ($state.currentPage = i + 1)}>{i + 1}</button>
+                        <button class="page-link" onclick={() => ($state.currentPage = i + 1)}>{i + 1}</button>
                     </li>
                 {/each}
                 <li class="page-item {$state.currentPage === totalPages ? 'disabled' : ''}">
                     <button
                         class="page-link"
-                        on:click={() => ($state.currentPage += 1)}
+                        onclick={() => ($state.currentPage += 1)}
                         disabled={$state.currentPage === totalPages}>Next</button
                     >
                 </li>

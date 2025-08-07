@@ -1,10 +1,12 @@
-<script>
+<script lang="ts">
     import TestDashboardTest from "./TestDashboardTest.svelte";
 
-    export let groupStats;
-    export let assigneeList;
-    export let clickedTests;
-    export let doFilters = (test) => false;
+    let {
+        groupStats,
+        assigneeList,
+        clickedTests = $bindable(),
+        doFilters = (test) => false
+    } = $props();
 
 
     const sortTestStats = function (testStats) {

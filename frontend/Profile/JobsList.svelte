@@ -1,17 +1,17 @@
-<script>
-    export let runs = [];
+<script lang="ts">
     import Fa from "svelte-fa";
     import { StatusCSSClassMap } from "../Common/TestStatus";
     import { faCircle, faExternalLinkSquareAlt } from "@fortawesome/free-solid-svg-icons";
     import TestRuns from "../WorkArea/TestRuns.svelte";
     import { timestampToISODate } from "../Common/DateUtils";
     import { onMount } from "svelte";
-    let filterString = "";
-    let pagedRuns = [];
+    let { runs = $bindable([]) } = $props();
+    let filterString = $state("");
+    let pagedRuns = $state([]);
     let totalPages = 0;
-    let selectedPage = 0;
-    let clickedRuns = {};
-    let listDomElement;
+    let selectedPage = $state(0);
+    let clickedRuns = $state({});
+    let listDomElement = $state();
 
     const filterJob = function (job) {
         let jobName = `${job.build_id}#${getBuildNumber(
@@ -93,7 +93,7 @@
             class="form-control"
             type="text"
             placeholder="Filter by name"
-            on:keyup={(e) => {
+            onkeyup={(e) => {
                 filterString = e.target.value;
                 runs = runs;
             }}
@@ -134,7 +134,7 @@
                             class="btn btn-sm btn-outline-secondary"
                             data-bs-toggle="collapse"
                             data-bs-target="#testRun_{run.id}"
-                            on:click={() => (clickedRuns[run.id] = !clickedRuns[run.id])}
+                            onclick={() => (clickedRuns[run.id] = !clickedRuns[run.id])}
                         >
                             {clickedRuns[run.id] ? "Close" : "Open"}
                         </button>
@@ -172,7 +172,7 @@
                     class="page-button ms-2 my-2 btn btn-sm"
                     class:btn-primary={selectedPage == idx}
                     class:btn-outline-primary={selectedPage != idx}
-                    on:click={() => {
+                    onclick={() => {
                         if (selectedPage == idx) return;
                         listDomElement.scrollIntoView();
                         selectedPage = idx;

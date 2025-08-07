@@ -1,11 +1,9 @@
-<script>
+<script lang="ts">
     import { createScreenshotUrl } from "../Common/RunUtils";
     import ScreenshotModal from "./Components/ScreenshotModal.svelte";
-    export let screenshots = [];
-    export let testInfo;
-    export let runId;
+    let { screenshots = [], testInfo, runId } = $props();
 
-    let selectedScreenshot = undefined;
+    let selectedScreenshot = $state(undefined);
 
 </script>
 
@@ -16,13 +14,13 @@
             role="button"
             tabindex="0"
             style="background-image: url('{createScreenshotUrl(testInfo.test.plugin_name, runId, screenshot_url)}')"
-            on:click={() => {
+            onclick={() => {
                 selectedScreenshot = createScreenshotUrl(testInfo.test.plugin_name, runId, screenshot_url);
             }}
-            on:keypress={() => {
+            onkeypress={() => {
                 selectedScreenshot = createScreenshotUrl(testInfo.test.plugin_name, runId, screenshot_url);
             }}
-        />
+></div>
 {:else}
     <div class="text-muted text-center py-2">No screenshots submitted!</div>
 {/each}

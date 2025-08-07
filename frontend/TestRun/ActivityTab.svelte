@@ -1,16 +1,24 @@
-<script>
+<script lang="ts">
+    import { run } from 'svelte/legacy';
+
     import { onMount } from "svelte";
     import { userList } from "../Stores/UserlistSubscriber";
 
-    let users = {};
-    $: users = $userList;
-    let fetching = true;
-    export let id = "";
-    let activity = {
+    let users = $state({});
+    run(() => {
+        users = $userList;
+    });
+    let fetching = $state(true);
+    interface Props {
+        id?: string;
+    }
+
+    let { id = "" }: Props = $props();
+    let activity = $state({
         events: {},
         raw_events: {},
         test_run_id: "",
-    };
+    });
 
     const getPictureForId = function (id) {
         let picture_id = users[id]?.picture_id;
@@ -47,7 +55,7 @@
                 type="button"
                 value="Refresh"
                 disabled={fetching}
-                on:click={fetchActivity}
+                onclick={fetchActivity}
             />
         </div>
     </div>

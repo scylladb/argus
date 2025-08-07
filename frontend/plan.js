@@ -1,6 +1,7 @@
 import ReleasePlan from "./ReleasePlanner/ReleasePlan.svelte";
+import { mount } from "svelte";
 
-const app = new ReleasePlan({
+const app = mount(ReleasePlan, {
     target: document.querySelector("div#planDashboard"),
     props: {
         plan: globalThis.ARGUS_PLAN_DATA,

@@ -1,8 +1,8 @@
-<script>
+<script lang="ts">
     import { onMount } from "svelte";
     import { Chart, registerables } from "chart.js";
 
-    export let results;
+    let { results } = $props();
 
     const resultColors = {
         passed: "#198754",
@@ -12,7 +12,7 @@
         disabled: "#d3d4d5",
     };
 
-    let canvas;
+    let canvas = $state();
     let chart = {
         data: {},
         update: () => {
@@ -54,4 +54,4 @@
 </script>
 
 
-<canvas bind:this={canvas} height="128px"/>
+<canvas bind:this={canvas} height="128px"></canvas>

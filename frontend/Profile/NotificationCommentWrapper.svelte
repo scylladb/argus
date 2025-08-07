@@ -1,13 +1,13 @@
-<script>
+<script lang="ts">
     import Comment from "../Discussion/Comment.svelte";
     import CommentEditor from "../Discussion/CommentEditor.svelte";
     import { sendMessage } from "../Stores/AlertStore";
     import { userList } from "../Stores/UserlistSubscriber";
     let users = $userList;
-    export let supportData;
-    let replying = false;
-    let fetching = false;
-    let replyUser = "";
+    let { supportData } = $props();
+    let replying = $state(false);
+    let fetching = $state(false);
+    let replyUser = $state("");
 
     const newCommentTemplate = {
         id: "",
@@ -21,7 +21,7 @@
         posted_at: new Date(),
     };
 
-    let newCommentBody;
+    let newCommentBody = $state();
 
     const handleReplyButton = function (e) {
         newCommentBody = Object.assign({}, newCommentTemplate);
@@ -93,7 +93,7 @@
                 <div class="mb-2 d-flex border-bottom pb-2">
                     <h5>Replying to <span class="fw-bold">{replyUser}</span></h5>
                     <div class="ms-auto">
-                        <button class="btn btn-close" on:click={() => (replying = false)} />
+                        <button class="btn btn-close" onclick={() => (replying = false)}></button>
                     </div>
                 </div>
                 <CommentEditor

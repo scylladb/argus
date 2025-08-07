@@ -1,10 +1,10 @@
-<script>
+<script lang="ts">
     import { faEdit, faTrash } from "@fortawesome/free-solid-svg-icons";
     import { createEventDispatcher } from "svelte";
     import Fa from "svelte-fa";
 
-    export let view;
-    let deleting = false;
+    let { view } = $props();
+    let deleting = $state(false);
     const dispatch = createEventDispatcher();
 
     const resolveViewForUpdating = async function () {
@@ -32,8 +32,8 @@
             {view.description || "No description provided."}
         </div>
     </div>
-    <div class="ms-auto"><button class="btn btn-primary" on:click={resolveViewForUpdating}><Fa icon={faEdit}/></button></div>
-    <div class="ms-2"><button class="btn btn-danger" on:click={() => (deleting = true)}><Fa icon={faTrash}/></button></div>
+    <div class="ms-auto"><button class="btn btn-primary" onclick={resolveViewForUpdating}><Fa icon={faEdit}/></button></div>
+    <div class="ms-2"><button class="btn btn-danger" onclick={() => (deleting = true)}><Fa icon={faTrash}/></button></div>
 </div>
 
 {#if deleting}
@@ -45,7 +45,7 @@
                     <div class="ms-auto">
                         <button
                             class="btn btn-close"
-                            on:click={() => {
+                            onclick={() => {
                                 deleting = false;
                             }}
                         ></button>
@@ -54,8 +54,8 @@
                 <div>
                     <div>Are you sure you want to delete this view?</div>
                     <div class="d-flex justify-content-end">
-                        <div><button class="btn btn-danger" on:click={() => dispatch("delete", view.id)}>Confirm</button></div>
-                        <div class="ms-1"><button class="btn btn-secondary" on:click={() => (deleting = false)}>Cancel</button></div>
+                        <div><button class="btn btn-danger" onclick={() => dispatch("delete", view.id)}>Confirm</button></div>
+                        <div class="ms-1"><button class="btn btn-secondary" onclick={() => (deleting = false)}>Cancel</button></div>
                     </div>
                 </div>
             </div>

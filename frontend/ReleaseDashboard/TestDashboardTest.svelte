@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
     import { createEventDispatcher } from "svelte";
     import { InvestigationStatusIcon, StatusBackgroundCSSClassMap, TestInvestigationStatus, TestInvestigationStatusStrings, TestStatus } from "../Common/TestStatus";
     import { subUnderscores, titleCase } from "../Common/TextUtils";
@@ -8,22 +8,24 @@
     import { faBug, faComment } from "@fortawesome/free-solid-svg-icons";
     import { getAssigneesForTest, shouldFilterOutByUser } from "./TestDashboard.svelte";
 
-    export let testStats;
-    export let groupStats;
-    export let assigneeList;
-    export let clickedTests;
-    export let doFilters;
+    let {
+        testStats,
+        groupStats,
+        assigneeList,
+        clickedTests,
+        doFilters
+    } = $props();
     const dispatch = createEventDispatcher();
 </script>
 
-<!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
     class:d-none={!doFilters(testStats)}
     class:status-block-active={testStats.start_time != 0}
     class:investigating={testStats?.investigation_status == TestInvestigationStatus.IN_PROGRESS}
     class:should-be-investigated={testStats?.investigation_status == TestInvestigationStatus.NOT_INVESTIGATED && [TestStatus.FAILED, TestStatus.TEST_ERROR].includes(testStats?.status)}
     class="rounded bg-main status-block m-1 d-flex flex-column overflow-hidden shadow-sm"
-    on:click={() => {
+    onclick={() => {
         dispatch("testClick", { testStats, groupStats });
     }}
 >

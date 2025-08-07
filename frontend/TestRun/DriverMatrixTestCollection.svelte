@@ -3,8 +3,12 @@
     import { faCircle, faBoxes, faWarning, faExclamationCircle } from "@fortawesome/free-solid-svg-icons";
     import DriverMatrixBreakdown from "./DriverMatrixBreakdown.svelte";
     import type { TestCollection } from "../Common/DriverMatrixTypes";
-    export let collections: TestCollection[];
-    export let testId: string;
+    interface Props {
+        collections: TestCollection[];
+        testId: string;
+    }
+
+    let { collections, testId }: Props = $props();
 
     const calculateCollectionStatus = function(collection: TestCollection): boolean {
         return collection.failures > 0 || collection.errors > 0;

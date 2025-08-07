@@ -1,46 +1,36 @@
-<script>
+<script lang="ts">
+    import { run as run_1 } from 'svelte/legacy';
+
     import { onMount } from "svelte";
     import Chart from "chart.js/auto";
 
-    export let viewId;
-    export let dashboardObject;
-    let chartCanvas;
+    let { viewId, dashboardObject } = $props();
+    let chartCanvas = $state();
     let chart;
-    let barChartCanvas;
+    let barChartCanvas = $state();
     let barChart;
-    let versions = [];
-    let releases = [];
-    let selectedFilter = "";
-    let totalDuration = 0;
-    let uniqueNemesisCount = 0;
+    let versions = $state([]);
+    let releases = $state([]);
+    let selectedFilter = $state("");
+    let totalDuration = $state(0);
+    let uniqueNemesisCount = $state(0);
     let allNemesisData = [];
-    let errorMsg = "";
-    let loading = true;
-    let filteredData = [];
+    let errorMsg = $state("");
+    let loading = $state(true);
+    let filteredData = $state([]);
     let collapsed = true;
-    let selectedNemesis = null;
+    let selectedNemesis = $state(null);
 
     // Pagination state
     let itemsPerPage = 20;
-    let currentPage = 1;
+    let currentPage = $state(1);
 
     // Sorting state
-    let sortField = "status";
-    let sortDirection = "asc"; // "asc" or "desc"
+    let sortField = $state("status");
+    let sortDirection = $state("asc"); // "asc" or "desc"
 
-    let paginatedRuns = [];
+    let paginatedRuns = $state([]);
 
-    // Watch for changes in selectedNemesis, currentPage, sortField, and sortDirection
-    $: {
-        if (selectedNemesis) {
-            const runs = filteredData.filter((nemesis) => nemesis.name === selectedNemesis);
-            const sortedRuns = sortRuns(runs);
-            const startIndex = (currentPage - 1) * itemsPerPage;
-            paginatedRuns = sortedRuns.slice(startIndex, startIndex + itemsPerPage);
-        } else {
-            paginatedRuns = [];
-        }
-    }
 
     async function fetchData() {
         try {
@@ -404,6 +394,17 @@
     onMount(() => {
         collapsed = true;
     });
+    // Watch for changes in selectedNemesis, currentPage, sortField, and sortDirection
+    run_1(() => {
+        if (selectedNemesis) {
+            const runs = filteredData.filter((nemesis) => nemesis.name === selectedNemesis);
+            const sortedRuns = sortRuns(runs);
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            paginatedRuns = sortedRuns.slice(startIndex, startIndex + itemsPerPage);
+        } else {
+            paginatedRuns = [];
+        }
+    });
 </script>
 
 <div class="accordion" id="nemesisStatsAccordion">
@@ -416,7 +417,7 @@
                 data-bs-target="#nemesisStats"
                 aria-expanded="false"
                 aria-controls="nemesisStats"
-                on:click={toggleCollapsed}
+                onclick={toggleCollapsed}
             >
                 Nemesis Statistics
             </button>
@@ -437,13 +438,13 @@
                         <button
                             class:active={selectedFilter === ""}
                             class="btn btn-outline-secondary"
-                            on:click={() => applyFilter("")}>All</button
+                            onclick={() => applyFilter("")}>All</button
                         >
                         {#each releases as release}
                             <button
                                 class:active={selectedFilter === release}
                                 class="btn btn-outline-secondary"
-                                on:click={() => applyFilter(release)}>{release}</button
+                                onclick={() => applyFilter(release)}>{release}</button
                             >
                         {/each}
                     </div>
@@ -452,7 +453,7 @@
                             <button
                                 class:active={selectedFilter === version}
                                 class="btn btn-outline-primary btn-sm"
-                                on:click={() => applyFilter(version)}>{version}</button
+                                onclick={() => applyFilter(version)}>{version}</button
                             >
                         {/each}
                     </div>
@@ -460,7 +461,7 @@
                     <div class="row">
                         <div class="col-md-3">
                             <div class="small-chart-container mb-3">
-                                <canvas bind:this={chartCanvas} />
+                                <canvas bind:this={chartCanvas}></canvas>
                             </div>
                             <div class="alert alert-info text-center py-2">
                                 <small>Total Duration: {(totalDuration / 3600).toFixed(2)} hours</small>
@@ -471,7 +472,7 @@
                         </div>
                         <div class="col-md-9">
                             <div class="bar-chart-container">
-                                <canvas bind:this={barChartCanvas} />
+                                <canvas bind:this={barChartCanvas}></canvas>
                             </div>
                         </div>
                     </div>
@@ -480,8 +481,8 @@
                         <div class="nemesis-details mt-4">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <h5>Nemesis: {selectedNemesis}</h5>
-                                <button class="btn btn-sm btn-outline-secondary" on:click={clearSelectedNemesis}>
-                                    <i class="bi bi-x" /> Close
+                                <button class="btn btn-sm btn-outline-secondary" onclick={clearSelectedNemesis}>
+                                    <i class="bi bi-x"></i> Close
                                 </button>
                             </div>
 
@@ -492,60 +493,60 @@
                                             <tr>
                                                 <th
                                                     class="status-column sortable"
-                                                    on:click={() => toggleSort("status")}
+                                                    onclick={() => toggleSort("status")}
                                                 >
                                                     Status
                                                     <span class="sort-indicator">
                                                         {#if sortField === "status"}
                                                             {#if sortDirection === "desc"}
-                                                                <i class="fas fa-sort-down" />
+                                                                <i class="fas fa-sort-down"></i>
                                                             {:else}
-                                                                <i class="fas fa-sort-up" />
+                                                                <i class="fas fa-sort-up"></i>
                                                             {/if}
                                                         {/if}
                                                     </span>
                                                 </th>
                                                 <th
                                                     class="start-time-column sortable"
-                                                    on:click={() => toggleSort("start_time")}
+                                                    onclick={() => toggleSort("start_time")}
                                                 >
                                                     Start Time
                                                     <span class="sort-indicator">
                                                         {#if sortField === "start_time"}
                                                             {#if sortDirection === "desc"}
-                                                                <i class="fas fa-sort-down" />
+                                                                <i class="fas fa-sort-down"></i>
                                                             {:else}
-                                                                <i class="fas fa-sort-up" />
+                                                                <i class="fas fa-sort-up"></i>
                                                             {/if}
                                                         {/if}
                                                     </span>
                                                 </th>
                                                 <th
                                                     class="duration-column sortable"
-                                                    on:click={() => toggleSort("duration")}
+                                                    onclick={() => toggleSort("duration")}
                                                 >
                                                     Duration
                                                     <span class="sort-indicator">
                                                         {#if sortField === "duration"}
                                                             {#if sortDirection === "desc"}
-                                                                <i class="fas fa-sort-down" />
+                                                                <i class="fas fa-sort-down"></i>
                                                             {:else}
-                                                                <i class="fas fa-sort-up" />
+                                                                <i class="fas fa-sort-up"></i>
                                                             {/if}
                                                         {/if}
                                                     </span>
                                                 </th>
                                                 <th
                                                     class="version-column sortable"
-                                                    on:click={() => toggleSort("version")}
+                                                    onclick={() => toggleSort("version")}
                                                 >
                                                     Version
                                                     <span class="sort-indicator">
                                                         {#if sortField === "version"}
                                                             {#if sortDirection === "desc"}
-                                                                <i class="fas fa-sort-down" />
+                                                                <i class="fas fa-sort-down"></i>
                                                             {:else}
-                                                                <i class="fas fa-sort-up" />
+                                                                <i class="fas fa-sort-up"></i>
                                                             {/if}
                                                         {/if}
                                                     </span>
@@ -589,7 +590,7 @@
                                                                     <button
                                                                         id={`btn-${run.run_id}`}
                                                                         class="btn btn-sm btn-outline-secondary mt-1"
-                                                                        on:click={() => toggleStackTrace(run.run_id)}
+                                                                        onclick={() => toggleStackTrace(run.run_id)}
                                                                     >
                                                                         Show More
                                                                     </button>
@@ -611,7 +612,7 @@
                                             <li class="page-item {currentPage === 1 ? 'disabled' : ''}">
                                                 <button
                                                     class="page-link"
-                                                    on:click={() => changePage(currentPage - 1)}
+                                                    onclick={() => changePage(currentPage - 1)}
                                                     disabled={currentPage === 1}
                                                 >
                                                     Previous
@@ -620,7 +621,7 @@
 
                                             {#each Array(getTotalPages(selectedNemesis)) as _, i}
                                                 <li class="page-item {currentPage === i + 1 ? 'active' : ''}">
-                                                    <button class="page-link" on:click={() => changePage(i + 1)}>
+                                                    <button class="page-link" onclick={() => changePage(i + 1)}>
                                                         {i + 1}
                                                     </button>
                                                 </li>
@@ -633,7 +634,7 @@
                                             >
                                                 <button
                                                     class="page-link"
-                                                    on:click={() => changePage(currentPage + 1)}
+                                                    onclick={() => changePage(currentPage + 1)}
                                                     disabled={currentPage === getTotalPages(selectedNemesis)}
                                                 >
                                                     Next

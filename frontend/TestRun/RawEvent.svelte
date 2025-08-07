@@ -1,7 +1,6 @@
-<script>
+<script lang="ts">
 
-    export let eventText;
-    export let errorMessage;
+    let { eventText, errorMessage } = $props();
 
 </script>
 

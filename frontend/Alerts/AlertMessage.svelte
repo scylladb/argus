@@ -1,13 +1,13 @@
-<script>
+<script lang="ts">
     import { createEventDispatcher, onMount } from "svelte";
     import { fly } from "svelte/transition";
     import Fa from "svelte-fa";
     import { faTimes } from "@fortawesome/free-solid-svg-icons";
-    export let message = {
+    let { message = {
         id: "-1",
         type: "error",
         message: "No error",
-    };
+    } } = $props();
     const dispatch = createEventDispatcher();
 
     let messageTimeout;
@@ -40,7 +40,7 @@
         <h4 class="d-flex align-items-center">
             <span class="me-4">{typeMap[message.type]}</span>
             <button
-                on:click={handleClose}
+                onclick={handleClose}
                 class="ms-auto btn btn-sm btn-light text-danger"
             >
                 <Fa icon={faTimes} />
