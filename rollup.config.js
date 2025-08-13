@@ -1,9 +1,11 @@
 import svelte from "rollup-plugin-svelte";
 import resolve from "@rollup/plugin-node-resolve";
-import css from "rollup-plugin-import-css";
+import postcss from 'rollup-plugin-postcss';
 import typescript from "@rollup/plugin-typescript";
 import { sveltePreprocess } from "svelte-preprocess";
-import commonjs from '@rollup/plugin-commonjs';
+import commonjs from "@rollup/plugin-commonjs";
+import sass from "@csstools/postcss-sass";
+
 
 const environment = process.env.ROLLUP_ENV || "production";
 
@@ -12,7 +14,6 @@ export default {
     input: {
         main: "./frontend/argus.js",
         fontAwesome: "./frontend/font-awesome.js",
-        //noto: "./frontend/fonts/noto.css",
         globalAlert: "./frontend/Alert.js",
         notificationCounter: "./frontend/notification-counter.js",
         flashDebug: "./frontend/flashDebug.js",
@@ -49,14 +50,18 @@ export default {
     },
     plugins: [
         commonjs(),
-        css({
-            output: "styles.css",
+        postcss({
+            extract: "styles.css",
+            plugins: [
+                sass(),
+            ]
         }),
         typescript(),
         resolve({ browser: true, exportConditions: ['svelte'], }),
         svelte({
             preprocess: sveltePreprocess(),
             include: "/**/*.svelte",
+            emitCss: true,
         }),
     ]
 };

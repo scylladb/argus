@@ -1,5 +1,5 @@
-@import 'bootstrap';
-@import 'highlight.js/styles/github.css';
+@import "../node_modules/bootstrap/scss/bootstrap";
+@import "../node_modules/highlight.js/styles/github.css";
 
 body {
     font-family: "Noto Sans Packaged", "Noto Sans", sans-serif;
