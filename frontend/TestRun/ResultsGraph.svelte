@@ -54,7 +54,7 @@
         window.removeEventListener("keydown", handleKeydown);
     }
 
-    function handleKeydown(event) {
+    function handleKeydown(event: KeyboardEvent) {
         if (event.key === "Escape") {
             closeModal();
         }
@@ -139,7 +139,7 @@
         return tickValues;
     }
 
-    function formatSecondsToHHMMSS(seconds) {
+    function formatSecondsToHHMMSS(seconds: number) {
         const hours = Math.floor(seconds / 3600);
         const minutes = Math.floor((seconds % 3600) / 60);
         const secs = Math.floor(seconds % 60);
@@ -230,7 +230,7 @@
 
                         // Add corresponding changes
                         const changes = tooltipModel.body[i]?.lines || [];
-                        changes.forEach((line) => {
+                        changes.forEach((line: string) => {
                             innerHtml += `<div class="tooltip-body">${line}</div>`;
                         });
 
@@ -308,10 +308,13 @@
             dataset.pointBackgroundColor = pointBackgroundColors;
         });
 
-        chart = new Chart(document.getElementById(`graph-${test_id}-${index}`), {
+        let elem = document.getElementById(`graph-${test_id}-${index}`) as HTMLCanvasElement;
+        if (!elem) return;
+
+        chart = new Chart(elem, {
             type: "scatter",
-            data: graph.data,
-            options: { ...graph.options, ...actions },
+            data: $state.snapshot(graph.data),
+            options: { ...$state.snapshot(graph.options), ...actions },
         });
 
         return () => {
