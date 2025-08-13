@@ -467,6 +467,7 @@
         <div class="w-25 fw-bold me-2">Owner</div>
         <div class="flex-fill">
             <Select
+                --item-height="auto"
                 value={users.find(u => u.id == plan.owner)}
                 on:select={(e) => plan.owner = e.detail.id}
                 items={users}
@@ -509,6 +510,7 @@
         <div class="w-25 fw-bold me-2">Participants</div>
         <div class="flex-fill">
             <Select
+                --item-height="auto"
                 bind:value={participants}
                 items={users}
                 itemFilter={filterUser}
@@ -599,6 +601,7 @@
                 </div>
                 <div class="ms-auto" style="min-width: 192px">
                     <Select
+                        --item-height="auto"
                         value={users.find(u => u.id == plan?.assignments?.[item.id])}
                         placeholder="Owner"
                         on:select={(e) => plan.assignments[item.id] = e.detail.id}

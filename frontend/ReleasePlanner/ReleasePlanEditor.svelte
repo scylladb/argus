@@ -314,6 +314,7 @@
             <div class="mb-3">
                 <div class="form-label">Assignee</div>
                 <Select
+                    --item-height="auto"
                     items={Object.values(users)}
                     itemId="id"
                     label="full_name"

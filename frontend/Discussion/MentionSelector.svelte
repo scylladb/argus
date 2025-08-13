@@ -52,6 +52,7 @@
 >
     <div class="flex-fill">
         <Select
+            --item-height="auto"
             items={prepareUsers(users)}
             itemFilter={filterUser}
             placeholder="@..."
