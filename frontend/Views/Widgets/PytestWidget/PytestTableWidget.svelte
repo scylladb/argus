@@ -1,7 +1,7 @@
 <script lang="ts">
     import { faSearch } from "@fortawesome/free-solid-svg-icons";
     import PytestResultRow from "./PytestResultRow.svelte";
-    import { PytestResult } from "./ViewPytestOverview.svelte";
+    import type { PytestResult } from "./ViewPytestOverview.svelte";
     import Fa from "svelte-fa";
     import { createEventDispatcher, onMount } from "svelte";
 
@@ -44,7 +44,6 @@
                 const slice = filtered.slice(sliceIdx, PAGE_SIZE + sliceIdx);
                 return [...slice];
             });
-        currentPage = 1;
         return pages;
     };
 

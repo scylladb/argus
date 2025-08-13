@@ -77,9 +77,9 @@
 
     let { dashboardObject, dashboardObjectType, settings }: Props = $props();
 
-    let pytestBarStatsCanvas: HTMLCanvasElement = $state();
+    let pytestBarStatsCanvas: HTMLCanvasElement | null = $state(null);
     let pytestBarChart: Chart<"bar">;
-    let pytestPieChartCanvas: HTMLCanvasElement = $state();
+    let pytestPieChartCanvas: HTMLCanvasElement | null = $state(null);
     let pytestPieChart: Chart<"pie">;
     let dirty = $state(false);
     let fetching = $state(false);
@@ -155,6 +155,8 @@
         }
     };
 
+    let statsPromise = fetchPytestStats();
+
     const forceRefresh = async function () {
         await fetchPytestStats();
     };
@@ -186,6 +188,8 @@
             pytestPieChart.destroy();
         }
 
+        if (!pytestPieChartCanvas) return;
+
         pytestPieChart = new Chart(pytestPieChartCanvas, {
             type: "pie",
             data: {
@@ -213,6 +217,9 @@
         if (pytestBarChart) {
             pytestBarChart.destroy();
         }
+
+        if (!pytestBarStatsCanvas) return;
+
         pytestBarChart = new Chart(pytestBarStatsCanvas, {
             type: "bar",
             data: {
@@ -317,7 +324,7 @@
 </script>
 
 <div>
-    {#await fetchPytestStats()}
+    {#await statsPromise}
         <div class="text-center p-4 text-muted d-flex align-items-center justify-content-center">
             <span class="spinner-grow me-2"></span> Loading Test Results...
         </div>
