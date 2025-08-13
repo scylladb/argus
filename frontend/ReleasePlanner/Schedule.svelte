@@ -243,6 +243,7 @@
                     {#if !updating}
                         <div class="flex-fill">
                             <Select
+                                --item-height="auto"
                                 items={prepareUsers(users)}
                                 bind:value={reassigned}
                                 multiple={true}

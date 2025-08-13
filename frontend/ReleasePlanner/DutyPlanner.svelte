@@ -330,6 +330,7 @@
                         <div class="mb-3">
                             <div class="form-label">Assignee</div>
                             <Select
+                                --item-height="auto"
                                 items={prepareUsers(users)}
                                 itemFilter={filterUser}
                                 placeholder="Select assignee"

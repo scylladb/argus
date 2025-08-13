@@ -80,6 +80,7 @@ data-bs-target="#createTeamCollapse"
     <div class="mb-2">
         <label class="form-label" for="teamName">Members</label>
         <Select
+            --item-height="auto"
             items={createUserSelectList(Object.values(users), currentUser)}
             multiple={true}
             placeholder="Members"

@@ -142,6 +142,7 @@
                     {/if}
                     <div class="flex-fill">
                         <Select
+                            --item-height="auto"
                             itemFilter={filterUser}
                             value={currentAssignee.value}
                             items={Object.values(
@@ -162,10 +163,11 @@
         {/if}
     </div>
 </div>
-<style>
+<style lang="scss">
+    $pct: 50%;
     .img-profile {
         height: 32px;
-        border-radius: 50%;
+        border-radius: $pct;
         object-fit: cover;
     }
 </style>

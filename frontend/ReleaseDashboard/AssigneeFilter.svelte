@@ -20,6 +20,7 @@
 
 <div class="w-100">
     <Select
+        --item-height="auto"
         value={user}
         itemFilter={filterUser}
         placeholder="Filter..."

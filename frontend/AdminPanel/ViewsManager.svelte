@@ -414,6 +414,7 @@
                 <input class="form-control mb-2" type="text" placeholder="Plan ID (internal)" bind:value={newView.plan_id}>
                 <div class="mb-2">
                     <Select
+                        --item-height="auto"
                         id="viewSelectComponent"
                         inputAttributes={{ class: "form-control" }}
                         bind:value={testSearcherValue}
