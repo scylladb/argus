@@ -1,23 +1,18 @@
-<!-- @migration-task Error while migrating Svelte code: can't migrate `let chartCanvas: HTMLCanvasElement;` to `$state` because there's a variable named state.
-     Rename the variable and try again or migrate by hand. -->
 <script lang="ts">
     import { onMount } from "svelte";
-    import { writable, derived } from "svelte/store";
     import Chart from "chart.js/auto";
     import type { Chart as ChartType } from "chart.js/auto";
+    import type { TestRun, NemesisData, DataResponse } from "./ViewGraphedStats/Interfaces";
     import NemesisTable from "./ViewGraphedStats/NemesisTable.svelte";
     import TestRunTable from "./ViewGraphedStats/TestRunTable.svelte";
     import Filters from "./ViewGraphedStats/Filters.svelte";
-    import { TestRun, NemesisData, DataResponse } from "./ViewGraphedStats/Interfaces";
 
-    export let dashboardObject: { id: string };
-    export let settings: {testFilters: string[]} ;
+    interface Props {
+        dashboardObject: { id: string };
+        settings: {testFilters: string[]};
+    }
 
-    /**
-     * @description Reactive state store containing component data and UI states
-     * @type {import('svelte/store').Writable}
-     */
-    const state = writable<{
+    interface WidgetState {
         loading: boolean;
         errorMsg: string;
         collapsed: boolean;
@@ -26,7 +21,14 @@
         currentBuildLevel: string;
         selectedNemesis: string | null;
         selectedFilter: string;
-    }>({
+    }
+
+    let {
+        dashboardObject,
+        settings,
+    }: Props = $props();
+
+    const widgetState: WidgetState = $state({
         loading: true,
         errorMsg: "",
         collapsed: true,
@@ -37,47 +39,35 @@
         selectedFilter: "",
     });
 
-    /**
-     * @description Store for Chart.js instances
-     * @type {import('svelte/store').Writable<Record<string, ChartType>>}
-     */
-    const charts = writable<Record<string, ChartType>>({});
+    const charts: Record<string, ChartType> = $state({});
 
-    /**
-     * @description Store for computed statistics
-     * @type {import('svelte/store').Writable}
-     */
-    const stats = writable({
+    const stats = $state({
         totalDuration: 0,
         uniqueTests: 0,
         uniqueNemesisCount: 0,
         nemesisStats: { totalCount: 0, succeeded: 0, failed: 0, totalDuration: 0, uniqueTypes: 0 },
     });
 
-    /**
-     * @description Derived store to determine if current build level is a leaf node
-     * @type {import('svelte/store').Readable<boolean>}
-     */
-    const isLeafNode = derived(state, ($state) => {
-        if (!$state.currentBuildLevel) return false;
-        return !$state.allData.test_runs.some(
+    const isLeafNode = () => {
+        if (!widgetState.currentBuildLevel) return false;
+        return !widgetState.allData.test_runs.some(
             (run) =>
-                run.build_id.startsWith($state.currentBuildLevel + "/") && run.build_id !== $state.currentBuildLevel
+                run.build_id.startsWith(widgetState.currentBuildLevel + "/") && run.build_id !== widgetState.currentBuildLevel
         );
-    });
+    };
 
-    let chartCanvas: HTMLCanvasElement;
-    let buildChartCanvas: HTMLCanvasElement;
-    let nemesisChartCanvas: HTMLCanvasElement;
-    let nemesisStatsCanvas: HTMLCanvasElement;
+    let chartCanvas: HTMLCanvasElement | null = $state(null);
+    let buildChartCanvas: HTMLCanvasElement | null = $state(null);
+    let nemesisChartCanvas: HTMLCanvasElement | null = $state(null);
+    let nemesisStatsCanvas: HTMLCanvasElement | null = $state(null);
 
     /**
      * @description Fetches data from the API and updates state
      * @async
      */
     async function fetchData() {
-        $state.loading = true;
-        $state.errorMsg = "";
+        widgetState.loading = true;
+        widgetState.errorMsg = "";
         try {
             // Prepare filters if they exist
             const filters = settings.testFilters && settings.testFilters.length > 0
@@ -89,12 +79,12 @@
             const data = await response.json();
             if (data.status === "error") throw new Error(data.response.exception);
 
-            $state.allData = data.response || { test_runs: [], nemesis_data: [] };
-            applyFilter($state.selectedFilter);
+            widgetState.allData = data.response || { test_runs: [], nemesis_data: [] };
+            applyFilter(widgetState.selectedFilter);
         } catch (error) {
-            $state.errorMsg = `Failed to load graphed stats: ${(error as Error).message}`;
+            widgetState.errorMsg = `Failed to load graphed stats: ${(error as Error).message}`;
         } finally {
-            $state.loading = false;
+            widgetState.loading = false;
         }
     }
 
@@ -103,13 +93,13 @@
      * @param {string} filter - Version filter string
      */
     function applyFilter(filter: string) {
-        $state.selectedFilter = filter;
-        $state.filteredData = {
-            test_runs: $state.allData.test_runs.filter((run) => (filter ? run.version.startsWith(filter) : true)),
-            nemesis_data: $state.allData.nemesis_data.filter((n) => (filter ? n.version.startsWith(filter) : true)),
+        widgetState.selectedFilter = filter;
+        widgetState.filteredData = {
+            test_runs: widgetState.allData.test_runs.filter((run) => (filter ? run.version.startsWith(filter) : true)),
+            nemesis_data: widgetState.allData.nemesis_data.filter((n) => (filter ? n.version.startsWith(filter) : true)),
         };
-        $state.currentBuildLevel = "";
-        $state.selectedNemesis = null;
+        widgetState.currentBuildLevel = "";
+        widgetState.selectedNemesis = null;
         updateStatsAndCharts();
     }
 
@@ -118,24 +108,24 @@
      * @param {string} buildPrefix - Build level prefix to filter by
      */
     function filterByBuildLevel(buildPrefix: string) {
-        $state.currentBuildLevel = buildPrefix;
-        const hasChildren = $state.allData.test_runs.some(
+        widgetState.currentBuildLevel = buildPrefix;
+        const hasChildren = widgetState.allData.test_runs.some(
             (run) => run.build_id.startsWith(buildPrefix + "/") && run.build_id !== buildPrefix
         );
 
-        $state.filteredData = {
-            test_runs: $state.allData.test_runs.filter(
+        widgetState.filteredData = {
+            test_runs: widgetState.allData.test_runs.filter(
                 (run) =>
-                    ($state.selectedFilter ? run.version.startsWith($state.selectedFilter) : true) &&
+                    (widgetState.selectedFilter ? run.version.startsWith(widgetState.selectedFilter) : true) &&
                     (buildPrefix
                         ? hasChildren
                             ? run.build_id.startsWith(buildPrefix)
                             : run.build_id === buildPrefix
                         : true)
             ),
-            nemesis_data: $state.allData.nemesis_data.filter(
+            nemesis_data: widgetState.allData.nemesis_data.filter(
                 (n) =>
-                    ($state.selectedFilter ? n.version.startsWith($state.selectedFilter) : true) &&
+                    (widgetState.selectedFilter ? n.version.startsWith(widgetState.selectedFilter) : true) &&
                     (buildPrefix
                         ? hasChildren
                             ? n.build_id.startsWith(buildPrefix)
@@ -144,44 +134,34 @@
             ),
         };
 
-        if ($state.filteredData.test_runs.length === 0 && !hasChildren) {
-            $state.filteredData = {
-                test_runs: $state.allData.test_runs.filter(
+        if (widgetState.filteredData.test_runs.length === 0 && !hasChildren) {
+            widgetState.filteredData = {
+                test_runs: widgetState.allData.test_runs.filter(
                     (run) =>
-                        ($state.selectedFilter ? run.version.startsWith($state.selectedFilter) : true) &&
+                        (widgetState.selectedFilter ? run.version.startsWith(widgetState.selectedFilter) : true) &&
                         (buildPrefix ? run.build_id.startsWith(buildPrefix) : true)
                 ),
-                nemesis_data: $state.allData.nemesis_data.filter(
+                nemesis_data: widgetState.allData.nemesis_data.filter(
                     (n) =>
-                        ($state.selectedFilter ? n.version.startsWith($state.selectedFilter) : true) &&
+                        (widgetState.selectedFilter ? n.version.startsWith(widgetState.selectedFilter) : true) &&
                         (buildPrefix ? n.build_id.startsWith(buildPrefix) : true)
                 ),
             };
         }
 
-        $state.selectedNemesis = null;
+        widgetState.selectedNemesis = null;
         updateStatsAndCharts();
-    }
-
-    /**
-     * @description Safely destroys a chart instance if it exists
-     * @param {string} chartName - Name of the chart to destroy
-     */
-    function safeDestroyChart(chartName: string) {
-        if ($charts[chartName]) {
-            $charts[chartName].destroy();
-        }
     }
 
     /**
      * @description Updates statistics and recreates charts
      */
     function updateStatsAndCharts() {
-        $stats.totalDuration = $state.filteredData.test_runs.reduce((sum, run) => sum + Math.max(0, run.duration), 0);
-        $stats.uniqueTests = new Set($state.filteredData.test_runs.map((run) => run.build_id)).size;
-        $stats.uniqueNemesisCount = new Set($state.filteredData.nemesis_data.map((n) => n.name)).size;
+        stats.totalDuration = widgetState.filteredData.test_runs.reduce((sum, run) => sum + Math.max(0, run.duration), 0);
+        stats.uniqueTests = new Set(widgetState.filteredData.test_runs.map((run) => run.build_id)).size;
+        stats.uniqueNemesisCount = new Set(widgetState.filteredData.nemesis_data.map((n) => n.name)).size;
 
-        const nemStats = $state.filteredData.nemesis_data.reduce(
+        const nemStats = widgetState.filteredData.nemesis_data.reduce(
             (acc, n) => {
                 acc.totalDuration += Math.max(0, n.duration);
                 acc[n.status === "succeeded" ? "succeeded" : "failed"]++;
@@ -190,39 +170,39 @@
             { succeeded: 0, failed: 0, totalDuration: 0 }
         );
 
-        $stats.nemesisStats = {
+        stats.nemesisStats = {
             ...nemStats,
             totalCount: nemStats.succeeded + nemStats.failed,
-            uniqueTypes: $stats.uniqueNemesisCount,
+            uniqueTypes: stats.uniqueNemesisCount,
         };
 
         setTimeout(() => {
             if (chartCanvas) {
-                safeDestroyChart("testStatus");
-                $charts.testStatus = createTestStatusChart(chartCanvas, $state.filteredData.test_runs);
+                charts["testStatus"]?.destroy();
+                charts.testStatus = createTestStatusChart(chartCanvas, widgetState.filteredData.test_runs);
             }
-            if (buildChartCanvas && !$isLeafNode) {
-                safeDestroyChart("build");
-                $charts.build = createBuildHierarchyChart(
+            if (buildChartCanvas && !isLeafNode()) {
+                charts["build"]?.destroy();
+                charts.build = createBuildHierarchyChart(
                     buildChartCanvas,
-                    $state.filteredData.test_runs,
-                    $state.currentBuildLevel,
+                    widgetState.filteredData.test_runs,
+                    widgetState.currentBuildLevel,
                     filterByBuildLevel
                 );
             }
             if (nemesisChartCanvas) {
-                safeDestroyChart("nemesis");
-                $charts.nemesis = createNemesisChart(
+                charts["nemesis"]?.destroy();
+                charts.nemesis = createNemesisChart(
                     nemesisChartCanvas,
-                    $state.filteredData.nemesis_data,
+                    widgetState.filteredData.nemesis_data,
                     (name: string) => {
-                        $state.selectedNemesis = name;
+                        widgetState.selectedNemesis = name;
                     }
                 );
             }
             if (nemesisStatsCanvas) {
-                safeDestroyChart("nemesisStats");
-                $charts.nemesisStats = createNemesisStatsPieChart(nemesisStatsCanvas, $stats.nemesisStats);
+                charts["nemesisStats"]?.destroy();
+                charts.nemesisStats = createNemesisStatsPieChart(nemesisStatsCanvas, stats.nemesisStats);
             }
         }, 0);
     }
@@ -388,12 +368,12 @@
     /**
      * @description Creates a pie chart showing nemesis status distribution
      * @param {HTMLCanvasElement} canvas - Canvas element to render chart
-     * @param {typeof $stats.nemesisStats} nemesisStats - Nemesis statistics object
+     * @param {typeof stats.nemesisStats} nemesisStats - Nemesis statistics object
      * @returns {ChartType} Chart.js instance
      */
     function createNemesisStatsPieChart(
         canvas: HTMLCanvasElement,
-        nemesisStats: typeof $stats.nemesisStats
+        nemesisStats: typeof stats.nemesisStats
     ): ChartType {
         return new Chart(canvas, {
             type: "pie",
@@ -438,14 +418,14 @@
      * @description Zooms out one level in the build hierarchy
      */
     function zoomOut() {
-        if (!$state.currentBuildLevel) return;
-        const parts = $state.currentBuildLevel.split("/");
+        if (!widgetState.currentBuildLevel) return;
+        const parts = widgetState.currentBuildLevel.split("/");
         parts.pop();
         filterByBuildLevel(parts.join("/"));
     }
 
     onMount(() => {
-        $state.collapsed = true;
+        widgetState.collapsed = true;
     });
 </script>
 
@@ -454,87 +434,87 @@
         <h2 class="accordion-header">
             <button
                 class="accordion-button collapsed"
-                aria-expanded={!$state.collapsed}
-                on:click={() => {
-                    $state.collapsed = !$state.collapsed;
-                    if (!$state.collapsed && !$state.allData.test_runs.length) fetchData();
+                aria-expanded={!widgetState.collapsed}
+                onclick={() => {
+                    widgetState.collapsed = !widgetState.collapsed;
+                    if (!widgetState.collapsed && !widgetState.allData.test_runs.length) fetchData();
                 }}
             >
                 Graphed Statistics
             </button>
         </h2>
-        <div class="accordion-collapse collapse" class:show={!$state.collapsed}>
+        <div class="accordion-collapse collapse" class:show={!widgetState.collapsed}>
             <div class="accordion-body">
-                {#if $state.errorMsg}
+                {#if widgetState.errorMsg}
                     <div class="alert alert-danger">
-                        {$state.errorMsg}
-                        <button class="btn btn-sm btn-outline-primary ms-2" on:click={fetchData}>Retry</button>
+                        {widgetState.errorMsg}
+                        <button class="btn btn-sm btn-outline-primary ms-2" onclick={fetchData}>Retry</button>
                     </div>
-                {:else if $state.loading}
+                {:else if widgetState.loading}
                     <div class="text-center my-3">
-                        <div class="spinner-border" role="status" />
+                        <div class="spinner-border" role="status"></div>
                         <span class="ms-2">Loading...</span>
                     </div>
                 {:else}
                     <Filters
-                        allData={$state.allData}
-                        selectedFilter={$state.selectedFilter}
+                        allData={widgetState.allData}
+                        selectedFilter={widgetState.selectedFilter}
                         onFilterChange={(filter) => {
                             applyFilter(filter);
                             if (filter === "") {
-                                $state.currentBuildLevel = "";
-                                $state.selectedNemesis = null;
+                                widgetState.currentBuildLevel = "";
+                                widgetState.selectedNemesis = null;
                             }
                         }}
                     />
 
                     <div class="row">
                         <div class="col-md-4">
-                            <div class="chart-container"><canvas bind:this={chartCanvas} height="400" /></div>
+                            <div class="chart-container"><canvas bind:this={chartCanvas} height="400"></canvas></div>
                             <div class="alert alert-info text-center py-2 mb-2">
-                                Total Duration: {($stats.totalDuration / 3600).toFixed(2)} hours
+                                Total Duration: {(stats.totalDuration / 3600).toFixed(2)} hours
                             </div>
                             <div class="alert alert-secondary text-center py-2 mb-2">
-                                Unique Tests: {$stats.uniqueTests}
+                                Unique Tests: {stats.uniqueTests}
                             </div>
                             <h5 class="mt-4 mb-3">Nemesis Statistics</h5>
-                            <div class="chart-container"><canvas bind:this={nemesisStatsCanvas} height="300" /></div>
+                            <div class="chart-container"><canvas bind:this={nemesisStatsCanvas} height="300"></canvas></div>
                             <div class="alert alert-secondary text-center py-2 mb-2">
-                                Unique Nemesis Types: {$stats.uniqueNemesisCount}
+                                Unique Nemesis Types: {stats.uniqueNemesisCount}
                             </div>
                             <div class="alert alert-secondary text-center py-2 mb-2">
-                                Nemesis Duration: {($stats.nemesisStats.totalDuration / 3600).toFixed(2)} hours
+                                Nemesis Duration: {(stats.nemesisStats.totalDuration / 3600).toFixed(2)} hours
                             </div>
                         </div>
                         <div class="col-md-8">
-                            {#if $state.currentBuildLevel}
+                            {#if widgetState.currentBuildLevel}
                                 <div class="mb-3">
-                                    <button class="btn btn-sm btn-outline-primary" on:click={zoomOut}
-                                        >Zoom Out (Current: {$state.currentBuildLevel})</button
+                                    <button class="btn btn-sm btn-outline-primary" onclick={zoomOut}
+                                        >Zoom Out (Current: {widgetState.currentBuildLevel})</button
                                     >
                                 </div>
                             {/if}
-                            {#if $isLeafNode}
+                            {#if isLeafNode()}
                                 <div>
                                     <TestRunTable
-                                        testRuns={$state.filteredData.test_runs}
+                                        testRuns={widgetState.filteredData.test_runs}
                                         onClose={zoomOut}
                                     />
                                 </div>
                             {:else}
-                                <div class="chart-container"><canvas bind:this={buildChartCanvas} height="400" /></div>
+                                <div class="chart-container"><canvas bind:this={buildChartCanvas} height="400"></canvas></div>
                             {/if}
-                            <div class="chart-container"><canvas bind:this={nemesisChartCanvas} height="400" /></div>
+                            <div class="chart-container"><canvas bind:this={nemesisChartCanvas} height="400"></canvas></div>
                         </div>
                     </div>
 
-                    {#if $state.selectedNemesis}
+                    {#if widgetState.selectedNemesis}
                         <div class="row">
                             <div class="col-12">
                                 <NemesisTable
-                                    nemesisName={$state.selectedNemesis}
-                                    nemesisData={$state.filteredData.nemesis_data}
-                                    onClose={() => ($state.selectedNemesis = null)}
+                                    nemesisName={widgetState.selectedNemesis}
+                                    nemesisData={widgetState.filteredData.nemesis_data}
+                                    onClose={() => (widgetState.selectedNemesis = null)}
                                 />
                             </div>
                         </div>

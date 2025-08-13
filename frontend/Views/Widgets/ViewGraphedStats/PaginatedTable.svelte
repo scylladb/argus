@@ -1,16 +1,7 @@
 <script lang="ts">
-    import { writable } from "svelte/store";
     import humanizeDuration from "humanize-duration";
     import { timestampToISODate } from "../../../Common/DateUtils.js";
     import type { NemesisData, TestRun } from "./Interfaces";
-
-
-
-
-
-
-
-
 
     interface Props {
         /** @description Array of items to display (either NemesisData or TestRun) */
@@ -46,15 +37,13 @@
         onClose
     }: Props = $props();
 
-    /**
-     * @description Reactive state store for pagination and sorting
-     * @type {import('svelte/store').Writable}
-     */
-    const state = writable<{
+    interface TableState {
         currentPage: number;
         sortField: string;
         sortDirection: "asc" | "desc";
-    }>({
+    };
+
+    const state: TableState = $state({
         currentPage: 1,
         sortField: sortField || "status",
         sortDirection: sortDirection || "asc",
@@ -84,15 +73,15 @@
      * @param {string} field - Column key to sort by
      */
     function toggleSort(field: string) {
-        $state.sortField = field;
-        $state.sortDirection = $state.sortField === field && $state.sortDirection === "asc" ? "desc" : "asc";
+        state.sortField = field;
+        state.sortDirection = state.sortField === field && state.sortDirection === "asc" ? "desc" : "asc";
     }
 
     /** @description Reactively sorted items based on current sort state */
-    let sortedItems = $derived(sortItems(items, $state.sortField, $state.sortDirection));
+    let sortedItems = $derived(sortItems(items, state.sortField, state.sortDirection));
 
     /** @description Reactively paginated items for current page */
-    let paginatedItems = $derived(sortedItems.slice(($state.currentPage - 1) * itemsPerPage, $state.currentPage * itemsPerPage));
+    let paginatedItems = $derived(sortedItems.slice((state.currentPage - 1) * itemsPerPage, state.currentPage * itemsPerPage));
 
     /** @description Total number of pages based on items and itemsPerPage */
     let totalPages = $derived(Math.ceil(items.length / itemsPerPage));
@@ -131,8 +120,8 @@
                                     : "width: 150px; min-width: 150px;"}
                             >
                                 {column.label}
-                                {#if column.sort && $state.sortField === column.key}
-                                    <i class="fas fa-sort-{$state.sortDirection === 'desc' ? 'down' : 'up'}"></i>
+                                {#if column.sort && state.sortField === column.key}
+                                    <i class="fas fa-sort-{state.sortDirection === 'desc' ? 'down' : 'up'}"></i>
                                 {/if}
                             </th>
                         {/each}
@@ -167,23 +156,23 @@
     {#if totalPages > 1}
         <nav class="mt-3">
             <ul class="pagination pagination-sm justify-content-center">
-                <li class="page-item {$state.currentPage === 1 ? 'disabled' : ''}">
+                <li class="page-item {state.currentPage === 1 ? 'disabled' : ''}">
                     <button
                         class="page-link"
-                        onclick={() => ($state.currentPage -= 1)}
-                        disabled={$state.currentPage === 1}>Previous</button
+                        onclick={() => (state.currentPage -= 1)}
+                        disabled={state.currentPage === 1}>Previous</button
                     >
                 </li>
                 {#each Array(totalPages) as _, i}
-                    <li class="page-item {$state.currentPage === i + 1 ? 'active' : ''}">
-                        <button class="page-link" onclick={() => ($state.currentPage = i + 1)}>{i + 1}</button>
+                    <li class="page-item {state.currentPage === i + 1 ? 'active' : ''}">
+                        <button class="page-link" onclick={() => (state.currentPage = i + 1)}>{i + 1}</button>
                     </li>
                 {/each}
-                <li class="page-item {$state.currentPage === totalPages ? 'disabled' : ''}">
+                <li class="page-item {state.currentPage === totalPages ? 'disabled' : ''}">
                     <button
                         class="page-link"
-                        onclick={() => ($state.currentPage += 1)}
-                        disabled={$state.currentPage === totalPages}>Next</button
+                        onclick={() => (state.currentPage += 1)}
+                        disabled={state.currentPage === totalPages}>Next</button
                     >
                 </li>
             </ul>
