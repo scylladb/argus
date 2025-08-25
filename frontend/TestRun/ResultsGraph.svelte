@@ -333,7 +333,7 @@
         };
     });
 
-    run(() => {
+    $effect(() => {
         if (showModal) {
             let actions = {
                 onClick: handleChartClick,
@@ -343,8 +343,8 @@
                 if (modalCanvas) {
                     modalChart = new Chart(modalCanvas, {
                         type: "scatter",
-                        data: graph.data,
-                        options: { ...graph.options, responsive: true, maintainAspectRatio: false, ...actions },
+                        data: $state.snapshot(graph.data),
+                        options: { ...$state.snapshot(graph.options), responsive: true, maintainAspectRatio: false, ...actions },
                     });
                 }
             }, 0);
@@ -363,7 +363,7 @@
 </div>
 
 {#if showModal}
-    <div class="modal" onclick={closeModal}>
+    <div class="modal">
         <div class="modal-content" onclick={stopPropagation(bubble('click'))}>
             <button class="close-btn" onclick={closeModal}>&times;</button>
             <button class="modal-copy-btn" onclick={() => copyToClipboard(true)}>
