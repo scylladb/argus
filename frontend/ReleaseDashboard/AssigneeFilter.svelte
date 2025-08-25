@@ -21,6 +21,7 @@
 <div class="w-100">
     <Select
         --item-height="auto"
+        --item-line-height="auto"
         value={user}
         itemFilter={filterUser}
         placeholder="Filter..."

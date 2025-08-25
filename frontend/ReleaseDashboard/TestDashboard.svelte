@@ -645,6 +645,7 @@
                                 {:then images}
                                 <Select
                                     --item-height="auto"
+                                    --item-line-height="auto"
                                     value={imageId ? { label: imageId, value: imageId} : undefined}
                                     items={images}
                                     on:select={e => {
@@ -672,6 +673,7 @@
                             <div class="p-2 w-100">
                                 <Select
                                     --item-height="auto"
+                                    --item-line-height="auto"
                                     value={loadOptionValue(FILTER_STACK, "backend")}
                                     on:select={e => FILTER_STACK.backend.state = e.detail.value}
                                     on:clear={() => FILTER_STACK.backend.state = undefined}

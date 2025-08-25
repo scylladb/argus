@@ -244,6 +244,7 @@
                         <div class="flex-fill">
                             <Select
                                 --item-height="auto"
+                                --item-line-height="auto"
                                 items={prepareUsers(users)}
                                 bind:value={reassigned}
                                 multiple={true}

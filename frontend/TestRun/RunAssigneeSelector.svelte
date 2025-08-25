@@ -143,6 +143,7 @@
                     <div class="flex-fill">
                         <Select
                             --item-height="auto"
+                            --item-line-height="auto"
                             itemFilter={filterUser}
                             value={currentAssignee.value}
                             items={Object.values(
@@ -167,6 +168,7 @@
     $pct: 50%;
     .img-profile {
         height: 32px;
+        width: 32px;
         border-radius: $pct;
         object-fit: cover;
     }

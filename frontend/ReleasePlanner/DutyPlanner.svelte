@@ -331,6 +331,7 @@
                             <div class="form-label">Assignee</div>
                             <Select
                                 --item-height="auto"
+                                --item-line-height="auto"
                                 items={prepareUsers(users)}
                                 itemFilter={filterUser}
                                 placeholder="Select assignee"

@@ -415,6 +415,7 @@
                 <div class="mb-2">
                     <Select
                         --item-height="auto"
+                        --item-line-height="auto"
                         id="viewSelectComponent"
                         inputAttributes={{ class: "form-control" }}
                         bind:value={testSearcherValue}
