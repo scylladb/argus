@@ -315,6 +315,7 @@
                 <div class="form-label">Assignee</div>
                 <Select
                     --item-height="auto"
+                    --item-line-height="auto"
                     items={Object.values(users)}
                     itemId="id"
                     label="full_name"

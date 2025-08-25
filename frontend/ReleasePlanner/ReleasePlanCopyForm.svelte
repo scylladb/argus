@@ -204,6 +204,7 @@
             <label for="" class="form-label">Owner</label>
             <Select
                 --item-height="auto"
+                --item-line-height="auto"
                 inputAttributes={{ class: "form-control" }}
                 value={users.find(u => u.id == plan.owner)}
                 on:select={(e) => copy.owner = e.detail.id}

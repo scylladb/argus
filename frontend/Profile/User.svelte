@@ -14,21 +14,23 @@
 <div
     class="d-flex align-items-center"
 >
-    <div
-        class="img-profile"
-        style="background-image: url({getPicture(item.picture_id)});"
-        title={item.label || item.username}
-    ></div>
+    <div class="">
+        <div
+            class="img-profile"
+            style="background-image: url({getPicture(item.picture_id)});"
+            title={item.label || item.username}
+        ></div>
+    </div>
     <div class="ms-2">
         {item.full_name || item.label}
-        <div class="text-muted">@{item.label || item.username}</div>
+        <div class="text-muted" style="font-size: small; margin: 0">@{item.label || item.username}</div>
     </div>
 </div>
 
 <style>
     .img-profile {
-        width: 16px;
-        height: 16px;
+        width: 32px;
+        height: 32px;
         border-radius: 50%;
         background-color: rgb(163, 163, 163);
         background-clip: border-box;

@@ -81,6 +81,7 @@ data-bs-target="#createTeamCollapse"
         <label class="form-label" for="teamName">Members</label>
         <Select
             --item-height="auto"
+            --item-line-height="auto"
             items={createUserSelectList(Object.values(users), currentUser)}
             multiple={true}
             placeholder="Members"
