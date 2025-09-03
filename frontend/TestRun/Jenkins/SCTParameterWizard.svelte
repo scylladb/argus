@@ -266,7 +266,8 @@
                     validationHelpText: "AMI Id should be in the format of \"ami-hexid\"",
                     validate: function (params) {
                         const AMI_RE = /^ami-([abcdef\d]{4,17})$/;
-                        return !!params[this.internalName] && AMI_RE.test(params[this.internalName]);
+                        const AMI_FUZZY_RE = /^scylla-(.+)/;
+                        return !!params[this.internalName] && (AMI_RE.test(params[this.internalName]) || AMI_FUZZY_RE.test(params[this.internalName]));
                     },
                     condition: (params, defs) => (defs.scyllaVersion.currentSource == "scylla_image" && inBackendGroup(params.backend, "aws")),
                     onChange: function (e, params) {
