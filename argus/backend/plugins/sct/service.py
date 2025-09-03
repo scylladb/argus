@@ -422,6 +422,8 @@ class SCTService:
                 split_name = node_name.split(" ")
                 node_name = split_name[1] if len(split_name) >= 2 else node_name
                 url = core_url_match.group("url")
+                ext = url.rsplit(".", maxsplit=1)[-1]
+                ext = ext if len(ext) <= 5 else "zst" # Default to .zst if URL doesn't conform
                 timestamp_component = ""
                 if ts_match:
                     try:
@@ -430,7 +432,7 @@ class SCTService:
                     except ValueError:
                         pass
                 log_link = {
-                    "log_name": f"core.scylla-{node_name}{timestamp_component}.gz",
+                    "log_name": f"core.scylla-{node_name}{timestamp_component}.{ext}",
                     "log_link": url
                 }
                 links.append(log_link)
