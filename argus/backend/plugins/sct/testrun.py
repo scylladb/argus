@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from cassandra.cqlengine import columns
 from cassandra.cqlengine.models import _DoesNotExist, Model
@@ -53,6 +53,33 @@ class SCTTestRunSubmissionRequest():
     branch_name: Optional[str] = field(default=None)
     runner_public_ip: Optional[str] = field(default=None)
     runner_private_ip: Optional[str] = field(default=None)
+
+
+
+class SCTEventSeverity(str, Enum):
+    CRITICAL = "CRITICAL"
+    ERROR = "ERROR"
+    WARNING = "WARNING"
+    NORMAL = "NORMAL"
+    DEBUG = "DEBUG"
+
+
+class SCTEvent(Model):
+    run_id = columns.UUID(partition_key=True, primary_key=True)
+    severity = columns.Text(partition_key=True, primary_key=True)
+    ts = columns.DateTime(primary_key=True)
+    message = columns.Text(required=True)
+    received_timestamp = columns.DateTime()
+    nemesis_name = columns.Text()
+    duration = columns.Float()
+    event_type = columns.Text()
+    node = columns.Text()
+    target_node = columns.Text()
+    known_issue = columns.Text()
+    nemesis_status = columns.Text()
+    event_id = columns.UUID(index=True, default=lambda: uuid4())
+    release_id = columns.UUID(index=True)
+
 
 
 class SCTTestRun(PluginModelBase):
@@ -246,6 +273,15 @@ class SCTTestRun(PluginModelBase):
 
     def get_events(self) -> list[EventsBySeverity]:
         return self.events
+
+    def get_all_events(self):
+        return SCTEvent.filter(run_id=self.id, severity__in=[s.value for s in list(SCTEventSeverity)]).all()
+
+    def get_events_by_severity(self, severity: SCTEventSeverity | list[SCTEventSeverity]):
+        if isinstance(severity, list):
+            return SCTEvent.filter(run_id=self.id, severity__in=[s.value for s in severity]).all()
+        else:
+            return SCTEvent.filter(run_id=self.id, severity=severity.value).all()
 
     def submit_product_version(self, version: str):
         if not self.version_source:
