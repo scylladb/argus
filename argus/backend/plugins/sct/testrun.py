@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from cassandra.cqlengine import columns
 from cassandra.cqlengine.models import _DoesNotExist, Model
@@ -53,6 +53,44 @@ class SCTTestRunSubmissionRequest():
     branch_name: Optional[str] = field(default=None)
     runner_public_ip: Optional[str] = field(default=None)
     runner_private_ip: Optional[str] = field(default=None)
+
+
+
+class SCTEventSeverity(str, Enum):
+    CRITICAL = "CRITICAL"
+    ERROR = "ERROR"
+    WARNING = "WARNING"
+    NORMAL = "NORMAL"
+    DEBUG = "DEBUG"
+
+
+class SCTEvent(Model):
+    __table_name__ = "sct_event"
+
+    run_id = columns.UUID(partition_key=True, primary_key=True)
+    severity = columns.Text(partition_key=True, primary_key=True)
+    ts = columns.DateTime(primary_key=True, clustering_order="DESC")
+    event_type = columns.Text()
+    message = columns.Text(required=True)
+
+    # DB Log columns
+    node = columns.Text()
+    received_timestamp = columns.DateTime() # SCT DB message timestamp
+
+    # Nemesis columns
+    nemesis_name = columns.Text()
+    duration = columns.Float()
+    target_node = columns.Text()
+    nemesis_status = columns.Text()
+
+    # Misc
+    known_issue = columns.Text()
+
+
+    @classmethod
+    def table_name(cls):
+        return cls.__table_name__
+
 
 
 class SCTTestRun(PluginModelBase):
@@ -244,8 +282,44 @@ class SCTTestRun(PluginModelBase):
     def get_nemeses(self) -> list[NemesisRunInfo]:
         return self.nemesis_data
 
-    def get_events(self) -> list[EventsBySeverity]:
+    def get_events_legacy(self) -> list[EventsBySeverity]:
+        """
+            Deprecated. To be replaced by new events system.
+        """
+        return self._get_events_legacy
+
+    def _get_events_legacy(self) -> list[EventsBySeverity]:
         return self.events
+
+    @classmethod
+    def get_events_limited(cls, run_id: UUID, before: datetime | None = None, severities: list[SCTEventSeverity] = None, per_partition_limit: int = 100) -> list[dict]:
+        db = ScyllaCluster.get()
+        query = f"SELECT * FROM {SCTEvent.table_name()} WHERE run_id = ? AND severity IN ?"
+        params = [run_id]
+        if severities:
+            severity_filter = [s.value for s in severities]
+        else:
+            severity_filter = [s.value for s in list(SCTEventSeverity)]
+        params.append(severity_filter)
+        if before:
+            query += " AND ts <= ?"
+            params.append(before)
+        query += " PER PARTITION LIMIT ?"
+        params.append(per_partition_limit)
+        prepared = db.prepare(query)
+
+        result = db.session.execute(prepared, parameters=params).all()
+
+        return list(result)
+
+    def get_all_events(self):
+        return SCTEvent.filter(run_id=self.id, severity__in=[s.value for s in list(SCTEventSeverity)]).all()
+
+    def get_events_by_severity(self, severity: SCTEventSeverity | list[SCTEventSeverity]):
+        if isinstance(severity, list):
+            return SCTEvent.filter(run_id=self.id, severity__in=[s.value for s in severity]).all()
+        else:
+            return SCTEvent.filter(run_id=self.id, severity=severity.value).all()
 
     def submit_product_version(self, version: str):
         if not self.version_source:

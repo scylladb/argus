@@ -1,16 +1,18 @@
 import base64
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 import logging
 import math
 import re
 from time import time
+from typing import TypedDict
+from uuid import UUID
 from xml.etree import ElementTree
 from flask import g
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.web import ArgusEventTypes, ErrorEventEmbeddings, CriticalEventEmbeddings
-from argus.backend.plugins.sct.testrun import SCTJunitReports, SCTTestRun, SubtestType
-from argus.common.sct_types import GeminiResultsRequest, PerformanceResultsRequest, ResourceUpdateRequest
+from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTJunitReports, SCTTestRun, SubtestType
+from argus.common.sct_types import GeminiResultsRequest, PerformanceResultsRequest, RawEventPayload, ResourceUpdateRequest
 from argus.backend.plugins.sct.udt import (
     CloudInstanceDetails,
     CloudResource,
@@ -55,6 +57,23 @@ class EventSubmissionRequest:
     severity: str
     total_events: int
     messages: list[str]
+
+
+@dataclass(init=True, repr=True)
+class EventSubmitRequest:
+    run_id: str
+    severity: str
+    ts: float
+    message: str
+    event_type: str
+    received_timestamp: str | None = None
+    nemesis_name: str | None = None
+    duration: float | None = None
+    node: str | None = None
+    target_node: str | None = None
+    known_issue: str | None = None
+    nemesis_status: str | None = None
+
 
 
 class SCTService:
@@ -385,6 +404,42 @@ class SCTService:
 
         return "updated"
 
+
+    @staticmethod
+    def submit_event(run_id: str, raw_event: RawEventPayload):
+        req = EventSubmitRequest(**raw_event)
+
+        event = SCTEvent()
+        event.run_id = UUID(run_id)
+        event.severity = SCTEventSeverity(req.severity.upper()).value
+        event.ts = datetime.fromtimestamp(req.ts, tz=UTC)
+        event.message = req.message
+        event.event_type = req.event_type
+
+        # DB related events
+        event.node = req.node
+        if req.received_timestamp:
+            event.received_timestamp = datetime.fromisoformat(req.received_timestamp)
+
+        # Nemesis related events
+        event.nemesis_name = req.nemesis_name
+        event.nemesis_status = req.nemesis_status
+        event.target_node = req.target_node
+        event.duration = req.duration
+
+        event.known_issue = req.known_issue
+
+        event.save()
+
+        return True
+
+    @staticmethod
+    def get_events(run_id: str, limit: int, severities: list[str], before: str | None) -> list[dict]:
+        if before:
+            before = datetime.fromtimestamp(int(before), tz=UTC)
+
+        return SCTTestRun.get_events_limited(run_id=UUID(run_id), before=before, severities=severities, per_partition_limit=limit)
+
     @staticmethod
     def submit_events(run_id: str, events: list[dict]) -> str:
         wrapped_events = [EventSubmissionRequest(**ev) for ev in events]
@@ -393,8 +448,8 @@ class SCTService:
             for event in wrapped_events:
                 wrapper = EventsBySeverity(severity=event.severity,
                                            event_amount=event.total_events, last_events=event.messages)
-                run.get_events().append(wrapper)
-            coredumps = SCTService.locate_coredumps(run, run.get_events())
+                run.get_events_legacy().append(wrapper)
+            coredumps = SCTService.locate_coredumps(run, run.get_events_legacy())
             run.submit_logs(coredumps)
             run.save()
         except SCTTestRun.DoesNotExist as exception:
