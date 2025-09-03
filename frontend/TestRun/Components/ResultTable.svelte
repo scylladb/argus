@@ -190,7 +190,7 @@
                     <thead class="thead-dark">
                     <tr>
                         <th>
-                            <button class="btn btn-link p-1" onclick={copyResultTableAsMarkdown}>
+                            <button class="btn btn-link p-1" onclick={async () => await copyResultTableAsMarkdown()}>
                                 <Fa icon={faMarkdown} size="sm"/>
                             </button>
                         </th>
