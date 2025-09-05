@@ -1,16 +1,17 @@
 import base64
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 import logging
 import math
 import re
 from time import time
+from typing import TypedDict
 from xml.etree import ElementTree
 from flask import g
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.web import ArgusEventTypes, ErrorEventEmbeddings, CriticalEventEmbeddings
-from argus.backend.plugins.sct.testrun import SCTJunitReports, SCTTestRun, SubtestType
-from argus.common.sct_types import GeminiResultsRequest, PerformanceResultsRequest, ResourceUpdateRequest
+from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTJunitReports, SCTTestRun, SubtestType
+from argus.common.sct_types import GeminiResultsRequest, PerformanceResultsRequest, RawEventPayload, ResourceUpdateRequest
 from argus.backend.plugins.sct.udt import (
     CloudInstanceDetails,
     CloudResource,
@@ -55,6 +56,23 @@ class EventSubmissionRequest:
     severity: str
     total_events: int
     messages: list[str]
+
+
+@dataclass(init=True, repr=True)
+class EventSubmitRequest:
+    run_id: str
+    severity: str
+    ts: float
+    message: str
+    event_type: str
+    received_timestamp: str | None = None
+    nemesis_name: str | None = None
+    duration: float | None = None
+    node: str | None = None
+    target_node: str | None = None
+    known_issue: str | None = None
+    nemesis_status: str | None = None
+
 
 
 class SCTService:
@@ -384,6 +402,42 @@ class SCTService:
             raise SCTServiceException("Run not found", run_id) from exception
 
         return "updated"
+
+
+    @staticmethod
+    def submit_event(run_id: str, raw_event: RawEventPayload):
+        req = EventSubmitRequest(**raw_event)
+
+        try:
+            run: SCTTestRun = SCTTestRun.get(id=run_id)
+        except SCTTestRun.DoesNotExist as exception:
+            LOGGER.error("Run %s not found for SCTTestRun", run_id)
+            raise SCTServiceException("Run not found", run_id) from exception
+
+        event = SCTEvent()
+        event.run_id = run.id
+        event.severity = SCTEventSeverity(req.severity.upper()).value
+        event.ts = datetime.fromtimestamp(req.ts, tz=UTC)
+        event.message = req.message
+        event.event_type = req.event_type
+
+        # DB related events
+        event.node = req.node
+        event.received_timestamp = req.received_timestamp
+
+        # Nemesis related events
+        event.nemesis_name = req.nemesis_name
+        event.nemesis_status = req.nemesis_status
+        event.target_node = req.target_node
+        event.duration = req.duration
+
+        event.known_issue = req.known_issue
+
+        # Indexing
+        event.release_id = run.release_id
+
+        event.save()
+
 
     @staticmethod
     def submit_events(run_id: str, events: list[dict]) -> str:

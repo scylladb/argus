@@ -126,6 +126,21 @@ def sct_events_submit(run_id: str):
     }
 
 
+@bp.route("/<string:run_id>/event/submit", methods=["POST"])
+@api_login_required
+def sct_event_submit(run_id: str):
+    payload = get_payload(request)
+    event_data = payload["data"]
+    if isinstance(event_data, list):
+        result = [SCTService.submit_event(run_id=run_id, events=e) for e in event_data]
+    else:
+        result = SCTService.submit_event(run_id=run_id, events=event_data)
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
 @bp.route("/<string:run_id>/gemini/submit", methods=["POST"])
 @api_login_required
 def sct_gemini_results_submit(run_id: str):
