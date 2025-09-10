@@ -3,9 +3,10 @@
     import { InvestigationStatusIcon, StatusBackgroundCSSClassMap, TestInvestigationStatus, TestInvestigationStatusStrings, TestStatus } from "../Common/TestStatus";
     import { subUnderscores, titleCase } from "../Common/TextUtils";
     import AssigneeList from "../WorkArea/AssigneeList.svelte";
+    import humanizeDuration from "humanize-duration";
     import { timestampToISODate } from "../Common/DateUtils";
     import Fa from "svelte-fa";
-    import { faBug, faComment } from "@fortawesome/free-solid-svg-icons";
+    import { faBug, faComment, faSpider } from "@fortawesome/free-solid-svg-icons";
     import { getAssigneesForTest, shouldFilterOutByUser } from "./TestDashboard.svelte";
 
     let {
@@ -15,11 +16,15 @@
         clickedTests,
         doFilters
     } = $props();
+
+    let lastRun = testStats?.last_runs?.[0];
     const dispatch = createEventDispatcher();
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
+    role="button"
+    tabindex="-1"
     class:d-none={!doFilters(testStats)}
     class:status-block-active={testStats.start_time != 0}
     class:investigating={testStats?.investigation_status == TestInvestigationStatus.IN_PROGRESS}
@@ -31,7 +36,7 @@
 >
     <div
         class="{StatusBackgroundCSSClassMap[
-            testStats.status
+            testStats.status as keyof typeof StatusBackgroundCSSClassMap
         ]} text-center text-light p-1 border-bottom"
     >
         {testStats.status == "unknown"
@@ -49,7 +54,12 @@
         </div>
     </div>
     <div class="d-flex flex-fill align-items-end justify-content-end p-1">
-        <div class="p-1 me-auto">
+        <div class="p-1 me-auto text-small">
+            {#if (lastRun?.nemesis_data ?? []).length}
+                <Fa icon={faSpider} /> {(lastRun?.nemesis_data ?? []).filter((n: {status: string}) => n.status == "failed").length} / {(lastRun?.nemesis_data ?? []).length}
+            {/if}
+        </div>
+        <div class="p-1 me-2">
             {#if assigneeList.tests[testStats.test.id] || assigneeList.groups[groupStats.group.id] || testStats.last_runs?.[0]?.assignee}
                 <AssigneeList
                     smallImage={false}
@@ -66,13 +76,13 @@
             <div
                 class="p-1"
                 title="Investigation: {TestInvestigationStatusStrings[
-                    testStats.investigation_status
+                    testStats.investigation_status as keyof typeof TestInvestigationStatusStrings
                 ]}"
             >
                 <Fa
                     color="#000"
                     icon={InvestigationStatusIcon[
-                        testStats.investigation_status
+                        testStats.investigation_status as keyof typeof InvestigationStatusIcon
                     ]}
                 />
             </div>
@@ -88,13 +98,18 @@
             </div>
         {/if}
     </div>
+    {#if lastRun?.end_time && new Date(lastRun.end_time).getTime() > 1}
+        <div class="border-top bg-light-two text-small text-center">
+            took {humanizeDuration((new Date(lastRun.end_time).getTime() - new Date(lastRun.start_time).getTime()), { units: ["d", "h", "m"], largest: 1, round: true })}
+        </div>
+    {/if}
 </div>
 
 
 <style>
     .status-block {
         width: 178px;
-        max-height: 160px;
+        max-height: 220px;
         box-sizing: border-box;
         cursor: pointer;
     }

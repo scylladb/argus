@@ -155,7 +155,7 @@ class SCTTestRun(PluginModelBase):
     @classmethod
     def _stats_query(cls) -> str:
         return ("SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, "
-                f"assignee, end_time, investigation_status, heartbeat, scylla_version, cloud_setup, allocated_resources FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT 15")
+                f"assignee, end_time, investigation_status, heartbeat, scylla_version, cloud_setup, allocated_resources, nemesis_data FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT 15")
 
     @classmethod
     def load_test_run(cls, run_id: UUID) -> 'SCTTestRun':
