@@ -505,6 +505,8 @@ class TestStats:
                 "build_number": get_build_number(run["build_job_url"]),
                 "build_job_name": run["build_id"],
                 "start_time": run["start_time"],
+                "end_time": run["end_time"],
+                "nemesis_data": run.get("nemesis_data", []),
                 "assignee": run["assignee"],
                 "issues": [dict(issue.items()) for issue in self.parent_group.parent_release.issues[run["id"]]],
                 "comments": [dict(comment.items()) for comment in self.parent_group.parent_release.comments[run["id"]]],
