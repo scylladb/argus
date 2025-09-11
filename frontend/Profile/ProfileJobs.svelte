@@ -31,7 +31,7 @@
             let response = await fetch(userId ? `/api/v1/team/user/${userId}/jobs` :"/api/v1/user/jobs");
             if (response.status != 200) throw new Error("HTTP Transport Error");
             let json = await response.json();
-            if (json.status != "ok") throw new Error(`API Error: ${json.exception.arguments.join(" ")}`);
+            if (json.status != "ok") throw new Error(`API Error: ${json.response.arguments.join(" ")}`);
             prepareJobs(json.response);
         } catch (e) {
             if (e instanceof Error) {
