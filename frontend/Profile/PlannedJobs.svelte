@@ -57,7 +57,7 @@
             let response = await fetch("/api/v1/user/planned_jobs");
             if (response.status != 200) throw new Error("HTTP Transport Error");
             let json = await response.json();
-            if (json.status != "ok") throw new Error(`API Error: ${json.exception.arguments.join(" ")}`);
+            if (json.status != "ok") throw new Error(`API Error: ${json.response.arguments.join(" ")}`);
 
             plannedTests = json.response.sort(sortJobs);
             jobCount = plannedTests.filter(t => !t.last_run).length;
