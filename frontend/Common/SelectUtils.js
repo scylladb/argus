@@ -1,3 +1,14 @@
+import * as urlSlug from "url-slug";
+
 export const filterUser = function (label, filterText, user) {
-    return `${label ?? ""}${user?.full_name ?? ""}`.toLowerCase().includes(filterText.toLowerCase());
+    const term = `${label ?? ""}${user?.full_name ?? ""}`;
+    const normalizedTerm = urlSlug.convert(term, {
+        separator: " ",
+        transformer: urlSlug.LOWERCASE_TRANSFORMER,
+        dictionary: {
+            Ł: "L",
+            ł: "l",
+        }
+    });
+    return normalizedTerm.includes(filterText.toLowerCase());
 };
