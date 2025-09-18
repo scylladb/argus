@@ -286,7 +286,7 @@ class SCTTestRun(PluginModelBase):
         """
             Deprecated. To be replaced by new events system.
         """
-        return self._get_events_legacy
+        return self._get_events_legacy()
 
     def _get_events_legacy(self) -> list[EventsBySeverity]:
         return self.events
