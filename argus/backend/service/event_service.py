@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, UTC
 import json
 from argus.backend.models.web import ArgusEvent, ArgusEventTypes
 
@@ -14,5 +14,5 @@ class EventService:
         event.run_id = run_id
         event.body = json.dumps(body, ensure_ascii=True, separators=(',', ':'))
         event.kind = kind.value
-        event.created_at = datetime.utcnow()
+        event.created_at = datetime.now(UTC)
         event.save()
