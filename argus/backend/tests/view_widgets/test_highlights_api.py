@@ -1,6 +1,6 @@
 import json
 import time
-from datetime import datetime, UTC
+from datetime import datetime, UTC, timedelta
 from unittest.mock import patch
 from uuid import uuid4, UUID
 
@@ -67,11 +67,10 @@ def test_get_highlights_should_return_highlights_and_action_items(flask_client):
         comments_count=0,
     )
     highlight_entry.save()
-
     action_item_entry = WidgetHighlights(
         view_id=UUID(view_id),
         index=0,
-        created_at=datetime.now(UTC),
+        created_at=datetime.now(UTC) + timedelta(milliseconds=1),
         creator_id=creator_id,
         content="Test action item",
         completed=False,

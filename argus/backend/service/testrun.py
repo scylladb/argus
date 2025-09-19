@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from functools import reduce
 import json
 import logging
@@ -50,6 +50,7 @@ class TestRunServiceException(Exception):
 
 
 class TestRunService:
+    __test__ = False  # prevent pytest from collecting this production class as a test
     ASSIGNEE_PLACEHOLDER = "none-none-none"
 
     RE_MENTION = r"@[A-Za-z\d](?:[A-Za-z\d]|-(?=[A-Za-z\d])){0,38}"
@@ -413,7 +414,7 @@ class TestRunService:
 
     def terminate_stuck_runs(self):
         sct = AVAILABLE_PLUGINS.get("scylla-cluster-tests").model
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         stuck_period = now - timedelta(minutes=45)
         stuck_runs_running = sct.filter(heartbeat__lt=int(
             stuck_period.timestamp()), status=TestStatus.RUNNING.value).allow_filtering().all()
@@ -480,7 +481,7 @@ class TestRunService:
                         "reason": reason,
                     }, ensure_ascii=True, separators=(',', ':')),
                     kind=ArgusEventTypes.TestRunBatchInvestigationStatusChange.value,
-                    created_at=datetime.utcnow(),
+                    created_at=datetime.now(UTC),
                 )
 
                 jobs_affected += 1

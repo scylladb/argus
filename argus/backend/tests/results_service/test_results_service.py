@@ -1,4 +1,5 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
+from time import sleep
 from uuid import uuid4
 
 import pytest
@@ -115,13 +116,15 @@ def test_get_tests_by_version_groups_runs_correctly(argus_db):
     pkg_v4_0 = PackageVersion(name='scylla', version='4.0', date='2021-01-01', revision_id='', build_id='')
     pkg_v4_1 = PackageVersion(name='scylla', version='4.1', date='2021-02-01', revision_id='', build_id='')
 
+    start_time = datetime.now(UTC)
     SCTTestRun(
         id=run_id1,
         build_id='build_id1',
         test_id=test_id1,
         test_method='test_method1',  # Changed to 'test_method'
         investigation_status='',
-        packages=[pkg_v4_0]
+        packages=[pkg_v4_0],
+        start_time = start_time + timedelta(milliseconds=1)
     ).save()
     SCTTestRun(
         id=run_id2,
@@ -129,7 +132,8 @@ def test_get_tests_by_version_groups_runs_correctly(argus_db):
         test_id=test_id1,
         test_method='test_method2',  # Changed to 'test_method'
         investigation_status='ignored',
-        packages=[pkg_v4_0]
+        packages=[pkg_v4_0],
+        start_time = start_time + timedelta(milliseconds=2)
     ).save()
     SCTTestRun(
         id=run_id3,
@@ -137,7 +141,8 @@ def test_get_tests_by_version_groups_runs_correctly(argus_db):
         test_id=test_id2,
         test_method='test_method1',  # Changed to 'test_method'
         investigation_status='',
-        packages=[pkg_v4_0]
+        packages=[pkg_v4_0],
+        start_time = start_time + timedelta(milliseconds=3)
     ).save()
     SCTTestRun(
         id=run_id4,
@@ -145,7 +150,8 @@ def test_get_tests_by_version_groups_runs_correctly(argus_db):
         test_id=test_id2,
         test_method='test_method1',  # Changed to 'test_method'
         investigation_status='',
-        packages=[pkg_v4_1]
+        packages=[pkg_v4_1],
+        start_time = start_time + timedelta(milliseconds=4)
     ).save()
 
     sut_package_name = 'scylla'

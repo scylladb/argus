@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
 from math import ceil
 from uuid import UUID
 from time import time
@@ -30,7 +30,7 @@ class PluginModelBase(Model):
     # Metadata
     build_id = columns.Text(required=True, partition_key=True)
     start_time = columns.DateTime(required=True, primary_key=True, clustering_order="DESC",
-                                  default=datetime.utcnow, custom_index=True)
+                                  default=lambda: datetime.now(UTC), custom_index=True)
     id = columns.UUID(index=True, required=True)
     release_id = columns.UUID(index=True)
     group_id = columns.UUID(index=True)
@@ -39,7 +39,7 @@ class PluginModelBase(Model):
     status = columns.Text(default=lambda: TestStatus.CREATED.value)
     investigation_status = columns.Text(default=lambda: TestInvestigationStatus.NOT_INVESTIGATED.value)
     heartbeat = columns.Integer(default=lambda: int(time()))
-    end_time = columns.DateTime(default=lambda: datetime.utcfromtimestamp(0))
+    end_time = columns.DateTime(default=lambda: datetime.fromtimestamp(0, UTC))
     build_job_url = columns.Text()
     product_version = columns.Text(index=True)
 
@@ -112,7 +112,7 @@ class PluginModelBase(Model):
             id__in=tuple(unique_schedule_ids),
         ).all()
 
-        today = datetime.utcnow()
+        today = datetime.now(UTC)
 
         valid_schedules = []
         for schedule in schedules:

@@ -233,7 +233,7 @@ class SCTTestRun(PluginModelBase):
             run.assignee = run.get_scheduled_assignee()
         except _DoesNotExist:
             run.assignee = None
-        run.start_time = datetime.utcnow()
+        run.start_time = datetime.now(timezone.utc)
         run.id = UUID(req.run_id)
         run.scm_revision_id = req.commit_id
         if req.origin_url:

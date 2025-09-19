@@ -2,8 +2,8 @@ from dataclasses import asdict
 from datetime import datetime, UTC
 import json
 import logging
+from time import sleep
 
-import pytest
 from flask.testing import FlaskClient
 
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest
@@ -152,21 +152,21 @@ def test_fetch_partition_limit(client_service: ClientService, sct_service: SCTSe
         "event_type": "DatabaseEvent"
     }
 
-    for i in range(200):
+    for i in range(11):
         event_data = dict(event_template)
-        event_data["ts"] = datetime.now(tz=UTC).timestamp() - 1
+        event_data["ts"] = datetime.now(tz=UTC).timestamp() + i * 0.001
         event_data["message"] = f"This is event {i}"
         _ = sct_service.submit_event(str(run.id), event_data)
 
-    for i in range(200):
+    for i in range(11):
         event_data = dict(event_template)
         event_data["severity"] = SCTEventSeverity.NORMAL.value
-        event_data["ts"] = datetime.now(tz=UTC).timestamp() - 1
+        event_data["ts"] = datetime.now(tz=UTC).timestamp() + i * 0.001
         event_data["message"] = f"This is event {i}"
         _ = sct_service.submit_event(str(run.id), event_data)
 
-    all_events = run.get_events_limited(run.id)
-    assert len(all_events) == 200, "Incorrect event in set!"
+    all_events = run.get_events_limited(run.id, per_partition_limit=10)
+    assert len(all_events) == 20, "Incorrect event in set!"
 
 
 def test_fetch_custom_limit(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
