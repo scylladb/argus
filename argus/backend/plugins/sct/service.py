@@ -155,7 +155,7 @@ class SCTService:
             run.save()
 
             if run.gemini_status != "PASSED":
-                run.status = TestStatus.FAILED
+                run.status = TestStatus.FAILED.value
                 EventService.create_run_event(kind=ArgusEventTypes.TestRunStatusChanged, body={
                     "message": "[{username}] Setting run status to {status} due to Gemini reporting following status: {gemini_status}",
                     "username": g.user.username,
