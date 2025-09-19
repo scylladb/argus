@@ -3,12 +3,21 @@ from datetime import datetime, UTC
 from uuid import UUID
 import re
 
-from flask import abort, g
+from flask import g
+from argus.backend.error_handlers import APIException
 
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.view_widgets import WidgetHighlights, WidgetComment
 from argus.backend.models.web import ArgusNotificationTypes, ArgusNotificationSourceTypes, ArgusUserView, User
 from argus.backend.service.notification_manager import NotificationManagerService
+
+
+class NotFound(APIException):
+    pass
+
+
+class Forbidden(APIException):
+    pass
 from argus.backend.util.common import strip_html_tags
 
 
@@ -237,9 +246,9 @@ class HighlightsService:
             created_at=datetime.fromtimestamp(payload.created_at, tz=UTC)
         ).first()
         if not entry:
-            abort(404, description="Highlight not found")
+            raise NotFound("Highlight not found")
         if entry.creator_id != user_id:
-            abort(403, description="Not authorized to update highlight")
+            raise Forbidden("Not authorized to update highlight")
 
         mentions, content_stripped = self._process_mentions(payload.content)
         entry.content = content_stripped
@@ -260,7 +269,7 @@ class HighlightsService:
             created_at=datetime.fromtimestamp(payload.created_at, tz=UTC)
         ).first()
         if not entry or entry.completed is None:
-            abort(404, description="ActionItem not found")
+            raise NotFound("ActionItem not found")
         if payload.assignee_id is None:
             entry.assignee_id = None
         else:
@@ -275,7 +284,7 @@ class HighlightsService:
             created_at=datetime.fromtimestamp(payload.created_at, tz=UTC)
         ).first()
         if not entry or entry.completed is None:
-            abort(404, description="ActionItem not found")
+            raise NotFound("ActionItem not found")
         entry.completed = payload.completed
         entry.save()
         return ActionItem.from_db_model(entry)
@@ -291,7 +300,7 @@ class HighlightsService:
         highlight = WidgetHighlights.objects(
             view_id=payload.view_id, index=payload.index, created_at=highlight_created_at).first()
         if not highlight:
-            abort(404, description="Highlight not found")
+            raise NotFound("Highlight not found")
         created_at = datetime.now(UTC)
         mentions, content_stripped = self._process_mentions(payload.content)
         comment = WidgetComment(
@@ -319,9 +328,9 @@ class HighlightsService:
             created_at=created_at,
         ).first()
         if not comment:
-            abort(404, description="Comment not found")
+            raise NotFound("Comment not found")
         if comment.creator_id != user_id:
-            abort(403, description="Not authorized to update comment")
+            raise Forbidden("Not authorized to update comment")
         mentions, content_stripped = self._process_mentions(payload.content)
         comment.content = payload.content
         comment.save()
@@ -340,14 +349,14 @@ class HighlightsService:
             created_at=created_at,
         ).first()
         if not comment:
-            abort(404, description="Comment not found")
+            raise NotFound("Comment not found")
         if comment.creator_id != user_id:
-            abort(403, description="Not authorized to delete comment")
+            raise Forbidden("Not authorized to delete comment")
         comment.delete()
         highlight = WidgetHighlights.objects(view_id=payload.view_id, index=index,
                                              created_at=highlight_created_at).first()
         if not highlight:
-            abort(404, description="Highlight not found")
+            raise NotFound("Highlight not found")
         highlight.comments_count -= 1
         highlight.save()
 

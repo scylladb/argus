@@ -67,7 +67,7 @@ def test_get_highlights_should_return_highlights_and_action_items(flask_client):
         comments_count=0,
     )
     highlight_entry.save()
-
+    time.sleep(0.001)  # Ensure different created_at
     action_item_entry = WidgetHighlights(
         view_id=UUID(view_id),
         index=0,

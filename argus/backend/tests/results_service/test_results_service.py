@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from time import sleep
 from uuid import uuid4
 
 import pytest
@@ -123,6 +124,7 @@ def test_get_tests_by_version_groups_runs_correctly(argus_db):
         investigation_status='',
         packages=[pkg_v4_0]
     ).save()
+    sleep(0.001)  # Ensure different start_time
     SCTTestRun(
         id=run_id2,
         build_id='build_id1',
@@ -131,6 +133,7 @@ def test_get_tests_by_version_groups_runs_correctly(argus_db):
         investigation_status='ignored',
         packages=[pkg_v4_0]
     ).save()
+    sleep(0.001)  # Ensure different start_time
     SCTTestRun(
         id=run_id3,
         build_id='build_id1',
@@ -139,6 +142,7 @@ def test_get_tests_by_version_groups_runs_correctly(argus_db):
         investigation_status='',
         packages=[pkg_v4_0]
     ).save()
+    sleep(0.001)  # Ensure different start_time
     SCTTestRun(
         id=run_id4,
         build_id='build_id1',
