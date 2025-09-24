@@ -1,5 +1,8 @@
 import logging
-from flask import Flask
+import os
+from flask import Flask, request
+from prometheus_flask_exporter import NO_PREFIX
+from argus.backend.metrics import METRICS
 from argus.backend.template_filters import export_filters
 from argus.backend.controller import admin, api, main
 from argus.backend.cli import cli_bp
@@ -12,8 +15,27 @@ from argus.backend.util.config import Config
 LOGGER = logging.getLogger(__name__)
 
 
+def register_metrics():
+    METRICS.export_defaults(group_by="endpoint", prefix=NO_PREFIX)
+    METRICS.register_default(
+        METRICS.counter(
+            "http_request_by_endpoint_total",
+            "Total Requests made",
+            labels={
+                "endpoint": lambda: request.endpoint,
+                "method": lambda: request.method,
+                "status": lambda response: response.status,
+            },
+        )
+    )
+
+
 def start_server(config=None) -> Flask:
     app = Flask(__name__, static_url_path="/s/", static_folder="public")
+    METRICS.init_app(app)
+    if os.environ.get("PROMETHEUS_MULTIPROC_DIR"):
+        with app.app_context():
+            METRICS.register_endpoint("/metrics")
     app.json_provider_class = ArgusJSONProvider
     app.json = ArgusJSONProvider(app)
     app.jinja_env.policies["json.dumps_kwargs"]["default"] = app.json.default
@@ -35,6 +57,11 @@ def start_server(config=None) -> Flask:
     app.register_blueprint(api.bp)
     app.register_blueprint(admin.bp)
     app.register_blueprint(cli_bp)
+    with app.app_context():
+        try:
+            register_metrics()
+        except ValueError:
+            pass
 
     app.logger.info("Ready.")
     return app
