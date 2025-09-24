@@ -51,6 +51,7 @@ web-backend = [
     "python-slugify ~= 6.1.1",
     "pygithub >= 2.6.1",
     "boto3 ~= 1.38.9",
+    "prometheus-flask-exporter>=0.23.2",
 ]
 docker-image = [
     "supervisor ~= 4.2.4",

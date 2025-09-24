@@ -31,11 +31,11 @@ def handle_api_exception(exception: Exception):
         LOGGER.error("[TraceId: %s] Request Data Start\n%s\nRequest Data End", trace_id,
                      request.json if request.is_json else request.get_data(as_text=True))
 
-    return {
+    return ({
         "status": "error",
         "response": {
             "trace_id": trace_id,
             "exception": exception.__class__.__name__,
             "arguments": exception.args
         }
-    }
+    }, 500)
