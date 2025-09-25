@@ -10,13 +10,28 @@
     let issueTemplateText = "";
 
 
+    // Function to convert markdown links to HTML while preserving other text
+    const convertMarkdownLinksToHtml = (text) => {
+        // Match markdown links [text](url) and convert them to HTML links
+        return text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" class="text-primary">$1</a>');
+    };
+
     const copyTemplateToClipboard = function () {
-        navigator.clipboard.writeText(templateElement.innerText);
+        navigator.clipboard.writeText(issueTemplateText);
     };
 
     onMount(() => {
-        renderedElement.innerHTML = parse(templateElement.innerHTML, markdownRendererOptions);
-        issueTemplateText = templateElement.innerHTML;
+        // Store original content for copying
+        const templateContent = templateElement.innerHTML;
+        
+        // Render full markdown for preview tab
+        renderedElement.innerHTML = parse(templateContent, markdownRendererOptions);
+        
+        // For the raw template tab, convert only links to clickable while preserving structure
+        templateElement.innerHTML = convertMarkdownLinksToHtml(templateContent);
+        
+        // Store original text for copying
+        issueTemplateText = templateContent;
     });
 </script>
 
@@ -91,7 +106,7 @@
                                     Select All
                                 </button>
                             </div>
-                            <pre
+                            <div
                                 class="code"
                                 bind:this={templateElement}
                                 id="issueTemplateText-{test_run.id}">
@@ -137,7 +152,7 @@
 
 <!-- cluster ID / logs / trace ID / version / suspected regression / comments -->
 
-                            </pre>
+                            </div>
                         </div>
                         <div class="tab-pane fade" id="issueTemplatePreview-{test_run.id}" role="tabpanel">
                             <div
@@ -158,5 +173,7 @@
         font-size: 11pt;
         padding: 1em;
         background-color: #f0f0f0;
+        white-space: pre-wrap;
+        font-family: monospace;
     }
 </style>

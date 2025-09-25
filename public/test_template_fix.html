@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Issue Template Link Rendering Fix Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .code {
+            font-size: 11pt;
+            padding: 1em;
+            background-color: #f0f0f0;
+            white-space: pre-wrap;
+            font-family: monospace;
+            border: 1px solid #ccc;
+            margin: 10px 0;
+        }
+        .test-section {
+            margin: 20px 0;
+            border: 1px solid #ddd;
+            padding: 20px;
+            background: white;
+            border-radius: 5px;
+        }
+        .text-primary {
+            color: #007bff;
+            text-decoration: none;
+        }
+        .text-primary:hover {
+            text-decoration: underline;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            margin: 5px;
+            border-radius: 3px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 3px;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.info {
+            background: #cce7ff;
+            color: #0c5460;
+            border: 1px solid #b3d7ff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Argus Issue Template Link Rendering Fix</h1>
+        
+        <div class="status info">
+            <strong>Fix Description:</strong> Links in issue templates are now clickable in the UI while preserving the ability to copy the original markdown text for GitHub issues.
+        </div>
+        
+        <div class="test-section">
+            <h2>❌ Before Fix (Links as Text)</h2>
+            <p>Links appeared as raw markdown and were not clickable:</p>
+            <div class="code">
+[Jenkins job URL](https://jenkins.example.com/job/123)
+[Argus](https://argus.scylladb.com/test/test-id/runs?additionalRuns[]=run-id)
+
+## Logs:
+- **[log-file.log](https://argus.scylladb.com/api/v1/tests/plugin/run-id/log/log-file.log/download)**
+
+<!-- cluster ID / logs / trace ID / version / suspected regression / comments -->
+            </div>
+            <p><em>Users had to manually copy and paste URLs to navigate to them.</em></p>
+        </div>
+
+        <div class="test-section">
+            <h2>✅ After Fix (Links Clickable)</h2>
+            <p>Links are now clickable in the template while maintaining proper copy functionality:</p>
+            <div class="code" id="afterTemplate">
+<!-- This will be populated by JavaScript -->
+            </div>
+            <button onclick="copyTemplate()">📋 Copy Template (Still Works!)</button>
+            <button onclick="showCopiedText()">👀 Show What Gets Copied</button>
+            
+            <div id="copyResult" style="display: none;" class="status success">
+                <strong>Copied text:</strong>
+                <pre id="copiedText" style="background: white; padding: 10px; margin: 10px 0; border: 1px solid #ccc;"></pre>
+                <em>This is the original markdown text that works perfectly in GitHub issues!</em>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>🔧 Technical Implementation</h2>
+            <ul>
+                <li>Changed <code>&lt;pre&gt;</code> elements to <code>&lt;div&gt;</code> elements with <code>white-space: pre-wrap</code></li>
+                <li>Added function to convert markdown links <code>[text](url)</code> to HTML links</li>
+                <li>Preserved original text for clipboard functionality</li>
+                <li>Applied Bootstrap <code>text-primary</code> class for consistent styling</li>
+                <li>Links open in new tab with <code>target="_blank"</code></li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Simulate the convertMarkdownLinksToHtml function from the fix
+        function convertMarkdownLinksToHtml(text) {
+            return text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" class="text-primary">$1</a>');
+        }
+
+        // Original template text (what gets copied - unchanged)
+        const originalText = `[Jenkins job URL](https://jenkins.example.com/job/123)
+[Argus](https://argus.scylladb.com/test/test-id/runs?additionalRuns[]=run-id)
+
+## Logs:
+- **[log-file.log](https://argus.scylladb.com/api/v1/tests/plugin/run-id/log/log-file.log/download)**
+
+<!-- cluster ID / logs / trace ID / version / suspected regression / comments -->`;
+
+        // Initialize the demo
+        document.addEventListener('DOMContentLoaded', function() {
+            const afterTemplate = document.getElementById('afterTemplate');
+            afterTemplate.innerHTML = convertMarkdownLinksToHtml(originalText);
+        });
+
+        function copyTemplate() {
+            navigator.clipboard.writeText(originalText).then(() => {
+                const result = document.getElementById('copyResult');
+                const copiedText = document.getElementById('copiedText');
+                copiedText.textContent = originalText;
+                result.style.display = 'block';
+                
+                // Hide after 5 seconds
+                setTimeout(() => {
+                    result.style.display = 'none';
+                }, 5000);
+            }).catch(err => {
+                alert('Copy failed. Here is the text that would be copied:\n\n' + originalText);
+            });
+        }
+
+        function showCopiedText() {
+            alert('This is what gets copied to clipboard:\n\n' + originalText);
+        }
+    </script>
+</body>
+</html>

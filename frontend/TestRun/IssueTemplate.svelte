@@ -16,6 +16,7 @@
     let templateElement = $state();
     let shortTemplateElement = $state();
     let issueTemplateText = "";
+    let issueShortTemplateText = "";
 
     const filterDbNodes = function (resources) {
         return resources.filter((val) =>
@@ -28,12 +29,12 @@
     };
 
     const copyTemplateToClipboard = function () {
-        navigator.clipboard.writeText(templateElement.innerText);
+        navigator.clipboard.writeText(issueTemplateText);
         sendMessage("success", "Issue template has been copied to your clipboard");
     };
 
     const copyShortTemplateToClipboard = function () {
-        navigator.clipboard.writeText(shortTemplateElement.innerText);
+        navigator.clipboard.writeText(issueShortTemplateText);
         sendMessage("success", "Issue template has been copied to your clipboard");
     };
 
@@ -68,10 +69,27 @@
         operatorHelmRepoPackage = getOperatorHelmRepoPackage(test_run.packages);
     });
 
+    // Function to convert markdown links to HTML while preserving other text
+    const convertMarkdownLinksToHtml = (text) => {
+        // Match markdown links [text](url) and convert them to HTML links
+        return text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" class="text-primary">$1</a>');
+    };
+
     onMount(() => {
+        // Render full markdown for preview tabs
         renderedElement.innerHTML = parse(templateElement.innerHTML, markdownRendererOptions);
         renderedShortElement.innerHTML = parse(shortTemplateElement.innerHTML, markdownRendererOptions);
-        issueTemplateText = templateElement.innerHTML;
+        
+        // For the raw template tabs, convert only links to clickable while preserving structure
+        const templateContent = templateElement.innerHTML;
+        const shortTemplateContent = shortTemplateElement.innerHTML;
+        
+        templateElement.innerHTML = convertMarkdownLinksToHtml(templateContent);
+        shortTemplateElement.innerHTML = convertMarkdownLinksToHtml(shortTemplateContent);
+        
+        // Store original text for copying
+        issueTemplateText = templateContent;
+        issueShortTemplateText = shortTemplateContent;
     });
 </script>
 
@@ -177,7 +195,7 @@
                                     Select All
                                 </button>
                             </div>
-                            <pre
+                            <div
                                 class="code"
                                 bind:this={templateElement}
                                 id="issueTemplateText-{test_run.id}">
@@ -253,7 +271,7 @@ Logs and commands
 [Argus]({document.location.origin}/test/{test_run.test_id}/runs?additionalRuns[]={test_run.id})
 &lt;/details&gt;
 
-                            </pre>
+                            </div>
                         </div>
                         <div class="tab-pane fade" id="issueTemplatePreview-{test_run.id}" role="tabpanel">
                             <div
@@ -281,7 +299,7 @@ Logs and commands
                                     Select All
                                 </button>
                             </div>
-                            <pre
+                            <div
                                 class="code"
                                 bind:this={shortTemplateElement}
                                 id="issueShortTemplateText-{test_run.id}">
@@ -334,7 +352,7 @@ Test config file(s):
 [Jenkins job URL]({test_run.build_job_url})
 &lt;/details&gt;
 
-                            </pre>
+                            </div>
                         </div>
                         <div class="tab-pane fade" id="issueShortTemplatePreview-{test_run.id}" role="tabpanel">
                             <div
@@ -355,5 +373,7 @@ Test config file(s):
         font-size: 11pt;
         padding: 1em;
         background-color: #f0f0f0;
+        white-space: pre-wrap;
+        font-family: monospace;
     }
 </style>
