@@ -244,9 +244,9 @@ Logs and commands
 
 ## Logs:
 {#each test_run.logs as log}
-    - **[{log[0]}](https://argus.scylladb.com{proxyS3Url(test, test_run, log[0])})**{"\n"}
+- **[{log[0]}](https://argus.scylladb.com{proxyS3Url(test, test_run, log[0])})**{"\n"}
 {:else}
-    *No logs captured during this run.*
+*No logs captured during this run.*
 {/each}
 
 [Jenkins job URL]({test_run.build_job_url})
@@ -327,9 +327,9 @@ Test config file(s):
 
 ## Logs:
 {#each test_run.logs as log}
-    - **[{log[0]}](https://argus.scylladb.com{proxyS3Url(test, test_run, log[0])})**{"\n"}
+- **[{log[0]}](https://argus.scylladb.com{proxyS3Url(test, test_run, log[0])})**{"\n"}
 {:else}
-    *No logs captured during this run.*
+*No logs captured during this run.*
 {/each}
 [Jenkins job URL]({test_run.build_job_url})
 &lt;/details&gt;
