@@ -18,6 +18,7 @@ class DataValidationError(APIException):
 
 def handle_api_exception(exception: Exception):
     trace_id = base64.encodebytes(sha256(os.urandom(64)).digest()).decode(encoding="utf-8").strip()
+    response_code = 200
     if issubclass(exception.__class__, APIException):
         LOGGER.info("[TraceId: %s] Endpoint %s responded with error %s: %s", trace_id,
                     request.endpoint, exception.__class__.__name__, str(exception))
@@ -38,4 +39,4 @@ def handle_api_exception(exception: Exception):
             "exception": exception.__class__.__name__,
             "arguments": exception.args
         }
-    }, 500)
+    }, response_code)
