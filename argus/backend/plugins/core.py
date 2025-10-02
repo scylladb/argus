@@ -116,7 +116,12 @@ class PluginModelBase(Model):
 
         valid_schedules = []
         for schedule in schedules:
-            if schedule.period_start <= today <= schedule.period_end:
+            # Normalize schedule datetimes to UTC-aware if they are naive
+            ps = schedule.period_start
+            pe = schedule.period_end
+            ps = ps.replace(tzinfo=UTC)
+            pe = pe.replace(tzinfo=UTC)
+            if ps <= today <= pe:
                 valid_schedules.append(schedule)
 
         assignees_uuids = []
