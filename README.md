@@ -5,6 +5,10 @@
 
 Argus is a test tracking system intended to provide observability into automated test pipelines which use long-running resources. It allows observation of a test status, its events and its allocated resources. It also allows easy comparison between particular runs of a specific test.
 
+## Contributing
+
+Review the [Repository Guidelines](AGENTS.md) for project structure, tooling expectations, and pull request practices before submitting changes.
+
 ## Installation notes
 
 ### Development
