@@ -9,33 +9,6 @@
         methods = []
     } = $props();
 
-    /**
-     * @type {boolean}
-     */
-    let disableRepoAccess = $state(JSON.parse(localStorage.getItem("loginPageDisableFullRepoAccess")) ?? false);
-
-    /**
-     * @param {string} rawScopes
-     * @param {boolean} fullAccess
-     * @returns {string}
-     */
-    const parseScopes = function(rawScopes, fullAccess) {
-        /**
-         * @type {{ string: boolean }} Scopes
-         */
-        let scopes = rawScopes
-            .split(/\s/)
-            .reduce((acc, scope) => {
-                acc[scope] = scope == "repo" ? !fullAccess : true;
-                return acc;
-            }, {});
-
-        return Object
-            .entries(scopes)
-            .filter(([_, enabled]) => enabled)
-            .map(([scope, _]) => scope)
-            .join(" ");
-    };
 
 </script>
 
@@ -59,23 +32,11 @@
         {#if methods.includes("gh")}
             <div class:text-center={!methods.includes("password")} class="my-2" >
                 <form action="https://github.com/login/oauth/authorize" method="get">
-                    <input type="hidden" name="scope" value={parseScopes(githubScopes, disableRepoAccess)} />
+                    <input type="hidden" name="scope" value={githubScopes} />
                     <input type="hidden" name="client_id" value={githubCid} />
                     <input type="hidden" name="state" value={csrfToken} />
                     <button class="btn btn-dark" type="submit"><Fa icon={faGithub}/> Sign In with GitHub</button>
                 </form>
-                <div class="mb-3">
-                    <label for="disableRepoAccess" class="form-check-label">Disable full repo access</label>
-                    <input
-                        id="disableRepoAccess"
-                        type="checkbox"
-                        class="form-check-input"
-                        bind:checked={disableRepoAccess}
-                        onchange={() => {
-                            localStorage.setItem("loginPageDisableFullRepoAccess", `${disableRepoAccess}`);
-                        }}
-                    >
-                </div>
             </div>
         {/if}
         {#if methods.length == 0}
