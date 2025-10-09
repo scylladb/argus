@@ -13,6 +13,7 @@
         duplicates?: number;
         // eslint-disable-next-line @typescript-eslint/no-empty-function
         toggleDuplicates?: any;
+        duplicatesVisible?: boolean;
         display?: boolean;
         filterString?: string;
     }
@@ -22,14 +23,12 @@
         similars = [],
         duplicates = 0,
         toggleDuplicates = () => {},
+        duplicatesVisible = false,
         display = true,
         filterString = ""
     }: Props = $props();
 
     const dispatch = createEventDispatcher();
-
-    // Track if duplicates are shown for this event (local state)
-    let showingDuplicates = $state(false);
 
     let showSimilars = $state(false);
     let fetchingIssues = $state(false);
@@ -125,11 +124,11 @@
             {#if duplicates > 0}
                 <button
                     class="btn btn-sm d-flex align-items-center gap-2"
-                    class:btn-primary={showingDuplicates}
-                    class:btn-info={!showingDuplicates}
-                    onclick={() => { showingDuplicates = !showingDuplicates; toggleDuplicates(event); }}>
+                    class:btn-primary={duplicatesVisible}
+                    class:btn-info={!duplicatesVisible}
+                    onclick={() => { toggleDuplicates(event); }}>
                     <Fa icon={faCopy} />
-                    <span>{showingDuplicates ? "Hide Duplicates" : `Show ${duplicates} Duplicates`}</span>
+                    <span>{duplicatesVisible ? "Hide Duplicates" : `Show ${duplicates} Duplicates`}</span>
                 </button>
             {/if}
             <button
