@@ -15,6 +15,7 @@
     let eventEmbeddings = {};
     let eventDuplicates = {};
     let distinctEvents = $state({ ERROR: {}, CRITICAL: {}, WARNING: {}, NORMAL: {}, DEBUG: {} });
+    let duplicateParents = $state({ ERROR: {}, CRITICAL: {}, WARNING: {}, NORMAL: {}, DEBUG: {} });
     let shownDuplicates = $state({
         ERROR: new Set(),
         CRITICAL: new Set(),
@@ -142,10 +143,11 @@
      * 4. If not found, create a new distinct event with its duplicates list
      *
      * @param {Array} eventData - Array of event objects with event_index, severity, and duplicates_list
-     * @returns {Object} Map of distinct events: { ERROR: {eventIndex: [duplicateIndices]}, CRITICAL: {eventIndex: [duplicateIndices]} }
+     * @returns {{ distinct: Object, parentMap: Object }} Distinct lookup plus a reverse map for duplicates
      */
     const buildDistinctEvents = function(eventData) {
         const distinct = { ERROR: {}, CRITICAL: {}, WARNING: {}, NORMAL: {}, DEBUG: {} };
+        const parentMap = { ERROR: {}, CRITICAL: {}, WARNING: {}, NORMAL: {}, DEBUG: {} };
 
         const processEventsForSeverity = (severity) => {
             const events = eventData.filter(event => event.severity === severity);
@@ -154,31 +156,38 @@
                 const duplicatesList = event.duplicates_list || [];
 
                 // Check if this event is already a duplicate of an existing distinct event
-                let isAlreadyProcessed = false;
+                let existingParent = null;
                 for (const [distinctIdx, duplicates] of Object.entries(distinct[severity])) {
                     if (duplicates.includes(eventIdx)) {
-                        isAlreadyProcessed = true;
+                        existingParent = parseInt(distinctIdx);
                         break;
                     }
                 }
 
-                if (!isAlreadyProcessed) {
-                    // Check if any existing distinct event is in this event's duplicates list
-                    let foundParent = null;
-                    for (const [distinctIdx, duplicates] of Object.entries(distinct[severity])) {
-                        if (duplicatesList.includes(parseInt(distinctIdx))) {
-                            foundParent = distinctIdx;
-                            break;
-                        }
-                    }
+                if (existingParent !== null) {
+                    parentMap[severity][eventIdx] = existingParent;
+                    return;
+                }
 
-                    if (foundParent) {
-                        // Add this event to the existing distinct event's duplicates
-                        distinct[severity][foundParent].push(eventIdx);
-                    } else {
-                        // Create new distinct event
-                        distinct[severity][eventIdx] = duplicatesList.slice();
+                // Check if any existing distinct event is in this event's duplicates list
+                let foundParent = null;
+                for (const [distinctIdx, duplicates] of Object.entries(distinct[severity])) {
+                    if (duplicatesList.includes(parseInt(distinctIdx))) {
+                        foundParent = parseInt(distinctIdx);
+                        break;
                     }
+                }
+
+                if (foundParent !== null) {
+                    // Add this event to the existing distinct event's duplicates
+                    distinct[severity][foundParent].push(eventIdx);
+                    parentMap[severity][eventIdx] = foundParent;
+                } else {
+                    // Create new distinct event and map its duplicates back to it
+                    distinct[severity][eventIdx] = duplicatesList.slice();
+                    duplicatesList.forEach(idx => {
+                        parentMap[severity][idx] = eventIdx;
+                    });
                 }
             });
         };
@@ -186,7 +195,7 @@
         processEventsForSeverity('ERROR');
         processEventsForSeverity('CRITICAL');
 
-        return distinct;
+        return { distinct, parentMap };
     };
 
     /**
@@ -231,20 +240,6 @@
         return duplicateIndices.every(idx => shownDuplicates[event.severity].has(idx));
     };
 
-    /**
-     * Toggles the visibility of duplicate events for a given distinct event.
-     *
-     * How it works:
-     * - If similar events data is not available, do nothing
-     * - Each distinct event has a list of duplicate event indices
-     * - The shownDuplicates set tracks which duplicate events are currently visible
-     * - When toggling, it either shows or hides ALL duplicates for the distinct event
-     * - If any duplicates are currently shown, it hides all of them
-     * - If no duplicates are shown, it shows all of them
-     * - Creates new Set objects to trigger Svelte reactivity
-     *
-     * @param {Object} event - The distinct event object containing severity and index
-     */
     // True when any ERROR/CRITICAL event has duplicate entries available.
     const hasDuplicateEvents = function() {
         if (!hasSimilarEventsData) {
@@ -273,7 +268,13 @@
         });
     };
 
-    const toggleDuplicates = async function(event) {
+    /**
+     * Toggles the visibility of duplicate events for a given distinct event.
+     *
+     * @param {Object} event - The distinct event object containing severity and index
+     * @param {number} [anchorIndex] - Optional index used to keep the clicked entry in view
+     */
+    const toggleDuplicates = async function(event, anchorIndex = event.index) {
         if (event.severity !== 'ERROR' && event.severity !== 'CRITICAL') {
             return;
         }
@@ -281,11 +282,11 @@
             return;
         }
 
-        const eventKey = `event-${event.severity}-${event.index}`;
+        const anchorKey = `event-${event.severity}-${anchorIndex}`;
         let relativeOffset: number | null = null;
 
         if (eventContainer) {
-            const target = eventContainer.querySelector<HTMLElement>(`[data-event-key="${eventKey}"]`);
+            const target = eventContainer.querySelector<HTMLElement>(`[data-event-key="${anchorKey}"]`);
             if (target) {
                 const containerScrollTop = eventContainer.scrollTop;
                 relativeOffset = target.offsetTop - containerScrollTop;
@@ -323,7 +324,7 @@
 
         if (relativeOffset !== null && eventContainer) {
             await tick();
-            const updatedTarget = eventContainer.querySelector<HTMLElement>(`[data-event-key="${eventKey}"]`);
+            const updatedTarget = eventContainer.querySelector<HTMLElement>(`[data-event-key="${anchorKey}"]`);
             if (updatedTarget) {
                 eventContainer.scrollTop = Math.max(updatedTarget.offsetTop - relativeOffset, 0);
             }
@@ -388,6 +389,12 @@
                     val.severity === "ERROR" || val.severity === "CRITICAL"
                         ? eventDuplicates[`${val.severity}_${idx}`] ?? []
                         : [],
+                duplicateParent:
+                    val.severity === "ERROR" || val.severity === "CRITICAL"
+                        ? (duplicateParents[val.severity]?.[idx] !== undefined
+                            ? { severity: val.severity, index: duplicateParents[val.severity][idx] }
+                            : null)
+                        : null,
             }));
             eventIndex++;
             return [...acc, ...mappedEvents];
@@ -404,6 +411,7 @@
                 parsed.similars = val.similars;
                 parsed.duplicates = val.duplicates;
                 parsed.index = val.index;
+                parsed.duplicateParent = val.duplicateParent;
             } catch (error) {
                 parsed = {
                     time: new Date(0),
@@ -414,6 +422,7 @@
                     similars: val.similars,
                     duplicates: val.duplicates,
                     index: val.index,
+                    duplicateParent: val.duplicateParent,
                 };
             }
             return parsed;
@@ -445,13 +454,20 @@
                     }, {});
 
                     // Find duplicate pairs and mark events to hide
-                    distinctEvents = buildDistinctEvents(data.response);
+                    const { distinct, parentMap } = buildDistinctEvents(data.response);
+                    distinctEvents = distinct;
+                    duplicateParents = parentMap;
+                } else {
+                    duplicateParents = { ERROR: {}, CRITICAL: {}, WARNING: {}, NORMAL: {}, DEBUG: {} };
+                    distinctEvents = { ERROR: {}, CRITICAL: {}, WARNING: {}, NORMAL: {}, DEBUG: {} };
                 }
             }
         } catch (error) {
             console.error("Failed to fetch event embeddings:", error);
             sendMessage("error", "Failed to fetch event embeddings", "StructuredEvent::toggleSimilars");
             hasSimilarEventsData = false;
+            duplicateParents = { ERROR: {}, CRITICAL: {}, WARNING: {}, NORMAL: {}, DEBUG: {} };
+            distinctEvents = { ERROR: {}, CRITICAL: {}, WARNING: {}, NORMAL: {}, DEBUG: {} };
         }
         nemesisByKey = testRun.nemesis_data.reduce((acc, val) => {
             acc[calculateNemesisKey(val)] = val;
@@ -513,6 +529,7 @@
                     similars={event.similars}
                     duplicates={getNumberOfDuplicates(event)}
                     duplicatesVisible={areDuplicatesVisible(event)}
+                    duplicateParent={event.duplicateParent}
                     {toggleDuplicates}
                     on:issueAttach
                 />
