@@ -1,6 +1,6 @@
 <script lang="ts">
     import { faCheck, faTimes } from "@fortawesome/free-solid-svg-icons";
-    import { onMount } from "svelte";
+    import { onMount, tick } from "svelte";
     import Fa from "svelte-fa";
     import RawEvent from "./RawEvent.svelte";
     import StructuredEvent from "./StructuredEvent.svelte";
@@ -24,6 +24,7 @@
     });
     let hasSimilarEventsData = $state(false);
     let isLoading = $state(true);
+    let eventContainer: HTMLDivElement;
 
     const displayCategories = $state({
         CRITICAL: {
@@ -226,12 +227,23 @@
      *
      * @param {Object} event - The distinct event object containing severity and index
      */
-    const toggleDuplicates = function(event) {
+    const toggleDuplicates = async function(event) {
         if (event.severity !== 'ERROR' && event.severity !== 'CRITICAL') {
             return;
         }
         if (!hasSimilarEventsData) {
             return;
+        }
+
+        const eventKey = `event-${event.severity}-${event.index}`;
+        let relativeOffset: number | null = null;
+
+        if (eventContainer) {
+            const target = eventContainer.querySelector<HTMLElement>(`[data-event-key="${eventKey}"]`);
+            if (target) {
+                const containerScrollTop = eventContainer.scrollTop;
+                relativeOffset = target.offsetTop - containerScrollTop;
+            }
         }
 
         const duplicateIndices = distinctEvents[event.severity][event.index] || [];
@@ -262,6 +274,14 @@
         }
 
         shownDuplicates = newShownDuplicates;
+
+        if (relativeOffset !== null && eventContainer) {
+            await tick();
+            const updatedTarget = eventContainer.querySelector<HTMLElement>(`[data-event-key="${eventKey}"]`);
+            if (updatedTarget) {
+                eventContainer.scrollTop = Math.max(updatedTarget.offsetTop - relativeOffset, 0);
+            }
+        }
     };
 
     /**
@@ -363,7 +383,7 @@
 </script>
 
 {#if parsedEvents.length > 0}
-    <div class="p-2 event-container">
+    <div class="p-2 event-container" bind:this={eventContainer}>
         <div class="d-flex justify-content-end mb-2 rounded bg-light p-1">
             {#each Object.entries(displayCategories) as [category, info]}
                 <!-- svelte-ignore a11y_label_has_associated_control -->

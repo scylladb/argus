@@ -86,6 +86,7 @@
 </script>
 
 <div
+    data-event-key={`event-${event.severity}-${event.index}`}
     class:d-none={!display || shouldFilter(filterString)}
     class="mb-2 p-2 shadow rounded font-monospace"
     class:bg-info-light={duplicates === -1}
