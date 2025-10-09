@@ -14,6 +14,7 @@
         // eslint-disable-next-line @typescript-eslint/no-empty-function
         toggleDuplicates?: any;
         duplicatesVisible?: boolean;
+        duplicateParent?: { severity: string; index: number } | null;
         display?: boolean;
         filterString?: string;
     }
@@ -24,6 +25,7 @@
         duplicates = 0,
         toggleDuplicates = () => {},
         duplicatesVisible = false,
+        duplicateParent = null,
         display = true,
         filterString = ""
     }: Props = $props();
@@ -129,6 +131,13 @@
                     onclick={() => { toggleDuplicates(event); }}>
                     <Fa icon={faCopy} />
                     <span>{duplicatesVisible ? "Hide Duplicates" : `Show ${duplicates} Duplicates`}</span>
+                </button>
+            {:else if duplicates === -1 && duplicateParent}
+                <button
+                    class="btn btn-sm btn-outline-primary d-flex align-items-center gap-2"
+                    onclick={() => { toggleDuplicates(duplicateParent, event.index); }}>
+                    <Fa icon={faCopy} />
+                    <span>Hide Duplicates</span>
                 </button>
             {/if}
             <button
