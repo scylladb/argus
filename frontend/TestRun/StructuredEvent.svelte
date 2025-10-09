@@ -1,5 +1,5 @@
 <script lang="ts">
-    import {faCheckCircle, faCopy, faDotCircle, faLink, faPlus} from "@fortawesome/free-solid-svg-icons";
+    import {faArrowUpRightFromSquare, faCheckCircle, faCopy, faDotCircle, faLink, faPlus} from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
     import { sendMessage } from "../Stores/AlertStore";
     import ModalWindow from "../Common/ModalWindow.svelte";
@@ -13,8 +13,11 @@
         duplicates?: number;
         // eslint-disable-next-line @typescript-eslint/no-empty-function
         toggleDuplicates?: any;
+        duplicatesVisible?: boolean;
+        duplicateParent?: { severity: string; index: number } | null;
         display?: boolean;
         filterString?: string;
+        scrollToEvent?: (target: { severity: string; index: number }) => void;
     }
 
     let {
@@ -22,14 +25,14 @@
         similars = [],
         duplicates = 0,
         toggleDuplicates = () => {},
+        duplicatesVisible = false,
+        duplicateParent = null,
         display = true,
-        filterString = ""
+        filterString = "",
+        scrollToEvent = () => {}
     }: Props = $props();
 
     const dispatch = createEventDispatcher();
-
-    // Track if duplicates are shown for this event (local state)
-    let showingDuplicates = $state(false);
 
     let showSimilars = $state(false);
     let fetchingIssues = $state(false);
@@ -86,6 +89,7 @@
 </script>
 
 <div
+    data-event-key={`event-${event.severity}-${event.index}`}
     class:d-none={!display || shouldFilter(filterString)}
     class="mb-2 p-2 shadow rounded font-monospace"
     class:bg-info-light={duplicates === -1}
@@ -124,11 +128,24 @@
             {#if duplicates > 0}
                 <button
                     class="btn btn-sm d-flex align-items-center gap-2"
-                    class:btn-primary={showingDuplicates}
-                    class:btn-info={!showingDuplicates}
-                    onclick={() => { showingDuplicates = !showingDuplicates; toggleDuplicates(event); }}>
+                    class:btn-primary={duplicatesVisible}
+                    class:btn-info={!duplicatesVisible}
+                    onclick={() => { toggleDuplicates(event); }}>
                     <Fa icon={faCopy} />
-                    <span>{showingDuplicates ? "Hide Duplicates" : `Show ${duplicates} Duplicates`}</span>
+                    <span>{duplicatesVisible ? "Hide Duplicates" : `Show ${duplicates} Duplicates`}</span>
+                </button>
+            {:else if duplicates === -1 && duplicateParent}
+                <button
+                    class="btn btn-sm btn-outline-primary d-flex align-items-center gap-2"
+                    onclick={() => { toggleDuplicates(duplicateParent, event.index); }}>
+                    <Fa icon={faCopy} />
+                    <span>Hide Duplicates</span>
+                </button>
+                <button
+                    class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-2"
+                    onclick={() => { scrollToEvent(duplicateParent); }}>
+                    <Fa icon={faArrowUpRightFromSquare} />
+                    <span>source ({duplicateParent.index})</span>
                 </button>
             {/if}
             <button
