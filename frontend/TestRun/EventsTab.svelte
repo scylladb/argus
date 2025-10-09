@@ -213,6 +213,24 @@
         return duplicates.length;
     };
 
+    // True when every duplicate for the event is currently expanded.
+    const areDuplicatesVisible = function(event) {
+        if (event.severity !== 'ERROR' && event.severity !== 'CRITICAL') {
+            return false;
+        }
+        if (!hasSimilarEventsData) {
+            return false;
+        }
+        if (!distinctEvents[event.severity].hasOwnProperty(event.index)) {
+            return false;
+        }
+        const duplicateIndices = distinctEvents[event.severity][event.index] || [];
+        if (!duplicateIndices.length) {
+            return false;
+        }
+        return duplicateIndices.every(idx => shownDuplicates[event.severity].has(idx));
+    };
+
     /**
      * Toggles the visibility of duplicate events for a given distinct event.
      *
@@ -227,6 +245,34 @@
      *
      * @param {Object} event - The distinct event object containing severity and index
      */
+    // True when any ERROR/CRITICAL event has duplicate entries available.
+    const hasDuplicateEvents = function() {
+        if (!hasSimilarEventsData) {
+            return false;
+        }
+        return ['ERROR', 'CRITICAL'].some(severity =>
+            Object.values(distinctEvents[severity] ?? {}).some(duplicates => duplicates.length > 0)
+        );
+    };
+
+    // Checks whether the global view already has all duplicates visible.
+    const allDuplicatesShown = function() {
+        if (!hasDuplicateEvents()) {
+            return false;
+        }
+        return ['ERROR', 'CRITICAL'].every(severity => {
+            const duplicatesByEvent = Object.values(distinctEvents[severity] ?? {});
+            for (const duplicates of duplicatesByEvent) {
+                for (const idx of duplicates) {
+                    if (!shownDuplicates[severity].has(idx)) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        });
+    };
+
     const toggleDuplicates = async function(event) {
         if (event.severity !== 'ERROR' && event.severity !== 'CRITICAL') {
             return;
@@ -281,6 +327,41 @@
             if (updatedTarget) {
                 eventContainer.scrollTop = Math.max(updatedTarget.offsetTop - relativeOffset, 0);
             }
+        }
+    };
+
+    // Bulk apply duplicate visibility for ERROR/CRITICAL events.
+    const setAllDuplicatesVisibility = function(showAll: boolean) {
+        const newShownDuplicates = {
+            ERROR: new Set(),
+            CRITICAL: new Set(),
+            WARNING: new Set(shownDuplicates.WARNING),
+            NORMAL: new Set(shownDuplicates.NORMAL),
+            DEBUG: new Set(shownDuplicates.DEBUG)
+        };
+
+        if (showAll) {
+            ['ERROR', 'CRITICAL'].forEach(severity => {
+                Object.values(distinctEvents[severity] ?? {}).forEach(duplicates => {
+                    duplicates.forEach(idx => newShownDuplicates[severity].add(idx));
+                });
+            });
+        }
+
+        shownDuplicates = newShownDuplicates;
+    };
+
+    // Global toggle wired to toolbar button; preserves scroll position.
+    const toggleAllDuplicates = async function() {
+        if (!hasDuplicateEvents()) {
+            return;
+        }
+        const preservedScroll = eventContainer ? eventContainer.scrollTop : null;
+        const shouldHide = allDuplicatesShown();
+        setAllDuplicatesVisibility(!shouldHide);
+        if (preservedScroll !== null && eventContainer) {
+            await tick();
+            eventContainer.scrollTop = preservedScroll;
         }
     };
 
@@ -384,23 +465,36 @@
 
 {#if parsedEvents.length > 0}
     <div class="p-2 event-container" bind:this={eventContainer}>
-        <div class="d-flex justify-content-end mb-2 rounded bg-light p-1">
-            {#each Object.entries(displayCategories) as [category, info]}
-                <!-- svelte-ignore a11y_label_has_associated_control -->
-                <button
-                    class="ms-2 px-2 py-1 btn severity-{category.toLowerCase()}"
-                    onclick={() => (info.show = !info.show)}
-                >
-                    {#if info.show}
-                        <Fa icon={faCheck} />
-                    {:else}
-                        <Fa icon={faTimes} />
-                    {/if}
-                    {category}
-                    (<span class="pointer-help" title="Shown">{info.eventsSubmitted}</span> /
-                    <span class="pointer-help" title="Happened during the test">{info.totalEvents}</span>)
-                </button>
-            {/each}
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2 rounded bg-light p-1 justify-content-between">
+            <button
+                class="btn btn-sm btn-outline-primary"
+                onclick={toggleAllDuplicates}
+                disabled={!hasDuplicateEvents()}
+            >
+                {#if allDuplicatesShown()}
+                    Hide All Duplicates
+                {:else}
+                    Show All Duplicates
+                {/if}
+            </button>
+            <div class="d-flex justify-content-end flex-wrap">
+                {#each Object.entries(displayCategories) as [category, info]}
+                    <!-- svelte-ignore a11y_label_has_associated_control -->
+                    <button
+                        class="ms-2 px-2 py-1 btn severity-{category.toLowerCase()}"
+                        onclick={() => (info.show = !info.show)}
+                    >
+                        {#if info.show}
+                            <Fa icon={faCheck} />
+                        {:else}
+                            <Fa icon={faTimes} />
+                        {/if}
+                        {category}
+                        (<span class="pointer-help" title="Shown">{info.eventsSubmitted}</span> /
+                        <span class="pointer-help" title="Happened during the test">{info.totalEvents}</span>)
+                    </button>
+                {/each}
+            </div>
         </div>
         <div class="p-2">
             <input class="form-control" type="text" placeholder="Filter events" bind:value={filterString} />
@@ -418,6 +512,7 @@
                     {event}
                     similars={event.similars}
                     duplicates={getNumberOfDuplicates(event)}
+                    duplicatesVisible={areDuplicatesVisible(event)}
                     {toggleDuplicates}
                     on:issueAttach
                 />
