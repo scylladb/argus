@@ -366,6 +366,17 @@
         }
     };
 
+    const scrollToEvent = function(target: { severity: string; index: number } | null) {
+        if (!target || !eventContainer) {
+            return;
+        }
+        const anchorKey = `event-${target.severity}-${target.index}`;
+        const targetElement = eventContainer.querySelector<HTMLElement>(`[data-event-key="${anchorKey}"]`);
+        if (targetElement) {
+            targetElement.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+    };
+
     /**
      * @param {{last_events: string[], event_amount: int, severity: string }[]} events
      */
@@ -531,6 +542,7 @@
                     duplicatesVisible={areDuplicatesVisible(event)}
                     duplicateParent={event.duplicateParent}
                     {toggleDuplicates}
+                    {scrollToEvent}
                     on:issueAttach
                 />
             {:else}

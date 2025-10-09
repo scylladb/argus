@@ -1,5 +1,5 @@
 <script lang="ts">
-    import {faCheckCircle, faCopy, faDotCircle, faLink, faPlus} from "@fortawesome/free-solid-svg-icons";
+    import {faArrowUpRightFromSquare, faCheckCircle, faCopy, faDotCircle, faLink, faPlus} from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
     import { sendMessage } from "../Stores/AlertStore";
     import ModalWindow from "../Common/ModalWindow.svelte";
@@ -17,6 +17,7 @@
         duplicateParent?: { severity: string; index: number } | null;
         display?: boolean;
         filterString?: string;
+        scrollToEvent?: (target: { severity: string; index: number }) => void;
     }
 
     let {
@@ -27,7 +28,8 @@
         duplicatesVisible = false,
         duplicateParent = null,
         display = true,
-        filterString = ""
+        filterString = "",
+        scrollToEvent = () => {}
     }: Props = $props();
 
     const dispatch = createEventDispatcher();
@@ -138,6 +140,12 @@
                     onclick={() => { toggleDuplicates(duplicateParent, event.index); }}>
                     <Fa icon={faCopy} />
                     <span>Hide Duplicates</span>
+                </button>
+                <button
+                    class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-2"
+                    onclick={() => { scrollToEvent(duplicateParent); }}>
+                    <Fa icon={faArrowUpRightFromSquare} />
+                    <span>source ({duplicateParent.index})</span>
                 </button>
             {/if}
             <button
