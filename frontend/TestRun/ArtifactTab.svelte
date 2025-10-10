@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { faPlus } from "@fortawesome/free-solid-svg-icons";
+    import { faPlus, faDownload } from "@fortawesome/free-solid-svg-icons";
     import ArtifactRow from "./ArtifactRow.svelte";
     import { sendMessage } from "../Stores/AlertStore";
     import { createEventDispatcher } from "svelte";
@@ -9,7 +9,32 @@
 
     let logName = $state("");
     let logLink = $state("");
+    let isDownloading = $state(false);
+    let artifactRowRefs: any[] = $state([]);
     const dispatch = createEventDispatcher();
+    const DOWNLOAD_DELAY_MS = 500  // prevent blocking by the browser
+
+    const getArtifactDownloadLink = (logName: string) =>
+        `/api/v1/tests/${testInfo.test.plugin_name}/${testRun.id}/log/${logName}/download`;
+
+    const downloadAllArtifacts = () => {
+        if (!testRun?.logs?.length || isDownloading) return;
+
+        isDownloading = true;
+        let delay = 0;
+
+        for (let i = 0; i < artifactRowRefs.length; i++) {
+            setTimeout(() => {
+                artifactRowRefs[i]?.triggerDownload();
+
+                // Unlock button after the last download is triggered
+                if (i === artifactRowRefs.length - 1) {
+                    isDownloading = false;
+                }
+            }, delay);
+            delay += DOWNLOAD_DELAY_MS;
+        }
+    };
 
     const addLogLink = async function() {
         try {
@@ -55,15 +80,27 @@
 </script>
 
 <div>
-    <div class="p-2 mb-2">
+    <div class="p-2 mb-2 d-flex gap-2 flex-wrap">
         <button
             class="btn btn-success"
+            type="button"
             data-bs-toggle="collapse"
             data-bs-target="#collapseAddLink-{testRun.id}"
         >
             <Fa icon={faPlus}/>
             Add Log Link
         </button>
+        {#if testRun.logs.length > 0}
+            <button
+                class="btn btn-outline-primary ms-auto"
+                type="button"
+                onclick={downloadAllArtifacts}
+                disabled={isDownloading}
+            >
+                <Fa icon={faDownload}/>
+                {isDownloading ? 'Downloading...' : 'Download All'}
+            </button>
+        {/if}
     </div>
     <div class="m-2 collapse border rounded p-2" id="collapseAddLink-{testRun.id}">
         <div class="mb-2">
@@ -98,7 +135,7 @@
     </thead>
     <tbody>
         {#each testRun.logs as [name, link], idx}
-            <ArtifactRow artifactName={name} originalLink={link} artifactLink={`/api/v1/tests/${testInfo.test.plugin_name}/${testRun.id}/log/${name}/download`}/>
+            <ArtifactRow bind:this={artifactRowRefs[idx]} artifactName={name} originalLink={link} artifactLink={getArtifactDownloadLink(name)}/>
         {/each}
     </tbody>
 </table>
