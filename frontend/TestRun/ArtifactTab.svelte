@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { faPlus } from "@fortawesome/free-solid-svg-icons";
+    import { faPlus, faDownload } from "@fortawesome/free-solid-svg-icons";
     import ArtifactRow from "./ArtifactRow.svelte";
     import { sendMessage } from "../Stores/AlertStore";
     import { createEventDispatcher } from "svelte";
@@ -10,6 +10,30 @@
     let logName = $state("");
     let logLink = $state("");
     const dispatch = createEventDispatcher();
+    const DOWNLOAD_DELAY_MS = 800
+
+    const getArtifactDownloadLink = (logName: string) =>
+        `/api/v1/tests/${testInfo.test.plugin_name}/${testRun.id}/log/${logName}/download`;
+
+    const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    const downloadAllArtifacts = async () => {
+        if (!testRun?.logs?.length) return;
+        if (typeof document === "undefined") return;
+
+        for (const [logName] of testRun.logs) {
+            const downloadUrl = getArtifactDownloadLink(logName);
+            const linkElement = document.createElement("a");
+            linkElement.href = downloadUrl;
+            linkElement.setAttribute("download", "");
+            linkElement.style.display = "none";
+            document.body.appendChild(linkElement);
+            linkElement.click();
+            document.body.removeChild(linkElement);
+
+            await delay(DOWNLOAD_DELAY_MS);
+        }
+    };
 
     const addLogLink = async function() {
         try {
@@ -55,15 +79,26 @@
 </script>
 
 <div>
-    <div class="p-2 mb-2">
+    <div class="p-2 mb-2 d-flex gap-2 flex-wrap">
         <button
             class="btn btn-success"
+            type="button"
             data-bs-toggle="collapse"
             data-bs-target="#collapseAddLink-{testRun.id}"
         >
             <Fa icon={faPlus}/>
             Add Log Link
         </button>
+        {#if testRun.logs.length > 0}
+            <button
+                class="btn btn-outline-primary ms-auto"
+                type="button"
+                onclick={downloadAllArtifacts}
+            >
+                <Fa icon={faDownload}/>
+                Download All
+            </button>
+        {/if}
     </div>
     <div class="m-2 collapse border rounded p-2" id="collapseAddLink-{testRun.id}">
         <div class="mb-2">
@@ -98,7 +133,7 @@
     </thead>
     <tbody>
         {#each testRun.logs as [name, link], idx}
-            <ArtifactRow artifactName={name} originalLink={link} artifactLink={`/api/v1/tests/${testInfo.test.plugin_name}/${testRun.id}/log/${name}/download`}/>
+            <ArtifactRow artifactName={name} originalLink={link} artifactLink={getArtifactDownloadLink(name)}/>
         {/each}
     </tbody>
 </table>
