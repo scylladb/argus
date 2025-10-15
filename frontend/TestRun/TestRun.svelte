@@ -32,7 +32,7 @@
         build_id: string,
     }
 
-    interface NemesisInfo {
+    export interface NemesisInfo {
         class_name: string,
         name: string,
         duration: number,
@@ -144,6 +144,7 @@
     import PackagesInfo from "./PackagesInfo.svelte";
     import JUnitResults from "./jUnitResults.svelte";
     import ResultsTab from "./ResultsTab.svelte";
+    import SctEvents from "./SCT/SctEvents.svelte";
 
     interface Props {
         runId?: string;
@@ -404,6 +405,19 @@
                     </button>
                     <button
                         class="nav-link"
+                        class:active={activeTab === "sct-events"}
+                        id="nav-sct-events-tab-{runId}"
+                        data-bs-toggle="tab"
+                        data-bs-target="#nav-sct-events-{runId}"
+                        type="button"
+                        role="tab"
+                        onclick={() => setActiveTab("sct-events")}
+                        onkeydown={(e) => e.key === "Enter" && setActiveTab("sct-events")}
+                    >
+                        <Fa icon={faRssSquare} /> Events
+                    </button>
+                    <button
+                        class="nav-link"
                         class:active={activeTab === "events"}
                         id="nav-events-tab-{runId}"
                         data-bs-toggle="tab"
@@ -413,7 +427,7 @@
                         onclick={() => setActiveTab("events")}
                         onkeydown={(e) => e.key === "Enter" && setActiveTab("events")}
                     >
-                        <Fa icon={faRssSquare} /> Events
+                        <Fa icon={faRssSquare} /> Events (Legacy)
                     </button>
                     <button
                         class="nav-link"
@@ -568,6 +582,17 @@
                 >
                     {#if visitedTabs["events"]}
                         <EventsTab {testRun} on:issueAttach={(e) => submitIssue(e.detail.url, runId, testInfo.test.id)} />
+                    {/if}
+                </div>
+                <div
+                    class="tab-pane fade"
+                    class:show={activeTab === "sct-events"}
+                    class:active={activeTab === "sct-events"}
+                    id="nav-sct-events-{runId}"
+                    role="tabpanel"
+                >
+                    {#if visitedTabs["sct-events"]}
+                        <SctEvents {testRun} nemeses={testRun.nemesis_data} />
                     {/if}
                 </div>
                 <div
