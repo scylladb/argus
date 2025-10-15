@@ -172,6 +172,22 @@ export const NemesisStatusBackgrounds = {
     "succeeded": "table-success",
 };
 
+export const NemesisStatusBg = {
+    "started": "bg-info",
+    "running": "bg-warning",
+    "failed": "bg-danger",
+    "skipped": "bg-dark",
+    "succeeded": "bg-success",
+};
+
+export const NemesisStatusFg = {
+    "started": "text-dark",
+    "running": "text-dark",
+    "failed": "text-light",
+    "skipped": "text-light",
+    "succeeded": "text-light",
+};
+
 export const ResultCellStatusStyleMap = {
     "PASS": "table-success",
     "ERROR": "table-danger",

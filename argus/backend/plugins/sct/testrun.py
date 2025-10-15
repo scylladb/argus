@@ -69,7 +69,7 @@ class SCTEvent(Model):
 
     run_id = columns.UUID(partition_key=True, primary_key=True)
     severity = columns.Text(partition_key=True, primary_key=True)
-    ts = columns.DateTime(primary_key=True, clustering_order="DESC")
+    ts = columns.DateTime(primary_key=True, clustering_order="ASC")
     event_type = columns.Text()
     message = columns.Text(required=True)
 
@@ -310,7 +310,7 @@ class SCTTestRun(PluginModelBase):
 
         result = db.session.execute(prepared, parameters=params).all()
 
-        return list(result)
+        return sorted(list(result), key=lambda evt: evt["ts"])
 
     def get_all_events(self):
         return SCTEvent.filter(run_id=self.id, severity__in=[s.value for s in list(SCTEventSeverity)]).all()
