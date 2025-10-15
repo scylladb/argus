@@ -9,6 +9,7 @@ from typing import TypedDict
 from uuid import UUID
 from xml.etree import ElementTree
 from flask import g
+from argus.backend.db import ScyllaCluster
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.web import ArgusEventTypes, ErrorEventEmbeddings, CriticalEventEmbeddings
 from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTJunitReports, SCTTestRun, SubtestType
@@ -439,6 +440,17 @@ class SCTService:
             before = datetime.fromtimestamp(int(before), tz=UTC)
 
         return SCTTestRun.get_events_limited(run_id=UUID(run_id), before=before, severities=severities, per_partition_limit=limit)
+
+    @staticmethod
+    def count_events_by_severity(run_id: str, severity: SCTEventSeverity) -> int:
+        db = ScyllaCluster.get()
+        query = f"SELECT count(*) FROM {SCTEvent.table_name()} WHERE run_id = ? AND severity IN ?"
+        params = [UUID(run_id), [SCTEventSeverity(severity).value]]
+
+        prepared = db.prepare(query)
+
+        result = db.session.execute(prepared, parameters=params).one()
+        return result["count"]
 
     @staticmethod
     def submit_events(run_id: str, events: list[dict]) -> str:
