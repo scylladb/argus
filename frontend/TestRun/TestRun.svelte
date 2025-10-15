@@ -1,6 +1,4 @@
-<!-- @migration-task Error while migrating Svelte code: The arguments keyword cannot be used within the template or at the top level of a component
-https://svelte.dev/e/invalid_arguments_usage -->
-<script lang="ts" context="module">
+<script lang="ts" module>
     interface CloudNodesInfo {
         image_id: string,
         instance_type: string,
@@ -147,23 +145,32 @@ https://svelte.dev/e/invalid_arguments_usage -->
     import JUnitResults from "./jUnitResults.svelte";
     import ResultsTab from "./ResultsTab.svelte";
 
-    export let runId = "";
-    export let buildNumber = -1;
-    export let testInfo: TestInfo;
-    export let tab = "";
+    interface Props {
+        runId?: string;
+        buildNumber?: any;
+        testInfo: TestInfo;
+        tab?: string;
+    }
+
+    let {
+        runId = "",
+        buildNumber = $bindable(-1),
+        testInfo,
+        tab = ""
+    }: Props = $props();
 
 
     const dispatch = createEventDispatcher();
 
-    let testRun: SCTTestRun;
+    let testRun: SCTTestRun | undefined = $state();
     let runRefreshInterval: ReturnType<typeof setInterval>;
-    let activeTab: string = tab.toLowerCase() || "details";
-    let failedToLoad = false;
-    let jUnitFetched = false;
-    let jUnitResults: JUnitReport[] = [];
+    let activeTab: string = $state(tab.toLowerCase() || "details");
+    let failedToLoad = $state(false);
+    let jUnitFetched = $state(false);
+    let jUnitResults: JUnitReport[] = $state([]);
 
     // Track which tabs have been visited
-    let visitedTabs: Record<string, boolean> = {};
+    let visitedTabs: Record<string, boolean> = $state({});
     visitedTabs[activeTab] = true;
 
     const fetchTestRunData = async function () {
@@ -260,7 +267,7 @@ https://svelte.dev/e/invalid_arguments_usage -->
             <button
                 class="btn btn-sm btn-outline-dark"
                 title="Refresh"
-                on:click={() => {
+                onclick={() => {
                     fetchTestRunData();
                 }}><Fa icon={faRefresh} /></button
             >
@@ -269,7 +276,7 @@ https://svelte.dev/e/invalid_arguments_usage -->
             <button
                 class="btn btn-sm btn-outline-dark"
                 title="Close"
-                on:click={() => dispatch("closeRun", { id: runId })}
+                onclick={() => dispatch("closeRun", { id: runId })}
             >
                 <Fa icon={faTimes} />
             </button>
@@ -283,6 +290,7 @@ https://svelte.dev/e/invalid_arguments_usage -->
                         <RunStatusButton
                             {testRun}
                             on:statusUpdate={(e) => {
+                                if (!testRun) return;
                                 testRun.status = e.detail.status;
                                 dispatch("runStatusChange");
                             }}
@@ -290,6 +298,7 @@ https://svelte.dev/e/invalid_arguments_usage -->
                         <RunInvestigationStatusButton
                             {testRun}
                             on:investigationStatusChange={(e) => {
+                                if (!testRun) return;
                                 testRun.investigation_status = e.detail.status;
                                 dispatch("investigationStatusChange", e.detail);
                             }}
@@ -300,6 +309,7 @@ https://svelte.dev/e/invalid_arguments_usage -->
                     <RunAssigneeSelector
                         {testRun}
                         on:assigneeUpdate={(e) => {
+                            if (!testRun) return;
                             testRun.assignee = e.detail.assignee;
                         }}
                     />
@@ -316,13 +326,14 @@ https://svelte.dev/e/invalid_arguments_usage -->
                         data-bs-target="#nav-details-{runId}"
                         type="button"
                         role="tab"
-                        on:click={() => setActiveTab("details")}
-                        on:keydown={(e) => e.key === "Enter" && setActiveTab("details")}
+                        onclick={() => setActiveTab("details")}
+                        onkeydown={(e) => e.key === "Enter" && setActiveTab("details")}
                     >
                         <Fa icon={faInfoCircle} /> Details
                     </button>
                     {#if testRun.subtest_name && Object.values(Subtests).includes(testRun.subtest_name)}
-                        <svelte:component this={SubtestTabComponents[testRun.subtest_name]} {testRun} />
+                        {@const SvelteComponent = SubtestTabComponents[testRun.subtest_name]}
+                        <SvelteComponent {testRun} />
                     {/if}
                     <button
                         class="nav-link"
@@ -332,8 +343,8 @@ https://svelte.dev/e/invalid_arguments_usage -->
                         data-bs-target="#nav-screenshots-{runId}"
                         type="button"
                         role="tab"
-                        on:click={() => setActiveTab("screenshots")}
-                        on:keydown={(e) => e.key === "Enter" && setActiveTab("screenshots")}
+                        onclick={() => setActiveTab("screenshots")}
+                        onkeydown={(e) => e.key === "Enter" && setActiveTab("screenshots")}
                     >
                         <Fa icon={faImages} /> Screenshots
                     </button>
@@ -345,8 +356,8 @@ https://svelte.dev/e/invalid_arguments_usage -->
                         data-bs-target="#nav-resources-{runId}"
                         type="button"
                         role="tab"
-                        on:click={() => setActiveTab("resources")}
-                        on:keydown={(e) => e.key === "Enter" && setActiveTab("resources")}
+                        onclick={() => setActiveTab("resources")}
+                        onkeydown={(e) => e.key === "Enter" && setActiveTab("resources")}
                     >
                         <Fa icon={faCloud} /> Resources
                     </button>
@@ -358,8 +369,8 @@ https://svelte.dev/e/invalid_arguments_usage -->
                         data-bs-target="#nav-packages-{runId}"
                         type="button"
                         role="tab"
-                        on:click={() => setActiveTab("packages")}
-                        on:keydown={(e) => e.key === "Enter" && setActiveTab("packages")}
+                        onclick={() => setActiveTab("packages")}
+                        onkeydown={(e) => e.key === "Enter" && setActiveTab("packages")}
                     >
                         <Fa icon={faCodeBranch} /> Packages
                     </button>
@@ -372,8 +383,8 @@ https://svelte.dev/e/invalid_arguments_usage -->
                             data-bs-target="#nav-junit-{runId}"
                             type="button"
                             role="tab"
-                            on:click={() => setActiveTab("junit")}
-                            on:keydown={(e) => e.key === "Enter" && setActiveTab("junit")}
+                            onclick={() => setActiveTab("junit")}
+                            onkeydown={(e) => e.key === "Enter" && setActiveTab("junit")}
                         >
                             <Fa icon={faClipboard} /> Test Results
                         </button>
@@ -386,8 +397,8 @@ https://svelte.dev/e/invalid_arguments_usage -->
                         data-bs-target="#nav-results-{runId}"
                         type="button"
                         role="tab"
-                        on:click={() => setActiveTab("results")}
-                        on:keydown={(e) => e.key === "Enter" && setActiveTab("results")}
+                        onclick={() => setActiveTab("results")}
+                        onkeydown={(e) => e.key === "Enter" && setActiveTab("results")}
                     >
                         <Fa icon={faTable} /> Results
                     </button>
@@ -399,8 +410,8 @@ https://svelte.dev/e/invalid_arguments_usage -->
                         data-bs-target="#nav-events-{runId}"
                         type="button"
                         role="tab"
-                        on:click={() => setActiveTab("events")}
-                        on:keydown={(e) => e.key === "Enter" && setActiveTab("events")}
+                        onclick={() => setActiveTab("events")}
+                        onkeydown={(e) => e.key === "Enter" && setActiveTab("events")}
                     >
                         <Fa icon={faRssSquare} /> Events
                     </button>
@@ -412,8 +423,8 @@ https://svelte.dev/e/invalid_arguments_usage -->
                         data-bs-target="#nav-nemesis-{runId}"
                         type="button"
                         role="tab"
-                        on:click={() => setActiveTab("nemesis")}
-                        on:keydown={(e) => e.key === "Enter" && setActiveTab("nemesis")}
+                        onclick={() => setActiveTab("nemesis")}
+                        onkeydown={(e) => e.key === "Enter" && setActiveTab("nemesis")}
                     >
                         <Fa icon={faSpider} /> Nemesis
                     </button>
@@ -425,8 +436,8 @@ https://svelte.dev/e/invalid_arguments_usage -->
                         data-bs-target="#nav-logs-{runId}"
                         type="button"
                         role="tab"
-                        on:click={() => setActiveTab("logs")}
-                        on:keydown={(e) => e.key === "Enter" && setActiveTab("logs")}
+                        onclick={() => setActiveTab("logs")}
+                        onkeydown={(e) => e.key === "Enter" && setActiveTab("logs")}
                     >
                         <Fa icon={faBox} /> Logs
                     </button>
@@ -438,8 +449,8 @@ https://svelte.dev/e/invalid_arguments_usage -->
                         data-bs-target="#nav-discuss-{runId}"
                         type="button"
                         role="tab"
-                        on:click={() => setActiveTab("discuss")}
-                        on:keydown={(e) => e.key === "Enter" && setActiveTab("discuss")}
+                        onclick={() => setActiveTab("discuss")}
+                        onkeydown={(e) => e.key === "Enter" && setActiveTab("discuss")}
                     >
                         <Fa icon={faComments} /> Discussion
                     </button>
@@ -451,8 +462,8 @@ https://svelte.dev/e/invalid_arguments_usage -->
                         data-bs-target="#nav-issues-{runId}"
                         type="button"
                         role="tab"
-                        on:click={() => setActiveTab("issues")}
-                        on:keydown={(e) => e.key === "Enter" && setActiveTab("issues")}
+                        onclick={() => setActiveTab("issues")}
+                        onkeydown={(e) => e.key === "Enter" && setActiveTab("issues")}
                     >
                         <Fa icon={faCodeBranch} /> Issues
                     </button>
@@ -464,8 +475,8 @@ https://svelte.dev/e/invalid_arguments_usage -->
                         data-bs-target="#nav-activity-{runId}"
                         type="button"
                         role="tab"
-                        on:click={() => setActiveTab("activity")}
-                        on:keydown={(e) => e.key === "Enter" && setActiveTab("activity")}
+                        onclick={() => setActiveTab("activity")}
+                        onkeydown={(e) => e.key === "Enter" && setActiveTab("activity")}
                     >
                         <Fa icon={faExclamationTriangle} /> Activity
                     </button>
@@ -488,7 +499,8 @@ https://svelte.dev/e/invalid_arguments_usage -->
                     />
                 </div>
                 {#if testRun.subtest_name && Object.values(Subtests).includes(testRun.subtest_name)}
-                    <svelte:component this={SubtestTabBodyComponents[testRun.subtest_name]} {testRun} />
+                    {@const SubtestComponent = SubtestTabBodyComponents[testRun.subtest_name]}
+                    <SubtestComponent {testRun} />
                 {/if}
                 <div
                     class="tab-pane fade"
@@ -620,7 +632,7 @@ https://svelte.dev/e/invalid_arguments_usage -->
         </div>
     {:else}
         <div class="text-center p-2 m-1 d-flex align-items-center justify-content-center">
-            <span class="spinner-border me-4" /><span class="fs-4">Loading...</span>
+            <span class="spinner-border me-4"></span><span class="fs-4">Loading...</span>
         </div>
     {/if}
 </div>
