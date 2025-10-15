@@ -41,7 +41,7 @@
                 return 0;
             });
         }
-        return nemeses.sort((a, b) => {
+        return Array.from(nemeses).sort((a, b) => {
             if (a[sortHeaders[key]] > b[sortHeaders[key]]) {
                 return descending ? 1 : -1;
             } else if (b[sortHeaders[key]] > a[sortHeaders[key]]) {

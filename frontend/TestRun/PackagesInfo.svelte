@@ -41,7 +41,7 @@
             }
         };
 
-        return packages.sort((a, b) => {
+        return Array.from(packages).sort((a, b) => {
             if (getValue(a, key) > getValue(b, key)) {
                 return descending ? 1 : -1;
             } else if (getValue(b, key) > getValue(a, key)) {
