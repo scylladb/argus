@@ -119,6 +119,22 @@ export const WIDGET_TYPES = {
                 default: 0,
                 help: "Index of the highlight (for support multiple highlight widgets in one view)",
                 displayName: "Index"
+            },
+            defaultGroupItems: {
+                type: MultiStringValue,
+                default: [
+                    "dtest - release",
+                    "dtest - debug",
+                    "dtest - release with raft",
+                    "dtest - release with topology changes",
+                    "SCT investigations",
+                    "Drivers",
+                    "SBOM",
+                    "Azure image publish",
+                    "Release Notes"
+                ],
+                help: "List of action items created when new Action Items Group is created",
+                displayName: "Test Filters"
             }
         },
     },
