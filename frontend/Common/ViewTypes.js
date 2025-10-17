@@ -119,6 +119,12 @@ export const WIDGET_TYPES = {
                 default: 0,
                 help: "Index of the highlight (for support multiple highlight widgets in one view)",
                 displayName: "Index"
+            },
+            defaultGroupItems: {
+                type: MultiStringValue,
+                default: ['Changelog', "dtest - release", "dtest - debug", "SCT investigations", "Promote"],
+                help: "List of action items created when new Action Items Group is created",
+                displayName: "Test Filters"
             }
         },
     },

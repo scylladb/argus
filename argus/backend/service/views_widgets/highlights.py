@@ -10,6 +10,7 @@ from argus.backend.db import ScyllaCluster
 from argus.backend.models.view_widgets import WidgetHighlights, WidgetComment
 from argus.backend.models.web import ArgusNotificationTypes, ArgusNotificationSourceTypes, ArgusUserView, User
 from argus.backend.service.notification_manager import NotificationManagerService
+from argus.backend.util.common import strip_html_tags
 
 
 class NotFound(APIException):
@@ -18,7 +19,6 @@ class NotFound(APIException):
 
 class Forbidden(APIException):
     pass
-from argus.backend.util.common import strip_html_tags
 
 
 @dataclass
@@ -30,6 +30,7 @@ class Highlight:
     content: str
     archived_at: datetime
     comments_count: int
+    group: str | None
 
     @classmethod
     def from_db_model(cls, model: WidgetHighlights):
@@ -43,6 +44,7 @@ class Highlight:
             content=model.content,
             archived_at=archived_at,
             comments_count=model.comments_count,
+            group=model.group,
         )
 
 
@@ -63,6 +65,7 @@ class ActionItem(Highlight):
             content=model.content,
             archived_at=archived_at,
             comments_count=model.comments_count,
+            group=model.group or "General",
             assignee_id=model.assignee_id,
             completed=model.completed,
         )
@@ -122,6 +125,15 @@ class HighlightCreate:
     index: int
     content: str
     is_task: bool
+    group: str | None = None
+
+
+@dataclass
+class HighlightGroupCreate:
+    view_id: UUID
+    index: int
+    name: str
+    items: list[str]
 
 
 @dataclass
@@ -203,14 +215,20 @@ class HighlightsService:
     ) -> Highlight | ActionItem:
         mentions, content_stripped = self._process_mentions(payload.content)
 
+        group_value = None
+        if payload.is_task:
+            group_candidate = (payload.group or "General")
+            group_value = strip_html_tags(group_candidate).strip() or "General"
+
         highlight = WidgetHighlights(
             view_id=payload.view_id,
             index=payload.index,
             created_at=datetime.now(UTC),
             creator_id=creator,
             content=content_stripped,
+            group=group_value,
             completed=None if not payload.is_task else False,
-            archived=datetime.fromtimestamp(0, tz=UTC),
+            archived_at=datetime.fromtimestamp(0, tz=UTC),
             comments_count=0,
         )
         highlight.save()
@@ -220,6 +238,37 @@ class HighlightsService:
         if payload.is_task:
             return ActionItem.from_db_model(highlight)
         return Highlight.from_db_model(highlight)
+
+    def create_group(self, creator: UUID, payload: HighlightGroupCreate) -> list[ActionItem]:
+        if not payload.items:
+            return []
+
+        created_items: list[ActionItem] = []
+        group_name_raw = strip_html_tags(payload.name).strip()
+        if not group_name_raw:
+            raise APIException("Group name is required")
+        group_name = group_name_raw
+
+        for item in payload.items:
+            item_text_raw = strip_html_tags(item).strip()
+            if not item_text_raw:
+                continue
+            highlight = WidgetHighlights(
+                view_id=payload.view_id,
+                index=payload.index,
+                created_at=datetime.now(UTC),
+                creator_id=creator,
+                assignee_id=creator,
+                content=item_text_raw,
+                group=group_name,
+                completed=False,
+                archived_at=datetime.fromtimestamp(0, tz=UTC),
+                comments_count=0,
+            )
+            highlight.save()
+            created_items.append(ActionItem.from_db_model(highlight))
+
+        return created_items
 
     def archive_highlight(self, payload: HighlightArchive):
         entry = WidgetHighlights.objects(

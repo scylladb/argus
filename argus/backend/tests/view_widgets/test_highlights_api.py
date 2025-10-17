@@ -29,6 +29,7 @@ def test_create_highlight_should_return_created_highlight(notifications, flask_c
     assert response.json["response"]["created_at"] > now.timestamp()
     assert "completed" not in response.json["response"]
     assert "assignee_id" not in response.json["response"]
+    assert response.json["response"]["group"] is None
 
 
 @patch("argus.backend.service.views_widgets.highlights.HighlightsService._send_highlight_notifications")
@@ -47,10 +48,65 @@ def test_create_action_item_should_return_created_action_item(notifications, fla
     assert response.json["response"]["content"] == "Action item content"
     assert response.json["response"]["completed"] is False
     assert response.json["response"]["assignee_id"] is None
+    assert response.json["response"]["group"] == "General"
     assert response.json["response"]["archived_at"] == 0
     assert response.json["response"]["comments_count"] == 0
     assert response.json["response"]["creator_id"] == str(g.user.id)
     assert response.json["response"]["created_at"] > now.timestamp()
+
+
+def test_create_action_group_should_return_created_action_items(flask_client):
+    view_id = str(uuid4())
+    group_name = "2025.3.3"
+    template_items = ["dtest release", "weekly summary"]
+
+    response = flask_client.post(
+        "/api/v1/views/widgets/highlights/create_group",
+        data=json.dumps({
+            "view_id": view_id,
+            "index": 0,
+            "name": group_name,
+            "items": template_items,
+        }),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json["status"] == "ok"
+    assert len(response.json["response"]) == len(template_items)
+    for idx, item in enumerate(template_items):
+        created = response.json["response"][idx]
+        assert created["view_id"] == view_id
+        assert created["content"] == item
+        assert created["group"] == group_name
+        assert created["assignee_id"] == str(g.user.id)
+        assert created["completed"] is False
+
+
+def test_create_action_group_should_skip_empty_items(flask_client):
+    view_id = str(uuid4())
+    response = flask_client.post(
+        "/api/v1/views/widgets/highlights/create_group",
+        data=json.dumps({
+            "view_id": view_id,
+            "index": 0,
+            "name": "  <b>Milestone</b>  ",
+            "items": [
+                "First deliverable",
+                "   ",  # empty after trim
+                "<script>alert(1)</script>",
+            ],
+        }),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    created_items = response.json["response"]
+    assert len(created_items) == 2
+    assert created_items[0]["content"] == "First deliverable"
+    assert created_items[0]["group"] == "&lt;b&gt;Milestone&lt;/b&gt;"
+    assert created_items[1]["content"] == "&lt;script&gt;alert(1)&lt;/script&gt;"
+    assert created_items[1]["group"] == "&lt;b&gt;Milestone&lt;/b&gt;"
 
 
 def test_get_highlights_should_return_highlights_and_action_items(flask_client):
@@ -92,6 +148,7 @@ def test_get_highlights_should_return_highlights_and_action_items(flask_client):
     assert len(action_items) == 1
     assert highlights[0]["content"] == "Test highlight"
     assert action_items[0]["content"] == "Test action item"
+    assert action_items[0]["group"] == "General"
 
 
 def test_archive_highlight_should_mark_highlight_as_archived(flask_client):
