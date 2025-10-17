@@ -12,6 +12,7 @@ class WidgetHighlights(Model):
     creator_id = columns.UUID()
     assignee_id = columns.UUID()
     content = columns.Text()
+    group = columns.Text()
     completed = columns.Boolean(default=lambda: None)  # None means it's highlight, not an action item
     comments_count = columns.TinyInt()
 
