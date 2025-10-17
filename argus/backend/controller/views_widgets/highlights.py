@@ -14,6 +14,7 @@ from argus.backend.service.views_widgets.highlights import (
     CommentUpdate,
     CommentDelete,
     CommentCreate,
+    HighlightGroupCreate,
 )
 from argus.backend.util.common import get_payload
 
@@ -28,6 +29,16 @@ def create_highlight():
     service = HighlightsService()
     highlight = service.create(creator_id, payload)
     return {"status": "ok", "response": asdict(highlight)}
+
+
+@bp.route("/highlights/create_group", methods=["POST"])
+@api_login_required
+def create_highlight_group():
+    creator_id = g.user.id
+    payload = HighlightGroupCreate(**get_payload(request))
+    service = HighlightsService()
+    action_items = service.create_group(creator_id, payload)
+    return {"status": "ok", "response": [asdict(action) for action in action_items]}
 
 
 @bp.route("/highlights", methods=["GET"])
