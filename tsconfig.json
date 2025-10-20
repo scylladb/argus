@@ -5,8 +5,8 @@
     "compilerOptions": {
         "outDir": "./public/dist",
         "noImplicitAny": true,
-        "module": "es6",
-        "target": "es6",
+        "module": "esnext",
+        "target": "esnext",
         "jsx": "react",
         "strict": true,
         "forceConsistentCasingInFileNames": true,
