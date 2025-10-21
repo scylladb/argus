@@ -21,8 +21,8 @@
 
 <svelte:window onkeydown={handleKeyDown} />
 <div class="modal-window">
-    <div class="d-flex align-items-center justify-content-center p-4">
-        <div class="rounded bg-white p-4 {widthClass}">
+    <div class="modal-container d-flex align-items-center justify-content-center p-4">
+        <div class="modal-content rounded bg-white p-4 {widthClass}">
             <div class="mb-2 d-flex border-bottom pb-2">
                 <h5>
                     {#if title}{@render title()}{:else}<!-- optional fallback -->{/if}
@@ -60,5 +60,21 @@
         overflow-y: scroll;
         background-color: rgba(0, 0, 0, 0.55);
         z-index: 9999;
+    }
+
+    /* Responsive styles for smaller screens */
+    @media screen and (max-width: 768px) {
+        .h-50,
+        .w-75 {
+            width: 95% !important;
+        }
+
+        .modal-container {
+            padding: 0.5rem !important;
+        }
+
+        .modal-content {
+            padding: 1rem !important;
+        }
     }
 </style>
