@@ -157,6 +157,16 @@ def sct_events_get_by_severity(run_id: str, severity: str):
     }
 
 
+@bp.route("/<string:run_id>/events/<string:severity>/count", methods=["GET"])
+@api_login_required
+def sct_events_count_by_severity(run_id: str, severity: str):
+    result = SCTService.count_events_by_severity(run_id=run_id, severity=SCTEventSeverity(severity))
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
 @bp.route("/<string:run_id>/event/submit", methods=["POST"])
 @api_login_required
 def sct_event_submit(run_id: str):
