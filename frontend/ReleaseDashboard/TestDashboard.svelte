@@ -113,7 +113,8 @@
         user: {
             f: function (test) {
                 if (!this.state) return true;
-                return getAssigneesForTest(test.test.id, test.test.group_id, test.last_runs) == this.state?.id;
+                const assignees = getAssigneesForTest(assigneeList, test.test.id, test.test.group_id, test.last_runs);
+                return assignees.includes(this.state?.id);
             },
             op: (a, b) => a && b,
             state: undefined,

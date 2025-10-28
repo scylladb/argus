@@ -16,6 +16,10 @@
     const handleFilter = function(e) {
         dispatch("selected", e.detail);
     };
+
+    const handleClear = function(e) {
+        dispatch("selected", undefined);
+    };
 </script>
 
 <div class="w-100">
@@ -32,7 +36,7 @@
         clearable={true}
         searchable={true}
         on:select={handleFilter}
-        on:clear={handleFilter}
+        on:clear={handleClear}
     >
         <div slot="item" let:item let:index>
             <User {item} />
