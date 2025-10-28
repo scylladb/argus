@@ -26,7 +26,19 @@
         }
     };
 
+    const getPackageKey = function (pkg, idx) {
+        // Include the index to guarantee uniqueness when API returns duplicated package rows
+        return [
+            pkg?.name ?? "unknown",
+            pkg?.version ?? "unknown",
+            pkg?.build_id ?? "no-build",
+            pkg?.revision_id ?? "no-revision",
+            idx
+        ].join("|");
+    };
+
     const sortPackagesByKey = function (packages, key, descending) {
+        const data = packages ?? [];
         const getValue = function (pkg, key) {
             let path = sortHeaders[key];
             if (typeof path == "string") {
@@ -41,7 +53,8 @@
             }
         };
 
-        return packages.sort((a, b) => {
+        // Create a new array to avoid mutating the original
+        return [...data].sort((a, b) => {
             if (getValue(a, key) > getValue(b, key)) {
                 return descending ? 1 : -1;
             } else if (getValue(b, key) > getValue(a, key)) {
@@ -165,7 +178,7 @@
         </tr>
     </thead>
     <tbody>
-        {#each sortPackagesByKey(packages, sortHeader, sortAscending) as pkg (pkg.name)}
+        {#each sortPackagesByKey(packages, sortHeader, sortAscending) as pkg, idx (getPackageKey(pkg, idx))}
             <tr class:d-none={filterColumn(pkg)}>
                 <td>{pkg.name}</td>
                 <td>{pkg.version}</td>
