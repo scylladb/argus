@@ -40,14 +40,16 @@
     };
 
     const handleQuickSelect = function (e) {
-        let tests = e.detail.tests;
+        let tests = e.detail.tests ?? [];
+        const detailGroups = e.detail.groups ?? {};
         tests.forEach((v) => {
-            let group = stats.groups[v.test.group_id];
+            const groupStats = detailGroups[v.test.group_id] ?? stats?.groups?.[v.test.group_id];
+            const groupName = groupStats?.group?.name ?? v.test.group?.name ?? v.test.group_id ?? "Unknown group";
             handleTestClick({
                 name: v.test.name,
                 id: v.test.id,
                 assignees: [],
-                group: group.group.name,
+                group: groupName,
                 status: v.status,
                 start_time: v.start_time,
                 last_runs: v.last_runs,

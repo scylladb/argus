@@ -151,7 +151,11 @@
                                                 <button
                                                     class="btn btn-sm btn-light mb-1"
                                                     onclick={() => {
-                                                        dispatch("quickSelect", { tests: getTestsForStatus(stats, investigationStatus, status) });
+                                                        const groups = stats.groups ?? (stats.group?.id ? { [stats.group.id]: stats } : undefined);
+                                                        dispatch("quickSelect", {
+                                                            tests: getTestsForStatus(stats, investigationStatus, status),
+                                                            groups
+                                                        });
                                                     }}
                                                 >
                                                     <Fa icon={faChevronRight} />

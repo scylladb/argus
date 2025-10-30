@@ -311,14 +311,17 @@
     };
 
     const handleQuickSelect = function (e) {
-        let tests = e.detail.tests;
+        let tests = e.detail.tests ?? [];
+        const detailGroups = e.detail.groups ?? {};
         tests.forEach((v) => {
-            let group = stats.groups[v.test.group_id];
+            const groupStats = detailGroups[v.test.group_id] ?? stats?.groups?.[v.test.group_id];
+            const groupId = groupStats?.group?.id ?? v.test.group_id;
+            const groupAssignees = groupId ? assigneeList.groups?.[groupId] ?? [] : [];
             dispatch("testClick", {
                 name: v.test.name,
                 id: v.test.id,
-                assignees: [...(assigneeList.tests?.[v.test.id] ?? []), ...(assigneeList.groups?.[group.group.id] ?? [])],
-                group: group.group.name,
+                assignees: [...(assigneeList.tests?.[v.test.id] ?? []), ...groupAssignees],
+                group: groupStats?.group?.name ?? v.test.group?.name ?? groupId ?? "Unknown group",
                 status: v.status,
                 start_time: v.start_time,
                 last_runs: v.last_runs,
@@ -333,7 +336,7 @@
      */
     const quickTestFilter = function(stats, key) {
         let allTests = Object.values(stats.groups).reduce((tests, group) => [...tests, ...Object.values(group.tests)], []);
-        let evt = new CustomEvent("quickSelect", { detail: { tests: allTests.filter(key) } });
+        let evt = new CustomEvent("quickSelect", { detail: { tests: allTests.filter(key), groups: stats.groups } });
         handleQuickSelect(evt);
     };
 
