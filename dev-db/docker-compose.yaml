@@ -1,6 +1,9 @@
 services:
   alpha:
-    image: "scylladb/scylla:5.4.6"
+    image: "scylladb/scylla:2025.4.0-rc3"
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      - HOME=/tmp
     networks:
       scylla_bridge:
         ipv4_address: 172.18.0.2
@@ -8,8 +11,28 @@ services:
           - argus-alpha
     command: --smp 1 --overprovisioned 1 --io-setup 0
     volumes:
-      - ./alpha-data:/var/lib/scylla/data:rw
+      - ./scylla:/var/lib/scylla:rw
       - ./alpha-config:/etc/scylla:rw
+      - ./alpha-config.d:/etc/scylla.d:rw
+  vector-store:
+    image: "scylladb/vector-store:0.5.1"
+    environment:
+      - VECTOR_STORE_SCYLLADB_URI=172.18.0.2:9042
+      - VECTOR_STORE_URI=172.18.0.3:6080
+      - VECTOR_STORE_THREADS=1
+      - VECTOR_STORE_SCYLLADB_USERNAME=cassandra
+      - VECTOR_STORE_SCYLLADB_PASSWORD_FILE=/var/lib/vector-store/db_password
+    networks:
+      scylla_bridge:
+        ipv4_address: 172.18.0.3
+        aliases:
+          - vector-store
+    ports:
+      - "6080:6080"
+    volumes:
+      - ./vector-store:/var/lib/vector-store:rw
+      - ./vector-store:/etc/vector-store:ro
+
 networks:
   scylla_bridge:
     driver: bridge

@@ -11,7 +11,7 @@ from xml.etree import ElementTree
 from flask import g
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.web import ArgusEventTypes, ErrorEventEmbeddings, CriticalEventEmbeddings
-from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTJunitReports, SCTTestRun, SubtestType
+from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTJunitReports, SCTTestRun, SubtestType, SCTUnprocessedEvent
 from argus.common.sct_types import GeminiResultsRequest, PerformanceResultsRequest, RawEventPayload, ResourceUpdateRequest
 from argus.backend.plugins.sct.udt import (
     CloudInstanceDetails,
@@ -430,6 +430,18 @@ class SCTService:
         event.known_issue = req.known_issue
 
         event.save()
+
+        # Add to unprocessed events queue for ERROR and CRITICAL events
+        if event.severity in (SCTEventSeverity.ERROR.value, SCTEventSeverity.CRITICAL.value):
+            try:
+                unprocessed_event = SCTUnprocessedEvent()
+                unprocessed_event.run_id = event.run_id
+                unprocessed_event.severity = event.severity
+                unprocessed_event.ts = event.ts
+                unprocessed_event.save()
+                LOGGER.debug(f"Added event to unprocessed queue: run_id={run_id}, severity={event.severity}, ts={event.ts}")
+            except Exception as e:
+                LOGGER.error(f"Failed to add event to unprocessed queue: {e}", exc_info=True)
 
         return True
 
