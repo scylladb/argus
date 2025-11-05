@@ -9,6 +9,7 @@
         hiddenStatuses?: any;
         displayExtendedStats?: boolean;
         releaseStats?: any;
+        widgetId?: number;
     }
 
     let {
@@ -19,6 +20,7 @@
         hiddenStatuses = [],
         displayExtendedStats = false,
         releaseStats,
+        widgetId,
     }: Props = $props();
 
     const releaseStatsDefault = {
@@ -41,7 +43,7 @@
     {#if releaseStats?.total > 0}
         {#if showReleaseStats}
             <div class="w-100 mb-2">
-                <DisplayItem stats={releaseStats} displayNumber={displayExtendedStats} displayInvestigations={displayExtendedStats} {hiddenStatuses} on:quickSelect/>
+                <DisplayItem stats={releaseStats} displayNumber={displayExtendedStats} displayInvestigations={displayExtendedStats} {hiddenStatuses} {widgetId} on:quickSelect/>
             </div>
         {/if}
     {:else if releaseStats?.total == -1}
