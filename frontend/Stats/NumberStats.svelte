@@ -6,6 +6,7 @@
     import { createEventDispatcher } from "svelte";
     import { faChevronRight } from "@fortawesome/free-solid-svg-icons";
     interface Props {
+        widgetId?: number;
         displayNumber?: boolean;
         displayPercentage?: boolean;
         displayInvestigations?: boolean;
@@ -18,6 +19,7 @@
         displayPercentage = false,
         displayInvestigations = false,
         hiddenStatuses = [],
+        widgetId = -1,
         stats = {
         created: 0,
         running: 0,
@@ -151,7 +153,7 @@
                                                 <button
                                                     class="btn btn-sm btn-light mb-1"
                                                     onclick={() => {
-                                                        dispatch("quickSelect", { tests: getTestsForStatus(stats, investigationStatus, status) });
+                                                        dispatch("quickSelect", { tests: getTestsForStatus(stats, investigationStatus, status), widgetId: widgetId });
                                                     }}
                                                 >
                                                     <Fa icon={faChevronRight} />

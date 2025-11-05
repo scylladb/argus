@@ -81,8 +81,10 @@
 
     const handleQuickSelect = function (e) {
         let tests = e.detail.tests;
+        let widget = view.widget_settings.find(v => v.position == e.detail.widgetId);
+        const key = calculateWidgetStatsKey(widget);
         tests.forEach((v) => {
-            let group = stats.groups[v.test.group_id];
+            let group = stats[key].groups[v.test.group_id];
             handleTestClick({
                 name: v.test.name,
                 id: v.test.id,
