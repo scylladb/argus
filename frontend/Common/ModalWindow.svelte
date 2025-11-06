@@ -10,7 +10,7 @@
         body?: import('svelte').Snippet;
     }
 
-    let { widthClass = "h-50", title, body }: Props = $props();
+    let { widthClass = "w-50", title, body }: Props = $props();
 
     function handleKeyDown(event) {
         if (event.key === "Escape") {
@@ -48,6 +48,10 @@
         width: 50%;
     }
 
+    .w-50 {
+        width: 50%;
+    }
+
     .w-75 {
         width: 75%;
     }
@@ -64,7 +68,7 @@
 
     /* Responsive styles for smaller screens */
     @media screen and (max-width: 768px) {
-        .h-50,
+        .w-50,
         .w-75 {
             width: 95% !important;
         }
