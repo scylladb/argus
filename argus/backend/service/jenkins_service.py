@@ -123,21 +123,14 @@ class JenkinsService:
             repo = git_info["repo"]
             user = git_info["user"]
 
-        user_tokens = UserOauthToken.filter(user_id=g.user.id).all()
-        token = None
-        for tok in user_tokens:
-            if tok.kind == "github":
-                token = tok.token
-                break
-        if not token:
-            raise JenkinsServiceError("Github token not found")
-
+        token = current_app.config.get("GITHUB_ACCESS_TOKEN")
         response = requests.get(
             url=f"https://api.github.com/repos/{user}/{repo}/contents/{new_settings['pipelineFile']}?ref={new_settings['gitBranch']}",
             headers={
                 "Accept": "application/vnd.github+json",
                 "Authorization": f"Bearer {token}",
-            }
+            },
+            timeout=60
         )
 
         if response.status_code == 404:

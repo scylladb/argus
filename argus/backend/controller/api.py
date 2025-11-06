@@ -47,27 +47,6 @@ def app_version():
     })
 
 
-@bp.route("/profile/github/token")
-@api_login_required
-def get_github_oauth_token():
-    user_tokens = UserOauthToken.filter(user_id=g.user.id).all()
-    token = None
-    for tok in user_tokens:
-        if tok.kind == "github":
-            token = tok.token
-            break
-    if not token:
-        raise Exception("Github token not found")
-
-    res = jsonify({
-        "status": "ok",
-        "response": token
-    })
-    res.cache_control.max_age = 300
-
-    return res
-
-
 @bp.route("/releases")
 @api_login_required
 def releases():
