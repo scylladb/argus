@@ -75,6 +75,7 @@
         build_id: string,
         assignee: string,
         start_time: string,
+        end_time: string,
         build_job_url: string,
         subtest_name: string,
         status: string,
