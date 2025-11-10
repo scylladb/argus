@@ -38,20 +38,24 @@
         subtype?: string
     }
 
-    class TimelineEvent {
+    export class TimelineEvent {
         type: TimelineEventType
         event: NemesisInfo | SCTEvent
         ts: number
+        tsEnd: number | null
         severity: string
         opts: Options | null
         id: string
+        innerEvents: TimelineEvent[]
 
-        constructor(type: TimelineEventType, event: SCTEvent | NemesisInfo, ts: number, severity: SeverityValueType, opts: Options | null = null) {
+        constructor(type: TimelineEventType, event: SCTEvent | NemesisInfo, ts: number, severity: SeverityValueType, innerEvents: TimelineEvent[] | null = null, tsEnd: number | null = null, opts: Options | null = null) {
             this.type = type;
             this.event = event;
             this.ts = ts;
             this.severity = severity;
             this.opts = opts;
+            this.tsEnd = tsEnd;
+            this.innerEvents = innerEvents || [];
             this.id = `${this.type}-${this.severity}-${this.ts}`;
         }
     }
@@ -157,7 +161,7 @@
 
         return (await Promise.all(entries.map(async ([severity, enabled]) => {
             const old = events[severity] || [];
-            const localLimit = fromCounters ? Math.max(eventCounters[severity], 100) : limit;
+            const localLimit = fromCounters ? Math.max(eventCounters[severity], 10000) : limit;
             const before = cursor && old.length > 0 ? Date.parse(old[0].ts) / 1000 : null;
             let val: [string, SCTEvent[]] = enabled ? [severity, await fetchEventsBySeverity(severity, before, localLimit)] : [severity, []];
             return val;
@@ -167,45 +171,38 @@
         }, {} as EventStore);
     }
 
-    const fetchMore = async function() {
-        const newEvents = await fetchEvents(true, 100);
-        Object.keys(SCTEventSeverity).forEach((severity) => {
-            if (severity) {
-                events[severity] = [...events[severity], ...newEvents[severity]];
-            }
-        })
-        updateCounters();
-    }
-
     const handleSeverityClick = async function(severity: SeverityValueType) {
         severityFilter[severity] = !severityFilter[severity];
         events = await fetchEvents(false, null, true);
     }
 
     const createTimeline = function(nemeses: NemesisInfo[], events: EventStore) {
-        let nemesisEvents = nemeses
-            .flatMap((nem) => {
-                let res = [];
-                const start = new TimelineEvent(TimelineEventType.Nemesis, nem, nem.start_time * 1000, "nemesis", {subtype: "start"});
-                res.push(start);
-                if (nem.end_time) {
-                    const stop = new TimelineEvent(TimelineEventType.Nemesis, nem, nem.end_time * 1000, "nemesis", {subtype: "end"});
-                    //res.push(stop);
-                };
-                return res;
-            });
         let sctEvents = Object
             .entries(events)
             .flatMap(([severity, events]) => events.map((event) => {return {severity, event}}))
             .map(({severity, event}) => new TimelineEvent(TimelineEventType.Event, event, Date.parse(event.ts), severity));
-        let timeline = [...nemesisEvents, ...sctEvents].sort((l, r) => l.ts - r.ts);
+
+        let consumedEvents: TimelineEvent[] = [];
+
+        let nemesisEvents = nemeses
+            .map((nem, idx, src) => {
+                let nextTs = src[idx + 1]?.end_time || Date.parse(testRun.end_time) || nem.start_time;
+                const evt = new TimelineEvent(TimelineEventType.Nemesis, nem, nem.start_time * 1000, "nemesis", null, (nextTs || 0) * 1000, {subtype: "start"});
+                let nemesisEvents = sctEvents.filter((event) => evt.ts <= event.ts && event.ts < (evt.tsEnd || evt.ts));
+                evt.innerEvents = nemesisEvents;
+                consumedEvents = [...consumedEvents, ...nemesisEvents];
+                return evt;
+            });
+        let usedEventIds = consumedEvents.map(v => v.id);
+        let remainder = sctEvents.filter((event) => !usedEventIds.includes(event.id));
+        let timeline = [...nemesisEvents, ...remainder].sort((l, r) => l.ts - r.ts);
         return timeline;
     }
 
     let timeline: TimelineEvent[] = $derived(createTimeline(nemeses, events));
 
     onMount(async () => {
-        events = await fetchEvents(false, 100);
+        events = await fetchEvents(false, 10000);
         updateCounters();
         refreshTimer = setInterval(async () => {
             events = await fetchEvents(false, null, true);
@@ -234,19 +231,16 @@
         {#each timeline as event}
             {#if event.type == TimelineEventType.Event}
                 {#if severityFilter[event.severity]}
-                    <div style="background: linear-gradient(#333, #666) no-repeat center/2px 100%; padding-bottom: 24px">
+                    <div class="mb-2">
                         <SctEvent event={(event.event as SCTEvent)} filterState={severityFilter} options={event.opts || {}}/>
                     </div>
                 {/if}
             {:else if event.type == TimelineEventType.Nemesis}
                 <div class="mb-2">
-                    <SctNemesis event={(event.event as NemesisInfo)} filterState={severityFilter} options={event.opts || {}}/>
+                    <SctNemesis event={(event.event as NemesisInfo)} filterState={severityFilter} innerEvents={event.innerEvents} options={event.opts || {}}/>
                 </div>
             {/if}
         {/each}
-    </div>
-    <div>
-        <button class="btn btn-primary w-100" onclick={fetchMore}>Load More...</button>
     </div>
 </div>
 

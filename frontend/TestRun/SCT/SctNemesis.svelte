@@ -1,46 +1,57 @@
 <script lang="ts">
     import Fa from "svelte-fa";
     import type { NemesisInfo } from "../TestRun.svelte";
-    import type { EventSeverityFilter, Options } from "./SctEvents.svelte";
-    import { faArrowDown, faArrowRight, faArrowUp, faFlagCheckered, faGun } from "@fortawesome/free-solid-svg-icons";
+    import { SCTEventSeverity, type EventSeverityFilter, type Options, type SCTEvent, type TimelineEvent } from "./SctEvents.svelte";
+    import { faArrowDown, faArrowUp, faServer, faSpider, faTimeline } from "@fortawesome/free-solid-svg-icons";
     import { NemesisStatusBg, NemesisStatusFg } from "../../Common/TestStatus";
     import { timestampToISODate } from "../../Common/DateUtils";
+    import SctEvent from "./SctEvent.svelte";
 
     interface Props {
         event: NemesisInfo,
         filterState: EventSeverityFilter,
         options: Options,
+        innerEvents: TimelineEvent[],
     }
-    let { event, filterState, options }: Props = $props();
+    let { event, filterState, innerEvents, options }: Props = $props();
+
+    let hasErrors = $derived(innerEvents.filter((evt: TimelineEvent) => [SCTEventSeverity.CRITICAL, SCTEventSeverity.ERROR].includes((evt.event as SCTEvent).severity)).length > 0);
+    let expandEvents = $derived(hasErrors);
     let showTrace = $state(false);
 </script>
 
-<div class="overflow-hidden">
+<div class="overflow-hidden border p-1 shadow-sm rounded bg-white">
     <div class="d-flex align-items-center">
-        <div class="ms-2">
-            <Fa icon={ options.subtype == "end" ? faFlagCheckered : faArrowRight } /> <span class="fw-bold">{event.name}</span> has {options.subtype == "end" ? "ended" : "started"} on node <span class="fw-bold">{event.target_node.name} ({event.target_node.ip})</span>.
+        <div>
+            <Fa icon={faSpider} /> <span class="fw-bold">{event.name}</span>
         </div>
-        {#if options.subtype == "end"}
-            <div class="ms-auto"></div>
-            <div class="ms-2 rounded bg-light text-dark">
-                {timestampToISODate(event.end_time * 1000, true)}
-            </div>
-            <div class="ms-2 rounded {NemesisStatusBg[event.status as keyof typeof NemesisStatusBg]} {NemesisStatusFg[event.status as keyof typeof NemesisStatusFg]}">
-                {event.status.toLocaleUpperCase()}
-            </div>
-            {#if event.stack_trace}
-                <div class="ms-2"><button class="btn btn-sm btn-primary" onclick={() => (showTrace = !showTrace)}><Fa icon={showTrace ? faArrowUp : faArrowDown} /></button></div>
-            {/if}
-        {:else}
-            <div class="ms-auto"></div>
-            <div class="ms-2 rounded bg-light text-dark">
-                {timestampToISODate(event.start_time * 1000, true)}
-            </div>
+        <div class="ms-auto rounded bg-light text-dark">
+            {timestampToISODate(event.end_time * 1000, true)}
+        </div>
+        <div class="ms-2 px-1 rounded {NemesisStatusBg[event.status as keyof typeof NemesisStatusBg]} {NemesisStatusFg[event.status as keyof typeof NemesisStatusFg]}">
+            {event.status.toLocaleUpperCase()}
+        </div>
+        {#if innerEvents.length > 0}
+            <div class="ms-2"><button class="btn btn-sm btn-primary" onclick={() => (expandEvents = !expandEvents)}><Fa icon={expandEvents ? faArrowUp : faArrowDown} /></button></div>
         {/if}
     </div>
-    {#if options.subtype == "end"}
-        <div class:d-none={!showTrace}>
+    <div class="d-flex align-items-center mb-1">
+        <div class="rounded px-1 bg-light text-dark">
+            <Fa icon={faServer}/> {event.target_node.name} ({event.target_node.ip})
+        </div>
+    </div>
+    {#if event.stack_trace}
+        <div>
             <pre class="font-monospace p-2 rounded m-1 bg-light-two" style="white-space: pre-wrap">{event.stack_trace}</pre>
+        </div>
+    {/if}
+    {#if innerEvents.length > 0}
+        <div class="rounded shadow bg-light-one p-2 collapse" class:show={expandEvents}>
+            {#each innerEvents as event}
+                <div class="mb-2">
+                    <SctEvent event={(event.event as SCTEvent)} filterState={filterState} options={event.opts || {}}/>
+                </div>
+            {/each}
         </div>
     {/if}
 </div>
