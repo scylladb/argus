@@ -10,7 +10,8 @@
         body?: import('svelte').Snippet;
     }
 
-    let { widthClass = "h-50", title, body }: Props = $props();
+    let { widthClass = "w-50", title, body }: Props = $props();
+    let innerWidth = $state(0);
 
     function handleKeyDown(event) {
         if (event.key === "Escape") {
@@ -19,10 +20,10 @@
     }
 </script>
 
-<svelte:window onkeydown={handleKeyDown} />
+<svelte:window onkeydown={handleKeyDown} bind:innerWidth={innerWidth} />
 <div class="modal-window">
     <div class="d-flex align-items-center justify-content-center p-4">
-        <div class="rounded bg-white p-4 {widthClass}">
+        <div class="rounded bg-white p-4 {innerWidth >= 768 ? widthClass : "w-100"}">
             <div class="mb-2 d-flex border-bottom pb-2">
                 <h5>
                     {#if title}{@render title()}{:else}<!-- optional fallback -->{/if}
@@ -44,7 +45,7 @@
 </div>
 
 <style>
-    .h-50 {
+    .w-50 {
         width: 50%;
     }
 
