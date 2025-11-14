@@ -18,6 +18,7 @@
         display?: boolean;
         filterString?: string;
         scrollToEvent?: (target: { severity: string; index: number }) => void;
+        registerAnchor?: (node: HTMLElement, key: string) => { destroy?: () => void } | void;
     }
 
     let {
@@ -29,7 +30,8 @@
         duplicateParent = null,
         display = true,
         filterString = "",
-        scrollToEvent = () => {}
+        scrollToEvent = () => {},
+        registerAnchor = (node: HTMLElement, _key: string) => ({ destroy() {} })
     }: Props = $props();
 
     const dispatch = createEventDispatcher();
@@ -89,6 +91,7 @@
 </script>
 
 <div
+    use:registerAnchor={`event-${event.severity}-${event.index}`}
     data-event-key={`event-${event.severity}-${event.index}`}
     class:d-none={!display || shouldFilter(filterString)}
     class="mb-2 p-2 shadow rounded font-monospace"
