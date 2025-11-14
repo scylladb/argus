@@ -27,6 +27,19 @@
     let isLoading = $state(true);
     let eventContainer: HTMLDivElement;
 
+    // Registry of event DOM elements keyed by `event-<SEVERITY>-<INDEX>` for scrolling after toggling duplicates
+    let eventElements: Map<string, HTMLElement> = new Map();
+
+    // register anchors for scrolling back to parent event after toggling duplicates
+    const registerEventAnchor = (node: HTMLElement, key: string) => {
+        eventElements.set(key, node);
+        return {
+            destroy() {
+                eventElements.delete(key);
+            }
+        };
+    };
+
     const displayCategories = $state({
         CRITICAL: {
             show: true,
@@ -286,7 +299,7 @@
         let relativeOffset: number | null = null;
 
         if (eventContainer) {
-            const target = eventContainer.querySelector<HTMLElement>(`[data-event-key="${anchorKey}"]`);
+            const target = eventElements.get(anchorKey);
             if (target) {
                 const containerScrollTop = eventContainer.scrollTop;
                 relativeOffset = target.offsetTop - containerScrollTop;
@@ -324,7 +337,7 @@
 
         if (relativeOffset !== null && eventContainer) {
             await tick();
-            const updatedTarget = eventContainer.querySelector<HTMLElement>(`[data-event-key="${anchorKey}"]`);
+            const updatedTarget = eventElements.get(anchorKey);
             if (updatedTarget) {
                 eventContainer.scrollTop = Math.max(updatedTarget.offsetTop - relativeOffset, 0);
             }
@@ -371,7 +384,7 @@
             return;
         }
         const anchorKey = `event-${target.severity}-${target.index}`;
-        const targetElement = eventContainer.querySelector<HTMLElement>(`[data-event-key="${anchorKey}"]`);
+        const targetElement = eventElements.get(anchorKey);
         if (targetElement) {
             targetElement.scrollIntoView({ behavior: "smooth", block: "center" });
         }
@@ -543,6 +556,7 @@
                     duplicateParent={event.duplicateParent}
                     {toggleDuplicates}
                     {scrollToEvent}
+                    registerAnchor={registerEventAnchor}
                     on:issueAttach
                 />
             {:else}
