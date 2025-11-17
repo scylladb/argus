@@ -406,19 +406,6 @@
                     </button>
                     <button
                         class="nav-link"
-                        class:active={activeTab === "sct-events"}
-                        id="nav-sct-events-tab-{runId}"
-                        data-bs-toggle="tab"
-                        data-bs-target="#nav-sct-events-{runId}"
-                        type="button"
-                        role="tab"
-                        onclick={() => setActiveTab("sct-events")}
-                        onkeydown={(e) => e.key === "Enter" && setActiveTab("sct-events")}
-                    >
-                        <Fa icon={faRssSquare} /> Events
-                    </button>
-                    <button
-                        class="nav-link"
                         class:active={activeTab === "events"}
                         id="nav-events-tab-{runId}"
                         data-bs-toggle="tab"
@@ -428,7 +415,7 @@
                         onclick={() => setActiveTab("events")}
                         onkeydown={(e) => e.key === "Enter" && setActiveTab("events")}
                     >
-                        <Fa icon={faRssSquare} /> Events (Legacy)
+                        <Fa icon={faRssSquare} /> Events
                     </button>
                     <button
                         class="nav-link"
@@ -494,6 +481,19 @@
                         onkeydown={(e) => e.key === "Enter" && setActiveTab("activity")}
                     >
                         <Fa icon={faExclamationTriangle} /> Activity
+                    </button>
+                    <button
+                        class="nav-link"
+                        class:active={activeTab === "sct-events"}
+                        id="nav-sct-events-tab-{runId}"
+                        data-bs-toggle="tab"
+                        data-bs-target="#nav-sct-events-{runId}"
+                        type="button"
+                        role="tab"
+                        onclick={() => setActiveTab("sct-events")}
+                        onkeydown={(e) => e.key === "Enter" && setActiveTab("sct-events")}
+                    >
+                        <Fa icon={faRssSquare} /> Events (Experimental)
                     </button>
                 </div>
             </nav>
