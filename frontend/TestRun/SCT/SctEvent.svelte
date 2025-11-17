@@ -4,17 +4,20 @@
     import type { EventSeverityFilter, Options, SCTEvent } from "./SctEvents.svelte";
     import { faNode } from "@fortawesome/free-brands-svg-icons";
     import Fa from "svelte-fa";
-    import { faClipboard, faClock, faServer, faSpider } from "@fortawesome/free-solid-svg-icons";
+    import { faClipboard, faClock, faCopy, faServer, faSpider } from "@fortawesome/free-solid-svg-icons";
 
     interface Props {
         event: SCTEvent,
         filterState: EventSeverityFilter,
         options: Options,
+        filterString: string,
     }
-    let { event, filterState, options }: Props = $props();
+    let { event, filterState, options, filterString = $bindable() }: Props = $props();
+    const MESSAGE_CUTOFF = 600;
+    const SHORT_MESSAGE_LEN = 500;
 
     const sliceMessage = function (message: string): string {
-        return fullMessage ? message : message.slice(0, Math.max(Math.ceil(message.length * 0.15), 500));
+        return fullMessage && message.length <= MESSAGE_CUTOFF ? message : message.slice(0, SHORT_MESSAGE_LEN);
     }
 
     const messageRegex = /\((?<eventType>\w+) Severity\.(?<severity>[A-Z]+)\) (?<rawFields>.+)\n?/s;
@@ -64,7 +67,16 @@
     };
 
     let fullMessage = $state(false);
-    //let parsedMessage = $derived(parseEventMessage(event.message));
+    let parsedMessage = $derived(parseEventMessage(event.message));
+
+    const shouldFilter = function (filterString: string) {
+        if (!filterString) return false;
+        try {
+            return !(new RegExp(filterString.toLowerCase()).test((event.message.toLowerCase() ?? "")));
+        } catch {
+            return false;
+        }
+    };
 
     type ParsedFields = Record<string, string>;
 
@@ -81,54 +93,57 @@
 
 </script>
 
-<div class="ms-3 rounded overflow-hidden shadow-sm severity-border-{event.severity.toLowerCase()}">
-    <div class="border-bottom bg-titlebar text-light p-1">
-        <div class="d-flex mb-1">
-            <div class="rounded bg-dark p-1">{event.event_type}</div>
-            <div class="ms-2 p-1 bg-light text-dark rounded">Nothing</div>
-            <div class="ms-auto"></div>
-            {#if event.duration}
-                <div class="ms-1 p-1 rounded bg-dark text-light">{humanizeDuration(event.duration * 1000, { round: true, largest: 2})}</div>
-            {/if}
-            <div class="ms-2 p-1 bg-light text-dark rounded">{timestampToISODate(event.ts, true)}</div>
+{#if !shouldFilter(filterString)}
+    <div class="ms-3 rounded overflow-hidden shadow-sm severity-border-{event.severity.toLowerCase()}">
+        <div class="border-bottom bg-titlebar text-light p-1">
+            <div class="d-flex mb-1">
+                <div class="rounded bg-dark p-1">{event.event_type}</div>
+                <div class="ms-2 p-1 bg-light text-dark rounded">{parsedMessage.fields["period_type"]}</div>
+                <div class="ms-auto"></div>
+                {#if event.duration}
+                    <div class="ms-1 p-1 rounded bg-dark text-light">{humanizeDuration(event.duration * 1000, { round: true, largest: 2})}</div>
+                {/if}
+                <div class="ms-2 p-1 bg-light text-dark rounded">{timestampToISODate(event.ts, true)}</div>
+                <button class="ms-2 btn btn-sm btn-success" onclick={() => navigator.clipboard.writeText(event.message)}><Fa icon={faCopy}/></button>
+            </div>
+            <div class="d-flex flex-wrap">
+                {#if event.nemesis_name}
+                    <div class="ms-2 rounded p-1 bg-light text-dark">
+                        <Fa icon={faSpider}/> {event.nemesis_name}
+                    </div>
+                {/if}
+                {#if event.known_issue}
+                    <div class="ms-2 rounded p-1 bg-light text-dark">
+                        <Fa icon={faClipboard}/> {event.known_issue}
+                    </div>
+                {/if}
+                {#if event.nemesis_status}
+                    <div class="ms-2 rounded p-1 bg-light text-dark">
+                        {event.nemesis_status}
+                    </div>
+                {/if}
+                {#if event.received_timestamp}
+                    <div class="ms-2 rounded p-1 bg-warning text-dark">
+                        <Fa icon={faClock}/> {event.received_timestamp}
+                    </div>
+                {/if}
+                {#if event.target_node}
+                    <div class="ms-2 rounded p-1 bg-light text-dark text-truncate" style="max-width: 256px">
+                        <Fa icon={faServer}/>  {event.target_node}
+                    </div>
+                {/if}
+                {#if event.node}
+                    <div class="ms-2 rounded p-1 bg-light text-dark text-truncate" style="max-width: 256px">
+                        <Fa icon={faServer}/> {event.node}
+                    </div>
+                {/if}
+            </div>
         </div>
-        <div class="d-flex flex-wrap">
-            {#if event.nemesis_name}
-                <div class="ms-2 rounded p-1 bg-light text-dark">
-                    <Fa icon={faSpider}/> {event.nemesis_name}
-                </div>
-            {/if}
-            {#if event.known_issue}
-                <div class="ms-2 rounded p-1 bg-light text-dark">
-                    <Fa icon={faClipboard}/> {event.known_issue}
-                </div>
-            {/if}
-            {#if event.nemesis_status}
-                <div class="ms-2 rounded p-1 bg-light text-dark">
-                    {event.nemesis_status}
-                </div>
-            {/if}
-            {#if event.received_timestamp}
-                <div class="ms-2 rounded p-1 bg-warning text-dark">
-                    <Fa icon={faClock}/> {event.received_timestamp}
-                </div>
-            {/if}
-            {#if event.target_node}
-                <div class="ms-2 rounded p-1 bg-light text-dark text-truncate" style="max-width: 256px">
-                    <Fa icon={faServer}/>  {event.target_node}
-                </div>
-            {/if}
-            {#if event.node}
-                <div class="ms-2 rounded p-1 bg-light text-dark text-truncate" style="max-width: 256px">
-                    <Fa icon={faServer}/> {event.node}
-                </div>
-            {/if}
+        <div class="bg-body p-2">
+            <pre class="font-monospace p-2 rounded m-1 bg-light-two" style="white-space: pre-wrap !important">{sliceMessage(event.message)} {#if event.message.length > 500}<button class="btn btn-sm btn-light" onclick={() => fullMessage = !fullMessage}>...</button>{/if}</pre>
         </div>
     </div>
-    <div class="bg-body p-2">
-        <pre class="font-monospace p-2 rounded m-1 bg-light-two" style="white-space: pre-wrap !important">{sliceMessage(event.message)} {#if event.message.length > 500}<button class="btn btn-sm btn-light" onclick={() => fullMessage = !fullMessage}>...</button>{/if}</pre>
-    </div>
-</div>
+{/if}
 
 
 <style>

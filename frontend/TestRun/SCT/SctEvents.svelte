@@ -75,6 +75,7 @@
     import Fa from "svelte-fa";
     import queryString from "query-string";
     import SctNemesis from "./SctNemesis.svelte";
+    import { NemesisStatusBg, NemesisStatuses, TestStatus } from "../../Common/TestStatus";
 
     interface Props {
         testRun: SCTTestRun,
@@ -92,6 +93,17 @@
         NORMAL: false,
         DEBUG: false,
     });
+
+    let nemesisFilter = $state({
+        "started": false,
+        "running": true,
+        "failed": true,
+        "skipped": false,
+        "succeeded": false,
+    });
+
+    let eventFilterString = $state("");
+    let nemesisFilterString = $state("");
 
 
     const countEventsBySeverity = async function (severity: SeverityValueType): Promise<SCTEvent[]> {
@@ -176,6 +188,12 @@
         events = await fetchEvents(false, null, true);
     }
 
+
+    const handleNemesisFilterClick = async function(filter: string) {
+        nemesisFilter[filter as keyof typeof nemesisFilter] = !nemesisFilter[filter as keyof typeof nemesisFilter];
+    }
+
+
     const createTimeline = function(nemeses: NemesisInfo[], events: EventStore) {
         let sctEvents = Object
             .entries(events)
@@ -205,8 +223,13 @@
         events = await fetchEvents(false, 10000);
         updateCounters();
         refreshTimer = setInterval(async () => {
+            if ([TestStatus.ABORTED, TestStatus.PASSED, TestStatus.FAILED, TestStatus.TEST_ERROR].includes(testRun.status)) {
+                clearInterval(refreshTimer);
+                refreshTimer = undefined;
+                return;
+            }
             events = await fetchEvents(false, null, true);
-        }, 30 * 1000);
+        }, 60 * 1000);
     });
 
     onDestroy(() => {
@@ -216,6 +239,16 @@
 
 
 <div class="p-2">
+    <div>
+        <div class="d-flex align-items-center mb-2">
+            <div class="me-2 flex-fill">
+                <input class="form-control" type="text" placeholder="Filter events..." bind:value={eventFilterString} />
+            </div>
+            <div class="flex-fill">
+                <input class="form-control" type="text" placeholder="Filter nemeses..." bind:value={nemesisFilterString} />
+            </div>
+        </div>
+    </div>
     <div class="d-flex mb-2 justify-content-end align-items-center">
         {#each Object.values(SCTEventSeverity) as severity}
             <button class="btn me-2 severity-{severity.toLowerCase()}" onclick={() => handleSeverityClick(severity)}>
@@ -227,18 +260,27 @@
             </button>
         {/each}
     </div>
+    <div class="d-flex mb-2 justify-content-end align-items-ccenter">
+        {#each Object.values(NemesisStatuses) as nemesisStatus}
+            <button class="btn me-2 text-light {NemesisStatusBg[nemesisStatus]}" onclick={() => handleNemesisFilterClick(nemesisStatus)}>
+                <Fa icon={nemesisFilter[nemesisStatus as keyof typeof nemesisFilter] ? faCheck : faTimes}/> {nemesisStatus.toLocaleUpperCase()}
+            </button>
+        {/each}
+    </div>
     <div class="p-2 bg-light-one rounded" style="max-height: 1024px; overflow-y: scroll">
         {#each timeline as event}
             {#if event.type == TimelineEventType.Event}
                 {#if severityFilter[event.severity]}
                     <div class="mb-2">
-                        <SctEvent event={(event.event as SCTEvent)} filterState={severityFilter} options={event.opts || {}}/>
+                        <SctEvent event={(event.event as SCTEvent)} filterState={severityFilter} options={event.opts || {}} bind:filterString={eventFilterString}/>
                     </div>
                 {/if}
             {:else if event.type == TimelineEventType.Nemesis}
-                <div class="mb-2">
-                    <SctNemesis event={(event.event as NemesisInfo)} filterState={severityFilter} innerEvents={event.innerEvents} options={event.opts || {}}/>
-                </div>
+                {#if event.innerEvents.filter((e) => [SCTEventSeverity.CRITICAL, SCTEventSeverity.ERROR].includes((e.event as SCTEvent).severity)).length > 0 || nemesisFilter[event.event.status]}
+                    <div class="mb-2">
+                        <SctNemesis event={(event.event as NemesisInfo)} filterState={severityFilter} innerEvents={event.innerEvents} options={event.opts || {}} bind:filterString={nemesisFilterString} bind:eventFilterString/>
+                    </div>
+                {/if}
             {/if}
         {/each}
     </div>
