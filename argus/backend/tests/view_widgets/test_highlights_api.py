@@ -154,6 +154,7 @@ def test_get_highlights_should_return_highlights_and_action_items(flask_client):
 def test_archive_highlight_should_mark_highlight_as_archived(flask_client):
     view_id = str(uuid4())
     created_at = datetime.now(UTC)
+    created_at = created_at - timedelta(seconds=1)
     creator_id = g.user.id
     highlight_entry = WidgetHighlights(
         view_id=UUID(view_id),
