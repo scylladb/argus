@@ -285,8 +285,7 @@
                 maintainAspectRatio: false,
                 interaction: { mode: "index", intersect: true, axis: "x" },
                 onHover: (event, chartElements) => {
-                    (event.native?.target as HTMLCanvasElement).style.cursor =
-                        chartElements.length > 0 ? "pointer" : "default";
+                    event.native.target.style.cursor = chartElements.length > 0 ? "pointer" : "default";
                 },
                 scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } },
                 plugins: { title: { display: true, text: "Build Hierarchy Stats" }, legend: { position: "bottom" } },
@@ -334,8 +333,7 @@
                 maintainAspectRatio: false,
                 interaction: { mode: "index", intersect: true, axis: "x" },
                 onHover: (event, chartElements) => {
-                    (event.native?.target as HTMLCanvasElement).style.cursor =
-                        chartElements.length > 0 ? "pointer" : "default";
+                    event.native.target.style.cursor = chartElements.length > 0 ? "pointer" : "default";
                 },
                 scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } },
                 plugins: {
