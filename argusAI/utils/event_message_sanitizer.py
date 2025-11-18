@@ -1,3 +1,4 @@
+import os
 import re
 from datetime import datetime
 
@@ -107,6 +108,7 @@ class MessageSanitizer:
             self.remove_special_chars,
             self.normalize_whitespace,
         ]
+        os.makedirs("logs", exist_ok=True)
         self.sanitized_messages_fp = open(
             "logs/sanitized_messages_" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".log", "w"
         )
