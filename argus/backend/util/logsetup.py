@@ -76,5 +76,9 @@ def setup_application_logging(log_level=logging.INFO):
                 'level': log_level,
                 'handlers': ['main']
             },
+            'argusAI': {
+                'level': log_level,
+                'handlers': ['main']
+            },
         }
     })

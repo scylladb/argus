@@ -55,7 +55,7 @@ def argus_db():
         need_sync_models = False
     except NotFound:
         container = docker_client.containers.run(
-            "scylladb/scylla-enterprise:2024.1.10",
+            "scylladb/scylla:2025.4.0-rc4",
             name=container_name,
             detach=True,
             ports={'9042/tcp': 9042},
