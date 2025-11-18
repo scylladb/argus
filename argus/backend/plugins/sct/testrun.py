@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import Optional
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from cassandra.cqlengine import columns
 from cassandra.cqlengine.models import _DoesNotExist, Model
@@ -91,6 +91,14 @@ class SCTEvent(Model):
     def table_name(cls):
         return cls.__table_name__
 
+
+class SCTUnprocessedEvent(Model):
+    """Table to track events that need embedding generation."""
+    __table_name__ = "sct_unprocessed_events"
+
+    run_id = columns.UUID(partition_key=True)
+    severity = columns.Text(primary_key=True, clustering_order="ASC")
+    ts = columns.DateTime(primary_key=True, clustering_order="DESC")
 
 
 class SCTTestRun(PluginModelBase):
