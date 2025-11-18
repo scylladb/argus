@@ -16,3 +16,4 @@ force_schema_commit_log: true
 experimental_features:
   - alternator-streams
   - udf
+vector_store_uri: 172.18.0.3:6080
