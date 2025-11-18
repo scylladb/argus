@@ -213,9 +213,9 @@ Cluster size: {test_run?.cloud_setup?.db_node?.node_amount ?? "Unknown amount of
 
 Scylla Nodes used in this run:
 {#each filterDbNodes(test_run.allocated_resources) as resource}
-    - {resource.name} ({resource.instance_info.public_ip} | {resource.instance_info.private_ip}) (shards: {resource.instance_info.shards_amount}){"\n"}
+- {resource.name} ({resource.instance_info.public_ip} | {resource.instance_info.private_ip}) (shards: {resource.instance_info.shards_amount}){"\n"}
 {:else}
-    **No resources left at the end of the run**
+**No resources left at the end of the run**
 {/each}
 
 OS / Image: `{test_run?.cloud_setup?.db_node?.image_id ?? "No image"}` ({test_run?.sct_runner_host?.provider ?? "NO RUNNER"}: {test_run?.sct_runner_host?.region ?? "NO RUNNER"})
@@ -224,7 +224,7 @@ Test: `{test?.name}`
 Test id: `{test_run.id}`
 Test name: `{test_run.build_id}`
 {#if test_run.test_method}
-    Test method: `{test_run.test_method}`
+Test method: `{test_run.test_method}`
 {/if}
 Test config file(s):
 
@@ -318,7 +318,7 @@ Test: `{test?.name}`
 Test id: `{test_run.id}`
 Test name: `{test_run.build_id}`
 {#if test_run.test_method}
-    Test method: `{test_run.test_method}`
+Test method: `{test_run.test_method}`
 {/if}
 Test config file(s):
 
