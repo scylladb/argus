@@ -31,6 +31,7 @@
     let newView = $state(Object.assign({}, VIEW_CREATE_TEMPLATE));
     let selectedItems = $state([]);
     let lockForm = $state(false);
+    let draggedWidget = $state(null);
     let editingExistingView = $state(false);
     let testSearcherValue = $state();
     let errorPopup = $state(false);
@@ -340,6 +341,25 @@
         sendMessage("error", message, "ViewManager::validateNewView");
     };
 
+    const handleWidgetDrag = function (widgetSettings) {
+        draggedWidget = widgetSettings;
+    };
+
+    const handleWidgetDragOver = function (widgetSettings) {
+        let draggedIndex = newWidgets.findIndex((w) => w.position == draggedWidget.position);
+        let draggedOverIndex = newWidgets.findIndex((w) => w.position == widgetSettings.position);
+        if (draggedIndex == draggedOverIndex) return;
+        let oldWidget = newWidgets[draggedIndex];
+        newWidgets[draggedIndex] = newWidgets[draggedOverIndex];
+        newWidgets[draggedOverIndex] = oldWidget;
+
+    };
+
+    const handleWidgetDragEnd = function (widgetSettings) {
+        draggedWidget = null;
+        reflowWidgetPositions();
+    };
+
     const resetForm = function () {
         newWidgets = [];
         selectedItems = [];
@@ -463,7 +483,14 @@
                             </button>
                         </div>
                         {#each newWidgets as widget, idx (widget.position)}
-                            <ViewWidget bind:widgetSettings={newWidgets[idx]} items={newView.items} on:removeWidget={removeWidget}/>
+                            <ViewWidget
+                                bind:widgetSettings={newWidgets[idx]}
+                                items={newView.items}
+                                on:removeWidget={removeWidget}
+                                drag={(widgetSettings) => handleWidgetDrag(widgetSettings)}
+                                dragover={(widgetSettings) => handleWidgetDragOver(widgetSettings)}
+                                dragend={(widgetSettings) => handleWidgetDragEnd(widgetSettings)}
+                            />
                         {/each}
                     </div>
                 </div>
