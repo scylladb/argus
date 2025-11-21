@@ -462,9 +462,9 @@ def test_subtests(testdir, requests_mock):  # pylint: disable=redefined-outer-na
     result = testdir.runpytest("--argus-post-reports", "-v")
 
     # fnmatch_lines does an assertion internally
-    result.stdout.fnmatch_lines(["*::test_failing_subtests * SUBFAIL*"])
-    result.stdout.fnmatch_lines(["*::test_failing_subtests * SUBPASS*"])
-    result.stdout.fnmatch_lines(["*::test_failing_subtests PASSED*"])
+    result.stdout.fnmatch_lines(["*::test_failing_subtests SUBFAILED?failed subtest?*"])
+    result.stdout.fnmatch_lines(["*::test_failing_subtests SUBPASSED?success subtest?*"])
+    result.stdout.fnmatch_lines(["*::test_failing_subtests FAILED*"])
 
     # make sure that that we get a '1' exit code for the testsuite
     assert result.ret == 1
@@ -473,7 +473,7 @@ def test_subtests(testdir, requests_mock):  # pylint: disable=redefined-outer-na
     report = json.loads(requests_mock.request_history[-1].text)
     assert report["name"] == "test_subtests.py::test_failing_subtests"
     assert "subtest" not in report["user_fields"]
-    assert report["status"] == "passed"
+    assert report["status"] == "failure"
 
     report = json.loads(requests_mock.request_history[-2].text)
     assert report["name"] == "test_subtests.py::test_failing_subtests"
