@@ -46,7 +46,7 @@ argus-reporter  = "pytest_argus_reporter"
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=3.0",
+    "pytest ~= 9.0.0",
     "pre-commit",
     "requests-mock",
     "codecov",
