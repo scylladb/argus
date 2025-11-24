@@ -1,0 +1,29 @@
+{% macro render_partial(options) %}
+<div class="table-responsive">
+    <h2><a class="btn-link-dark" href="http://argus.scylladb.com/tests/scylla-cluster-tests/{{ options['run_id' ]}}/resources">Resources</a></h2>
+    <table class="table table-responsive table-bordered">
+        <thead>
+            <tr>
+                <th>Status</th>
+                <th>Backend</th>
+                <th>Type</th>
+                <th>Instance</th>
+                <th>Name</th>
+                <th>Region</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for resource in options["resources"] | sort(attribute="name") | selectattr("state", "eq", "running") %}
+            <tr style="text-align: center">
+                <td>{{ resource["state"] }}</td>
+                <td>{{ resource["instance_info"]["provider"] }}</td>
+                <td>{{ resource["resource_type"] }}</td>
+                <td>{{ resource["instance_info"]["instance_type"] }}</td>
+                <td>{{ resource["name"] }}</td>
+                <td>{{ resource["instance_info"]["region"] }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{%- endmacro %}

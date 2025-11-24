@@ -1,0 +1,9 @@
+{% macro render_partial(options) %}
+<div style="margin-bottom: 0.25rem;">
+    <div style="text-align: center">
+        <a class="btn-link" href="http://argus.scylladb.com/tests/scylla-cluster-tests/{{ options['id'] }}">
+            <span style="vertical-align: middle; margin-right: 4px; width: 16px; height: 16px; border-radius: 50%; display: inline-block; background-color: {{ options['status'] | status_to_color }}"></span><span style="display: inline-block; vertical-align: middle; text-decoration: underline; color: black">{{ options["build_id"] }}#{{ options["build_number"] }}</span>
+        </a>
+    </div>
+</div>
+{%- endmacro %}

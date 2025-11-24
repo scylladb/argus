@@ -1,0 +1,29 @@
+{% macro render_partial(options) %}
+<div>
+    <h2><a class="btn-link-dark" href="http://argus.scylladb.com/tests/scylla-cluster-tests/{{ options['run_id' ]}}/nemesis">Nemesis</a></h2>
+    <div class="table-responsive">
+        <table class="table table-responsive table-bordered">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Target</th>
+                <th>Status</th>
+                <th>Start</th>
+                <th>Duration</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for nemesis in options["nemesis"] | sort(attribute="{}".format(options["sort_order"][0]), reverse=True if options["sort_order"][1] == "desc" else False) %}
+            <tr style="font-size: 1rem;">
+                <td>{{ nemesis["name"] }}</td>
+                <td>{{ nemesis["target_node"]["name"] }}</td>
+                <td title="{{ nemesis['status'].capitalize() }}">{{ nemesis["status"] | nemesis_status_to_emoji }}</td>
+                <td>{{ nemesis["start_time"] | from_timestamp | formatted_date }}</td>
+                <td>{{ nemesis["start_time"]  | nemesis_duration(nemesis["end_time"])  }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</div>
+{%- endmacro %}

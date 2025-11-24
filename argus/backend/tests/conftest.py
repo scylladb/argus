@@ -160,7 +160,7 @@ def results_service(argus_db):
 def get_fake_test_run(
         test: ArgusTest,
         schema_version: str = "1.0.0",
-        job_url: str = "http://example.com",
+        job_url: str = "http://example.com/job/42",
         started_by: str = "default_user",
         commit_id: str = "default_commit_id",
         sct_config: dict | None = None,

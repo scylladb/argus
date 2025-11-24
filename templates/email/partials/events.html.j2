@@ -1,0 +1,23 @@
+{% macro render_partial(options) %}
+<div>
+    <h2><a class="btn-link-dark" href="http://argus.scylladb.com/tests/scylla-cluster-tests/{{ options['run_id' ]}}/events">Events</a></h2>
+    <div>
+    {% for event in options["events"] %}
+        <div style="padding: 0.5rem; margin-bottom: 1rem; border-radius: 12px; border: solid 1px gray; background-color: rgb(236, 236, 236)">
+            <div>
+                <div style="display: inline-block; padding: 0.25rem; border-radius: 4px; color: white; background-color: {{ event['severity'] | severity_to_color }}">{{ event["severity"] }}</div>
+                <div style="display: inline-block; padding: 0.25rem; border-radius: 4px; color: white; background-color: #141414">{{ event["event_type"] }}</div>
+                <div style="display: inline-block; padding: 0.25rem; border-radius: 4px; color: rgb(0, 0, 0); background-color: #78adfd">{{ event["ts"] | formatted_date }}</div>
+            </div>
+            <div style="padding: 0.25rem;">
+                <pre class="code text-monospace p-2 border rounded" style="font-size: 1rem; padding: 0.5rem; background-color: white; overflow-x: scroll; max-height: 256px; overflow-y: scroll">{{ event["ts"] }}: {{ event["message"] }}</pre>
+            </div>
+        </div>
+    {% else %}
+        <div class="p-4">
+            <div class="text-muted p-3 text-center bg-light border rounded">No notable events.</div>
+        </div>
+    {% endfor %}
+    </div>
+</div>
+{%- endmacro %}

@@ -1,0 +1,8 @@
+{% macro render_partial(options) %}
+<div>
+    <h2><a class="btn-link-dark" href="http://argus.scylladb.com/tests/scylla-cluster-tests/{{ options['run_id' ]}}">{{ options["section_name"] }}</a></h2>
+    <div>
+        {{ options["html"] | safe }}
+    </div>
+</div>
+{%- endmacro %}

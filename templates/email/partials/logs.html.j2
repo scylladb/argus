@@ -1,0 +1,12 @@
+{% macro render_partial(options) %}
+<div>
+    <h2><a class="btn-link-dark" href="http://argus.scylladb.com/tests/scylla-cluster-tests/{{ options['run_id' ]}}/logs">Logs</a></h2>
+    <ul style="list-style-type: square;">
+        {% for name, link in options["proxied_links"].items() %}
+        <li>
+            <a href="https://argus.scylladb.com{{ link }}"><span style="font-weight: lighter;">{{ name }}</span></a>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{%- endmacro %}

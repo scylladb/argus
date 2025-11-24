@@ -1,0 +1,179 @@
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+hr {
+    margin: 1rem 0;
+    color: inherit;
+    border: 0;
+    border-top: 1px solid;
+    opacity: 0.25;
+}
+
+pre,
+code,
+kbd,
+samp {
+    font-family: monospace;
+    font-size: 1em;
+}
+
+pre {
+    display: block;
+    margin-top: 0;
+    margin-bottom: 1rem;
+    overflow: auto;
+    font-size: 0.875em;
+}
+
+pre code {
+    font-size: inherit;
+    color: inherit;
+    word-break: normal;
+}
+
+code {
+    font-size: 0.875em;
+    color: rgb(255, 97, 97);
+    word-wrap: break-word;
+}
+
+a>code {
+    color: inherit;
+}
+
+table {
+    caption-side: bottom;
+    border-collapse: collapse;
+}
+
+th {
+    text-align: inherit;
+}
+
+thead,
+tbody,
+tfoot,
+tr,
+td,
+th {
+    border-color: rgb(192, 192, 192);
+    border-style: solid;
+    border-width: 1px;
+}
+
+.table {
+    width: 100%;
+    margin-bottom: 1rem;
+    vertical-align: top;
+    border-color: #dee2e6;
+}
+
+.table> :not(caption)>*>* {
+    padding: 0.5rem 0.5rem;
+    color: #000;
+    background-color: var(--bs-table-bg);
+    border-bottom-width: var(--bs-border-width);
+}
+
+.table>tbody {
+    vertical-align: inherit;
+}
+
+.table>thead {
+    vertical-align: bottom;
+}
+
+.table-group-divider {
+    border-top: calc(var(--bs-border-width) * 2) solid currentcolor;
+}
+
+.caption-top {
+    caption-side: top;
+}
+
+.table-sm> :not(caption)>*>* {
+    padding: 0.25rem 0.25rem;
+}
+
+.table-bordered> :not(caption)>* {
+    border-width: 1px 0;
+}
+
+.table-bordered> :not(caption)>*>* {
+    border-width: 0 1px;
+}
+
+.table-borderless> :not(caption)>*>* {
+    border-bottom-width: 0;
+}
+
+.table-borderless> :not(:first-child) {
+    border-top-width: 0;
+}
+
+.table-responsive {
+    overflow-x: scroll;
+    -webkit-overflow-scrolling: touch;
+}
+
+a.btn-link {
+    color: white;
+    text-decoration: none;
+}
+
+a.btn-link-dark {
+    color: black;
+}
+
+a.btn-link:visited {
+    color: white;
+    text-decoration: none;
+}
+
+a.btn-link-dark :visited {
+    color: black;
+}
+
+.margin-body {
+    margin: 3.5rem 10rem;
+}
+
+.upper-block {
+    height: 72px;
+}
+
+.info-list {
+    vertical-align:top;
+    list-style-type: none;
+    list-style-position: outside;
+    padding: 0;
+    display: inline-block;
+    width: 40%;
+    padding-left: 12px;
+}
+
+.img-screenshot {
+    display: inline-block;
+    width: 512px;
+    height: 512px;
+    object-fit: cover;
+    object-position: top;
+}
+
+@media screen and (max-width: 768px) {
+    .margin-body {
+        margin: 0 0;
+    }
+
+    .info-list {
+        width: 100%;
+    }
+
+    .upper-block {
+        display: none;
+    }
+}
