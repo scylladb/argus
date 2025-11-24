@@ -1,0 +1,15 @@
+{% macro render_partial(options) %}
+<div>
+    <h2><a class="btn-link-dark" href="http://argus.scylladb.com/tests/scylla-cluster-tests/{{ options['run_id' ]}}/screenshots">Screenshots</a></h2>
+    <div style="list-style-type: square;">
+        {% for link in options["links"] %}
+        <div style=" display: inline-block; border: solid 1px black; ">
+            <div style="border: solid 1px black; "></div>
+            <a href="{{link}}" style="btn-link">
+                <img src="{{link}}" alt="screenshot" class="img-screenshot">
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{%- endmacro %}

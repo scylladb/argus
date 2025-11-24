@@ -1,0 +1,21 @@
+{% macro render_partial(options) %}
+<div>
+    <h2><a class="btn-link-dark" href="http://argus.scylladb.com/tests/scylla-cluster-tests/{{ options['run_id' ]}}/packages">Packages</a></h2>
+    <table class="table table-responsive table-bordered">
+        <thead>
+            <tr style="text-align: center">
+                <th>Name</th>
+                <th>Version</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in options["packages"] %}
+            <tr>
+                <td>{{ row["name"] }}</td>
+                <td>{{ row["version"] }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{%- endmacro %}

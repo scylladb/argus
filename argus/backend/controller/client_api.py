@@ -1,6 +1,7 @@
 from flask import Blueprint, request
 
 from argus.backend.error_handlers import handle_api_exception
+from argus.backend.service.email_service import EmailService
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.user import api_login_required
 from argus.backend.service.client_service import ClientService
@@ -138,3 +139,22 @@ def get_pytest_test_field_stats(test_name: str, field_name: str, aggr_function: 
         "status": "ok",
         "response": result
     }
+
+
+@bp.route("/testrun/report/email", methods=["POST"])
+@api_login_required
+def send_email_report():
+    payload = get_payload(request)
+    result = EmailService().send_report(request_data=payload)
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
+@bp.route("/testrun/report", methods=["POST"])
+@api_login_required
+def render_email_report():
+    payload = get_payload(request)
+    result = EmailService().display_report(request_data=payload)
+    return result

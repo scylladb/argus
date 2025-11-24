@@ -1,11 +1,18 @@
 import smtplib
-from typing import List, Set
+from io import BytesIO
+from typing import List, Set, TypedDict
 from smtplib import SMTPException
 
 from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
 from email.mime.text import MIMEText
 from flask import current_app
 from flask import render_template
+
+
+class Attachment(TypedDict):
+    filename: str
+    data: BytesIO
 
 
 class Email:
@@ -55,7 +62,8 @@ class Email:
     def _prepare_email(self, subject: str,
                        content: str,
                        recipients: List[str],
-                       html: bool = True):
+                       html: bool = True,
+                       attachments: list[Attachment] = None,):
         msg = MIMEMultipart()
         msg['subject'] = subject
         msg['from'] = self.sender
@@ -65,11 +73,16 @@ class Email:
             text_part = MIMEText(content, "html")
         else:
             text_part = MIMEText(content, "plain")
+        for attachment in attachments or []:
+            p = MIMEApplication(attachment["data"].read(), Name=attachment["filename"])
+            attachment["data"].close()
+            p["Content-Disposition"] = f"attachment; filename={attachment['filename']}"
+            msg.attach(p)
         msg.attach(text_part)
         email = msg.as_string()
         return email
 
-    def send(self, subject, content, recipients, html=True):
+    def send(self, subject, content, recipients, html=True, attachments: list[Attachment] = None):
         """
         :param subject: text
         :param content: text/html
@@ -78,7 +91,7 @@ class Email:
         :param files: paths of the files that will be attached to the email
         :return:
         """
-        email = self._prepare_email(subject, content, recipients, html)
+        email = self._prepare_email(subject, content, recipients, html, attachments)
         self._send_email(recipients, email)
 
     def _send_email(self, recipients, email):

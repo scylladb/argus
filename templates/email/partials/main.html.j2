@@ -1,0 +1,27 @@
+{% macro render_partial(options) %}
+<div>
+    <h2><a class="btn-link-dark" href="http://argus.scylladb.com/tests/scylla-cluster-tests/{{ options['run_id' ]}}/details">Info</a></h2>
+    <ul class="info-list">
+        <li><span style="font-weight: 600;">Status: </span> <span style="color: {{ options['status'] | status_to_color }}">{{ options["status"].upper() }}</span></li>
+        <li><span style="font-weight: 600;">Started:</span> {{ options["start_time"] | formatted_date }}</li>
+        <li><span style="font-weight: 600;">Ended:</span> {{ options["end_time"] | formatted_date }}</li>
+        <li><span style="font-weight: 600;">Duration:</span> {{ options["duration"] }}</li>
+        <li><span style="font-weight: 600;">Started by:</span> {{ options["started_by"] }}</li>
+        <li><a href="http://argus.scylladb.com/tests/scylla-cluster-tests/{{ options['run_id' ]}}">Argus: {{ options["run_id"] }}</a></li>
+        <li><a href="{{ options['build_job_url' ]}}">Jenkins</a></li>
+    </ul>
+    <ul class="info-list">
+        <li><span style="font-weight: 600;">SCT repository:</span> {{ options["repo"] }}</li>
+        <li><span style="font-weight: 600;">SCT branch name:</span> {{ options["branch"] }}</li>
+        <li><span style="font-weight: 600;">SCT commit sha:</span> {{ options["commit"] }}</li>
+        <li><span style="font-weight: 600;">Kernel:</span> {{ options["packages"] | get_kernel_version }}</li>
+        <li><span style="font-weight: 600;">Scylla Version:</span> {{ options["packages"] | get_scylla_full_version }} </li>
+        {% if options["cloud_setup"] %}
+        <li><span style="font-weight: 600">Primary Backend:</span> {{ options["cloud_setup"]["backend"] }}</li>
+        <li><span style="font-weight: 600">DB ImageId:</span> {{ options["cloud_setup"]["db_node"]["image_id"] or "None" }}</li>
+        <li><span style="font-weight: 600">Monitor ImageId:</span> {{ options["cloud_setup"]["monitor_node"]["image_id"] or "None" }}</li>
+        <li><span style="font-weight: 600">Loader ImageId:</span> {{ options["cloud_setup"]["loader_node"]["image_id"] or "None" }}</li>
+        {% endif %}
+    </ul>
+</div>
+{%- endmacro %}

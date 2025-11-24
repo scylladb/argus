@@ -1,0 +1,25 @@
+{% macro render_partial(options) %}
+<div>
+    <h2><a class="btn-link-dark" href="http://argus.scylladb.com/tests/scylla-cluster-tests/{{ options['run_id' ]}}">{{ options["table_name"] }}</a></h2>
+    <div>
+        <table class="table table-responsive table-bordered">
+        <thead>
+            <tr>
+                {% for header in options["headers"] %}
+                <th>{{ header }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in options["rows"] %}
+            <tr style="font-size: 1rem;">
+                {% for cell in row %}
+                <td>{{ cell }}</td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</div>
+{%- endmacro %}

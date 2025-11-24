@@ -1,0 +1,11 @@
+{% macro render_partial(options) %}
+<div>
+    <div class="alert alert-warning">
+        Received an unknown template request: {{ options["type"] }}
+    </div>
+    <div>
+        <h6>Options</h6>
+        <pre class="code text-monospace border p-2 rounded bg-gray" style="white-space: pre-wrap">{{ options | tojson }}</pre>
+    </div>
+</div>
+{%- endmacro %}

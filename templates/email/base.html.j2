@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <style>
+        {% include "email/css/styles.css" %}
+    </style>
+</head>
+<body style="background-color: #f8f9fa; font-family: sans-serif">
+    <div class="upper-block"></div>
+    <div style="display: none">
+        [{{ run.status.replace("_", " ").upper() }}] {{run.build_id}}#{{run.build_job_url | build_url_to_build_number }} {{ run.test_method }} - {{ run.id }}
+        <br>
+        <br>
+        <br>
+        <br>
+    </div>
+    <div class="margin-body" style="padding: 0.25rem; background-color: white; border: 1px solid #dee2e6">
+        <div style="min-height: 128px; background-color: #212529; padding: 0.25rem; margin-bottom: 0.5rem;">
+            <h1 style="color: white">
+                <table style="border-width: 0; width: 100%; vertical-align: middle">
+                    <thead style="border-width: 0;"></thead>
+                    <tbody style="border-width: 0;">
+                        <tr style="border-width: 0;">
+                            <td style="border-width: 0; width: 50%; text-align: right"><img style="height: 128px;" src="https://raw.githubusercontent.com/scylladb/argus/master/public/argus.png" alt="Argus Logo"></td>
+                            <td style="border-width: 0; width: 50%; text-align: left">Argus</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </h1>
+        </div>
+        {% for section in sections %}
+            {% if section["has_data"] %}
+            <div style="margin-bottom: 0.5rem">
+                    {% from section["template_path"] import render_partial %}
+                    {{ render_partial(section) }}
+            </div>
+            <hr>
+            {% else %}
+            {% endif %}
+        {% endfor %}
+    </div>
+</body>
+</html>
