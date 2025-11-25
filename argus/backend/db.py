@@ -77,15 +77,18 @@ class ScyllaCluster:
             LOGGER.info("Syncing type: %s..", udt.__name__)
             sync_type(ks_name=self.config["SCYLLA_KEYSPACE_NAME"], type_model=udt)
         LOGGER.info("Core Types synchronized.")
-        # create session as it cannot use self.session due loaded UDTs from plugins being not yet created
-        session = getattr(connection, "session", None)
-        session.execute(f"USE {self.config['SCYLLA_KEYSPACE_NAME']};")
         for model in USED_MODELS:
             LOGGER.info("Syncing model: %s..", model.__name__)
             sync_table(model, keyspaces=[self.config["SCYLLA_KEYSPACE_NAME"]])
-            if rule_func := getattr(model, "_sync_additional_rules", None):
-                rule_func(session)
+
         LOGGER.info("Core Models synchronized.")
+
+    def sync_additional_schema(self):
+        LOGGER.info("Syncing additional rules...")
+        for model in USED_MODELS:
+            if rule_func := getattr(model, "_sync_additional_rules", None):
+                rule_func(self.session)
+        LOGGER.info("Syncing additional rules done.")
 
     @classmethod
     def get_session(cls):
