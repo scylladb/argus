@@ -258,6 +258,33 @@ def sct_get_similar_events(run_id: str):
     }
 
 
+@bp.route("/<string:run_id>/event/similar", methods=["POST"])
+@api_login_required
+def sct_get_similar_events_realtime(run_id: str):
+    """Get similar events for a specific event using real-time vector search"""
+    payload = get_payload(request)
+    severity = payload.get("severity")
+    ts = payload.get("ts")
+    limit = int(payload.get("limit", 50))
+
+    if not severity or not ts:
+        return {
+            "status": "error",
+            "response": "Missing required parameters: severity and ts"
+        }, 400
+
+    result = SCTService.get_similar_events_realtime(
+        run_id=run_id,
+        severity=severity,
+        ts=ts,
+        limit=limit
+    )
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
 @bp.route("/similar_runs_info", methods=["POST"])
 @api_login_required
 def sct_get_similar_runs_info():

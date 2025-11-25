@@ -12,7 +12,8 @@ from flask import g
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.web import ArgusEventTypes, ErrorEventEmbeddings, CriticalEventEmbeddings
-from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTJunitReports, SCTTestRun, SubtestType
+from argus.backend.models.argus_ai import SCTErrorEventEmbedding, SCTCriticalEventEmbedding
+from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTJunitReports, SCTTestRun, SubtestType, SCTUnprocessedEvent
 from argus.common.sct_types import GeminiResultsRequest, PerformanceResultsRequest, RawEventPayload, ResourceUpdateRequest
 from argus.backend.plugins.sct.udt import (
     CloudInstanceDetails,
@@ -432,6 +433,18 @@ class SCTService:
 
         event.save()
 
+        # Add to unprocessed events queue for ERROR and CRITICAL events
+        if event.severity in (SCTEventSeverity.ERROR.value, SCTEventSeverity.CRITICAL.value):
+            try:
+                unprocessed_event = SCTUnprocessedEvent()
+                unprocessed_event.run_id = event.run_id
+                unprocessed_event.severity = event.severity
+                unprocessed_event.ts = event.ts
+                unprocessed_event.save()
+                LOGGER.debug(f"Added event to unprocessed queue: run_id={run_id}, severity={event.severity}, ts={event.ts}")
+            except Exception as e:
+                LOGGER.error(f"Failed to add event to unprocessed queue: {e}", exc_info=True)
+
         return True
 
     @staticmethod
@@ -542,6 +555,86 @@ class SCTService:
             )
 
         return result
+
+    @staticmethod
+    def get_similar_events_realtime(run_id: str, severity: str, ts: str, limit: int = 50) -> list[dict]:
+        """Get similar events for a specific event using real-time vector search
+
+        Args:
+            run_id: The test run ID
+            severity: Event severity (ERROR or CRITICAL)
+            ts: Event timestamp (ISO format string or timestamp)
+            limit: Maximum number of similar events to return (default: 10)
+
+        Returns:
+            List of similar events with their details and similarity scores
+        """
+        try:
+            # Convert timestamp to datetime if needed
+            if isinstance(ts, str):
+                try:
+                    # Try parsing as ISO format first
+                    event_ts = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                except ValueError:
+                    # Try parsing as timestamp
+                    try:
+                        event_ts = datetime.fromtimestamp(float(ts), tz=UTC)
+                    except ValueError:
+                        raise SCTServiceException(f"Invalid timestamp format: {ts}")
+            else:
+                event_ts = datetime.fromtimestamp(float(ts), tz=UTC)
+
+            # Get the embedding for the query event
+            if severity == "ERROR":
+                embedding_model = SCTErrorEventEmbedding
+            elif severity == "CRITICAL":
+                embedding_model = SCTCriticalEventEmbedding
+            else:
+                raise SCTServiceException(f"Unsupported severity for similarity search: {severity}")
+
+            # Fetch the embedding for the query event
+            query_embedding_result = embedding_model.filter(run_id=UUID(run_id), ts=event_ts).first()
+
+            if not query_embedding_result:
+                LOGGER.warning(f"No embedding found for event: run_id={run_id}, severity={severity}, ts={ts}")
+                return []
+
+            query_embedding = query_embedding_result.embedding
+
+            db = ScyllaCluster.get()
+            table_name = embedding_model.__table_name__
+
+            query = f"""
+                SELECT DISTINCT run_id
+                FROM {table_name}
+                ORDER BY embedding ANN OF ?
+                LIMIT ?
+            """
+
+            prepared = db.prepare(query)
+            result_rows = db.session.execute(prepared, parameters=[query_embedding, limit + 1])
+
+            similar_events = []
+            visited_run_ids = {str(run_id)} # Skip current run_id
+            for row in result_rows:
+                if str(row['run_id']) in visited_run_ids:
+                    continue
+
+                if len(similar_events) < limit:
+                    similar_events.append({
+                        "run_id": str(row["run_id"]),
+                        "severity": severity,
+                    })
+                    visited_run_ids.add(str(row['run_id']))
+
+                if len(similar_events) >= limit:
+                    break
+
+            return similar_events
+
+        except Exception as e:
+            LOGGER.error(f"Error fetching similar events: {e}", exc_info=True)
+            raise SCTServiceException(f"Failed to fetch similar events: {str(e)}")
 
     @staticmethod
     def get_similar_runs_info(run_ids: list[str]):
