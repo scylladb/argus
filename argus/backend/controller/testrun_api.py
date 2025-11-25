@@ -560,3 +560,20 @@ def get_pytest_test_field_stats(test_name: str, field_name: str, aggr_function: 
         "status": "ok",
         "response": result
     }
+
+
+@bp.route("/github/repo/validate", methods=["POST"])
+@api_login_required
+def byo_validation():
+    payload = get_payload(client_request=request)
+    service = GithubService()
+
+    validated, message = service.validate_repo(payload["repo"], payload["branch"])
+
+    return {
+        "status": "ok",
+        "response": {
+            "validated": validated,
+            "message": message,
+        }
+    }
