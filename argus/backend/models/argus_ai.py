@@ -53,7 +53,7 @@ class Vector(columns.List):
         super(columns.List, self).__init__((value_type,), default=default, **kwargs)
         self.value_col: columns.Column = self.types[0]
         self.size: int = size
-        self.db_type: str = 'vector<{0}, {1}>'.format(self.value_col.db_type, self.size)
+        self.db_type: str = f"vector<{self.value_col.db_type}, {self.size}>"
 
     def validate(self, value: Optional[Union[set, list, tuple]]) -> Optional[List[Any]]:
         val = super(columns.List, self).validate(value)

@@ -1,6 +1,6 @@
 services:
   alpha:
-    image: "scylladb/scylla:2025.4.0-rc4"
+    image: "scylladb/scylla:2025.4.0"
     user: "${UID:-1000}:${GID:-1000}"
     environment:
       - HOME=/tmp
@@ -15,7 +15,7 @@ services:
       - ./alpha-config:/etc/scylla:rw
       - ./alpha-config.d:/etc/scylla.d:rw
   vector-store:
-    image: "scylladb/vector-store:latest"
+    image: "scylladb/vector-store:1.2.0"
     environment:
       - VECTOR_STORE_SCYLLADB_URI=172.18.0.2:9042
       - VECTOR_STORE_URI=172.18.0.3:6080

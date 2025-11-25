@@ -593,7 +593,7 @@
                     role="tabpanel"
                 >
                     {#if visitedTabs["sct-events"]}
-                        <SctEvents {testRun} nemeses={testRun.nemesis_data} />
+                        <SctEvents {testRun} nemeses={testRun.nemesis_data} issueAttach={(url) => submitIssue(url, runId, testInfo.test.id)}/>
                     {/if}
                 </div>
                 <div

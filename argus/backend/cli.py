@@ -33,6 +33,7 @@ def sync_models():
         sync_table(model=model, keyspaces=[cluster.config["SCYLLA_KEYSPACE_NAME"]])
 
     LOGGER.info("Plugins ready.")
+    cluster.sync_additional_schema()
     click.echo("All models synchronized.")
 
 

@@ -2,17 +2,18 @@
     import humanizeDuration from "humanize-duration";
     import { timestampToISODate } from "../../Common/DateUtils";
     import type { EventSeverityFilter, Options, SCTEvent } from "./SctEvents.svelte";
-    import { faNode } from "@fortawesome/free-brands-svg-icons";
     import Fa from "svelte-fa";
     import { faClipboard, faClock, faCopy, faServer, faSpider } from "@fortawesome/free-solid-svg-icons";
+    import SctSimilarEvents from "./SctSimilarEvents.svelte";
 
     interface Props {
         event: SCTEvent,
         filterState: EventSeverityFilter,
         options: Options,
+        issueAttach: (url: string) => void;
         filterString: string,
     }
-    let { event, filterState, options, filterString = $bindable() }: Props = $props();
+    let { event, filterState, options, issueAttach, filterString = $bindable()}: Props = $props();
     const MESSAGE_CUTOFF = 600;
     const SHORT_MESSAGE_LEN = 500;
 
@@ -105,6 +106,9 @@
                 {/if}
                 <div class="ms-2 p-1 bg-light text-dark rounded">{timestampToISODate(event.ts, true)}</div>
                 <button class="ms-2 btn btn-sm btn-success" onclick={() => navigator.clipboard.writeText(event.message)}><Fa icon={faCopy}/></button>
+                <div class="ms-2">
+                    <SctSimilarEvents {event} runId={event.run_id} issueAttach={issueAttach}/>
+                </div>
             </div>
             <div class="d-flex flex-wrap">
                 {#if event.nemesis_name}
