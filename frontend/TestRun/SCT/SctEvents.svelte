@@ -80,9 +80,10 @@
     interface Props {
         testRun: SCTTestRun,
         nemeses: NemesisInfo[]
+        issueAttach: (url: string) => void;
     }
 
-    let { testRun, nemeses }: Props = $props();
+    let { testRun, nemeses, issueAttach }: Props = $props();
     let events: EventStore = $state({});
     let refreshTimer: ReturnType<typeof setInterval> | undefined = $state();
     let eventCounters: Record<SeverityValueType, number> = $state(Object.fromEntries(Object.keys(SCTEventSeverity).map(s => [s, 0])));
@@ -272,13 +273,13 @@
             {#if event.type == TimelineEventType.Event}
                 {#if severityFilter[event.severity]}
                     <div class="mb-2">
-                        <SctEvent event={(event.event as SCTEvent)} filterState={severityFilter} options={event.opts || {}} bind:filterString={eventFilterString}/>
+                        <SctEvent event={(event.event as SCTEvent)} filterState={severityFilter} options={event.opts || {}} issueAttach={issueAttach} bind:filterString={eventFilterString} />
                     </div>
                 {/if}
             {:else if event.type == TimelineEventType.Nemesis}
                 {#if event.innerEvents.filter((e) => [SCTEventSeverity.CRITICAL, SCTEventSeverity.ERROR].includes((e.event as SCTEvent).severity)).length > 0 || nemesisFilter[event.event.status]}
                     <div class="mb-2">
-                        <SctNemesis event={(event.event as NemesisInfo)} filterState={severityFilter} innerEvents={event.innerEvents} options={event.opts || {}} bind:filterString={nemesisFilterString} bind:eventFilterString/>
+                        <SctNemesis event={(event.event as NemesisInfo)} filterState={severityFilter} innerEvents={event.innerEvents} options={event.opts || {}} bind:filterString={nemesisFilterString}  issueAttach={issueAttach} bind:eventFilterString/>
                     </div>
                 {/if}
             {/if}
