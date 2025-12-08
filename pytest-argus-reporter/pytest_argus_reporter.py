@@ -13,6 +13,7 @@ import fnmatch
 import concurrent.futures
 import json
 from json import JSONDecodeError
+from functools import cached_property
 
 import six
 import pytest
@@ -180,7 +181,7 @@ class ArgusReporter(object):  # pylint: disable=too-many-instance-attributes
         self.is_slave = False
         self.slices_query_fields = dict()
 
-    @property
+    @cached_property
     def argus_client(self):
         return ArgusGenericClient(auth_token=self.api_key, base_url=self.base_url, extra_headers=self.extra_headers)
 
