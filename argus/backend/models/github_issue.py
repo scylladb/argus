@@ -60,3 +60,4 @@ class IssueLink(Model):
     test_id = columns.UUID(index=True)
     user_id = columns.UUID(index=True)
     added_on = columns.DateTime(default=datetime.utcnow)
+    type = columns.Text()

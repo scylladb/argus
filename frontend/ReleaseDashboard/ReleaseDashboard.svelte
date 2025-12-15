@@ -2,7 +2,7 @@
     import queryString from "query-string";
     import ReleaseStats from "../Stats/ReleaseStats.svelte";
     import ReleaseActivity from "./ReleaseActivity.svelte";
-    import GithubIssues from "../Github/GithubIssues.svelte";
+    import Issues from "../Github/Issues.svelte";
     import TestPopoutSelector from "./TestPopoutSelector.svelte";
     import { sendMessage } from "../Stores/AlertStore";
     import TestDashboard from "./TestDashboard.svelte";
@@ -84,7 +84,7 @@
                     >
                         <div class="accordion-body">
                             {#if issuesClicked}
-                            <GithubIssues
+                            <Issues
                                 id={releaseData.release.id}
                                 filter_key="release_id"
                                 submitDisabled={true}

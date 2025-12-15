@@ -174,3 +174,42 @@ div#notificationCounter {
     color: #f4faff;
     background-color: #8256d0;
 }
+
+.jira-progress {
+    color: #2d2d2e;
+    background-color: #8fb8f6
+}
+.jira-review {
+    color: #2d2d2e;
+    background-color: #8fb8f6
+}
+.jira-merge {
+    color: #2d2d2e;
+    background-color: #8fb8f6
+}
+.jira-new {
+    color: #2d2d2e;
+    background-color: #8fb8f6
+}
+
+.jira-fix {
+    color: #2d2d2e;
+    background-color: #b3df72
+}
+.jira-done {
+    color: #2d2d2e;
+    background-color: #b3df72
+}
+.jira-dupe {
+    color: #2d2d2e;
+    background-color: #b3df72
+}
+
+.jira-blocked {
+    color: #2d2d2e;
+    background-color: #dddee1
+}
+.jira-todo {
+    color: #2d2d2e;
+    background-color: #dddee1
+}

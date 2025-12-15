@@ -50,6 +50,14 @@ GITHUB_REQUIRED_ORGANIZATIONS:
   # at least one is required for user to successfully authenticate
   - myorg
   - otherorg
+
+# JIRA Server address
+JIRA_SERVER: https://your.jira.instance
+# Email of the service user
+JIRA_EMAIL: user@your.jira.instance
+# API Token of the service user
+JIRA_TOKEN: base64Token
+
 JENKINS_URL: https://your_jenkins_hostname
 JENKINS_USER: user
 JENKINS_API_TOKEN_NAME: Optional

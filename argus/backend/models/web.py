@@ -7,6 +7,7 @@ from cassandra.cqlengine import columns
 from cassandra.util import uuid_from_time, unix_time_from_uuid1
 
 from argus.backend.models.github_issue import GithubIssue, IssueLink
+from argus.backend.models.jira import JiraIssue
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.pytest import PytestResultTable, PytestResultTableOld, PytestUserField
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ArgusBestResultData, ArgusGraphView
@@ -395,6 +396,7 @@ USED_MODELS: list[Model] = [
     ArgusGraphView,
     ErrorEventEmbeddings,
     CriticalEventEmbeddings,
+    JiraIssue,
     GithubIssue,
     IssueLink,
     PytestResultTable,

@@ -1,5 +1,5 @@
 <script lang="ts">
-    import GithubIssues from "../../Github/GithubIssues.svelte";
+    import Issues from "../../Github/Issues.svelte";
     let {
         dashboardObject,
         dashboardObjectType,
@@ -32,7 +32,7 @@
         >
             <div class="accordion-body">
                 {#if issuesClicked}
-                    <GithubIssues
+                    <Issues
                         id={dashboardObject.id}
                         filter_key="view_id"
                         submitDisabled={settings.submitDisabled}

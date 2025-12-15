@@ -40,7 +40,7 @@
 </script>
 
 <script lang="ts">
-    import GithubIssues from "../Github/GithubIssues.svelte";
+    import Issues from "../Github/Issues.svelte";
     import { sendMessage } from "../Stores/AlertStore";
 
     let { runId, testInfo } = $props();
@@ -56,7 +56,7 @@
 
 </script>
 
-<GithubIssues bind:this={runIssuesComponent} {runId} id={runId} testId={testInfo.test.id} pluginName={testInfo.test.plugin_name}/>
+<Issues bind:this={runIssuesComponent} {runId} id={runId} testId={testInfo.test.id} pluginName={testInfo.test.plugin_name}/>
 <div class="accordion accordion-flush border-top" id="allIssuesContainer-{testInfo.test.id}-{runId}">
     <div class="accordion-item">
         <h2 class="accordion-header">
@@ -66,7 +66,7 @@
         </h2>
         <div id="allIssues-{testInfo.test.id}-{runId}" class="accordion-collapse collapse" data-bs-parent="#allIssuesContainer-{testInfo.test.id}-{runId}">
         <div class="accordion-body overflow-scroll" style="max-height: 768px">
-            <GithubIssues on:submitToCurrent={(e) => submitIssueLocal(e.detail, runId, testInfo.test.id)} bind:this={aggregatedIssuesComponent} {runId} id={testInfo.test.id} testId={testInfo.test.id} filter_key="test_id" aggregateByIssue={true} submitDisabled={true}/>
+            <Issues on:submitToCurrent={(e) => submitIssueLocal(e.detail, runId, testInfo.test.id)} bind:this={aggregatedIssuesComponent} {runId} id={testInfo.test.id} testId={testInfo.test.id} filter_key="test_id" aggregateByIssue={true} submitDisabled={true}/>
         </div>
         </div>
     </div>
