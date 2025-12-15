@@ -20,7 +20,7 @@
 
     const fetchUserFields = async function(name: string, id: string): Promise<UserFields> {
         try {
-            const res = await fetch(`/api/v1/views/widgets/pytest/${name}/${id}/fields`);
+            const res = await fetch(`/api/v1/views/widgets/pytest/${encodeURIComponent(name)}/${id}/fields`);
             const json = await res.json();
 
             if (json.status !== "ok") {
