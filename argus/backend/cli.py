@@ -7,6 +7,7 @@ from argus.backend.db import ScyllaCluster
 from argus.backend.plugins.loader import all_plugin_models, all_plugin_types
 from argus.backend.service.build_system_monitor import JenkinsMonitor
 from argus.backend.service.github_service import GithubService
+from argus.backend.service.jira_service import JiraService
 
 cli_bp = Blueprint("cli", __name__)
 LOGGER = logging.getLogger(__name__)
@@ -38,7 +39,9 @@ def sync_models():
 def refresh_issues():
     ScyllaCluster.get()
     gh = GithubService()
+    j = JiraService()
     gh.refresh_stale_issues()
+    j.refresh_stale_issues()
 
 
 @cli_bp.cli.add_command

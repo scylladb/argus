@@ -4,18 +4,20 @@
     import { createEventDispatcher } from "svelte";
     import Color from "color";
     import Fa from "svelte-fa";
-    import { faGithub } from "@fortawesome/free-brands-svg-icons";
+    import { faJira } from "@fortawesome/free-brands-svg-icons";
     import {
         faCheckCircle,
         faDotCircle,
         faExternalLinkSquareAlt,
+        faSquare,
         faTrash,
+        type IconDefinition,
     } from "@fortawesome/free-solid-svg-icons";
     import { sendMessage } from "../Stores/AlertStore";
     import { userList } from "../Stores/UserlistSubscriber";
     import { timestampToISODate } from "../Common/DateUtils";
     import { stateEncoder } from "../Common/StateManagement";
-    import type { GithubSubtype, Link, TestRun } from './Issues.svelte';
+    import { label2color, type JiraState, type JiraSubtype, type Label, type Link, type TestRun } from '../Github/Issues.svelte';
     import { getUser } from '../Common/UserUtils';
 
     const dispatch = createEventDispatcher();
@@ -24,18 +26,32 @@
         users = $userList;
     });
 
-    const IssueColorMap = {
-        open: "issue-open",
-        closed: "issue-closed",
+    const IssueColorMap: Record<JiraState, string> = {
+        "in progress": "jira-progress",
+        "in review": "jira-review",
+        "ready for merge": "jira-merge",
+        "won't fix": "jira-fix",
+        new: "jira-new",
+        blocked: "jira-blocked",
+        done: "jira-done",
+        duplicate: "jira-dupe",
+        todo: "jira-todo",
     };
 
-    const IssueIcon = {
-        open: faDotCircle,
-        closed: faCheckCircle,
+    const IssueIcon: Record<JiraState, IconDefinition> = {
+        "in progress": faDotCircle,
+        "in review": faDotCircle,
+        "ready for merge": faDotCircle,
+        "won't fix": faCheckCircle,
+        blocked: faSquare,
+        done: faCheckCircle,
+        duplicate: faCheckCircle,
+        todo: faSquare,
+        new: faDotCircle,
     };
 
     interface Props {
-        issue?: GithubSubtype;
+        issue?: JiraSubtype;
         runId: string;
         deleteEnabled?: boolean;
         aggregated?: boolean;
@@ -44,18 +60,17 @@
     let {
         issue = $bindable({
         id: "",
-        subtype: "github",
-        number: "-1",
-        state: "open",
-        owner: "nobody",
-        repo: "no-repo",
-        title: "NO ISSUE",
+        key: "NONE-01",
+        summary: "",
+        project: "",
+        subtype: "jira",
+        state: "in review",
         links: [],
         labels: [],
         type: "issues",
-        assignees: [],
-        url: "https://github.com/",
+        permalink: "https://scylladb.atlassian.com/",
         user_id: "",
+        assignees: [],
         added_on: "Mon, 1 Jan 1970 9:00:00 GMT",
     }),
         runId,
@@ -90,7 +105,7 @@
         return data.response.runs;
     };
 
-    const resolveFirstUserForAggregation = function(issue: GithubSubtype) {
+    const resolveFirstUserForAggregation = function(issue: JiraSubtype) {
         if (!issue.links) return {
             id: issue.user_id,
             date: issue.added_on,
@@ -109,6 +124,7 @@
             date: resolved?.[0]?.added_on ?? issue.added_on,
         };
     };
+
 
     const deleteIssue = async function () {
         deleting = true;
@@ -137,13 +153,13 @@
                 sendMessage(
                     "error",
                     `Unable to delete an issue.\nAPI Response: ${(error as {status: string, response: { arguments: string[] }}).response.arguments[0]}`,
-                    "GithubIssue::delete"
+                    "JiraIssue::delete"
                 );
             } else {
                 sendMessage(
                     "error",
                     "A backend error occurred during issue deleting",
-                    "GithubIssue::delete"
+                    "JiraIssue::delete"
                 );
             }
         }
@@ -154,24 +170,24 @@
     <div class="col rounded p-2 bg-white shadow-sm">
         <div class="d-flex">
             <div class="ms-2 align-self-center">
-                <div class="mb-1 py-1 shadow-sm rounded-pill d-inline-flex {IssueColorMap[issue.state]}">
-                    <div class="ms-2 me-1"><Fa icon={IssueIcon[issue.state]} /></div>
+                <div class="mb-1 py-1 shadow-sm rounded-pill d-inline-flex {IssueColorMap[issue.state] || IssueColorMap["new"]}">
+                    <div class="ms-2 me-1"><Fa icon={IssueIcon[issue.state] || IssueIcon["new"]} /></div>
                     <div class="me-2">{issue.state}</div>
                 </div>
             </div>
             <div
                 class="ms-2 me-2"
                 style="width: 30em;"
-                title={issue.title}
+                title={issue.summary}
             >
-                <Fa icon={faGithub} /> <a target="_blank" class="link-dark" href={issue.url}>{issue.title}</a>
-                <div class="text-muted ms-auto me-2">{issue.repo}#{issue.number}</div>
+                <Fa icon={faJira} /> <a target="_blank" class="link-dark" href={issue.permalink}>{issue.summary}</a>
+                <div class="text-muted ms-auto me-2">{issue.key}</div>
             </div>
             <div class="ms-2 me-2">
                 {#each issue.labels as label (label.id)}
                     <button
                         class="align-items-center me-1 px-2 label-text border border-dark cursor-pointer"
-                        style="color: {Color(`#${label.color}`).isDark() ? 'white' : 'black'}; background-color: #{label.color};"
+                        style="color: {Color(`${label2color(label)}`).isDark() ? 'white' : 'black'}; background-color: {label2color(label)};"
                         onclick={() => {
                             dispatch("labelClick", label);
                         }}
@@ -216,7 +232,7 @@
                 {#if aggregated}
                     <div class="text-end my-2">
                         {#if runId}
-                            <button class="btn btn-primary" onclick={() => dispatch("submitToCurrent", issue.url)}>Add to current run</button>
+                            <button class="btn btn-primary" onclick={() => dispatch("submitToCurrent", issue.permalink)}>Add to current run</button>
                         {/if}
                         <button class="btn btn-primary" onclick={() => (showRuns = true)}>View {issue.links.length} runs</button>
                     </div>
@@ -231,7 +247,7 @@
         <div class="d-flex align-items-center justify-content-center p-4">
             <div class="rounded bg-white p-4 h-50">
                 <div class="mb-2 d-flex border-bottom pb-2">
-                    <h5>Runs for <span class="fw-bold">{issue.title}</span></h5>
+                    <h5>Runs for <span class="fw-bold">{issue.summary}</span></h5>
                     <div class="ms-auto">
                         <button
                             class="btn btn-close"
@@ -291,7 +307,7 @@
             <div class="modal-body">
                 <p>
                     Are you sure you want to remove <span class="fw-bold"
-                        >{issue.repo}#{issue.number}</span
+                        >{issue.key}</span
                     > from this run?
                 </p>
             </div>

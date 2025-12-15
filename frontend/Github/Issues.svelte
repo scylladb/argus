@@ -1,6 +1,144 @@
-<script lang="ts">
-    import { run } from 'svelte/legacy';
+<script module lang="ts">
+    export type GithubState = "open" | "closed";
+    export type JiraState = "in review" | "blocked" | "todo" | "in progress" | "ready for merge" | "done" | "duplicate" | "won't fix" | "new";
+    export type State = GithubState | JiraState;
+    export interface Label {
+        id: string,
+        name: string,
+        color: string,
+        description: string,
+    }
 
+    export interface Link {
+        id: string,
+        test_id: string,
+        run_id: string,
+        release_id: string,
+        type: string,
+        added_on: string,
+        user_id: string,
+    }
+
+    export interface Issue {
+        subtype: "github" | "jira",
+        id: string,
+        state: State,
+        added_on: string,
+        labels: Label[],
+        user_id: string,
+        links: Link[],
+    }
+
+    export interface GithubSubtype extends Issue {
+        repo: string,
+        owner: string,
+        number: string,
+        title: string,
+        state: GithubState,
+        url: string,
+        assignees: { html_url: string, login: string }[]
+    }
+
+    export type StateFilter = Record<State, boolean>;
+
+    export interface JiraSubtype extends Issue {
+        key: string,
+        summary: string,
+        project: string,
+        permalink: string,
+        state: JiraState,
+        assignees: string[],
+    }
+
+    export interface TestRun {
+        build_id: string,
+        build_number: string,
+        build_job_url: string,
+        assignee: string,
+        group_id: string,
+        release_id: string,
+        test_id: string,
+        id: string,
+    }
+
+    export interface RichAssignee {
+        login: string,
+        html_url: string,
+    }
+
+
+    export const getTitle = function(i: Issue): string {
+        if (i.subtype == "github") {
+            return (i as GithubSubtype).title;
+        } else {
+            return (i as JiraSubtype).summary;
+        }
+    };
+
+    export const getRepo = function(i: Issue): string {
+        if (i.subtype == "github") {
+            return (i as GithubSubtype).repo;
+        } else {
+            return (i as JiraSubtype).project;
+        }
+    };
+
+    export const getNumber = function(i: Issue): number {
+        if (i.subtype == "github") {
+            return parseInt((i as GithubSubtype).number);
+        } else {
+            return parseInt((i as JiraSubtype).key.split("-")[1]);
+        }
+    };
+
+    export const getUrl = function(i: Issue): string {
+        if (i.subtype == "github") {
+            return (i as GithubSubtype).url;
+        } else {
+            return (i as JiraSubtype).permalink;
+        }
+    };
+
+    export const getAssignees = function(i: Issue): string[] {
+        if (i.subtype == "github") {
+            return (i as GithubSubtype).assignees.map((v) => v.login);
+        } else {
+            return (i as JiraSubtype).assignees;
+        }
+    };
+
+    export const getKey = function(i: Issue): string {
+        if (i.subtype == "github") {
+            let iss = i as GithubSubtype;
+            return `${iss.owner}/${iss.repo}#${iss.number}`;
+        } else {
+            let iss = i as JiraSubtype;
+            return `${iss.key}`;
+        }
+    };
+
+    export const getAssigneesRich = function(i: Issue): RichAssignee[] {
+        if (i.subtype == "github") {
+            return (i as GithubSubtype).assignees;
+        } else {
+            return (i as JiraSubtype).assignees.map(v => ({ login: v, html_url: "#" }));
+        }
+    };
+
+
+    export const label2color = function (label: Label): string {
+        const START_COLOR = [255, 238, 0];
+        const END_COLOR = [0, 32, 255];
+        const factor = (parseInt(sha1(label.name).slice(0,16), 16) % 10000) / 10000;
+
+        const lerp = (c1: number, c2: number, frac: number) => Math.round(((c2 - c1) * frac + c1)) & 0xff;
+        let color = START_COLOR.map((c1, idx) => lerp(c1, END_COLOR[idx], factor)).join(", ");
+        return `rgb(${color})`;
+    }
+
+</script>
+
+<script lang="ts">
     import { onMount } from "svelte";
     import { PLUGIN_NAMES } from "../Common/PluginNames";
     import { newIssueDestinations } from "../Common/IssueDestinations";
@@ -9,7 +147,10 @@
     import { faChevronDown, faChevronUp, faCopy } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
     import Color from "color";
-    import GithubIssuesCopyModal from "./GithubIssuesCopyModal.svelte";
+    import IssuesCopyModal from "./IssuesCopyModal.svelte";
+    import queryString from 'query-string';
+    import JiraIssue from "../Jira/JiraIssue.svelte";
+    import { sha1 } from "js-sha1";
     interface Props {
         id?: string;
         runId: any;
@@ -30,14 +171,15 @@
         aggregateByIssue = false
     }: Props = $props();
     let newIssueUrl = $state("");
-    let issues = $state([]);
+    let issues: Issue[] = $state([]);
     let fetching = $state(false);
     let showAllLabels = $state(false);
     export const fetchIssues = async function () {
         issues = [];
         fetching = true;
         try {
-            let params = new URLSearchParams({
+
+            let params = queryString.stringify({
                 filterKey: filter_key,
                 id: id,
                 aggregateByIssue: new Number(aggregateByIssue),
@@ -55,33 +197,43 @@
         }
     };
 
-    let sortCriteria = $state("date");
+    let sortCriteria: "name" | "repo" | "date" = $state("date");
     let reverseSort = $state(true);
     let currentPage = $state(0);
     let PAGE_SIZE = $state(10);
     let filterString = $state("");
-    let availableLabels = [];
-    let selectedLabels = $state([]);
-    const stateFilter = $state({
+    let availableLabels: Label[] = [];
+    let selectedLabels: Label[] = $state([]);
+    const stateFilter: Record<State, boolean> = $state({
         open: true,
         closed: true,
+        "in progress": true,
+        "in review": true,
+        "ready for merge": true,
+        "blocked": true,
+        "done": true,
+        "duplicate": true,
+        "won't fix": true,
+        todo: true,
+        new: true,
     });
+
 
     const SORT_ORDERS = {
         name: {
             field: "title",
             friendlyString: "By title",
-            f: (lhs, rhs) => reverseSort ? rhs.title.localeCompare(lhs.title) : lhs.title.localeCompare(rhs.title)
+            f: (lhs: Issue, rhs: Issue) => reverseSort ? getTitle(rhs).localeCompare(getTitle(lhs)) : getTitle(lhs).localeCompare(getTitle(rhs))
         },
         repo: {
             field: "repo",
             friendlyString: "By repository",
-            f: (lhs, rhs) => reverseSort ? rhs.repo.localeCompare(lhs.repo) : lhs.repo.localeCompare(rhs.repo)
+            f: (lhs: Issue, rhs: Issue) => reverseSort ? getRepo(rhs).localeCompare(getRepo(lhs)) : getRepo(lhs).localeCompare(getRepo(rhs))
         },
         date: {
             field: "added_on",
             friendlyString: "By date",
-            f: (lhs, rhs) => reverseSort ? new Date(rhs.added_on) - new Date(lhs.added_on) : new Date(lhs.added_on) - new Date(rhs.added_on)
+            f: (lhs: Issue, rhs: Issue) => reverseSort ? Date.parse(rhs.added_on) - Date.parse(lhs.added_on) : Date.parse(lhs.added_on) - Date.parse(rhs.added_on)
         }
     };
 
@@ -90,13 +242,13 @@
      * @param {number} id
      * @param {Object[]} selectedLabels
      */
-    const labelActive = function(id, selectedLabels) {
+    const labelActive = function(id: string, selectedLabels: Label[]) {
         return !!selectedLabels.find(l => l.id == id);
     };
 
-    const handleLabelClick = function(label) {
+    const handleLabelClick = function(label: Label) {
         if (labelActive(label.id, selectedLabels)) {
-            selectedLabels = selectedLabels.filter(l => l.id != label.id);
+            selectedLabels = selectedLabels.filter((l: Label) => l.id != label.id);
         } else {
             selectedLabels.push(label);
             selectedLabels = selectedLabels;
@@ -124,10 +276,10 @@
                 throw apiJson;
             }
         } catch (error) {
-            if (error?.status === "error") {
+            if ((error as {status: string, response: { arguments: string[] }})?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error while submitting an issue on a test run.\nMessage: ${error.response.arguments[0]}`,
+                    `API Error while submitting an issue on a test run.\nMessage: ${(error as {status: string, response: { arguments: string[] }}).response.arguments[0]}`,
                     "GithubIssueContainer::submit"
                 );
             } else {
@@ -140,42 +292,33 @@
         }
     };
 
-    /**
-     *
-     * @param {{title: string, added_on: string, repo: string}} issue
-     * @param {string} filterString
-     */
-    const shouldFilter = function (issue, filterString) {
+    const shouldFilter = function (issue: Issue, filterString: string) {
         if (shouldFilterByState(issue, selectedLabels, stateFilter)) return true;
         if (!filterString) return false;
         if (!issue) return true;
-        const allTerms = `${issue.owner}$$${issue.title}$$${issue.repo}#${issue.number}`;
+        let allTerms = "";
+        if (issue.subtype == "github") {
+            let i = issue as GithubSubtype;
+            allTerms = `${i.owner}$$${i.title}$$${i.repo}#${i.number}`;
+        } else {
+            let i = issue as JiraSubtype;
+            allTerms = `${i.project}$$${i.summary}#${i.key}`;
+        }
+
         return allTerms.toLowerCase().search(filterString.toLowerCase()) == -1;
     };
 
-    /**
-     *
-     * @param {{ state: { state: ('open'|'closed'), labels: {id: number, name: string }[]}}}issue
-     * @param {{id: number, name: string }[]} selectedLabels
-     * @param {{ open: boolean, closed: boolean }} stateFilter
-     */
-    const shouldFilterByState = function(issue, selectedLabels, stateFilter) {
+    const shouldFilterByState = function(issue: Issue, selectedLabels: Label[], stateFilter: StateFilter) {
         if (!stateFilter[issue.state]) return true;
         if (selectedLabels.length == 0) return false;
         return !issue.labels.map(label => !!selectedLabels.find(selectedLabel => label.id == selectedLabel.id)).includes(true);
     };
 
-    /**
-     *
-     * @param {{title: string, added_on: string, repo: string}[]} issues
-     * @param sortCriteria
-     * @param reverse
-     */
-    const paginateIssues = function(issues, sortCriteria = "default", reverse = false, filterString = "") {
+    const paginateIssues = function(issues: Issue[], sortCriteria: "name" | "repo" | "date" = "name", reverse = false, filterString = "") {
         if (issues.length == 0) return [];
         const sorted = Array.from(issues).sort(SORT_ORDERS[sortCriteria].f);
         const filtered = sorted.filter(v => !shouldFilter(v, filterString));
-        const steps = Math.max(parseInt(filtered.length / PAGE_SIZE) + 1, 1);
+        const steps = Math.max(parseInt(String(filtered.length / PAGE_SIZE)) + 1, 1);
         const pages = Array
             .from({length: steps}, () => [])
             .map((_, pageIdx) => {
@@ -186,12 +329,7 @@
         return pages;
     };
 
-    let sortedIssues = $state(paginateIssues(issues, sortCriteria, reverseSort));
-    run(() => {
-        sortedIssues = paginateIssues(issues, sortCriteria, reverseSort, filterString, selectedLabels, stateFilter, PAGE_SIZE);
-    });
-
-
+    let sortedIssues = $derived(paginateIssues(issues, sortCriteria, reverseSort, filterString));
 
     onMount(() => {
         fetchIssues();
@@ -238,7 +376,7 @@
                     <div class="input-group flex-nowrap">
                         <input
                             class="form-control"
-                            placeholder="Github Issue URL"
+                            placeholder="Issue URL"
                             type="text"
                             bind:value={newIssueUrl}
                         />
@@ -258,9 +396,9 @@
             <h6 class="d-flex">
                 <div>Issues</div>
                 <div class="ms-auto">
-                    <GithubIssuesCopyModal sortedIssues={sortedIssues} currentPage={currentPage} selectedLabels={selectedLabels}>
+                    <IssuesCopyModal sortedIssues={sortedIssues} currentPage={currentPage} selectedLabels={selectedLabels}>
                         <Fa icon={faCopy}/>
-                    </GithubIssuesCopyModal>
+                    </IssuesCopyModal>
                 </div>
             </h6>
             <div class="row">
@@ -295,7 +433,7 @@
                         {/each}
                     </select>
                     <div class="mb-2">Issues per page</div>
-                    <select class="form-select mb-2" placeholder="Issues per page" onchange={(e) => PAGE_SIZE = parseInt(e.target.value)} value=10>
+                    <select class="form-select mb-2" placeholder="Issues per page" onchange={(e) => PAGE_SIZE = parseInt((e.target as HTMLOptionElement)?.value)} value=10>
                         <option value="10">10</option>
                         <option value="25">25</option>
                         <option value="50">50</option>
@@ -323,7 +461,11 @@
             </div>
             <div class="row">
                 {#each sortedIssues[currentPage] ?? [] as issue, idx (issue.id)}
-                    <GithubIssue {runId} bind:issue={sortedIssues[currentPage][idx]} aggregated={aggregateByIssue} deleteEnabled={!submitDisabled} on:submitToCurrent on:issueDeleted={fetchIssues} on:labelClick={(e) => handleLabelClick(e.detail)}/>
+                    {#if issue.subtype == "github"}
+                        <GithubIssue {runId} bind:issue={sortedIssues[currentPage][idx] as GithubSubtype} aggregated={aggregateByIssue} deleteEnabled={!submitDisabled} on:submitToCurrent on:issueDeleted={fetchIssues} on:labelClick={(e) => handleLabelClick(e.detail)}/>
+                    {:else if issue.subtype == "jira"}
+                        <JiraIssue {runId} bind:issue={sortedIssues[currentPage][idx] as JiraSubtype} aggregated={aggregateByIssue} deleteEnabled={!submitDisabled} on:submitToCurrent on:issueDeleted={fetchIssues} on:labelClick={(e) => handleLabelClick(e.detail)}/>
+                    {/if}
                 {/each}
             </div>
             <div class="d-flex ">

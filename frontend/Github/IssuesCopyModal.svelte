@@ -6,44 +6,46 @@
     import {faHtml5, faMarkdown} from "@fortawesome/free-brands-svg-icons";
     import {titleCase} from "../Common/TextUtils";
     import Color from "color";
+    import { getAssignees, getAssigneesRich, getKey, getNumber, getTitle, getUrl, label2color, type Issue, type Label } from "./Issues.svelte";
 
     interface Props {
-        sortedIssues?: any;
+        sortedIssues?: Issue[][];
         currentPage?: number;
-        selectedLabels?: any;
+        selectedLabels?: Label[];
         btnClass?: string;
         children?: import('svelte').Snippet;
     }
 
     let {
-        sortedIssues = {},
+        sortedIssues = [],
         currentPage = 0,
         selectedLabels = [],
         btnClass = "btn-success",
         children
     }: Props = $props();
     let issueCopy = $state(false);
+    let issueTable: HTMLDivElement | null = $state(null);
 
 
     const copyIssueTableAsMarkdown = function () {
         const issues = sortedIssues[currentPage] ?? [];
         let issueFormattedList = issues
-            .sort((a, b) => a.number - b.number)
-            .map(val => `|${val.state ? `${val.state.state.toUpperCase()} ` : " "}|${val.url}|${val.state ? val.state.labels.map(v => v.name).join("\t") : ""}|${val.state && val.assignees ? val.assignees.map(v => v.login).join(",") : ""}|`);
-        navigator.clipboard.writeText(`Current Issues ${selectedLabels.length > 0 ? selectedLabels.map(label => `[${label.name}]`).join(" ") : ""}\n|State|Issue|Tags|Assignee|\n|---|---|---|---|\n${issueFormattedList.join("\n")}`);
+            .sort((a: Issue, b: Issue) => getNumber(a) - getNumber(b))
+            .map((val: Issue) => `|${val.state ? `${val.state.toUpperCase()} ` : " "}|${getUrl(val)}|${val.state ? val.labels.map(v => v.name).join("\t") : ""}|${val.state && getAssignees(val) ? getAssignees(val).join(",") : ""}|`);
+        navigator.clipboard.writeText(`Current Issues ${selectedLabels.length > 0 ? selectedLabels.map((label: Label) => `[${label.name}]`).join(" ") : ""}\n|State|Issue|Tags|Assignee|\n|---|---|---|---|\n${issueFormattedList.join("\n")}`);
     };
 
     const copyIssueTableAsText = function () {
         const issues = sortedIssues[currentPage] ?? [];
 
-        const lines = issues.map(i => ` * ${i.url} (${i?.state?.state ?? ""}) [${i?.state?.assignee?.login ?? "Nobody"}]`);
+        const lines = issues.map((i: Issue) => ` * ${getUrl(i)} (${i?.state ?? ""}) [${getAssignees(i)[0] || "Nobody"}]`);
         navigator.clipboard.writeText(`Issues\n${lines.join("\n")}`);
     };
 
     const copyIssueTableAsHTML = async function () {
-        const table = document.querySelector("div#modalTableIssueView");
+        const table = issueTable;
 
-        const data = table.innerHTML;
+        const data = table?.innerHTML || "";
         // Baseline: June 2024
         // eslint-disable-next-line no-undef
         const clipboardItem = new ClipboardItem({
@@ -82,7 +84,7 @@
                         Copy as Text
                     </button>
                 </div>
-                <div id="modalTableIssueView">
+                <div bind:this={issueTable}>
                     <table class="table" style="border: solid 1px black">
                         <thead>
                             <tr>
@@ -98,19 +100,23 @@
                             <tr>
                                 <td style="border: solid 1px black">{titleCase(issue?.state)}</td>
                                 <td style="border: solid 1px black">
-                                    <a class="link-primary" href="{issue.url}">{issue.owner}/{issue.repo}#{issue.number}</a>
+                                    <a class="link-primary" href="{getUrl(issue)}">{getKey(issue)}</a>
                                 </td>
                                 <td style="border: solid 1px black">
-                                    {issue.title}
+                                    {getTitle(issue)}
                                 </td>
                                 <td style="border: solid 1px black">
                                     {#each issue.labels as label}
-                                        <span style="text-decoration: underline; color: {Color(`#${label.color}`).darken(0.50)}">{label.name}</span><br>
+                                        {#if issue.subtype == "github"}
+                                            <span style="text-decoration: underline; color: {Color(`#${label.color}`).darken(0.50)}">{label.name}</span><br>
+                                        {:else}
+                                            <span style="text-decoration: underline; color: {Color(`${label2color(label)}`).darken(0.50)}">{label.name}</span><br>
+                                        {/if}
                                     {/each}
                                 </td>
                                 <td style="border: solid 1px black">
-                                    {#each issue.assignees as assignee}
-                                        <a href="{assignee.html_url}">@{assignee.login}</a>
+                                    {#each getAssigneesRich(issue) as assignee}
+                                        <a href="{assignee.html_url}">@{assignee.login}</a><br>
                                     {:else}
                                         None
                                     {/each}

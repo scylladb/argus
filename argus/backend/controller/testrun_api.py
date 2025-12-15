@@ -12,7 +12,9 @@ import magic
 from argus.backend.error_handlers import handle_api_exception
 from argus.backend.models.web import ArgusTest
 from argus.backend.service.github_service import GithubService
+from argus.backend.service.issue_service import IssueService
 from argus.backend.service.jenkins_service import JenkinsService
+from argus.backend.service.jira_service import JiraService
 from argus.backend.service.results_service import ResultsService
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.user import api_login_required
@@ -169,8 +171,8 @@ def set_testrun_assignee(test_id: str, run_id: str):
 @api_login_required
 def issues_submit(test_id: str, run_id: str):
     payload = get_payload(client_request=request)
-    service = GithubService()
-    submit_result = service.submit_github_issue(
+    service = IssueService()
+    submit_result = service.submit(
         issue_url=payload["issue_url"],
         test_id=UUID(test_id),
         run_id=UUID(run_id)
@@ -194,8 +196,9 @@ def issues_get():
     key_value = UUID(key_value)
     aggregate_by_issue = request.args.get("aggregateByIssue")
     aggregate_by_issue = bool(int(aggregate_by_issue)) if aggregate_by_issue else False
-    service = GithubService()
-    issues = service.get_github_issues(
+
+    service = IssueService()
+    issues = service.get(
         filter_key=filter_key,
         filter_id=key_value,
         aggregate_by_issue=aggregate_by_issue
@@ -211,8 +214,8 @@ def issues_get():
 @api_login_required
 def issues_delete():
     payload = get_payload(client_request=request)
-    service = GithubService()
-    result = service.delete_github_issue(issue_id=payload["issue_id"], run_id=payload["run_id"])
+    service = IssueService()
+    result = service.delete(issue_id=payload["issue_id"], run_id=payload["run_id"])
 
     return {
         "status": "ok",

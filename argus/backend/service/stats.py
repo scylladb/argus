@@ -9,6 +9,7 @@ from uuid import UUID
 
 from cassandra.cqlengine.models import Model
 from argus.backend.models.github_issue import GithubIssue, IssueLink
+from argus.backend.models.jira import JiraIssue
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.plugins.loader import all_plugin_models
 from argus.backend.util.common import chunk, get_build_number
@@ -177,13 +178,12 @@ def fetch_issues(release: list[UUID] | UUID):
     unique_issues = {link.issue_id for link in links}
     resolved_issues = {}
     for batch in chunk(unique_issues):
-        for issue in GithubIssue.filter(id__in=batch).all():
+        for issue in [*GithubIssue.filter(id__in=batch).all(), *JiraIssue.filter(id__in=batch).all()]:
             resolved_issues[issue.id] = issue
-
     linked_issues = []
     for link in links:
         linked = dict(link.items())
-        issue = resolved_issues.get(link.issue_id)
+        issue = resolved_issues.get(link.issue_id, {})
         linked = {
             **linked,
             **dict(issue.items())

@@ -3,7 +3,7 @@
     import {onMount} from "svelte";
     import GithubIssue from "../../../Github/GithubIssue.svelte";
     import {faBug} from "@fortawesome/free-solid-svg-icons";
-    import GithubIssuesCopyModal from "../../../Github/GithubIssuesCopyModal.svelte";
+    import IssuesCopyModal from "../../../Github/IssuesCopyModal.svelte";
 
     let { runId, runStatus } = $props();
     let issues = $state([]);
@@ -47,10 +47,10 @@
         </div>
     {:else}
         {#if issues.length > 0}
-            <GithubIssuesCopyModal sortedIssues={paginatedIssues} btnClass="btn-danger">
+            <IssuesCopyModal sortedIssues={paginatedIssues} btnClass="btn-danger">
                 {issues.length}
                 <Fa icon={faBug}/>
-            </GithubIssuesCopyModal>
+            </IssuesCopyModal>
         {/if}
     {/if}
 {/if}
