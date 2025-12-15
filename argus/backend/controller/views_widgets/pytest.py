@@ -41,7 +41,7 @@ def get_view_pytest_results(view_id: str):
         "response": res
     }
 
-@bp.route("/pytest/<string:test_name>/<string:id>/fields", methods=["GET"])
+@bp.route("/pytest/<path:test_name>/<string:id>/fields", methods=["GET"])
 @api_login_required
 def get_user_fields_for_test(test_name: str, id: str):
     service = PytestViewService()
