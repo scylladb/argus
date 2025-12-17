@@ -28,7 +28,7 @@ class ArgusSCTClient(ArgusClient):
         SUBMIT_EVENTS = "/sct/$id/events/submit"
         SUBMIT_EVENT = "/sct/$id/event/submit"
         SUBMIT_JUNIT_REPORT = "/sct/$id/junit/submit"
-        SUBMIT_EMAIL = "/testrun/report"
+        SUBMIT_EMAIL = "/testrun/report/email"
 
     def __init__(self, run_id: UUID, auth_token: str, base_url: str, api_version="v1", extra_headers: dict | None = None) -> None:
         super().__init__(auth_token, base_url, api_version, extra_headers=extra_headers)
