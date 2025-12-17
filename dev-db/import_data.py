@@ -9,7 +9,7 @@ db = ScyllaCluster.get()
 if "127.0.0.10" in Config.CONFIG.get("SCYLLA_CONTACT_POINTS"):
     raise Exception("This script should not be run on local DB!")
 
-release_name = "scylla-enterprise"  # change name here
+release_name = "scylla-2025.4"  # change name here
 dest = Path(__file__).parent / "sample_data" / release_name
 
 print("importing releases")
@@ -90,3 +90,36 @@ for file in dest.glob("generic_result_data_*.json"):
             print(
                 f"Saved generic result data for run {result_data['run_id']}, test {result_data['test_id']}, name {result_data['name']}"
             )
+
+print("importing SCT events")
+statement = db.prepare("INSERT INTO sct_event JSON ?")
+for file in dest.glob("sct_event_*.json"):
+    with file.open(mode="rt", encoding="utf-8") as src:
+        events = json.loads(src.read())
+        for event in events:
+            event_raw = json.dumps(event)
+            db.session.execute(statement, parameters=(event_raw,))
+        run_id = file.stem.replace("sct_event_", "")
+        print(f"Saved {len(events)} SCT events for run {run_id}")
+
+print("importing issue links")
+statement = db.prepare("INSERT INTO issue_link JSON ?")
+for file in dest.glob("issue_link_*.json"):
+    with file.open(mode="rt", encoding="utf-8") as src:
+        issue_links = json.loads(src.read())
+        for issue_link in issue_links:
+            issue_link_raw = json.dumps(issue_link)
+            db.session.execute(statement, parameters=(issue_link_raw,))
+        run_id = file.stem.replace("issue_link_", "")
+        print(f"Saved {len(issue_links)} issue links for run {run_id}")
+
+print("importing GitHub issues (full table)")
+github_issues_file = dest / "github_issues.json"
+if github_issues_file.exists():
+    statement = db.prepare("INSERT INTO github_issue JSON ?")
+    with github_issues_file.open(mode="rt", encoding="utf-8") as src:
+        github_issues = json.loads(src.read())
+        for github_issue in github_issues:
+            github_issue_raw = json.dumps(github_issue)
+            db.session.execute(statement, parameters=(github_issue_raw,))
+        print(f"Saved {len(github_issues)} GitHub issues")
