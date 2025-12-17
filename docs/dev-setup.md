@@ -3,11 +3,10 @@
 Minimal local dev setup with one db node (adjust accordingly if needed more nodes)
 
 ## Prerequisites
-1. Python >=3.10.0 (system-wide or pyenv)
-2. NodeJS >=16 (with npm)
-3. Yarn (can be installed globally with `npm -g install yarn`)
-4. uv (https://docs.astral.sh/uv/getting-started/installation/)
-5. docker-compose
+1. NodeJS >=16 (with npm)
+2. Yarn (can be installed globally with `npm -g install yarn`)
+3. uv (https://docs.astral.sh/uv/getting-started/installation/)
+4. docker-compose
 
 ## Installing argus dependencies
 ```bash

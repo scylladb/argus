@@ -3,7 +3,7 @@ from pathlib import Path
 from collections import defaultdict
 
 from argus.backend.models.web import ArgusRelease, ArgusTest, ArgusGroup
-from argus.backend.plugins.sct.testrun import SCTTestRun
+from argus.backend.plugins.sct.testrun import SCTTestRun, SCTEvent
 from argus.backend.db import ScyllaCluster
 from argus.backend.util.encoders import ArgusJSONEncoder
 from argus.backend.models.result import (
@@ -12,10 +12,11 @@ from argus.backend.models.result import (
     ArgusBestResultData,
     ArgusGraphView,
 )
+from argus.backend.models.github_issue import GithubIssue, IssueLink
 
 db = ScyllaCluster.get()
 
-release_name = "scylla-enterprise"  # change name here
+release_name = "scylla-2025.4"  # change name here
 dest = Path(__file__).parent / "sample_data" / release_name
 dest.mkdir(parents=True, exist_ok=True)
 release = ArgusRelease.get(name=release_name)
@@ -77,3 +78,20 @@ for run in SCTTestRun.filter(release_id=release.id).all():
     for partition_key, results in result_data_by_partition.items():
         print(f"Saving generic result data for partition {partition_key}")
         (dest / f"generic_result_data_{partition_key}.json").write_text(json.dumps(results, cls=ArgusJSONEncoder))
+    # Export SCTEvent for each run
+    events = list(SCTEvent.filter(run_id=run.id).allow_filtering().all())
+    if events:
+        print(f"Saving {len(events)} SCT events for run {run.id}")
+        (dest / f"sct_event_{run.id}.json").write_text(json.dumps(events, cls=ArgusJSONEncoder))
+
+    # Export IssueLink for each run
+    issue_links = list(IssueLink.filter(run_id=run.id).allow_filtering().all())
+    if issue_links:
+        print(f"Saving {len(issue_links)} issue links for run {run.id}")
+        (dest / f"issue_link_{run.id}.json").write_text(json.dumps(issue_links, cls=ArgusJSONEncoder))
+
+print("getting github issues data (full table)")
+all_issues = list(GithubIssue.all())
+if all_issues:
+    print(f"Saving {len(all_issues)} GitHub issues")
+    (dest / "github_issues.json").write_text(json.dumps(all_issues, cls=ArgusJSONEncoder))
