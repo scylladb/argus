@@ -23,6 +23,7 @@ from argus.backend.plugins.sct.udt import (
     NodeDescription,
     PackageVersion,
     PerformanceHDRHistogram,
+    StressCommand,
 )
 from argus.backend.service.event_service import EventService
 from argus.backend.util.common import chunk, get_build_number
@@ -822,6 +823,28 @@ class SCTService:
         report.save()
 
         return True
+
+    @staticmethod
+    def get_stress_commands(run_id: str) -> list[StressCommand]:
+        try:
+            run: SCTTestRun = SCTTestRun.get(id=run_id)
+        except SCTTestRun.DoesNotExist as exception:
+            LOGGER.error("Run %s not found for SCTTestRun", run_id)
+            raise SCTServiceException("Run not found", run_id) from exception
+
+        return run.stress_commands
+
+    @staticmethod
+    def add_stress_command(run_id: str, cmd: str):
+        try:
+            run: SCTTestRun = SCTTestRun.get(id=run_id)
+            run.add_stress_command(cmd=cmd)
+            run.save()
+        except SCTTestRun.DoesNotExist as exception:
+            LOGGER.error("Run %s not found for SCTTestRun", run_id)
+            raise SCTServiceException("Run not found", run_id) from exception
+
+        return "added"
 
     @staticmethod
     def junit_get_all(run_id: str) -> list[SCTJunitReports]:
