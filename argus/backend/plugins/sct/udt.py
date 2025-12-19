@@ -61,6 +61,10 @@ class CloudResource(UserType):
         return self.instance_info
 
 
+class StressCommand(UserType):
+    cmd = columns.Text()
+
+
 class EventsBySeverity(UserType):
     __type_name__ = "EventsBySeverity"
     severity = columns.Text()

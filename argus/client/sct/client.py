@@ -28,6 +28,7 @@ class ArgusSCTClient(ArgusClient):
         SUBMIT_EVENTS = "/sct/$id/events/submit"
         SUBMIT_EVENT = "/sct/$id/event/submit"
         SUBMIT_JUNIT_REPORT = "/sct/$id/junit/submit"
+        SUBMIT_STRESS_CMD = "/sct/$id//stress_cmd/submit"
         SUBMIT_EMAIL = "/testrun/report/email"
 
     def __init__(self, run_id: UUID, auth_token: str, base_url: str, api_version="v1", extra_headers: dict | None = None,
@@ -122,6 +123,20 @@ class ArgusSCTClient(ArgusClient):
             body={
                 **self.generic_body,
                 "packages": [asdict(p) for p in packages],
+            }
+        )
+        self.check_response(response)
+
+    def add_stress_command(self, command: str) -> None:
+        """
+            Submits stress command information to be viewed inside Argus.
+        """
+        response = self.post(
+            endpoint=self.Routes.SUBMIT_STRESS_CMD,
+            location_params={"id": str(self.run_id)},
+            body={
+                **self.generic_body,
+                "cmd": command,
             }
         )
         self.check_response(response)

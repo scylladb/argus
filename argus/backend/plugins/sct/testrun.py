@@ -18,7 +18,8 @@ from argus.backend.plugins.sct.udt import (
     EventsBySeverity,
     NemesisRunInfo,
     PackageVersion,
-    PerformanceHDRHistogram
+    PerformanceHDRHistogram,
+    StressCommand
 )
 from argus.backend.util.common import chunk
 
@@ -118,6 +119,7 @@ class SCTTestRun(PluginModelBase):
     scylla_version = columns.Text()
     version_source = columns.Text()
     yaml_test_duration = columns.Integer()
+    stress_commands = columns.List(value_type=columns.UserDefinedType(user_type=StressCommand))
 
     # Test Preset Resources
     sct_runner_host = columns.UserDefinedType(user_type=CloudInstanceDetails)
@@ -290,6 +292,19 @@ class SCTTestRun(PluginModelBase):
 
     def get_nemeses(self) -> list[NemesisRunInfo]:
         return self.nemesis_data
+
+
+    def get_stress_commands(self) -> list[StressCommand]:
+        return self.stress_commands
+
+
+    def add_stress_command(self, cmd: str):
+        s = StressCommand()
+        s.cmd = cmd
+
+        self.stress_commands.append(s)
+        return True
+
 
     def get_events_legacy(self) -> list[EventsBySeverity]:
         """
