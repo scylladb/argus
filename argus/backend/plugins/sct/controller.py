@@ -248,6 +248,27 @@ def sct_get_junit_reports(run_id: str):
     }
 
 
+@bp.route("/<string:run_id>/stress_cmd/submit", methods=["POST"])
+@api_login_required
+def sct_add_stress_cmd(run_id: str):
+    payload = get_payload(request)
+    result = SCTService.add_stress_command(run_id, payload["cmd"])
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
+@bp.route("/<string:run_id>/stress_cmd/get", methods=["GET"])
+@api_login_required
+def sct_get_all_stress_cmds(run_id: str):
+    result = SCTService.get_stress_commands(run_id)
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
 @bp.route("/<string:run_id>/similar_events", methods=["GET"])
 @api_login_required
 def sct_get_similar_events(run_id: str):
