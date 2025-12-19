@@ -2,11 +2,13 @@ import base64
 from dataclasses import asdict, dataclass
 from io import BytesIO
 import logging
+import re
 from typing import Any
 
 from flask import render_template
 import humanize
 from argus.backend.plugins.sct.testrun import SCTEventSeverity, SCTTestRun
+from argus.backend.service.results_service import ResultsService
 from argus.backend.util.common import get_build_number
 from argus.backend.util.send_email import Attachment, Email
 from argus.common.email import RawAttachment, RawReportSendRequest, ReportSection, ReportSectionShortHand
@@ -198,6 +200,37 @@ class Events(Partial):
         }
 
 
+class GenericResults(Partial):
+    TEMPLATE_PATH = "email/partials/generic_results.html.j2"
+    def create_context(self, options: dict[str, Any]):
+        results = ResultsService().get_run_results(run_id=self.test_run.id, test_id=self.test_run.test_id)
+        table_filter: list[str] = options.get("table_filter", [])
+        final_tables = set()
+        tables = [next(iter(t.keys())) for t in results]
+        if table_filter:
+            filters: list[re.Pattern] = []
+            for filter in table_filter:
+                try:
+                    filters.append(re.compile(filter))
+                except re.error:
+                    LOGGER.warning("Received invalid regexp filter: %s", filter)
+                    continue
+            for f in filters:
+                [final_tables.add(table) for table in tables if f.search(table)]
+        else:
+            final_tables = tables
+        return {
+            "section_name": options.get("section_name", "Results"),
+            "results": [result for result in results if next(iter(result.keys())) in final_tables],
+            **self.default_options(),
+        }
+
+    def default_options(self):
+        return {
+            **self._service_fields,
+            "run_id": self.test_run.id,
+        }
+
 
 class Unsupported(Partial):
     TEMPLATE_PATH = "email/partials/unsupported.html.j2"
@@ -252,6 +285,7 @@ PARTIALS: dict[str, Partial] = {
     "nemesis": Nemesis,
     "events": Events,
     "screenshots": Screenshots,
+    "generic_results": GenericResults,
     "custom_table": CustomTable,
     "custom_html": CustomHtml,
     "unsupported": Unsupported,

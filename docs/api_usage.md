@@ -161,6 +161,7 @@ Supported sections are:
 | logs| List of links to the log files stored on S3 for this run |
 | cloud| Contains active remaining resources running at the end the test. Table |
 | nemesis| Table of nemeses in the run with their status and durations |
+| generic_results| Generic Result API results, formatted as tables |
 | events| Event block of most recent events sorted by timestamp |
 | screenshots| Grafana screenshot gallery |
 | custom_table| Custom table element. Can be used to display arbitrary tables. HTML in cells is **not** supported |
@@ -180,6 +181,13 @@ The `section` block can be provided as empty array to use the default template.
 |------|----|-----------|
 |amount_per_severity| number | Amount of events per severity to display (default 10)|
 |severity_filter| string[] | Names of severities to include in the email (default [CRITICAL, ERROR]). Available severities: CRITICAL, ERROR, WARNING, NORMAL, DEBUG  (case-sensitive)|
+
+###### Generic Results
+
+|Option|Type|Description|
+|------|----|-----------|
+|table_filter| string[] | Array of regexes to filter tables by. Default: [] - all tables will be shown|
+|section_name| string | Heading value for the results tables|
 
 ###### Nemesis
 

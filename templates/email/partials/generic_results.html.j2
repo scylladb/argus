@@ -1,0 +1,46 @@
+{% macro render_partial(options) %}
+<div>
+    <h2><a class="btn-link-dark" href="https://argus.scylladb.com/tests/scylla-cluster-tests/{{ options['run_id' ]}}/results">{{ options["section_name"] }}</a></h2>
+    <div>
+        {% for result in options["results"] %}
+            {% for table_name, table_data in result.items() %}
+                <div>
+                    <h4>{{table_name}}</h4>
+                    <div class="table-responsive">
+                        <table class="table table-responsive table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>    </th>
+                                    {% for col in table_data["columns"] %}
+                                        {% if col["visible"] %}
+                                            <th>{{ col["name"] }}</th>
+                                        {% endif %}
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in table_data["rows"] %}
+                                <tr>
+                                    <td>{{ row }}</td>
+                                    {% for col in table_data["columns"] %}
+                                        {% if col["visible"] %}
+                                            <td class="{{ table_data['table_data'][row][col['name']]['status'] | result_status_to_table_cell }}">
+                                                {% if col["type"] == "TEXT" and table_data["table_data"][row][col["name"]]["value"] and table_data["table_data"][row][col["name"]]["value"].startswith("http") %}
+                                                    <a href="{{ table_data['table_data'][row][col['name']]['value'] }}">View</a>
+                                                {% else %}
+                                                    {{ table_data["table_data"][row][col["name"]]["value"] }}
+                                                {% endif %}
+                                            </td>
+                                        {% endif %}
+                                    {% endfor %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            {% endfor %}
+        {% endfor %}
+    </div>
+</div>
+{%- endmacro %}

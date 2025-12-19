@@ -92,3 +92,14 @@ def nemesis_status_to_emoji(status: str):
         "terminated": "🛑",
     }
     return EMOJI.get(status, EMOJI["terminated"])
+
+@is_filter("result_status_to_table_cell")
+def result_status_to_table_cell(status: str):
+
+    STATUS = {
+        "PASS": "table-success",
+        "ERROR": "table-danger",
+        "WARNING": "table-warning",
+        "NULL": "table-secondary",
+    }
+    return STATUS.get(status, STATUS["NULL"])
