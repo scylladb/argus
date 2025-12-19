@@ -115,6 +115,23 @@ th {
     border-top-width: 0;
 }
 
+.table-success {
+    color: #000;
+    background-color: #a3cfbb !important;
+}
+.table-danger {
+    color: #000;
+    background-color: #f1aeb5 !important;
+}
+.table-warning {
+    color: #000;
+    background-color: #ffe69c !important;
+}
+.table-secondary {
+    color: #000;
+    background-color: unset !important;
+}
+
 .table-responsive {
     overflow-x: scroll;
     -webkit-overflow-scrolling: touch;
