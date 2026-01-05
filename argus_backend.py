@@ -11,6 +11,7 @@ from argus.backend.util.encoders import ArgusJSONProvider
 from argus.backend.db import ScyllaCluster
 from argus.backend.controller import auth
 from argus.backend.util.config import Config
+from jwt import PyJWKClient
 
 LOGGER = logging.getLogger(__name__)
 
@@ -42,6 +43,18 @@ def start_server(config=None) -> Flask:
     app.config.from_mapping(Config.load_yaml_config())
     if config:
         app.config.from_mapping(config)
+
+    if "cf" in app.config.get("LOGIN_METHODS", []):
+        cf_domain = app.config.get("CLOUDFLARE_ACCESS_TEAM_DOMAIN")
+        if cf_domain:
+            app.config["CLOUDFLARE_ACCESS_JWK_CLIENT"] = PyJWKClient(
+                f"https://{cf_domain}/cdn-cgi/access/certs",
+                cache_keys=True,
+                lifespan=3600,
+                timeout=5,
+            )
+        else:
+            LOGGER.warning("Cloudflare Access enabled but CLOUDFLARE_ACCESS_TEAM_DOMAIN is missing")
 
     setup_application_logging(log_level=app.config["APP_LOG_LEVEL"])
     app.logger.info("Starting Scylla Cluster connection...")

@@ -45,6 +45,7 @@ web-backend = [
     "Flask-WTF ~= 1.0.0",
     "Flask-Login ~= 0.5.0",
     "humanize ~= 3.13.1",
+    "PyJWT[crypto] >= 2.10.0",
     "python-magic ~= 0.4.24",
     "uwsgi ~= 2.0.20",
     "python-jenkins >= 1.7.0",
