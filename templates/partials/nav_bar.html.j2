@@ -27,11 +27,13 @@
             {{g.user.username}}
             </a>
             <div class="d-inline-flex align-items-center">
+                {% if not g.auth_via_cf %}
                 <form action="{{ url_for('auth.logout')}}" method="post">
                     <button class="btn btn-sm btn-danger" type="submit">
                         <i class="fas fa-sign-out-alt"></i> Logout
                     </button>
                 </form>
+                {% endif %}
             </div>
             {% else %}
             {% if config["APP_DOC_LINK"] %}
