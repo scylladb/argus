@@ -38,6 +38,9 @@ Generic results are stored in Argus database and can be accessed via Argus API a
 To send generic results to Argus, you need to create `ResultTable` class basing on `GenericResultTable` available in Argus Client library
 and send it using `ArgusClient` class (or it's child class like `ArgusSCTClient`).
 
+Note: Argus client requests use a 60s timeout by default. `ArgusGenericClient` defaults to 180s to accommodate larger payloads. Only GET
+requests are retried, and only on timeouts; POST submissions surface timeouts to the caller so clients can handle retries explicitly.
+
 Child class of `GenericResultTable` needs to define `Meta` class with `name` and `description` fields. It also needs to define `Columns`
 field that will describe available columns details for given result: as a list of `ColumnMetadata` objects. Each `ColumnMetadata` object
 needs to have `name`, `unit` and `type` and optionally `higher_is_better` fields. `type` field can be one of `ResultType` enum values.

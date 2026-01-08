@@ -42,20 +42,23 @@ class ArgusClient:
         self._api_ver = api_version
         self._timeout = timeout
         self.session = requests.Session()
-        
+
         # Configure retry strategy
         retry_strategy = Retry(
             total=max_retries,
+            connect=max_retries,
+            read=max_retries,
+            status=0,
             backoff_factor=1,
-            status_forcelist=[500, 502, 503, 504],
-            allowed_methods=["GET", "POST"],
+            status_forcelist=(),
+            allowed_methods=["GET"],
         )
-        
+
         # Mount adapter with retry strategy for both http and https
         adapter = HTTPAdapter(max_retries=retry_strategy)
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
-        
+
         if extra_headers:
             self.session.headers.update(extra_headers)
 

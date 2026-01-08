@@ -1,7 +1,5 @@
 """Tests for timeout and retry functionality in ArgusClient."""
-import pytest
-from unittest.mock import Mock, patch
-from requests.exceptions import Timeout, ConnectionError
+from unittest.mock import patch
 from uuid import uuid4
 
 from argus.client.base import ArgusClient
@@ -37,19 +35,17 @@ def test_argus_client_session_has_retry_adapter():
         base_url="https://test.example.com",
         max_retries=5
     )
-    
+
     # Check that adapters are mounted
     assert "https://" in client.session.adapters
     assert "http://" in client.session.adapters
-    
+
     # Check that the adapter has retry configuration
     adapter = client.session.get_adapter("https://test.example.com")
     assert adapter.max_retries.total == 5
     assert adapter.max_retries.backoff_factor == 1
-    assert 500 in adapter.max_retries.status_forcelist
-    assert 502 in adapter.max_retries.status_forcelist
-    assert 503 in adapter.max_retries.status_forcelist
-    assert 504 in adapter.max_retries.status_forcelist
+    assert adapter.max_retries.status == 0
+    assert adapter.max_retries.status_forcelist == set()
 
 
 def test_get_request_uses_timeout(requests_mock):
@@ -59,13 +55,13 @@ def test_get_request_uses_timeout(requests_mock):
         json={"status": "ok", "response": {}},
         status_code=200
     )
-    
+
     client = ArgusClient(
         auth_token="test_token",
         base_url="https://test.example.com",
         timeout=30
     )
-    
+
     with patch.object(client.session, 'get', wraps=client.session.get) as mock_get:
         try:
             client.get(
@@ -74,7 +70,7 @@ def test_get_request_uses_timeout(requests_mock):
             )
         except Exception:
             pass  # We're just checking the call arguments
-        
+
         # Verify timeout was passed to the request
         assert mock_get.called
         call_kwargs = mock_get.call_args.kwargs
@@ -89,13 +85,13 @@ def test_post_request_uses_timeout(requests_mock):
         json={"status": "ok"},
         status_code=200
     )
-    
+
     client = ArgusClient(
         auth_token="test_token",
         base_url="https://test.example.com",
         timeout=45
     )
-    
+
     with patch.object(client.session, 'post', wraps=client.session.post) as mock_post:
         try:
             client.post(
@@ -105,7 +101,7 @@ def test_post_request_uses_timeout(requests_mock):
             )
         except Exception:
             pass  # We're just checking the call arguments
-        
+
         # Verify timeout was passed to the request
         assert mock_post.called
         call_kwargs = mock_post.call_args.kwargs
@@ -120,19 +116,17 @@ def test_retry_configuration_is_correct():
         base_url="https://test.example.com",
         max_retries=5
     )
-    
+
     # Get the adapter
     adapter = client.session.get_adapter("https://test.example.com")
-    
+
     # Verify retry configuration
     assert adapter.max_retries.total == 5
     assert adapter.max_retries.backoff_factor == 1
-    assert 500 in adapter.max_retries.status_forcelist
-    assert 502 in adapter.max_retries.status_forcelist
-    assert 503 in adapter.max_retries.status_forcelist
-    assert 504 in adapter.max_retries.status_forcelist
+    assert adapter.max_retries.status == 0
+    assert adapter.max_retries.status_forcelist == set()
     assert "GET" in adapter.max_retries.allowed_methods
-    assert "POST" in adapter.max_retries.allowed_methods
+    assert "POST" not in adapter.max_retries.allowed_methods
 
 
 def test_sct_client_passes_timeout_and_retries():
@@ -145,7 +139,7 @@ def test_sct_client_passes_timeout_and_retries():
         timeout=90,
         max_retries=5
     )
-    
+
     assert client._timeout == 90
     adapter = client.session.get_adapter("https://test.example.com")
     assert adapter.max_retries.total == 5
@@ -159,7 +153,7 @@ def test_generic_client_passes_timeout_and_retries():
         timeout=75,
         max_retries=4
     )
-    
+
     assert client._timeout == 75
     adapter = client.session.get_adapter("https://test.example.com")
     assert adapter.max_retries.total == 4
@@ -175,7 +169,7 @@ def test_driver_matrix_client_passes_timeout_and_retries():
         timeout=100,
         max_retries=2
     )
-    
+
     assert client._timeout == 100
     adapter = client.session.get_adapter("https://test.example.com")
     assert adapter.max_retries.total == 2
@@ -189,7 +183,7 @@ def test_sirenada_client_passes_timeout_and_retries():
         timeout=80,
         max_retries=6
     )
-    
+
     assert client._timeout == 80
     adapter = client.session.get_adapter("https://test.example.com")
     assert adapter.max_retries.total == 6
@@ -203,7 +197,7 @@ def test_client_uses_default_values_when_not_specified():
         auth_token="test_token",
         base_url="https://test.example.com"
     )
-    
+
     # Should use default timeout of 60 and default retries of 3
     assert client._timeout == 60
     adapter = client.session.get_adapter("https://test.example.com")
