@@ -17,6 +17,11 @@ def register():
 
 @bp.route('/login', methods=('GET', 'POST'))
 def login():
+    if g.user:
+        if redirect_target := session.pop("redirect_target", None):
+            return redirect(redirect_target)
+        return redirect(url_for("main.home"))
+
     token = hashlib.sha256((os.urandom(64))).hexdigest()
     session["csrf_token"] = token
 

@@ -3,12 +3,14 @@ import functools
 import hashlib
 import os
 import base64
+import logging
 from uuid import UUID
 from time import time
 from hashlib import sha384
 
 from flask import current_app, flash, g, redirect, request, session, url_for
 import requests
+import jwt
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from argus.backend.db import ScyllaCluster
@@ -16,6 +18,7 @@ from argus.backend.error_handlers import APIException
 from argus.backend.models.web import User, UserOauthToken, UserRoles, WebFileStorage
 from argus.backend.util.common import FlaskView
 
+LOGGER = logging.getLogger(__name__)
 
 class UserServiceException(Exception):
     pass
@@ -284,15 +287,9 @@ def check_roles(needed_roles: list[str] | str = None):
 
 
 def load_logged_in_user():
-    user_id = session.get('user_id')
+    g.auth_via_cf = False
     auth_header = request.headers.get("Authorization")
-
-    if user_id:
-        try:
-            g.user = User.get(id=UUID(user_id))
-            return
-        except User.DoesNotExist:
-            session.clear()
+    cf_access_jwt = request.headers.get("Cf-Access-Jwt-Assertion")
 
     if auth_header:
         try:
@@ -305,4 +302,64 @@ def load_logged_in_user():
             raise APIException("Malformed authorization header") from exception
         except User.DoesNotExist as exception:
             raise APIException("User not found for supplied token") from exception
+
+    if user_id := session.get('user_id'):
+        try:
+            g.user = User.get(id=UUID(user_id))
+            return
+        except User.DoesNotExist:
+            session.clear()
+
+    if cf_access_jwt and "cf" in current_app.config.get("LOGIN_METHODS", []):
+        if cf_user := _get_or_create_user_from_cf_access(cf_access_jwt):
+            g.user = cf_user
+            g.auth_via_cf = True
+            session["user_id"] = str(cf_user.id)
+            return
     g.user = None
+
+
+def _get_cf_access_payload(token: str) -> dict | None:
+    cf_domain = current_app.config.get("CLOUDFLARE_ACCESS_TEAM_DOMAIN")
+    cf_aud = current_app.config.get("CLOUDFLARE_ACCESS_AUD")
+    if not cf_domain or not cf_aud:
+        LOGGER.warning("Cloudflare Access config missing: domain or audience")
+        return None
+
+    jwk_client = current_app.config.get("CLOUDFLARE_ACCESS_JWK_CLIENT")
+    if not jwk_client:
+        LOGGER.warning("Cloudflare Access JWK client is not configured")
+        return None
+
+    issuer = f"https://{cf_domain}"
+    try:
+        signing_key = jwk_client.get_signing_key_from_jwt(token)
+        payload = jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["RS256"],
+            audience=cf_aud,
+            issuer=issuer,
+        )
+    except jwt.PyJWTError:
+        LOGGER.warning("Invalid Cloudflare Access JWT", exc_info=True)
+        return None
+    if not isinstance(payload, dict):
+        return None
+    # PyJWT validates exp during decode; rely on that for expiration.
+    return payload
+
+
+def _get_or_create_user_from_cf_access(token: str) -> User | None:
+    payload = _get_cf_access_payload(token)
+    if not payload:
+        return None
+    email = payload.get("email")
+    if not email:
+        return None
+    if not email.lower().endswith("@scylladb.com"):
+        return None
+    try:
+        return User.get(email=email)
+    except User.DoesNotExist:
+        return None

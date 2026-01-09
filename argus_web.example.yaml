@@ -15,9 +15,11 @@ SCYLLA_KEYSPACE_NAME: mykeyspacename
 # SCYLLA_REPLICATION_FACTOR: 3
 
 # Which login methods to enable
+# Enable Cloudflare Access JWT auth by adding "cf" to LOGIN_METHODS.
 LOGIN_METHODS:
   - password
   - gh
+  - cf
 
 # Application log level
 APP_LOG_LEVEL: INFO
@@ -75,3 +77,7 @@ JOB_VALIDITY_PERIOD_DAYS: 30
 
 # Documentation link, if present, will be shown in the nav bar
 APP_DOC_LINK:
+# Cloudflare Access JWT verification
+CLOUDFLARE_ACCESS_TEAM_DOMAIN: your-team.cloudflareaccess.com
+# Application Audience (AUD) Tag for the Access app
+CLOUDFLARE_ACCESS_AUD: your-application-aud-tag-from-cloudflare-dashboard
