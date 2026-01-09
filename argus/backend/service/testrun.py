@@ -271,7 +271,7 @@ class TestRunService:
             group_id=test.group_id,
             test_id=test.id
         )
-        if new_assignee_user.id != g.user.id:
+        if new_assignee_user and new_assignee_user.id != g.user.id:
             self.notification_manager.send_notification(
                 receiver=new_assignee_user.id,
                 sender=g.user.id,
