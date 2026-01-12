@@ -44,12 +44,18 @@ Profile
                     Email:
                 </div>
                 <div class="col-6">
-                    <form class="form mb-3" action="/profile/update/email" method="post" enctype="multipart/form-data">
+                    {% if g.user.is_admin() or session["original_user"] %}
+                        <form class="form mb-3" action="/profile/update/email" method="post" enctype="multipart/form-data">
+                            <div class="mb-3 d-flex align-items-center">
+                                <input class="form-control form-control-sm me-3" id="formUpdateName" name="new_email" type="text" placeholder="{{ g.user.email }}">
+                                <button type="submit" class="btn btn-primary">Change</button>
+                            </div>
+                        </form>
+                    {% else %}
                         <div class="mb-3 d-flex align-items-center">
-                            <input class="form-control form-control-sm me-3" id="formUpdateName" name="new_email" type="text" placeholder="{{ g.user.email }}">
-                            <button type="submit" class="btn btn-primary">Change</button>
+                            <input class="form-control form-control-sm me-3" id="formUpdateName" name="new_email" type="text" placeholder="{{ g.user.email }}" disabled>
                         </div>
-                    </form>
+                    {% endif %}
                 </div>
             </div>
             <h4>Change profile picture</h4>

@@ -148,18 +148,47 @@ class UserService:
             }
         return None
 
+    def cf_login(self):
+        cf_access_jwt = request.headers.get("Cf-Access-Jwt-Assertion")
+
+        if cf_access_jwt and "cf" in current_app.config.get("LOGIN_METHODS", []):
+            if cf_user := _get_or_create_user_from_cf_access(cf_access_jwt):
+                g.user = cf_user
+                session["user_id"] = str(cf_user.id)
+                session["auth_via_cf"] = True
+                return True
+
+        return False
+
     def get_users(self) -> dict:
         users = User.all()
         return {str(user.id): user.to_json() for user in users}
 
     def get_users_privileged(self) -> dict:
         users = User.all()
-        users = {str(user.id): dict(user.items()) for user in users}
+        users = {str(user.id): dict(user.items()) for user in sorted(users, key=lambda u: u.username)}
         for user in users.values():
             user.pop("password")
             user.pop("api_token")
 
         return users
+
+    def set_user_impersonation(self, user_id: str):
+        if session.get("original_user"):
+            raise UserServiceException("Cannot impersonate while already impersonating a user.")
+
+        user = User.get(id=user_id)
+        session["original_user"] = str(g.user.id)
+        g.user = user
+        session["user_id"] = str(user.id)
+
+    def stop_user_impersonation(self):
+        if not session.get("original_user"):
+            raise UserServiceException("No impersonation in progress.")
+
+        user_id = session.pop("original_user")
+        g.user = User.get(id=user_id)
+        session["user_id"] = str(g.user.id)
 
     def generate_token(self, user: User):
         token_digest = f"{user.username}-{int(time())}-{base64.encodebytes(os.urandom(128)).decode(encoding='utf-8')}"
@@ -287,9 +316,7 @@ def check_roles(needed_roles: list[str] | str = None):
 
 
 def load_logged_in_user():
-    g.auth_via_cf = False
     auth_header = request.headers.get("Authorization")
-    cf_access_jwt = request.headers.get("Cf-Access-Jwt-Assertion")
 
     if auth_header:
         try:
@@ -309,13 +336,6 @@ def load_logged_in_user():
             return
         except User.DoesNotExist:
             session.clear()
-
-    if cf_access_jwt and "cf" in current_app.config.get("LOGIN_METHODS", []):
-        if cf_user := _get_or_create_user_from_cf_access(cf_access_jwt):
-            g.user = cf_user
-            g.auth_via_cf = True
-            session["user_id"] = str(cf_user.id)
-            return
     g.user = None
 
 

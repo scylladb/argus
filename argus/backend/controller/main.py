@@ -8,10 +8,10 @@ from flask import (
 from argus.backend.controller.notifications import bp as notifications_bp
 from argus.backend.controller.team_ui import bp as teams_bp
 from argus.backend.service.argus_service import ArgusService
-from argus.backend.models.web import ArgusRelease, WebFileStorage
+from argus.backend.models.web import ArgusRelease, UserRoles, WebFileStorage
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.planner_service import PlanningService
-from argus.backend.service.user import UserService, login_required
+from argus.backend.service.user import UserService, check_roles, login_required
 from argus.backend.service.views import UserViewService
 
 LOGGER = logging.getLogger(__name__)
@@ -264,6 +264,9 @@ def update_full_name():
 @login_required
 def update_email():
     new_email = request.values.get("new_email")
+    if not session.get("original_user"):
+        flash("Not authorized to change email.")
+        redirect(url_for("main.profile"))
     if not new_email:
         flash("Incorrect new email", category="error")
     else:

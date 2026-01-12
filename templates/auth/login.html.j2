@@ -12,6 +12,7 @@
   const GITHUB_CLIENT_ID = "{{ github_cid }}";
   const CSRF_TOKEN = "{{ csrf_token }}";
   const LOGIN_METHODS = {{ config["LOGIN_METHODS"] or [] | tojson }};
+  const MANUAL_LOGOUT = {{ session.get("manual_logout", False) | tojson }}
 </script>
 {% endblock javascripts %}
 
