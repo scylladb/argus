@@ -8,5 +8,6 @@ const app = mount(Login, {
         githubCid: GITHUB_CLIENT_ID,
         githubScopes: GITHUB_SCOPES,
         methods: LOGIN_METHODS,
+        manualLogout: MANUAL_LOGOUT,
     }
 });

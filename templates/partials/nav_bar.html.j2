@@ -27,10 +27,21 @@
             {{g.user.username}}
             </a>
             <div class="d-inline-flex align-items-center">
-                {% if not g.auth_via_cf %}
+                {% if not session["original_user"] %}
                 <form action="{{ url_for('auth.logout')}}" method="post">
-                    <button class="btn btn-sm btn-danger" type="submit">
+                    <button class="btn btn-sm btn-danger me-2" type="submit">
                         <i class="fas fa-sign-out-alt"></i> Logout
+                    </button>
+                </form>
+                {% endif %}
+                {% if g.user.is_admin() and not session["original_user"] %}
+                <a href="{{ url_for('auth.switch_user')}}" class="btn btn-sm btn-warning">
+                    <i class="fas fa-redo"></i> Switch User
+                </a>
+                {% elif session["original_user"] %}
+                <form action="{{ url_for('auth.stop_impersonation')}}" method="post">
+                    <button type="submit" class="btn btn-sm btn-success">
+                        <i class="fas fa-sign-out-alt"></i> Return
                     </button>
                 </form>
                 {% endif %}

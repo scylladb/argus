@@ -1,15 +1,25 @@
 <script>
     import { faGithub } from "@fortawesome/free-brands-svg-icons";
+    import { faBook } from "@fortawesome/free-solid-svg-icons";
+    import { onMount } from "svelte";
     import Fa from "svelte-fa";
 
     let {
+        manualLogout,
         csrfToken,
         githubCid,
         githubScopes,
         methods = []
     } = $props();
 
-
+    let oktaBtn = $state(null);
+    let oktaText = $state("Sign in with Okta");
+    onMount(() => {
+        if (oktaBtn && !manualLogout) {
+            oktaText = "Automatic Login with Okta starting...";
+            oktaBtn.click();
+        }
+    })
 </script>
 
 <div class="row justify-content-center">
@@ -36,6 +46,13 @@
                     <input type="hidden" name="client_id" value={githubCid} />
                     <input type="hidden" name="state" value={csrfToken} />
                     <button class="btn btn-dark" type="submit"><Fa icon={faGithub}/> Sign In with GitHub</button>
+                </form>
+            </div>
+        {/if}
+        {#if methods.includes("cf")}
+            <div class:text-center={!methods.includes("cf")} class="my-2" >
+                <form action="/auth/login/cf" method="post">
+                    <button class="btn btn-primary" type="submit" bind:this={oktaBtn}><Fa icon={faBook}/> {oktaText}</button>
                 </form>
             </div>
         {/if}

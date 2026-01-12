@@ -1,0 +1,39 @@
+{% extends 'base.html.j2' %}
+
+{% block title %}
+  User Switch
+{% endblock %}
+
+{% block javascripts %}
+{{ super() }}
+{% endblock javascripts %}
+
+{% block body %}
+
+<div class="container border rounded shadow-sm bg-white">
+  <h1>Users</h1>
+  <div>
+    {% for uid, user in users.items() %}
+    <div class="d-flex align-items-center border-bottom p-2">
+      <img class="me-2" style="border-radius: 50%; height: 64px; width: 64px;" src="{{ '/storage/picture/%s' % user.picture_id if user.picture_id else '/s/no-user-picture.png' }}" alt="">
+      <div>
+        {{user.full_name}}
+        <div class="text-muted" style="font-size: 0.85rem">
+          @{{user.username}}
+        </div>
+        <div class="text-muted" style="font-size: 0.85rem">
+          {{user.email}}
+        </div>
+      </div>
+      <div class="ms-auto">
+        <form method="post" action="/auth/admin/impersonate" enctype="multipart/form-data">
+          <input type="hidden" name="user_id" value="{{uid}}">
+          <button class="btn btn-primary" type="submit">Switch</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+{% endblock %}
