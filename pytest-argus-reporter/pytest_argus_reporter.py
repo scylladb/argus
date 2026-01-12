@@ -183,7 +183,11 @@ class ArgusReporter(object):  # pylint: disable=too-many-instance-attributes
 
     @cached_property
     def argus_client(self):
-        return ArgusGenericClient(auth_token=self.api_key, base_url=self.base_url, extra_headers=self.extra_headers)
+        return ArgusGenericClient(
+            auth_token=self.api_key,
+            base_url=self.base_url,
+            extra_headers=self.extra_headers,
+        )
 
     def append_test_data(self, request, test_data):
         self.test_data[request.node.nodeid].update(**test_data)
