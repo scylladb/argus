@@ -4,10 +4,12 @@ from flask import (
     Blueprint, flash, g, redirect, render_template, request, session, url_for, current_app
 )
 from werkzeug.security import check_password_hash
+from argus.backend.error_handlers import handle_profile_exception
 from argus.backend.models.web import User, UserRoles
 from argus.backend.service.user import UserService, UserServiceException, check_roles, load_logged_in_user, login_required
 
 bp = Blueprint('auth', __name__, url_prefix='/auth')
+bp.register_error_handler(UserServiceException, handle_profile_exception)
 
 
 @bp.route('/register', methods=('GET', 'POST'))
@@ -27,7 +29,8 @@ def login():
 
     if request.method == 'POST':
         try:
-            if "password" not in current_app.config.get("LOGIN_METHODS", []):
+            # Allow password auth if user logged out after logging in via enabled methods.
+            if "password" not in current_app.config.get("LOGIN_METHODS", []) and not session.get("manual_logout"):
                 raise UserServiceException("Password Login is disabled")
             username = request.form["username"]
             password = request.form["password"]
@@ -77,6 +80,7 @@ def generate_api_token():
 
 @bp.route('/admin/impersonate', methods=("POST","GET"))
 @check_roles(UserRoles.Admin)
+@login_required
 def switch_user():
 
     if request.method == 'POST':
@@ -88,12 +92,13 @@ def switch_user():
         UserService().set_user_impersonation(user_id)
         return redirect(url_for('main.profile'))
 
-    users = UserService().get_users_privileged()
+    users = UserService().get_users_privileged(service_only=True)
 
     return render_template('auth/user_switch.html.j2', users=users)
 
 
 @bp.route('/admin/impersonate/stop', methods=("POST",))
+@login_required
 def stop_impersonation():
 
     UserService().stop_user_impersonation()

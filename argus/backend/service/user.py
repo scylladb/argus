@@ -4,6 +4,7 @@ import hashlib
 import os
 import base64
 import logging
+import re
 from uuid import UUID
 from time import time
 from hashlib import sha384
@@ -29,6 +30,7 @@ class GithubOrganizationMissingError(Exception):
 
 
 class UserService:
+    EMAIL_RE = re.compile(r"^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$", re.IGNORECASE)
     def __init__(self) -> None:
         self.cluster = ScyllaCluster.get()
         self.session = self.cluster.session
@@ -164,8 +166,10 @@ class UserService:
         users = User.all()
         return {str(user.id): user.to_json() for user in users}
 
-    def get_users_privileged(self) -> dict:
-        users = User.all()
+    def get_users_privileged(self, service_only: bool = False) -> dict:
+        users: list[User] = User.all()
+        if service_only:
+            users = [u for u in users if u.is_service_user()]
         users = {str(user.id): dict(user.items()) for user in sorted(users, key=lambda u: u.username)}
         for user in users.values():
             user.pop("password")
@@ -199,6 +203,10 @@ class UserService:
         return new_token
 
     def update_email(self, user: User, new_email: str):
+        if (existing := User.exists_by_email(new_email)) and existing.id != user.id:
+            raise UserServiceException("This email is already taken.")
+        if not self.EMAIL_RE.match(new_email):
+            raise UserServiceException("Invalid email.")
         user.email = new_email
         user.save()
 
@@ -246,6 +254,14 @@ class UserService:
         user.save()
 
         return True
+
+    def change_username(self, user: User, new_username: str):
+        if (existing := User.exists_by_name(new_username)) and existing.id != user.id:
+            raise UserServiceException("This username is already taken.")
+        if "@" in new_username:
+            raise UserServiceException("Cannot use '@' in the username")
+        user.username = new_username
+        user.save()
 
     def update_name(self, user: User, new_name: str):
         user.full_name = new_name

@@ -1,3 +1,4 @@
+from typing import Optional
 from uuid import UUID, uuid1, uuid4
 from datetime import datetime
 from enum import Enum, IntEnum, auto
@@ -40,6 +41,7 @@ class User(Model):
     roles = columns.List(value_type=columns.Text)
     picture_id = columns.UUID(default=None)
     api_token = columns.Text(index=True)
+    service_user = columns.Boolean(default=lambda: False)
 
     def __hash__(self) -> int:
         return hash(self.id)
@@ -58,6 +60,17 @@ class User(Model):
         if UserRoles.Manager not in self.roles:
             self.roles.append(UserRoles.Manager.value)
 
+    def set_as_service_user(self) -> None:
+        self.service_user = True
+        self.save()
+
+    def set_as_normal_user(self) -> None:
+        self.service_user = False
+        self.save()
+
+    def is_service_user(self) -> bool:
+        return bool(self.service_user)
+
     def get_id(self):
         return str(self.id)
 
@@ -72,9 +85,19 @@ class User(Model):
         return None
 
     @classmethod
-    def exists_by_name(cls, name: str):
+    def exists_by_name(cls, name: str) -> Optional['User']:
         try:
             user = cls.get(username=name)
+            if user:
+                return user
+        except cls.DoesNotExist:
+            pass
+        return None
+
+    @classmethod
+    def exists_by_email(cls, email: str) -> Optional['User']:
+        try:
+            user = cls.get(email=email)
             if user:
                 return user
         except cls.DoesNotExist:
