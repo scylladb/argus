@@ -1,5 +1,6 @@
 import json
 from unittest.mock import Mock, patch, MagicMock
+from urllib.parse import quote
 from botocore.exceptions import ClientError
 import pytest
 
@@ -18,7 +19,7 @@ class TestResolveArtifactSize:
             mock_s3.get_object.return_value = {"ContentLength": 12345}
             mock_boto_client.return_value = mock_s3
             
-            response = flask_client.get(f"/api/v1/artifact/resolveSize?l={s3_url}")
+            response = flask_client.get(f"/api/v1/artifact/resolveSize?l={quote(s3_url, safe='')}")
             
             assert response.status_code == 200
             data = response.json
@@ -40,7 +41,7 @@ class TestResolveArtifactSize:
             mock_s3.get_object.side_effect = ClientError(error_response, 'GetObject')
             mock_boto_client.return_value = mock_s3
             
-            response = flask_client.get(f"/api/v1/artifact/resolveSize?l={s3_url}")
+            response = flask_client.get(f"/api/v1/artifact/resolveSize?l={quote(s3_url, safe='')}")
             
             assert response.status_code == 200
             data = response.json
@@ -62,7 +63,7 @@ class TestResolveArtifactSize:
             mock_s3.get_object.side_effect = ClientError(error_response, 'GetObject')
             mock_boto_client.return_value = mock_s3
             
-            response = flask_client.get(f"/api/v1/artifact/resolveSize?l={s3_url}")
+            response = flask_client.get(f"/api/v1/artifact/resolveSize?l={quote(s3_url, safe='')}")
             
             assert response.status_code == 200
             data = response.json
@@ -84,7 +85,7 @@ class TestResolveArtifactSize:
             mock_s3.get_object.side_effect = ClientError(error_response, 'GetObject')
             mock_boto_client.return_value = mock_s3
             
-            response = flask_client.get(f"/api/v1/artifact/resolveSize?l={s3_url}")
+            response = flask_client.get(f"/api/v1/artifact/resolveSize?l={quote(s3_url, safe='')}")
             
             assert response.status_code == 200
             data = response.json
@@ -101,7 +102,7 @@ class TestResolveArtifactSize:
             mock_response.headers = {"Content-Length": "54321"}
             mock_head.return_value = mock_response
             
-            response = flask_client.get(f"/api/v1/artifact/resolveSize?l={http_url}")
+            response = flask_client.get(f"/api/v1/artifact/resolveSize?l={quote(http_url, safe='')}")
             
             assert response.status_code == 200
             data = response.json
@@ -118,7 +119,7 @@ class TestResolveArtifactSize:
             mock_response.headers = {}
             mock_head.return_value = mock_response
             
-            response = flask_client.get(f"/api/v1/artifact/resolveSize?l={http_url}")
+            response = flask_client.get(f"/api/v1/artifact/resolveSize?l={quote(http_url, safe='')}")
             
             assert response.status_code == 200
             data = response.json
@@ -134,7 +135,7 @@ class TestResolveArtifactSize:
             mock_response.status_code = 404
             mock_head.return_value = mock_response
             
-            response = flask_client.get(f"/api/v1/artifact/resolveSize?l={http_url}")
+            response = flask_client.get(f"/api/v1/artifact/resolveSize?l={quote(http_url, safe='')}")
             
             assert response.status_code == 200
             data = response.json
@@ -160,7 +161,7 @@ class TestResolveArtifactSize:
             mock_s3.get_object.return_value = {"ContentLength": 99999}
             mock_boto_client.return_value = mock_s3
             
-            response = flask_client.get(f"/api/v1/artifact/resolveSize?l={s3_url}")
+            response = flask_client.get(f"/api/v1/artifact/resolveSize?l={quote(s3_url, safe='')}")
             
             assert response.status_code == 200
             data = response.json
@@ -176,7 +177,7 @@ class TestResolveArtifactSize:
             mock_s3.get_object.return_value = {"ContentLength": 11111}
             mock_boto_client.return_value = mock_s3
             
-            response = flask_client.get(f"/api/v1/artifact/resolveSize?l={s3_url}")
+            response = flask_client.get(f"/api/v1/artifact/resolveSize?l={quote(s3_url, safe='')}")
             
             assert response.status_code == 200
             data = response.json
