@@ -10,6 +10,7 @@ from typing import Any
 from uuid import UUID
 
 import boto3
+from botocore.exceptions import ClientError
 import magic
 import requests
 from flask import current_app, g
@@ -173,8 +174,17 @@ class TestRunService:
 
             return length
 
-        obj = self.s3.get_object(Bucket=match.group("bucket"), Key=match.group("key"))
-        return obj["ContentLength"]
+        try:
+            obj = self.s3.get_object(Bucket=match.group("bucket"), Key=match.group("key"))
+            return obj["ContentLength"]
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code == 'NoSuchKey':
+                raise TestRunServiceException(f"S3 object not found: {link}")
+            elif error_code == 'AccessDenied':
+                raise TestRunServiceException(f"Access denied to S3 object: {link}")
+            else:
+                raise TestRunServiceException(f"Error accessing S3 object: {e}")
 
     def proxy_stored_s3_image(self, plugin_name: str, run_id: UUID | str, image_name: str):
         plugin = self.get_plugin(plugin_name=plugin_name)
