@@ -7,16 +7,18 @@ from flask import (
 )
 from argus.backend.controller.notifications import bp as notifications_bp
 from argus.backend.controller.team_ui import bp as teams_bp
+from argus.backend.error_handlers import handle_profile_exception
 from argus.backend.service.argus_service import ArgusService
-from argus.backend.models.web import ArgusRelease, UserRoles, WebFileStorage
+from argus.backend.models.web import ArgusRelease, WebFileStorage
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.planner_service import PlanningService
-from argus.backend.service.user import UserService, check_roles, login_required
+from argus.backend.service.user import UserService, UserServiceException, login_required
 from argus.backend.service.views import UserViewService
 
 LOGGER = logging.getLogger(__name__)
 
 bp = Blueprint('main', __name__)
+bp.register_error_handler(UserServiceException, handle_profile_exception)
 bp.register_blueprint(notifications_bp)
 bp.register_blueprint(teams_bp)
 
@@ -260,13 +262,26 @@ def update_full_name():
     return redirect(url_for("main.profile"))
 
 
+@bp.route("/profile/update/username", methods=["POST"])
+@login_required
+def update_user_name():
+    new_username = request.values.get("new_username")
+    if not new_username:
+        flash(message="Missing username in payload", category="error")
+    else:
+        service = UserService()
+        service.change_username(g.user, new_username)
+        flash("Successfully changed username!", category="success")
+    return redirect(url_for("main.profile"))
+
+
 @bp.route("/profile/update/email", methods=["POST"])
 @login_required
 def update_email():
     new_email = request.values.get("new_email")
-    if not session.get("original_user"):
+    if not session.get("original_user") and not g.user.is_admin():
         flash("Not authorized to change email.")
-        redirect(url_for("main.profile"))
+        return redirect(url_for("main.profile"))
     if not new_email:
         flash("Incorrect new email", category="error")
     else:

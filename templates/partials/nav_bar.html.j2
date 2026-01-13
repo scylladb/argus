@@ -34,11 +34,7 @@
                     </button>
                 </form>
                 {% endif %}
-                {% if g.user.is_admin() and not session["original_user"] %}
-                <a href="{{ url_for('auth.switch_user')}}" class="btn btn-sm btn-warning">
-                    <i class="fas fa-redo"></i> Switch User
-                </a>
-                {% elif session["original_user"] %}
+                {% if session["original_user"] %}
                 <form action="{{ url_for('auth.stop_impersonation')}}" method="post">
                     <button type="submit" class="btn btn-sm btn-success">
                         <i class="fas fa-sign-out-alt"></i> Return

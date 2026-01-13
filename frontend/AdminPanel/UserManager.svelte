@@ -258,6 +258,11 @@
 {/if}
 
 <div>
+    <div class="text-end">
+        <a href="/auth/admin/impersonate" class="btn btn-sm btn-warning">
+            <i class="fas fa-redo"></i> Switch User
+        </a>
+    </div>
     <div class="bg-white rounded m-2">
         {#if lastError}
             <div class="p-2">

@@ -3,7 +3,7 @@ from hashlib import sha256
 import logging
 import os
 from traceback import format_exception
-from flask import request
+from flask import flash, redirect, request, url_for
 
 LOGGER = logging.getLogger(__name__)
 
@@ -40,3 +40,7 @@ def handle_api_exception(exception: Exception):
             "arguments": exception.args
         }
     }, response_code)
+
+def handle_profile_exception(exception: Exception):
+    flash(message=" ".join(exception.args), category="error")
+    return redirect(url_for("main.profile"))

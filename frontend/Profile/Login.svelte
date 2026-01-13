@@ -24,7 +24,7 @@
 
 <div class="row justify-content-center">
     <div class="col-4 text-end">
-        {#if methods.includes("password")}
+        {#if methods.includes("password") || manualLogout}
             <form method="post">
                 <div class="mb-3">
                     <label class="form-label" for="username">Username</label>
@@ -50,7 +50,7 @@
             </div>
         {/if}
         {#if methods.includes("cf")}
-            <div class:text-center={!methods.includes("cf")} class="my-2" >
+            <div class:text-center={!methods.includes("password")} class="my-2" >
                 <form action="/auth/login/cf" method="post">
                     <button class="btn btn-primary" type="submit" bind:this={oktaBtn}><Fa icon={faBook}/> {oktaText}</button>
                 </form>

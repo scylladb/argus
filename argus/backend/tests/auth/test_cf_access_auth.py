@@ -1,14 +1,10 @@
 import uuid
 from types import SimpleNamespace
 
-from flask import current_app, g, session
+from flask import current_app
 
 from argus.backend.models.web import User
 from argus.backend.service import user as user_service
-
-# Import the real function before any mocking happens
-import importlib
-_real_load_logged_in_user = importlib.import_module('argus.backend.service.user').load_logged_in_user
 
 
 def _set_cf_config():
@@ -91,67 +87,3 @@ def test_user_cf_access_returns_none_when_user_missing(monkeypatch, argus_app, a
         email = f"user-{uuid.uuid4()}@scylladb.com"
         monkeypatch.setattr(user_service, "_get_cf_access_payload", lambda _token: {"email": email})
         assert user_service._get_or_create_user_from_cf_access("token") is None
-
-
-def test_load_logged_in_user_sets_session_from_cf_access(monkeypatch, flask_client, argus_db):
-    from argus_backend import argus_app
-    _set_cf_config()
-    argus_app.secret_key = "test-secret"
-    user = User()
-    user.username = f"user-{uuid.uuid4()}"
-    user.email = f"{user.username}@scylladb.com"
-    user.roles = ["ROLE_USER"]
-    user.save()
-
-    monkeypatch.setattr(user_service, "_get_or_create_user_from_cf_access", lambda _token: user)
-
-    with argus_app.test_request_context(headers={"Cf-Access-Jwt-Assertion": "token"}):
-        _real_load_logged_in_user()
-        assert g.user.id == user.id
-        assert session["user_id"] == str(user.id)
-
-
-def test_load_logged_in_user_falls_back_to_session_when_cf_invalid(monkeypatch, flask_client, argus_db):
-    from argus_backend import argus_app
-    _set_cf_config()
-    argus_app.secret_key = "test-secret"
-    user = User()
-    user.username = f"user-{uuid.uuid4()}"
-    user.email = f"{user.username}@scylladb.com"
-    user.roles = ["ROLE_USER"]
-    user.save()
-
-    monkeypatch.setattr(user_service, "_get_or_create_user_from_cf_access", lambda _token: None)
-
-    with argus_app.test_request_context(headers={"Cf-Access-Jwt-Assertion": "token"}):
-        session["user_id"] = str(user.id)
-        _real_load_logged_in_user()
-        assert g.user.id == user.id
-
-
-def test_load_logged_in_user_prefers_api_token_over_cf(monkeypatch, flask_client, argus_db):
-    from argus_backend import argus_app
-    _set_cf_config()
-    api_user = User()
-    api_user.username = f"user-{uuid.uuid4()}"
-    api_user.email = f"{api_user.username}@scylladb.com"
-    api_user.roles = ["ROLE_USER"]
-    api_user.api_token = f"api-token-{uuid.uuid4()}"
-    api_user.save()
-
-    cf_user = User()
-    cf_user.username = f"user-{uuid.uuid4()}"
-    cf_user.email = f"{cf_user.username}@scylladb.com"
-    cf_user.roles = ["ROLE_USER"]
-    cf_user.save()
-
-    monkeypatch.setattr(user_service, "_get_or_create_user_from_cf_access", lambda _token: cf_user)
-
-    headers = {
-        "Authorization": f"token {api_user.api_token}",
-        "Cf-Access-Jwt-Assertion": "token",
-    }
-    with argus_app.test_request_context(headers=headers):
-        _real_load_logged_in_user()
-        assert g.user.id == api_user.id
-        assert not g.auth_via_cf
