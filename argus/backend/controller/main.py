@@ -112,7 +112,7 @@ def alert_debug():
     return render_template("flash_debug.html.j2")
 
 
-@bp.route("/dashboard/<string:release_name>")
+@bp.route("/dashboard/<path:release_name>")
 @login_required
 def release_dashboard(release_name: str):
     service = ArgusService()
