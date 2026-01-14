@@ -82,6 +82,7 @@
         test_id: string,
         release_id: string,
         group_id: string,
+        stress_commands: { cmd: string, ts: string }[]
         investigation_status: string,
         screenshots: string[],
         packages: SCTPackage[],
@@ -149,6 +150,7 @@
     import JUnitResults from "./jUnitResults.svelte";
     import ResultsTab from "./ResultsTab.svelte";
     import SctEvents from "./SCT/SctEvents.svelte";
+    import SctSetup from "./SCT/SctSetup.svelte";
 
     interface Props {
         runId?: string;
@@ -336,6 +338,19 @@
                     >
                         <Fa icon={faInfoCircle} /> Details
                     </button>
+                    <button
+                        class="nav-link"
+                        class:active={activeTab === "setup"}
+                        id="nav-setup-tab-{runId}"
+                        data-bs-toggle="tab"
+                        data-bs-target="#nav-setup-{runId}"
+                        type="button"
+                        role="tab"
+                        onclick={() => setActiveTab("setup")}
+                        onkeydown={(e) => e.key === "Enter" && setActiveTab("setup")}
+                    >
+                        <Fa icon={faCodeBranch} /> SCT Runtime
+                    </button>
                     {#if testRun.subtest_name && Object.values(Subtests).includes(testRun.subtest_name)}
                         {@const SvelteComponent = SubtestTabComponents[testRun.subtest_name]}
                         <SvelteComponent {testRun} />
@@ -515,6 +530,15 @@
                         test={testInfo.test}
                         on:cloneComplete
                     />
+                </div>
+                <div
+                    class="tab-pane fade"
+                    class:show={activeTab === "setup"}
+                    class:active={activeTab === "setup"}
+                    id="nav-setup-{runId}"
+                    role="tabpanel"
+                >
+                    <SctSetup {testRun} />
                 </div>
                 {#if testRun.subtest_name && Object.values(Subtests).includes(testRun.subtest_name)}
                     {@const SubtestComponent = SubtestTabBodyComponents[testRun.subtest_name]}
