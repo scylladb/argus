@@ -24,7 +24,7 @@
 
 <div class="row justify-content-center">
     <div class="col-4 text-end">
-        {#if methods.includes("password") || manualLogout}
+        {#if methods.includes("password")}
             <form method="post">
                 <div class="mb-3">
                     <label class="form-label" for="username">Username</label>

@@ -1,6 +1,7 @@
-from datetime import datetime
+from datetime import UTC, datetime
 import functools
 import hashlib
+import mimetypes
 import os
 import base64
 import logging
@@ -10,6 +11,7 @@ from time import time
 from hashlib import sha384
 
 from flask import current_app, flash, g, redirect, request, session, url_for
+import magic
 import requests
 import jwt
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -17,7 +19,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from argus.backend.db import ScyllaCluster
 from argus.backend.error_handlers import APIException
 from argus.backend.models.web import User, UserOauthToken, UserRoles, WebFileStorage
-from argus.backend.util.common import FlaskView
+from argus.backend.util.common import FlaskView, gen_pass
 
 LOGGER = logging.getLogger(__name__)
 
@@ -110,8 +112,7 @@ class UserService:
             user.full_name = user_info.get("name", user_info.get("login"))
             user.registration_date = datetime.utcnow()
             user.roles = ["ROLE_USER"]
-            temp_password = base64.encodebytes(
-                os.urandom(48)).decode("ascii").strip()
+            temp_password = gen_pass()
             user.password = generate_password_hash(temp_password)
 
             avatar_url: str = user_info.get("avatar_url")
@@ -150,17 +151,45 @@ class UserService:
             }
         return None
 
-    def cf_login(self):
+    def cf_login_or_register(self):
         cf_access_jwt = request.headers.get("Cf-Access-Jwt-Assertion")
 
         if cf_access_jwt and "cf" in current_app.config.get("LOGIN_METHODS", []):
-            if cf_user := _get_or_create_user_from_cf_access(cf_access_jwt):
-                g.user = cf_user
-                session["user_id"] = str(cf_user.id)
+            try:
+                res = _get_user_from_cf_access(cf_access_jwt)
+            except UserServiceException as exc:
+                session["manual_logout"] = True
+                raise exc
+            if res["exists"]:
+                session["user_id"] = str(res["user"].id)
                 session["auth_via_cf"] = True
-                return True
+                return {
+                    "redirect_to": "main.profile",
+                    "redirect_optional": True,
+                    "found": True,
+                }
+            else:
+                email = res["payload"].get("email")
+                suggested_username: str = email.split("@")[0]
+                suggested_name = " ".join(part.capitalize() for part in suggested_username.split("."))
+                session["registration_allowed"] = True
+                session["lock_user_email"] = True
+                session["auth_via_cf"] = True
+                session["oauth_email"] = email
+                session["oauth_username"] = suggested_username
+                session["oauth_name"] = suggested_name
+                return {
+                    "redirect_to": "main.profile_user_create",
+                    "redirect_optional": False,
+                    "found": False,
+                }
 
-        return False
+        session["manual_logout"] = True
+        return {
+            "redirect_to": "auth.login",
+            "redirect_optional": False,
+            "found": False,
+        }
 
     def get_users(self) -> dict:
         users = User.all()
@@ -227,6 +256,76 @@ class UserService:
 
         user.save()
         return True
+
+
+    def create_user(self, username: str, email: str, full_name: str) -> dict:
+
+        result = {
+            "created": False,
+            "user": None,
+            "temp_password": None,
+            "first_run": False,
+            "form_feedback": {
+                "username": ["is-valid", ""],
+                "email": ["is-valid", ""],
+                "full_name": ["is-valid", ""],
+            }
+        }
+        errors = False
+
+        if User.exists_by_name(username):
+            result["form_feedback"]["username"] = ["is-invalid", "This username is already taken."]
+            errors = True
+        if "@" in username:
+            result["form_feedback"]["username"] = ["is-invalid", "Cannot use '@' in the username."]
+            errors = True
+
+        if User.exists_by_email(email):
+            result["form_feedback"]["email"] = ["is-invalid", "This email is already taken."]
+            errors = True
+        if not self.EMAIL_RE.match(email):
+            result["form_feedback"]["email"] = ["is-invalid", "Invalid email."]
+            errors = True
+
+        if len(full_name) == 0:
+            result["form_feedback"]["full_name"] = ["is-invalid", "No display name provided."]
+            errors = True
+
+        if errors:
+            return result
+
+        user = User()
+        user.username = username
+        user.email = email
+        user.full_name = full_name
+        user.registration_date = datetime.now(tz=UTC)
+        user.roles = ["ROLE_USER"]
+
+        if avatar := request.files.get("avatar"):
+            content = avatar.stream.read()
+            avatar_mime = magic.from_buffer(content, mime=True)
+            if not re.match(r"^image/.*", avatar_mime, re.IGNORECASE):
+                raise UserServiceException(f"Expected image/*, got {avatar_mime} for user avatar.")
+            avatar_ext = mimetypes.guess_extension(avatar_mime)
+            filename = f"{username}_{datetime.now(tz=UTC).timestamp()}{avatar_ext}"
+            filename, filepath = self.save_profile_picture_to_disk(filename, content, user.username)
+
+            web_file = WebFileStorage()
+            web_file.filename = filename
+            web_file.filepath = filepath
+            web_file.save()
+            user.picture_id = web_file.id
+
+        temp_password = gen_pass()
+        user.password = generate_password_hash(temp_password)
+
+        user.save()
+        result["user"] = user
+        result["created"] = True
+        result["temp_password"] = temp_password
+        result["first_run"] = True
+
+        return result
 
     def delete_user(self, user_id: str):
         user: User = User.get(id=user_id)
@@ -360,12 +459,12 @@ def _get_cf_access_payload(token: str) -> dict | None:
     cf_aud = current_app.config.get("CLOUDFLARE_ACCESS_AUD")
     if not cf_domain or not cf_aud:
         LOGGER.warning("Cloudflare Access config missing: domain or audience")
-        return None
+        raise UserServiceException("Cloudflare Access config missing: domain or audience")
 
     jwk_client = current_app.config.get("CLOUDFLARE_ACCESS_JWK_CLIENT")
     if not jwk_client:
         LOGGER.warning("Cloudflare Access JWK client is not configured")
-        return None
+        raise UserServiceException("Cloudflare Access JWK client is not configured")
 
     issuer = f"https://{cf_domain}"
     try:
@@ -379,23 +478,32 @@ def _get_cf_access_payload(token: str) -> dict | None:
         )
     except jwt.PyJWTError:
         LOGGER.warning("Invalid Cloudflare Access JWT", exc_info=True)
-        return None
+        raise UserServiceException("Invalid Cloudflare Access JWT")
     if not isinstance(payload, dict):
-        return None
+        raise UserServiceException("Invalid Cloudflare Access Payload")
     # PyJWT validates exp during decode; rely on that for expiration.
     return payload
 
 
-def _get_or_create_user_from_cf_access(token: str) -> User | None:
+def _get_user_from_cf_access(token: str) -> dict:
     payload = _get_cf_access_payload(token)
     if not payload:
-        return None
+        raise UserServiceException("Invalid Cloudflare Access Payload")
     email = payload.get("email")
     if not email:
-        return None
+        raise UserServiceException("No email in the payload.")
     if not email.lower().endswith("@scylladb.com"):
-        return None
+        raise UserServiceException("Email is external to scylladb.com")
     try:
-        return User.get(email=email)
+        user = User.get(email=email)
+        return {
+            "user": user,
+            "payload": payload,
+            "exists": True,
+        }
     except User.DoesNotExist:
-        return None
+        return {
+            "user": None,
+            "payload": payload,
+            "exists": False,
+        }

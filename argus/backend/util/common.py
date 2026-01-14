@@ -1,5 +1,7 @@
+import base64
 from itertools import islice
 import logging
+import os
 from typing import Callable, Iterable, TypeVar
 from uuid import UUID
 
@@ -54,6 +56,10 @@ def get_payload(client_request: Request) -> dict:
 
 def current_user() -> User:
     return g.user
+
+
+def gen_pass() -> str:
+    return base64.encodebytes(os.urandom(48)).decode("ascii").strip()
 
 
 def get_build_number(build_job_url: str) -> int | None:

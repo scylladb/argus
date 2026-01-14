@@ -29,8 +29,7 @@ def login():
 
     if request.method == 'POST':
         try:
-            # Allow password auth if user logged out after logging in via enabled methods.
-            if "password" not in current_app.config.get("LOGIN_METHODS", []) and not session.get("manual_logout"):
+            if "password" not in current_app.config.get("LOGIN_METHODS", []):
                 raise UserServiceException("Password Login is disabled")
             username = request.form["username"]
             password = request.form["password"]
@@ -60,14 +59,12 @@ def login():
 
 @bp.route("/login/cf", methods=("POST",))
 def cf_login():
-    if not UserService().cf_login():
-        flash("Error logging in", category="error")
-        session["manual_logout"] = True
-        return redirect(url_for("auth.login"))
-
+    res = UserService().cf_login_or_register()
+    if not res["redirect_optional"]:
+        return redirect(url_for(res["redirect_to"]))
     if redirect_target := session.pop("redirect_target", None):
         return redirect(redirect_target)
-    return redirect(url_for("main.home"))
+    return redirect(url_for(res["redirect_to"]))
 
 
 @bp.route("/profile/api/token/generate", methods=("POST",))

@@ -185,6 +185,27 @@ def profile():
     return render_template("profile.html.j2", first_run=first_run, token_generated=token_generated)
 
 
+@bp.route("/profile/create", methods=("GET", "POST"))
+def profile_user_create():
+    if not session.get("registration_allowed", False):
+        raise UserServiceException("Registration is not allowed at the moment.")
+    result = {}
+    if request.method == "POST":
+        if session.get("lock_user_email") and request.form.get("email") != session.get("oauth_email"):
+            raise UserServiceException("Email changed while being locked to oauth one.")
+        result = UserService().create_user(username=request.form["username"], email=request.form["email"], full_name=request.form["full_name"])
+        if result["created"]:
+            session.clear()
+            session["user_id"] = str(result["user"].id)
+            session["first_run_info"] = {
+                "password": result["temp_password"],
+                "first_login": True
+            }
+            return redirect(url_for("main.profile"))
+
+    return render_template("create_user.html.j2", feedback=result.get("form_feedback", {}))
+
+
 @bp.route("/profile/oauth/github", methods=["GET"])
 def profile_oauth_github_callback():
     req_state = request.args.get('state', '')
