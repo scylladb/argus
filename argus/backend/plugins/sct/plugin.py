@@ -13,6 +13,7 @@ from argus.backend.plugins.sct.udt import (
     NodeDescription,
     PackageVersion,
     PerformanceHDRHistogram,
+    StressCommand,
 )
 
 
@@ -27,6 +28,7 @@ class PluginInfo(PluginInfoBase):
         SCTUnprocessedEvent,
     ]
     all_types = [
+        StressCommand,
         NemesisRunInfo,
         NodeDescription,
         EventsBySeverity,

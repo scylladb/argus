@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from time import time
 from cassandra.cqlengine.usertype import UserType
 from cassandra.cqlengine import columns
@@ -63,6 +64,7 @@ class CloudResource(UserType):
 
 class StressCommand(UserType):
     cmd = columns.Text()
+    ts = columns.DateTime(default=lambda: datetime.now(tz=UTC))
 
 
 class EventsBySeverity(UserType):
