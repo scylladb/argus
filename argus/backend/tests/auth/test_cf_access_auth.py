@@ -1,6 +1,7 @@
 import uuid
 from types import SimpleNamespace
 
+import pytest
 from flask import current_app
 
 from argus.backend.models.web import User
@@ -41,7 +42,8 @@ def test_cf_access_payload_invalid(monkeypatch, argus_app):
 
         monkeypatch.setattr(user_service.jwt, "decode", fake_decode)
 
-        assert user_service._get_cf_access_payload("token") is None
+        with pytest.raises(user_service.UserServiceException):
+            user_service._get_cf_access_payload("token")
 
 
 def test_cf_access_payload_missing_config(argus_app):
@@ -49,21 +51,24 @@ def test_cf_access_payload_missing_config(argus_app):
         current_app.config.pop("CLOUDFLARE_ACCESS_TEAM_DOMAIN", None)
         current_app.config.pop("CLOUDFLARE_ACCESS_AUD", None)
         current_app.config["LOGIN_METHODS"] = ["cf"]
-        assert user_service._get_cf_access_payload("token") is None
+        with pytest.raises(user_service.UserServiceException):
+            user_service._get_cf_access_payload("token")
 
 
 def test_user_creation_rejects_non_scylladb_domain(monkeypatch, argus_app, argus_db):
     with argus_app.app_context():
         _set_cf_config()
         monkeypatch.setattr(user_service, "_get_cf_access_payload", lambda _token: {"email": "user@example.com"})
-        assert user_service._get_or_create_user_from_cf_access("token") is None
+        with pytest.raises(user_service.UserServiceException):
+            user_service._get_user_from_cf_access("token")
 
 
 def test_user_creation_rejects_missing_email(monkeypatch, argus_app, argus_db):
     with argus_app.app_context():
         _set_cf_config()
         monkeypatch.setattr(user_service, "_get_cf_access_payload", lambda _token: {})
-        assert user_service._get_or_create_user_from_cf_access("token") is None
+        with pytest.raises(user_service.UserServiceException):
+            user_service._get_user_from_cf_access("token")
 
 
 def test_user_cf_access_returns_existing_user_by_email(monkeypatch, argus_app, argus_db):
@@ -76,9 +81,10 @@ def test_user_cf_access_returns_existing_user_by_email(monkeypatch, argus_app, a
         existing.save()
         monkeypatch.setattr(user_service, "_get_cf_access_payload", lambda _token: {"email": existing.email})
 
-        user = user_service._get_or_create_user_from_cf_access("token")
-        assert user is not None
-        assert user.id == existing.id
+        res = user_service._get_user_from_cf_access("token")
+        assert res["user"] is not None
+        assert res["user"].id == existing.id
+        assert res["exists"]
 
 
 def test_user_cf_access_returns_none_when_user_missing(monkeypatch, argus_app, argus_db):
@@ -86,4 +92,6 @@ def test_user_cf_access_returns_none_when_user_missing(monkeypatch, argus_app, a
         _set_cf_config()
         email = f"user-{uuid.uuid4()}@scylladb.com"
         monkeypatch.setattr(user_service, "_get_cf_access_payload", lambda _token: {"email": email})
-        assert user_service._get_or_create_user_from_cf_access("token") is None
+        res = user_service._get_user_from_cf_access("token")
+        assert res["user"] is None
+        assert not res["exists"]

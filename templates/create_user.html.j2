@@ -1,0 +1,61 @@
+{% extends "base.html.j2" %}
+
+{% block title %}
+Create User
+{% endblock %}
+
+{% block body %}
+<div class="container">
+    <div class="row border rounded bg-main my-3 shadow-sm justify-content-center">
+        <div class="col-6 p-2">
+            <h2>Registration</h2>
+            <form action="/profile/create" method="post" enctype="multipart/form-data">
+                {% if session.get('lock_user_email') %}
+                <input type="hidden" name="email" id="emailAutomatic" value="{{ session.get('oauth_email', '') }}">
+                {% endif %}
+                <div class="mb-2">
+                    <label class="form-label" for="formCreateEmail">Email</label>
+                    <input class="form-control {{ feedback.get('email', ['', ''])[0] }}"  {{ "disabled" if session.get('lock_user_email') else ""}} type="text" id="formCreateEmail" name="email" required value="{{ request.form.get('email', '') or session.get('oauth_email', '') }}" placeholder="example@scyllab.com" aria-describedby="formCreateEmailHelp">
+                    <div id="formCreateEmailHelp" class="form-text">Emails must end in @scylladb.com domain</div>
+                    <div class="valid-feedback">
+                        {{ feedback.get("email", ["", ""])[1] }}
+                    </div>
+                    <div class="invalid-feedback">
+                        {{ feedback.get("email", ["", ""])[1] }}
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label" for="formCreateUsername">Username</label>
+                    <input class="form-control {{ feedback.get('username', ['', ''])[0] }}" type="text" id="formCreateUsername" name="username" required value="{{ request.form.get('email', '') or session.get('oauth_username', '') }}" placeholder="user" aria-describedby="formCreateUsernameHelp">
+                    <div id="formCreateUsernameHelp" class="form-text">Suggestion: use the same username as on github for convenience.</div>
+                    <div class="valid-feedback">
+                        {{ feedback.get("username", ["", ""])[1] }}
+                    </div>
+                    <div class="invalid-feedback">
+                        {{ feedback.get("username", ["", ""])[1] }}
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label" for="formCreateFullName">Display Name</label>
+                    <input class="form-control {{ feedback.get('full_name', ['', ''])[0] }}" type="text" id="formCreateFullName" name="full_name" required value="{{ request.form.get('email', '') or session.get('oauth_name', '') }}" placeholder="Name" aria-describedby="formCreateFullNameHelp">
+                    <div id="formCreateFullNameHelp" class="form-text"></div>
+                    <div class="valid-feedback">
+                        {{ feedback.get("full_name", ["", ""])[1] }}
+                    </div>
+                    <div class="invalid-feedback">
+                        {{ feedback.get("full_name", ["", ""])[1] }}
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label" for="formCreateAvatar">Profile Picture</label>
+                    <input class="form-control" {{ "disabled" if session.get('oauth_avatar_url') else ""}} type="file" id="formCreateAvatar" name="avatar" placeholder="Select a profile picture..." aria-describedby="formCreateAvatarHelp">
+                    <div id="formCreateAvatarHelp" class="form-text"></div>
+                </div>
+                <div class="mb-2">
+                    <input class="btn btn-submit btn-success" type="submit" value="Create">
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
