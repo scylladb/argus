@@ -1,7 +1,7 @@
 from functools import cached_property
 import logging
 from typing import Optional
-from flask import g, Flask
+from flask import current_app, g, Flask
 from cassandra.policies import WhiteListRoundRobinPolicy
 from cassandra import ConsistencyLevel
 from cassandra.cluster import ExecutionProfile, EXEC_PROFILE_DEFAULT, Cluster
@@ -32,7 +32,8 @@ class ScyllaCluster:
         connection.setup(hosts=config["SCYLLA_CONTACT_POINTS"], default_keyspace=config["SCYLLA_KEYSPACE_NAME"],
                          auth_provider=self.auth_provider,
                          protocol_version=4,
-                         execution_profiles={EXEC_PROFILE_DEFAULT: self.execution_profile})
+                         execution_profiles={EXEC_PROFILE_DEFAULT: self.execution_profile},
+                         retry_connect=True)
         self.cluster: Cluster = connection.get_cluster(connection='default')
         self.prepared_statements = {}
         self.read_exec_profile = ExecutionProfile(
@@ -50,6 +51,20 @@ class ScyllaCluster:
     @cached_property
     def session(self):
         return self.cluster.connect(keyspace=self.config["SCYLLA_KEYSPACE_NAME"])
+
+    @classmethod
+    def reconnect(cls):
+        if cls.APP_INSTANCE:
+            old_statements = cls.APP_INSTANCE.prepared_statements
+            cls.close_session()
+            cls.APP_INSTANCE.shutdown()
+            app = current_app
+            new_instance = cls.get(app.config)
+            for query, _ in old_statements.items():
+                new_instance.prepare(query)
+            return new_instance
+
+        return cls.get()
 
     @classmethod
     def get(cls, config: Config = None) -> 'ScyllaCluster':

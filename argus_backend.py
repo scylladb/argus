@@ -1,7 +1,9 @@
 import logging
 import os
+import cassandra.cluster
 from flask import Flask, request
 from prometheus_flask_exporter import NO_PREFIX
+from argus.backend.error_handlers import DBErrorHandler
 from argus.backend.metrics import METRICS
 from argus.backend.template_filters import export_filters
 from argus.backend.controller import admin, api, main
@@ -58,7 +60,10 @@ def start_server(config=None) -> Flask:
 
     setup_application_logging(log_level=app.config["APP_LOG_LEVEL"])
     app.logger.info("Starting Scylla Cluster connection...")
-    ScyllaCluster.get(app.config).attach_to_app(app)
+    app.register_error_handler(cassandra.cluster.NoHostAvailable, DBErrorHandler.handle_db_errors)
+    app.register_error_handler(cassandra.cluster.NoConnectionsAvailable, DBErrorHandler.handle_db_errors)
+    ScyllaCluster.get(app.config)
+    ScyllaCluster.attach_to_app(app)
 
     app.logger.info("Loading filters...")
     for filter_func in export_filters():
