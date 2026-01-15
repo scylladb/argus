@@ -12,6 +12,7 @@ from argus.backend.models.jira import JiraIssue
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.pytest import PytestResultTable, PytestResultTableOld, PytestUserField
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ArgusBestResultData, ArgusGraphView
+from argus.backend.models.run_config import RunConfigParam, RunConfiguration
 from argus.backend.models.runtime_store import RuntimeStore
 from argus.backend.models.view_widgets import WidgetHighlights, WidgetComment
 from argus.backend.models.argus_ai import ErrorEventEmbeddings, CriticalEventEmbeddings, SCTErrorEventEmbedding, \
@@ -428,6 +429,8 @@ USED_MODELS: list[Model] = [
     PytestResultTable,
     PytestUserField,
     PytestResultTableOld,
+    RunConfiguration,
+    RunConfigParam,
 ]
 
 USED_TYPES: list[UserType] = [
