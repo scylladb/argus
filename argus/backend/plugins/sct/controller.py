@@ -217,7 +217,7 @@ def sct_get_performance_history(run_id: str):
     }
 
 
-@bp.route("/release/<string:release_name>/kernels", methods=["GET"])
+@bp.route("/release/<path:release_name>/kernels", methods=["GET"])
 @api_login_required
 def sct_get_kernel_report(release_name: str):
     result = SCTService.get_scylla_version_kernels_report(release_name=release_name)

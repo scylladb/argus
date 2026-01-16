@@ -25,7 +25,7 @@ class ArgusTestsMonitor(ABC):
         self._existing_tests = list(ArgusTest.objects().limit(None))
         self._filtered_groups: list[str] = self.BUILD_SYSTEM_FILTERED_PREFIXES
 
-    def create_release(self, release_name):
+    def create_release(self, release_name: str):
         release = ArgusRelease()
         release.name = release_name
         release.save()
@@ -77,6 +77,9 @@ class JenkinsMonitor(ArgusTestsMonitor):
 
     JENKINS_MONITORED_RELEASES = [
         r"^scylla-master$",
+        r"^drivers$",
+        r"^scylla-\d+\.\d+/releng-testing$",
+        r"^enterprise-20\d{2}\.\d+/releng-testing$",
         r"^scylla-staging$",
         r"^scylla-\d+\.\d+$",
         r"^manager-3.\d+$",
@@ -104,13 +107,13 @@ class JenkinsMonitor(ArgusTestsMonitor):
         LOGGER.info("Will collect %s", [f["fullname"] for f in all_monitored_folders])
 
         for release in all_monitored_folders:
-            LOGGER.info("Processing release %s", release["name"])
+            LOGGER.info("Processing release %s", release["fullname"])
             try:
-                saved_release = ArgusRelease.get(name=release["name"])
-                LOGGER.info("Release %s exists", release["name"])
+                saved_release = ArgusRelease.get(name=release["fullname"])
+                LOGGER.info("Release %s exists", release["fullname"])
             except ArgusRelease.DoesNotExist:
-                LOGGER.warning("Release %s does not exist, creating...", release["name"])
-                saved_release = self.create_release(release["name"])
+                LOGGER.warning("Release %s does not exist, creating...", release["fullname"])
+                saved_release = self.create_release(release["fullname"])
                 self._existing_releases.append(saved_release)
 
             try:
