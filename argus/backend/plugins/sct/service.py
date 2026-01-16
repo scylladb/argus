@@ -1,6 +1,7 @@
 import base64
 from dataclasses import dataclass
 from datetime import UTC, datetime
+import json
 import logging
 import math
 import re
@@ -12,7 +13,7 @@ from flask import g
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.web import ArgusEventTypes, ErrorEventEmbeddings, CriticalEventEmbeddings
-from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTJunitReports, SCTTestRun, SubtestType
+from argus.backend.plugins.sct.testrun import SCTConfigParam, SCTConfiguration, SCTEvent, SCTEventSeverity, SCTJunitReports, SCTTestRun, SubtestType
 from argus.common.sct_types import GeminiResultsRequest, PerformanceResultsRequest, RawEventPayload, ResourceUpdateRequest
 from argus.backend.plugins.sct.udt import (
     CloudInstanceDetails,
@@ -432,6 +433,40 @@ class SCTService:
 
         event.save()
 
+        return True
+
+    @staticmethod
+    def get_config_store(run_id: str, config_name: str) -> SCTConfiguration:
+        try:
+            config_store = SCTConfiguration.get(run_id=run_id, name=config_name)
+        except SCTConfiguration.DoesNotExist:
+            config_store = SCTConfiguration()
+            config_store.run_id = run_id
+            config_store.name = config_name
+
+        return config_store
+
+    @classmethod
+    def parse_config_values(cls, config: str, run_id: str):
+        loaded: dict = json.loads(config)
+        # Store top level keys to a separate table for comparsion
+        for key, value in loaded.items():
+            param = SCTConfigParam()
+            param.name = key
+            param.value = str(value)
+            param.run_id = run_id
+            param.save()
+
+    @classmethod
+    def submit_config(cls, run_id: str, config_name: str, config_type: str, config_content: str) -> bool:
+        config_store = cls.get_config_store(run_id, config_name)
+        decoded_config = str(base64.decodebytes(bytes(config_content, encoding="utf-8")), encoding="utf-8")
+
+        config_store.content = decoded_config
+        config_store.type = config_type
+        if config_type == "sct":
+            cls.parse_config_values(decoded_config, run_id)
+        config_store.save()
         return True
 
     @staticmethod
