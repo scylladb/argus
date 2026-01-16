@@ -2,8 +2,11 @@ import base64
 from hashlib import sha256
 import logging
 import os
+from threading import Lock
 from traceback import format_exception
 from flask import flash, redirect, request, url_for
+
+from argus.backend.db import ScyllaCluster
 
 LOGGER = logging.getLogger(__name__)
 
@@ -14,6 +17,31 @@ class APIException(Exception):
 
 class DataValidationError(APIException):
     pass
+
+
+class DBErrorHandler():
+    DB_ERROR_COUNTER = 0
+    DB_ERROR_THRESHOLD = 10
+    RESTART_LOCK = Lock()
+
+    @classmethod
+    def handle_db_errors(cls, exception: Exception):
+        with cls.RESTART_LOCK:
+            cls.DB_ERROR_COUNTER +=1
+            LOGGER.error("Received error from db cluster.", exc_info=True)
+            if cls.DB_ERROR_COUNTER > cls.DB_ERROR_THRESHOLD:
+                LOGGER.warning("Reconnecting the cluster as we've exceeded cassandra error counter...")
+                ScyllaCluster.get().reconnect()
+                cls.DB_ERROR_COUNTER = 0
+                return {
+                    "status": "success",
+                    "response": f"Cluster seems down. Reconnect successful. Please attempt the request again."
+                }
+
+            return {
+                "status": "error",
+                "response": f"Cluster seems down. Attempting reconnect in {cls.DB_ERROR_THRESHOLD - cls.DB_ERROR_COUNTER} tries."
+            }
 
 
 def handle_api_exception(exception: Exception):
