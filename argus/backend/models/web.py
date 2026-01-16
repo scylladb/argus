@@ -14,7 +14,8 @@ from argus.backend.models.pytest import PytestResultTable, PytestResultTableOld,
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ArgusBestResultData, ArgusGraphView
 from argus.backend.models.runtime_store import RuntimeStore
 from argus.backend.models.view_widgets import WidgetHighlights, WidgetComment
-from argus.backend.models.argus_ai import ErrorEventEmbeddings, CriticalEventEmbeddings
+from argus.backend.models.argus_ai import ErrorEventEmbeddings, CriticalEventEmbeddings, SCTErrorEventEmbedding, \
+    SCTCriticalEventEmbedding
 
 
 def uuid_now():
@@ -417,8 +418,10 @@ USED_MODELS: list[Model] = [
     WidgetHighlights,
     WidgetComment,
     ArgusGraphView,
-    ErrorEventEmbeddings,
-    CriticalEventEmbeddings,
+    ErrorEventEmbeddings,  # to be deprecated
+    CriticalEventEmbeddings,  # to be deprecated
+    SCTErrorEventEmbedding,
+    SCTCriticalEventEmbedding,
     JiraIssue,
     GithubIssue,
     IssueLink,

@@ -80,9 +80,15 @@ class ScyllaCluster:
         for model in USED_MODELS:
             LOGGER.info("Syncing model: %s..", model.__name__)
             sync_table(model, keyspaces=[self.config["SCYLLA_KEYSPACE_NAME"]])
+
+        LOGGER.info("Core Models synchronized.")
+
+    def sync_additional_schema(self):
+        LOGGER.info("Syncing additional rules...")
+        for model in USED_MODELS:
             if rule_func := getattr(model, "_sync_additional_rules", None):
                 rule_func(self.session)
-        LOGGER.info("Core Models synchronized.")
+        LOGGER.info("Syncing additional rules done.")
 
     @classmethod
     def get_session(cls):
