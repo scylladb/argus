@@ -151,6 +151,7 @@
     import ResultsTab from "./ResultsTab.svelte";
     import SctEvents from "./SCT/SctEvents.svelte";
     import SctSetup from "./SCT/SctSetup.svelte";
+    import SctConfig from "./SCT/SctConfig.svelte";
 
     interface Props {
         runId?: string;
@@ -539,6 +540,9 @@
                     role="tabpanel"
                 >
                     <SctSetup {testRun} />
+                    {#if visitedTabs["setup"]}
+                        <SctConfig {testRun} />
+                    {/if}
                 </div>
                 {#if testRun.subtest_name && Object.values(Subtests).includes(testRun.subtest_name)}
                     {@const SubtestComponent = SubtestTabBodyComponents[testRun.subtest_name]}
