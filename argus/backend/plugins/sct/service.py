@@ -563,15 +563,14 @@ class SCTService:
         Args:
             run_id: The test run ID
             severity: Event severity (ERROR or CRITICAL)
-            ts: Event timestamp (Unix timestamp as string or float)
+            ts: Event timestamp (ISO format string)
             limit: Maximum number of similar events to return (default: 50)
-
         Returns:
             List of similar events with their details and similarity scores
         """
         try:
-            # Convert timestamp string to datetime
-            event_ts = datetime.fromtimestamp(float(ts), tz=UTC)
+            # Convert timestamp to datetime if needed
+            event_ts = datetime.fromisoformat(ts)
 
             # Get the embedding for the query event
             if severity == "ERROR":
@@ -585,7 +584,7 @@ class SCTService:
             query_embedding_result = embedding_model.filter(run_id=UUID(run_id), ts=event_ts).first()
 
             if not query_embedding_result:
-                LOGGER.warning(f"No embedding found for event: run_id={run_id}, severity={severity}, ts={ts}")
+                LOGGER.warning(f"No embedding found for event: run_id={run_id}, severity={severity}, ts={event_ts}")
                 return []
 
             query_embedding = query_embedding_result.embedding
