@@ -36,9 +36,6 @@
     const fetchSimilarEvents = async function () {
         loadingSimilars = true;
         try {
-            // Convert ISO timestamp to Unix timestamp for backend
-            const tsUnix = new Date(event.ts).getTime() / 1000;
-
             const response = await fetch(`/api/v1/client/sct/${runId}/event/similar`, {
                 method: "POST",
                 headers: {
@@ -46,7 +43,7 @@
                 },
                 body: JSON.stringify({
                     severity: event.severity,
-                    ts: tsUnix,
+                    ts: event.ts,
                     limit: 50
                 })
             });
