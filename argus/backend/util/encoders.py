@@ -22,7 +22,7 @@ class ArgusJSONEncoder(JSONEncoder):
             case m.Model():
                 return dict(o.items())
             case datetime():
-                return o.strftime("%Y-%m-%dT%H:%M:%SZ")
+                return o.strftime("%Y-%m-%dT%H:%M:%S.%fZ")[:-4] + "Z"  # Include milliseconds, trim to 3 decimal places
             case _:
                 return super().default(o)
 
@@ -54,6 +54,6 @@ class ArgusJSONProvider(DefaultJSONProvider):
             case dict():
                 return {str(k): v for k, v in o.items()}
             case datetime():
-                return o.strftime("%Y-%m-%dT%H:%M:%SZ")
+                return o.strftime("%Y-%m-%dT%H:%M:%S.%fZ")[:-4] + "Z"  # Include milliseconds, trim to 3 decimal places
             case _:
                 return super().default(o)
