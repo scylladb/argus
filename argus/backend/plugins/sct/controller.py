@@ -3,7 +3,7 @@ from flask import Blueprint, request
 from argus.backend.error_handlers import handle_api_exception
 from argus.backend.plugins.sct.testrun import SCTEventSeverity
 from argus.backend.service.user import api_login_required
-from argus.backend.plugins.sct.service import SCTService
+from argus.backend.plugins.sct.service import SCTService, SCTServiceException
 from argus.backend.util.common import get_payload
 
 bp = Blueprint("sct_api", __name__, url_prefix="/sct")
@@ -265,7 +265,7 @@ def sct_get_similar_events_realtime(run_id: str):
     payload = get_payload(request)
     severity = payload.get("severity")
     ts = payload.get("ts")
-    limit = int(payload.get("limit", 50))
+    limit = int(payload.get("limit", 100))
 
     err_message = ""
     if not severity and not ts:
@@ -275,10 +275,7 @@ def sct_get_similar_events_realtime(run_id: str):
     elif not ts:
         err_message = "Missing required parameter: ts"
     if err_message:
-        return {
-            "status": "error",
-            "response": err_message
-        }, 400
+        raise SCTServiceException(err_message)
 
 
     result = SCTService.get_similar_events_realtime(
