@@ -30,6 +30,7 @@
     let { event, runId, issueAttach }: Props = $props();
     let showModal = $state(false);
     let similarEvents: SimilarEventExtended[] = $state([]);
+    let originalSimilarEventsCount = $state(0);
     let loadingSimilars = $state(false);
     let fetchingRunInfo = $state(false);
 
@@ -55,6 +56,7 @@
             const data = await response.json();
             if (data.status === "ok") {
                 similarEvents = data.response || [];
+                originalSimilarEventsCount = similarEvents.length;
                 // Fetch run info for all similar events
                 if (similarEvents.length > 0) {
                     await fetchRunsInfo();
@@ -136,8 +138,8 @@
         <Fa icon={faExclamationTriangle}/>
         {#if loadingSimilars}
             <span class="spinner-border spinner-border-sm"></span>
-        {:else if similarEvents.length > 0}
-            View {similarEvents.length} Similar Events
+        {:else if originalSimilarEventsCount > 0}
+            Found {originalSimilarEventsCount} Similar Events
         {:else}
             Find Similar Events
         {/if}
