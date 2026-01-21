@@ -89,14 +89,16 @@
                 const data = await response.json();
                 if (data.status === "ok") {
                     const runsInfo = data.response;
-                    // Merge run info into similar events
-                    similarEvents = similarEvents.map(event => ({
-                        ...event,
-                        build_id: runsInfo[event.run_id]?.build_id,
-                        start_time: runsInfo[event.run_id]?.start_time,
-                        version: runsInfo[event.run_id]?.version,
-                        issues: runsInfo[event.run_id]?.issues || [],
-                    }));
+                    // Merge run info into similar events and filter out events without run info
+                    similarEvents = similarEvents
+                        .map(event => ({
+                            ...event,
+                            build_id: runsInfo[event.run_id]?.build_id,
+                            start_time: runsInfo[event.run_id]?.start_time,
+                            version: runsInfo[event.run_id]?.version,
+                            issues: runsInfo[event.run_id]?.issues || [],
+                        }))
+                        .filter(event => runsInfo[event.run_id] !== undefined);
                 } else {
                     console.error("Error fetching similar runs info:", data);
                 }

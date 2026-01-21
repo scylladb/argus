@@ -557,8 +557,9 @@ class SCTService:
         return result
 
     @staticmethod
-    def get_similar_events_realtime(run_id: str, severity: str, ts: str, limit: int = 50) -> list[dict]:
+    def get_similar_events_realtime(run_id: str, severity: str, ts: str, limit: int = 100) -> list[dict]:
         """Get similar events for a specific event using real-time vector search
+        Fetching more than we show to account for possible duplicates and the event itself.
 
         Args:
             run_id: The test run ID
@@ -608,16 +609,12 @@ class SCTService:
                 if str(row['run_id']) in visited_run_ids:
                     continue
 
-                if len(similar_events) < limit:
-                    similar_events.append({
-                        "run_id": str(row["run_id"]),
-                        "severity": severity,
-                        "ts": row["ts"],
-                    })
-                    visited_run_ids.add(str(row['run_id']))
-
-                if len(similar_events) >= limit:
-                    break
+                similar_events.append({
+                    "run_id": str(row["run_id"]),
+                    "severity": severity,
+                    "ts": row["ts"],
+                })
+                visited_run_ids.add(str(row['run_id']))
 
             return similar_events
 
