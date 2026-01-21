@@ -1,6 +1,6 @@
 <script lang="ts">
     import Fa from "svelte-fa";
-    import type { NemesisInfo } from "../TestRun.svelte";
+    import type { NemesisInfo, SCTTestRun } from "../TestRun.svelte";
     import { SCTEventSeverity, type EventSeverityFilter, type Options, type SCTEvent, type TimelineEvent } from "./SctEvents.svelte";
     import { faArrowDown, faArrowUp, faServer, faSpider, faTimeline } from "@fortawesome/free-solid-svg-icons";
     import { NemesisStatusBg, NemesisStatusFg } from "../../Common/TestStatus";
@@ -9,6 +9,7 @@
 
     interface Props {
         event: NemesisInfo,
+        run: SCTTestRun,
         filterState: EventSeverityFilter,
         options: Options,
         innerEvents: TimelineEvent[],
@@ -16,7 +17,7 @@
         issueAttach: (url: string) => void,
         eventFilterString: string,
     }
-    let { event, filterState, innerEvents, options, issueAttach, filterString = $bindable(), eventFilterString = $bindable()}: Props = $props();
+    let { event, run, filterState, innerEvents, options, issueAttach, filterString = $bindable(), eventFilterString = $bindable()}: Props = $props();
 
     let hasErrors = $derived(innerEvents.filter((evt: TimelineEvent) => [SCTEventSeverity.CRITICAL, SCTEventSeverity.ERROR].includes((evt.event as SCTEvent).severity)).length > 0);
     let expandEvents = $derived(hasErrors);
@@ -63,7 +64,7 @@
             <div class="rounded shadow bg-light-one p-2 collapse" class:show={expandEvents}>
                 {#each innerEvents as event}
                     <div class="mb-2">
-                        <SctEvent event={(event.event as SCTEvent)} filterState={filterState} options={event.opts || {}} issueAttach={issueAttach} bind:filterString={eventFilterString}/>
+                        <SctEvent {run} event={(event.event as SCTEvent)} filterState={filterState} options={event.opts || {}} issueAttach={issueAttach} bind:filterString={eventFilterString}/>
                     </div>
                 {/each}
             </div>

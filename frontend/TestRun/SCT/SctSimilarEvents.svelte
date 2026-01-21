@@ -131,7 +131,7 @@
 
 {#if canShowSimilars}
     <button
-        class="btn btn-sm btn-warning d-flex align-items-center gap-2"
+        class="ms-2 btn btn-sm btn-warning"
         onclick={toggleModal}
         disabled={loadingSimilars}
     >

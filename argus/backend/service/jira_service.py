@@ -4,6 +4,7 @@ import logging
 from collections import defaultdict
 from datetime import UTC, datetime
 from functools import reduce
+from unittest.mock import MagicMock
 from uuid import UUID
 from flask import current_app, g
 from jira import JIRA
@@ -29,7 +30,10 @@ class JiraService:
 
     plugins = AVAILABLE_PLUGINS
 
-    def __init__(self):
+    def __init__(self, dry_run = False):
+        if dry_run:
+            self.jira = None
+            return
         config = current_app.config
         self.jira = JIRA(server=config["JIRA_SERVER"], basic_auth=(config["JIRA_EMAIL"], config["JIRA_TOKEN"]))
 
@@ -74,7 +78,7 @@ class JiraService:
         last_ran.value = check_time
         last_ran.save()
 
-    def submit_issue(self, issue_url: str, test_id: UUID, run_id: UUID):
+    def get_issue(self, issue_url: str) -> tuple[JiraIssue, bool]:
         match = re.match(
             r"http(s)?://scylladb\.atlassian\.net/browse/(?P<key>[A-Z\-\d]+)(/)?",
             issue_url,
@@ -82,17 +86,15 @@ class JiraService:
         if not match:
             raise JiraServiceException("URL doesn't match ScyllaDB JIRA schema")
 
-        test: ArgusTest = ArgusTest.get(id=test_id)
-        plugin = self.get_plugin(plugin_name=test.plugin_name)
-        run = plugin.model.get(id=run_id)
-
         existing = True
         try:
-            issue = JiraIssue.get(url=issue_url)
+            issue = list(JiraIssue.filter(permalink=issue_url).all())[0]
         except:
             issue = None
             existing = False
         if not issue:
+            if not self.jira:
+                raise JiraServiceException("Jira remote is disabled.")
             key = match.group("key")
             remote_issue = self.jira.issue(key)
 
@@ -116,6 +118,14 @@ class JiraService:
 
             issue.save()
 
+        return issue, existing
+
+    def submit_issue(self, issue_url: str, test_id: UUID, run_id: UUID, event_id: UUID | str = None):
+        test: ArgusTest = ArgusTest.get(id=test_id)
+        plugin = self.get_plugin(plugin_name=test.plugin_name)
+        run = plugin.model.get(id=run_id)
+        issue, state = self.get_issue(issue_url)
+
         link = IssueLink()
         link.run_id = run.id
         link.user_id = g.user.id
@@ -123,6 +133,7 @@ class JiraService:
         link.release_id = test.release_id
         link.test_id = test.id
         link.group_id = test.group_id
+        link.event_id = event_id
         link.type = "jira"
 
         link.save()
@@ -130,7 +141,7 @@ class JiraService:
         EventService.create_run_event(
             kind=ArgusEventTypes.TestRunIssueAdded,
             body={
-                "message": f"An issue titled \"{{summary}}\" was {'attached' if existing else 'added'} by {{username}}",
+                "message": f"An issue titled \"{{summary}}\" was {'attached' if state else 'added'} by {{username}}",
                 "username": g.user.username,
                 "url": issue_url,
                 "summary": issue.summary,
@@ -160,9 +171,9 @@ class JiraService:
         return links
 
     def get_issues(self, filter_key: str, filter_id: UUID, aggregate_by_issue: bool = False) -> list[dict]:
-        if filter_key not in ["release_id", "group_id", "test_id", "run_id", "user_id", "view_id"]:
+        if filter_key not in ["release_id", "group_id", "test_id", "run_id", "user_id", "view_id", "event_id"]:
             raise Exception(
-                "filter_key can only be one of: \"release_id\", \"group_id\", \"test_id\", \"run_id\", \"user_id\", \"view_id\""
+                "filter_key can only be one of: \"release_id\", \"group_id\", \"test_id\", \"run_id\", \"user_id\", \"view_id\", \"event_id\""
             )
         if filter_key == "view_id":
             links = list(self._get_jira_issues_for_view(filter_id))

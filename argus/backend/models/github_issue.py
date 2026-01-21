@@ -1,6 +1,6 @@
-from enum import unique
+from enum import Enum, unique
 from uuid import uuid4
-from datetime import datetime
+from datetime import UTC, datetime
 from cassandra.cqlengine.models import Model
 from cassandra.cqlengine.usertype import UserType
 from cassandra.cqlengine import columns
@@ -38,7 +38,7 @@ class GithubIssue(Model):
     labels = columns.List(value_type=columns.UserDefinedType(user_type=IssueLabel))
     assignees = columns.List(value_type=columns.UserDefinedType(user_type=IssueAssignee))
     url = columns.Text(index=True)
-    added_on = columns.DateTime(default=datetime.utcnow)
+    added_on = columns.DateTime(default=lambda: datetime.now(tz=UTC))
 
     def __hash__(self) -> int:
         return hash((self.owner, self.repo, self.number))
@@ -59,5 +59,6 @@ class IssueLink(Model):
     group_id = columns.UUID(index=True)
     test_id = columns.UUID(index=True)
     user_id = columns.UUID(index=True)
-    added_on = columns.DateTime(default=datetime.utcnow)
+    event_id = columns.UUID(index=True)
+    added_on = columns.DateTime(default=lambda: datetime.now(tz=UTC))
     type = columns.Text()
