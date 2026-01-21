@@ -162,7 +162,7 @@ def results_service(argus_db):
 
 @fixture(scope='session')
 def issue_service(argus_db) -> IssueService:
-    return IssueService()
+    return IssueService(True)
 
 
 @fixture(scope='session')

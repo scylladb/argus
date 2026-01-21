@@ -1,3 +1,16 @@
+<script module>
+
+    export const GithubIssueColorMap = {
+        open: "issue-open",
+        closed: "issue-closed",
+    };
+
+    export const GithubIssueIcon = {
+        open: faDotCircle,
+        closed: faCheckCircle,
+    };
+
+</script>
 <script lang="ts">
     import { run as run_1 } from 'svelte/legacy';
 
@@ -24,15 +37,6 @@
         users = $userList;
     });
 
-    const IssueColorMap = {
-        open: "issue-open",
-        closed: "issue-closed",
-    };
-
-    const IssueIcon = {
-        open: faDotCircle,
-        closed: faCheckCircle,
-    };
 
     interface Props {
         issue?: GithubSubtype;
@@ -154,8 +158,8 @@
     <div class="col rounded p-2 bg-white shadow-sm">
         <div class="d-flex">
             <div class="ms-2 align-self-center">
-                <div class="mb-1 py-1 shadow-sm rounded-pill d-inline-flex {IssueColorMap[issue.state]}">
-                    <div class="ms-2 me-1"><Fa icon={IssueIcon[issue.state]} /></div>
+                <div class="mb-1 py-1 shadow-sm rounded-pill d-inline-flex {GithubIssueColorMap[issue.state]}">
+                    <div class="ms-2 me-1"><Fa icon={GithubIssueIcon[issue.state]} /></div>
                     <div class="me-2">{issue.state}</div>
                 </div>
             </div>
