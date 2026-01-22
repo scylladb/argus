@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from functools import reduce
 from uuid import UUID
 from flask import current_app, g
-from github import Github, Auth
+from github import Github, Auth, GithubException, UnknownObjectException
 
 from argus.backend.models.runtime_store import RuntimeStore
 from argus.backend.models.web import ArgusEventTypes, ArgusTest, ArgusUserView
@@ -234,3 +234,22 @@ class GithubService:
         return {
             "deleted": issue_id if remaining_links == 0 else (link.run_id, link.issue_id)
         }
+
+    def validate_repo(self, repo: str, branch: str):
+        try:
+            match = re.search(r'github\.com:(.+)\.git', repo)
+            repository = self.gh.get_repo(match.group(1))
+        except UnknownObjectException:
+            return (False, f"Repository '{repo}' not found or access denied.")
+        except GithubException as e:
+            LOGGER.error(f"GithubException while getting repo {repo}: {e.status} {e.data}")
+            return (False, f"Error accessing repository '{repo}': {e.data.get('message', 'Unknown error')}")
+
+        try:
+            repository.get_branch(branch)
+            return (True, "Repository and branch are valid.")
+        except UnknownObjectException:
+            return (False, f"Branch '{branch}' not found in repository '{repo}'.")
+        except GithubException as e:
+            LOGGER.error(f"GithubException while getting branch {branch} for repo {repo}: {e.status} {e.data}")
+            return (False, f"Error accessing branch '{branch}': {e.data.get('message', 'Unknown error')}")
