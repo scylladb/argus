@@ -62,6 +62,7 @@ def start_server(config=None) -> Flask:
     app.logger.info("Starting Scylla Cluster connection...")
     app.register_error_handler(cassandra.cluster.NoHostAvailable, DBErrorHandler.handle_db_errors)
     app.register_error_handler(cassandra.cluster.NoConnectionsAvailable, DBErrorHandler.handle_db_errors)
+    ScyllaCluster.pre_create_keyspaces(app.config)
     ScyllaCluster.get(app.config)
     ScyllaCluster.attach_to_app(app)
 
