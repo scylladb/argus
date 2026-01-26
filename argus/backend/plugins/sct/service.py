@@ -7,7 +7,7 @@ import re
 from time import time
 from uuid import UUID
 from xml.etree import ElementTree
-from flask import g
+from flask import current_app, g
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.web import ArgusEventTypes, ErrorEventEmbeddings, CriticalEventEmbeddings
@@ -605,10 +605,11 @@ class SCTService:
 
             db = ScyllaCluster.get()
             table_name = embedding_model.__table_name__
+            keyspace = embedding_model.__keyspace__ or current_app.config["SCYLLA_KEYSPACE_NAME"]
 
             query = f"""
                 SELECT run_id, ts
-                FROM {table_name}
+                FROM {keyspace}.{table_name}
                 ORDER BY embedding ANN OF ?
                 LIMIT ?
             """

@@ -56,6 +56,7 @@ def argus_db():
                 "--listen-address", "127.0.0.1",
                 "--smp", "1",
                 "--overprovisioned", "1",
+                "--rf-rack-valid-keyspaces", "1",
                 "--skip-wait-for-gossip-to-settle", "0",
                 "--endpoint-snitch=SimpleSnitch",
                 "--authenticator", "PasswordAuthenticator",
@@ -119,7 +120,11 @@ def argus_db():
         session = cluster.connect()
         session.execute("""
              CREATE KEYSPACE IF NOT EXISTS test_argus
-             WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1};
+             WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor' : 1};
+         """)
+        session.execute("""
+             CREATE KEYSPACE IF NOT EXISTS argus_tablets
+             WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor' : 1} AND tablets = {'enabled': true};
          """)
     config = {"SCYLLA_KEYSPACE_NAME": "test_argus", "SCYLLA_CONTACT_POINTS": [container_ip],
               "SCYLLA_USERNAME": "cassandra", "SCYLLA_PASSWORD": "cassandra", "APP_LOG_LEVEL": "INFO",
@@ -130,14 +135,15 @@ def argus_db():
     if need_sync_models:
         for user_type in all_plugin_types():
             sync_type(ks_name="test_argus", type_model=user_type)
-        sync_models()
+        sync_models("test_argus")
     # Wait a little to let CDC Reader and full scan of Vector Store indices to complete.
     LOGGER.info("Waiting on Vector Store to be ready...")
-    vs_indices = [r["name"] for r in database.session.execute("DESCRIBE test_argus").all() if r["type"] == "index" and "vector_index" in r["create_statement"]]
+    ks_name = "argus_tablets"
+    vs_indices = [r["name"] for r in database.session.execute(f"DESCRIBE {ks_name}").all() if r["type"] == "index" and "vector_index" in r["create_statement"]]
     for index_name in vs_indices:
         for log in containers["vs"].logs(stream=True):
             log_line = log.decode('utf-8')
-            if f"finished full scan on test_argus.{index_name}" in log_line:
+            if f"finished full scan on {ks_name}.{index_name}" in log_line:
                 break
             if time.time() - start_time > log_wait_timeout:
                 raise Exception("FATAL - Vector search did not build indices.")
