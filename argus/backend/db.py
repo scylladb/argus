@@ -87,14 +87,34 @@ class ScyllaCluster:
             self.prepared_statements[query] = statement
         return statement
 
+    @classmethod
+    def pre_create_keyspaces(cls, config: dict):
+        auth_provider = PlainTextAuthProvider(
+            username=config["SCYLLA_USERNAME"], password=config["SCYLLA_PASSWORD"])
+        lb_policy = WhiteListRoundRobinPolicy(hosts=config["SCYLLA_CONTACT_POINTS"])
+        execution_profile = ExecutionProfile(
+            load_balancing_policy=lb_policy, consistency_level=ConsistencyLevel.QUORUM)
+        cluster = Cluster(contact_points=config["SCYLLA_CONTACT_POINTS"],
+                         auth_provider=auth_provider,
+                         protocol_version=4,
+                         execution_profiles={EXEC_PROFILE_DEFAULT: execution_profile},)
+        session = cluster.connect()
+        rf = config.get("SCYLLA_REPLICATION_FACTOR", len(config["SCYLLA_CONTACT_POINTS"]))
+        ks_base_name = config["SCYLLA_KEYSPACE_NAME"]
+        session.execute("CREATE KEYSPACE IF NOT EXISTS {ks} WITH replication = {{'class': 'NetworkTopologyStrategy','replication_factor': {rf}}} AND tablets = {{'enabled': true}};".format(ks=ks_base_name, rf=rf))
+        session.execute("CREATE KEYSPACE IF NOT EXISTS argus_tablets WITH replication = {{'class': 'NetworkTopologyStrategy','replication_factor': {rf}}} AND tablets = {{'enabled': true}};".format(ks=ks_base_name, rf=rf))
+        cluster.shutdown()
+
     def sync_core_tables(self):
         for udt in USED_TYPES:
             LOGGER.info("Syncing type: %s..", udt.__name__)
-            sync_type(ks_name=self.config["SCYLLA_KEYSPACE_NAME"], type_model=udt)
+            ks = getattr(udt, "__keyspace__" ,self.config["SCYLLA_KEYSPACE_NAME"])
+            sync_type(ks_name=ks, type_model=udt)
         LOGGER.info("Core Types synchronized.")
         for model in USED_MODELS:
             LOGGER.info("Syncing model: %s..", model.__name__)
-            sync_table(model, keyspaces=[self.config["SCYLLA_KEYSPACE_NAME"]])
+            ks = model.__keyspace__ or self.config["SCYLLA_KEYSPACE_NAME"]
+            sync_table(model, keyspaces=[ks])
 
         LOGGER.info("Core Models synchronized.")
 

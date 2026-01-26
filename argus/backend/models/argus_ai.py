@@ -6,6 +6,7 @@ from cassandra.cqlengine.models import Model
 
 
 class ErrorEventEmbeddings(Model):
+    __keyspace__ = "argus_tablets"
     __table_name__ = "error_event_embeddings"
     run_id = columns.UUID(partition_key=True)
     event_index = columns.Integer(primary_key=True)
@@ -19,6 +20,7 @@ class ErrorEventEmbeddings(Model):
 
 
 class CriticalEventEmbeddings(Model):
+    __keyspace__ = "argus_tablets"
     __table_name__ = "critical_event_embeddings"
     run_id = columns.UUID(partition_key=True)
     event_index = columns.Integer(primary_key=True)
@@ -71,6 +73,7 @@ class Vector(columns.List):
 class SCTErrorEventEmbedding(Model):
     """Table to store ERROR event embeddings for similarity search."""
     __table_name__ = "sct_error_event_embedding"
+    __keyspace__ = "argus_tablets"
 
     run_id = columns.UUID(partition_key=True)
     ts = columns.DateTime(primary_key=True, clustering_order="DESC")
@@ -79,13 +82,14 @@ class SCTErrorEventEmbedding(Model):
     @classmethod
     def _sync_additional_rules(cls, session: Session):
         session.execute(
-            f"CREATE INDEX IF NOT EXISTS error_event_index ON {cls.__table_name__}(embedding) USING 'vector_index' WITH OPTIONS = {{ 'similarity_function': 'COSINE' }}"
+            f"CREATE INDEX IF NOT EXISTS error_event_index ON {cls.__keyspace__}.{cls.__table_name__}(embedding) USING 'vector_index' WITH OPTIONS = {{ 'similarity_function': 'COSINE' }}"
         )
 
 
 class SCTCriticalEventEmbedding(Model):
     """Table to store CRITICAL event embeddings for similarity search."""
     __table_name__ = "sct_critical_event_embedding"
+    __keyspace__ = "argus_tablets"
 
     run_id = columns.UUID(partition_key=True)
     ts = columns.DateTime(primary_key=True, clustering_order="DESC")
@@ -94,5 +98,5 @@ class SCTCriticalEventEmbedding(Model):
     @classmethod
     def _sync_additional_rules(cls, session: Session):
         session.execute(
-            f"CREATE INDEX IF NOT EXISTS critical_event_index ON {cls.__table_name__}(embedding) USING 'vector_index' WITH OPTIONS = {{ 'similarity_function': 'COSINE' }}"
+            f"CREATE INDEX IF NOT EXISTS critical_event_index ON {cls.__keyspace__}.{cls.__table_name__}(embedding) USING 'vector_index' WITH OPTIONS = {{ 'similarity_function': 'COSINE' }}"
         )

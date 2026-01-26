@@ -98,11 +98,12 @@ def argus_db():
               "EMAIL_SENDER": "unit tester", "EMAIL_SENDER_PASS": "pass", "EMAIL_SENDER_USER": "qa",
               "EMAIL_SERVER": "fake", "EMAIL_SERVER_PORT": 25}
     Config.CONFIG = config  # patch config for whole test to avoid using Config.load_yaml_config() required by app context
+    ScyllaCluster.pre_create_keyspaces(config)
     database = ScyllaCluster.get(config)
     if need_sync_models:
         for user_type in all_plugin_types():
             sync_type(ks_name="test_argus", type_model=user_type)
-        sync_models()
+        sync_models("test_argus")
 
     yield database
     database.shutdown()
