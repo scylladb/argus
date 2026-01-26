@@ -138,7 +138,9 @@ class TestEventProcessing:
         insert_calls = [
             call
             for call in processor.db.execute.call_args_list
-            if call[0][0].startswith(f"INSERT INTO {SCTErrorEventEmbedding.__table_name__}")
+            if call[0][0].startswith(
+                f"INSERT INTO {SCTErrorEventEmbedding.__keyspace__}.{SCTErrorEventEmbedding.__table_name__}"
+            )
         ]
         assert len(insert_calls) == 1
 
@@ -172,7 +174,9 @@ class TestEventProcessing:
         insert_calls = [
             call
             for call in processor.db.execute.call_args_list
-            if call[0][0].startswith(f"INSERT INTO {SCTCriticalEventEmbedding.__table_name__}")
+            if call[0][0].startswith(
+                f"INSERT INTO {SCTCriticalEventEmbedding.__keyspace__}.{SCTCriticalEventEmbedding.__table_name__}"
+            )
         ]
         assert len(insert_calls) == 1
 

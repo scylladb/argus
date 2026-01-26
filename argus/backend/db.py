@@ -90,11 +90,13 @@ class ScyllaCluster:
     def sync_core_tables(self):
         for udt in USED_TYPES:
             LOGGER.info("Syncing type: %s..", udt.__name__)
-            sync_type(ks_name=self.config["SCYLLA_KEYSPACE_NAME"], type_model=udt)
+            ks = getattr(udt, "__keyspace__" ,self.config["SCYLLA_KEYSPACE_NAME"])
+            sync_type(ks_name=ks, type_model=udt)
         LOGGER.info("Core Types synchronized.")
         for model in USED_MODELS:
             LOGGER.info("Syncing model: %s..", model.__name__)
-            sync_table(model, keyspaces=[self.config["SCYLLA_KEYSPACE_NAME"]])
+            ks = model.__keyspace__ or self.config["SCYLLA_KEYSPACE_NAME"]
+            sync_table(model, keyspaces=[ks])
 
         LOGGER.info("Core Models synchronized.")
 

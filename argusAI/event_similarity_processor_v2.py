@@ -73,6 +73,11 @@ class EventSimilarityProcessorV2:
         self.error_count = 0
         self.cache_clear_timer = 3600
         self.similar_event_cache: dict[tuple[RunIdStr, Severity], list[SimilarEvent]] = {}
+        self.keyspace = (
+            SCTCriticalEventEmbedding.__keyspace__
+            or SCTErrorEventEmbedding.__keyspace__
+            or self.db.config["SCYLLA_KEYSPACE_NAME"]
+        )
         LOGGER.info("EventSimilarityProcessorV2 initialized")
 
     def _clear_stale_cache(self):
@@ -98,7 +103,7 @@ class EventSimilarityProcessorV2:
     def _get_potential_duplicate_rows(self, embedding: list[float], table_name: str) -> list[SimilarEvent]:
         query = f"""
                 SELECT run_id, ts, embedding
-                FROM {table_name}
+                FROM {self.keyspace}.{table_name}
                 ORDER BY embedding ANN OF ?
                 LIMIT ?
             """
@@ -289,7 +294,7 @@ class EventSimilarityProcessorV2:
             else:
                 raise ValueError(f"Unsupported severity: {severity}")
 
-            insert_query = f"INSERT INTO {table_name} (run_id, ts, embedding) VALUES (?, ?, ?)"
+            insert_query = f"INSERT INTO {self.keyspace}.{table_name} (run_id, ts, embedding) VALUES (?, ?, ?)"
             self.db.execute(insert_query, (run_id, ts, embedding))
             LOGGER.debug(f"Stored embedding in {table_name} for event: run_id={run_id}, ts={ts}")
             # cache event until it is visible in VS

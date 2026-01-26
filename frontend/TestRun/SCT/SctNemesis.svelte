@@ -70,7 +70,7 @@
             <div class="rounded shadow bg-light-one p-2 collapse" class:show={expandEvents}>
                 {#each innerEvents as event}
                     <div class="mb-2">
-                        <SctEvent {focusDuplicate} bind:this={eventMap[event.event.event_id]} {refreshIssues} issues={issues.filter((i) => i.event_id == (event.event as SCTEvent).event_id)} {run} event={(event.event as SCTEvent)} filterState={filterState} options={event.opts || {}} issueAttach={issueAttach} bind:filterString={eventFilterString}/>
+                        <SctEvent {focusDuplicate} bind:duplicateIdShowTable bind:this={eventMap[event.event.event_id]} {refreshIssues} issues={issues.filter((i) => i.event_id == (event.event as SCTEvent).event_id)} {run} event={(event.event as SCTEvent)} filterState={filterState} options={event.opts || {}} issueAttach={issueAttach} bind:filterString={eventFilterString}/>
                     </div>
                 {/each}
             </div>
