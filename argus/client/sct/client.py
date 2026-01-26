@@ -127,7 +127,7 @@ class ArgusSCTClient(ArgusClient):
         )
         self.check_response(response)
 
-    def add_stress_command(self, command: str) -> None:
+    def add_stress_command(self, command: str, log_name: str, loader_name: str) -> None:
         """
             Submits stress command information to be viewed inside Argus.
         """
@@ -137,6 +137,8 @@ class ArgusSCTClient(ArgusClient):
             body={
                 **self.generic_body,
                 "cmd": command,
+                "log_name": log_name,
+                "loader_name": loader_name,
             }
         )
         self.check_response(response)

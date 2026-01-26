@@ -61,12 +61,6 @@ class CloudResource(UserType):
     def get_instance_info(self) -> CloudInstanceDetails:
         return self.instance_info
 
-
-class StressCommand(UserType):
-    cmd = columns.Text()
-    ts = columns.DateTime(default=lambda: datetime.now(tz=UTC))
-
-
 class EventsBySeverity(UserType):
     __type_name__ = "EventsBySeverity"
     severity = columns.Text()

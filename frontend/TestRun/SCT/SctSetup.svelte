@@ -30,7 +30,19 @@
                         <td>
                             <div class="input-group">
                                 <input class="form-control" type="text" value="{cmd.cmd}" disabled>
-                                <button class="btn btn-success btn-sm" onclick={() => navigator.clipboard.writeText(cmd.cmd)}><Fa icon={faCopy}/></button>
+                                <button class="d-none btn btn-success btn-sm" onclick={() => navigator.clipboard.writeText(cmd.cmd)}><Fa icon={faCopy}/></button>
+                            </div>
+                            <div class="d-flex">
+                                {#if cmd.log_name}
+                                    <div>
+                                        Log File: {cmd.log_name}
+                                    </div>
+                                {/if}
+                                {#if cmd.loader_name}
+                                    <div class="ms-auto">
+                                        Node: {cmd.loader_name}
+                                    </div>
+                                {/if}
                             </div>
                             {#if cmd.ts}
                                 <div class="text-muted" style="font-size: 0.75rem">
@@ -46,5 +58,7 @@
 </div>
 
 <style>
-
+    .input-group:hover button{
+        display: inline !important;
+    }
 </style>

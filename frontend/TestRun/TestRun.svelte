@@ -79,7 +79,7 @@
         build_job_url: string,
         subtest_name: string,
         status: string,
-        stress_commands: { cmd: string, ts: string }[]
+        stress_commands: { cmd: string, ts: string, loader_name: string, log_name: string }[]
         investigation_status: string,
         screenshots: string[],
         packages: SCTPackage[],

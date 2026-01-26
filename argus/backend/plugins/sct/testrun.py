@@ -1,6 +1,6 @@
 from enum import Enum
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from dataclasses import dataclass, field
 from typing import Optional
 from uuid import UUID
@@ -18,8 +18,7 @@ from argus.backend.plugins.sct.udt import (
     EventsBySeverity,
     NemesisRunInfo,
     PackageVersion,
-    PerformanceHDRHistogram,
-    StressCommand
+    PerformanceHDRHistogram
 )
 from argus.backend.util.common import chunk
 
@@ -63,6 +62,16 @@ class SCTEventSeverity(str, Enum):
     WARNING = "WARNING"
     NORMAL = "NORMAL"
     DEBUG = "DEBUG"
+
+
+
+class StressCommand(Model):
+    run_id = columns.UUID(primary_key=True, partition_key=True)
+    ts = columns.DateTime(primary_key=True, clustering_order="DESC", default=lambda: datetime.now(tz=UTC))
+    cmd = columns.Text()
+    log_name = columns.Text()
+    node_name = columns.Text()
+
 
 
 class SCTEvent(Model):
@@ -118,7 +127,6 @@ class SCTTestRun(PluginModelBase):
     scylla_version = columns.Text()
     version_source = columns.Text()
     yaml_test_duration = columns.Integer()
-    stress_commands = columns.List(value_type=columns.UserDefinedType(user_type=StressCommand))
 
     # Test Preset Resources
     sct_runner_host = columns.UserDefinedType(user_type=CloudInstanceDetails)
@@ -294,14 +302,17 @@ class SCTTestRun(PluginModelBase):
 
 
     def get_stress_commands(self) -> list[StressCommand]:
-        return self.stress_commands
+        return list(StressCommand.filter(run_id=self.id).all())
 
 
-    def add_stress_command(self, cmd: str):
+    def add_stress_command(self, cmd: str, log_name: str, loader_name: str):
         s = StressCommand()
+        s.run_id = self.id
         s.cmd = cmd
+        s.log_name = log_name
+        s.node_name = loader_name
 
-        self.stress_commands.append(s)
+        s.save()
         return True
 
 
