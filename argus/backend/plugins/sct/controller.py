@@ -252,7 +252,7 @@ def sct_get_junit_reports(run_id: str):
 @api_login_required
 def sct_add_stress_cmd(run_id: str):
     payload = get_payload(request)
-    result = SCTService.add_stress_command(run_id, payload["cmd"])
+    result = SCTService.add_stress_command(run_id, cmd=payload["cmd"], loader_name=payload["loader_name"], log_name=payload["log_name"])
     return {
         "status": "ok",
         "response": result

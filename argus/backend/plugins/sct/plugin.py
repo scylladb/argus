@@ -1,6 +1,6 @@
 from flask import Blueprint
 
-from argus.backend.plugins.sct.testrun import SCTEvent, SCTJunitReports, SCTTestRun, SCTUnprocessedEvent
+from argus.backend.plugins.sct.testrun import SCTEvent, SCTJunitReports, SCTTestRun, SCTUnprocessedEvent, StressCommand
 from argus.backend.plugins.sct.controller import bp as sct_bp
 from argus.backend.plugins.core import PluginInfoBase, PluginModelBase
 from argus.backend.plugins.sct.udt import (
@@ -12,8 +12,7 @@ from argus.backend.plugins.sct.udt import (
     NemesisRunInfo,
     NodeDescription,
     PackageVersion,
-    PerformanceHDRHistogram,
-    StressCommand,
+    PerformanceHDRHistogram
 )
 
 
@@ -26,9 +25,9 @@ class PluginInfo(PluginInfoBase):
         SCTJunitReports,
         SCTEvent,
         SCTUnprocessedEvent,
+        StressCommand,
     ]
     all_types = [
-        StressCommand,
         NemesisRunInfo,
         NodeDescription,
         EventsBySeverity,

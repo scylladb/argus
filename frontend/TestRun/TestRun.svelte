@@ -82,7 +82,7 @@
         test_id: string,
         release_id: string,
         group_id: string,
-        stress_commands: { cmd: string, ts: string }[]
+        stress_commands: { cmd: string, ts: string, loader_name: string, log_name: string }[]
         investigation_status: string,
         screenshots: string[],
         packages: SCTPackage[],
