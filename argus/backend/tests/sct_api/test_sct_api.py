@@ -292,6 +292,29 @@ def test_submit_legacy_events(flask_client, sct_run_id):
 
 
 
+def test_stress_commands(flask_client, sct_run_id):
+    payload = {
+        "log_name": "example.log",
+        "cmd": "cassandra-stress example --param 1",
+        "loader_name": "loader-node-1",
+        "schema_version": "v8"
+    }
+    resp = flask_client.post(
+        f"{API_PREFIX}/{sct_run_id}/stress_cmd/submit",
+        data=json.dumps(payload),
+        content_type="application/json",
+    )
+    assert resp.status_code == 200
+    assert resp.json["status"] == "ok"
+
+    run: SCTTestRun = SCTTestRun.get(id=sct_run_id)
+    stress_cmds = run.get_stress_commands(run.id)
+    assert len(stress_cmds) == 1
+    assert stress_cmds[0].cmd == payload["cmd"]
+    assert stress_cmds[0].log_name == payload["log_name"]
+    assert stress_cmds[0].node_name == payload["loader_name"]
+
+
 def test_submit_gemini_results(flask_client, sct_run_id):
     payload = {
         "gemini_data": {

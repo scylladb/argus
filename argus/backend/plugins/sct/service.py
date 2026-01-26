@@ -13,7 +13,7 @@ from argus.backend.db import ScyllaCluster
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.web import ArgusEventTypes, ErrorEventEmbeddings, CriticalEventEmbeddings
 from argus.backend.models.argus_ai import SCTErrorEventEmbedding, SCTCriticalEventEmbedding
-from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTJunitReports, SCTTestRun, SubtestType, SCTUnprocessedEvent
+from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTJunitReports, SCTTestRun, SubtestType, SCTUnprocessedEvent, StressCommand
 from argus.common.sct_types import GeminiResultsRequest, PerformanceResultsRequest, RawEventPayload, ResourceUpdateRequest
 from argus.backend.plugins.sct.udt import (
     CloudInstanceDetails,
@@ -23,7 +23,6 @@ from argus.backend.plugins.sct.udt import (
     NodeDescription,
     PackageVersion,
     PerformanceHDRHistogram,
-    StressCommand,
 )
 from argus.backend.service.event_service import EventService
 from argus.backend.util.common import chunk, get_build_number
@@ -826,19 +825,13 @@ class SCTService:
 
     @staticmethod
     def get_stress_commands(run_id: str) -> list[StressCommand]:
-        try:
-            run: SCTTestRun = SCTTestRun.get(id=run_id)
-        except SCTTestRun.DoesNotExist as exception:
-            LOGGER.error("Run %s not found for SCTTestRun", run_id)
-            raise SCTServiceException("Run not found", run_id) from exception
-
-        return run.stress_commands
+        return SCTTestRun.get_stress_commands(run_id)
 
     @staticmethod
-    def add_stress_command(run_id: str, cmd: str):
+    def add_stress_command(run_id: str, cmd: str, loader_name: str, log_name: str):
         try:
             run: SCTTestRun = SCTTestRun.get(id=run_id)
-            run.add_stress_command(cmd=cmd)
+            run.add_stress_command(cmd=cmd, loader_name=loader_name, log_name=log_name)
             run.save()
         except SCTTestRun.DoesNotExist as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
