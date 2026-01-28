@@ -65,6 +65,44 @@ class EventSimilarityProcessorV2:
         self.error_count = 0
         LOGGER.info("EventSimilarityProcessorV2 initialized")
 
+    def _mark_event_is_duplicate(self, run_id: str, ts: datetime, severity: str, embedding: list[float]) -> bool:
+        try:
+            table_name = (
+                SCTErrorEventEmbedding.__table_name__
+                if severity == "ERROR"
+                else SCTCriticalEventEmbedding.__table_name__
+            )
+            query = f"""
+                SELECT run_id, ts
+                FROM {table_name}
+                ORDER BY embedding ANN OF ?
+                LIMIT ?
+            """
+            bound_statement = self.db.session.prepare(query)
+            result_rows = list(self.db.session.execute(bound_statement, parameters=[embedding, 1000]))
+            if len(result_rows) > 0:
+                dupe_embedding = next((row for row in result_rows if row["run_id"] == run_id), None)
+                if not dupe_embedding:
+                    return False
+                q = f"SELECT event_id FROM {SCTEvent.__table_name__} WHERE run_id = ? AND severity = ? AND ts = ?"
+                dupe = self.db.session.execute(
+                    q, parameters=(dupe_embedding["run_id"], severity, dupe_embedding["ts"])
+                ).one()
+                dupe_id = dupe["event_id"]
+                self._clear_unprocessed_event(SCTUnprocessedEvent.__table_name__, run_id, severity, ts)
+                update_query = f"UPDATE {SCTEvent.__table_name__} SET duplicate_id = ? WHERE run_id = ? AND severity = ? AND ts = ?"
+                self.db.execute(update_query, (dupe_id, run_id, severity, ts))
+                return True
+        except Exception as e:
+            LOGGER.error(f"Duplicate search error: {e}", exc_info=True)
+            raise
+
+        return False
+
+    def _clear_unprocessed_event(self, table_name: str, run_id: str, severity: str, ts: datetime):
+        delete_query = f"DELETE FROM {table_name} WHERE run_id = ? AND severity = ? AND ts = ?"
+        self.db.execute(delete_query, (run_id, severity, ts))
+
     def process_unprocessed_events(self) -> None:
         """
         Main processing loop that continuously reads and processes unprocessed events.
@@ -181,6 +219,10 @@ class EventSimilarityProcessorV2:
             LOGGER.error(f"Failed to generate embedding for event (run_id={run_id}): {e}", exc_info=True)
             raise
 
+        # Step 3.5: Check if event is duplicate, cancel remaining steps if it is.
+        if self._mark_event_is_duplicate(run_id, ts, severity, embedding):
+            return
+
         # Step 4: Store embedding in severity-specific table
         try:
             if severity == "ERROR":
@@ -199,10 +241,7 @@ class EventSimilarityProcessorV2:
 
         # Step 5: Remove entry from unprocessed_events table
         try:
-            delete_query = (
-                f"DELETE FROM {SCTUnprocessedEvent.__table_name__} WHERE run_id = ? AND severity = ? AND ts = ?"
-            )
-            self.db.execute(delete_query, (run_id, severity, ts))
+            self._clear_unprocessed_event(SCTUnprocessedEvent.__table_name__, run_id, severity, ts)
             LOGGER.debug(f"Removed unprocessed event: run_id={run_id}, severity={severity}, ts={ts}")
         except Exception as e:
             LOGGER.error(f"Failed to delete unprocessed event (run_id={run_id}): {e}", exc_info=True)
