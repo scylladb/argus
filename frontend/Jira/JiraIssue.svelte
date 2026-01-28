@@ -1,3 +1,32 @@
+<script module>
+    export const JiraIssueIcon: Record<JiraState, IconDefinition> = {
+        "in progress": faDotCircle,
+        "in review": faDotCircle,
+        "ready for merge": faDotCircle,
+        "won't fix": faCheckCircle,
+        blocked: faSquare,
+        done: faCheckCircle,
+        duplicate: faCheckCircle,
+        todo: faSquare,
+        new: faDotCircle,
+    };
+
+
+    export const JiraIssueColorMap: Record<JiraState, string> = {
+        "in progress": "jira-progress",
+        "in review": "jira-review",
+        "ready for merge": "jira-merge",
+        "won't fix": "jira-fix",
+        new: "jira-new",
+        blocked: "jira-blocked",
+        done: "jira-done",
+        duplicate: "jira-dupe",
+        todo: "jira-todo",
+    };
+
+
+</script>
+
 <script lang="ts">
     import { run as run_1 } from 'svelte/legacy';
 
@@ -25,30 +54,6 @@
     run_1(() => {
         users = $userList;
     });
-
-    const IssueColorMap: Record<JiraState, string> = {
-        "in progress": "jira-progress",
-        "in review": "jira-review",
-        "ready for merge": "jira-merge",
-        "won't fix": "jira-fix",
-        new: "jira-new",
-        blocked: "jira-blocked",
-        done: "jira-done",
-        duplicate: "jira-dupe",
-        todo: "jira-todo",
-    };
-
-    const IssueIcon: Record<JiraState, IconDefinition> = {
-        "in progress": faDotCircle,
-        "in review": faDotCircle,
-        "ready for merge": faDotCircle,
-        "won't fix": faCheckCircle,
-        blocked: faSquare,
-        done: faCheckCircle,
-        duplicate: faCheckCircle,
-        todo: faSquare,
-        new: faDotCircle,
-    };
 
     interface Props {
         issue?: JiraSubtype;
@@ -170,8 +175,8 @@
     <div class="col rounded p-2 bg-white shadow-sm">
         <div class="d-flex">
             <div class="ms-2 align-self-center">
-                <div class="mb-1 py-1 shadow-sm rounded-pill d-inline-flex {IssueColorMap[issue.state] || IssueColorMap["new"]}">
-                    <div class="ms-2 me-1"><Fa icon={IssueIcon[issue.state] || IssueIcon["new"]} /></div>
+                <div class="mb-1 py-1 shadow-sm rounded-pill d-inline-flex {JiraIssueColorMap[issue.state] || JiraIssueColorMap["new"]}">
+                    <div class="ms-2 me-1"><Fa icon={JiraIssueIcon[issue.state] || JiraIssueIcon["new"]} /></div>
                     <div class="me-2">{issue.state}</div>
                 </div>
             </div>

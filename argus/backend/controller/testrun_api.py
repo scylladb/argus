@@ -184,6 +184,24 @@ def issues_submit(test_id: str, run_id: str):
     }
 
 
+@bp.route("/test/<string:test_id>/run/<string:run_id>/issues/event/<string:event_id>/submit", methods=["POST"])
+@api_login_required
+def issues_submit_for_event(test_id: str, run_id: str, event_id: str):
+    payload = get_payload(client_request=request)
+    service = IssueService()
+    submit_result = service.submit_for_sct_event(
+        issue_url=payload["issue_url"],
+        test_id=UUID(test_id),
+        event_id=UUID(event_id),
+        run_id=UUID(run_id)
+    )
+
+    return {
+        "status": "ok",
+        "response": submit_result
+    }
+
+
 @bp.route("/issues/get", methods=["GET"])
 @api_login_required
 def issues_get():

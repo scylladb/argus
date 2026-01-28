@@ -3,6 +3,7 @@
         run_id: string;
         severity: string;
         ts: string;
+        event_id: string;
         event_type: string;
         message: string;
         node?: string;
@@ -273,13 +274,13 @@
             {#if event.type == TimelineEventType.Event}
                 {#if severityFilter[event.severity]}
                     <div class="mb-2">
-                        <SctEvent event={(event.event as SCTEvent)} filterState={severityFilter} options={event.opts || {}} issueAttach={issueAttach} bind:filterString={eventFilterString} />
+                        <SctEvent event={(event.event as SCTEvent)} run={testRun} filterState={severityFilter} options={event.opts || {}} issueAttach={issueAttach} bind:filterString={eventFilterString} />
                     </div>
                 {/if}
             {:else if event.type == TimelineEventType.Nemesis}
                 {#if event.innerEvents.filter((e) => [SCTEventSeverity.CRITICAL, SCTEventSeverity.ERROR].includes((e.event as SCTEvent).severity)).length > 0 || nemesisFilter[event.event.status]}
                     <div class="mb-2">
-                        <SctNemesis event={(event.event as NemesisInfo)} filterState={severityFilter} innerEvents={event.innerEvents} options={event.opts || {}} bind:filterString={nemesisFilterString}  issueAttach={issueAttach} bind:eventFilterString/>
+                        <SctNemesis event={(event.event as NemesisInfo)}  run={testRun} filterState={severityFilter} innerEvents={event.innerEvents} options={event.opts || {}} bind:filterString={nemesisFilterString}  issueAttach={issueAttach} bind:eventFilterString/>
                     </div>
                 {/if}
             {/if}

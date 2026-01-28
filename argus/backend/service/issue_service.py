@@ -6,9 +6,9 @@ from argus.backend.service.jira_service import JiraService
 
 class IssueService:
 
-    def __init__(self):
-        self.gh = GithubService()
-        self.jira = JiraService()
+    def __init__(self, dry_run = False):
+        self.gh = GithubService(dry_run)
+        self.jira = JiraService(dry_run)
 
     def _get_service(self, url):
         return self.gh if "github.com" in url else self.jira
@@ -28,3 +28,6 @@ class IssueService:
 
     def submit(self, issue_url: str, test_id: UUID | str, run_id: UUID | str):
         return self._get_service(issue_url).submit_issue(issue_url=issue_url, test_id=test_id, run_id=run_id)
+
+    def submit_for_sct_event(self, issue_url: str, test_id: UUID | str, event_id: UUID | str, run_id: UUID | str):
+        return self._get_service(issue_url).submit_issue(issue_url=issue_url, test_id=test_id, run_id=run_id, event_id=event_id)

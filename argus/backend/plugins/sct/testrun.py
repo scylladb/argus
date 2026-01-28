@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from cassandra.cqlengine import columns
 from cassandra.cqlengine.models import _DoesNotExist, Model
@@ -70,6 +70,7 @@ class SCTEvent(Model):
     run_id = columns.UUID(partition_key=True, primary_key=True)
     severity = columns.Text(partition_key=True, primary_key=True)
     ts = columns.DateTime(primary_key=True, clustering_order="ASC")
+    event_id = columns.UUID(index=True, default=uuid4)
     event_type = columns.Text()
     message = columns.Text(required=True)
 
