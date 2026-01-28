@@ -572,6 +572,12 @@ class SCTService:
         try:
             # Convert timestamp to datetime if needed
             event_ts = datetime.fromisoformat(ts)
+            event: SCTEvent = SCTEvent.get(run_id=run_id, severity=severity, ts=event_ts)
+            if event.duplicate_id:
+                real_event: SCTEvent = SCTEvent.get(event_id=event.duplicate_id)
+                run_id = real_event.run_id
+                severity = real_event.severity
+                event_ts = real_event.ts
 
             # Get the embedding for the query event
             if severity == "ERROR":

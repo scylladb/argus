@@ -181,6 +181,33 @@ class EventSimilarityProcessorV2:
             LOGGER.error(f"Failed to generate embedding for event (run_id={run_id}): {e}", exc_info=True)
             raise
 
+        try:
+            table_name = (
+                SCTErrorEventEmbedding.__table_name__
+                if severity == "ERROR"
+                else SCTCriticalEventEmbedding.__table_name__
+            )
+            query = f"""
+                SELECT run_id, ts
+                FROM {table_name}
+                ORDER BY embedding ANN OF ?
+                LIMIT ?
+            """
+
+            result_rows = list(self.db.session.execute(query, parameters=[embedding, 1]))
+            if len(result_rows) > 0:
+                dupe_id = result_rows[0]["run_id"]
+                delete_query = (
+                    f"DELETE FROM {SCTUnprocessedEvent.__table_name__} WHERE run_id = ? AND severity = ? AND ts = ?"
+                )
+                self.db.execute(delete_query, (run_id, severity, ts))
+                update_query = f"UPDATE {SCTUnprocessedEvent.__table_name__} SET duplicate_id = ? WHERE run_id = ? AND severity = ? AND ts = ?"
+                self.db.execute(update_query, (dupe_id, run_id, severity, ts))
+                return
+        except Exception as e:
+            LOGGER.error(f"Duplicate search error: {e}", exc_info=True)
+            raise
+
         # Step 4: Store embedding in severity-specific table
         try:
             if severity == "ERROR":
