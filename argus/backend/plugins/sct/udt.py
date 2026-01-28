@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from time import time
 from cassandra.cqlengine.usertype import UserType
 from cassandra.cqlengine import columns
@@ -59,7 +60,6 @@ class CloudResource(UserType):
 
     def get_instance_info(self) -> CloudInstanceDetails:
         return self.instance_info
-
 
 class EventsBySeverity(UserType):
     __type_name__ = "EventsBySeverity"

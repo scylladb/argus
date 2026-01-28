@@ -1,6 +1,6 @@
 from enum import Enum
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from dataclasses import dataclass, field
 from typing import Optional
 from uuid import UUID
@@ -62,6 +62,16 @@ class SCTEventSeverity(str, Enum):
     WARNING = "WARNING"
     NORMAL = "NORMAL"
     DEBUG = "DEBUG"
+
+
+
+class StressCommand(Model):
+    run_id = columns.UUID(primary_key=True, partition_key=True)
+    ts = columns.DateTime(primary_key=True, clustering_order="DESC", default=lambda: datetime.now(tz=UTC))
+    cmd = columns.Text()
+    log_name = columns.Text()
+    node_name = columns.Text()
+
 
 
 class SCTEvent(Model):
@@ -289,6 +299,22 @@ class SCTTestRun(PluginModelBase):
 
     def get_nemeses(self) -> list[NemesisRunInfo]:
         return self.nemesis_data
+
+
+    def get_stress_commands(self) -> list[StressCommand]:
+        return list(StressCommand.filter(run_id=self.id).all())
+
+
+    def add_stress_command(self, cmd: str, log_name: str, loader_name: str):
+        s = StressCommand()
+        s.run_id = self.id
+        s.cmd = cmd
+        s.log_name = log_name
+        s.node_name = loader_name
+
+        s.save()
+        return True
+
 
     def get_events_legacy(self) -> list[EventsBySeverity]:
         """
