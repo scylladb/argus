@@ -72,6 +72,7 @@ class SCTEvent(Model):
     ts = columns.DateTime(primary_key=True, clustering_order="ASC")
     event_type = columns.Text()
     message = columns.Text(required=True)
+    duplicate_id = columns.UUID(index=True)
 
     # DB Log columns
     node = columns.Text()
