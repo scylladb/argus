@@ -73,6 +73,7 @@ class SCTEvent(Model):
     event_id = columns.UUID(index=True, default=uuid4)
     event_type = columns.Text()
     message = columns.Text(required=True)
+    duplicate_id = columns.UUID()
 
     # DB Log columns
     node = columns.Text()
