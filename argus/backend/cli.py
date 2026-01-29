@@ -31,7 +31,6 @@ def sync_models():
     for model in all_plugin_models(True):
         LOGGER.info("Synchronizing plugin model %s...", model.__name__)
         sync_table(model=model, keyspaces=[cluster.config["SCYLLA_KEYSPACE_NAME"]])
-
     LOGGER.info("Plugins ready.")
     cluster.sync_additional_schema()
     click.echo("All models synchronized.")
