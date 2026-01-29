@@ -247,36 +247,6 @@ def sct_get_junit_reports(run_id: str):
         "response": result
     }
 
-@bp.route("/<string:run_id>/config/submit", methods=["POST"])
-@api_login_required
-def sct_submit_config(run_id: str):
-    payload = get_payload(request)
-    result = SCTService.submit_config(run_id, config_name=payload["name"], config_content=payload["content"])
-    return {
-        "status": "ok",
-        "response": result
-    }
-
-
-@bp.route("/<string:run_id>/config/<string:name>/get", methods=["GET"])
-@api_login_required
-def sct_get_config(run_id: str, name: str):
-    result = SCTService.get_config_store(run_id, name)
-    return {
-        "status": "ok",
-        "response": result
-    }
-
-
-@bp.route("/<string:run_id>/config/all", methods=["GET"])
-@api_login_required
-def sct_get_all_configs(run_id: str):
-    result = SCTService.get_all_configs(run_id)
-    return {
-        "status": "ok",
-        "response": result
-    }
-
 
 @bp.route("/<string:run_id>/stress_cmd/submit", methods=["POST"])
 @api_login_required
