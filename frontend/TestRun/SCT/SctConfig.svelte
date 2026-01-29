@@ -36,7 +36,7 @@
     const fetchConfigs = async function () {
 
         try {
-            const res = await fetch(`/api/v1/client/sct/${testRun.id}/config/all`);
+            const res = await fetch(`/api/v1/client/${testRun.id}/config/all`);
             const json = await res.json();
             if (json.status !== "ok") {
                 throw new Error(json.response.arguments[0]);

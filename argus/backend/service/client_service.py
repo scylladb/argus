@@ -1,14 +1,17 @@
+import base64
+import json
 import logging
 from dataclasses import asdict
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
-from cassandra.util import uuid_from_time
 
 from argus.backend.db import ScyllaCluster
 from argus.backend.error_handlers import DataValidationError
 from argus.backend.models.pytest import PytestResultTable, PytestSubmitData, PytestUserField
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData
+from argus.backend.models.run_config import RunConfigParam, RunConfiguration
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.generic.model import GenericRun
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS
@@ -168,3 +171,64 @@ class ClientService:
         if result_failed:
             raise DataValidationError()
         return {"status": "ok", "message": "Results submitted"}
+
+    @staticmethod
+    def get_config_store(run_id: str, config_name: str) -> RunConfiguration:
+        try:
+            config_store = RunConfiguration.get(run_id=run_id, name=config_name)
+        except RunConfiguration.DoesNotExist:
+            config_store = RunConfiguration()
+            config_store.run_id = run_id
+            config_store.name = config_name
+
+        return config_store
+
+    @staticmethod
+    def get_all_configs(run_id: str) -> list[RunConfiguration]:
+        config_store = RunConfiguration.filter(run_id=run_id).all()
+        return list(config_store)
+
+    @staticmethod
+    def parse_config_values(name: str, config: str, run_id: str):
+        def is_scalar(value: Any):
+            match (value):
+                case list():
+                    return False
+                case dict():
+                    return False
+                case _:
+                    return True
+        try:
+            loaded: dict = json.loads(config)
+        except json.JSONDecodeError:
+            LOGGER.info("Received a non-json config for run %s, skipping param parsing...", run_id)
+            return
+
+        if not isinstance(loaded, dict):
+            LOGGER.warning("JSON Config for run %s does not begin with a top-level mapping, cannot continue parsing...", run_id)
+            return
+
+        loaded_items = [[f"{name.replace(".", "_").replace(" ", "_")}.", k, v] for k, v in list(loaded.items())]
+        # Store flattened keys to a separate table for comparison purposes
+        for level, key, value in loaded_items:
+            if is_scalar(value):
+                param = RunConfigParam()
+                param.name = f"{level}{key}"
+                param.value = str(value) or "null"
+                param.run_id = run_id
+                param.save()
+            else:
+                if isinstance(value, dict):
+                    loaded_items.extend([f"{level}{key}.", inner_key, value] for inner_key, value in value.items())
+                elif isinstance(value, list):
+                    loaded_items.extend([f"{level}{key}.", str(idx), value] for idx, value in enumerate(value))
+
+    @classmethod
+    def submit_config(cls, run_id: str, config_name: str, config_content: str) -> bool:
+        config_store = cls.get_config_store(run_id, config_name)
+        decoded_config = str(base64.decodebytes(bytes(config_content, encoding="utf-8")), encoding="utf-8")
+
+        config_store.content = decoded_config
+        cls.parse_config_values(config_name, decoded_config, run_id)
+        config_store.save()
+        return True

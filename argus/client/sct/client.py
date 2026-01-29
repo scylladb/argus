@@ -30,9 +30,7 @@ class ArgusSCTClient(ArgusClient):
         SUBMIT_JUNIT_REPORT = "/sct/$id/junit/submit"
         SUBMIT_STRESS_CMD = "/sct/$id//stress_cmd/submit"
         SUBMIT_EMAIL = "/testrun/report/email"
-        SUBMIT_SCT_CONFIG = "/sct/$id/config/sct/submit"
-        SUBMIT_SCYLLA_CONFIG = "/sct/$id/config/scylla/submit"
-        SUBMIT_CONFIG = "/sct/$id/config/submit"
+        SUBMIT_CONFIG = "/$id/config/submit"
 
     def __init__(self, run_id: UUID, auth_token: str, base_url: str, api_version="v1", extra_headers: dict | None = None,
                  timeout: int = 60, max_retries: int = 3) -> None:
