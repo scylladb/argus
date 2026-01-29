@@ -90,6 +90,30 @@ def run_submit_logs(run_type: str, run_id: str):
     }
 
 
+
+@bp.route("/<string:run_id>/config/submit", methods=["POST"])
+@api_login_required
+def submit_run_config(run_id: str):
+    payload = get_payload(request)
+    result = ClientService().submit_config(run_id, config_name=payload["name"], config_content=payload["content"])
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
+@bp.route("/<string:run_id>/config/all", methods=["GET"])
+@api_login_required
+def get_all_run_configs(run_id: str):
+    result = ClientService().get_all_configs(run_id)
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
+
+
 @bp.route("/testrun/<string:run_type>/<string:run_id>/finalize", methods=["POST"])
 @api_login_required
 def run_finalize(run_type: str, run_id: str):

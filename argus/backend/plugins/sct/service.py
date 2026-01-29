@@ -5,7 +5,6 @@ import logging
 import math
 import re
 from time import time
-from typing import TypedDict
 from uuid import UUID
 from xml.etree import ElementTree
 from flask import g
@@ -446,6 +445,7 @@ class SCTService:
                 LOGGER.error(f"Failed to add event to unprocessed queue: {e}", exc_info=True)
 
         return True
+
 
     @staticmethod
     def get_events(run_id: str, limit: int, severities: list[str], before: str | None) -> list[dict]:
