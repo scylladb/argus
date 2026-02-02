@@ -65,6 +65,7 @@ def handle_api_exception(exception: Exception):
         "response": {
             "trace_id": trace_id,
             "exception": exception.__class__.__name__,
+            "message": str(exception),
             "arguments": exception.args
         }
     }, response_code)
