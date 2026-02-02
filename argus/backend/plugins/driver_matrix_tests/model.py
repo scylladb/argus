@@ -293,16 +293,20 @@ class DriverTestRun(PluginModelBase):
         test_collection.time = 0.0
         test_collection.suites = []
 
+        # For cargo-nextest (new rust test runner), time is at testsuites level
+        testsuites_time = float(testsuites.attrib.get("time", 0.0))
+
         for xml_suite in testsuites.iter("testsuite"):
             suite = TestSuite()
             suite.name = xml_suite.attrib["name"]
             suite.tests_total = int(xml_suite.attrib.get("tests", 0))
             suite.failures = int(xml_suite.attrib.get("failures", 0))
-            suite.disabled = int(0)
+            suite.disabled = int(xml_suite.attrib.get("disabled", 0))
             suite.passed = self.get_passed_count(xml_suite.attrib)
             suite.skipped = int(xml_suite.attrib.get("skipped", 0))
             suite.errors = int(xml_suite.attrib.get("errors", 0))
-            suite.time = float(xml_suite.attrib["time"])
+            # Handle missing time attribute for cargo-nextest (new rust test runner)
+            suite.time = float(xml_suite.attrib.get("time", 0.0))
             suite.cases = self.get_test_cases(xml_suite.findall("testcase"))
 
             test_collection.suites.append(suite)
@@ -313,6 +317,10 @@ class DriverTestRun(PluginModelBase):
             test_collection.skipped += suite.skipped
             test_collection.passed += suite.passed
             test_collection.time += suite.time
+
+        # If suites have no time (cargo-nextest), use time from testsuites root level
+        if test_collection.time == 0.0 and testsuites_time > 0.0:
+            test_collection.time = testsuites_time
 
         return test_collection
 
