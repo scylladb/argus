@@ -173,6 +173,14 @@ class ClientService:
         return {"status": "ok", "message": "Results submitted"}
 
     @staticmethod
+    def get_config_property(name: str, value: Any | str, run_id: str = None) -> list[RunConfigParam]:
+        dml = RunConfigParam.filter(name=name, value=str(value))
+        if run_id:
+            dml.filter(run_id=run_id)
+
+        return list(dml.all())
+
+    @staticmethod
     def get_config_store(run_id: str, config_name: str) -> RunConfiguration:
         try:
             config_store = RunConfiguration.get(run_id=run_id, name=config_name)
