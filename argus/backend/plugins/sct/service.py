@@ -44,6 +44,7 @@ class NemesisSubmissionRequest:
     node_name: str
     node_ip: str
     node_shards: int
+    description: str | None = None
 
 
 @dataclass(init=True, repr=True)

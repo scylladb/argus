@@ -277,7 +277,8 @@ class ArgusSCTClient(ArgusClient):
         self.check_response(response)
 
     def submit_nemesis(self, name: str, class_name: str, start_time: int,
-                       target_name: str, target_ip: str, target_shards: int) -> None:
+                       target_name: str, target_ip: str, target_shards: int,
+                       description: str | None = None) -> None:
         """
             Submits a nemesis record. Should then be finalized by
             .finalize_nemesis method on nemesis completion.
@@ -294,6 +295,7 @@ class ArgusSCTClient(ArgusClient):
                     "node_name": target_name,
                     "node_ip": target_ip,
                     "node_shards": target_shards,
+                    "description": description,
                 }
             }
         )

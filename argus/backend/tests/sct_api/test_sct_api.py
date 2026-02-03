@@ -209,6 +209,7 @@ def test_nemesis_submit_and_finalize(flask_client, sct_run_id):
             "node_name": "node-1",
             "node_ip": "10.0.0.1",
             "node_shards": 8,
+            "description": "Killing nodes randomly",
         },
         "schema_version": "v8"
     }
