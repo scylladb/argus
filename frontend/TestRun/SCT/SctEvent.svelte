@@ -32,7 +32,11 @@
     let submitting = $state(false);
 
     const sliceMessage = function (message: string): string {
-        return fullMessage && message.length <= MESSAGE_CUTOFF ? message : message.slice(0, SHORT_MESSAGE_LEN);
+        if (message.length <= MESSAGE_CUTOFF || fullMessage) {
+            return message;
+        }
+
+        return message.slice(0, SHORT_MESSAGE_LEN);
     }
 
     const submitIssueForEvent = async function () {
@@ -321,7 +325,7 @@
             </div>
         </div>
         <div class="bg-body p-2">
-            <pre class="font-monospace p-2 rounded m-1 bg-light-two" style="white-space: pre-wrap !important">{sliceMessage(event.message)} {#if event.message.length > 500}<button class="btn btn-sm btn-light" onclick={() => fullMessage = !fullMessage}>...</button>{/if}</pre>
+            <pre class="font-monospace p-2 rounded m-1 bg-light-two" style="white-space: pre-wrap !important">{sliceMessage(event.message)} {#if event.message.length > MESSAGE_CUTOFF}<button class="btn btn-sm btn-light" onclick={() => fullMessage = !fullMessage}>{#if fullMessage}X{:else}...{/if}</button>{/if}</pre>
         </div>
     </div>
 {/if}
