@@ -351,13 +351,13 @@
                         </button>
                         <ul class="dropdown-menu">
                             <li>
-                                <h6 class="dropdown-header">Repositories</h6>
+                                <h6 class="dropdown-header">Jira Projects</h6>
                             </li>
                                 <li>
                                     <a
                                         target="_blank"
                                         class="dropdown-item"
-                                        href="https://github.com/scylladb/argus/issues/new/choose"
+                                        href="https://scylladb.atlassian.net/secure/CreateIssue.jspa?pid=10782"
                                         >Argus</a
                                     >
                                 </li>
@@ -366,7 +366,7 @@
                                     <a
                                         target="_blank"
                                         class="dropdown-item"
-                                        href="{destination.url}/issues/new/choose"
+                                        href="{destination.url}"
                                         >{destination.name}</a
                                     >
                                 </li>

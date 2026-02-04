@@ -1,36 +1,26 @@
 import { PLUGIN_NAMES } from "./PluginNames";
 
+const JIRA_SERVER = "https://scylladb.atlassian.net";
+
+const getJiraCreateUrl = (pid) => {
+    return `${JIRA_SERVER}/secure/CreateIssue.jspa?pid=${pid}`;
+};
+
 export const newIssueDestinations = {
     [PLUGIN_NAMES.SCT]: [
         {
             name: "ScyllaDB",
-            url: "https://github.com/scylladb/scylla",
-        },
-        {
-            "name": "Scylla Enterprise",
-            "url": "https://github.com/scylladb/scylla-enterprise",
+            url: getJiraCreateUrl("10408"),
         },
         {
             name: "Scylla Cluster Tests",
-            url: "https://github.com/scylladb/scylla-cluster-tests",
+            url: getJiraCreateUrl("10781"),
         },
     ],
     [PLUGIN_NAMES.SIRENADA]: [
         {
-            name: "Siren Tests",
-            url: "https://github.com/scylladb/siren-tests",
-        },
-        {
-            name: "Siren",
-            url: "https://github.com/scylladb/siren",
-        },
-        {
-            name: "Siren Frontend",
-            url: "https://github.com/scylladb/siren-frontend",
-        },
-        {
-            name: "Siren Devops",
-            url: "https://github.com/scylladb/siren-devops",
+            name: "Scylla Cloud",
+            url: getJiraCreateUrl("10612"),
         },
     ],
 };
