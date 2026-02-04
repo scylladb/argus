@@ -35,7 +35,8 @@
     "svelte-loader": "^3.2.3",
     "svelte-select": "5.8.3",
     "url-slug": "^4.0.1",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.0",
+    "yaml": "^2.8.2"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.6",

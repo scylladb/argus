@@ -23,13 +23,14 @@
     } = $props();
 
     let configs: SctConfiguration[] = $state([]);
+    let init = $state(false);
 
     const tryParseConfig = function (config: string) {
         try {
             JSON.parse(config);
             return true;
         } catch (e) {
-            return true;
+            return false;
         }
     }
 
@@ -51,7 +52,7 @@
                 console.trace();
             }
         } finally {
-
+            init = true;
         }
     }
 
@@ -63,12 +64,20 @@
 
 <div class="mb-2">
     <div class="p-2">
+        <h4>Configuration files</h4>
+        <p class="text-muted" style="font-size: 0.8rem">
+            Configuration files used in this run.
+        </p>
         {#each configs as config}
             {@const Component = tryParseConfig(config.content) ? RuntimeConfig : MiscConfig}
             <Component name={config.name} content={config.content}/>
         {:else}
             <div class="text-center text-muted p-2">
-                No configs were submitted to this run.
+                {#if init}
+                    No configs were submitted to this run.
+                {:else}
+                    <span class="spinner-border spinner-border-sm"></span> Fetching configs...
+                {/if}
             </div>
         {/each}
     </div>

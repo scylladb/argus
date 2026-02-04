@@ -82,7 +82,6 @@
         test_id: string,
         release_id: string,
         group_id: string,
-        stress_commands: { cmd: string, ts: string, loader_name: string, log_name: string }[]
         investigation_status: string,
         screenshots: string[],
         packages: SCTPackage[],
@@ -94,6 +93,13 @@
             loader_node: CloudNodesInfo,
             monitor_node: CloudNodesInfo,
         }
+    }
+
+    export interface StressCommand {
+        cmd: string,
+        ts: string,
+        loader_name: string,
+        log_name: string,
     }
 
     export interface SCTTestRunResponse {
@@ -539,8 +545,8 @@
                     id="nav-setup-{runId}"
                     role="tabpanel"
                 >
-                    <SctSetup {testRun} />
                     {#if visitedTabs["setup"]}
+                        <SctSetup {testRun} />
                         <SctConfig {testRun} />
                     {/if}
                 </div>

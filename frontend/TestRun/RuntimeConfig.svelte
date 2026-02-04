@@ -1,9 +1,9 @@
 <script lang="ts">
-    import { faCopy, faLink } from "@fortawesome/free-solid-svg-icons";
+    import { faAngleDown, faAngleUp, faCopy, faLink } from "@fortawesome/free-solid-svg-icons";
     import queryString from "query-string";
     import { onMount } from "svelte";
     import Fa from "svelte-fa";
-    import { quadIn } from "svelte/easing";
+    import { stringify } from 'yaml'
 
     let {
         name,
@@ -14,6 +14,13 @@
     } = $props();
 
     let filterString = $state("");
+    let collapsed = $state(false);
+    let displayRaw = $state(false);
+
+    const LOCALIZED_CONFIG_NAMES: { [key: string]: string } = {
+        "sct_config": "SCT Configuration",
+        "scylla_yaml": "scylla.yaml (1st Node)",
+    };
 
     const checkFilter = function (key: string, value: string): boolean {
         if (!filterString) return false;
@@ -78,12 +85,17 @@
     })
 </script>
 
-<div class="mb-2">
-    <h4>{name}</h4>
+<div class="mb-2 bg-light-one p-1 rounded">
+    <h4>
+        <button class="btn btn-sm btn-secondary d-inline-block me-2" onclick={() => (collapsed = !collapsed)}><Fa icon={collapsed ? faAngleUp : faAngleDown}/></button><span>{LOCALIZED_CONFIG_NAMES[name] || name}</span>
+    </h4>
     <div class="mb-1">
         <input type="text" class="form-control w-100" bind:value={filterString} placeholder="Filter configuration...">
     </div>
-    <div class="overflow-x-clip rounded" style="max-height: 768px; overflow-y: scroll">
+    <div class="p-1 mb-1">
+        <button class="btn btn-sm btn-dark" onclick={() => (displayRaw = !displayRaw)}>View {displayRaw ? "Parsed" : "Plain"}</button>
+    </div>
+    <div class:d-none={collapsed || displayRaw} class="overflow-x-clip rounded" style="max-height: 768px; overflow-y: scroll">
         <table class="table table-responsive table-striped table-bordered table-hover">
             <thead>
                 <tr>
@@ -94,8 +106,8 @@
             <tbody>
                 {#each walkConfig("", content) as param}
                     <tr class:d-none={checkFilter(param.name, JSON.stringify(param.value))} style="vertical-align: center;">
-                        <td class="fw-bold">{param.name}</td>
-                        <td>
+                        <td style="width: 50%" class="fw-bold">{param.name}</td>
+                        <td style="width: 50%">
                             <div class="input-group">
                                 <input class="form-control" type="text" disabled value={param.value}>
                                 <button class="d-none btn btn-primary" onclick={() => {
@@ -116,6 +128,11 @@
                 {/each}
             </tbody>
         </table>
+    </div>
+    <div class:d-none={!displayRaw || collapsed}>
+        <div class="overflow-x-clip rounded" style="max-height: 768px; overflow-y: scroll">
+            <pre class="code bg-white p-1 rounded m-1">{stringify(JSON.parse(content))}</pre>
+        </div>
     </div>
 </div>
 
