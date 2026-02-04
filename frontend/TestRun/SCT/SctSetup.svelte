@@ -59,7 +59,7 @@
                             <td class="fw-bold">{idx+1}</td>
                             <td>
                                 <div class="input-group">
-                                    <input class="form-control" type="text" value="{cmd.cmd}" disabled>
+                                    <textarea class="form-control" style="resize: none" rows=4 disabled>{cmd.cmd}</textarea>
                                     <button class="d-none btn btn-success btn-sm" onclick={() => navigator.clipboard.writeText(cmd.cmd)}><Fa icon={faCopy}/></button>
                                 </div>
                                 <div class="d-flex">
