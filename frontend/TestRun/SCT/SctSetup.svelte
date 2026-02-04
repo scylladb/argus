@@ -1,13 +1,42 @@
 <script lang="ts">
     import Fa from "svelte-fa";
-    import type { SCTTestRun } from "../TestRun.svelte";
+    import type { SCTTestRun, StressCommand } from "../TestRun.svelte";
     import { faCopy } from "@fortawesome/free-solid-svg-icons";
     import { timestampToISODate } from "../../Common/DateUtils";
+    import { sendMessage } from "../../Stores/AlertStore";
+    import { onMount } from "svelte";
 
     let {
         testRun
     }: { testRun: SCTTestRun} = $props();
 
+    let stressCommands: StressCommand[] = $state([]);
+    let init = $state(false);
+
+    const fetchStressCommands = async function () {
+        try {
+            const res = await fetch(`/api/v1/client/sct/${testRun.id}/stress_cmd/get`);
+            const json = await res.json();
+            if (json.status !== "ok") {
+                throw new Error(json.response.arguments[0]);
+            }
+
+            stressCommands = json.response;
+        } catch (e) {
+            if (e instanceof Error) {
+                sendMessage("error", e.message, "SctSetup::fetchStressCommands");
+            } else {
+                sendMessage("error", "Backend error during stress command fetch.", "SctSetup::fetchStressCommands");
+                console.trace();
+            }
+        } finally {
+            init = true;
+        }
+    };
+
+    onMount(async () => {
+        await fetchStressCommands();
+    })
 </script>
 
 <div class="p-2">
@@ -16,44 +45,54 @@
         <p class="text-muted" style="font-size: 0.8rem">
             Stress commands executed during the test run.
         </p>
-        <table class="table table-striped table-responsive table-hover">
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>Command</th>
-                </tr>
-            </thead>
-            <tbody>
-                {#each testRun.stress_commands as cmd, idx}
+        {#if stressCommands.length > 0 && init}
+            <table class="table table-striped table-responsive table-hover">
+                <thead>
                     <tr>
-                        <td class="fw-bold">{idx+1}</td>
-                        <td>
-                            <div class="input-group">
-                                <input class="form-control" type="text" value="{cmd.cmd}" disabled>
-                                <button class="d-none btn btn-success btn-sm" onclick={() => navigator.clipboard.writeText(cmd.cmd)}><Fa icon={faCopy}/></button>
-                            </div>
-                            <div class="d-flex">
-                                {#if cmd.log_name}
-                                    <div>
-                                        Log File: {cmd.log_name}
-                                    </div>
-                                {/if}
-                                {#if cmd.loader_name}
-                                    <div class="ms-auto">
-                                        Node: {cmd.loader_name}
-                                    </div>
-                                {/if}
-                            </div>
-                            {#if cmd.ts}
-                                <div class="text-muted" style="font-size: 0.75rem">
-                                    Executed at {timestampToISODate(cmd.ts)}
-                                </div>
-                            {/if}
-                        </td>
+                        <th>#</th>
+                        <th>Command</th>
                     </tr>
-                {/each}
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    {#each stressCommands as cmd, idx}
+                        <tr>
+                            <td class="fw-bold">{idx+1}</td>
+                            <td>
+                                <div class="input-group">
+                                    <input class="form-control" type="text" value="{cmd.cmd}" disabled>
+                                    <button class="d-none btn btn-success btn-sm" onclick={() => navigator.clipboard.writeText(cmd.cmd)}><Fa icon={faCopy}/></button>
+                                </div>
+                                <div class="d-flex">
+                                    {#if cmd.log_name}
+                                        <div>
+                                            Log File: {cmd.log_name}
+                                        </div>
+                                    {/if}
+                                    {#if cmd.loader_name}
+                                        <div class="ms-auto">
+                                            Node: {cmd.loader_name}
+                                        </div>
+                                    {/if}
+                                </div>
+                                {#if cmd.ts}
+                                    <div class="text-muted" style="font-size: 0.75rem">
+                                        Executed at {timestampToISODate(cmd.ts)}
+                                    </div>
+                                {/if}
+                            </td>
+                        </tr>
+                    {/each}
+                </tbody>
+            </table>
+        {:else if stressCommands.length == 0 && !init}
+            <div class="text-center text-muted p-4">
+                <span class="spinner-border spinner-border-sm"></span> Fetching stress commands...
+            </div>
+        {:else}
+            <div class="text-center text-muted p-4">
+                No Stress Commands were submitted to this run.
+            </div>
+        {/if}
     </div>
 </div>
 
