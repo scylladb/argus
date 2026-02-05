@@ -6,18 +6,21 @@
     import { NemesisStatusBg, NemesisStatusFg } from "../../Common/TestStatus";
     import { timestampToISODate } from "../../Common/DateUtils";
     import SctEvent from "./SctEvent.svelte";
+    import type { GithubSubtype, JiraSubtype } from "../../Github/Issues.svelte";
 
     interface Props {
         event: NemesisInfo,
         run: SCTTestRun,
         filterState: EventSeverityFilter,
+        issues: (GithubSubtype | JiraSubtype)[],
         options: Options,
+        refreshIssues: () => void,
         innerEvents: TimelineEvent[],
         filterString: string,
         issueAttach: (url: string) => void,
         eventFilterString: string,
     }
-    let { event, run, filterState, innerEvents, options, issueAttach, filterString = $bindable(), eventFilterString = $bindable()}: Props = $props();
+    let { event, run, issues = $bindable(), refreshIssues, filterState, innerEvents, options, issueAttach, filterString = $bindable(), eventFilterString = $bindable()}: Props = $props();
 
     let hasErrors = $derived(innerEvents.filter((evt: TimelineEvent) => [SCTEventSeverity.CRITICAL, SCTEventSeverity.ERROR].includes((evt.event as SCTEvent).severity)).length > 0);
     let expandEvents = $derived(hasErrors);
@@ -64,7 +67,7 @@
             <div class="rounded shadow bg-light-one p-2 collapse" class:show={expandEvents}>
                 {#each innerEvents as event}
                     <div class="mb-2">
-                        <SctEvent {run} event={(event.event as SCTEvent)} filterState={filterState} options={event.opts || {}} issueAttach={issueAttach} bind:filterString={eventFilterString}/>
+                        <SctEvent {refreshIssues} issues={issues.filter((i) => i.event_id == (event.event as SCTEvent).event_id)} {run} event={(event.event as SCTEvent)} filterState={filterState} options={event.opts || {}} issueAttach={issueAttach} bind:filterString={eventFilterString}/>
                     </div>
                 {/each}
             </div>
