@@ -77,6 +77,7 @@
     import queryString from "query-string";
     import SctNemesis from "./SctNemesis.svelte";
     import { NemesisStatusBg, NemesisStatuses, TestStatus } from "../../Common/TestStatus";
+    import type { GithubSubtype, JiraSubtype } from "../../Github/Issues.svelte";
 
     interface Props {
         testRun: SCTTestRun,
@@ -106,6 +107,7 @@
 
     let eventFilterString = $state("");
     let nemesisFilterString = $state("");
+    let issues: (GithubSubtype | JiraSubtype)[] = $state([]);
 
 
     const countEventsBySeverity = async function (severity: SeverityValueType): Promise<SCTEvent[]> {
@@ -134,6 +136,31 @@
         }
         return [];
     }
+
+    const fetchIssuesForEvents = async function () {
+        try {
+
+            let params = queryString.stringify({
+                filterKey: "run_id",
+                id: testRun.id,
+                aggregateByIssue: false,
+            });
+            const res = await fetch("/api/v1/issues/get?" + params);
+            const json = await res.json();
+            if (json.status === "ok") {
+                issues = json.response;
+            } else {
+                throw json;
+            }
+        } catch (error) {
+            sendMessage("error", "Error fetching issues for events. Check console for details.", "SctEvents::fetchIssuesForEvents");
+            console.log(error);
+        }
+    };
+
+    const refreshIssues = async function() {
+        await fetchIssuesForEvents();
+    };
 
     const fetchEventsBySeverity = async function (severity: SeverityValueType, before: number | null = null, limit: number | null = null): Promise<SCTEvent[]> {
         try {
@@ -223,6 +250,7 @@
 
     onMount(async () => {
         events = await fetchEvents(false, 10000);
+        await fetchIssuesForEvents();
         updateCounters();
         refreshTimer = setInterval(async () => {
             if ([TestStatus.ABORTED, TestStatus.PASSED, TestStatus.FAILED, TestStatus.TEST_ERROR].includes(testRun.status)) {
@@ -274,13 +302,13 @@
             {#if event.type == TimelineEventType.Event}
                 {#if severityFilter[event.severity]}
                     <div class="mb-2">
-                        <SctEvent event={(event.event as SCTEvent)} run={testRun} filterState={severityFilter} options={event.opts || {}} issueAttach={issueAttach} bind:filterString={eventFilterString} />
+                        <SctEvent {refreshIssues} issues={issues.filter((i) => i.event_id == (event.event as SCTEvent).event_id)} event={(event.event as SCTEvent)} run={testRun} filterState={severityFilter} options={event.opts || {}} issueAttach={issueAttach} bind:filterString={eventFilterString} />
                     </div>
                 {/if}
             {:else if event.type == TimelineEventType.Nemesis}
                 {#if event.innerEvents.filter((e) => [SCTEventSeverity.CRITICAL, SCTEventSeverity.ERROR].includes((e.event as SCTEvent).severity)).length > 0 || nemesisFilter[event.event.status]}
                     <div class="mb-2">
-                        <SctNemesis event={(event.event as NemesisInfo)}  run={testRun} filterState={severityFilter} innerEvents={event.innerEvents} options={event.opts || {}} bind:filterString={nemesisFilterString}  issueAttach={issueAttach} bind:eventFilterString/>
+                        <SctNemesis {refreshIssues} bind:issues event={(event.event as NemesisInfo)}  run={testRun} filterState={severityFilter} innerEvents={event.innerEvents} options={event.opts || {}} bind:filterString={nemesisFilterString}  issueAttach={issueAttach} bind:eventFilterString/>
                     </div>
                 {/if}
             {/if}

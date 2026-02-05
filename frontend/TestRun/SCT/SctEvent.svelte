@@ -6,7 +6,6 @@
     import { faClipboard, faClock, faCopy, faPlus, faServer, faSpider, faTable } from "@fortawesome/free-solid-svg-icons";
     import SctSimilarEvents from "./SctSimilarEvents.svelte";
     import { sendMessage } from "../../Stores/AlertStore";
-    import { onMount } from "svelte";
     import type { GithubSubtype, JiraSubtype } from "../../Github/Issues.svelte";
     import type { SCTTestRun } from "../TestRun.svelte";
     import ModalWindow from "../../Common/ModalWindow.svelte";
@@ -17,15 +16,16 @@
     interface Props {
         event: SCTEvent,
         run: SCTTestRun,
+        issues: (GithubSubtype | JiraSubtype)[],
         filterState: EventSeverityFilter,
         options: Options,
-        issueAttach: (url: string) => void;
+        issueAttach: (url: string) => void,
+        refreshIssues: () => void,
         filterString: string,
     }
-    let { event, run, filterState, options, issueAttach, filterString = $bindable()}: Props = $props();
+    let { event, run, issues, refreshIssues, filterState, options, issueAttach, filterString = $bindable()}: Props = $props();
     const MESSAGE_CUTOFF = 600;
     const SHORT_MESSAGE_LEN = 500;
-    let issues: (GithubSubtype | JiraSubtype)[] = $state([]);
     let showingIssueTable = $state(false);
     let showingIssueAddWindow = $state(false);
     let newIssueUrl = $state("");
@@ -54,7 +54,7 @@
             if (json.status !== "ok") {
                 throw json;
             }
-            await fetchIssueForEvent();
+            await refreshIssues();
             showingIssueAddWindow = false;
         } catch(e: any) {
             console.trace();
@@ -63,21 +63,6 @@
         } finally {
             newIssueUrl = "";
             submitting = false;
-        }
-    }
-
-    const fetchIssueForEvent = async function() {
-        try {
-            const res = await fetch(`/api/v1/issues/get?filterKey=event_id&id=${event.event_id}`);
-            const json = await res.json();
-            if (json.status !== "ok") {
-                throw json;
-            }
-            issues = json.response;
-        } catch(e: any) {
-            console.trace();
-            console.log(e);
-            sendMessage("error", "Error getting issues for an event!", "SctEvent::fetchIssueForEvent");
         }
     }
 
@@ -151,9 +136,6 @@
         message: string
     }
 
-    onMount(async () => {
-        await fetchIssueForEvent();
-    })
 </script>
 
 {#if showingIssueTable}

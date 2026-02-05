@@ -23,6 +23,7 @@
         subtype: "github" | "jira",
         id: string,
         state: State,
+        event_id: string,
         added_on: string,
         labels: Label[],
         user_id: string,
