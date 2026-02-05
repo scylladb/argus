@@ -1,14 +1,17 @@
 import os
+from pathlib import Path
 import time
 import uuid
 from unittest.mock import patch
 
 from cassandra.auth import PlainTextAuthProvider
 from docker import DockerClient
+from docker.models.containers import Container
 from flask import g, Flask
 from flask.testing import FlaskClient
 
-from argus.backend.plugins.loader import all_plugin_types
+from argus.backend.models.argus_ai import Vector
+from argus.backend.plugins.loader import all_plugin_models, all_plugin_types
 from argus.backend.plugins.sct.service import SCTService
 from argus.backend.service.github_service import GithubService
 from argus.backend.service.issue_service import IssueService
@@ -39,50 +42,75 @@ logging.getLogger('cassandra.connection').setLevel(logging.WARNING)
 logging.getLogger('cassandra.pool').setLevel(logging.WARNING)
 logging.getLogger('cassandra.cluster').setLevel(logging.WARNING)
 
+LOGGER = logging.getLogger(__name__)
 
 @fixture(scope='session')
 def argus_db():
-    container_name = "argus_test_scylla"
-    docker_client = DockerClient.from_env()
-    need_sync_models = True
-    try:
-        container = docker_client.containers.get(container_name)
-        if container.status != 'running':
-            container.start()
-            print(f"Started existing container '{container_name}'.")
-        else:
-            print(f"Using already running container '{container_name}'.")
-        need_sync_models = False
-    except NotFound:
-        container = docker_client.containers.run(
-            "scylladb/scylla:2025.4.0",
-            name=container_name,
-            detach=True,
-            ports={'9042/tcp': 9042},
-            command=[
+    CONTAINERS = {
+        "database": {
+            "image": "scylladb/scylla:2025.4.0",
+            "name": "argus_test_scylla",
+            "detach": True,
+            "network_mode": "host",
+            "command": [
+                "--listen-address", "127.0.0.1",
                 "--smp", "1",
                 "--overprovisioned", "1",
                 "--skip-wait-for-gossip-to-settle", "0",
                 "--endpoint-snitch=SimpleSnitch",
                 "--authenticator", "PasswordAuthenticator",
-            ],
-        )
-        log_wait_timeout = 120
-        start_time = time.time()
+                "--vector-store-primary-uri", "http://localhost:6080",
+            ]
+        },
+        "vs": {
+            "image": "scylladb/vector-store:1.2.0",
+            "name": "vector-search_test",
+            "detach": True,
+            "network_mode": "host",
+            "environment": {
+                "VECTOR_STORE_SCYLLADB_URI": "localhost:9042",
+                "VECTOR_STORE_THREADS": "4",
+                "VECTOR_STORE_SCYLLADB_USERNAME": "cassandra",
+                "VECTOR_STORE_SCYLLADB_PASSWORD_FILE": "/var/lib/vector-store/db_password",
+            },
+            "volumes": {
+                Path("./argus/backend/tests/vs").absolute(): {
+                    "bind": "/var/lib/vector-store",
+                    "mode": "rw",
+                },
+            }
+        }
+    }
 
-        print("Waiting for 'init - serving' message in container logs...")
-        for log in container.logs(stream=True):
-            log_line = log.decode('utf-8')
-            if "init - serving" in log_line:
-                print("'init - serving' message found.")
-                break
-            if "FATAL state" in log_line:
-                raise Exception("ScyllaDB exited unexpectedly. Check container logs for more information.")
-            if time.time() - start_time > log_wait_timeout:
-                raise Exception("ScyllaDB did not log 'init - serving' within the timeout period.")
+    docker_client = DockerClient.from_env()
+    need_sync_models = True
+    containers: dict[str, Container] = {}
+    for name, params in CONTAINERS.items():
+        try:
+            container = docker_client.containers.get(params["name"])
+            container.remove(force=True)
+        except NotFound:
+            pass
 
-    container.reload()
-    container_ip = container.attrs['NetworkSettings']['Networks']['bridge']['IPAddress']
+    for name, params in CONTAINERS.items():
+        container = docker_client.containers.run(**params)
+        containers[name] = container
+    log_wait_timeout = 120
+    start_time = time.time()
+
+    print("Waiting for 'init - serving' message in container logs...")
+    for log in containers["database"].logs(stream=True):
+        log_line = log.decode('utf-8')
+        if "init - serving" in log_line:
+            print("'init - serving' message found.")
+            break
+        if "FATAL state" in log_line:
+            raise Exception("ScyllaDB exited unexpectedly. Check container logs for more information.")
+        if time.time() - start_time > log_wait_timeout:
+            raise Exception("ScyllaDB did not log 'init - serving' within the timeout period.")
+
+    containers["database"].reload()
+    container_ip = "localhost"
     print(f"Container IP: {container_ip}")
 
     if need_sync_models:
@@ -103,9 +131,23 @@ def argus_db():
         for user_type in all_plugin_types():
             sync_type(ks_name="test_argus", type_model=user_type)
         sync_models()
+    # Wait a little to let CDC Reader and full scan of Vector Store indices to complete.
+    LOGGER.info("Waiting on Vector Store to be ready...")
+    vs_indices = [r["name"] for r in database.session.execute("DESCRIBE test_argus").all() if r["type"] == "index" and "vector_index" in r["create_statement"]]
+    for index_name in vs_indices:
+        for log in containers["vs"].logs(stream=True):
+            log_line = log.decode('utf-8')
+            if f"finished full scan on test_argus.{index_name}" in log_line:
+                break
+            if time.time() - start_time > log_wait_timeout:
+                raise Exception("FATAL - Vector search did not build indices.")
+        LOGGER.info("Vector Index %s - Ready.", index_name)
 
     yield database
     database.shutdown()
+    for _, container in containers.items():
+        container.remove(force=True)
+        pass
 
 
 @fixture(scope='session')
