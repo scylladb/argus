@@ -173,7 +173,7 @@
     }
 
     onMount(async () => {
-        if (event.duplicate_id) duplicateIdShowTable[event.duplicate_id] = false;
+        if (event.duplicate_id && typeof duplicateIdShowTable[event.duplicate_id] !== "boolean") duplicateIdShowTable[event.duplicate_id] = false;
     })
 </script>
 
