@@ -10,6 +10,7 @@ Test coverage:
 """
 
 import logging
+import time
 from datetime import datetime
 from threading import Event
 from unittest.mock import Mock, MagicMock, patch
@@ -19,7 +20,7 @@ import pytest
 
 from argus.backend.models.argus_ai import SCTErrorEventEmbedding, SCTCriticalEventEmbedding
 from argus.backend.plugins.sct.testrun import SCTUnprocessedEvent
-from argusAI.event_similarity_processor_v2 import EventSimilarityProcessorV2, BgeSmallEnEmbeddingModel
+from argusAI.event_similarity_processor_v2 import EventSimilarityProcessorV2, BgeSmallEnEmbeddingModel, SimilarEvent
 
 
 LOGGER = logging.getLogger(__name__)
@@ -523,3 +524,310 @@ class TestIntegrationScenarios:
 
         assert result == 3
         assert full_processor.processed_count == 3
+
+
+class TestDeduplication:
+    """Tests for event deduplication logic."""
+
+    @pytest.fixture
+    def processor(self):
+        """Create processor with mocked dependencies."""
+        with (
+            patch("argusAI.event_similarity_processor_v2.ScyllaConnection") as mock_scylla,
+            patch("argusAI.event_similarity_processor_v2.BgeSmallEnEmbeddingModel") as mock_embedding,
+            patch("argusAI.event_similarity_processor_v2.MessageSanitizer") as mock_sanitizer,
+        ):
+            mock_db = MagicMock()
+            mock_scylla.return_value = mock_db
+            mock_embedding.return_value = MagicMock(return_value=[[0.1] * 384])
+            mock_sanitizer.return_value = MagicMock(sanitize=MagicMock(return_value="sanitized"))
+            processor = EventSimilarityProcessorV2()
+            return processor
+
+    def test_mark_event_is_duplicate_should_return_false_when_no_rows_returned(self, processor):
+        """Should return False when ANN search returns no rows (no similar events in DB or cache)."""
+        run_id = uuid4()
+        ts = datetime.now()
+        embedding = [0.1] * 384
+
+        # ANN query returns no results
+        processor.db.session.execute.return_value = []
+
+        result = processor._mark_event_is_duplicate(run_id, ts, "ERROR", embedding)
+
+        assert result is False
+
+    def test_mark_event_is_duplicate_should_return_false_when_similar_embedding_belongs_to_different_run(
+        self, processor
+    ):
+        """Should return False when near-identical embedding exists but belongs to a different run."""
+        run_id = uuid4()
+        other_run_id = uuid4()
+        ts = datetime.now()
+        # Identical unit vectors — cosine distance would be ~0
+        embedding = [1.0] + [0.0] * 383
+
+        # DB returns a row with the same embedding but for a different run
+        other_run_row = SimilarEvent(run_id=other_run_id, ts=datetime.now(), embedding=embedding, added_ts=time.time())
+        processor.db.session.execute.return_value = [other_run_row]
+
+        result = processor._mark_event_is_duplicate(run_id, ts, "ERROR", embedding)
+
+        assert result is False
+
+    def test_mark_event_is_duplicate_should_return_false_when_cosine_distance_too_large(self, processor):
+        """Should return False when the closest embedding exceeds the similarity threshold."""
+        run_id = uuid4()
+        ts = datetime.now()
+        # Two orthogonal unit vectors — cosine distance = 1.0, well outside (-0.1, 0.1)
+        embedding = [1.0] + [0.0] * 383
+        different_embedding = [0.0, 1.0] + [0.0] * 382
+
+        existing_row = SimilarEvent(
+            run_id=run_id, ts=datetime.now(), embedding=different_embedding, added_ts=time.time()
+        )
+        processor.db.session.execute.return_value = [existing_row]
+
+        result = processor._mark_event_is_duplicate(run_id, ts, "ERROR", embedding)
+
+        assert result is False
+
+    def test_mark_event_is_duplicate_should_return_true_for_near_identical_embedding(self, processor):
+        """Should return True and write duplicate_id when a near-identical embedding exists in the same run."""
+        run_id = uuid4()
+        ts = datetime.now()
+        ts_existing = datetime.now()
+        existing_event_id = uuid4()
+        # Same unit vector — cosine distance = 0, clearly within (-0.1, 0.1)
+        embedding = [1.0] + [0.0] * 383
+
+        existing_row = SimilarEvent(run_id=run_id, ts=ts_existing, embedding=embedding, added_ts=time.time())
+
+        # First session.execute call: ANN query → returns [existing_row]
+        # Second session.execute call: SELECT event_id → returns a mock dupe
+        mock_dupe = Mock(event_id=existing_event_id)
+        ann_result_exhausted = False
+
+        def session_execute_side_effect(*args, **kwargs):
+            nonlocal ann_result_exhausted
+            if not ann_result_exhausted:
+                ann_result_exhausted = True
+                return [existing_row]
+            return Mock(one=Mock(return_value=mock_dupe))
+
+        processor.db.session.execute.side_effect = session_execute_side_effect
+
+        result = processor._mark_event_is_duplicate(run_id, ts, "ERROR", embedding)
+
+        assert result is True
+
+        # Verify unprocessed event was deleted
+        delete_calls = [call for call in processor.db.execute.call_args_list if "DELETE FROM" in call[0][0]]
+        assert len(delete_calls) == 1
+
+        # Verify duplicate_id was written back to SCTEvent
+        update_calls = [call for call in processor.db.execute.call_args_list if "UPDATE" in call[0][0]]
+        assert len(update_calls) == 1
+        assert update_calls[0][0][1][0] == existing_event_id
+
+    def test_process_single_event_should_skip_insert_and_delete_when_duplicate_detected(self, processor):
+        """_process_single_event should return early without INSERT or final DELETE when a duplicate is found."""
+        run_id = uuid4()
+        severity = "ERROR"
+        ts = datetime.now()
+
+        mock_event = Mock(message="Connection refused to 10.0.0.1")
+        mock_result = Mock()
+        mock_result.one.return_value = mock_event
+        processor.db.execute.return_value = mock_result
+
+        with patch.object(processor, "_mark_event_is_duplicate", return_value=True):
+            processor._process_single_event(run_id, severity, ts)
+
+        insert_calls = [call for call in processor.db.execute.call_args_list if "INSERT INTO" in call[0][0]]
+        assert len(insert_calls) == 0
+
+        # The only DELETE should come from _mark_event_is_duplicate itself (mocked), not from step 5
+        delete_calls = [
+            call
+            for call in processor.db.execute.call_args_list
+            if call[0][0].startswith(f"DELETE FROM {SCTUnprocessedEvent.__table_name__}")
+        ]
+        assert len(delete_calls) == 0
+
+    def test_mark_event_is_duplicate_should_propagate_exceptions(self, processor):
+        """Exceptions raised during duplicate search should propagate to the caller."""
+        run_id = uuid4()
+        ts = datetime.now()
+        embedding = [0.1] * 384
+
+        processor.db.session.execute.side_effect = RuntimeError("ScyllaDB timeout")
+
+        with pytest.raises(RuntimeError, match="ScyllaDB timeout"):
+            processor._mark_event_is_duplicate(run_id, ts, "ERROR", embedding)
+
+
+class TestCaching:
+    """Tests for the embedding cache used to bridge the vector-search indexing lag."""
+
+    @pytest.fixture
+    def processor(self):
+        """Create processor with mocked dependencies."""
+        with (
+            patch("argusAI.event_similarity_processor_v2.ScyllaConnection") as mock_scylla,
+            patch("argusAI.event_similarity_processor_v2.BgeSmallEnEmbeddingModel") as mock_embedding,
+            patch("argusAI.event_similarity_processor_v2.MessageSanitizer") as mock_sanitizer,
+        ):
+            mock_db = MagicMock()
+            mock_scylla.return_value = mock_db
+            mock_embedding.return_value = MagicMock(return_value=[[0.1] * 384])
+            mock_sanitizer.return_value = MagicMock(sanitize=MagicMock(return_value="sanitized"))
+            processor = EventSimilarityProcessorV2()
+            return processor
+
+    def test_processed_event_should_be_added_to_cache(self, processor):
+        """A successfully embedded event should appear in similar_event_cache immediately."""
+        run_id = uuid4()
+        severity = "ERROR"
+        ts = datetime.now()
+
+        mock_event = Mock(message="Disk full on node")
+        mock_result = Mock()
+        mock_result.one.return_value = mock_event
+        processor.db.execute.return_value = mock_result
+
+        with patch.object(processor, "_mark_event_is_duplicate", return_value=False):
+            processor._process_single_event(run_id, severity, ts)
+
+        cache_key = (run_id, severity)
+        assert cache_key in processor.similar_event_cache
+        cached = processor.similar_event_cache[cache_key]
+        assert len(cached) == 1
+        assert cached[0].ts == ts
+
+    def test_duplicate_event_should_not_be_added_to_cache(self, processor):
+        """An event identified as a duplicate must not be inserted into the cache."""
+        run_id = uuid4()
+        severity = "ERROR"
+        ts = datetime.now()
+
+        mock_event = Mock(message="Disk full on node")
+        mock_result = Mock()
+        mock_result.one.return_value = mock_event
+        processor.db.execute.return_value = mock_result
+
+        with patch.object(processor, "_mark_event_is_duplicate", return_value=True):
+            processor._process_single_event(run_id, severity, ts)
+
+        assert len(processor.similar_event_cache) == 0
+
+    def test_merge_cache_should_remove_entries_now_visible_in_database(self, processor):
+        """Cache entries that the ANN query now returns (indexed) should be evicted from cache."""
+        run_id = uuid4()
+        severity = "ERROR"
+        ts = datetime.now()
+
+        stale = SimilarEvent(run_id=run_id, ts=ts, embedding=[0.1] * 384, added_ts=time.time())
+        processor.similar_event_cache[(run_id, severity)] = [stale]
+
+        # Database now returns the same event (vector index has caught up)
+        combined_rows, remaining_cache = processor._merge_cache(run_id, severity, [stale])
+
+        # Entry should have been evicted from the in-memory cache
+        assert len(remaining_cache) == 0
+        assert processor.similar_event_cache[(run_id, severity)] == []
+        # But it is still present in the combined view returned to the caller
+        assert stale in combined_rows
+
+    def test_merge_cache_should_keep_entries_not_yet_indexed_by_database(self, processor):
+        """Cache entries absent from the ANN result set should be preserved and included in combined rows."""
+        run_id = uuid4()
+        severity = "ERROR"
+
+        unindexed = SimilarEvent(run_id=run_id, ts=datetime.now(), embedding=[0.2] * 384, added_ts=time.time())
+        processor.similar_event_cache[(run_id, severity)] = [unindexed]
+
+        # DB returns a different event (unindexed is not visible there yet)
+        db_row = SimilarEvent(run_id=run_id, ts=datetime.now(), embedding=[0.5] * 384, added_ts=time.time())
+
+        combined_rows, remaining_cache = processor._merge_cache(run_id, severity, [db_row])
+
+        # Unindexed cache entry should survive in cache and appear in combined rows
+        assert unindexed in remaining_cache
+        assert unindexed in combined_rows
+        assert db_row in combined_rows
+
+    def test_is_stale_should_return_true_when_event_present_in_db_rows(self, processor):
+        """is_stale should identify a cached event that is now returned by the database."""
+        run_id = uuid4()
+        ts = datetime.now()
+        cached = SimilarEvent(run_id=run_id, ts=ts, embedding=[0.1] * 384, added_ts=time.time())
+        db_row = SimilarEvent(run_id=run_id, ts=ts, embedding=[0.1] * 384, added_ts=time.time())
+
+        assert processor.is_stale(cached, [db_row]) is True
+
+    def test_is_stale_should_return_false_when_event_absent_from_db_rows(self, processor):
+        """is_stale should return False when the cached event is not yet returned by the database."""
+        run_id = uuid4()
+        cached = SimilarEvent(run_id=run_id, ts=datetime.now(), embedding=[0.1] * 384, added_ts=time.time())
+        other_row = SimilarEvent(run_id=run_id, ts=datetime.now(), embedding=[0.5] * 384, added_ts=time.time())
+
+        assert processor.is_stale(cached, [other_row]) is False
+
+    def test_clear_stale_cache_should_remove_keys_whose_entries_have_expired_added_ts(self, processor):
+        """Cache entries with an old added_ts (not in the future window) should be purged."""
+        run_id = uuid4()
+        severity = "ERROR"
+
+        # added_ts = 0.0 is far in the past; cmp_ts returns False → full_cache empty → key dropped
+        old_entry = SimilarEvent(run_id=run_id, ts=datetime.now(), embedding=[0.1] * 384, added_ts=0.0)
+        processor.similar_event_cache[(run_id, severity)] = [old_entry]
+
+        processor._clear_stale_cache()
+
+        assert (run_id, severity) not in processor.similar_event_cache
+
+    def test_clear_stale_cache_should_retain_keys_with_future_added_ts(self, processor):
+        """Cache entries whose added_ts lies beyond time.time() + cache_clear_timer should be retained."""
+        run_id = uuid4()
+        severity = "ERROR"
+
+        # added_ts > time.time() + cache_clear_timer so the entry survives
+        future_ts = time.time() + processor.cache_clear_timer + 60
+        fresh_entry = SimilarEvent(run_id=run_id, ts=datetime.now(), embedding=[0.1] * 384, added_ts=future_ts)
+        processor.similar_event_cache[(run_id, severity)] = [fresh_entry]
+
+        processor._clear_stale_cache()
+
+        assert (run_id, severity) in processor.similar_event_cache
+        assert len(processor.similar_event_cache[(run_id, severity)]) == 1
+
+    def test_deduplication_should_use_cache_when_db_has_not_indexed_new_event(self, processor):
+        """An event stored in cache (not yet in DB) should still trigger deduplication for a new identical event."""
+        run_id = uuid4()
+        severity = "ERROR"
+        ts_existing = datetime.now()
+        existing_event_id = uuid4()
+        # Identical unit vectors
+        embedding = [1.0] + [0.0] * 383
+
+        # Pre-populate cache; DB ANN query returns nothing (not yet indexed)
+        cached_event = SimilarEvent(run_id=run_id, ts=ts_existing, embedding=embedding, added_ts=time.time() + 3600)
+        processor.similar_event_cache[(run_id, severity)] = [cached_event]
+
+        mock_dupe = Mock(event_id=existing_event_id)
+        ann_call_done = False
+
+        def session_execute_side_effect(*args, **kwargs):
+            nonlocal ann_call_done
+            if not ann_call_done:
+                ann_call_done = True
+                return []  # ANN search sees nothing yet
+            return Mock(one=Mock(return_value=mock_dupe))
+
+        processor.db.session.execute.side_effect = session_execute_side_effect
+
+        new_ts = datetime.now()
+        result = processor._mark_event_is_duplicate(run_id, new_ts, severity, embedding)
+
+        assert result is True
