@@ -4,6 +4,7 @@
         severity: string;
         ts: string;
         event_id: string;
+        duplicate_id: string;
         event_type: string;
         message: string;
         node?: string;
@@ -105,6 +106,14 @@
         "succeeded": false,
     });
 
+    let duplicateIdShowTable: { [key: string]: boolean } = $state({
+
+    });
+
+    let eventMap: {[key: string]: SctEvent} = $state({
+
+    });
+
     let eventFilterString = $state("");
     let nemesisFilterString = $state("");
     let issues: (GithubSubtype | JiraSubtype)[] = $state([]);
@@ -161,6 +170,17 @@
     const refreshIssues = async function() {
         await fetchIssuesForEvents();
     };
+
+    const focusDuplicate = function(event: SCTEvent) {
+        let elem;
+        if (elem = eventMap[event.duplicate_id]) {
+            elem.highlight();
+            elem.scrollIntoView({
+                behavior: "smooth",
+                block: "center"
+            });
+        }
+    }
 
     const fetchEventsBySeverity = async function (severity: SeverityValueType, before: number | null = null, limit: number | null = null): Promise<SCTEvent[]> {
         try {
@@ -302,13 +322,13 @@
             {#if event.type == TimelineEventType.Event}
                 {#if severityFilter[event.severity]}
                     <div class="mb-2">
-                        <SctEvent {refreshIssues} issues={issues.filter((i) => i.event_id == (event.event as SCTEvent).event_id)} event={(event.event as SCTEvent)} run={testRun} filterState={severityFilter} options={event.opts || {}} issueAttach={issueAttach} bind:filterString={eventFilterString} />
+                        <SctEvent {focusDuplicate} bind:this={eventMap[event.event.event_id]} bind:duplicateIdShowTable {refreshIssues} issues={issues.filter((i) => i.event_id == (event.event as SCTEvent).event_id)} event={(event.event as SCTEvent)} run={testRun} filterState={severityFilter} options={event.opts || {}} issueAttach={issueAttach} bind:filterString={eventFilterString} />
                     </div>
                 {/if}
             {:else if event.type == TimelineEventType.Nemesis}
                 {#if event.innerEvents.filter((e) => [SCTEventSeverity.CRITICAL, SCTEventSeverity.ERROR].includes((e.event as SCTEvent).severity)).length > 0 || nemesisFilter[event.event.status]}
                     <div class="mb-2">
-                        <SctNemesis {refreshIssues} bind:issues event={(event.event as NemesisInfo)}  run={testRun} filterState={severityFilter} innerEvents={event.innerEvents} options={event.opts || {}} bind:filterString={nemesisFilterString}  issueAttach={issueAttach} bind:eventFilterString/>
+                        <SctNemesis {refreshIssues} bind:issues {focusDuplicate} bind:eventMap bind:duplicateIdShowTable event={(event.event as NemesisInfo)}  run={testRun} filterState={severityFilter} innerEvents={event.innerEvents} options={event.opts || {}} bind:filterString={nemesisFilterString}  issueAttach={issueAttach} bind:eventFilterString/>
                     </div>
                 {/if}
             {/if}
