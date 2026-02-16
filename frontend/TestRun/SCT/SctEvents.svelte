@@ -143,7 +143,7 @@
             let params = queryString.stringify({
                 filterKey: "run_id",
                 id: testRun.id,
-                aggregateByIssue: false,
+                aggregateByIssue: Number(false),
             });
             const res = await fetch("/api/v1/issues/get?" + params);
             const json = await res.json();
