@@ -93,20 +93,109 @@ flask_app = create_flask_app()
 fastapi_app.mount("/legacy", WSGIMiddleware(flask_app))
 ```
 
-### 0.4 Async Cassandra driver setup
+### 0.4 CQLEngine & Cassandra async strategy
 
-The existing `scylla-driver` already supports asyncio via `cassandra.cluster.Session.execute_async`.
-Wrap it in an async helper:
+**This is the biggest blocker for the migration.** CQLEngine is the ORM layer provided by `scylla-driver` and it is entirely synchronous — every `.filter()`, `.get()`, `.all()`, `.save()`, `.delete()`, and `.create()` call uses `session.execute()` internally. The `session.execute_async()` method exists on the low-level `Session` object but is **not used by CQLEngine** at all.
+
+#### Current CQLEngine footprint
+
+| Category | Count | Details |
+|---|---|---|
+| ORM models | 37 | Defined in `argus/backend/models/` and `plugins/` |
+| User-Defined Types | 18 | Nested Cassandra UDTs used in models |
+| ORM query sites | ~200+ | `.filter()`, `.get()`, `.all()`, `.save()`, `.delete()` across 21 service files |
+| Raw CQL sites | ~35 | `session.execute()` with prepared statements across 14 files |
+| ORM-to-raw ratio | ~85 / 15% | Most data access goes through CQLEngine |
+
+Common ORM patterns in use:
+- **Query chains**: `.filter(group_id=x).allow_filtering().all()` (~45 sites)
+- **Single-row lookups**: `.get(id=x)` (~60 sites)
+- **Column projection**: `.only(["col1", "col2"])` (~20 sites)
+- **Instance mutation**: `model.field = value; model.save()` (throughout services)
+- **Batch writes**: `BatchQuery` (1 site in `service/testrun.py`)
+- **Schema sync**: `sync_table()` / `sync_type()` at startup via `db.py`
+
+#### Recommended approach: Keep CQLEngine sync, run in thread pool (Phase 0–2)
+
+Since CQLEngine has no async API and there is no drop-in async replacement for it, the
+pragmatic path is to **keep CQLEngine as-is** and offload its blocking calls to a thread
+pool so they don't block the asyncio event loop.
+
+FastAPI already handles this automatically: **any route defined with `def` (not `async def`)
+runs in a thread-pool executor by default.** This means existing service code that calls
+CQLEngine can be used without modification in sync route handlers:
+
+```python
+# FastAPI runs sync handlers in a threadpool automatically
+@router.get("/test_runs")
+def get_test_runs(user: User = Depends(get_current_user)):
+    # CQLEngine calls here are blocking, but FastAPI runs this in a thread
+    runs = list(SCTTestRun.filter(build_id=build_id).all())
+    return {"status": "ok", "response": runs}
+```
+
+For `async def` handlers that need to call CQLEngine, use `run_in_executor` explicitly:
+
+```python
+import asyncio
+from functools import partial
+
+async def async_cql(func, *args, **kwargs):
+    """Run a blocking CQLEngine call in the default thread-pool executor."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, partial(func, *args, **kwargs))
+
+# Usage in an async handler
+@router.get("/releases")
+async def get_releases():
+    releases = await async_cql(lambda: list(ArgusRelease.all()))
+    return {"status": "ok", "response": releases}
+```
+
+#### Raw CQL: async wrapper for `session.execute()`
+
+The ~35 raw CQL sites that call `session.execute()` directly (mostly in `results_service.py`
+and plugin modules) can use the driver's built-in `execute_async` with an asyncio bridge:
 
 ```python
 # argus/backend/db_async.py
-async def execute_async(session, query, params=None):
-    loop = asyncio.get_event_loop()
+async def execute_cql_async(session, query, params=None):
     future = session.execute_async(query, params)
-    return await asyncio.wrap_future(future, loop=loop)
+    return await asyncio.wrap_future(future)
 ```
 
-Alternatively, evaluate adopting the `acsylla` pure-async driver later if performance warrants it.
+This covers prepared statements, dynamic CQL, and any custom queries outside CQLEngine.
+
+#### Migration phases for database access
+
+| Phase | Database approach | Risk |
+|---|---|---|
+| **Phase 0–1** | Keep all CQLEngine sync; use sync `def` handlers (FastAPI threadpool) + `execute_cql_async` for raw CQL | Lowest risk; no ORM changes |
+| **Phase 2** | Introduce `async_cql()` helper for `async def` handlers that need CQLEngine alongside other async work | Low risk; opt-in per handler |
+| **Phase 3–4** | Evaluate whether to stay on CQLEngine-in-threadpool long-term, or begin migrating hot paths to raw async CQL for performance | Deferred decision |
+
+#### Why not switch away from CQLEngine now?
+
+Replacing CQLEngine would mean rewriting **all 37 models**, **18 UDTs**, and **~200+ query
+sites** across the service layer — effectively a full rewrite of the data access tier. This
+dwarfs the Flask-to-FastAPI migration itself and should be treated as a separate project if
+ever pursued. The threadpool approach lets us migrate the web framework **without touching
+the database layer**.
+
+#### Alternative async drivers (future evaluation)
+
+If profiling shows the threadpool approach is a bottleneck (unlikely for this workload), these
+options can be evaluated later as a separate initiative:
+
+| Driver | Async support | CQLEngine compat | Notes |
+|---|---|---|---|
+| `scylla-driver` (current) | `execute_async()` on raw Session | Full CQLEngine ORM | Threadpool wrapping is sufficient |
+| `acsylla` | Native asyncio | No ORM, raw CQL only | Would require rewriting all 200+ ORM query sites |
+| Custom async ORM layer | Build on `execute_async()` | Partial | High effort; not recommended unless performance-critical |
+
+**Recommendation**: Defer any driver swap. Keep `scylla-driver` + CQLEngine with threadpool
+wrapping through the entire FastAPI migration. Revisit only if benchmarks show thread
+contention under production load.
 
 ### 0.5 Update deployment stack
 
@@ -321,7 +410,8 @@ With FastAPI, these currently-blocking operations can become non-blocking:
 | GitHub API calls | `requests` (sync) | `httpx.AsyncClient` |
 | Jira API calls | `requests` (sync) | `httpx.AsyncClient` |
 | Jenkins polling | `python-jenkins` (sync) | `httpx.AsyncClient` or async wrapper |
-| Cassandra queries | sync `session.execute()` | `session.execute_async()` + asyncio bridge |
+| Cassandra queries (raw CQL) | sync `session.execute()` | `execute_async()` + asyncio bridge |
+| Cassandra queries (CQLEngine ORM) | sync CQLEngine API | Keep sync; FastAPI threadpool (see §0.4) |
 | Email sending | sync SMTP | `aiosmtplib` or BackgroundTasks |
 
 ---
@@ -357,7 +447,7 @@ async def test_get_test_runs(app):
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Frontend breakage during migration | High | Keep JSON response format identical; co-host both frameworks |
-| CQLEngine ORM compatibility | Medium | CQLEngine is sync-only; use thread-pool executor for async wrapping until a full async driver is adopted |
+| CQLEngine ORM is sync-only | High | Keep CQLEngine unchanged; use sync `def` handlers (FastAPI threadpool) during Phase 0–2; defer driver replacement (see §0.4) |
 | Session/cookie-based auth disruption | Medium | Port Flask-Login sessions to Starlette session middleware with same cookie name/format |
 | uWSGI-specific features (touch-reload, stats) | Low | Uvicorn supports similar signals; update ops runbook |
 | Large number of routes (~220) | Medium | Migrate blueprint by blueprint with integration tests per phase |
@@ -391,7 +481,7 @@ async def test_get_test_runs(app):
 
 ## Open Questions
 
-1. **Async Cassandra driver**: Should we adopt `acsylla` for a fully async driver, or is wrapping `execute_async` sufficient?
+1. **CQLEngine long-term**: After the FastAPI migration is complete, should we benchmark the threadpool approach under production load to decide if migrating hot paths to raw async CQL is worthwhile?
 2. **Session storage**: Continue with cookie-based sessions, or move to server-side session store (Redis)?
 3. **Task queue**: Is `APScheduler` sufficient for periodic jobs, or do we need a distributed queue like `arq` or Celery?
 4. **WebSocket support**: Should we add WebSocket endpoints to replace polling (`/test_runs/poll`) during this migration?
