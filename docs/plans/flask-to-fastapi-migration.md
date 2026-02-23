@@ -33,9 +33,26 @@ FastAPI addresses all of these through native async/await, built-in BackgroundTa
 
 ## Migration Strategy
 
-### Approach: Incremental, Blueprint-by-Blueprint
+### Approach: Test-First, Blueprint-by-Blueprint
 
 A full rewrite is high-risk. Instead, migrate one blueprint at a time while keeping the existing Flask app functional. Use ASGI mounting to run both frameworks in the same process during the transition.
+
+**Critical prerequisite**: This repository has significant test coverage gaps (see
+[Test Coverage Gaps](#test-coverage-gaps) below). Every phase **must** begin by writing
+integration tests for the endpoints being migrated, verified against the existing Flask
+app, before any refactoring begins. The same tests must then pass against FastAPI without
+modification.
+
+```
+Per-phase workflow (mandatory for every phase):
+
+  1. Audit   ─ List all endpoints to migrate; identify missing tests
+  2. Test    ─ Write integration tests for every uncovered endpoint (run against Flask)
+  3. Green   ─ All tests pass on Flask; fix any bugs the new tests uncover
+  4. Refactor─ Port endpoints to FastAPI
+  5. Green   ─ All tests pass on FastAPI without any test changes
+  6. Ship    ─ Merge; remove old Flask routes
+```
 
 ```
 Phase 0  ─ Foundation & tooling
@@ -44,6 +61,28 @@ Phase 2  ─ Auth, Admin, Client blueprints
 Phase 3  ─ UI routes (main blueprint)
 Phase 4  ─ Remove Flask entirely
 ```
+
+### Test Coverage Gaps
+
+The following controllers currently have **no endpoint-level test coverage** and must be
+covered before their phase begins:
+
+| Controller | Routes | Current Coverage | Phase |
+|---|---|---|---|
+| `api.py` | ~36 | Partial (results, highlights) | 1 |
+| `testrun_api.py` | ~34 | Partial (SCT, assignees, events) | 1 |
+| `view_api.py` | ~13 | Partial (highlights only) | 1 |
+| `planner_api.py` | ~14 | ❌ None | 1 |
+| `team.py` | team CRUD | ❌ None | 1 |
+| `notification_api.py` | notifications | ❌ None | 1 |
+| `auth.py` | login/logout/OAuth | ❌ None (unit tests for CF Access only) | 2 |
+| `admin_api.py` | ~24 | ❌ None | 2 |
+| `client_api.py` | client endpoints | Partial | 2 |
+| `main.py` | ~30 UI routes | ❌ None | 3 |
+| `admin.py` (UI) | admin UI pages | ❌ None | 3 |
+| `team_ui.py` | team UI pages | ❌ None | 3 |
+| `notifications.py` (UI) | notification pages | ❌ None | 3 |
+| `views_widgets/*` | graphs, summary, nemesis | Mostly ❌ | 1 |
 
 ---
 
@@ -211,7 +250,37 @@ contention under production load.
 
 **Goal**: Port the largest surface area (~36 routes in `api.py`, ~34 in `testrun_api.py`, plus sub-blueprints) to FastAPI routers.
 
-### 1.1 Create Pydantic request/response models
+### 1.1 Write missing integration tests (before any refactoring)
+
+Before touching any route, add integration tests for every endpoint in the API blueprint
+that lacks coverage. Tests use Flask's test client and run against the existing Flask app:
+
+```python
+# argus/backend/tests/test_api_endpoints.py
+def test_get_releases(flask_client):
+    response = flask_client.get("/api/v1/releases")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["status"] == "ok"
+
+def test_get_test_runs_requires_auth(flask_client):
+    response = flask_client.get("/api/v1/test_runs")
+    assert response.status_code in (401, 403)
+```
+
+**Checklist for Phase 1 test coverage:**
+- [ ] `api.py` — all ~36 routes (currently partial coverage)
+- [ ] `testrun_api.py` — all ~34 routes (currently partial)
+- [ ] `planner_api.py` — all ~14 routes (currently zero coverage)
+- [ ] `team.py` — team CRUD routes (currently zero coverage)
+- [ ] `notification_api.py` — notification routes (currently zero coverage)
+- [ ] `view_api.py` — all ~13 routes (currently highlights only)
+- [ ] `views_widgets/*` — graphs, summary, nemesis stats (mostly uncovered)
+
+**Gate**: All new tests must pass against Flask before proceeding to step 1.2.
+If tests uncover existing bugs, fix them in the Flask codebase first.
+
+### 1.2 Create Pydantic request/response models
 
 For every endpoint, define typed models replacing raw `dict` access:
 
@@ -231,7 +300,7 @@ class TestRunResponse(BaseModel):
     response: dict
 ```
 
-### 1.2 Convert Flask blueprint to FastAPI router
+### 1.3 Convert Flask blueprint to FastAPI router
 
 ```python
 # Before (Flask)
@@ -246,7 +315,7 @@ async def get_test_runs(user: User = Depends(get_current_user)):
     ...
 ```
 
-### 1.3 Port authentication to FastAPI dependencies
+### 1.4 Port authentication to FastAPI dependencies
 
 Replace `@login_required` / `@api_login_required` decorators with FastAPI dependency injection:
 
@@ -266,7 +335,7 @@ async def require_admin(user: User = Depends(get_current_user)):
     return user
 ```
 
-### 1.4 Port error handling
+### 1.5 Port error handling
 
 Replace `bp.register_error_handler(...)` with FastAPI exception handlers:
 
@@ -276,41 +345,100 @@ async def handle_user_exception(request, exc):
     return JSONResponse(status_code=exc.status_code, content={"status": "error", "response": str(exc)})
 ```
 
-### 1.5 Validate with existing tests
+### 1.6 Validate — all Phase 1 tests pass on FastAPI
 
-Run `pytest argus/backend/tests/` after each converted controller. Response format must remain `{"status": "ok"|"error", "response": ...}` to avoid breaking the Svelte frontend.
+Re-run the full test suite written in step 1.1 against the new FastAPI app. **No test
+modifications are allowed** — if a test fails, the FastAPI route must be fixed to match
+the original Flask behavior.
+
+```bash
+pytest argus/backend/tests/ -v
+```
+
+Response format must remain `{"status": "ok"|"error", "response": ...}` to avoid
+breaking the Svelte frontend.
 
 ---
 
 ## Phase 2 — Auth, Admin, Client, and Remaining API Blueprints
 
-### 2.1 Auth blueprint (`/auth`)
+### 2.1 Write missing integration tests (before any refactoring)
+
+Cover all endpoints in the blueprints being migrated this phase:
+
+```python
+# argus/backend/tests/test_auth_endpoints.py
+def test_login_page_renders(flask_client):
+    response = flask_client.get("/auth/login")
+    assert response.status_code == 200
+
+def test_login_rejects_invalid_credentials(flask_client):
+    response = flask_client.post("/auth/login", json={"username": "x", "password": "y"})
+    assert response.status_code in (401, 403)
+```
+
+**Checklist for Phase 2 test coverage:**
+- [ ] `auth.py` — login/logout, OAuth flows, CF Access (currently zero endpoint tests)
+- [ ] `admin_api.py` — all ~24 admin routes (currently zero coverage)
+- [ ] `client_api.py` — client endpoints (currently partial)
+
+**Gate**: All new tests must pass against Flask before proceeding to step 2.2.
+
+### 2.2 Auth blueprint (`/auth`)
 
 - Replace Flask-Login session management with FastAPI session middleware or JWT-based auth.
 - Port GitHub OAuth flow using `httpx.AsyncClient` for non-blocking token exchange.
 - Port Cloudflare Access JWT validation (already uses PyJWT, minimal changes).
 - Replace Flask-WTF CSRF with FastAPI middleware or header-based CSRF tokens for the remaining form endpoints.
 
-### 2.2 Admin blueprint (`/admin`)
+### 2.3 Admin blueprint (`/admin`)
 
 - Convert ~24 admin routes to FastAPI router.
 - Use `Depends(require_admin)` for role gating.
 
-### 2.3 Client blueprint
+### 2.4 Client blueprint
 
 - Convert client-facing API endpoints.
 - These are already pure JSON, making them straightforward to port.
 
-### 2.4 Team, Planner, View, and Notification sub-blueprints
+### 2.5 Team, Planner, View, and Notification sub-blueprints
 
 - Convert nested blueprints to nested FastAPI routers.
 - Maintain URL structure for frontend compatibility.
+
+### 2.6 Validate — all Phase 2 tests pass on FastAPI
+
+Re-run all tests from step 2.1 against FastAPI. **No test modifications allowed.**
 
 ---
 
 ## Phase 3 — UI Routes (Main Blueprint)
 
-### 3.1 Template rendering
+### 3.1 Write missing integration tests (before any refactoring)
+
+UI routes return HTML templates. Tests should verify status codes, redirects, and that
+key content is present:
+
+```python
+# argus/backend/tests/test_ui_endpoints.py
+def test_index_redirects_to_login(flask_client):
+    response = flask_client.get("/")
+    assert response.status_code in (200, 302)
+
+def test_test_run_page_requires_auth(flask_client):
+    response = flask_client.get("/test_runs")
+    assert response.status_code in (200, 302)
+```
+
+**Checklist for Phase 3 test coverage:**
+- [ ] `main.py` — all ~30 UI routes (currently zero coverage)
+- [ ] `admin.py` (UI) — admin pages (currently zero coverage)
+- [ ] `team_ui.py` — team pages (currently zero coverage)
+- [ ] `notifications.py` (UI) — notification pages (currently zero coverage)
+
+**Gate**: All new tests must pass against Flask before proceeding to step 3.2.
+
+### 3.2 Template rendering
 
 FastAPI supports Jinja2 via `Jinja2Templates`. Port the template-rendering routes:
 
@@ -323,7 +451,7 @@ async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 ```
 
-### 3.2 Port custom template filters
+### 3.3 Port custom template filters
 
 Register existing Jinja2 filters from `template_filters.py` on the FastAPI template environment:
 
@@ -333,12 +461,16 @@ templates.env.filters["formatted_date"] = formatted_date
 # ... remaining filters
 ```
 
-### 3.3 Static file serving
+### 3.4 Static file serving
 
 ```python
 from fastapi.staticfiles import StaticFiles
 app.mount("/s", StaticFiles(directory="public"), name="static")
 ```
+
+### 3.5 Validate — all Phase 3 tests pass on FastAPI
+
+Re-run all tests from step 3.1 against FastAPI. **No test modifications allowed.**
 
 ---
 
@@ -418,27 +550,58 @@ With FastAPI, these currently-blocking operations can become non-blocking:
 
 ## Testing Strategy
 
-### Approach
+### Principle: Tests are written before refactoring, not after
 
-- Use `httpx.AsyncClient` with FastAPI's `TestClient` (backed by `httpx`) for endpoint tests.
-- Migrate existing pytest fixtures incrementally; keep `conftest.py` pattern.
-- Maintain response format compatibility: `{"status": "ok"|"error", "response": ...}`.
+This repository currently has significant test coverage gaps (10 of 14 controllers listed in
+the [Test Coverage Gaps](#test-coverage-gaps) table have no or only partial endpoint tests).
+The migration **must not** begin for any blueprint until its endpoints are fully covered by
+integration tests that pass against the existing Flask app.
+
+### Test-first workflow (per phase)
+
+```
+1. Write integration tests for all endpoints being migrated
+2. Run tests against Flask — all must pass
+3. If tests expose bugs, fix them in Flask first (separate commits)
+4. Refactor endpoints to FastAPI
+5. Run the SAME tests against FastAPI — all must pass WITHOUT any test changes
+6. If tests fail on FastAPI, the FastAPI code has a bug — fix the route, not the test
+```
+
+This ensures behavioral equivalence between the Flask and FastAPI implementations and
+catches regressions before they reach production.
+
+### Test infrastructure
+
+- **Flask tests**: Use the existing `flask_client` fixture from `conftest.py`.
+- **FastAPI tests**: Use `httpx.AsyncClient` with `ASGITransport` (or FastAPI's `TestClient`).
+- **Shared assertions**: Both Flask and FastAPI tests assert the same response structure,
+  status codes, and payloads so tests are interchangeable.
+
+```python
+# Example: Flask integration test (written first, runs against Flask)
+def test_get_test_runs(flask_client):
+    response = flask_client.get("/api/v1/test_runs")
+    assert response.status_code == 200
+    assert response.get_json()["status"] == "ok"
+
+# Example: Same test adapted for FastAPI (after migration)
+def test_get_test_runs(fastapi_client):
+    response = fastapi_client.get("/api/v1/test_runs")
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+```
 
 ### Test migration order
 
 Match the phase order: API tests → Auth tests → Admin tests → UI tests.
 
-```python
-# Example: FastAPI test
-from httpx import AsyncClient, ASGITransport
+### Coverage target
 
-async def test_get_test_runs(app):
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/api/v1/test_runs")
-        assert response.status_code == 200
-        assert response.json()["status"] == "ok"
-```
+Every endpoint migrated must have at least one integration test covering:
+- Success path (200/201 response with expected shape)
+- Auth rejection (401/403 when unauthenticated)
+- Invalid input (400/422 for malformed requests where applicable)
 
 ---
 
@@ -446,6 +609,7 @@ async def test_get_test_runs(app):
 
 | Risk | Impact | Mitigation |
 |---|---|---|
+| Low existing test coverage (10 of 14 controllers lack full endpoint tests) | High | Mandatory test-first step at each phase; no refactoring until tests pass on Flask (see per-phase workflow) |
 | Frontend breakage during migration | High | Keep JSON response format identical; co-host both frameworks |
 | CQLEngine ORM is sync-only | High | Keep CQLEngine unchanged; use sync `def` handlers (FastAPI threadpool) during Phase 0–2; defer driver replacement (see §0.4) |
 | Session/cookie-based auth disruption | Medium | Port Flask-Login sessions to Starlette session middleware with same cookie name/format |
@@ -460,18 +624,23 @@ async def test_get_test_runs(app):
 | Phase | Scope | Estimate |
 |---|---|---|
 | Phase 0 — Foundation | App shell, deps, deployment | 1–2 weeks |
-| Phase 1 — API blueprint | ~100 routes, Pydantic models, auth deps | 3–4 weeks |
-| Phase 2 — Auth, Admin, Client | ~60 routes, OAuth flow | 2–3 weeks |
-| Phase 3 — UI routes | ~30 template routes, static files | 1–2 weeks |
+| Phase 1 — API blueprint | Write tests (~100 routes), Pydantic models, port routes, validate | 4–6 weeks |
+| Phase 2 — Auth, Admin, Client | Write tests (~60 routes), OAuth flow, port routes, validate | 3–4 weeks |
+| Phase 3 — UI routes | Write tests (~30 routes), template routes, static files, validate | 2–3 weeks |
 | Phase 4 — Cleanup | Remove Flask, update docs & deployment | 1 week |
-| **Total** | | **8–12 weeks** |
+| **Total** | | **11–16 weeks** |
+
+> **Note**: Estimates increased from original 8–12 weeks to 11–16 weeks to account for
+> the mandatory test coverage work. This is a net positive — the tests protect against
+> regressions during and after the migration.
 
 ---
 
 ## Success Criteria
 
+- [ ] All ~220 existing endpoints have integration tests passing against Flask before migration.
 - [ ] All ~220 existing endpoints return identical responses under FastAPI.
-- [ ] Existing pytest suite passes against FastAPI test client.
+- [ ] All integration tests pass against FastAPI **without any test modifications**.
 - [ ] Swagger UI auto-generated at `/docs` covering all API endpoints.
 - [ ] At least one background task (e.g., issue refresh) runs in-process without CLI invocation.
 - [ ] Deployment uses Uvicorn (ASGI) with no Flask or uWSGI dependencies.
