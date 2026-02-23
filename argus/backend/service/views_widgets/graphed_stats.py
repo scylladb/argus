@@ -6,6 +6,7 @@ from argus.backend.db import ScyllaCluster
 from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.util.common import chunk, get_build_number
+from argus.backend.util.nemesis_map import get_nemesis_name
 
 LOGGER = logging.getLogger(__name__)
 
@@ -62,7 +63,7 @@ class GraphedStatsService:
                 for nemesis in [n for n in run["nemesis_data"] if n.status in ("succeeded", "failed")]:
                     release_data["nemesis_data"].append({
                         "version": version,
-                        "name": nemesis.name.split("disrupt_")[-1],
+                        "name": get_nemesis_name(nemesis.name),
                         "start_time": nemesis.start_time,
                         "duration": nemesis.end_time - nemesis.start_time,
                         "status": nemesis.status,

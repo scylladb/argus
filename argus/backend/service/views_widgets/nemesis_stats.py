@@ -3,6 +3,7 @@ from uuid import UUID
 
 from argus.backend.db import ScyllaCluster
 from argus.backend.plugins.sct.testrun import SCTTestRun
+from argus.backend.util.nemesis_map import get_nemesis_name
 
 
 class NemesisStatsService:
@@ -23,7 +24,7 @@ class NemesisStatsService:
                 nemesis_data.append(
                     {
                         "version": version,
-                        "name": nemesis.name.split("disrupt_")[-1],
+                        "name": get_nemesis_name(nemesis.name),
                         "start_time": nemesis.start_time,
                         "duration": nemesis.end_time - nemesis.start_time,
                         "status": nemesis.status,
