@@ -839,11 +839,3 @@ class SCTService:
             raise SCTServiceException("Run not found", run_id) from exception
 
         return "added"
-
-    @staticmethod
-    def junit_get_all(run_id: str) -> list[SCTJunitReports]:
-        return list(SCTJunitReports.filter(test_id=run_id).all())
-
-    @staticmethod
-    def junit_get_single(run_id: str, file_name: str) -> SCTJunitReports:
-        return SCTJunitReports.get(test_id=run_id, file_name=file_name)

@@ -193,6 +193,14 @@ class PluginModelBase(Model):
         return list(rows)
 
     @classmethod
+    def get_run_response(cls, run_id: UUID) -> dict | None:
+        try:
+            run = cls.get(id=run_id)
+        except cls.DoesNotExist:
+            return None
+        return dict(run.items())
+
+    @classmethod
     def load_test_run(cls, run_id: UUID) -> 'PluginModelBase':
         raise NotImplementedError()
 

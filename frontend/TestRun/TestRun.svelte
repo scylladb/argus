@@ -143,7 +143,6 @@
     import TestRunComments from "./TestRunComments.svelte";
     import IssueTemplate from "./IssueTemplate.svelte";
     import { sendMessage } from "../Stores/AlertStore";
-    import { fetchRun } from "../Common/RunUtils";
     import RunStatusButton from "./RunStatusButton.svelte";
     import RunInvestigationStatusButton from "./RunInvestigationStatusButton.svelte";
     import RunAssigneeSelector from "./RunAssigneeSelector.svelte";
@@ -189,8 +188,15 @@
 
     const fetchTestRunData = async function () {
         try {
-            let run: SCTTestRun = await fetchRun(testInfo.test.plugin_name, runId);
-            testRun = run;
+            let res = await fetch(`/api/v1/run/${testInfo.test.plugin_name}/${runId}`);
+            if (res.status != 200) {
+                throw new Error(`Network error: ${res.status}`);
+            }
+            let json = await res.json();
+            if (json.status != "ok") {
+                throw json.response;
+            }
+            testRun = json.response;
             if (!testRun) {
                 failedToLoad = true;
                 return;
@@ -198,7 +204,8 @@
             if (buildNumber == -1) {
                 buildNumber = parseInt(testRun.build_job_url.split("/").reverse()[1]);
             }
-            fetchJunitReports();
+            jUnitResults = json.response.junit_reports ?? [];
+            jUnitFetched = true;
         } catch (error) {
             if ((error as APIError)?.status === "error") {
                 sendMessage(
@@ -211,36 +218,6 @@
                     "error",
                     "A backend error occurred during test run data fetch",
                     "SCTTestRun::fetchTestRunData"
-                );
-                console.log(error);
-            }
-        }
-    };
-
-    const fetchJunitReports = async function () {
-        try {
-            let res = await fetch(`/api/v1/client/sct/${testRun?.id}/junit/get_all`);
-            if (res.status != 200) {
-                throw new Error(`Network error: ${res.status}`);
-            }
-            let json = await res.json();
-            if (json.status != "ok") {
-                throw json.response;
-            }
-            jUnitFetched = true;
-            jUnitResults = json.response;
-        } catch (error) {
-            if ((error as APIError)?.status === "error") {
-                sendMessage(
-                    "error",
-                    `API Error when fetching test run junit results data.\nMessage: ${(error as APIError).response.arguments[0]}`,
-                    "SCTTestRun::fetchJunitReports"
-                );
-            } else {
-                sendMessage(
-                    "error",
-                    "A backend error occurred during test run junit results data fetch",
-                    "SCTTestRun::fetchJunitReports"
                 );
                 console.log(error);
             }
@@ -261,7 +238,7 @@
 
     onMount(() => {
         fetchTestRunData();
-        runRefreshInterval = setInterval(fetchTestRunData, 30_000);
+        runRefreshInterval = setInterval(fetchTestRunData, 120_000);
         return () => {
             if (runRefreshInterval) clearInterval(runRefreshInterval);
         };

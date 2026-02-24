@@ -359,8 +359,8 @@ def test_submit_and_get_junit_report(flask_client, sct_run_id):
     assert resp.status_code == 200
     assert resp.json["status"] == "ok"
 
-    resp = flask_client.get(f"{API_PREFIX}/{sct_run_id}/junit/get_all")
+    resp = flask_client.get(f"/api/v1/run/scylla-cluster-tests/{sct_run_id}")
     assert resp.status_code == 200
     assert resp.json["status"] == "ok"
-    assert isinstance(resp.json["response"], list)
-    assert any(item.get("file_name") == "report.xml" for item in resp.json["response"])
+    assert isinstance(resp.json["response"]["junit_reports"], list)
+    assert any(item.get("file_name") == "report.xml" for item in resp.json["response"]["junit_reports"])
