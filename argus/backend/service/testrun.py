@@ -74,6 +74,11 @@ class TestRunService:
             except plugin.model.DoesNotExist:
                 return None
 
+    def get_run_response(self, run_type: str, run_id: UUID) -> dict | None:
+        plugin = self.plugins.get(run_type)
+        if plugin:
+            return plugin.model.get_run_response(run_id)
+
     def get_runs_by_test_id(self, test_id: UUID, additional_runs: list[UUID], limit: int = 10):
         test: ArgusTest = ArgusTest.get(id=test_id)
         plugin = self.get_plugin(plugin_name=test.plugin_name)

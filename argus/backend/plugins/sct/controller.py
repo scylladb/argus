@@ -237,17 +237,6 @@ def sct_submit_junit_report(run_id: str):
         "response": result
     }
 
-
-@bp.route("/<string:run_id>/junit/get_all", methods=["GET"])
-@api_login_required
-def sct_get_junit_reports(run_id: str):
-    result = SCTService.junit_get_all(run_id)
-    return {
-        "status": "ok",
-        "response": result
-    }
-
-
 @bp.route("/<string:run_id>/stress_cmd/submit", methods=["POST"])
 @api_login_required
 def sct_add_stress_cmd(run_id: str):

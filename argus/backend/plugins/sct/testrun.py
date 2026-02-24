@@ -420,6 +420,16 @@ class SCTTestRun(PluginModelBase):
         else:
             raise ValueError(f"{sut_package_name} package not found in packages - cannot determine SUT timestamp")
 
+    @classmethod
+    def get_run_response(cls, run_id: UUID) -> dict | None:
+        try:
+            run = cls.get(id=run_id)
+        except cls.DoesNotExist:
+            return None
+        response = dict(run.items())
+        response["junit_reports"] = list(SCTJunitReports.filter(test_id=run_id).all())
+        return response
+
 
 class SCTJunitReports(Model):
     test_id = columns.UUID(primary_key=True, partition_key=True, required=True)
