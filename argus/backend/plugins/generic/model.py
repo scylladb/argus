@@ -57,9 +57,7 @@ class GenericRun(PluginModelBase):
     @classmethod
     def submit_run(cls, request_data: GenericRunSubmitRequest) -> 'GenericRun':
         try:
-            run = cls.get(id=request_data["run_id"])
-            raise GenericPluginException(
-                f"Run with UUID {request_data['run_id']} already exists.", request_data["run_id"])
+            return cls.get(id=request_data["run_id"])
         except cls.DoesNotExist:
             pass
         run = cls()
@@ -80,6 +78,10 @@ class GenericRun(PluginModelBase):
         run.save()
 
         return run
+
+    def submit_logs(self, logs: list[dict]):
+        for log in logs:
+            self.logs[log["log_name"]] = log["log_link"]
 
     def finish_run(self, payload: GenericRunFinishRequest = None):
         self.end_time = datetime.utcnow()
