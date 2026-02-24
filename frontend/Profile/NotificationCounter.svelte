@@ -1,24 +1,47 @@
 <script>
     import { onDestroy, onMount } from "svelte";
     import { apiMethodCall } from "../Common/ApiUtils";
+
+    const POLL_INTERVAL_MS = 5 * 60 * 1000;
+    const BROADCAST_CHANNEL_NAME = "argus_notifications";
+    const LOCK_NAME = "argus_notification_leader";
+
     let unreadCount = $state(0);
     let notificationCheckInterval;
-    const getUnreadNotificationsCount = async function () {
+    /** @type {BroadcastChannel} */
+    let channel;
+
+    const fetchAndBroadcast = async function () {
         let result = await apiMethodCall("/api/v1/notifications/get_unread", undefined, "GET");
         if (result.status === "ok") {
             unreadCount = result.response;
+            channel.postMessage({ unreadCount: result.response });
         }
     };
 
+    const startLeaderPolling = function () {
+        navigator.locks.request(LOCK_NAME, async () => {
+            await fetchAndBroadcast();
+            await new Promise((resolve) => {
+                notificationCheckInterval = setInterval(fetchAndBroadcast, POLL_INTERVAL_MS);
+                window.addEventListener("beforeunload", resolve, { once: true });
+            });
+        });
+    };
+
     onMount(() => {
-        getUnreadNotificationsCount();
-        notificationCheckInterval = setInterval(() => {
-            getUnreadNotificationsCount();
-        }, 5 * 60 * 1000);
+        channel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
+        channel.addEventListener("message", (event) => {
+            if (typeof event.data?.unreadCount === "number") {
+                unreadCount = event.data.unreadCount;
+            }
+        });
+        startLeaderPolling();
     });
 
     onDestroy(() => {
         clearInterval(notificationCheckInterval);
+        channel?.close();
     });
 </script>
 
