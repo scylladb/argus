@@ -776,7 +776,7 @@ class SCTService:
             scylla_pkgs = {p["name"]: p for p in packages if "scylla-server" in p["name"]}
             scylla_pkg = scylla_pkgs["scylla-server-upgraded"] if scylla_pkgs.get(
                 "scylla-server-upgraded") else scylla_pkgs.get("scylla-server")
-            version = f"{scylla_pkg['version']}-{scylla_pkg['date']}.{scylla_pkg['revision_id']}" if scylla_pkgs else "unknown"
+            version = f"{scylla_pkg['version']}-{scylla_pkg['date']}.{scylla_pkg['revision_id']}" if scylla_pkg else "unknown"
             kernel_packages = [p for p in packages if "kernel" in p["name"]]
             kernel_package = kernel_packages[0] if len(kernel_packages) > 0 else None
             if not kernel_package:
@@ -790,6 +790,7 @@ class SCTService:
                     "passed": 0,
                     "failed": 0,
                     "aborted": 0,
+                    "test_error": 0,
                 }
             )
             if run["status"] in ["passed", "failed", "aborted", "test_error"]:
