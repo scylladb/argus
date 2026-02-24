@@ -152,6 +152,11 @@ class DriverTestRun(PluginModelBase):
 
     @classmethod
     def submit_run(cls, request_data: dict) -> 'DriverTestRun':
+        try:
+            return cls.get(id=request_data["run_id"])
+        except cls.DoesNotExist:
+            pass
+
         if request_data["schema_version"] == "v2":
             req = DriverMatrixRunSubmissionRequestV2(**request_data)
         else:
@@ -176,6 +181,9 @@ class DriverTestRun(PluginModelBase):
     def submit_driver_result(cls, run_id: UUID, driver_name: str, driver_type: TestTypeType, xml_data: str):
         run: DriverTestRun = cls.get(id=run_id)
 
+        if any(c.name == driver_name for c in run.test_collection):
+            return run
+
         collection = run.parse_result_xml(driver_name, xml_data, driver_type)
         run.test_collection.append(collection)
 
@@ -188,6 +196,9 @@ class DriverTestRun(PluginModelBase):
     @classmethod
     def submit_driver_failure(cls, run_id: UUID, driver_name: str, driver_type: TestTypeType, fail_message: str):
         run: DriverTestRun = cls.get(id=run_id)
+
+        if any(c.name == driver_name for c in run.test_collection):
+            return run
 
         collection = TestCollection()
         collection.failures = 1
@@ -209,11 +220,14 @@ class DriverTestRun(PluginModelBase):
         run: DriverTestRun = cls.get(id=run_id)
         env = run.parse_build_environment(env_data)
 
+        existing_keys = {ei.key for ei in run.environment_info}
         for key, value in env.items():
-            env_info = EnvironmentInfo()
-            env_info.key = key
-            env_info.value = value
-            run.environment_info.append(env_info)
+            if key not in existing_keys:
+                env_info = EnvironmentInfo()
+                env_info.key = key
+                env_info.value = value
+                run.environment_info.append(env_info)
+                existing_keys.add(key)
 
         run.scylla_version = env.get("scylla-version")
 
