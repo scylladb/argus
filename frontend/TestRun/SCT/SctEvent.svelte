@@ -3,7 +3,7 @@
     import { timestampToISODate } from "../../Common/DateUtils";
     import type { EventSeverityFilter, Options, SCTEvent } from "./SctEvents.svelte";
     import Fa from "svelte-fa";
-    import { faClipboard, faClock, faCopy, faPlus, faServer, faSpider, faTable } from "@fortawesome/free-solid-svg-icons";
+    import { faClipboard, faClock, faCopy, faPlus, faSearch, faServer, faSpider, faTable } from "@fortawesome/free-solid-svg-icons";
     import SctSimilarEvents from "./SctSimilarEvents.svelte";
     import { sendMessage } from "../../Stores/AlertStore";
     import type { GithubSubtype, JiraSubtype } from "../../Github/Issues.svelte";
@@ -12,24 +12,29 @@
     import { JiraIssueColorMap, JiraIssueIcon } from "../../Jira/JiraIssue.svelte";
     import { GithubIssueColorMap, GithubIssueIcon } from "../../Github/GithubIssue.svelte";
     import Color from "color";
+    import { onMount } from "svelte";
 
     interface Props {
         event: SCTEvent,
         run: SCTTestRun,
         issues: (GithubSubtype | JiraSubtype)[],
+        focusDuplicate: (eventId: SCTEvent) => void,
         filterState: EventSeverityFilter,
         options: Options,
         issueAttach: (url: string) => void,
         refreshIssues: () => void,
         filterString: string,
+        duplicateIdShowTable: { [key: string]: boolean },
     }
-    let { event, run, issues, refreshIssues, filterState, options, issueAttach, filterString = $bindable()}: Props = $props();
+    let { event, focusDuplicate, duplicateIdShowTable = $bindable() ,run, issues, refreshIssues, filterState, options, issueAttach, filterString = $bindable()}: Props = $props();
     const MESSAGE_CUTOFF = 600;
     const SHORT_MESSAGE_LEN = 500;
     let showingIssueTable = $state(false);
     let showingIssueAddWindow = $state(false);
     let newIssueUrl = $state("");
     let submitting = $state(false);
+    let highlighting = $state(false);
+
 
     const sliceMessage = function (message: string): string {
         if (message.length <= MESSAGE_CUTOFF || fullMessage) {
@@ -116,6 +121,33 @@
         return parsedMessage;
     };
 
+    export const highlight = function() {
+        highlighting = true;
+        setTimeout(() => {
+            highlighting = false;
+        }, 3 * 1000);
+    }
+
+    const hasDuplicates = function(event: SCTEvent) {
+        return typeof duplicateIdShowTable[event.event_id] === "boolean";
+    };
+
+    const duplicatesShown = function(event: SCTEvent) {
+        return duplicateIdShowTable[event.event_id];
+    }
+
+    const toggleDuplicates = function(event: SCTEvent) {
+        duplicateIdShowTable[event.event_id] = !duplicateIdShowTable[event.event_id];
+    };
+
+    const isDuplicate = function(event: SCTEvent) {
+        return !!(event.duplicate_id);
+    };
+
+    const shouldHideDuplicate = function(event: SCTEvent) {
+        return isDuplicate(event) && !duplicateIdShowTable[event.duplicate_id];
+    }
+
     let fullMessage = $state(false);
     let parsedMessage = $derived(parseEventMessage(event.message));
 
@@ -140,6 +172,9 @@
         message: string
     }
 
+    onMount(async () => {
+        if (event.duplicate_id && typeof duplicateIdShowTable[event.duplicate_id] !== "boolean") duplicateIdShowTable[event.duplicate_id] = false;
+    })
 </script>
 
 {#if showingIssueTable}
@@ -254,12 +289,22 @@
 
 
 {#if !shouldFilter(filterString)}
-    <div class="ms-3 rounded overflow-hidden shadow-sm severity-border-{event.severity.toLowerCase()}">
-        <div class="border-bottom bg-titlebar text-light p-1">
+<div class:highlight={highlighting}>
+    <div id="sct-event-{event.event_id}" class:d-none={shouldHideDuplicate(event)} class="ms-3 rounded overflow-hidden shadow-sm severity-border-{event.severity.toLowerCase()}">
+        <div class:duplicate={isDuplicate(event)} class="border-bottom bg-titlebar text-light p-1">
             <div class="d-flex mb-1">
+                {#if isDuplicate(event)}
+                    <div class="rounded bg-white text-dark p-1 me-2">DUPLICATE</div>
+                {/if}
                 <div class="rounded bg-dark p-1">{event.event_type}</div>
-                <div class="ms-2 p-1 bg-light text-dark rounded">{parsedMessage ? parsedMessage.fields["period_type"] : ""}</div>
+                <div class="ms-2 p-1 bg-light text-dark rounded">{parsedMessage ? parsedMessage.fields["period_type"] : "one-time"}</div>
                 <div class="ms-auto"></div>
+                {#if hasDuplicates(event)}
+                    <button class="ms-2 btn btn-sm btn-dark" onclick={() => toggleDuplicates(event)}><Fa icon={faClipboard}/> { duplicatesShown(event) ? "Hide" : "Show" } Duplicates</button>
+                {/if}
+                {#if isDuplicate(event)}
+                    <button class="ms-2 btn btn-sm btn-dark" onclick={() => focusDuplicate(event)}><Fa icon={faSearch}/> Focus Original</button>
+                {/if}
                 <div class="ms-2 btn-group">
                     {#if issues.length > 0}
                         <button class="btn btn-sm btn-primary" onclick={() => showingIssueTable = true}><Fa icon={faTable}/> View {issues.length} Issue{issues.length > 1 ? "s" : ""}</button>
@@ -271,7 +316,9 @@
                 {/if}
                 <div class="ms-2 p-1 bg-light text-dark rounded">{timestampToISODate(event.ts, true)}</div>
                 <button class="ms-2 btn btn-sm btn-success" onclick={() => navigator.clipboard.writeText(event.message)}><Fa icon={faCopy}/></button>
-                <SctSimilarEvents {event} runId={event.run_id} issueAttach={issueAttach}/>
+                {#if !isDuplicate(event)}
+                    <SctSimilarEvents {event} runId={event.run_id} issueAttach={issueAttach}/>
+                {/if}
             </div>
             <div class="d-flex flex-wrap">
                 {#if event.nemesis_name}
@@ -310,10 +357,16 @@
             <pre class="font-monospace p-2 rounded m-1 bg-light-two" style="white-space: pre-wrap !important">{sliceMessage(event.message)} {#if event.message.length > MESSAGE_CUTOFF}<button class="btn btn-sm btn-light" onclick={() => fullMessage = !fullMessage}>{#if fullMessage}X{:else}...{/if}</button>{/if}</pre>
         </div>
     </div>
+</div>
 {/if}
 
 
 <style>
+    .highlight {
+        border: 10px dashed #2d98c2;
+        padding: 1rem;
+    }
+
     .bg-titlebar {
         background-color: #dddddd;
     }
@@ -372,5 +425,9 @@
     .severity-border-critical {
         border-left: 5px solid !important;
         border-color: #692121 !important;
+    }
+
+    .duplicate {
+        background-color: #2d98c2 !important;
     }
 </style>

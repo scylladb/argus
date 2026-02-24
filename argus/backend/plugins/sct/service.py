@@ -573,6 +573,12 @@ class SCTService:
         try:
             # Convert timestamp to datetime if needed
             event_ts = datetime.fromisoformat(ts)
+            event: SCTEvent = SCTEvent.get(run_id=run_id, severity=severity, ts=event_ts)
+            if event.duplicate_id:
+                real_event: SCTEvent = SCTEvent.get(event_id=event.duplicate_id)
+                run_id = real_event.run_id
+                severity = real_event.severity
+                event_ts = real_event.ts
 
             # Get the embedding for the query event
             if severity == "ERROR":
@@ -583,7 +589,7 @@ class SCTService:
                 raise SCTServiceException(f"Unsupported severity for similarity search: {severity}")
 
             # Fetch the embedding for the query event
-            query_embedding_result = embedding_model.filter(run_id=UUID(run_id), ts=event_ts).first()
+            query_embedding_result = embedding_model.filter(run_id=UUID(run_id) if isinstance(run_id, str) else run_id, ts=event_ts).first()
 
             if not query_embedding_result:
                 LOGGER.warning(f"No embedding found for event: run_id={run_id}, severity={severity}, ts={event_ts}")
