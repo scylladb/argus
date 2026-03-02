@@ -126,7 +126,7 @@ def test_retry_configuration_is_correct():
     assert adapter.max_retries.status == 0
     assert adapter.max_retries.status_forcelist == set()
     assert "GET" in adapter.max_retries.allowed_methods
-    assert "POST" not in adapter.max_retries.allowed_methods
+    assert "POST" in adapter.max_retries.allowed_methods
 
 
 def test_sct_client_passes_timeout_and_retries():
