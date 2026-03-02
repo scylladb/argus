@@ -306,9 +306,10 @@ class SCTTestRun(PluginModelBase):
     def get_stress_commands(cls, run_id: str) -> list[StressCommand]:
         return list(StressCommand.filter(run_id=run_id).all())
 
-    def add_stress_command(self, cmd: str, log_name: str, loader_name: str):
+    def add_stress_command(self, cmd: str, ts: float, log_name: str, loader_name: str):
         s = StressCommand()
         s.run_id = self.id
+        s.ts = datetime.fromtimestamp(ts)
         s.cmd = cmd
         s.log_name = log_name
         s.node_name = loader_name

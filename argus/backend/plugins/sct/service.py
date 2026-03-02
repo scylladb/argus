@@ -26,6 +26,7 @@ from argus.backend.plugins.sct.udt import (
 from argus.backend.service.event_service import EventService
 from argus.backend.util.common import chunk, get_build_number
 from argus.common.enums import NemesisStatus, ResourceState, TestStatus
+from argus.common.utils import clamp_ts_to_milliseconds
 
 LOGGER = logging.getLogger(__name__)
 MAX_SIMILARS = 20
@@ -116,7 +117,8 @@ class SCTService:
             )
             run.sct_runner_host = details
             resource = CloudResource(name=name or "sct-runner", resource_type="sct-runner", instance_info=details)
-            run.allocated_resources.append(resource)
+            if not any(r.name == resource.name for r in run.allocated_resources):
+                run.allocated_resources.append(resource)
             run.save()
         except SCTTestRun.DoesNotExist as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
@@ -129,7 +131,8 @@ class SCTService:
         try:
             run: SCTTestRun = SCTTestRun.get(id=run_id)
             for link in screenshot_links:
-                run.add_screenshot(link)
+                if link not in run.screenshots:
+                    run.add_screenshot(link)
             run.save()
         except SCTTestRun.DoesNotExist as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
@@ -290,8 +293,9 @@ class SCTService:
         resource = CloudResource(**resource_details, instance_info=instance_details)
         try:
             run: SCTTestRun = SCTTestRun.get(id=run_id)
-            run.get_resources().append(resource)
-            run.save()
+            if not any(r.name == resource.name for r in run.get_resources()):
+                run.get_resources().append(resource)
+                run.save()
         except SCTTestRun.DoesNotExist as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
             raise SCTServiceException("Run not found", run_id) from exception
@@ -378,8 +382,10 @@ class SCTService:
         )
         try:
             run: SCTTestRun = SCTTestRun.get(id=run_id)
-            run.add_nemesis(nemesis_info)
-            run.save()
+            if not any(nem.name == nem_req.name and nem.start_time == int(nem_req.start_time)
+                       for nem in run.get_nemeses()):
+                run.add_nemesis(nemesis_info)
+                run.save()
         except SCTTestRun.DoesNotExist as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
             raise SCTServiceException("Run not found", run_id) from exception
@@ -810,21 +816,18 @@ class SCTService:
 
     @staticmethod
     def junit_submit(run_id: str, file_name: str, content: str) -> bool:
-        try:
-            report = SCTJunitReports.get(test_id=run_id, file_name=file_name)
-            if report:
-                raise SCTServiceException(f"Report {file_name} already exists.", file_name)
-        except SCTJunitReports.DoesNotExist:
-            pass
-        report = SCTJunitReports()
-        report.test_id = run_id
-        report.file_name = file_name
-
         xml_content = str(base64.decodebytes(bytes(content, encoding="utf-8")), encoding="utf-8")
         try:
             _ = ElementTree.fromstring(xml_content)
         except Exception:
             raise SCTServiceException(f"Malformed JUnit report submitted")
+
+        try:
+            report = SCTJunitReports.get(test_id=run_id, file_name=file_name)
+        except SCTJunitReports.DoesNotExist:
+            report = SCTJunitReports()
+            report.test_id = run_id
+            report.file_name = file_name
 
         report.report = xml_content
         report.save()
@@ -836,10 +839,10 @@ class SCTService:
         return SCTTestRun.get_stress_commands(run_id)
 
     @staticmethod
-    def add_stress_command(run_id: str, cmd: str, loader_name: str, log_name: str):
+    def add_stress_command(run_id: str, cmd: str, ts: float, loader_name: str, log_name: str):
         try:
             run: SCTTestRun = SCTTestRun.get(id=run_id)
-            run.add_stress_command(cmd=cmd, loader_name=loader_name, log_name=log_name)
+            run.add_stress_command(cmd=cmd, ts=clamp_ts_to_milliseconds(ts), loader_name=loader_name, log_name=log_name)
             run.save()
         except SCTTestRun.DoesNotExist as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
