@@ -2,7 +2,7 @@ from uuid import UUID
 
 
 from argus.backend.db import ScyllaCluster
-from argus.backend.plugins.sct.testrun import SCTTestRun
+from argus.backend.plugins.sct.testrun import SCTNemesis, SCTTestRun
 from argus.backend.util.nemesis_map import get_nemesis_name
 
 
@@ -11,16 +11,16 @@ class NemesisStatsService:
         self.cluster = ScyllaCluster.get()
 
     def get_nemesis_data(self, test_id: UUID):
-        rows = SCTTestRun.filter(test_id=test_id).only(["id", "nemesis_data", "investigation_status", "packages"]).all()
+        runs = SCTTestRun.filter(test_id=test_id).only(["id", "investigation_status", "packages"]).all()
         nemesis_data = []
-        for run in [row for row in rows if row["investigation_status"].lower() != "ignored"]:
+        for run in [row for row in runs if row["investigation_status"].lower() != "ignored"]:
             try:
                 version = [package.version for package in run["packages"] if package.name == "scylla-server"][0]
             except (IndexError, TypeError):
                 continue
-            if not run["nemesis_data"]:
-                continue
-            for nemesis in [nemesis for nemesis in run["nemesis_data"] if nemesis.status in ("succeeded", "failed")]:
+            for nemesis in SCTNemesis.filter(run_id=run["id"]).all():
+                if nemesis.status not in ("succeeded", "failed"):
+                    continue
                 nemesis_data.append(
                     {
                         "version": version,

@@ -3,7 +3,7 @@ from uuid import UUID
 import json
 import re
 from argus.backend.db import ScyllaCluster
-from argus.backend.plugins.sct.testrun import SCTTestRun
+from argus.backend.plugins.sct.testrun import SCTNemesis, SCTTestRun
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.util.common import chunk, get_build_number
 from argus.backend.util.nemesis_map import get_nemesis_name
@@ -21,7 +21,6 @@ class GraphedStatsService:
             "start_time",
             "end_time",
             "id",
-            "nemesis_data",
             "investigation_status",
             "packages",
             "status"
@@ -59,18 +58,19 @@ class GraphedStatsService:
                 "investigation_status": run["investigation_status"]
             })
 
-            if run["nemesis_data"]:
-                for nemesis in [n for n in run["nemesis_data"] if n.status in ("succeeded", "failed")]:
-                    release_data["nemesis_data"].append({
-                        "version": version,
-                        "name": get_nemesis_name(nemesis.name),
-                        "start_time": nemesis.start_time,
-                        "duration": nemesis.end_time - nemesis.start_time,
-                        "status": nemesis.status,
-                        "run_id": str(run["id"]),
-                        "stack_trace": nemesis.stack_trace,
-                        "build_id": run["build_id"]
-                    })
+            for nemesis in SCTNemesis.filter(run_id=run["id"]).all():
+                if nemesis.status not in ("succeeded", "failed"):
+                    continue
+                release_data["nemesis_data"].append({
+                    "version": version,
+                    "name": get_nemesis_name(nemesis.name),
+                    "start_time": nemesis.start_time,
+                    "duration": nemesis.end_time - nemesis.start_time,
+                    "status": nemesis.status,
+                    "run_id": str(run["id"]),
+                    "stack_trace": nemesis.stack_trace,
+                    "build_id": run["build_id"]
+                })
 
         return release_data
 

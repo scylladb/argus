@@ -12,6 +12,7 @@ from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.jira import JiraIssue
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.plugins.loader import all_plugin_models
+from argus.backend.plugins.sct.testrun import SCTNemesis
 from argus.backend.util.common import chunk, get_build_number
 from argus.common.enums import TestStatus, TestInvestigationStatus
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusScheduleTest, ArgusTest, \
@@ -506,7 +507,7 @@ class TestStats:
                 "build_job_name": run["build_id"],
                 "start_time": run["start_time"],
                 "end_time": run["end_time"],
-                "nemesis_data": run.get("nemesis_data", []),
+                "nemesis_data": list(SCTNemesis.filter(run_id=run["id"]).all()),
                 "assignee": run["assignee"],
                 "issues": [dict(issue.items()) for issue in self.parent_group.parent_release.issues[run["id"]]],
                 "comments": [dict(comment.items()) for comment in self.parent_group.parent_release.comments[run["id"]]],

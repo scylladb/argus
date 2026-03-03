@@ -12,7 +12,7 @@ from argus.backend.db import ScyllaCluster
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.web import ArgusEventTypes, ErrorEventEmbeddings, CriticalEventEmbeddings
 from argus.backend.models.argus_ai import SCTErrorEventEmbedding, SCTCriticalEventEmbedding
-from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTJunitReports, SCTTestRun, SubtestType, SCTUnprocessedEvent, StressCommand
+from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTJunitReports, SCTNemesis, SCTTestRun, SubtestType, SCTUnprocessedEvent, StressCommand
 from argus.common.sct_types import GeminiResultsRequest, PerformanceResultsRequest, RawEventPayload, ResourceUpdateRequest
 from argus.backend.plugins.sct.udt import (
     CloudInstanceDetails,
@@ -370,22 +370,20 @@ class SCTService:
     def submit_nemesis(run_id: str, nemesis_details: dict) -> str:
         nem_req = NemesisSubmissionRequest(**nemesis_details)
         node_desc = NodeDescription(name=nem_req.node_name, ip=nem_req.node_ip, shards=nem_req.node_shards)
-        nemesis_info = NemesisRunInfo(
-            class_name=nem_req.class_name,
-            name=nem_req.name,
-            start_time=int(nem_req.start_time),
-            end_time=0,
-            duration=0,
-            stack_trace="",
-            status=NemesisStatus.RUNNING.value,
-            target_node=node_desc,
-        )
         try:
-            run: SCTTestRun = SCTTestRun.get(id=run_id)
-            if not any(nem.name == nem_req.name and nem.start_time == int(nem_req.start_time)
-                       for nem in run.get_nemeses()):
-                run.add_nemesis(nemesis_info)
-                run.save()
+            # Idempotent: SCTNemesis primary key is (run_id, start_time); repeated submits are safe upserts.
+            nemesis_row = SCTNemesis(
+                run_id=UUID(run_id),
+                start_time=int(nem_req.start_time),
+                class_name=nem_req.class_name,
+                name=nem_req.name,
+                duration=0,
+                end_time=0,
+                stack_trace="",
+                status=NemesisStatus.RUNNING.value,
+                target_node=node_desc,
+            )
+            nemesis_row.save()
         except SCTTestRun.DoesNotExist as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
             raise SCTServiceException("Run not found", run_id) from exception
@@ -396,19 +394,14 @@ class SCTService:
     def finalize_nemesis(run_id: str, nemesis_details: dict) -> str:
         nem_req = NemesisFinalizationRequest(**nemesis_details)
         try:
-            run: SCTTestRun = SCTTestRun.get(id=run_id)
-            nemesis = next(nem for nem in run.get_nemeses() if nem.name ==
-                           nem_req.name and nem.start_time == nem_req.start_time)
-            nemesis.status = NemesisStatus(nem_req.status).value
-            nemesis.stack_trace = nem_req.message
-            nemesis.end_time = int(time())
-            run.save()
-        except StopIteration as exception:
+            nemesis_row = SCTNemesis.get(run_id=UUID(run_id), start_time=nem_req.start_time)
+            nemesis_row.status = NemesisStatus(nem_req.status).value
+            nemesis_row.stack_trace = nem_req.message
+            nemesis_row.end_time = int(time())
+            nemesis_row.save()
+        except SCTNemesis.DoesNotExist as exception:
             LOGGER.error("Nemesis %s (%s) not found for run %s", nem_req.name, nem_req.start_time, run_id)
             raise SCTServiceException("Nemesis not found", (nem_req.name, nem_req.start_time)) from exception
-        except SCTTestRun.DoesNotExist as exception:
-            LOGGER.error("Run %s not found for SCTTestRun", run_id)
-            raise SCTServiceException("Run not found", run_id) from exception
 
         return "updated"
 

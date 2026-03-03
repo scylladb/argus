@@ -17,6 +17,7 @@ from argus.backend.plugins.sct.udt import (
     CloudSetupDetails,
     EventsBySeverity,
     NemesisRunInfo,
+    NodeDescription,
     PackageVersion,
     PerformanceHDRHistogram
 )
@@ -113,6 +114,22 @@ class SCTUnprocessedEvent(Model):
     ts = columns.DateTime(primary_key=True, clustering_order="DESC")
 
 
+class SCTNemesis(Model):
+    """External table storing one row per nemesis run, replacing the inline nemesis_data list on SCTTestRun."""
+    __table_name__ = "sct_nemesis"
+
+    run_id = columns.UUID(partition_key=True, primary_key=True)
+    start_time = columns.Integer(primary_key=True, clustering_order="ASC")
+
+    class_name = columns.Text()
+    name = columns.Text()
+    duration = columns.Integer()
+    target_node = columns.UserDefinedType(user_type=NodeDescription)
+    status = columns.Text()
+    end_time = columns.Integer()
+    stack_trace = columns.Text()
+
+
 class SCTTestRun(PluginModelBase):
     __table_name__ = "sct_test_run"
     _plugin_name = "scylla-cluster-tests"
@@ -140,7 +157,6 @@ class SCTTestRun(PluginModelBase):
 
     # Test Results
     events = columns.List(value_type=columns.UserDefinedType(user_type=EventsBySeverity))
-    nemesis_data = columns.List(value_type=columns.UserDefinedType(user_type=NemesisRunInfo))
     screenshots = columns.List(value_type=columns.Text())
 
     # Subtest
@@ -175,7 +191,7 @@ class SCTTestRun(PluginModelBase):
     @classmethod
     def _stats_query(cls) -> str:
         return ("SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, "
-                f"assignee, end_time, investigation_status, heartbeat, scylla_version, cloud_setup, allocated_resources, nemesis_data FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT 15")
+                f"assignee, end_time, investigation_status, heartbeat, scylla_version, cloud_setup, allocated_resources FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT 15")
 
     @classmethod
     def load_test_run(cls, run_id: UUID) -> 'SCTTestRun':
@@ -299,8 +315,8 @@ class SCTTestRun(PluginModelBase):
     def get_resources(self) -> list[CloudResource]:
         return self.allocated_resources
 
-    def get_nemeses(self) -> list[NemesisRunInfo]:
-        return self.nemesis_data
+    def get_nemeses(self) -> list["SCTNemesis"]:
+        return list(SCTNemesis.filter(run_id=self.id).all())
 
     @classmethod
     def get_stress_commands(cls, run_id: str) -> list[StressCommand]:
@@ -380,7 +396,18 @@ class SCTTestRun(PluginModelBase):
         self.screenshots.append(screenshot_link)
 
     def add_nemesis(self, nemesis: NemesisRunInfo):
-        self.nemesis_data.append(nemesis)
+        row = SCTNemesis(
+            run_id=self.id,
+            start_time=nemesis.start_time,
+            class_name=nemesis.class_name,
+            name=nemesis.name,
+            duration=nemesis.duration,
+            target_node=nemesis.target_node,
+            status=nemesis.status,
+            end_time=nemesis.end_time,
+            stack_trace=nemesis.stack_trace,
+        )
+        row.save()
 
     def _add_new_event_type(self, event: EventsBySeverity):
         self.events.append(event)
@@ -430,6 +457,7 @@ class SCTTestRun(PluginModelBase):
             return None
         response = dict(run.items())
         response["junit_reports"] = list(SCTJunitReports.filter(test_id=run_id).all())
+        response["nemesis_data"] = list(SCTNemesis.filter(run_id=run_id).all())
         return response
 
 
