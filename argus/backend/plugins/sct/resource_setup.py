@@ -4,11 +4,30 @@ from argus.backend.plugins.sct.udt import CloudNodesInfo, CloudSetupDetails
 LOGGER = logging.getLogger(__name__)
 
 
-def _get_node_amounts(config: dict) -> tuple[int, int]:
-    num_db_node = config.get("n_db_nodes")
-    num_db_node = sum([int(i) for i in num_db_node.split()]) if isinstance(num_db_node, str) else num_db_node
-    num_loaders = config.get("n_loaders")
-    num_loaders = sum([int(i) for i in num_loaders.split()]) if isinstance(num_loaders, str) else num_loaders
+def _resolve_node_count(value: int | str | list | None) -> int | None:
+    """Normalise the various shapes SCT uses for node counts into a single int.
+
+    Accepted input formats:
+    - ``None``        → ``None`` (unknown / not set)
+    - ``int``         → returned as-is
+    - ``str``         → space-separated token string, e.g. ``"3 1 1"``; tokens are
+                        summed after casting to int (multi-DC notation).
+    - ``list[int]``   → each element cast to int and summed (multi-DC list notation).
+    """
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        return sum(int(i) for i in value.split())
+    if isinstance(value, list):
+        return sum(int(i) for i in value)
+    return int(value)
+
+
+def _get_node_amounts(config: dict) -> tuple[int | None, int | None]:
+    num_db_node = _resolve_node_count(config.get("n_db_nodes"))
+    num_loaders = _resolve_node_count(config.get("n_loaders"))
 
     return num_db_node, num_loaders
 
@@ -25,7 +44,7 @@ def _prepare_aws_resource_setup(sct_config: dict) -> CloudSetupDetails:
                                        post_behaviour=sct_config.get("post_behavior_loader_nodes"))
     monitor_node_setup = CloudNodesInfo(image_id=sct_config.get("ami_id_monitor"),
                                         instance_type=sct_config.get("instance_type_monitor"),
-                                        node_amount=sct_config.get("n_monitor_nodes"),
+                                        node_amount=_resolve_node_count(sct_config.get("n_monitor_nodes")),
                                         post_behaviour=sct_config.get("post_behavior_monitor_nodes"))
     cloud_setup = CloudSetupDetails(db_node=db_node_setup, loader_node=loader_node_setup,
                                     monitor_node=monitor_node_setup, backend=sct_config.get("cluster_backend"))
@@ -45,7 +64,7 @@ def _prepare_gce_resource_setup(sct_config: dict) -> CloudSetupDetails:
                                        post_behaviour=sct_config.get("post_behavior_loader_nodes"))
     monitor_node_setup = CloudNodesInfo(image_id=sct_config.get("gce_image_monitor"),
                                         instance_type=sct_config.get("gce_instance_type_monitor"),
-                                        node_amount=sct_config.get("n_monitor_nodes"),
+                                        node_amount=_resolve_node_count(sct_config.get("n_monitor_nodes")),
                                         post_behaviour=sct_config.get("post_behavior_monitor_nodes"))
     cloud_setup = CloudSetupDetails(db_node=db_node_setup, loader_node=loader_node_setup,
                                     monitor_node=monitor_node_setup, backend=sct_config.get("cluster_backend"))
@@ -65,7 +84,7 @@ def _prepare_azure_resource_setup(sct_config: dict) -> CloudSetupDetails:
                                        post_behaviour=sct_config.get("post_behavior_loader_nodes"))
     monitor_node_setup = CloudNodesInfo(image_id=sct_config.get("azure_image_monitor"),
                                         instance_type=sct_config.get("azure_instance_type_monitor"),
-                                        node_amount=sct_config.get("n_monitor_nodes"),
+                                        node_amount=_resolve_node_count(sct_config.get("n_monitor_nodes")),
                                         post_behaviour=sct_config.get("post_behavior_monitor_nodes"))
     cloud_setup = CloudSetupDetails(db_node=db_node_setup, loader_node=loader_node_setup,
                                     monitor_node=monitor_node_setup, backend=sct_config.get("cluster_backend"))
@@ -96,15 +115,15 @@ def _prepare_unknown_resource_setup(sct_config: dict) -> CloudSetupDetails:
 def _prepare_bare_metal_resource_setup(sct_config: dict) -> CloudSetupDetails:
     db_node_setup = CloudNodesInfo(image_id="bare_metal",
                                    instance_type="bare_metal",
-                                   node_amount=sct_config.get("n_db_nodes"),
+                                   node_amount=_resolve_node_count(sct_config.get("n_db_nodes")),
                                    post_behaviour=sct_config.get("post_behavior_db_nodes"))
     loader_node_setup = CloudNodesInfo(image_id="bare_metal",
                                        instance_type="bare_metal",
-                                       node_amount=sct_config.get("n_loaders"),
+                                       node_amount=_resolve_node_count(sct_config.get("n_loaders")),
                                        post_behaviour=sct_config.get("post_behavior_loader_nodes"))
     monitor_node_setup = CloudNodesInfo(image_id="bare_metal",
                                         instance_type="bare_metal",
-                                        node_amount=sct_config.get("n_monitor_nodes"),
+                                        node_amount=_resolve_node_count(sct_config.get("n_monitor_nodes")),
                                         post_behaviour=sct_config.get("post_behavior_monitor_nodes"))
     cloud_setup = CloudSetupDetails(db_node=db_node_setup, loader_node=loader_node_setup,
                                     monitor_node=monitor_node_setup, backend=sct_config.get("cluster_backend"))
@@ -141,15 +160,15 @@ def _prepare_k8s_eks_resource_setup(sct_config: dict) -> CloudSetupDetails:
 def _prepare_docker_resource_setup(sct_config: dict) -> CloudSetupDetails:
     db_node_setup = CloudNodesInfo(image_id=sct_config.get('docker_image'),
                                    instance_type="docker",
-                                   node_amount=sct_config.get("n_db_nodes"),
+                                   node_amount=_resolve_node_count(sct_config.get("n_db_nodes")),
                                    post_behaviour=sct_config.get("post_behavior_db_nodes"))
     loader_node_setup = CloudNodesInfo(image_id=sct_config.get('docker_image'),
                                        instance_type="docker",
-                                       node_amount=sct_config.get("n_loaders"),
+                                       node_amount=_resolve_node_count(sct_config.get("n_loaders")),
                                        post_behaviour=sct_config.get("post_behavior_loader_nodes"))
     monitor_node_setup = CloudNodesInfo(image_id=sct_config.get('docker_image'),
                                         instance_type="docker",
-                                        node_amount=sct_config.get("n_monitor_nodes"),
+                                        node_amount=_resolve_node_count(sct_config.get("n_monitor_nodes")),
                                         post_behaviour=sct_config.get("post_behavior_monitor_nodes"))
     cloud_setup = CloudSetupDetails(db_node=db_node_setup, loader_node=loader_node_setup,
                                     monitor_node=monitor_node_setup, backend=sct_config.get("cluster_backend"))
