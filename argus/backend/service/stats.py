@@ -497,6 +497,9 @@ class TestStats:
         if limited and not self.parent_group.parent_release.forced_collection:
             return
 
+        all_run_ids = [run["id"] for run in last_runs]
+        nemesis_stats_map = SCTNemesis.get_nemesis_stats(all_run_ids)
+
         self.last_runs = [
             {
                 "id": run["id"],
@@ -507,7 +510,7 @@ class TestStats:
                 "build_job_name": run["build_id"],
                 "start_time": run["start_time"],
                 "end_time": run["end_time"],
-                "nemesis_data": list(SCTNemesis.filter(run_id=run["id"]).all()),
+                "nemesis_stats": nemesis_stats_map.get(run["id"], {}),
                 "assignee": run["assignee"],
                 "issues": [dict(issue.items()) for issue in self.parent_group.parent_release.issues[run["id"]]],
                 "comments": [dict(comment.items()) for comment in self.parent_group.parent_release.comments[run["id"]]],

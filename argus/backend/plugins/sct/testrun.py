@@ -16,7 +16,6 @@ from argus.backend.plugins.sct.udt import (
     CloudResource,
     CloudSetupDetails,
     EventsBySeverity,
-    NemesisRunInfo,
     NodeDescription,
     PackageVersion,
     PerformanceHDRHistogram
@@ -115,7 +114,6 @@ class SCTUnprocessedEvent(Model):
 
 
 class SCTNemesis(Model):
-    """External table storing one row per nemesis run, replacing the inline nemesis_data list on SCTTestRun."""
     __table_name__ = "sct_nemesis"
 
     run_id = columns.UUID(partition_key=True, primary_key=True)
@@ -128,6 +126,34 @@ class SCTNemesis(Model):
     status = columns.Text()
     end_time = columns.Integer()
     stack_trace = columns.Text()
+    nemesis_stats = columns.Map(key_type=columns.Text(), value_type=columns.Integer(), static=True)
+
+    @classmethod
+    def get_nemesis_stats(cls, run_ids: UUID | list[UUID]) -> dict[str, int] | dict[UUID, dict[str, int]]:
+        """Fetch nemesis_stats static column for one or more run IDs.
+
+        When called with a single UUID, returns the stats dict for that run (empty dict
+        when no stats exist).
+        When called with a list of UUIDs, returns a dict mapping run_id -> stats dict
+        (runs with no stats are omitted).
+        """
+        single = isinstance(run_ids, UUID)
+        if single:
+            run_ids = [run_ids]
+        if not run_ids:
+            return {}
+        db = ScyllaCluster.get()
+        stmt = db.prepare(
+            f"SELECT DISTINCT run_id, nemesis_stats FROM {cls.__table_name__} WHERE run_id IN ?"
+        )
+        result: dict[UUID, dict[str, int]] = {}
+        for batch in chunk(run_ids):
+            for row in db.session.execute(stmt, [batch]):
+                if row["nemesis_stats"]:
+                    result[row["run_id"]] = dict(row["nemesis_stats"])
+        if single:
+            return result.get(run_ids[0], {})
+        return result
 
 
 class SCTTestRun(PluginModelBase):
@@ -315,9 +341,6 @@ class SCTTestRun(PluginModelBase):
     def get_resources(self) -> list[CloudResource]:
         return self.allocated_resources
 
-    def get_nemeses(self) -> list["SCTNemesis"]:
-        return list(SCTNemesis.filter(run_id=self.id).all())
-
     @classmethod
     def get_stress_commands(cls, run_id: str) -> list[StressCommand]:
         return list(StressCommand.filter(run_id=run_id).all())
@@ -394,20 +417,6 @@ class SCTTestRun(PluginModelBase):
 
     def add_screenshot(self, screenshot_link: str):
         self.screenshots.append(screenshot_link)
-
-    def add_nemesis(self, nemesis: NemesisRunInfo):
-        row = SCTNemesis(
-            run_id=self.id,
-            start_time=nemesis.start_time,
-            class_name=nemesis.class_name,
-            name=nemesis.name,
-            duration=nemesis.duration,
-            target_node=nemesis.target_node,
-            status=nemesis.status,
-            end_time=nemesis.end_time,
-            stack_trace=nemesis.stack_trace,
-        )
-        row.save()
 
     def _add_new_event_type(self, event: EventsBySeverity):
         self.events.append(event)

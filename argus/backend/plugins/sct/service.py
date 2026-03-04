@@ -371,7 +371,6 @@ class SCTService:
         nem_req = NemesisSubmissionRequest(**nemesis_details)
         node_desc = NodeDescription(name=nem_req.node_name, ip=nem_req.node_ip, shards=nem_req.node_shards)
         try:
-            # Idempotent: SCTNemesis primary key is (run_id, start_time); repeated submits are safe upserts.
             nemesis_row = SCTNemesis(
                 run_id=UUID(run_id),
                 start_time=int(nem_req.start_time),
@@ -395,15 +394,21 @@ class SCTService:
         nem_req = NemesisFinalizationRequest(**nemesis_details)
         try:
             nemesis_row = SCTNemesis.get(run_id=UUID(run_id), start_time=nem_req.start_time)
-            nemesis_row.status = NemesisStatus(nem_req.status).value
-            nemesis_row.stack_trace = nem_req.message
-            nemesis_row.end_time = int(time())
-            nemesis_row.save()
+
+            current_stats = nemesis_row.nemesis_stats or {}
+            new_count = current_stats.get(nem_req.status, 0) + 1
+
+            SCTNemesis.objects(run_id=UUID(run_id), start_time=nem_req.start_time).update(
+                status=NemesisStatus(nem_req.status).value,
+                stack_trace=nem_req.message,
+                end_time=int(time()),
+                nemesis_stats__update={nem_req.status: new_count}
+            )
+            return "finalized"
+
         except SCTNemesis.DoesNotExist as exception:
             LOGGER.error("Nemesis %s (%s) not found for run %s", nem_req.name, nem_req.start_time, run_id)
             raise SCTServiceException("Nemesis not found", (nem_req.name, nem_req.start_time)) from exception
-
-        return "updated"
 
 
     @staticmethod
