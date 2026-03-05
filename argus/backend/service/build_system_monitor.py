@@ -88,6 +88,7 @@ class JenkinsMonitor(ArgusTestsMonitor):
         r"^scylla-enterprise$",
         r"^enterprise-20\d{2}\.\d+$",
         r"^siren-tests$",
+        r"^releng-testing$",
     ]
 
     def __init__(self) -> None:
