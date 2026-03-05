@@ -5,7 +5,8 @@ import logging
 import math
 import re
 from time import time
-from uuid import UUID
+from typing import TypedDict
+from uuid import UUID, uuid4
 from xml.etree import ElementTree
 from flask import current_app, g
 from argus.backend.db import ScyllaCluster
@@ -77,6 +78,10 @@ class EventSubmitRequest:
     known_issue: str | None = None
     nemesis_status: str | None = None
 
+
+class CoredumpLink(TypedDict):
+    log_name: str
+    log_link: str
 
 
 class SCTService:
@@ -413,8 +418,8 @@ class SCTService:
         return "updated"
 
 
-    @staticmethod
-    def submit_event(run_id: str, raw_event: RawEventPayload):
+    @classmethod
+    def submit_event(cls, run_id: str, raw_event: RawEventPayload):
         req = EventSubmitRequest(**raw_event)
 
         event = SCTEvent()
@@ -438,6 +443,10 @@ class SCTService:
         event.known_issue = req.known_issue
 
         event.save()
+        if event.event_type.lower() == "coredumpevent" and (link := cls.create_coredump_link(event.message, event.ts)):
+            run: SCTTestRun = SCTTestRun.get(id=event.run_id)
+            run.submit_logs([link])
+            run.save()
 
         # Add to unprocessed events queue for ERROR and CRITICAL events
         if event.severity in (SCTEventSeverity.ERROR.value, SCTEventSeverity.CRITICAL.value):
@@ -490,40 +499,48 @@ class SCTService:
 
         return "added"
 
-    @staticmethod
-    def locate_coredumps(run: SCTTestRun, events: list[EventsBySeverity]) -> list[dict]:
+    @classmethod
+    def locate_coredumps(cls, run: SCTTestRun, events: list[EventsBySeverity]) -> list[CoredumpLink]:
         flat_messages: list[str] = []
         links = []
         for es in events:
             flat_messages.extend(es.last_events)
         coredump_events = filter(lambda v: "coredumpevent" in v.lower(), flat_messages)
-        for idx, event in enumerate(coredump_events):
-            core_pattern = r"corefile_url=(?P<url>.+)$"
-            ts_pattern = r"^(?P<ts>\d{4}-\d{2}-\d{2} ([\d:]*)\.\d{3})"
-            node_name_pattern = r"node=(?P<name>.+)$"
-            core_url_match = re.search(core_pattern, event, re.MULTILINE)
-            node_name_match = re.search(node_name_pattern, event, re.MULTILINE)
-            ts_match = re.search(ts_pattern, event)
-            if core_url_match:
-                node_name = node_name_match.group("name") if node_name_match else f"unknown-node-{idx}"
-                split_name = node_name.split(" ")
-                node_name = split_name[1] if len(split_name) >= 2 else node_name
-                url = core_url_match.group("url")
-                ext = url.rsplit(".", maxsplit=1)[-1]
-                ext = ext if len(ext) <= 5 else "zst" # Default to .zst if URL doesn't conform
-                timestamp_component = ""
-                if ts_match:
-                    try:
-                        timestamp = datetime.fromisoformat(ts_match.group("ts"))
-                        timestamp_component = timestamp.strftime("-%Y-%m-%d_%H-%M-%S")
-                    except ValueError:
-                        pass
-                log_link = {
-                    "log_name": f"core.scylla-{node_name}{timestamp_component}.{ext}",
-                    "log_link": url
-                }
-                links.append(log_link)
+        for event in coredump_events:
+            if link := cls.create_coredump_link(event):
+                links.append(link)
         return links
+
+    @staticmethod
+    def create_coredump_link(event_message: str, event_ts: datetime = None) -> CoredumpLink | None:
+        core_pattern = r"corefile_url=(?P<url>.+)$"
+        ts_pattern = r"^(?P<ts>\d{4}-\d{2}-\d{2} ([\d:]*)\.\d{3})"
+        node_name_pattern = r"node=(?P<name>.+)$"
+        core_url_match = re.search(core_pattern, event_message, re.MULTILINE)
+        node_name_match = re.search(node_name_pattern, event_message, re.MULTILINE)
+        ts_match = re.search(ts_pattern, event_message)
+        if core_url_match:
+            node_name = node_name_match.group("name") if node_name_match else f"unknown-node-{uuid4()}"
+            split_name = node_name.split(" ")
+            node_name = split_name[1] if len(split_name) >= 2 else node_name
+            url = core_url_match.group("url")
+            ext = url.rsplit(".", maxsplit=1)[-1]
+            ext = ext if len(ext) <= 5 else "zst" # Default to .zst if URL doesn't conform
+            timestamp_component = ""
+            if event_ts:
+                timestamp_component = event_ts.strftime("-%Y-%m-%d_%H-%M-%S")
+            elif ts_match:
+                try:
+                    timestamp = datetime.fromisoformat(ts_match.group("ts"))
+                    timestamp_component = timestamp.strftime("-%Y-%m-%d_%H-%M-%S")
+                except ValueError:
+                    pass
+            log_link = {
+                "log_name": f"core.scylla-{node_name}{timestamp_component}.{ext}",
+                "log_link": url
+            }
+            return log_link
+        return None
 
     @staticmethod
     def get_similar_events(run_id: str) -> list[dict]:
