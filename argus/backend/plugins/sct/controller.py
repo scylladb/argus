@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from flask import Blueprint, request
 
 from argus.backend.error_handlers import handle_api_exception
@@ -241,7 +243,7 @@ def sct_submit_junit_report(run_id: str):
 @api_login_required
 def sct_add_stress_cmd(run_id: str):
     payload = get_payload(request)
-    result = SCTService.add_stress_command(run_id, cmd=payload["cmd"], ts=payload["ts"], loader_name=payload["loader_name"], log_name=payload["log_name"])
+    result = SCTService.add_stress_command(run_id, cmd=payload["cmd"], ts=payload.get("ts", datetime.now(UTC).timestamp()), loader_name=payload["loader_name"], log_name=payload["log_name"])
     return {
         "status": "ok",
         "response": result
