@@ -16,13 +16,10 @@ jobs:
       (
         github.event.comment.author_association == 'OWNER' ||
         github.event.comment.author_association == 'MEMBER' ||
-        github.event.comment.author_association == 'COLLABORATOR' ||
         github.event.issue.author_association == 'OWNER' ||
         github.event.issue.author_association == 'MEMBER' ||
-        github.event.issue.author_association == 'COLLABORATOR' ||
         github.event.review.author_association == 'OWNER' ||
-        github.event.review.author_association == 'MEMBER' ||
-        github.event.review.author_association == 'COLLABORATOR'
+        github.event.review.author_association == 'MEMBER'
       ) && (
         (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
         (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
@@ -37,10 +34,46 @@ jobs:
       id-token: write
       actions: read # Required for Claude to read CI results on PRs
     steps:
+      - name: Resolve PR head ref
+        id: get-ref
+        run: |
+          set -euo pipefail
+
+          ref=""
+          repo=""
+
+          if [[ "${{ github.event_name }}" == "issue_comment" && -n "${{ github.event.issue.pull_request.url }}" ]]; then
+            PR_JSON=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.issue.number }})
+            ref=$(echo "$PR_JSON" | jq -r '.head.sha // empty')
+            repo=$(echo "$PR_JSON" | jq -r '.head.repo.full_name // empty')
+          elif [[ "${{ github.event_name }}" == "pull_request_review_comment" || "${{ github.event_name }}" == "pull_request_review" ]]; then
+            ref="${{ github.event.pull_request.head.sha }}"
+            repo="${{ github.event.pull_request.head.repo.full_name }}"
+          else
+            ref="${{ github.sha }}"
+            repo="${{ github.repository }}"
+          fi
+
+          if [[ -z "$ref" || "$ref" == "null" || -z "$repo" || "$repo" == "null" ]]; then
+            echo "Error: failed to resolve ref/repo for event '${{ github.event_name }}'." >&2
+            echo "ref='$ref', repo='$repo'" >&2
+            exit 1
+          fi
+
+          {
+            echo "ref=$ref"
+            echo "repo=$repo"
+          } >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          ref: ${{ steps.get-ref.outputs.ref }}
+          repository: ${{ steps.get-ref.outputs.repo }}
+          persist-credentials: false
 
       - name: Run Claude Code
         id: claude
