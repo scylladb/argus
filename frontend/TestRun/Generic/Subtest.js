@@ -4,14 +4,17 @@ import DtestTab from "../Pytest/DtestTab.svelte";
 export const Cases = {
     PYTEST: "pytest",
     DTEST: "dtest",
+    TESTPY: "testpy",
 };
 
 export const Tabs = {
     [Cases.PYTEST]: PytestTab,
     [Cases.DTEST]: DtestTab,
+    [Cases.TESTPY]: PytestTab,
 };
 
 export const TabBody = {
     [Cases.PYTEST]: PytestRun,
     [Cases.DTEST]: PytestRun,
+    [Cases.TESTPY]: PytestRun,
 };
