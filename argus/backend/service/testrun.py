@@ -79,18 +79,38 @@ class TestRunService:
         if plugin:
             return plugin.model.get_run_response(run_id)
 
-    def get_runs_by_test_id(self, test_id: UUID, additional_runs: list[UUID], limit: int = 10):
+    def get_runs_by_test_id(self, test_id: UUID, additional_runs: list[UUID], before: str | None, after: str | None, full: bool = False, limit: int = 10):
+        limited_fields = ["id", "test_id", "group_id", "release_id", "status", "start_time", "build_job_url", "build_id", "assignee", "end_time", "investigation_status", "heartbeat"]
         test: ArgusTest = ArgusTest.get(id=test_id)
         plugin = self.get_plugin(plugin_name=test.plugin_name)
         if not plugin:
             return []
-
-        last_runs: list[dict] = plugin.model.get_run_meta_by_build_id(build_id=test.build_system_id, limit=limit)
-        last_runs_ids = [run["id"] for run in last_runs]
+        dml = plugin.model.filter(build_id=test.build_system_id).limit(limit)
+        if not full:
+            dml = dml.only(limited_fields)
+        if before:
+            try:
+                ts_before = datetime.fromtimestamp(float(before))
+            except ValueError:
+                raise TestRunServiceException(f"Incorrect timestamp format, expected float-ms, got: {before}")
+            dml = dml.filter(start_time__lt=ts_before)
+        if after:
+            try:
+                ts_after = datetime.fromtimestamp(float(after))
+            except ValueError:
+                raise TestRunServiceException(f"Incorrect timestamp format, expected float-ms, got: {after}")
+            dml = dml.filter(start_time__gt=ts_after)
+        last_runs: list[PluginModelBase] = list(dml.all())
+        last_runs_ids = [run.id for run in last_runs]
         for added_run in additional_runs:
             if added_run not in last_runs_ids:
-                last_runs.extend(plugin.model.get_run_meta_by_run_id(run_id=added_run))
+                try:
+                    last_runs.append(plugin.model.filter(id=added_run).get())
+                except plugin.model.DoesNotExist:
+                    pass
 
+
+        last_runs = [dict(run.items()) for run in last_runs]
         for row in last_runs:
             row["build_number"] = get_build_number(build_job_url=row["build_job_url"])
 
