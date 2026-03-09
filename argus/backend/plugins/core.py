@@ -41,6 +41,7 @@ class PluginModelBase(Model):
     heartbeat = columns.Integer(default=lambda: int(time()))
     end_time = columns.DateTime(default=lambda: datetime.fromtimestamp(0, UTC))
     build_job_url = columns.Text()
+    build_number = columns.Integer()
     product_version = columns.Text(index=True)
 
     # Test Logs Collection
@@ -137,7 +138,7 @@ class PluginModelBase(Model):
     def get_jobs_assigned_to_user(cls, user_id: str | UUID):
         cluster = ScyllaCluster.get()
         query = cluster.prepare("SELECT build_id, start_time, release_id, group_id, assignee, "
-                                f"test_id, id, status, investigation_status, build_job_url, scylla_version FROM {cls.table_name()} WHERE assignee = ?")
+                                f"test_id, id, status, investigation_status, build_job_url, build_number, scylla_version FROM {cls.table_name()} WHERE assignee = ?")
         rows = cluster.session.execute(query=query, parameters=(user_id,))
 
         return list(rows)
@@ -146,7 +147,7 @@ class PluginModelBase(Model):
     def get_jobs_meta_by_test_id(cls, test_id: UUID):
         cluster = ScyllaCluster.get()
         query = cluster.prepare(
-            f"SELECT build_id, start_time, id, test_id, release_id, group_id, status, investigation_status FROM {cls.table_name()} WHERE test_id = ?")
+            f"SELECT build_id, start_time, id, test_id, release_id, group_id, status, investigation_status, build_number FROM {cls.table_name()} WHERE test_id = ?")
         rows = cluster.session.execute(query=query, parameters=(test_id,))
 
         return list(rows)
@@ -178,7 +179,7 @@ class PluginModelBase(Model):
     def get_run_meta_by_build_id(cls, build_id: str, limit: int = 10):
         cluster = ScyllaCluster.get()
         query = cluster.prepare("SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, "
-                                f"assignee, end_time, investigation_status, heartbeat FROM {cls.table_name()} WHERE build_id = ? LIMIT ?")
+                                f"assignee, end_time, investigation_status, heartbeat, build_number FROM {cls.table_name()} WHERE build_id = ? LIMIT ?")
         rows = cluster.session.execute(query=query, parameters=(build_id, limit))
 
         return list(rows)
@@ -187,7 +188,7 @@ class PluginModelBase(Model):
     def get_run_meta_by_run_id(cls, run_id: UUID | str):
         cluster = ScyllaCluster.get()
         query = cluster.prepare("SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, "
-                                f"assignee, end_time, investigation_status, heartbeat FROM {cls.table_name()} WHERE id = ?")
+                                f"assignee, end_time, investigation_status, heartbeat, build_number FROM {cls.table_name()} WHERE id = ?")
         rows = cluster.session.execute(query=query, parameters=(run_id,))
 
         return list(rows)

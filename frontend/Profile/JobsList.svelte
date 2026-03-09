@@ -14,9 +14,7 @@
     let listDomElement = $state();
 
     const filterJob = function (job) {
-        let jobName = `${job.build_id}#${getBuildNumber(
-            job.build_job_url
-        )}`;
+        let jobName = `${job.build_id}#${job.build_number}`;
         if (filterString == "") {
             return false;
         }
@@ -27,14 +25,6 @@
         } catch (e) {
             return true;
         }
-    };
-
-    const getBuildNumber = function (url) {
-        return url
-            .trim()
-            .slice(0, url.length - 1)
-            .split("/")
-            .at(-1);
     };
 
     const fetchReleaseDetails = async function(releaseId) {
@@ -114,7 +104,7 @@
                             <span class="spinner-border spinner-border-sm"></span> Getting name...
                         {:then [test, release]}
                             <div>
-                                {test.name}<span class="text-muted">#{getBuildNumber(run.build_job_url)}</span>
+                                {test.name}<span class="text-muted">#{run.build_number}</span>
                             </div>
                             <div class="text-muted" style="font-size: 0.75em;">
                                 {release.name}
