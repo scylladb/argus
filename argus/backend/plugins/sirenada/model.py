@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 from cassandra.cqlengine import columns
 from cassandra.cqlengine.usertype import UserType
@@ -6,6 +6,7 @@ from cassandra.cqlengine.models import Model
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import ArgusRelease
 from argus.backend.plugins.core import PluginModelBase
+from argus.backend.util.common import get_build_number
 from argus.common.sirenada_types import RawSirenadaRequest, SirenadaPluginException
 from argus.common.enums import TestStatus
 
@@ -46,7 +47,7 @@ class SirenadaRun(PluginModelBase):
     @classmethod
     def _stats_query(cls) -> str:
         return ("SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, "
-                f"assignee, end_time, investigation_status, heartbeat, scylla_version FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT 15")
+                f"assignee, end_time, investigation_status, heartbeat, build_number, scylla_version FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT 15")
 
     @classmethod
     def get_distinct_product_versions(cls, release: ArgusRelease, cluster: ScyllaCluster = None) -> list[str]:
@@ -85,9 +86,10 @@ class SirenadaRun(PluginModelBase):
             run = cls()
             run.id = request_data["run_id"]  # FIXME: Validate pls
             run.build_id = request_data["build_id"]
-            run.start_time = datetime.utcnow()
+            run.start_time = datetime.now(UTC)
             run.assign_categories()
             run.build_job_url = request_data["build_job_url"]
+            run.build_number = get_build_number(request_data["build_job_url"])
             run.region = request_data["region"]
             run.status = TestStatus.PASSED.value
             try:

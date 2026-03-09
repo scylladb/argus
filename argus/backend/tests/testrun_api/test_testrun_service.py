@@ -19,6 +19,7 @@ META_FIELDS = frozenset(
         "release_id",
         "status",
         "start_time",
+        "build_number",
         "build_job_url",
         "build_id",
         "assignee",

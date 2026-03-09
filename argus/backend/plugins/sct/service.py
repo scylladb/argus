@@ -24,7 +24,7 @@ from argus.backend.plugins.sct.udt import (
     PerformanceHDRHistogram,
 )
 from argus.backend.service.event_service import EventService
-from argus.backend.util.common import chunk, get_build_number
+from argus.backend.util.common import chunk
 from argus.common.enums import NemesisStatus, ResourceState, TestStatus
 from argus.common.utils import clamp_ts_to_milliseconds
 
@@ -213,6 +213,7 @@ class SCTService:
                 "id": None,
                 "metric": None,
                 "job_url": None,
+                "build_number": None,
             }
 
             if performance_results["histograms"]:
@@ -233,6 +234,7 @@ class SCTService:
                         regression_info["job_url"] = last_run["build_job_url"]
                         regression_info["id"] = str(last_run["id"])
                         regression_info["delta"] = metric_to_last
+                        regression_info["build_number"] = last_run["build_number"]
                         break
 
                     if metric_to_best < threshold_negative:
@@ -242,6 +244,7 @@ class SCTService:
                         regression_info["job_url"] = best_run["build_job_url"]
                         regression_info["id"] = str(best_run["id"])
                         regression_info["delta"] = metric_to_best
+                        regression_info["build_number"] = best_run["build_number"]
                         break
 
                 if regression_found:
@@ -263,7 +266,7 @@ class SCTService:
                     "base_run_id": str(run.id),
                     "previous_run_id": regression_info["id"],
                     "version": regression_info["version"],
-                    "build_number": get_build_number(regression_info["job_url"])
+                    "build_number": regression_info["build_number"]
                 }, user_id=g.user.id, run_id=run_id, release_id=run.release_id, test_id=run.test_id)
             else:
                 # NOTE: This will override status set by SCT Events.

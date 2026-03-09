@@ -5,7 +5,7 @@ import re
 from argus.backend.db import ScyllaCluster
 from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.models.github_issue import GithubIssue, IssueLink
-from argus.backend.util.common import chunk, get_build_number
+from argus.backend.util.common import chunk
 from argus.backend.util.nemesis_map import get_nemesis_name
 
 LOGGER = logging.getLogger(__name__)
@@ -118,7 +118,7 @@ class GraphedStatsService:
         for run_id in run_ids:
             try:
                 test_run = SCTTestRun.filter(id=run_id).only(
-                    ["id", "status", "build_id", "start_time", "assignee", "investigation_status", "packages", "build_job_url"]).get()
+                    ["id", "status", "build_id", "start_time", "assignee", "investigation_status", "build_number", "packages", "build_job_url"]).get()
                 test_runs[run_id] = test_run
             except Exception as e:
                 LOGGER.error(f"Failed to fetch test run {run_id}: {str(e)}")
@@ -140,7 +140,7 @@ class GraphedStatsService:
                 links = all_issue_links.get(run_id, [])
                 issues = [issues_by_id[issue_id] for issue_id in links if issue_id in issues_by_id]
 
-                build_number = get_build_number(test_run.build_job_url)
+                build_number = test_run.build_number
 
                 # Get Scylla version from packages
                 for pkg_name in ["scylla-server-upgraded", "scylla-server-upgrade-target", "scylla-server", "scylla-server-target"]:

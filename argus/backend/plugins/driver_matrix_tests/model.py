@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from functools import reduce
 import logging
 from pprint import pformat
@@ -14,6 +14,7 @@ from argus.backend.models.web import ArgusRelease
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.driver_matrix_tests.udt import TestCollection, TestSuite, TestCase, EnvironmentInfo
 from argus.backend.plugins.driver_matrix_tests.raw_types import RawMatrixTestResult
+from argus.backend.util.common import get_build_number
 from argus.common.enums import TestStatus
 
 
@@ -121,7 +122,7 @@ class DriverTestRun(PluginModelBase):
     @classmethod
     def _stats_query(cls) -> str:
         return ("SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, "
-                f"assignee, end_time, investigation_status, heartbeat, scylla_version FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT 15")
+                f"assignee, end_time, investigation_status, heartbeat, build_number, scylla_version FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT 15")
 
     @classmethod
     def get_distinct_product_versions(cls, release: ArgusRelease) -> list[str]:
@@ -166,7 +167,8 @@ class DriverTestRun(PluginModelBase):
         run.id = req.run_id
         run.build_id = req.job_name
         run.build_job_url = req.job_url
-        run.start_time = datetime.utcnow()
+        run.build_number = get_build_number(req.job_url)
+        run.start_time = datetime.now(UTC)
         run.assign_categories()
         try:
             run.assignee = run.get_scheduled_assignee()

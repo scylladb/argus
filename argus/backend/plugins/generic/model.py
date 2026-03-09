@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 import re
 from uuid import UUID
 from cassandra.cqlengine import columns
@@ -7,6 +7,7 @@ from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import ArgusRelease
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.generic.types import GenericRunFinishRequest, GenericRunSubmitRequest
+from argus.backend.util.common import get_build_number
 from argus.common.enums import TestStatus
 
 
@@ -26,7 +27,7 @@ class GenericRun(PluginModelBase):
     @classmethod
     def _stats_query(cls) -> str:
         return ("SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, "
-                f"assignee, end_time, investigation_status, heartbeat, scylla_version FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT 15")
+                f"assignee, end_time, investigation_status, heartbeat, build_number, scylla_version FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT 15")
 
     @classmethod
     def get_distinct_product_versions(cls, release: ArgusRelease, cluster: ScyllaCluster = None) -> list[str]:
@@ -61,11 +62,12 @@ class GenericRun(PluginModelBase):
         except cls.DoesNotExist:
             pass
         run = cls()
-        run.start_time = datetime.utcnow()
+        run.start_time = datetime.now(UTC)
         run.build_id = request_data["build_id"]
         run.started_by = request_data["started_by"]
         run.id = request_data["run_id"]
         run.build_job_url = request_data["build_url"]
+        run.build_number = get_build_number(request_data["build_url"])
         run.sub_type = request_data.get("sub_type")
         run.assign_categories()
         try:
@@ -80,7 +82,7 @@ class GenericRun(PluginModelBase):
         return run
 
     def finish_run(self, payload: GenericRunFinishRequest = None):
-        self.end_time = datetime.utcnow()
+        self.end_time = datetime.now(UTC)
         self.status = TestStatus(payload["status"]).value
         if version := payload.get("scylla_version"):
             self.submit_product_version(version)
