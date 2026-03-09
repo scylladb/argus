@@ -29,7 +29,19 @@ LOGGER = logging.getLogger(__name__)
 @bp.route("/test/<string:test_id>/runs")
 @api_login_required
 def get_runs_for_test(test_id: str):
+    """
+        Fetch test runs for a test using test id.
+        This endpoint accepts the following query parameters
+        limit (int) - How many runs from a partition to fetch
+        before (float) - Timestamp to filter for runs submitted before it
+        after (float) - Timestamp to filter for runs submitted after it
+        full (str) - Any value here (for API usage purposes, '1') returns
+                    the complete object instead of just meta fields
+    """
     limit = request.args.get("limit")
+    before = request.args.get("before")
+    after = request.args.get("after")
+    full = request.args.get("full")
     if not limit:
         limit = 10
     else:
@@ -37,7 +49,7 @@ def get_runs_for_test(test_id: str):
     additional_runs = [UUID(run) for run in request.args.getlist('additionalRuns[]')]
     service = TestRunService()
 
-    runs = service.get_runs_by_test_id(test_id=UUID(test_id), additional_runs=additional_runs, limit=limit)
+    runs = service.get_runs_by_test_id(test_id=UUID(test_id), additional_runs=additional_runs, limit=limit, full=bool(full), before=before, after=after)
 
     return {
         "status": "ok",
