@@ -5,7 +5,6 @@
     import humanizeDuration from "humanize-duration";
     import Fa from "svelte-fa";
     import { timestampToISODate } from "../Common/DateUtils";
-    import { extractBuildNumber } from "../Common/RunUtils";
     import JenkinsBuildModal from "./Jenkins/JenkinsBuildModal.svelte";
     import JenkinsCloneModal from "./Jenkins/JenkinsCloneModal.svelte";
     let { testRun = {}, testInfo } = $props();
@@ -105,7 +104,7 @@
         {#if rebuildRequested}
             <JenkinsBuildModal
                 buildId={testRun.build_id}
-                buildNumber={extractBuildNumber(testRun)}
+                buildNumber={testRun.build_number}
                 pluginName={testInfo.test.plugin_name}
                 on:rebuildCancel={() => (rebuildRequested = false)}
                 on:rebuildComplete={() => (rebuildRequested = false)}
@@ -114,7 +113,7 @@
         {#if cloneRequested}
             <JenkinsCloneModal
                 buildId={testRun.build_id}
-                buildNumber={extractBuildNumber(testRun)}
+                buildNumber={testRun.build_number}
                 pluginName={testInfo.test.plugin_name}
                 testId={testInfo.test.id}
                 releaseId={testInfo.release.id}

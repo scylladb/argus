@@ -20,7 +20,7 @@ from argus.backend.plugins.sct.udt import (
     PackageVersion,
     PerformanceHDRHistogram
 )
-from argus.backend.util.common import chunk
+from argus.backend.util.common import chunk, get_build_number
 
 LOGGER = logging.getLogger(__name__)
 SCT_REGION_PROPERTY_MAP = {
@@ -176,7 +176,7 @@ class SCTTestRun(PluginModelBase):
     @classmethod
     def _stats_query(cls) -> str:
         return ("SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, "
-                f"assignee, end_time, investigation_status, heartbeat, scylla_version, cloud_setup, allocated_resources, nemesis_data FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT 15")
+                f"assignee, end_time, investigation_status, heartbeat, build_number, scylla_version, cloud_setup, allocated_resources, nemesis_data FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT 15")
 
     @classmethod
     def load_test_run(cls, run_id: UUID) -> 'SCTTestRun':
@@ -239,7 +239,7 @@ class SCTTestRun(PluginModelBase):
     def get_perf_results_for_test_name(cls, build_id: str, start_time: float, test_name: str):
         cluster = ScyllaCluster.get()
         query = cluster.prepare(f"SELECT build_id, packages, scylla_version, test_name, perf_op_rate_average, perf_op_rate_total, "
-                                "perf_avg_latency_99th, perf_avg_latency_mean, perf_total_errors, id, start_time, build_job_url"
+                                "perf_avg_latency_99th, perf_avg_latency_mean, perf_total_errors, id, start_time, build_job_url, build_number"
                                 f" FROM {cls.table_name()} WHERE build_id = ? AND start_time < ? AND test_name = ? ALLOW FILTERING")
         rows = cluster.session.execute(query=query, parameters=(build_id, start_time, test_name))
 
@@ -262,6 +262,7 @@ class SCTTestRun(PluginModelBase):
             run.branch_name = req.branch_name
         run.started_by = req.started_by
         run.build_job_url = req.job_url
+        run.build_number = get_build_number(req.job_url)
 
         return run
 

@@ -138,7 +138,7 @@ def generate_field_status_map(
 
     status_map = {}
     for run in last_runs:
-        run_number = get_build_number(run["build_job_url"])
+        run_number = run["build_number"]
         match status := status_map.get(run_number):
             case (str(), dict()):
                 last_status, _ = status
@@ -478,7 +478,7 @@ class TestStats:
         else:
             last_runs = self.parent_group.parent_release.dict.get(self.test.build_system_id, [])
         last_runs: list[TestRunStatRow] = sorted(
-            last_runs, reverse=True, key=lambda r: get_build_number(r["build_job_url"]))
+            last_runs, reverse=True, key=lambda r: r["build_number"] or get_build_number(r["build_job_url"]))
         try:
             last_run = last_runs[0]
         except IndexError:
@@ -487,7 +487,7 @@ class TestStats:
             return
         status_map = generate_field_status_map(last_runs)
 
-        worst_case = status_map.get(get_build_number(last_run["build_job_url"]))
+        worst_case = status_map.get(last_run["build_number"])
         self.status = worst_case[0]
         self.investigation_status = worst_case[1]["investigation_status"]
         self.start_time = last_run["start_time"]
@@ -502,7 +502,7 @@ class TestStats:
                 "status": run["status"],
                 "setup": run.get("cloud_setup"),
                 "resources": run.get("allocated_resources"),
-                "build_number": get_build_number(run["build_job_url"]),
+                "build_number": run["build_number"],
                 "build_job_name": run["build_id"],
                 "start_time": run["start_time"],
                 "end_time": run["end_time"],

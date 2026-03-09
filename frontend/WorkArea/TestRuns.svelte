@@ -1,5 +1,5 @@
 <script>
-    import { run as run_1 } from 'svelte/legacy';
+    import { run as run_1 } from "svelte/legacy";
 
     import { createEventDispatcher, onMount, onDestroy } from "svelte";
     import queryString from "query-string";
@@ -8,7 +8,6 @@
     import { titleCase } from "../Common/TextUtils";
     import { timestampToISODate } from "../Common/DateUtils";
     import TestRunsSelector from "./TestRunsSelector.svelte";
-    import { extractBuildNumber } from "../Common/RunUtils";
     import TestRunDispatcher from "./TestRunDispatcher.svelte";
     import { isPluginSupported } from "../Common/PluginDispatch";
     import { AVAILABLE_PLUGINS } from "../Common/PluginDispatch";
@@ -35,14 +34,7 @@
      */
 
     /** @type {Props} */
-    let {
-        testId,
-        tab,
-        listId = uuidv4(),
-        filtered = false,
-        removableRuns = false,
-        additionalRuns = []
-    } = $props();
+    let { testId, tab, listId = uuidv4(), filtered = false, removableRuns = false, additionalRuns = [] } = $props();
     /**
      * @type {{roles: string[]}}
      */
@@ -67,7 +59,7 @@
             inProgress: true,
             classes: ["text-muted"],
             message: "Loading test information...",
-            onEnter: function() {
+            onEnter: function () {
                 //empty
             },
         },
@@ -76,7 +68,7 @@
             inProgress: true,
             classes: ["text-muted"],
             message: "Loading...",
-            onEnter: function() {
+            onEnter: function () {
                 //empty
             },
         },
@@ -85,7 +77,7 @@
             inProgress: false,
             classes: ["text-muted"],
             message: "No test runs have been submitted for this test so far!",
-            onEnter: function() {
+            onEnter: function () {
                 //empty
             },
         },
@@ -94,7 +86,7 @@
             inProgress: false,
             classes: ["alert-danger"],
             message: "Failed fetching runs for this test, retrying...",
-            onEnter: function() {
+            onEnter: function () {
                 //empty
             },
         },
@@ -103,7 +95,7 @@
             inProgress: false,
             classes: [],
             message: "",
-            onEnter: function() {
+            onEnter: function () {
                 //empty
             },
         },
@@ -112,20 +104,20 @@
             inProgress: false,
             classes: ["alert-danger"],
             message: "Unable to fetch test info.",
-            onEnter: function() {
+            onEnter: function () {
                 //empty
             },
         },
     };
 
-    const setState = function(newState) {
+    const setState = function (newState) {
         let curState = stateMap[currentState];
         if (!curState.nextStates.includes(newState)) return;
         currentState = newState;
         stateMap[currentState].onEnter();
     };
 
-    const loadAdditionalRuns = function(additionalRuns) {
+    const loadAdditionalRuns = function (additionalRuns) {
         return additionalRuns.reduce((acc, val) => {
             acc[val] = true;
             return acc;
@@ -150,9 +142,12 @@
 
     const fetchTestInfo = async function () {
         try {
-            let params = queryString.stringify({
-                testId: testId,
-            }, { arrayFormat: "bracket" });
+            let params = queryString.stringify(
+                {
+                    testId: testId,
+                },
+                { arrayFormat: "bracket" },
+            );
             let res = await fetch("/api/v1/test-info?" + params);
             if (res.status != 200) {
                 throw new Error(`Network error: ${res.status}`);
@@ -166,7 +161,11 @@
             setState(states.INIT_RUNS);
         } catch (error) {
             if (error?.exception) {
-                sendMessage("error", `Failed fetching test info: ${error.exception}\n${error.arguments.join(" ")}`, "TestRuns::fetchTestInfo");
+                sendMessage(
+                    "error",
+                    `Failed fetching test info: ${error.exception}\n${error.arguments.join(" ")}`,
+                    "TestRuns::fetchTestInfo",
+                );
             } else if (error instanceof Error) {
                 sendMessage("error", error.message, "TestRuns::fetchTestInfo");
             }
@@ -176,10 +175,13 @@
 
     const fetchTestRuns = async function () {
         try {
-            let params = queryString.stringify({
-                additionalRuns,
-                limit: runLimit,
-            }, { arrayFormat: "bracket" });
+            let params = queryString.stringify(
+                {
+                    additionalRuns,
+                    limit: runLimit,
+                },
+                { arrayFormat: "bracket" },
+            );
             let res = await fetch(`/api/v1/test/${testId}/runs?` + params);
             if (res.status != 200) {
                 throw new Error(`Network error: ${res.status}`);
@@ -197,7 +199,11 @@
             }
         } catch (error) {
             if (error?.exception) {
-                sendMessage("error", `Failed fetching runs: ${error.exception}\n${error.arguments.join(" ")}`, "TestRuns::fetchTestRuns");
+                sendMessage(
+                    "error",
+                    `Failed fetching runs: ${error.exception}\n${error.arguments.join(" ")}`,
+                    "TestRuns::fetchTestRuns",
+                );
             } else if (error instanceof Error) {
                 sendMessage("error", error.message, "TestRuns::fetchTestRuns");
             }
@@ -244,11 +250,11 @@
         let response = await fetch(`/api/v1/test/${testId}/set_plugin`, {
             method: "POST",
             headers: {
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
             },
             body: JSON.stringify({
-                plugin_name: selectedPlugin
-            })
+                plugin_name: selectedPlugin,
+            }),
         });
         if (response.status != 200) {
             sendMessage("error", "Failed adjusting plugin for this test", "TestRuns::handlePluginFixup");
@@ -262,7 +268,7 @@
         main();
     };
 
-    const handleIgnoreRuns = async function(e) {
+    const handleIgnoreRuns = async function (e) {
         let testId = e.detail.testId;
         let reason = e.detail.reason;
 
@@ -274,7 +280,7 @@
             body: JSON.stringify({
                 testId: testId,
                 reason: reason,
-            })
+            }),
         });
 
         if (response.status != 200) {
@@ -288,11 +294,19 @@
                 sendMessage("error", "Failed to ignore runs for this test");
                 console.log(json);
             }
-            sendMessage("success", `Runs successfully ignored. Affected amount: ${json.response.affectedJobs}`, "TestRuns::handleIgnoreRuns");
+            sendMessage(
+                "success",
+                `Runs successfully ignored. Affected amount: ${json.response.affectedJobs}`,
+                "TestRuns::handleIgnoreRuns",
+            );
             fetchTestRuns();
             dispatch("batchIgnoreDone");
-        } catch(e) {
-            sendMessage("error", "Error parsing response json, check console for details.", "TestRuns::handleIgnoreRuns");
+        } catch (e) {
+            sendMessage(
+                "error",
+                "Error parsing response json, check console for details.",
+                "TestRuns::handleIgnoreRuns",
+            );
             console.log(e);
         }
     };
@@ -316,100 +330,131 @@
     });
 </script>
 
-<svelte:window bind:innerWidth={innerWidth} />
+<svelte:window bind:innerWidth />
 <div class:d-none={filtered} class="accordion-item border-none px-2 bg-main mb-1">
-{#if testInfo}
-    <div
-        class="border-none mb-2"
-    >
-        <div
-            class="btn w-100 rounded d-flex align-items-center { removableRuns ? "shadow-sm" : "p-2"}"
-            class:btn-light={!open}
-            class:btn-testruns-open={open}
-            role="button"
-            tabindex="0"
-            onkeydown={() => {}}
-            onclick={() => {
-                open = !open;
-                new Collapse(`#collapse-${listId}`).toggle();
-            }}
-        >
-            {#if runs.length > 0}
-                <span
-                    title={titleCase(runs[0].status)}
-                    class="me-2 cursor-question status-circle {StatusBackgroundCSSClassMap[runs[0].status] ?? StatusBackgroundCSSClassMap["unknown"]}"
-                    ></span
-                >
-            {/if}
-                <div class="text-truncate" style="min-width: 0;">{testInfo.test.name}{#if !smallScreen} ({testInfo.release.name}/{testInfo.group.name}){/if}</div>
-            {#if runs.length > 0}
-                {#if !smallScreen}<div class="ms-auto text-end text-nowrap">{timestampToISODate(runs[0].start_time)}</div>{/if}
-                <div class="mx-2" class:ms-auto={smallScreen}>#{extractBuildNumber(runs[0])}</div>
-            {/if}
-                <div class="btn-group">
-                    {#if applicationCurrentUser.roles.some(v => ["ROLE_ADMIN", "ROLE_MANAGER"].includes(v)) || testInfo.release.name.includes("staging")}
-                        <button class="btn" onclick={(e) => {configureRequested = true; e.stopPropagation();}}><Fa icon={faGear}/></button>
-                    {/if}
-                    <button class="btn" onclick={(e) => {execRequested = true; e.stopPropagation();}}><Fa icon={faPlay} /></button>
-                    <button class="btn" onclick={(e) => {cloneRequested = true; e.stopPropagation();}}><Fa icon={faCopy} /></button>
+    {#if testInfo}
+        <div class="border-none mb-2">
+            <div
+                class="btn w-100 rounded d-flex align-items-center {removableRuns ? 'shadow-sm' : 'p-2'}"
+                class:btn-light={!open}
+                class:btn-testruns-open={open}
+                role="button"
+                tabindex="0"
+                onkeydown={() => {}}
+                onclick={() => {
+                    open = !open;
+                    new Collapse(`#collapse-${listId}`).toggle();
+                }}
+            >
+                {#if runs.length > 0}
+                    <span
+                        title={titleCase(runs[0].status)}
+                        class="me-2 cursor-question status-circle {StatusBackgroundCSSClassMap[runs[0].status] ??
+                            StatusBackgroundCSSClassMap['unknown']}"
+                    ></span>
+                {/if}
+                <div class="text-truncate" style="min-width: 0;">
+                    {testInfo.test.name}{#if !smallScreen}
+                        ({testInfo.release.name}/{testInfo.group.name}){/if}
                 </div>
-            {#if removableRuns}
-                <div class="me-2" class:ms-1={runs.length > 0} class:ms-auto={runs.length == 0} >
+                {#if runs.length > 0}
+                    {#if !smallScreen}<div class="ms-auto text-end text-nowrap">
+                            {timestampToISODate(runs[0].start_time)}
+                        </div>{/if}
+                    <div class="mx-2" class:ms-auto={smallScreen}>#{runs[0].build_number}</div>
+                {/if}
+                <div class="btn-group">
+                    {#if applicationCurrentUser.roles.some( (v) => ["ROLE_ADMIN", "ROLE_MANAGER"].includes(v), ) || testInfo.release.name.includes("staging")}
+                        <button
+                            class="btn"
+                            onclick={(e) => {
+                                configureRequested = true;
+                                e.stopPropagation();
+                            }}><Fa icon={faGear} /></button
+                        >
+                    {/if}
                     <button
                         class="btn"
-                        onclick={(e) => { dispatch("testRunRemove", { testId: testId }); e.stopPropagation(); }}
+                        onclick={(e) => {
+                            execRequested = true;
+                            e.stopPropagation();
+                        }}><Fa icon={faPlay} /></button
                     >
-                        <Fa icon={faTimes}/>
-                    </button>
+                    <button
+                        class="btn"
+                        onclick={(e) => {
+                            cloneRequested = true;
+                            e.stopPropagation();
+                        }}><Fa icon={faCopy} /></button
+                    >
                 </div>
-            {/if}
-        </div>
-    </div>
-    {#if configureRequested}
-        <JobConfigureModal
-            testName={testInfo.test.pretty_name || testInfo.test.name}
-            buildId={testInfo.test.build_system_id}
-            on:configureCancel={() => (configureRequested = false)}
-            on:settingsFinished={() => (configureRequested = false)}
-        />
-    {/if}
-    {#if cloneRequested}
-        <JenkinsCloneModal
-            buildId={testInfo.test.build_system_id}
-            buildNumber={runs.length > 0 ? extractBuildNumber(runs[0]) : -1}
-            pluginName={testInfo.test.plugin_name}
-            testId={testInfo.test.id}
-            releaseId={testInfo.release.id}
-            groupId={testInfo.group.id}
-            oldTestName={testInfo.test.name}
-            on:cloneCancel={() => (cloneRequested = false)}
-            on:cloneComplete={(e) => { cloneRequested = false; dispatch("cloneSelect", { testId: e.detail.testId }); }}
-        />
-    {/if}
-    {#if execRequested}
-        <JenkinsBuildModal
-            buildId={testInfo.test.build_system_id}
-            buildNumber={runs.length > 0 ? extractBuildNumber(runs[0]) : undefined}
-            pluginName={testInfo.test.plugin_name}
-            on:rebuildCancel={() => (execRequested = false)}
-            on:rebuildComplete={() => (execRequested = false)}
-        />
-    {/if}
-    <div class="collapse show bg-main shadow-sm rounded" id="collapse-{listId}">
-        {#if !isPluginSupported(testInfo.test.plugin_name)}
-            <div class="rounded shadow-sm bg-white p-2 text-center">
-                <span class="fw-bold">Unsupported plugin</span> <span class="d-inline-block text-danger bg-light-one rounded p-1">{testInfo.test.plugin_name ? testInfo.test.plugin_name : "#empty-test-name"}</span>
+                {#if removableRuns}
+                    <div class="me-2" class:ms-1={runs.length > 0} class:ms-auto={runs.length == 0}>
+                        <button
+                            class="btn"
+                            onclick={(e) => {
+                                dispatch("testRunRemove", { testId: testId });
+                                e.stopPropagation();
+                            }}
+                        >
+                            <Fa icon={faTimes} />
+                        </button>
+                    </div>
+                {/if}
             </div>
+        </div>
+        {#if configureRequested}
+            <JobConfigureModal
+                testName={testInfo.test.pretty_name || testInfo.test.name}
+                buildId={testInfo.test.build_system_id}
+                on:configureCancel={() => (configureRequested = false)}
+                on:settingsFinished={() => (configureRequested = false)}
+            />
+        {/if}
+        {#if cloneRequested}
+            <JenkinsCloneModal
+                buildId={testInfo.test.build_system_id}
+                buildNumber={runs.length > 0 ? runs[0].build_number : -1}
+                pluginName={testInfo.test.plugin_name}
+                testId={testInfo.test.id}
+                releaseId={testInfo.release.id}
+                groupId={testInfo.group.id}
+                oldTestName={testInfo.test.name}
+                on:cloneCancel={() => (cloneRequested = false)}
+                on:cloneComplete={(e) => {
+                    cloneRequested = false;
+                    dispatch("cloneSelect", { testId: e.detail.testId });
+                }}
+            />
+        {/if}
+        {#if execRequested}
+            <JenkinsBuildModal
+                buildId={testInfo.test.build_system_id}
+                buildNumber={runs.length > 0 ? runs[0].build_number : undefined}
+                pluginName={testInfo.test.plugin_name}
+                on:rebuildCancel={() => (execRequested = false)}
+                on:rebuildComplete={() => (execRequested = false)}
+            />
+        {/if}
+        <div class="collapse show bg-main shadow-sm rounded" id="collapse-{listId}">
+            {#if !isPluginSupported(testInfo.test.plugin_name)}
+                <div class="rounded shadow-sm bg-white p-2 text-center">
+                    <span class="fw-bold">Unsupported plugin</span>
+                    <span class="d-inline-block text-danger bg-light-one rounded p-1"
+                        >{testInfo.test.plugin_name ? testInfo.test.plugin_name : "#empty-test-name"}</span
+                    >
+                </div>
                 <div>
                     {#if !pluginFixed}
-                        <div class="p-2 alert alert-warning my-2">This looks like a newly added test and it will need to have its plugin name specified. If you know which plugin this test should use, select it from the list below and click save.</div>
+                        <div class="p-2 alert alert-warning my-2">
+                            This looks like a newly added test and it will need to have its plugin name specified. If
+                            you know which plugin this test should use, select it from the list below and click save.
+                        </div>
                         <div class="form-group mb-2">
                             <label for="" class="form-label">Plugin</label>
                             <select id="" class="form-select" bind:value={selectedPlugin}>
                                 {#each Object.keys(AVAILABLE_PLUGINS) as plugin}
-                                    <option value={plugin}
-                                        >{plugin}</option
-                                    >
+                                    <option value={plugin}>{plugin}</option>
                                 {/each}
                             </select>
                         </div>
@@ -417,87 +462,88 @@
                             <button class="btn btn-success w-100" onclick={handlePluginFixup}>Save</button>
                         </div>
                     {:else}
-                        <div>
-                            Refresh the page to see updated changes.
-                        </div>
+                        <div>Refresh the page to see updated changes.</div>
                     {/if}
                 </div>
-        {/if}
-        {#if runs.length > 0}
-            <div class="" bind:this={runsBody}>
-                <TestRunsSelector
-                    {runs}
-                    {testInfo}
-                    {testId}
-                    bind:clickedTestRuns={clickedTestRuns}
-                    on:runClick={handleTestRunClick}
-                    on:closeRun={handleTestRunClose}
-                    on:increaseLimit={handleIncreaseLimit}
-                    on:ignoreRuns={handleIgnoreRuns}
-                    on:fetchNewRuns={fetchTestRuns}
-                    on:showGraph={handleShowGraph}
-                />
-                {#if clickedGraph}
-                <div class="collapse mb-2 show" id="collapse-graphs" >
-                        <div class="container-fluid p-1 bg-light" >
-                            <ResultsGraphs test_id={testInfo.test.id}
-                                           bind:clickedTestRuns={clickedTestRuns}
-                                           on:runClick={handleTestRunClick}/>
-                        </div>
-                    </div>
-                    {/if}
-                {#each runs as run (run.id)}
-                    <div class:show={clickedTestRuns[run.id]} class="collapse mb-2" id="collapse{run.id}">
-                        <div class="container-fluid p-1 bg-light">
-                            {#if clickedTestRuns[run.id]}
-                                <TestRunDispatcher
-                                    runId={run.id}
-                                    {testInfo}
-                                    tab={tab}
-                                    buildNumber={extractBuildNumber(run)}
-                                    on:closeRun={handleTestRunClose}
-                                    on:investigationStatusChange
-                                    on:runStatusChange={fetchTestRuns}
-                                    on:cloneComplete={(e) => dispatch("cloneSelect", { testId: e.detail.testId })}
+            {/if}
+            {#if runs.length > 0}
+                <div class="" bind:this={runsBody}>
+                    <TestRunsSelector
+                        {runs}
+                        {testInfo}
+                        {testId}
+                        bind:clickedTestRuns
+                        on:runClick={handleTestRunClick}
+                        on:closeRun={handleTestRunClose}
+                        on:increaseLimit={handleIncreaseLimit}
+                        on:ignoreRuns={handleIgnoreRuns}
+                        on:fetchNewRuns={fetchTestRuns}
+                        on:showGraph={handleShowGraph}
+                    />
+                    {#if clickedGraph}
+                        <div class="collapse mb-2 show" id="collapse-graphs">
+                            <div class="container-fluid p-1 bg-light">
+                                <ResultsGraphs
+                                    test_id={testInfo.test.id}
+                                    bind:clickedTestRuns
+                                    on:runClick={handleTestRunClick}
                                 />
-                            {/if}
+                            </div>
                         </div>
+                    {/if}
+                    {#each runs as run (run.id)}
+                        <div class:show={clickedTestRuns[run.id]} class="collapse mb-2" id="collapse{run.id}">
+                            <div class="container-fluid p-1 bg-light">
+                                {#if clickedTestRuns[run.id]}
+                                    <TestRunDispatcher
+                                        runId={run.id}
+                                        {testInfo}
+                                        {tab}
+                                        buildNumber={run.build_number}
+                                        on:closeRun={handleTestRunClose}
+                                        on:investigationStatusChange
+                                        on:runStatusChange={fetchTestRuns}
+                                        on:cloneComplete={(e) => dispatch("cloneSelect", { testId: e.detail.testId })}
+                                    />
+                                {/if}
+                            </div>
+                        </div>
+                    {/each}
+                </div>
+            {:else}
+                <TestRunsMessage state={stateMap[currentState]}>
+                    <div>
+                        <a class="link link-primary" href={testInfo.test.build_system_url}>Jenkins</a>
                     </div>
-                {/each}
-            </div>
-        {:else}
-            <TestRunsMessage state={stateMap[currentState]}>
-                <div>
-                    <a class="link link-primary" href="{testInfo.test.build_system_url}">Jenkins</a>
-                </div>
-            </TestRunsMessage>
-        {/if}
-    </div>
-{:else}
-    <div class="d-flex">
-        <div class="flex-fill">
-            <TestRunsMessage state={stateMap[currentState]}>
-                <div>
-                    Test ID: {testId}
-                </div>
-                {#if removableRuns}
-                <div class="mx-2 p-2">
-                    <button
-                        class="d-inline-block btn btn-secondary"
-                        onclick={() => { dispatch("testRunRemove", { testId: testId }); }}
-                    >
-                        Close
-                    </button>
-                </div>
-                {/if}
-            </TestRunsMessage>
+                </TestRunsMessage>
+            {/if}
         </div>
-    </div>
-{/if}
+    {:else}
+        <div class="d-flex">
+            <div class="flex-fill">
+                <TestRunsMessage state={stateMap[currentState]}>
+                    <div>
+                        Test ID: {testId}
+                    </div>
+                    {#if removableRuns}
+                        <div class="mx-2 p-2">
+                            <button
+                                class="d-inline-block btn btn-secondary"
+                                onclick={() => {
+                                    dispatch("testRunRemove", { testId: testId });
+                                }}
+                            >
+                                Close
+                            </button>
+                        </div>
+                    {/if}
+                </TestRunsMessage>
+            </div>
+        </div>
+    {/if}
 </div>
 
 <style>
-
     .status-circle {
         display: inline-block;
         padding: 8px;
@@ -508,9 +554,7 @@
         cursor: help;
     }
 
-
     .border-none {
         border-style: none;
     }
-
 </style>

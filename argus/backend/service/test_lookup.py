@@ -10,7 +10,6 @@ from cassandra.cqlengine.models import Model
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.loader import all_plugin_models
-from argus.backend.util.common import get_build_number
 
 
 class TestLookup:
@@ -90,7 +89,6 @@ class TestLookup:
                 name = run["test"]["name"]
             run["group"] = dict(cls.resolve_run_group(run["group_id"]).items())if run["group_id"] else None
             run["release"] = dict(cls.resolve_run_release(run["release_id"]).items()) if run["release_id"] else None
-            run["build_number"] = get_build_number(run["build_job_url"])
             run["name"] = f"{name}#{run['build_number']}"
 
             return [run]
