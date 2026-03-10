@@ -98,6 +98,7 @@
         DEBUG: false,
     });
 
+    let container: Element | null = $state(null);
     let nemesisFilter = $state({
         "started": false,
         "running": true,
@@ -172,13 +173,16 @@
     };
 
     const focusDuplicate = function(event: SCTEvent) {
-        let elem;
-        if (elem = eventMap[event.duplicate_id]) {
-            elem.highlight();
-            elem.scrollIntoView({
-                behavior: "smooth",
-                block: "center"
-            });
+        let originalEvent;
+        if (originalEvent = eventMap[event.duplicate_id]) {
+            originalEvent.highlight();
+            let domNode = container?.querySelector(`div#sct-event-${event.duplicate_id}`);
+            if (domNode) {
+                domNode.scrollIntoView({
+                    behavior: "smooth",
+                    block: "center",
+                });
+            }
         }
     }
 
@@ -317,7 +321,7 @@
             </button>
         {/each}
     </div>
-    <div class="p-2 bg-light-one rounded" style="max-height: 1024px; overflow-y: scroll">
+    <div bind:this={container} class="p-2 bg-light-one rounded" style="max-height: 1024px; overflow-y: scroll">
         {#each timeline as event}
             {#if event.type == TimelineEventType.Event}
                 {#if severityFilter[event.severity]}
