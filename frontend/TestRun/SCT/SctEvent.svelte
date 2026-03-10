@@ -125,7 +125,7 @@
         highlighting = true;
         setTimeout(() => {
             highlighting = false;
-        }, 3 * 1000);
+        }, 5 * 1000);
     }
 
     const hasDuplicates = function(event: SCTEvent) {
@@ -136,8 +136,16 @@
         return duplicateIdShowTable[event.event_id];
     }
 
+    const duplicatesShownFromDupe = function(event: SCTEvent) {
+        return duplicateIdShowTable[event.duplicate_id];
+    }
+
     const toggleDuplicates = function(event: SCTEvent) {
         duplicateIdShowTable[event.event_id] = !duplicateIdShowTable[event.event_id];
+    };
+
+    const toggleDuplicatedFromDupe = function(event: SCTEvent) {
+        duplicateIdShowTable[event.duplicate_id] = !duplicateIdShowTable[event.duplicate_id];
     };
 
     const isDuplicate = function(event: SCTEvent) {
@@ -304,6 +312,7 @@
                 {/if}
                 {#if isDuplicate(event)}
                     <button class="ms-2 btn btn-sm btn-dark" onclick={() => focusDuplicate(event)}><Fa icon={faSearch}/> Focus Original</button>
+                    <button class="ms-2 btn btn-sm btn-dark" onclick={() => toggleDuplicatedFromDupe(event)}><Fa icon={faClipboard}/> { duplicatesShownFromDupe(event) ? "Hide" : "Show" } Duplicates</button>
                 {/if}
                 <div class="ms-2 btn-group">
                     {#if issues.length > 0}
@@ -353,7 +362,7 @@
                 {/if}
             </div>
         </div>
-        <div class="bg-body p-2">
+        <div class:duplicate-body={isDuplicate(event)} class="bg-body p-2">
             <pre class="font-monospace p-2 rounded m-1 bg-light-two" style="white-space: pre-wrap !important">{sliceMessage(event.message)} {#if event.message.length > MESSAGE_CUTOFF}<button class="btn btn-sm btn-light" onclick={() => fullMessage = !fullMessage}>{#if fullMessage}X{:else}...{/if}</button>{/if}</pre>
         </div>
     </div>
@@ -362,9 +371,13 @@
 
 
 <style>
+    @keyframes highlight-pulse {
+        0%, 100% { box-shadow: 0 0 0 0 #2d98c200; }
+        50%       { box-shadow: 0 0 0 7px #222a2ea6; }
+    }
+
     .highlight {
-        border: 10px dashed #2d98c2;
-        padding: 1rem;
+        animation: highlight-pulse 1.55s ease-in-out 6;
     }
 
     .bg-titlebar {
@@ -373,6 +386,10 @@
 
     .bg-body {
         background-color: #ececec;
+    }
+
+    .duplicate-body {
+        background-color: #ddeef6;
     }
 
     .severity-warning {
@@ -428,6 +445,6 @@
     }
 
     .duplicate {
-        background-color: #2d98c2 !important;
+        background-color: #c8e3ef !important;
     }
 </style>
