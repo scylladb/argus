@@ -17,7 +17,8 @@ from argus.backend.models.web import (
     ArgusScheduleGroup,
     ArgusSchedule,
     ArgusScheduleTest,
-    ArgusScheduleAssignee
+    ArgusScheduleAssignee,
+    User,
 )
 from argus.backend.util.common import chunk
 from argus.common.enums import TestInvestigationStatus, TestStatus
@@ -87,6 +88,20 @@ class PluginModelBase(Model):
 
     def get_scheduled_assignee(self) -> UUID:
         return self.get_assignment()
+
+    def get_initial_assignee(self, started_by: str | None = None) -> UUID | None:
+        try:
+            investigation_assignee = self.get_scheduled_assignee()
+            if investigation_assignee:
+                return investigation_assignee
+        except Model.DoesNotExist:
+            pass
+
+        if not started_by:
+            return None
+
+        trigger_user = User.exists_by_name(started_by)
+        return trigger_user.id if trigger_user else None
 
     def _legacy_get_scheduled_assignee(self, associated_test: ArgusTest, associated_release: ArgusRelease) -> UUID:
         """
