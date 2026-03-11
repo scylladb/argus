@@ -23,7 +23,7 @@
         issueAttach: (url: string) => void,
         eventFilterString: string,
     }
-    let { event, run, duplicateIdShowTable = $bindable(), eventMap = $bindable(), focusDuplicate, issues = $bindable(), refreshIssues, filterState, innerEvents, options, issueAttach, filterString = $bindable(), eventFilterString = $bindable()}: Props = $props();
+    let { event, run, duplicateIdShowTable = $bindable(), eventMap, focusDuplicate, issues = $bindable(), refreshIssues, filterState, innerEvents, options, issueAttach, filterString = $bindable(), eventFilterString = $bindable()}: Props = $props();
 
     let hasErrors = $derived(innerEvents.filter((evt: TimelineEvent) => [SCTEventSeverity.CRITICAL, SCTEventSeverity.ERROR].includes((evt.event as SCTEvent).severity)).length > 0);
     let expandEvents = $derived(hasErrors);

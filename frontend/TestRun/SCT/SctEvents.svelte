@@ -111,9 +111,7 @@
 
     });
 
-    let eventMap: {[key: string]: SctEvent} = $state({
-
-    });
+    let eventMap: {[key: string]: SctEvent} = {};
 
     let eventFilterString = $state("");
     let nemesisFilterString = $state("");
@@ -174,6 +172,7 @@
 
     const focusDuplicate = function(event: SCTEvent) {
         let originalEvent;
+        console.log($state.snapshot(eventMap));
         if (originalEvent = eventMap[event.duplicate_id]) {
             originalEvent.highlight();
             let domNode = container?.querySelector(`div#sct-event-${event.duplicate_id}`);
@@ -332,7 +331,7 @@
             {:else if event.type == TimelineEventType.Nemesis}
                 {#if event.innerEvents.filter((e) => [SCTEventSeverity.CRITICAL, SCTEventSeverity.ERROR].includes((e.event as SCTEvent).severity)).length > 0 || nemesisFilter[event.event.status]}
                     <div class="mb-2">
-                        <SctNemesis {refreshIssues} bind:issues {focusDuplicate} bind:eventMap bind:duplicateIdShowTable event={(event.event as NemesisInfo)}  run={testRun} filterState={severityFilter} innerEvents={event.innerEvents} options={event.opts || {}} bind:filterString={nemesisFilterString}  issueAttach={issueAttach} bind:eventFilterString/>
+                        <SctNemesis {refreshIssues} bind:issues {focusDuplicate} {eventMap} bind:duplicateIdShowTable event={(event.event as NemesisInfo)}  run={testRun} filterState={severityFilter} innerEvents={event.innerEvents} options={event.opts || {}} bind:filterString={nemesisFilterString}  issueAttach={issueAttach} bind:eventFilterString/>
                     </div>
                 {/if}
             {/if}
