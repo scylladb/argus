@@ -1,9 +1,10 @@
 import logging
+from collections import defaultdict
 from uuid import UUID
 import json
 import re
 from argus.backend.db import ScyllaCluster
-from argus.backend.plugins.sct.testrun import SCTTestRun
+from argus.backend.plugins.sct.testrun import SCTNemesis, SCTTestRun
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.util.common import chunk, get_build_number
 from argus.backend.util.nemesis_map import get_nemesis_name
@@ -21,7 +22,6 @@ class GraphedStatsService:
             "start_time",
             "end_time",
             "id",
-            "nemesis_data",
             "investigation_status",
             "packages",
             "status"
@@ -39,7 +39,20 @@ class GraphedStatsService:
             except (json.JSONDecodeError, re.error) as e:
                 LOGGER.error(f"Error parsing filters: {e}")
 
-        for run in [row for row in rows if row["investigation_status"].lower() != "ignored"]:
+        filtered_rows = [row for row in rows if row["investigation_status"].lower() != "ignored"]
+
+        # Batch-fetch all nemesis rows for all run IDs to stay within the IN statement limit
+        nemeses_by_run: dict[UUID, list] = defaultdict(list)
+        if filtered_rows:
+            run_ids = [row["id"] for row in filtered_rows]
+            stmt = self.cluster.prepare(
+                f"SELECT run_id, name, start_time, end_time, status, stack_trace FROM {SCTNemesis.table_name()} WHERE run_id IN ?"
+            )
+            for batch in chunk(run_ids):
+                for nem in self.cluster.session.execute(stmt, [batch]):
+                    nemeses_by_run[nem["run_id"]].append(nem)
+
+        for run in filtered_rows:
             # Skip if build_id matches any filter pattern
             if filter_patterns and any(pattern.search(run["build_id"]) for pattern in filter_patterns):
                 continue
@@ -59,18 +72,19 @@ class GraphedStatsService:
                 "investigation_status": run["investigation_status"]
             })
 
-            if run["nemesis_data"]:
-                for nemesis in [n for n in run["nemesis_data"] if n.status in ("succeeded", "failed")]:
-                    release_data["nemesis_data"].append({
-                        "version": version,
-                        "name": get_nemesis_name(nemesis.name),
-                        "start_time": nemesis.start_time,
-                        "duration": nemesis.end_time - nemesis.start_time,
-                        "status": nemesis.status,
-                        "run_id": str(run["id"]),
-                        "stack_trace": nemesis.stack_trace,
-                        "build_id": run["build_id"]
-                    })
+            for nem in nemeses_by_run.get(run["id"], []):
+                if nem["status"] not in ("succeeded", "failed"):
+                    continue
+                release_data["nemesis_data"].append({
+                    "version": version,
+                    "name": get_nemesis_name(nem["name"]),
+                    "start_time": nem["start_time"],
+                    "duration": nem["end_time"] - nem["start_time"],
+                    "status": nem["status"],
+                    "run_id": str(run["id"]),
+                    "stack_trace": nem["stack_trace"],
+                    "build_id": run["build_id"]
+                })
 
         return release_data
 
