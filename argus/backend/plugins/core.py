@@ -20,8 +20,9 @@ from argus.backend.models.web import (
     ArgusScheduleAssignee,
     User,
 )
-from argus.backend.util.common import chunk
+from argus.backend.util.common import chunk, get_build_number
 from argus.common.enums import TestInvestigationStatus, TestStatus
+from argus.backend.service.jenkins_service import JenkinsService
 
 LOGGER = logging.getLogger(__name__)
 
@@ -89,7 +90,7 @@ class PluginModelBase(Model):
     def get_scheduled_assignee(self) -> UUID:
         return self.get_assignment()
 
-    def get_initial_assignee(self, started_by: str | None = None) -> UUID | None:
+    def get_assignee(self, started_by: str | None = None) -> UUID | None:
         try:
             investigation_assignee = self.get_scheduled_assignee()
             if investigation_assignee:
@@ -97,11 +98,40 @@ class PluginModelBase(Model):
         except Model.DoesNotExist:
             pass
 
-        if not started_by:
+        if started_by:
+            trigger_user = User.exists_by_name(started_by)
+            if trigger_user:
+                return trigger_user.id
+
+        jenkins_username = self._get_jenkins_requested_by_user()
+        if jenkins_username:
+            jenkins_user = User.exists_by_name(jenkins_username)
+            if jenkins_user:
+                return jenkins_user.id
+
+        return None
+
+    def _get_jenkins_requested_by_user(self) -> str | None:
+        build_job_url = getattr(self, "build_job_url", None)
+        build_id = getattr(self, "build_id", None)
+        if not build_job_url or not build_id:
             return None
 
-        trigger_user = User.exists_by_name(started_by)
-        return trigger_user.id if trigger_user else None
+        build_number = get_build_number(build_job_url)
+        if not build_number:
+            return None
+
+        try:
+            service = JenkinsService()
+            return service.get_requested_by_user(build_id=build_id, build_number=build_number)
+        except Exception:  # noqa: BLE001 – Jenkins may be unreachable; do not fail run submission
+            LOGGER.warning(
+                "Could not fetch REQUESTED_BY_USER from Jenkins for build %s #%s",
+                build_id,
+                build_number,
+                exc_info=True,
+            )
+            return None
 
     def _legacy_get_scheduled_assignee(self, associated_test: ArgusTest, associated_release: ArgusRelease) -> UUID:
         """

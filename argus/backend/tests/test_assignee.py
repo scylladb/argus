@@ -272,3 +272,147 @@ def test_investigation_assignee_takes_priority_over_triggerer(flask_client, fake
         schedule_assignee.delete()
         schedule_test.delete()
         schedule.delete()
+
+
+def test_run_assigned_via_jenkins_fallback_when_started_by_unknown(flask_client, fake_test):
+    """When started_by doesn't match any Argus user, fall back to REQUESTED_BY_USER from Jenkins."""
+    jenkins_user = User(
+        id=uuid.uuid4(),
+        username=f"jenkins_user_{uuid.uuid4().hex[:8]}",
+        full_name="Jenkins User",
+        email=f"jenkins_{uuid.uuid4().hex[:8]}@scylladb.com",
+        password="test_password",
+        roles=[UserRoles.User.value],
+    )
+    jenkins_user.save()
+
+    run_id = str(uuid.uuid4())
+    payload = {
+        "run_id": run_id,
+        "job_name": fake_test.build_system_id,
+        "job_url": f"http://example.com/job/{fake_test.build_system_id}/99/",
+        "started_by": "ghost_user_not_in_argus",
+        "commit_id": "aabbccdd",
+        "origin_url": "http://example.com/repo.git",
+        "branch_name": "main",
+        "sct_config": {"cluster_backend": "aws"},
+        "schema_version": "v8",
+    }
+
+    with patch(
+        "argus.backend.plugins.core.JenkinsService.get_requested_by_user",
+        return_value=jenkins_user.username,
+    ):
+        resp = flask_client.post(
+            "/api/v1/client/testrun/scylla-cluster-tests/submit",
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+    assert resp.status_code == 200, resp.json
+    assert resp.json["status"] == "ok"
+
+    run = SCTTestRun.get(id=run_id)
+    assert run.assignee == jenkins_user.id, "run should be assigned to the user returned by Jenkins REQUESTED_BY_USER"
+
+
+def test_run_unassigned_when_jenkins_fallback_returns_unknown_user(flask_client, fake_test):
+    """When REQUESTED_BY_USER from Jenkins doesn't match any Argus user either, leave the run unassigned."""
+    run_id = str(uuid.uuid4())
+    payload = {
+        "run_id": run_id,
+        "job_name": fake_test.build_system_id,
+        "job_url": f"http://example.com/job/{fake_test.build_system_id}/100/",
+        "started_by": "ghost_user_not_in_argus",
+        "commit_id": "11223344",
+        "origin_url": "http://example.com/repo.git",
+        "branch_name": "main",
+        "sct_config": {"cluster_backend": "aws"},
+        "schema_version": "v8",
+    }
+
+    with patch(
+        "argus.backend.plugins.core.JenkinsService.get_requested_by_user",
+        return_value="also_unknown_jenkins_user",
+    ):
+        resp = flask_client.post(
+            "/api/v1/client/testrun/scylla-cluster-tests/submit",
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+    assert resp.status_code == 200, resp.json
+    assert resp.json["status"] == "ok"
+
+    run = SCTTestRun.get(id=run_id)
+    assert run.assignee is None, "run should remain unassigned when Jenkins user is also not in Argus"
+
+
+def test_run_unassigned_when_jenkins_fallback_fails(flask_client, fake_test):
+    """When Jenkins is unreachable, silently fall through and leave the run unassigned."""
+    run_id = str(uuid.uuid4())
+    payload = {
+        "run_id": run_id,
+        "job_name": fake_test.build_system_id,
+        "job_url": f"http://example.com/job/{fake_test.build_system_id}/101/",
+        "started_by": "ghost_user_not_in_argus",
+        "commit_id": "deadbeef",
+        "origin_url": "http://example.com/repo.git",
+        "branch_name": "main",
+        "sct_config": {"cluster_backend": "aws"},
+        "schema_version": "v8",
+    }
+
+    with patch(
+        "argus.backend.plugins.core.JenkinsService",
+        side_effect=Exception("Jenkins unreachable"),
+    ):
+        resp = flask_client.post(
+            "/api/v1/client/testrun/scylla-cluster-tests/submit",
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+    assert resp.status_code == 200, resp.json
+    assert resp.json["status"] == "ok"
+
+    run = SCTTestRun.get(id=run_id)
+    assert run.assignee is None, "run should remain unassigned when Jenkins fallback raises"
+
+
+def test_started_by_takes_priority_over_jenkins_fallback(flask_client, fake_test):
+    """started_by should be used when it resolves to a known user; Jenkins is not queried."""
+    triggerer = User(
+        id=uuid.uuid4(),
+        username=f"real_triggerer_{uuid.uuid4().hex[:8]}",
+        full_name="Real Triggerer",
+        email=f"real_{uuid.uuid4().hex[:8]}@scylladb.com",
+        password="test_password",
+        roles=[UserRoles.User.value],
+    )
+    triggerer.save()
+
+    run_id = str(uuid.uuid4())
+    payload = {
+        "run_id": run_id,
+        "job_name": fake_test.build_system_id,
+        "job_url": f"http://example.com/job/{fake_test.build_system_id}/102/",
+        "started_by": triggerer.username,
+        "commit_id": "cafecafe",
+        "origin_url": "http://example.com/repo.git",
+        "branch_name": "main",
+        "sct_config": {"cluster_backend": "aws"},
+        "schema_version": "v8",
+    }
+
+    with patch(
+        "argus.backend.plugins.core.JenkinsService.get_requested_by_user",
+    ) as mock_jenkins:
+        resp = flask_client.post(
+            "/api/v1/client/testrun/scylla-cluster-tests/submit",
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+    assert resp.status_code == 200, resp.json
+    assert resp.json["status"] == "ok"
+
+    run = SCTTestRun.get(id=run_id)
+    assert run.assignee == triggerer.id, "run should be assigned to the started_by user"
+    mock_jenkins.assert_not_called()
