@@ -86,14 +86,11 @@ class SirenadaRun(PluginModelBase):
             run.id = request_data["run_id"]  # FIXME: Validate pls
             run.build_id = request_data["build_id"]
             run.start_time = datetime.utcnow()
-            run.assign_categories()
             run.build_job_url = request_data["build_job_url"]
+            run.assign_categories()
             run.region = request_data["region"]
             run.status = TestStatus.PASSED.value
-            try:
-                run.assignee = run.get_scheduled_assignee()
-            except Model.DoesNotExist:
-                run.assignee = None
+            run.assignee = run.get_assignee()
 
         for raw_case in request_data["results"]:
             case = SirenadaTest(**raw_case)
