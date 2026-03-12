@@ -2,7 +2,6 @@
     import { createEventDispatcher, onMount } from "svelte";
     import { fade } from "svelte/transition";
     import { sendMessage } from "../Stores/AlertStore";
-    import { extractBuildNumber } from "../Common/RunUtils";
     import { InvestigationStatusIcon, StatusBackgroundCSSClassMap } from "../Common/TestStatus";
     import { faChevronCircleDown, faChevronCircleUp } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
@@ -57,7 +56,7 @@
                     <div class="d-flex align-items-center">
                         {#each jobs.slice(0, 5) as job}
                             <div class="{StatusBackgroundCSSClassMap[job.status] ?? StatusBackgroundCSSClassMap.unknown} px-2 py-1 ms-1 rounded-start text-light">
-                                #{extractBuildNumber(job)}
+                                #{job.build_number}
                             </div>
                             <div class="bg-dark rounded-end me-1 px-2 py-1 text-light">
                                 <Fa icon={InvestigationStatusIcon[job.investigation_status]}/>

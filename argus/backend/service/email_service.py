@@ -9,7 +9,6 @@ from flask import render_template
 import humanize
 from argus.backend.plugins.sct.testrun import SCTEventSeverity, SCTTestRun
 from argus.backend.service.results_service import ResultsService
-from argus.backend.util.common import get_build_number
 from argus.backend.util.send_email import Attachment, Email
 from argus.common.email import RawAttachment, RawReportSendRequest, ReportSection, ReportSectionShortHand
 
@@ -61,7 +60,7 @@ class Header(Partial):
             **self._service_fields,
             "id": self.test_run.id,
             "build_id": self.test_run.build_id,
-            "build_number": get_build_number(self.test_run.build_job_url),
+            "build_number": self.test_run.build_number,
             "status": self.test_run.status,
         }
 
@@ -379,6 +378,6 @@ class EmailService:
                 partial = PARTIALS.get(section, PARTIALS["unsupported"])(section_type=section, test_run=run)
                 partials.append(partial.create_context({}))
         if request.title == "#auto":
-            request.title = f"[{run.status.upper()}] {run.build_id}#{get_build_number(run.build_job_url)}: {run.start_time.strftime("%d/%m/%Y %H:%M:%S")}"
+            request.title = f"[{run.status.upper()}] {run.build_id}#{run.build_number}: {run.start_time.strftime("%d/%m/%Y %H:%M:%S")}"
         request.sections = partials
         return render_template("email/base.html.j2", **asdict(request), run=run)

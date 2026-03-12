@@ -8,7 +8,6 @@
     import { titleCase } from "../Common/TextUtils";
     import { timestampToISODate } from "../Common/DateUtils";
     import TestRunsSelector from "./TestRunsSelector.svelte";
-    import { extractBuildNumber } from "../Common/RunUtils";
     import TestRunDispatcher from "./TestRunDispatcher.svelte";
     import { isPluginSupported } from "../Common/PluginDispatch";
     import { AVAILABLE_PLUGINS } from "../Common/PluginDispatch";
@@ -341,7 +340,7 @@
                 <div>{testInfo.test.name} ({testInfo.release.name}/{testInfo.group.name})</div>
             {#if runs.length > 0}
                 <div class="ms-auto flex-fill text-end">{timestampToISODate(runs[0].start_time)}</div>
-                <div class="mx-2">#{extractBuildNumber(runs[0])}</div>
+                <div class="mx-2">#{runs[0].build_number}</div>
             {/if}
                 <div class="btn-group">
                     {#if applicationCurrentUser.roles.some(v => ["ROLE_ADMIN", "ROLE_MANAGER"].includes(v)) || testInfo.release.name.includes("staging")}
@@ -373,7 +372,7 @@
     {#if cloneRequested}
         <JenkinsCloneModal
             buildId={testInfo.test.build_system_id}
-            buildNumber={runs.length > 0 ? extractBuildNumber(runs[0]) : -1}
+            buildNumber={runs.length > 0 ? runs[0].build_number : -1}
             pluginName={testInfo.test.plugin_name}
             testId={testInfo.test.id}
             releaseId={testInfo.release.id}
@@ -386,7 +385,7 @@
     {#if execRequested}
         <JenkinsBuildModal
             buildId={testInfo.test.build_system_id}
-            buildNumber={runs.length > 0 ? extractBuildNumber(runs[0]) : undefined}
+            buildNumber={runs.length > 0 ? runs[0].build_number : undefined}
             pluginName={testInfo.test.plugin_name}
             on:rebuildCancel={() => (execRequested = false)}
             on:rebuildComplete={() => (execRequested = false)}
@@ -451,7 +450,7 @@
                                     runId={run.id}
                                     {testInfo}
                                     tab={tab}
-                                    buildNumber={extractBuildNumber(run)}
+                                    buildNumber={run.build_number}
                                     on:closeRun={handleTestRunClose}
                                     on:investigationStatusChange
                                     on:runStatusChange={fetchTestRuns}
