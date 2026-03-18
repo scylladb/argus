@@ -139,7 +139,7 @@ class EventSimilarityProcessorV2:
                 ]
                 if len(dupe_embeddings) == 0:
                     return False
-                dupe_embedding = next((row for row, distance in dupe_embeddings if -0.1 < distance < 0.1), None)
+                dupe_embedding = next((row for row, distance in dupe_embeddings if -0.05 < distance < 0.05), None)
                 if not dupe_embedding:
                     return False
                 q = f"SELECT event_id FROM {SCTEvent.__table_name__} WHERE run_id = ? AND severity = ? AND ts = ?"
