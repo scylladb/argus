@@ -2,7 +2,7 @@
     import Fa from "svelte-fa";
     import type { NemesisInfo, SCTTestRun } from "../TestRun.svelte";
     import { SCTEventSeverity, type EventSeverityFilter, type Options, type SCTEvent, type TimelineEvent } from "./SctEvents.svelte";
-    import { faArrowDown, faArrowUp, faServer, faSpider, faTimeline } from "@fortawesome/free-solid-svg-icons";
+    import { faArrowDown, faArrowUp, faCheck, faServer, faSpider, faTimeline, faTimes } from "@fortawesome/free-solid-svg-icons";
     import { NemesisStatusBg, NemesisStatusFg } from "../../Common/TestStatus";
     import { timestampToISODate } from "../../Common/DateUtils";
     import SctEvent from "./SctEvent.svelte";
@@ -26,7 +26,8 @@
     let { event, run, duplicateIdShowTable = $bindable(), eventMap, focusDuplicate, issues = $bindable(), refreshIssues, filterState, innerEvents, options, issueAttach, filterString = $bindable(), eventFilterString = $bindable()}: Props = $props();
 
     let hasErrors = $derived(innerEvents.filter((evt: TimelineEvent) => [SCTEventSeverity.CRITICAL, SCTEventSeverity.ERROR].includes((evt.event as SCTEvent).severity)).length > 0);
-    let expandEvents = $derived(hasErrors);
+    let visibleEvents = $derived(innerEvents.map((evt: TimelineEvent) => !(evt.event as SCTEvent).duplicate_id || (duplicateIdShowTable[(evt.event as SCTEvent).duplicate_id])).some((v) => v));
+    let expandEvents = $derived(hasErrors && visibleEvents);
     let showTrace = $state(false);
 
     const shouldFilter = function (filterString: string) {
@@ -52,6 +53,9 @@
             <div class="ms-2 px-1 rounded {NemesisStatusBg[event.status as keyof typeof NemesisStatusBg]} {NemesisStatusFg[event.status as keyof typeof NemesisStatusFg]}">
                 {event.status.toLocaleUpperCase()}
             </div>
+            {#if event.stack_trace}
+                <div class="ms-2"><button class="btn btn-sm btn-primary" onclick={() => (showTrace = !showTrace)}><Fa icon={showTrace ? faCheck : faTimes} /> Show Trace</button></div>
+            {/if}
             {#if innerEvents.length > 0}
                 <div class="ms-2"><button class="btn btn-sm btn-primary" onclick={() => (expandEvents = !expandEvents)}><Fa icon={expandEvents ? faArrowUp : faArrowDown} /></button></div>
             {/if}
@@ -61,7 +65,7 @@
                 <Fa icon={faServer}/> {event.target_node.name} ({event.target_node.ip})
             </div>
         </div>
-        {#if event.stack_trace}
+        {#if event.stack_trace && showTrace}
             <div>
                 <pre class="font-monospace p-2 rounded m-1 bg-light-two" style="white-space: pre-wrap">{event.stack_trace}</pre>
             </div>
@@ -70,7 +74,7 @@
             <div class="rounded shadow bg-light-one p-2 collapse" class:show={expandEvents}>
                 {#each innerEvents as event}
                     <div class="mb-2">
-                        <SctEvent {focusDuplicate} bind:duplicateIdShowTable bind:this={eventMap[event.event.event_id]} {refreshIssues} issues={issues.filter((i) => i.event_id == (event.event as SCTEvent).event_id)} {run} event={(event.event as SCTEvent)} filterState={filterState} options={event.opts || {}} issueAttach={issueAttach} bind:filterString={eventFilterString}/>
+                        <SctEvent {focusDuplicate} bind:duplicateIdShowTable bind:this={eventMap[`${event.id}-${event.event.event_id}`]} {refreshIssues} issues={issues.filter((i) => i.event_id == (event.event as SCTEvent).event_id)} {run} event={(event.event as SCTEvent)} filterState={filterState} options={event.opts || {}} issueAttach={issueAttach} bind:filterString={eventFilterString}/>
                     </div>
                 {/each}
             </div>
