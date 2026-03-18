@@ -88,6 +88,7 @@
 
     let { testRun, nemeses, issueAttach }: Props = $props();
     let events: EventStore = $state({});
+    let eventDisplayMode: "classic" | "nemesis" = $state("classic");
     let refreshTimer: ReturnType<typeof setInterval> | undefined = $state();
     let eventCounters: Record<SeverityValueType, number> = $state(Object.fromEntries(Object.keys(SCTEventSeverity).map(s => [s, 0])));
     let severityFilter: EventSeverityFilter = $state({
@@ -171,13 +172,16 @@
     };
 
     const focusDuplicate = function(event: SCTEvent) {
-        let originalEvent;
-        console.log($state.snapshot(eventMap));
-        if (originalEvent = eventMap[event.duplicate_id]) {
-            originalEvent.highlight();
-            let domNode = container?.querySelector(`div#sct-event-${event.duplicate_id}`);
-            if (domNode) {
-                domNode.scrollIntoView({
+        let originalEvents = Object.entries(eventMap).filter(([key, _]) => key.includes(event.duplicate_id));
+        if (originalEvents.length > 0) {
+            originalEvents.forEach(([_, value]) => {
+                if (value) {
+                    value.highlight();
+                }
+            });
+            let domNodes = container?.querySelectorAll(`div.sct-event-${event.duplicate_id}`);
+            if (domNodes && domNodes.length > 0) {
+                domNodes[0].scrollIntoView({
                     behavior: "smooth",
                     block: "center",
                 });
@@ -246,11 +250,13 @@
     }
 
 
-    const createTimeline = function(nemeses: NemesisInfo[], events: EventStore) {
+    const createTimeline = function(nemeses: NemesisInfo[], events: EventStore, timelineMode: "nemesis" | "classic") {
         let sctEvents = Object
             .entries(events)
             .flatMap(([severity, events]) => events.map((event) => {return {severity, event}}))
             .map(({severity, event}) => new TimelineEvent(TimelineEventType.Event, event, Date.parse(event.ts), severity));
+
+        if (timelineMode === "classic") return [...sctEvents].sort((l, r) => l.ts - r.ts);
 
         let consumedEvents: TimelineEvent[] = [];
 
@@ -269,7 +275,7 @@
         return timeline;
     }
 
-    let timeline: TimelineEvent[] = $derived(createTimeline(nemeses, events));
+    let timeline: TimelineEvent[] = $derived(createTimeline(nemeses, events, eventDisplayMode));
 
     onMount(async () => {
         events = await fetchEvents(false, 10000);
@@ -294,12 +300,24 @@
 <div class="p-2">
     <div>
         <div class="d-flex align-items-center mb-2">
-            <div class="me-2 flex-fill">
+            <div class="flex-fill">
+                <select class="form-select" bind:value={eventDisplayMode}>
+                    <option value="nemesis">Nemesis Timeline</option>
+                    <option value="classic">Timeline</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    <div>
+        <div class="d-flex align-items-center mb-2">
+            <div class="flex-fill">
                 <input class="form-control" type="text" placeholder="Filter events..." bind:value={eventFilterString} />
             </div>
-            <div class="flex-fill">
-                <input class="form-control" type="text" placeholder="Filter nemeses..." bind:value={nemesisFilterString} />
-            </div>
+            {#if eventDisplayMode === "nemesis"}
+                <div class="ms-2 flex-fill">
+                    <input class="form-control" type="text" placeholder="Filter nemeses..." bind:value={nemesisFilterString} />
+                </div>
+            {/if}
         </div>
     </div>
     <div class="d-flex mb-2 justify-content-end align-items-center">
@@ -313,13 +331,15 @@
             </button>
         {/each}
     </div>
-    <div class="d-flex mb-2 justify-content-end align-items-ccenter">
-        {#each Object.values(NemesisStatuses) as nemesisStatus}
-            <button class="btn me-2 text-light {NemesisStatusBg[nemesisStatus]}" onclick={() => handleNemesisFilterClick(nemesisStatus)}>
-                <Fa icon={nemesisFilter[nemesisStatus as keyof typeof nemesisFilter] ? faCheck : faTimes}/> {nemesisStatus.toLocaleUpperCase()}
-            </button>
-        {/each}
-    </div>
+    {#if eventDisplayMode === "nemesis"}
+        <div class="d-flex mb-2 justify-content-end align-items-ccenter">
+            {#each Object.values(NemesisStatuses) as nemesisStatus}
+                <button class="btn me-2 text-light {NemesisStatusBg[nemesisStatus]}" onclick={() => handleNemesisFilterClick(nemesisStatus)}>
+                    <Fa icon={nemesisFilter[nemesisStatus as keyof typeof nemesisFilter] ? faCheck : faTimes}/> {nemesisStatus.toLocaleUpperCase()}
+                </button>
+            {/each}
+        </div>
+    {/if}
     <div bind:this={container} class="p-2 bg-light-one rounded" style="max-height: 1024px; overflow-y: scroll">
         {#each timeline as event}
             {#if event.type == TimelineEventType.Event}
@@ -329,7 +349,7 @@
                     </div>
                 {/if}
             {:else if event.type == TimelineEventType.Nemesis}
-                {#if event.innerEvents.filter((e) => [SCTEventSeverity.CRITICAL, SCTEventSeverity.ERROR].includes((e.event as SCTEvent).severity)).length > 0 || nemesisFilter[event.event.status]}
+                {#if event.innerEvents.filter((e) => [SCTEventSeverity.CRITICAL, SCTEventSeverity.ERROR].includes((e.event as SCTEvent).severity) && (!(e.event as SCTEvent).duplicate_id || duplicateIdShowTable[(e.event as SCTEvent).duplicate_id])).length > 0 || nemesisFilter[event.event.status]}
                     <div class="mb-2">
                         <SctNemesis {refreshIssues} bind:issues {focusDuplicate} {eventMap} bind:duplicateIdShowTable event={(event.event as NemesisInfo)}  run={testRun} filterState={severityFilter} innerEvents={event.innerEvents} options={event.opts || {}} bind:filterString={nemesisFilterString}  issueAttach={issueAttach} bind:eventFilterString/>
                     </div>

@@ -298,7 +298,7 @@
 
 {#if !shouldFilter(filterString)}
 <div class:highlight={highlighting}>
-    <div id="sct-event-{event.event_id}" class:d-none={shouldHideDuplicate(event)} class="ms-3 rounded overflow-hidden shadow-sm severity-border-{event.severity.toLowerCase()}">
+    <div class:d-none={shouldHideDuplicate(event)} class="sct-event-{event.event_id} ms-3 rounded overflow-hidden shadow-sm severity-border-{event.severity.toLowerCase()}">
         <div class:duplicate={isDuplicate(event)} class="border-bottom bg-titlebar text-light p-1">
             <div class="d-flex mb-1">
                 {#if isDuplicate(event)}
