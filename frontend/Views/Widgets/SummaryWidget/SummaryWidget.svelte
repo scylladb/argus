@@ -1,5 +1,8 @@
 <script lang="ts">
     import { run } from 'svelte/legacy';
+    import dayjs from "dayjs";
+    import customParseFormat from "dayjs/plugin/customParseFormat";
+    dayjs.extend(customParseFormat);
 
     import {onMount} from "svelte";
     import Fa from 'svelte-fa';
@@ -81,8 +84,9 @@
         versions = Object.keys(versioned_runs);
         versionItems = versions.map((version, index) => ({
             value: index,
-            label: formatVersion(version)
-        }));
+            label: formatVersion(version),
+            date: extractTimestamp(version)
+        })).sort((a, b) => a.date - b.date);
         selectedVersionItem = versionItems[versions.length - 1];
         await fetchRunResults(versions.length - 1);
     }
@@ -243,6 +247,17 @@
     function formatVersion(version) {
         const parts = version.split('-');
         return `${parts[0]} (${parts[1]}) - ${parts[2]}`;
+    }
+
+    function extractTimestamp(version: string) {
+        const parts = version.split('-');
+        if (parts.length < 2) return 0;
+        const [_, date, __] = parts;
+        const parsed = dayjs(date, "YYYYMMDD");
+        if (parsed.isValid()) {
+            return parsed.toDate().getTime();
+        }
+        return 0;
     }
 
     function toggleTest(testId) {
