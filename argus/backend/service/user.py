@@ -152,7 +152,7 @@ class UserService:
         return None
 
     def cf_login_or_register(self):
-        cf_access_jwt = request.headers.get("Cf-Access-Jwt-Assertion")
+        cf_access_jwt = request.headers.get("Cf-Access-Jwt-Assertion") or request.headers.get("CF_Authorization")
 
         if cf_access_jwt and "cf" in current_app.config.get("LOGIN_METHODS", []):
             try:
