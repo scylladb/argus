@@ -89,6 +89,7 @@ class JenkinsMonitor(ArgusTestsMonitor):
         r"^enterprise-20\d{2}\.\d+$",
         r"^siren-tests$",
         r"^releng-testing$",
+        r"^sct-github-PRs-scan$",
     ]
 
     def __init__(self) -> None:
@@ -180,7 +181,7 @@ class JenkinsMonitor(ArgusTestsMonitor):
                                 LOGGER.error("Unable to create test for build_id %s", job["fullname"], exc_info=True)
 
     def collect_groups_for_release(self, jobs):
-        groups = [folder for folder in jobs if "Folder" in folder["_class"]]
+        groups = [folder for folder in jobs if "Folder" in folder["_class"] or "WorkflowMultiBranchProject" in folder["_class"]]
         groups = [group for group in groups if self.check_filter(group["name"])]
 
         return groups
