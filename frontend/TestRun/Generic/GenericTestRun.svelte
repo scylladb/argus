@@ -145,132 +145,77 @@
                     }}/>
                 </div>
             </div>
-            <nav>
-                <div class="nav nav-tabs" id="nav-tab-{runId}" role="tablist">
-                    <button
-                            class="nav-link"
-                            class:active={activeTab === 'details'}
-                            id="nav-details-tab-{runId}"
-                            data-bs-toggle="tab"
-                            data-bs-target="#nav-details-{runId}"
-                            type="button"
-                            role="tab"
-                            onclick={() => setActiveTab("details")}
-                            onkeydown={(e) => e.key === "Enter" && setActiveTab("details")}
-                    ><i class="fas fa-info-circle"></i> Details
+            <div class="argus-tab-bar" role="tablist">
+                    <button class="argus-tab" class:active={activeTab === 'details'} type="button" role="tab" onclick={() => setActiveTab("details")}>
+                        <i class="fas fa-info-circle"></i> Details
                     </button>
                     {#if testRun.sub_type}
                         {#each Object.entries(subtests.Cases) as [key, value]}
                             {#if value === testRun.sub_type}
-                                {@const SvelteComponent = subtests.Tabs[value]}
-                                <SvelteComponent
-                                        on:tab-switched={(ev) => setActiveTab(ev.detail.tab)} {runId}
-                                />
+                                {@const meta = subtests.TabMeta[value]}
+                                <button class="argus-tab" class:active={activeTab === value} type="button" role="tab" onclick={() => setActiveTab(value)}>
+                                    <i class="fas fa-eye"></i> {meta.label}
+                                </button>
                             {/if}
                         {/each}
                     {/if}
-                    <button
-                            class="nav-link"
-                            class:active={activeTab === 'discuss'}
-                            id="nav-discuss-tab-{runId}"
-                            data-bs-toggle="tab"
-                            data-bs-target="#nav-discuss-{runId}"
-                            type="button"
-                            onclick={() => setActiveTab("discuss")}
-                            onkeydown={(e) => e.key === "Enter" && setActiveTab("discuss")}
-                            role="tab"
-                    ><i class="fas fa-comments"></i> Discussion
-                    </button
-                    >
-                    <button
-                            class="nav-link"
-                            class:active={activeTab === 'issues'}
-                            id="nav-issues-tab-{runId}"
-                            data-bs-toggle="tab"
-                            data-bs-target="#nav-issues-{runId}"
-                            type="button"
-                            role="tab"
-                            onclick={() => setActiveTab("issues")}
-                            onkeydown={(e) => e.key === "Enter" && setActiveTab("issues")}
-                    ><i class="fas fa-code-branch"></i> Issues
-                    </button
-                    >
-                    <button
-                            class="nav-link"
-                            class:active={activeTab === 'activity'}
-                            id="nav-activity-tab-{runId}"
-                            data-bs-toggle="tab"
-                            data-bs-target="#nav-activity-{runId}"
-                            type="button"
-                            onclick={() => setActiveTab("activity")}
-                            onkeydown={(e) => e.key === "Enter" && setActiveTab("activity")}
-                            role="tab"
-                    ><i class="fas fa-exclamation-triangle"></i> Activity
-                    </button
-                    >
+                    <button class="argus-tab" class:active={activeTab === 'discuss'} type="button" role="tab" onclick={() => setActiveTab("discuss")}>
+                        <i class="fas fa-comments"></i> Discussion
+                    </button>
+                    <button class="argus-tab" class:active={activeTab === 'issues'} type="button" role="tab" onclick={() => setActiveTab("issues")}>
+                        <i class="fas fa-code-branch"></i> Issues
+                    </button>
+                    <button class="argus-tab" class:active={activeTab === 'activity'} type="button" role="tab" onclick={() => setActiveTab("activity")}>
+                        <i class="fas fa-exclamation-triangle"></i> Activity
+                    </button>
                 </div>
-            </nav>
+                <div class="argus-tab-select">
+                    <select onchange={(e) => setActiveTab(e.currentTarget.value)} value={activeTab}>
+                        <option value="details">Details</option>
+                        {#if testRun.sub_type}
+                            {#each Object.entries(subtests.Cases) as [key, value]}
+                                {#if value === testRun.sub_type}
+                                    {@const meta = subtests.TabMeta[value]}
+                                    <option value={value}>{meta.label}</option>
+                                {/if}
+                            {/each}
+                        {/if}
+                        <option value="discuss">Discussion</option>
+                        <option value="issues">Issues</option>
+                        <option value="activity">Activity</option>
+                    </select>
+                </div>
             <div
-                    class="tab-content border-start border-end border-bottom bg-white"
+                    class="argus-tab-content"
                     id="nav-tabContent-{runId}"
             >
-                <div
-                        class="tab-pane fade"
-                        class:show={activeTab === 'details'}
-                        class:active={activeTab === 'details'}
-                        id="nav-details-{runId}"
-                        role="tabpanel"
-                >
+                <div role="tabpanel" style:display={activeTab === 'details' ? "block" : "none"}>
                     <GenericTestRunInfo test_run={testRun} release={testInfo.release} group={testInfo.group}
                                         test={testInfo.test}/>
                 </div>
                 {#if testRun.sub_type}
                         {#each Object.entries(subtests.Cases) as [key, value]}
-                            {#if value === testRun.sub_type && activeTab === value}
+                            {#if value === testRun.sub_type}
                                 {@const SvelteComponent_1 = subtests.TabBody[value]}
-                                <div
-                                        class="tab-pane fade"
-                                        class:show={activeTab === testRun.sub_type}
-                                        class:active={activeTab === testRun.sub_type}
-                                        id="nav-discuss-{runId}"
-                                        role="tabpanel"
-                                >
+                                <div role="tabpanel" style:display={activeTab === value ? "block" : "none"}>
                                         <SvelteComponent_1 {runId}/>
                                 </div>
                             {/if}
                         {/each}
                 {/if}
-                <div
-                        class="tab-pane fade"
-                        class:show={activeTab === 'discuss'}
-                        class:active={activeTab === 'discuss'}
-                        id="nav-discuss-{runId}"
-                        role="tabpanel"
-                >
+                <div role="tabpanel" style:display={activeTab === 'discuss' ? "block" : "none"}>
                     {#if visitedTabs['discuss']}
                         <TestRunComments {testRun} {testInfo}/>
                     {/if}
                 </div>
-                <div
-                        class="tab-pane fade"
-                        class:show={activeTab === 'issues'}
-                        class:active={activeTab === 'issues'}
-                        id="nav-issues-{runId}"
-                        role="tabpanel"
-                >
+                <div role="tabpanel" style:display={activeTab === 'issues' ? "block" : "none"}>
                     <div class="py-2 bg-white">
                         {#if visitedTabs['issues']}
                             <IssueTab {testInfo} {runId}/>
                         {/if}
                     </div>
                 </div>
-                <div
-                        class="tab-pane fade"
-                        class:show={activeTab === 'activity'}
-                        class:active={activeTab === 'activity'}
-                        id="nav-activity-{runId}"
-                        role="tabpanel"
-                >
+                <div role="tabpanel" style:display={activeTab === 'activity' ? "block" : "none"}>
                     {#if visitedTabs['activity']}
                         <ActivityTab id={runId}/>
                     {/if}
