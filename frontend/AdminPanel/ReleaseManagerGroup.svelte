@@ -90,7 +90,7 @@
             editing = false;
         })}
     >
-        <div class="col-4 mt-6 bg-white rounded shadow-sm shadow-light p-2">
+        <div class="col-12 col-md-4 mt-6 bg-white rounded shadow-sm shadow-light p-2">
             <div class="fs-6 text-muted mb-2">
                 <span class="fw-bold">Argus Group Id</span>: {editedGroup.id}
             </div>

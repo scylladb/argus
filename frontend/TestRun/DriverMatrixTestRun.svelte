@@ -101,21 +101,21 @@
 
 <div class="border rounded shadow-sm testrun-card mb-4 top-bar">
     <div class="d-flex px-2 py-2 mb-1 border-bottom bg-white ">
-        <div class="p-1">
+        <div class="p-1 min-width-0 text-truncate">
             {#if testRun}
                 <a class="link-dark" href="/tests/{testInfo.test.plugin_name}/{testRun.id}">
                     {testRun.build_id}#{buildNumber}
                 </a>
             {/if}
         </div>
-        <div class="ms-auto text-end">
+        <div class="ms-auto text-end flex-shrink-0">
             <button class="btn btn-sm btn-outline-dark" title="Refresh" onclick={() => {
                 fetchTestRunData();
             }}
                 ><Fa icon={faRefresh} /></button
             >
         </div>
-        <div class="ms-2 text-end">
+        <div class="ms-2 text-end flex-shrink-0">
             <button class="btn btn-sm btn-outline-dark" title="Close" onclick={() => {
                 dispatch("closeRun", { id: runId });
             }}
@@ -126,7 +126,7 @@
     {#if testRun}
         <div class="p-2">
             <div class="row p-2">
-                <div class="col-6">
+                <div class="col-12 col-md-6">
                     <div class="d-flex align-items-center">
                         <RunStatusButton {testRun} on:statusUpdate={(e) => {
                             testRun.status = e.detail.status;
@@ -138,7 +138,7 @@
                         }} />
                     </div>
                 </div>
-                <div class="col-6">
+                <div class="col-12 col-md-6">
                     <RunAssigneeSelector {testRun} on:assigneeUpdate={(e) => {
                         testRun.assignee = e.detail.assignee;
                     }} />

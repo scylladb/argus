@@ -13,7 +13,15 @@
     let validationState = "validationCompleted";
     let validated = $state(false);
     let validationMessage = $state("");
+    let innerWidth = $state(1024);
+    let smallScreen = $derived(innerWidth < 768);
     const dispatch = createEventDispatcher();
+
+    function handleKeyDown(event) {
+        if (event.key === "Escape") {
+            dispatch("configureCancel");
+        }
+    }
 
     const fetchOldJobSettings = async function() {
         try {
@@ -139,12 +147,13 @@
     onMount(fetchOldJobSettings);
 </script>
 
+<svelte:window bind:innerWidth onkeydown={handleKeyDown} />
 <div class="build-modal">
-    <div class="d-flex align-items-center justify-content-center p-4">
-        <div class="rounded bg-white p-4 h-50">
-            <div class="mb-2 d-flex border-bottom pb-2">
-                <h5>Configuring <span class="fw-bold">{testName}</span></h5>
-                <div class="ms-auto">
+    <div class="d-flex align-items-center justify-content-center p-2 p-md-4">
+        <div class="rounded bg-white p-3 p-md-4 {smallScreen ? 'modal-panel-mobile' : 'modal-panel'}">
+            <div class="mb-2 d-flex border-bottom pb-2 min-width-0">
+                <h5 class="text-truncate mb-0">Configuring <span class="fw-bold">{testName}</span></h5>
+                <div class="ms-auto flex-shrink-0">
                     <button
                         class="btn btn-close"
                         onclick={() => {
@@ -204,8 +213,14 @@
 </div>
 
 <style>
-    .h-50 {
+    .modal-panel {
         width: 50%;
+    }
+    .modal-panel-mobile {
+        width: 100%;
+    }
+    .min-width-0 {
+        min-width: 0;
     }
     .build-modal {
         position: fixed;
