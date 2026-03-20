@@ -220,7 +220,7 @@ div#notificationCounter {
     flex-wrap: wrap;
     gap: 0.35rem;
     padding: 0.5rem 0.5rem 0;
-    background-color: #fff;
+    background-color: transparent;
 }
 
 .argus-tab-bar .argus-tab {
@@ -253,7 +253,7 @@ div#notificationCounter {
 }
 
 .argus-tab-content {
-    background-color: #ededed;
+    background-color: #fff;
     border-radius: 0.375rem;
     box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
     padding: 0.5rem;
