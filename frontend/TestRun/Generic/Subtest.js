@@ -1,6 +1,4 @@
-import { PytestTab, PytestRun } from "../Pytest";
-import DtestTab from "../Pytest/DtestTab.svelte";
-import TestPyTab from "../Pytest/TestPyTab.svelte";
+import { PytestRun } from "../Pytest";
 
 export const Cases = {
     PYTEST: "pytest",
@@ -8,10 +6,10 @@ export const Cases = {
     TESTPY: "testpy",
 };
 
-export const Tabs = {
-    [Cases.PYTEST]: PytestTab,
-    [Cases.DTEST]: DtestTab,
-    [Cases.TESTPY]: TestPyTab,
+export const TabMeta = {
+    [Cases.PYTEST]: { key: Cases.PYTEST, label: "PyTest" },
+    [Cases.DTEST]: { key: Cases.DTEST, label: "DTest" },
+    [Cases.TESTPY]: { key: Cases.TESTPY, label: "test.py" },
 };
 
 export const TabBody = {
