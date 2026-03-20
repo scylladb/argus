@@ -84,4 +84,10 @@
     .mention-select:hover {
         color: black;
     }
+
+    @media (prefers-color-scheme: dark) {
+        .mention-select:hover {
+            color: #dee2e6;
+        }
+    }
 </style>

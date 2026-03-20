@@ -447,4 +447,23 @@
     .duplicate {
         background-color: #c8e3ef !important;
     }
+
+    @media (prefers-color-scheme: dark) {
+        .bg-titlebar {
+            background-color: #2b3035;
+            color: #dee2e6;
+        }
+
+        .bg-body {
+            background-color: #212529;
+        }
+
+        .duplicate {
+            background-color: #1a3a4a !important;
+        }
+
+        .duplicate-body {
+            background-color: #162d3a;
+        }
+    }
 </style>
