@@ -13,6 +13,8 @@
     import ViewListItem from "./ViewListItem.svelte";
     import ModalWindow from "../Common/ModalWindow.svelte";
 
+    let { enableManager, createCallback = () => {} } = $props();
+
     let allViews = $state([]);
 
     const VIEW_CREATE_TEMPLATE = {
@@ -41,6 +43,7 @@
 
 
     const fetchAllViews = async function() {
+        if (!enableManager) return;
         try {
             const response = await fetch("/api/v1/views/all");
 
@@ -189,6 +192,7 @@
             }
 
             resetForm();
+            createCallback(json.response);
             await fetchAllViews();
 
         } catch (error) {
@@ -499,14 +503,16 @@
             </div>
         </div>
     </div>
-    <div class="rounded p-2 m-2 shadow-sm">
-        All Views
-        <div>
-            {#each allViews as view (view.id)}
-                <ViewListItem {view} on:viewUpdateRequested={handleViewUpdateRequest} on:delete={(e) => deleteView(e.detail)}/>
-            {:else}
-                <div>No views created.</div>
-            {/each}
+    {#if enableManager}
+        <div class="rounded p-2 m-2 shadow-sm">
+            All Views
+            <div>
+                {#each allViews as view (view.id)}
+                    <ViewListItem {view} on:viewUpdateRequested={handleViewUpdateRequest} on:delete={(e) => deleteView(e.detail)}/>
+                {:else}
+                    <div>No views created.</div>
+                {/each}
+            </div>
         </div>
-    </div>
+    {/if}
 </div>
