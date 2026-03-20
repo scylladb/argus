@@ -77,7 +77,7 @@
         </div>
     {/if}
     <div
-        class=" bg-light p-2 d-flex align-items-center"
+        class="comment-header bg-light p-2 d-flex align-items-center"
     >
         <div>
             <UserProfile user={getUser()} />
@@ -139,7 +139,7 @@
                 on:cancelEditing={() => (editing = false)}
             />
         {:else}
-            <div class="p-2 rounded bg-light">
+            <div class="p-2 rounded-bottom bg-light comment-body">
                 <div class="border rounded p-2 markdown-body">
                     {@html marked.parse(commentBody.message, markdownRendererOptions)}
                 </div>
@@ -205,5 +205,43 @@
     .bg-blur {
         background-color: #ffffff00;
         backdrop-filter: blur(4px);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .border-lightish {
+            border-color: #3a4a5c !important;
+        }
+
+        .bg-editor {
+            background-color: #1a1d21;
+        }
+
+        .bg-blur {
+            background-color: #21252900;
+        }
+
+        .comment-header {
+            background-color: #2f343a !important;
+            border-bottom: 1px solid #495057;
+        }
+
+        .comment-body :global(.markdown-body) {
+            background-color: #161b22;
+            color: #c9d1d9;
+        }
+
+        .comment-body :global(.markdown-body code),
+        .comment-body :global(.markdown-body tt) {
+            background-color: rgba(110, 118, 129, 0.3);
+            color: #e6edf3;
+        }
+
+        .comment-body :global(.markdown-body pre) {
+            background-color: #161b22;
+        }
+
+        .comment-body :global(.markdown-body pre code) {
+            background-color: transparent;
+        }
     }
 </style>
