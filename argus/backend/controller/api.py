@@ -588,6 +588,19 @@ def s3_generic_proxy(bucket_name: str, bucket_path: str):
     return redirect(result, code=302)
 
 
+@bp.route("/user/token", methods=["GET"])
+@api_login_required
+def user_token():
+    token = UserService().get_or_generate_token(user=g.user)
+
+    return {
+        "status": "ok",
+        "response": {
+            "token": token
+        }
+    }
+
+
 @bp.route("/user/jobs")
 @api_login_required
 def user_jobs():
