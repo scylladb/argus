@@ -12,9 +12,11 @@ from argus.backend.error_handlers import DataValidationError
 from argus.backend.models.pytest import PytestResultTable, PytestSubmitData, PytestUserField
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData
 from argus.backend.models.run_config import RunConfigParam, RunConfiguration
+from argus.backend.models.web import ArgusEvent, ArgusTestRunComment, ArgusTest, ArgusGroup, ArgusRelease
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.generic.model import GenericRun
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS
+from argus.backend.events.event_processors import EVENT_PROCESSORS
 from argus.backend.service.results_service import ResultsService, Cell
 from argus.common.enums import TestStatus
 
@@ -171,6 +173,64 @@ class ClientService:
         if result_failed:
             raise DataValidationError()
         return {"status": "ok", "message": "Results submitted"}
+
+    def get_run_info(self, run_id: str) -> dict:
+        """Search all plugin models for a test run by run_id and return full details.
+
+        Returns the test run itself, test info (test, group, release), comments, and activity.
+        """
+        run_uuid = UUID(run_id)
+        run = None
+        plugin_name = None
+
+        for name, plugin in AVAILABLE_PLUGINS.items():
+            model = plugin.model
+            try:
+                run = model.get(id=run_uuid)
+                plugin_name = name
+                break
+            except model.DoesNotExist:
+                continue
+
+        if not run:
+            raise ClientException(f"Test run {run_id} not found in any plugin model")
+
+        run_data = dict(run.items())
+
+        test_info = {}
+        if run.test_id:
+            try:
+                test = ArgusTest.get(id=run.test_id)
+                group = ArgusGroup.get(id=test.group_id)
+                release = ArgusRelease.get(id=test.release_id)
+                test_info = {
+                    "test": dict(test.items()),
+                    "group": dict(group.items()),
+                    "release": dict(release.items()),
+                }
+            except Exception:
+                LOGGER.warning("Failed to fetch test info for run %s (test_id=%s)", run_id, run.test_id)
+
+        comments = sorted(ArgusTestRunComment.filter(test_run_id=run_uuid).all(), key=lambda c: c.posted_at)
+        comments_data = [dict(c.items()) for c in comments]
+
+        all_events = sorted(ArgusEvent.filter(run_id=run_uuid).all(), key=lambda ev: ev.created_at)
+        activity = {
+            "run_id": run_uuid,
+            "raw_events": [dict(event.items()) for event in all_events],
+            "events": {
+                str(event.id): EVENT_PROCESSORS.get(event.kind)(json.loads(event.body))
+                for event in all_events
+            },
+        }
+
+        return {
+            "plugin_name": plugin_name,
+            "test_run": run_data,
+            "test_info": test_info,
+            "comments": comments_data,
+            "activity": activity,
+        }
 
     @staticmethod
     def get_config_property(name: str, value: Any | str, run_id: str = None) -> list[RunConfigParam]:
