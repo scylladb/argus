@@ -15,6 +15,16 @@ for plugin in AVAILABLE_PLUGINS.values():
         bp.register_blueprint(plugin.controller)
 
 
+@bp.route("/testrun/<string:run_id>/info", methods=["GET"])
+@api_login_required
+def get_run_info(run_id: str):
+    result = ClientService().get_run_info(run_id=run_id)
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
 @bp.route("/testrun/<string:run_type>/submit", methods=["POST"])
 @api_login_required
 def submit_run(run_type: str):
