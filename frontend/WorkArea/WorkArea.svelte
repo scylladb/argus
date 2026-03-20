@@ -59,8 +59,8 @@
     }}
 />
 
-<div class="container-fluid bg-lighter">
-    <div class="row p-4" id="dashboard-main">
+<div class="container-fluid px-md-3 bg-lighter">
+    <div class="row p-0 p-md-4" id="dashboard-main">
         <div
             class="col-md-3 p-0 py-4 me-3 border rounded shadow-sm bg-white"
             id="run-sidebar"
@@ -95,7 +95,7 @@
                 </div>
             {/await}
         </div>
-        <div class="col-md-8 col-sm-12 p-2 border rounded shadow-sm bg-main">
+        <div class="col-md-8 col-sm-12 p-0 p-md-2 border rounded shadow-sm bg-main" id="runs-panel">
             <TestRunsPanel
                 bind:testRuns={testRuns}
                 on:testRunRemove={onTestRunRemove}
@@ -114,6 +114,11 @@
     @media screen and (max-width: 768px) {
         #run-sidebar {
             display: none
+        }
+        #runs-panel {
+            border: none !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
         }
     }
 </style>

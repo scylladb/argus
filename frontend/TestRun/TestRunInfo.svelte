@@ -24,6 +24,8 @@
         group,
         test
     } = $props();
+    let innerWidth = $state(0);
+    let mobile = $derived(innerWidth < 768);
     let rebuildRequested = $state(false);
     let cloneRequested = $state(false);
     const dispatch = createEventDispatcher();
@@ -65,11 +67,13 @@
     });
 </script>
 
+<svelte:window bind:innerWidth={innerWidth} />
+
 <div class="container-fluid">
     <div class="row">
-        <div class="col-6 p-2">
+        <div class="col-12 col-md-6 p-2">
             <h5>Run Details</h5>
-            <ul class="list-unstyled border-start ps-2">
+            <ul class="list-unstyled border-start ps-2 text-break">
                 <li>
                     <span class="fw-bold">Release:</span>
                     {release?.name ?? "#NO_RELEASE"}
@@ -132,9 +136,9 @@
                 </li>
             </ul>
         </div>
-        <div class="col-6 p-2">
+        <div class="col-12 col-md-6 p-2">
             <h5>System Information</h5>
-            <ul class="list-unstyled border-start ps-2">
+            <ul class="list-unstyled border-start ps-2 text-break">
                 <li>
                     <span class="fw-bold">Backend:</span>
                     {test_run.cloud_setup?.backend ?? "Unknown"}
@@ -272,58 +276,118 @@
                     on:cloneComplete={(e) => {cloneRequested = false; dispatch("cloneComplete", { testId: e.detail.testId }); }}
                 />
             {/if}
-            <div class="btn-group">
-                {#if locateGrafanaNode()}
-                    <a
-                        target="_blank"
-                        href="http://{locateGrafanaNode().instance_info
-                        .public_ip}:3000/"
-                        class="btn btn-outline-warning">Open Grafana</a
-                    >
-                {/if}
-                {#if !InProgressStatuses.includes(test_run.status)}
-                    <a
-                        href="https://jenkins.scylladb.com/view/QA/job/QA-tools/job/hydra-show-monitor/parambuild/?test_id={test_run.id}"
-                        class="btn btn-outline-primary"
-                        target="_blank"
-                        aria-current="page"
-                        ><Fa icon={faSearch} /> Restore Monitoring Stack</a
-                    >
-                    <button class="btn btn-sm btn-outline-primary" onclick={() => (rebuildRequested = true)}
-                        ><Fa icon={faPlay} /> Rebuild</button
-                    >
-                    <button class="btn btn-sm btn-outline-primary" onclick={() => (cloneRequested = true)}
-                        ><Fa icon={faCopy} /> Clone</button
-                    >
-                    {#if navigator.clipboard}
-                        <button
-                            type="button"
-                            class="btn btn-outline-success"
-                            onclick={() => {
-                                navigator.clipboard.writeText(
-                                    cmd_hydraInvestigateShowMonitor
-                                );
-                                sendMessage("success", `\`${cmd_hydraInvestigateShowMonitor}\` has been copied to your clipboard`);
-                            }}><Fa icon={faCopy} /> Hydra Show Monitor</button
-                        >
-                        <button
-                            type="button"
-                            class="btn btn-outline-success"
-                            onclick={() => {
-                                navigator.clipboard.writeText(
-                                    cmd_hydraInvestigateShowLogs
-                                );
-                                sendMessage("success", `\`${cmd_hydraInvestigateShowLogs}\` has been copied to your clipboard`);
-                            }}><Fa icon={faCopy} /> Hydra Show Logs</button
+            {#if mobile}
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        Actions
+                    </button>
+                    <ul class="dropdown-menu">
+                        {#if locateGrafanaNode()}
+                            <li>
+                                <a
+                                    class="dropdown-item"
+                                    target="_blank"
+                                    href="http://{locateGrafanaNode().instance_info.public_ip}:3000/"
+                                ><Fa icon={faSearch} /> Open Grafana</a>
+                            </li>
+                        {/if}
+                        {#if !InProgressStatuses.includes(test_run.status)}
+                            <li>
+                                <a
+                                    class="dropdown-item"
+                                    href="https://jenkins.scylladb.com/view/QA/job/QA-tools/job/hydra-show-monitor/parambuild/?test_id={test_run.id}"
+                                    target="_blank"
+                                ><Fa icon={faSearch} /> Restore Monitoring Stack</a>
+                            </li>
+                            <li>
+                                <button class="dropdown-item" onclick={() => (rebuildRequested = true)}
+                                    ><Fa icon={faPlay} /> Rebuild</button>
+                            </li>
+                            <li>
+                                <button class="dropdown-item" onclick={() => (cloneRequested = true)}
+                                    ><Fa icon={faCopy} /> Clone</button>
+                            </li>
+                            {#if navigator.clipboard}
+                                <li>
+                                    <button
+                                        class="dropdown-item"
+                                        onclick={() => {
+                                            navigator.clipboard.writeText(cmd_hydraInvestigateShowMonitor);
+                                            sendMessage("success", `\`${cmd_hydraInvestigateShowMonitor}\` has been copied to your clipboard`);
+                                        }}><Fa icon={faCopy} /> Hydra Show Monitor</button>
+                                </li>
+                                <li>
+                                    <button
+                                        class="dropdown-item"
+                                        onclick={() => {
+                                            navigator.clipboard.writeText(cmd_hydraInvestigateShowLogs);
+                                            sendMessage("success", `\`${cmd_hydraInvestigateShowLogs}\` has been copied to your clipboard`);
+                                        }}><Fa icon={faCopy} /> Hydra Show Logs</button>
+                                </li>
+                            {/if}
+                        {/if}
+                        <li>
+                            <a
+                                class="dropdown-item"
+                                href="/dashboard/{release.name}"
+                            ><Fa icon={faBusinessTime} /> Release Dashboard</a>
+                        </li>
+                    </ul>
+                </div>
+            {:else}
+                <div class="btn-group">
+                    {#if locateGrafanaNode()}
+                        <a
+                            target="_blank"
+                            href="http://{locateGrafanaNode().instance_info
+                            .public_ip}:3000/"
+                            class="btn btn-outline-warning">Open Grafana</a
                         >
                     {/if}
-                {/if}
-                <a
-                    href="/dashboard/{release.name}"
-                    class="btn btn-outline-success"
-                    ><Fa icon={faBusinessTime} /> Release Dashboard</a
-                >
-            </div>
+                    {#if !InProgressStatuses.includes(test_run.status)}
+                        <a
+                            href="https://jenkins.scylladb.com/view/QA/job/QA-tools/job/hydra-show-monitor/parambuild/?test_id={test_run.id}"
+                            class="btn btn-outline-primary"
+                            target="_blank"
+                            aria-current="page"
+                            ><Fa icon={faSearch} /> Restore Monitoring Stack</a
+                        >
+                        <button class="btn btn-sm btn-outline-primary" onclick={() => (rebuildRequested = true)}
+                            ><Fa icon={faPlay} /> Rebuild</button
+                        >
+                        <button class="btn btn-sm btn-outline-primary" onclick={() => (cloneRequested = true)}
+                            ><Fa icon={faCopy} /> Clone</button
+                        >
+                        {#if navigator.clipboard}
+                            <button
+                                type="button"
+                                class="btn btn-outline-success"
+                                onclick={() => {
+                                    navigator.clipboard.writeText(
+                                        cmd_hydraInvestigateShowMonitor
+                                    );
+                                    sendMessage("success", `\`${cmd_hydraInvestigateShowMonitor}\` has been copied to your clipboard`);
+                                }}><Fa icon={faCopy} /> Hydra Show Monitor</button
+                            >
+                            <button
+                                type="button"
+                                class="btn btn-outline-success"
+                                onclick={() => {
+                                    navigator.clipboard.writeText(
+                                        cmd_hydraInvestigateShowLogs
+                                    );
+                                    sendMessage("success", `\`${cmd_hydraInvestigateShowLogs}\` has been copied to your clipboard`);
+                                }}><Fa icon={faCopy} /> Hydra Show Logs</button
+                            >
+                        {/if}
+                    {/if}
+                    <a
+                        href="/dashboard/{release.name}"
+                        class="btn btn-outline-success"
+                        ><Fa icon={faBusinessTime} /> Release Dashboard</a
+                    >
+                </div>
+            {/if}
         </div>
         {#if !navigator.clipboard}
         <div class="d-flex flex-column p-2">

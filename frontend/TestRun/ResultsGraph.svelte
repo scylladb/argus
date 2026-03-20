@@ -423,6 +423,15 @@
         position: relative;
     }
 
+    @media (max-width: 767.98px) {
+        .modal-content {
+            width: 100%;
+            height: 95%;
+            padding: 8px;
+            border-radius: 0;
+        }
+    }
+
     .close-btn {
         position: absolute;
         top: 10px;

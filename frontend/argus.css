@@ -285,6 +285,15 @@ div#notificationCounter {
     .argus-tab-select {
         display: block;
     }
+    #argus-header .navbar-nav .nav-link,
+    #argus-header .navbar-nav > .d-inline-flex {
+        padding: 0.6rem 1rem;
+    }
+    #argusMain,
+    #dashboard-body {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
 }
 
 /* ============================================================
