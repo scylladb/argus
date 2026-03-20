@@ -231,6 +231,11 @@ class UserService:
         user.save()
         return new_token
 
+    def get_or_generate_token(self, user: User) -> str:
+        if user.api_token:
+            return user.api_token
+        return self.generate_token(user)
+
     def update_email(self, user: User, new_email: str):
         if (existing := User.exists_by_email(new_email)) and existing.id != user.id:
             raise UserServiceException("This email is already taken.")
