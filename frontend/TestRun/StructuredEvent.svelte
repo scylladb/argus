@@ -103,6 +103,12 @@
     .bg-info-light {
         background-color: #e3f2fd !important;
     }
+
+    @media (prefers-color-scheme: dark) {
+        .bg-info-light {
+            background-color: #1a3a4a !important;
+        }
+    }
 </style>
     <div class="event-header d-flex align-items-start flex-wrap">
         <div class="ms-2 mb-2 bg-dark text-light rounded px-2">{event.eventType}</div>
@@ -341,6 +347,12 @@
 
     .date-column {
         width: 100px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .issue-link {
+            color: #dee2e6;
+        }
     }
 
     .btn-open {
