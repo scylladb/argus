@@ -1,16 +1,14 @@
 import GeminiTabBodyComponent from "./Gemini/GeminiTabBodyComponent.svelte";
-import GeminiTabComponent from "./Gemini/GeminiTabComponent.svelte";
 import PerformanceTabBodyComponent from "./Performance/PerformanceTabBodyComponent.svelte";
-import PerformanceTabComponent from "./Performance/PerformanceTabComponent.svelte";
 
 export const Subtests = {
     GEMINI: "gemini",
     PERFORMANCE: "performance",
 };
 
-export const SubtestTabComponents = {
-    [Subtests.GEMINI]: GeminiTabComponent,
-    [Subtests.PERFORMANCE]: PerformanceTabComponent,
+export const SubtestTabMeta = {
+    [Subtests.GEMINI]: { key: "gemini", label: "Gemini", faIcon: "faEye" },
+    [Subtests.PERFORMANCE]: { key: "performance", label: "Performance", faIcon: "faChartSimple" },
 };
 
 export const SubtestTabBodyComponents = {
