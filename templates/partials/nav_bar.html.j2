@@ -4,50 +4,55 @@
         <a class="navbar-brand" href="{{ url_for('main.run_dashboard')}}">
             <img src="/s/argus.png" alt="" width="64" height="64" class="d-inline-block align-text-middle">  Argus
         </a>
-        <div class="navbar-nav">
-            <a class="{% if request.path == url_for('main.run_dashboard')%}active{%endif%} nav-link" aria-current="page" href="{{ url_for('main.run_dashboard')}}"><i class="fas fa-tasks"></i> Workspace</a>
-            <a class="{% if request.path == url_for('main.releases')%}active{%endif%} nav-link" href="{{ url_for('main.releases')}}"><i class="fas fa-business-time"></i> Releases</a>
-            <a class="{% if request.path == url_for('main.views')%}active{%endif%} nav-link" href="{{ url_for('main.views')}}"><i class="far fa-object-group"></i> Views</a>
-            {% if g.user %}
-            <a class="{% if request.path == url_for('main.profile_jobs')%}active{%endif%} nav-link" href="{{ url_for('main.profile_jobs')}}"><i class="fas fa-archive"></i> My Jobs</a>
-            <a class="{% if request.path == url_for('main.notifications.index')%}active{%endif%} nav-link position-relative" href="{{ url_for('main.notifications.index') }}"><div class="position-absolute" id="notificationCounter"></div><i class="far fa-bell"></i> Notifications</a>
-                {% if g.user.is_admin() %}
-                    <a class="{% if request.path == url_for('admin.index')%}active{%endif%} nav-link" href="{{ url_for('admin.index')}}"><i class="fas fa-wrench"></i> Admin Area</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#argusNavCollapse" aria-controls="argusNavCollapse" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="argusNavCollapse">
+            <div class="navbar-nav ms-auto">
+                <a class="{% if request.path == url_for('main.run_dashboard')%}active{%endif%} nav-link" aria-current="page" href="{{ url_for('main.run_dashboard')}}"><i class="fas fa-tasks"></i> Workspace</a>
+                <a class="{% if request.path == url_for('main.releases')%}active{%endif%} nav-link" href="{{ url_for('main.releases')}}"><i class="fas fa-business-time"></i> Releases</a>
+                <a class="{% if request.path == url_for('main.views')%}active{%endif%} nav-link" href="{{ url_for('main.views')}}"><i class="far fa-object-group"></i> Views</a>
+                {% if g.user %}
+                <a class="{% if request.path == url_for('main.profile_jobs')%}active{%endif%} nav-link" href="{{ url_for('main.profile_jobs')}}"><i class="fas fa-archive"></i> My Jobs</a>
+                <a class="{% if request.path == url_for('main.notifications.index')%}active{%endif%} nav-link position-relative" href="{{ url_for('main.notifications.index') }}"><div class="position-absolute" id="notificationCounter"></div><i class="far fa-bell"></i> Notifications</a>
+                    {% if g.user.is_admin() %}
+                        <a class="{% if request.path == url_for('admin.index')%}active{%endif%} nav-link" href="{{ url_for('admin.index')}}"><i class="fas fa-wrench"></i> Admin Area</a>
+                    {% endif %}
+                <a class="{% if request.path == url_for('main.teams.index')%}active{%endif%} nav-link" href="{{ url_for('main.teams.index')}}"><i class="fas fa-users"></i> Teams</a>
+                {% if config["APP_DOC_LINK"] %}
+                <a class="nav-link" href="{{ config['APP_DOC_LINK'] }}" target="_blank"><i class="fas fa-book"></i> Docs</a>
                 {% endif %}
-            <a class="{% if request.path == url_for('main.teams.index')%}active{%endif%} nav-link" href="{{ url_for('main.teams.index')}}"><i class="fas fa-users"></i> Teams</a>
-            {% if config["APP_DOC_LINK"] %}
-            <a class="nav-link" href="{{ config['APP_DOC_LINK'] }}" target="_blank"><i class="fas fa-book"></i> Docs</a>
-            {% endif %}
-            <a class="{% if request.path == url_for('main.profile')%}active{%endif%} nav-link d-flex align-items-center" href="{{ url_for('main.profile')}}">
-            {% if g.user.picture_id %}
-            <img class="me-1" src="/storage/picture/{{ g.user.picture_id }}" style="height: 24px; border-radius: 50%" alt="">
-            {% else %}
-            <i class="fas fa-user"></i>
-            {% endif %}
-            {{g.user.username}}
-            </a>
-            <div class="d-inline-flex align-items-center">
-                {% if not session["original_user"] %}
-                <form action="{{ url_for('auth.logout')}}" method="post">
-                    <button class="btn btn-sm btn-danger me-2" type="submit">
-                        <i class="fas fa-sign-out-alt"></i> Logout
-                    </button>
-                </form>
+                <a class="{% if request.path == url_for('main.profile')%}active{%endif%} nav-link d-flex align-items-center" href="{{ url_for('main.profile')}}">
+                {% if g.user.picture_id %}
+                <img class="me-1" src="/storage/picture/{{ g.user.picture_id }}" style="height: 24px; border-radius: 50%" alt="">
+                {% else %}
+                <i class="fas fa-user"></i>
                 {% endif %}
-                {% if session["original_user"] %}
-                <form action="{{ url_for('auth.stop_impersonation')}}" method="post">
-                    <button type="submit" class="btn btn-sm btn-success">
-                        <i class="fas fa-sign-out-alt"></i> Return
-                    </button>
-                </form>
+                {{g.user.username}}
+                </a>
+                <div class="d-inline-flex align-items-center">
+                    {% if not session["original_user"] %}
+                    <form action="{{ url_for('auth.logout')}}" method="post">
+                        <button class="btn btn-sm btn-danger me-2" type="submit">
+                            <i class="fas fa-sign-out-alt"></i> Logout
+                        </button>
+                    </form>
+                    {% endif %}
+                    {% if session["original_user"] %}
+                    <form action="{{ url_for('auth.stop_impersonation')}}" method="post">
+                        <button type="submit" class="btn btn-sm btn-success">
+                            <i class="fas fa-sign-out-alt"></i> Return
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+                {% else %}
+                {% if config["APP_DOC_LINK"] %}
+                <a class="nav-link" href="{{ config['APP_DOC_LINK'] }}" target="_blank"><i class="fas fa-book"></i> Docs</a>
+                {% endif %}
+                <a href="{{ url_for('auth.login')}}" class="{% if request.path == url_for('auth.login')%}active{%endif%} nav-link"><i class="fas fa-sign-in-alt"></i> Login</a>
                 {% endif %}
             </div>
-            {% else %}
-            {% if config["APP_DOC_LINK"] %}
-            <a class="nav-link" href="{{ config['APP_DOC_LINK'] }}" target="_blank"><i class="fas fa-book"></i> Docs</a>
-            {% endif %}
-            <a href="{{ url_for('auth.login')}}" class="{% if request.path == url_for('auth.login')%}active{%endif%} nav-link"><i class="fas fa-sign-in-alt"></i> Login</a>
-            {% endif %}
         </div>
     </div>
 </nav>

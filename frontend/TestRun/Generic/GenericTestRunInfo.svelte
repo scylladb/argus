@@ -15,9 +15,9 @@
 
 <div class="container-fluid">
     <div class="row">
-        <div class="col-6 p-2">
+        <div class="col-12 col-md-6 p-2">
             <h5>Run Details</h5>
-            <ul class="list-unstyled border-start ps-2">
+            <ul class="list-unstyled border-start ps-2 text-break">
                 <li>
                     <span class="fw-bold">Release:</span>
                     {release?.name ?? "#NO_RELEASE"}
@@ -68,9 +68,9 @@
                 </li>
             </ul>
         </div>
-        <div class="col-6 p-2">
+        <div class="col-12 col-md-6 p-2">
             <h5>Build Info</h5>
-            <ul class="list-unstyled border-start ps-2">
+            <ul class="list-unstyled border-start ps-2 text-break">
                 <li>
                     <span class="fw-bold">Scylla Version:</span>
                     {test_run.scylla_version}
@@ -79,7 +79,7 @@
         </div>
     </div>
     <div class="row">
-        <div class="col-6 p-2">
+        <div class="col-12 col-md-6 p-2">
             <div class="btn-group">
                 <a
                     href="/dashboard/{release.name}"

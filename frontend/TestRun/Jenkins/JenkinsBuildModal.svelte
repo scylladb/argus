@@ -9,7 +9,15 @@
 
     let { buildId, buildNumber, pluginName } = $props();
     let currentState = $state("none");
+    let innerWidth = $state(1024);
+    let smallScreen = $derived(innerWidth < 768);
     const dispatch = createEventDispatcher();
+
+    function handleKeyDown(event) {
+        if (event.key === "Escape") {
+            dispatch("rebuildCancel");
+        }
+    }
 
     const STATES = {
         PARAM_FETCH: "param_fetch",
@@ -201,16 +209,17 @@
     const SvelteComponent = $derived(STATE_MACHINE[currentState].component);
 </script>
 
+<svelte:window bind:innerWidth onkeydown={handleKeyDown} />
 <div class="build-modal">
-    <div class="d-flex align-items-center justify-content-center p-4">
-        <div class="rounded bg-white p-4 h-50">
-            <div class="mb-2 d-flex border-bottom pb-2">
+    <div class="d-flex align-items-center justify-content-center p-2 p-md-4">
+        <div class="rounded bg-white p-3 p-md-4 {smallScreen ? 'modal-panel-mobile' : 'modal-panel'}">
+            <div class="mb-2 d-flex border-bottom pb-2 min-width-0">
                 {#if buildNumber}
-                    <h5>Rebuilding <span class="fw-bold">{buildId}#{buildNumber}</span></h5>
+                    <h5 class="text-truncate mb-0">Rebuilding <span class="fw-bold">{buildId}#{buildNumber}</span></h5>
                 {:else}
-                    <h5>Starting <span class="fw-bold">{buildId}</span></h5>
+                    <h5 class="text-truncate mb-0">Starting <span class="fw-bold">{buildId}</span></h5>
                 {/if}
-                <div class="ms-auto">
+                <div class="ms-auto flex-shrink-0">
                     <button
                         class="btn btn-close"
                         onclick={() => {
@@ -225,8 +234,14 @@
 </div>
 
 <style>
-    .h-50 {
+    .modal-panel {
         width: 50%;
+    }
+    .modal-panel-mobile {
+        width: 100%;
+    }
+    .min-width-0 {
+        min-width: 0;
     }
     .build-modal {
         position: fixed;

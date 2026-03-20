@@ -122,7 +122,7 @@
 </script>
 
 <div class="row mb-2 text-sm justify-content-end">
-    <div class="col-6">
+    <div class="col-12 col-md-6">
         {#if Object.keys(userSelect).length > 1}
             <div class="text-muted text-sm text-end mb-2">
                 Assignee
