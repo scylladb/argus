@@ -21,6 +21,7 @@ export default {
         workArea: "./frontend/work-area.js",
         adminPanel: "./frontend/admin-panel.js",
         releasePage: "./frontend/release-page.js",
+        viewsPage: "./frontend/views-page.js",
         testRunDetails: "./frontend/test-run-details.js",
         testRunsStandalone: "./frontend/test-runs-standalone.js",
         runByPlugin: "./frontend/run-by-plugin.js",
