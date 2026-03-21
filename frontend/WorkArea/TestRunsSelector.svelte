@@ -2,7 +2,6 @@
     import { createEventDispatcher, onMount } from "svelte";
     import Fa from "svelte-fa";
     import {faBan, faChartLine, faPlus, faRefresh, faTimes} from "@fortawesome/free-solid-svg-icons";
-    import { extractBuildNumber } from "../Common/RunUtils";
     import { StatusButtonCSSClassMap } from "../Common/TestStatus";
     import { Modal } from "bootstrap";
     import { sendMessage } from "../Stores/AlertStore";
@@ -80,7 +79,7 @@
                     type="button"
                     onclick={() => dispatch("runClick", { runId: run.id })}
                 >
-                    #{extractBuildNumber(run)}
+                    #{run.build_number}
                 </button>
                 {#if clickedTestRuns[run.id]}
                     <button

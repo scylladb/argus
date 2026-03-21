@@ -80,7 +80,7 @@ class TestRunService:
             return plugin.model.get_run_response(run_id)
 
     def get_runs_by_test_id(self, test_id: UUID, additional_runs: list[UUID], before: str | None, after: str | None, full: bool = False, limit: int = 10):
-        limited_fields = ["id", "test_id", "group_id", "release_id", "status", "start_time", "build_job_url", "build_id", "assignee", "end_time", "investigation_status", "heartbeat"]
+        limited_fields = ["id", "test_id", "group_id", "release_id", "status", "start_time", "build_number", "build_job_url", "build_id", "assignee", "end_time", "investigation_status", "heartbeat"]
         test: ArgusTest = ArgusTest.get(id=test_id)
         plugin = self.get_plugin(plugin_name=test.plugin_name)
         if not plugin:
@@ -109,13 +109,9 @@ class TestRunService:
                 except plugin.model.DoesNotExist:
                     pass
 
-
         last_runs = [dict(run.items()) for run in last_runs]
-        for row in last_runs:
-            row["build_number"] = get_build_number(build_job_url=row["build_job_url"])
-
         last_runs = sorted(last_runs, reverse=True, key=lambda run: (
-            run["build_number"], ComparableTestStatus(TestStatus(run["status"]))))
+            run["build_number"] or get_build_number(run["build_job_url"]), ComparableTestStatus(TestStatus(run["status"]))))
 
         return last_runs
 
@@ -319,7 +315,7 @@ class TestRunService:
                     "run_id": run.id,
                     "test_id": test.id,
                     "build_id": run.build_id,
-                    "build_number": get_build_number(run.build_job_url),
+                    "build_number": run.build_number,
                 }
             )
         return {
@@ -359,7 +355,7 @@ class TestRunService:
         comment.save()
 
         run: PluginModelBase = plugin.model.get(id=run_id)
-        build_number = get_build_number(build_job_url=run.build_job_url)
+        build_number = run.build_number
         for mention in mentions:
             params = {
                 "username": g.user.username,
@@ -441,9 +437,9 @@ class TestRunService:
             model_runs = []
             for run_id in run_ids:
                 model_runs.append(model.filter(id=run_id).only(
-                    ["build_id", "start_time", "build_job_url", "id", "test_id"]).get())
+                    ["build_id", "start_time", "build_job_url", "build_number", "id", "test_id"]).get())
             all_runs.update(
-                {str(run["id"]): {**run, "build_number": get_build_number(run["build_job_url"])} for run in model_runs})
+                {str(run["id"]): {**run} for run in model_runs})
 
         return all_runs
 

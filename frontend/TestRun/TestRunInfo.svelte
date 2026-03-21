@@ -12,7 +12,7 @@
     import { InProgressStatuses } from "../Common/TestStatus";
     import { timestampToISODate } from "../Common/DateUtils";
     import { getScyllaPackage, getKernelPackage, getUpgradedScyllaPackage,
-        getOperatorPackage, getOperatorHelmPackage, getOperatorHelmRepoPackage, extractBuildNumber,
+        getOperatorPackage, getOperatorHelmPackage, getOperatorHelmRepoPackage,
     } from "../Common/RunUtils";
     import JenkinsBuildModal from "./Jenkins/JenkinsBuildModal.svelte";
     import JenkinsCloneModal from "./Jenkins/JenkinsCloneModal.svelte";
@@ -253,7 +253,7 @@
             {#if rebuildRequested}
                 <JenkinsBuildModal
                     buildId={test_run.build_id}
-                    buildNumber={extractBuildNumber(test_run)}
+                    buildNumber={test_run.build_number}
                     pluginName={test.plugin_name}
                     on:rebuildCancel={() => (rebuildRequested = false)}
                     on:rebuildComplete={() => (rebuildRequested = false)}
@@ -262,7 +262,7 @@
             {#if cloneRequested}
                 <JenkinsCloneModal
                     buildId={test_run.build_id}
-                    buildNumber={extractBuildNumber(test_run)}
+                    buildNumber={test_run.build_number}
                     pluginName={test.plugin_name}
                     testId={test.id}
                     releaseId={release.id}
