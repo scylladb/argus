@@ -1,8 +1,43 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+        (function() {
+            var pref = localStorage.getItem("argus-theme");
+            function resolve(p) {
+                if (p === "light" || p === "dark") return p;
+                return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+            }
+            document.documentElement.setAttribute("data-bs-theme", resolve(pref));
+            window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function(e) {
+                if (!localStorage.getItem("argus-theme")) {
+                    document.documentElement.setAttribute("data-bs-theme", e.matches ? "dark" : "light");
+                    if (typeof updateThemeIcon === "function") updateThemeIcon();
+                }
+            });
+            window.applyTheme = function() {
+                var p = localStorage.getItem("argus-theme");
+                document.documentElement.setAttribute("data-bs-theme", resolve(p));
+                updateThemeIcon();
+            };
+            window.cycleTheme = function() {
+                var current = localStorage.getItem("argus-theme");
+                var next = current === null ? "light" : current === "light" ? "dark" : null;
+                if (next) { localStorage.setItem("argus-theme", next); }
+                else { localStorage.removeItem("argus-theme"); }
+                applyTheme();
+            };
+            window.updateThemeIcon = function() {
+                var p = localStorage.getItem("argus-theme");
+                var icon = document.getElementById("theme-icon");
+                var label = document.getElementById("theme-label");
+                if (icon) icon.className = "fas " + (p === null ? "fa-circle-half-stroke" : p === "light" ? "fa-sun" : "fa-moon");
+                if (label) label.textContent = p === null ? "Auto" : p === "light" ? "Light" : "Dark";
+            };
+        })();
+    </script>
     <title>Argus - {%block title%}{%endblock%}</title>
     <link rel="stylesheet" href="/s/dist/styles.css">
     <link rel="shortcut icon" href="/s/argus.png" type="image/png">

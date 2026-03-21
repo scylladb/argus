@@ -104,10 +104,8 @@
         background-color: #e3f2fd !important;
     }
 
-    @media (prefers-color-scheme: dark) {
-        .bg-info-light {
-            background-color: #1a3a4a !important;
-        }
+    :global([data-bs-theme="dark"]) .bg-info-light {
+        background-color: #1a3a4a !important;
     }
 </style>
     <div class="event-header d-flex align-items-start flex-wrap">
@@ -349,10 +347,8 @@
         width: 100px;
     }
 
-    @media (prefers-color-scheme: dark) {
-        .issue-link {
-            color: #dee2e6;
-        }
+    :global([data-bs-theme="dark"]) .issue-link {
+        color: #dee2e6;
     }
 
     .btn-open {
