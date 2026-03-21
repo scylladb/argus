@@ -85,9 +85,7 @@
         color: black;
     }
 
-    @media (prefers-color-scheme: dark) {
-        .mention-select:hover {
-            color: #dee2e6;
-        }
+    :global([data-bs-theme="dark"]) .mention-select:hover {
+        color: #dee2e6;
     }
 </style>

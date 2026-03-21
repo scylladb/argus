@@ -207,41 +207,39 @@
         backdrop-filter: blur(4px);
     }
 
-    @media (prefers-color-scheme: dark) {
-        .border-lightish {
-            border-color: #3a4a5c !important;
-        }
+    :global([data-bs-theme="dark"]) .border-lightish {
+        border-color: #3a4a5c !important;
+    }
 
-        .bg-editor {
-            background-color: #1a1d21;
-        }
+    :global([data-bs-theme="dark"]) .bg-editor {
+        background-color: #1a1d21;
+    }
 
-        .bg-blur {
-            background-color: #21252900;
-        }
+    :global([data-bs-theme="dark"]) .bg-blur {
+        background-color: #21252900;
+    }
 
-        .comment-header {
-            background-color: #2f343a !important;
-            border-bottom: 1px solid #495057;
-        }
+    :global([data-bs-theme="dark"]) .comment-header {
+        background-color: #2f343a !important;
+        border-bottom: 1px solid #495057;
+    }
 
-        .comment-body :global(.markdown-body) {
-            background-color: #161b22;
-            color: #c9d1d9;
-        }
+    :global([data-bs-theme="dark"]) .comment-body :global(.markdown-body) {
+        background-color: #161b22;
+        color: #c9d1d9;
+    }
 
-        .comment-body :global(.markdown-body code),
-        .comment-body :global(.markdown-body tt) {
-            background-color: rgba(110, 118, 129, 0.3);
-            color: #e6edf3;
-        }
+    :global([data-bs-theme="dark"]) .comment-body :global(.markdown-body code),
+    :global([data-bs-theme="dark"]) .comment-body :global(.markdown-body tt) {
+        background-color: rgba(110, 118, 129, 0.3);
+        color: #e6edf3;
+    }
 
-        .comment-body :global(.markdown-body pre) {
-            background-color: #161b22;
-        }
+    :global([data-bs-theme="dark"]) .comment-body :global(.markdown-body pre) {
+        background-color: #161b22;
+    }
 
-        .comment-body :global(.markdown-body pre code) {
-            background-color: transparent;
-        }
+    :global([data-bs-theme="dark"]) .comment-body :global(.markdown-body pre code) {
+        background-color: transparent;
     }
 </style>

@@ -184,16 +184,14 @@
     }
 
     /* Dark mode overrides */
-    @media (prefers-color-scheme: dark) {
-        .alert-console-panel {
-            background-color: #1e2126;
-            color: #dee2e6;
-        }
-        .alert-console-panel .btn-close {
-            filter: invert(1) grayscale(100%) brightness(200%);
-        }
-        .alert-console-panel .border-bottom {
-            border-color: #495057 !important;
-        }
+    :global([data-bs-theme="dark"]) .alert-console-panel {
+        background-color: #1e2126;
+        color: #dee2e6;
+    }
+    :global([data-bs-theme="dark"]) .alert-console-panel .btn-close {
+        filter: invert(1) grayscale(100%) brightness(200%);
+    }
+    :global([data-bs-theme="dark"]) .alert-console-panel .border-bottom {
+        border-color: #495057 !important;
     }
 </style>
