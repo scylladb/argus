@@ -246,9 +246,7 @@
         background-color: #f2f2f2;
     }
 
-    @media (prefers-color-scheme: dark) {
-        .bg-editor {
-            background-color: #1a1d21;
-        }
+    :global([data-bs-theme="dark"]) .bg-editor {
+        background-color: #1a1d21;
     }
 </style>

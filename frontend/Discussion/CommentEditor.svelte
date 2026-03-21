@@ -381,32 +381,30 @@
         color: #1f1f1f !important;
     }
 
-    @media (prefers-color-scheme: dark) {
-        .bg-editor {
-            background-color: #1a1d21;
-        }
+    :global([data-bs-theme="dark"]) .bg-editor {
+        background-color: #1a1d21;
+    }
 
-        .editor-icon {
-            color: #dee2e6 !important;
-        }
+    :global([data-bs-theme="dark"]) .editor-icon {
+        color: #dee2e6 !important;
+    }
 
-        .preview-body :global(.markdown-body) {
-            background-color: #161b22;
-            color: #c9d1d9;
-        }
+    :global([data-bs-theme="dark"]) .preview-body :global(.markdown-body) {
+        background-color: #161b22;
+        color: #c9d1d9;
+    }
 
-        .preview-body :global(.markdown-body code),
-        .preview-body :global(.markdown-body tt) {
-            background-color: rgba(110, 118, 129, 0.3);
-            color: #e6edf3;
-        }
+    :global([data-bs-theme="dark"]) .preview-body :global(.markdown-body code),
+    :global([data-bs-theme="dark"]) .preview-body :global(.markdown-body tt) {
+        background-color: rgba(110, 118, 129, 0.3);
+        color: #e6edf3;
+    }
 
-        .preview-body :global(.markdown-body pre) {
-            background-color: #161b22;
-        }
+    :global([data-bs-theme="dark"]) .preview-body :global(.markdown-body pre) {
+        background-color: #161b22;
+    }
 
-        .preview-body :global(.markdown-body pre code) {
-            background-color: transparent;
-        }
+    :global([data-bs-theme="dark"]) .preview-body :global(.markdown-body pre code) {
+        background-color: transparent;
     }
 </style>

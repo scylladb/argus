@@ -229,9 +229,7 @@
         overflow: hidden;
     }
 
-    @media (prefers-color-scheme: dark) {
-        .testrun-card {
-            background-color: #2b3035;
-        }
+    :global([data-bs-theme="dark"]) .testrun-card {
+        background-color: #2b3035;
     }
 </style>

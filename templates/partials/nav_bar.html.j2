@@ -40,17 +40,23 @@
                     {% endif %}
                     {% if session["original_user"] %}
                     <form action="{{ url_for('auth.stop_impersonation')}}" method="post">
-                        <button type="submit" class="btn btn-sm btn-success">
+                        <button type="submit" class="btn btn-sm btn-success me-2">
                             <i class="fas fa-sign-out-alt"></i> Return
                         </button>
                     </form>
                     {% endif %}
+                    <button id="theme-toggle" class="btn btn-sm btn-link text-light text-decoration-none" type="button" title="Toggle theme" aria-label="Toggle theme" onclick="cycleTheme()">
+                        <i id="theme-icon" class="fas fa-circle-half-stroke"></i> <span id="theme-label">Auto</span>
+                    </button>
                 </div>
                 {% else %}
                 {% if config["APP_DOC_LINK"] %}
                 <a class="nav-link" href="{{ config['APP_DOC_LINK'] }}" target="_blank"><i class="fas fa-book"></i> Docs</a>
                 {% endif %}
                 <a href="{{ url_for('auth.login')}}" class="{% if request.path == url_for('auth.login')%}active{%endif%} nav-link"><i class="fas fa-sign-in-alt"></i> Login</a>
+                <button id="theme-toggle" class="btn btn-sm btn-link text-light text-decoration-none ms-2" type="button" title="Toggle theme" aria-label="Toggle theme" onclick="cycleTheme()">
+                    <i id="theme-icon" class="fas fa-circle-half-stroke"></i> <span id="theme-label">Auto</span>
+                </button>
                 {% endif %}
             </div>
         </div>

@@ -20,10 +20,8 @@
         width: 60em;
     }
 
-    @media (prefers-color-scheme: dark) {
-        .stacktrace {
-            background-color: #1a1d21;
-            color: #dee2e6;
-        }
+    :global([data-bs-theme="dark"]) .stacktrace {
+        background-color: #1a1d21;
+        color: #dee2e6;
     }
 </style>

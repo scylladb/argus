@@ -297,14 +297,13 @@ div#notificationCounter {
 }
 
 /* ============================================================
-   Dark Mode - Browser Preference
+   Dark Mode - Attribute Toggle
    ============================================================ */
-@media (prefers-color-scheme: dark) {
+[data-bs-theme="dark"] {
     /* ----------------------------------------------------------
        Bootstrap 5 core CSS custom properties override
        ---------------------------------------------------------- */
-    :root,
-    [data-bs-theme="light"] {
+    & {
         --bs-body-color: #dee2e6;
         --bs-body-color-rgb: 222, 226, 230;
         --bs-body-bg: #1a1d21;
