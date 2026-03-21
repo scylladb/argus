@@ -63,15 +63,12 @@ class GenericRun(PluginModelBase):
         run = cls()
         run.start_time = datetime.utcnow()
         run.build_id = request_data["build_id"]
+        run.build_job_url = request_data["build_url"]
         run.started_by = request_data["started_by"]
         run.id = request_data["run_id"]
-        run.build_job_url = request_data["build_url"]
         run.sub_type = request_data.get("sub_type")
         run.assign_categories()
-        try:
-            run.assignee = run.get_scheduled_assignee()
-        except Model.DoesNotExist:
-            run.assignee = None
+        run.assignee = run.get_assignee(request_data.get("started_by"))
         if version := request_data.get("scylla_version"):
             run.submit_product_version(version)
         run.status = TestStatus.RUNNING.value
