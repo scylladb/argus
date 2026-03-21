@@ -447,4 +447,21 @@
     .duplicate {
         background-color: #c8e3ef !important;
     }
+
+    :global([data-bs-theme="dark"]) .bg-titlebar {
+        background-color: #2b3035;
+        color: #dee2e6;
+    }
+
+    :global([data-bs-theme="dark"]) .bg-body {
+        background-color: #212529;
+    }
+
+    :global([data-bs-theme="dark"]) .duplicate {
+        background-color: #1a3a4a !important;
+    }
+
+    :global([data-bs-theme="dark"]) .duplicate-body {
+        background-color: #162d3a;
+    }
 </style>

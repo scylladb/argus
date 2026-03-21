@@ -9,6 +9,8 @@
     import JenkinsBuildModal from "./Jenkins/JenkinsBuildModal.svelte";
     import JenkinsCloneModal from "./Jenkins/JenkinsCloneModal.svelte";
     let { testRun = {}, testInfo } = $props();
+    let innerWidth = $state(0);
+    let mobile = $derived(innerWidth < 768);
     let rebuildRequested = $state(false);
     let cloneRequested = $state(false);
     /**
@@ -33,11 +35,13 @@
     let env = parseEnvironmentBlock(testRun.environment_info ?? []);
 </script>
 
+<svelte:window bind:innerWidth={innerWidth} />
+
 <div class="container-fluid">
     <div class="row">
-        <div class="col-6 p-2">
+        <div class="col-12 col-md-6 p-2">
             <h5>Run Details</h5>
-            <ul class="list-unstyled border-start ps-2">
+            <ul class="list-unstyled border-start ps-2 text-break">
                 <li>
                     <span class="fw-bold">Release:</span>
                     {testInfo.release?.name ?? "#NO_RELEASE"}
@@ -84,8 +88,8 @@
                 </li>
             </ul>
         </div>
-        <div class="col-6 p-2">
-            <ul class="list-unstyled border-start ps-2">
+        <div class="col-12 col-md-6 p-2">
+            <ul class="list-unstyled border-start ps-2 text-break">
                 <li>
                     <span class="fw-bold">Product:</span>
                     {env["scylla-product"]}
@@ -120,20 +124,44 @@
                 on:cloneComplete={() => (cloneRequested = false)}
             />
         {/if}
-        <div class="col-6 p-2">
-            <div class="btn-group">
-                <button class="btn btn-sm btn-outline-primary" onclick={() => (rebuildRequested = true)}
-                    ><Fa icon={faPlay} /> Rebuild</button
-                >
-                <button class="btn btn-sm btn-outline-primary" onclick={() => (cloneRequested = true)}
-                    ><Fa icon={faCopy} /> Clone</button
-                >
-                <a
-                    href="/dashboard/{testInfo.release.name}"
-                    class="btn btn-outline-success"
-                    ><Fa icon={faBusinessTime} /> Release Dashboard</a
-                >
-            </div>
+        <div class="col-12 col-md-6 p-2">
+            {#if mobile}
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        Actions
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li>
+                            <button class="dropdown-item" onclick={() => (rebuildRequested = true)}
+                                ><Fa icon={faPlay} /> Rebuild</button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item" onclick={() => (cloneRequested = true)}
+                                ><Fa icon={faCopy} /> Clone</button>
+                        </li>
+                        <li>
+                            <a
+                                class="dropdown-item"
+                                href="/dashboard/{testInfo.release.name}"
+                            ><Fa icon={faBusinessTime} /> Release Dashboard</a>
+                        </li>
+                    </ul>
+                </div>
+            {:else}
+                <div class="btn-group">
+                    <button class="btn btn-sm btn-outline-primary" onclick={() => (rebuildRequested = true)}
+                        ><Fa icon={faPlay} /> Rebuild</button
+                    >
+                    <button class="btn btn-sm btn-outline-primary" onclick={() => (cloneRequested = true)}
+                        ><Fa icon={faCopy} /> Clone</button
+                    >
+                    <a
+                        href="/dashboard/{testInfo.release.name}"
+                        class="btn btn-outline-success"
+                        ><Fa icon={faBusinessTime} /> Release Dashboard</a
+                    >
+                </div>
+            {/if}
         </div>
     </div>
 </div>

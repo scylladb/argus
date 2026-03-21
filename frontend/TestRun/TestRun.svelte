@@ -122,11 +122,13 @@
     import Fa from "svelte-fa";
     import {
         faBox,
+        faChartSimple,
         faClipboard,
         faCloud,
         faCodeBranch,
         faComments,
         faExclamationTriangle,
+        faEye,
         faImages,
         faInfoCircle,
         faRefresh,
@@ -150,7 +152,7 @@
     import EventsTab from "./EventsTab.svelte";
     import ArtifactTab from "./ArtifactTab.svelte";
     import IssueTab, { submitIssue } from "./IssueTab.svelte";
-    import { SubtestTabBodyComponents, SubtestTabComponents, Subtests } from "./SCTSubTests/Subtest";
+    import { SubtestTabBodyComponents, SubtestTabMeta, Subtests } from "./SCTSubTests/Subtest";
     import PackagesInfo from "./PackagesInfo.svelte";
     import JUnitResults from "./jUnitResults.svelte";
     import ResultsTab from "./ResultsTab.svelte";
@@ -247,14 +249,14 @@
 
 <div class="border rounded shadow-sm testrun-card mb-4 top-bar">
     <div class="d-flex px-2 py-2 mb-1 border-bottom bg-white">
-        <div class="p-1">
+        <div class="p-1 min-width-0 text-truncate">
             {#if testRun}
                 <a class="link-dark" href="/tests/{testInfo.test.plugin_name}/{testRun.id}">
                     {testRun.build_id}#{buildNumber}
                 </a>
             {/if}
         </div>
-        <div class="ms-auto text-end">
+        <div class="ms-auto text-end flex-shrink-0">
             <button
                 class="btn btn-sm btn-outline-dark"
                 title="Refresh"
@@ -263,7 +265,7 @@
                 }}><Fa icon={faRefresh} /></button
             >
         </div>
-        <div class="ms-2 text-end">
+        <div class="ms-2 text-end flex-shrink-0">
             <button
                 class="btn btn-sm btn-outline-dark"
                 title="Close"
@@ -276,7 +278,7 @@
     {#if testRun}
         <div class="p-2">
             <div class="row p-2">
-                <div class="col-6">
+                <div class="col-12 col-md-6">
                     <div class="d-flex align-items-center">
                         <RunStatusButton
                             {testRun}
@@ -296,7 +298,7 @@
                         />
                     </div>
                 </div>
-                <div class="col-6">
+                <div class="col-12 col-md-6">
                     <RunAssigneeSelector
                         {testRun}
                         on:assigneeUpdate={(e) => {
@@ -307,206 +309,84 @@
                     <HeartbeatIndicator {testRun} />
                 </div>
             </div>
-            <nav>
-                <div class="nav nav-tabs" id="nav-tab-{runId}" role="tablist">
-                    <button
-                        class="nav-link"
-                        class:active={activeTab === "details"}
-                        id="nav-details-tab-{runId}"
-                        data-bs-toggle="tab"
-                        data-bs-target="#nav-details-{runId}"
-                        type="button"
-                        role="tab"
-                        onclick={() => setActiveTab("details")}
-                        onkeydown={(e) => e.key === "Enter" && setActiveTab("details")}
-                    >
+            <div class="argus-tab-bar" role="tablist">
+                    <button class="argus-tab" class:active={activeTab === "details"} type="button" role="tab" onclick={() => setActiveTab("details")}>
                         <Fa icon={faInfoCircle} /> Details
                     </button>
-                    <button
-                        class="nav-link"
-                        class:active={activeTab === "setup"}
-                        id="nav-setup-tab-{runId}"
-                        data-bs-toggle="tab"
-                        data-bs-target="#nav-setup-{runId}"
-                        type="button"
-                        role="tab"
-                        onclick={() => setActiveTab("setup")}
-                        onkeydown={(e) => e.key === "Enter" && setActiveTab("setup")}
-                    >
+                    <button class="argus-tab" class:active={activeTab === "setup"} type="button" role="tab" onclick={() => setActiveTab("setup")}>
                         <Fa icon={faCodeBranch} /> SCT Runtime
                     </button>
                     {#if testRun.subtest_name && Object.values(Subtests).includes(testRun.subtest_name)}
-                        {@const SvelteComponent = SubtestTabComponents[testRun.subtest_name]}
-                        <SvelteComponent {testRun} />
+                        {@const meta = SubtestTabMeta[testRun.subtest_name]}
+                        <button class="argus-tab" class:active={activeTab === meta.key} type="button" role="tab" onclick={() => setActiveTab(meta.key)}>
+                            <Fa icon={meta.faIcon === "faChartSimple" ? faChartSimple : faEye} /> {meta.label}
+                        </button>
                     {/if}
-                    <button
-                        class="nav-link"
-                        class:active={activeTab === "screenshots"}
-                        id="nav-screenshots-tab-{runId}"
-                        data-bs-toggle="tab"
-                        data-bs-target="#nav-screenshots-{runId}"
-                        type="button"
-                        role="tab"
-                        onclick={() => setActiveTab("screenshots")}
-                        onkeydown={(e) => e.key === "Enter" && setActiveTab("screenshots")}
-                    >
+                    <button class="argus-tab" class:active={activeTab === "screenshots"} type="button" role="tab" onclick={() => setActiveTab("screenshots")}>
                         <Fa icon={faImages} /> Screenshots
                     </button>
-                    <button
-                        class="nav-link"
-                        class:active={activeTab === "resources"}
-                        id="nav-resources-tab-{runId}"
-                        data-bs-toggle="tab"
-                        data-bs-target="#nav-resources-{runId}"
-                        type="button"
-                        role="tab"
-                        onclick={() => setActiveTab("resources")}
-                        onkeydown={(e) => e.key === "Enter" && setActiveTab("resources")}
-                    >
+                    <button class="argus-tab" class:active={activeTab === "resources"} type="button" role="tab" onclick={() => setActiveTab("resources")}>
                         <Fa icon={faCloud} /> Resources
                     </button>
-                    <button
-                        class="nav-link"
-                        class:active={activeTab === "packages"}
-                        id="nav-packages-tab-{runId}"
-                        data-bs-toggle="tab"
-                        data-bs-target="#nav-packages-{runId}"
-                        type="button"
-                        role="tab"
-                        onclick={() => setActiveTab("packages")}
-                        onkeydown={(e) => e.key === "Enter" && setActiveTab("packages")}
-                    >
+                    <button class="argus-tab" class:active={activeTab === "packages"} type="button" role="tab" onclick={() => setActiveTab("packages")}>
                         <Fa icon={faCodeBranch} /> Packages
                     </button>
                     {#if jUnitFetched && jUnitResults.length > 0}
-                        <button
-                            class="nav-link"
-                            class:active={activeTab === "junit"}
-                            id="nav-junit-tab-{runId}"
-                            data-bs-toggle="tab"
-                            data-bs-target="#nav-junit-{runId}"
-                            type="button"
-                            role="tab"
-                            onclick={() => setActiveTab("junit")}
-                            onkeydown={(e) => e.key === "Enter" && setActiveTab("junit")}
-                        >
+                        <button class="argus-tab" class:active={activeTab === "junit"} type="button" role="tab" onclick={() => setActiveTab("junit")}>
                             <Fa icon={faClipboard} /> Test Results
                         </button>
                     {/if}
-                    <button
-                        class="nav-link"
-                        class:active={activeTab === "results"}
-                        id="nav-results-tab-{runId}"
-                        data-bs-toggle="tab"
-                        data-bs-target="#nav-results-{runId}"
-                        type="button"
-                        role="tab"
-                        onclick={() => setActiveTab("results")}
-                        onkeydown={(e) => e.key === "Enter" && setActiveTab("results")}
-                    >
+                    <button class="argus-tab" class:active={activeTab === "results"} type="button" role="tab" onclick={() => setActiveTab("results")}>
                         <Fa icon={faTable} /> Results
                     </button>
-                    <button
-                        class="nav-link"
-                        class:active={activeTab === "events"}
-                        id="nav-events-tab-{runId}"
-                        data-bs-toggle="tab"
-                        data-bs-target="#nav-events-{runId}"
-                        type="button"
-                        role="tab"
-                        onclick={() => setActiveTab("events")}
-                        onkeydown={(e) => e.key === "Enter" && setActiveTab("events")}
-                    >
+                    <button class="argus-tab" class:active={activeTab === "events"} type="button" role="tab" onclick={() => setActiveTab("events")}>
                         <Fa icon={faRssSquare} /> Events
                     </button>
-                    <button
-                        class="nav-link"
-                        class:active={activeTab === "nemesis"}
-                        id="nav-nemesis-tab-{runId}"
-                        data-bs-toggle="tab"
-                        data-bs-target="#nav-nemesis-{runId}"
-                        type="button"
-                        role="tab"
-                        onclick={() => setActiveTab("nemesis")}
-                        onkeydown={(e) => e.key === "Enter" && setActiveTab("nemesis")}
-                    >
+                    <button class="argus-tab" class:active={activeTab === "nemesis"} type="button" role="tab" onclick={() => setActiveTab("nemesis")}>
                         <Fa icon={faSpider} /> Nemesis
                     </button>
-                    <button
-                        class="nav-link"
-                        class:active={activeTab === "logs"}
-                        id="nav-logs-tab-{runId}"
-                        data-bs-toggle="tab"
-                        data-bs-target="#nav-logs-{runId}"
-                        type="button"
-                        role="tab"
-                        onclick={() => setActiveTab("logs")}
-                        onkeydown={(e) => e.key === "Enter" && setActiveTab("logs")}
-                    >
+                    <button class="argus-tab" class:active={activeTab === "logs"} type="button" role="tab" onclick={() => setActiveTab("logs")}>
                         <Fa icon={faBox} /> Logs
                     </button>
-                    <button
-                        class="nav-link"
-                        class:active={activeTab === "discuss"}
-                        id="nav-discuss-tab-{runId}"
-                        data-bs-toggle="tab"
-                        data-bs-target="#nav-discuss-{runId}"
-                        type="button"
-                        role="tab"
-                        onclick={() => setActiveTab("discuss")}
-                        onkeydown={(e) => e.key === "Enter" && setActiveTab("discuss")}
-                    >
+                    <button class="argus-tab" class:active={activeTab === "discuss"} type="button" role="tab" onclick={() => setActiveTab("discuss")}>
                         <Fa icon={faComments} /> Discussion
                     </button>
-                    <button
-                        class="nav-link"
-                        class:active={activeTab === "issues"}
-                        id="nav-issues-tab-{runId}"
-                        data-bs-toggle="tab"
-                        data-bs-target="#nav-issues-{runId}"
-                        type="button"
-                        role="tab"
-                        onclick={() => setActiveTab("issues")}
-                        onkeydown={(e) => e.key === "Enter" && setActiveTab("issues")}
-                    >
+                    <button class="argus-tab" class:active={activeTab === "issues"} type="button" role="tab" onclick={() => setActiveTab("issues")}>
                         <Fa icon={faCodeBranch} /> Issues
                     </button>
-                    <button
-                        class="nav-link"
-                        class:active={activeTab === "activity"}
-                        id="nav-activity-tab-{runId}"
-                        data-bs-toggle="tab"
-                        data-bs-target="#nav-activity-{runId}"
-                        type="button"
-                        role="tab"
-                        onclick={() => setActiveTab("activity")}
-                        onkeydown={(e) => e.key === "Enter" && setActiveTab("activity")}
-                    >
+                    <button class="argus-tab" class:active={activeTab === "activity"} type="button" role="tab" onclick={() => setActiveTab("activity")}>
                         <Fa icon={faExclamationTriangle} /> Activity
                     </button>
-                    <button
-                        class="nav-link"
-                        class:active={activeTab === "sct-events"}
-                        id="nav-sct-events-tab-{runId}"
-                        data-bs-toggle="tab"
-                        data-bs-target="#nav-sct-events-{runId}"
-                        type="button"
-                        role="tab"
-                        onclick={() => setActiveTab("sct-events")}
-                        onkeydown={(e) => e.key === "Enter" && setActiveTab("sct-events")}
-                    >
+                    <button class="argus-tab" class:active={activeTab === "sct-events"} type="button" role="tab" onclick={() => setActiveTab("sct-events")}>
                         <Fa icon={faRssSquare} /> Events (Experimental)
                     </button>
                 </div>
-            </nav>
-            <div class="tab-content border-start border-end border-bottom bg-white" id="nav-tabContent-{runId}">
-                <div
-                    class="tab-pane fade"
-                    class:show={activeTab === "details"}
-                    class:active={activeTab === "details"}
-                    id="nav-details-{runId}"
-                    role="tabpanel"
-                >
+                <div class="argus-tab-select">
+                    <select onchange={(e) => setActiveTab(e.currentTarget.value)} value={activeTab}>
+                        <option value="details">Details</option>
+                        <option value="setup">SCT Runtime</option>
+                        {#if testRun.subtest_name && Object.values(Subtests).includes(testRun.subtest_name)}
+                            {@const meta = SubtestTabMeta[testRun.subtest_name]}
+                            <option value={meta.key}>{meta.label}</option>
+                        {/if}
+                        <option value="screenshots">Screenshots</option>
+                        <option value="resources">Resources</option>
+                        <option value="packages">Packages</option>
+                        {#if jUnitFetched && jUnitResults.length > 0}
+                            <option value="junit">Test Results</option>
+                        {/if}
+                        <option value="results">Results</option>
+                        <option value="events">Events</option>
+                        <option value="nemesis">Nemesis</option>
+                        <option value="logs">Logs</option>
+                        <option value="discuss">Discussion</option>
+                        <option value="issues">Issues</option>
+                        <option value="activity">Activity</option>
+                        <option value="sct-events">Events (Experimental)</option>
+                    </select>
+                </div>
+            <div class="argus-tab-content" id="nav-tabContent-{runId}">
+                <div role="tabpanel" style:display={activeTab === "details" ? "block" : "none"}>
                     <TestRunInfo
                         test_run={testRun}
                         release={testInfo.release}
@@ -515,13 +395,7 @@
                         on:cloneComplete
                     />
                 </div>
-                <div
-                    class="tab-pane fade"
-                    class:show={activeTab === "setup"}
-                    class:active={activeTab === "setup"}
-                    id="nav-setup-{runId}"
-                    role="tabpanel"
-                >
+                <div role="tabpanel" style:display={activeTab === "setup" ? "block" : "none"}>
                     {#if visitedTabs["setup"]}
                         <SctSetup {testRun} />
                         <SctConfig {testRun} />
@@ -529,24 +403,15 @@
                 </div>
                 {#if testRun.subtest_name && Object.values(Subtests).includes(testRun.subtest_name)}
                     {@const SubtestComponent = SubtestTabBodyComponents[testRun.subtest_name]}
-                    <SubtestComponent {testRun} />
+                    {@const meta = SubtestTabMeta[testRun.subtest_name]}
+                    <div role="tabpanel" style:display={activeTab === meta.key ? "block" : "none"}>
+                        <SubtestComponent {testRun} />
+                    </div>
                 {/if}
-                <div
-                    class="tab-pane fade"
-                    class:show={activeTab === "screenshots"}
-                    class:active={activeTab === "screenshots"}
-                    id="nav-screenshots-{runId}"
-                    role="tabpanel"
-                >
+                <div role="tabpanel" style:display={activeTab === "screenshots" ? "block" : "none"}>
                     <Screenshots {testInfo} runId={testRun.id} screenshots={testRun.screenshots} />
                 </div>
-                <div
-                    class="tab-pane fade"
-                    class:show={activeTab === "resources"}
-                    class:active={activeTab === "resources"}
-                    id="nav-resources-{runId}"
-                    role="tabpanel"
-                >
+                <div role="tabpanel" style:display={activeTab === "resources" ? "block" : "none"}>
                     <div class="p-2 overflow-scroll">
                         <ResourcesInfo
                             resources={testRun.allocated_resources}
@@ -555,111 +420,51 @@
                         />
                     </div>
                 </div>
-                <div
-                    class="tab-pane fade"
-                    class:show={activeTab === "packages"}
-                    class:active={activeTab === "packages"}
-                    id="nav-packages-{runId}"
-                    role="tabpanel"
-                >
+                <div role="tabpanel" style:display={activeTab === "packages" ? "block" : "none"}>
                     <div class="p-2 overflow-scroll">
                         <PackagesInfo packages={testRun.packages} />
                     </div>
                 </div>
-                <div
-                    class="tab-pane fade overflow-scroll"
-                    class:show={activeTab === "junit"}
-                    class:active={activeTab === "junit"}
-                    id="nav-junit-{runId}"
-                    role="tabpanel"
-                >
+                <div class="overflow-scroll" role="tabpanel" style:display={activeTab === "junit" ? "block" : "none"}>
                     {#if jUnitFetched}
                         <JUnitResults results={jUnitResults} />
                     {/if}
                 </div>
-                <div
-                    class="tab-pane fade"
-                    class:show={activeTab === "results"}
-                    class:active={activeTab === "results"}
-                    id="nav-results-{runId}"
-                    role="tabpanel"
-                >
+                <div role="tabpanel" style:display={activeTab === "results" ? "block" : "none"}>
                     {#if visitedTabs["results"]}
                         <ResultsTab id={runId} test_id={testInfo.test.id} />
                     {/if}
                 </div>
-                <div
-                    class="tab-pane fade"
-                    class:show={activeTab === "events"}
-                    class:active={activeTab === "events"}
-                    id="nav-events-{runId}"
-                    role="tabpanel"
-                >
+                <div role="tabpanel" style:display={activeTab === "events" ? "block" : "none"}>
                     {#if visitedTabs["events"]}
                         <EventsTab {testRun} on:issueAttach={(e) => submitIssue(e.detail.url, runId, testInfo.test.id)} />
                     {/if}
                 </div>
-                <div
-                    class="tab-pane fade"
-                    class:show={activeTab === "sct-events"}
-                    class:active={activeTab === "sct-events"}
-                    id="nav-sct-events-{runId}"
-                    role="tabpanel"
-                >
+                <div role="tabpanel" style:display={activeTab === "sct-events" ? "block" : "none"}>
                     {#if visitedTabs["sct-events"]}
                         <SctEvents {testRun} nemeses={testRun.nemesis_data} issueAttach={(url) => submitIssue(url, runId, testInfo.test.id)}/>
                     {/if}
                 </div>
-                <div
-                    class="tab-pane fade overflow-scroll"
-                    class:show={activeTab === "nemesis"}
-                    class:active={activeTab === "nemesis"}
-                    id="nav-nemesis-{runId}"
-                    role="tabpanel"
-                >
+                <div class="overflow-scroll" role="tabpanel" style:display={activeTab === "nemesis" ? "block" : "none"}>
                     <NemesisTable nemesisCollection={testRun.nemesis_data} resources={testRun.allocated_resources} />
                 </div>
-                <div
-                    class="tab-pane fade overflow-scroll"
-                    class:show={activeTab === "logs"}
-                    class:active={activeTab === "logs"}
-                    id="nav-logs-{runId}"
-                    role="tabpanel"
-                >
+                <div class="overflow-scroll" role="tabpanel" style:display={activeTab === "logs" ? "block" : "none"}>
                     {#if visitedTabs["logs"]}
                         <ArtifactTab {testRun} {testInfo} on:refreshRequest={fetchTestRunData} />
                     {/if}
                 </div>
-                <div
-                    class="tab-pane fade"
-                    class:show={activeTab === "discuss"}
-                    class:active={activeTab === "discuss"}
-                    id="nav-discuss-{runId}"
-                    role="tabpanel"
-                >
+                <div role="tabpanel" style:display={activeTab === "discuss" ? "block" : "none"}>
                     {#if visitedTabs["discuss"]}
                         <TestRunComments {testRun} {testInfo} />
                     {/if}
                 </div>
-                <div
-                    class="tab-pane fade"
-                    class:show={activeTab === "issues"}
-                    class:active={activeTab === "issues"}
-                    id="nav-issues-{runId}"
-                    role="tabpanel"
-                >
+                <div role="tabpanel" style:display={activeTab === "issues" ? "block" : "none"}>
                     <IssueTemplate test_run={testRun} test={testInfo.test} />
                     {#if visitedTabs["issues"]}
                         <IssueTab {testInfo} {runId} />
                     {/if}
                 </div>
-                <div
-                    class="tab-pane fade"
-                    class:show={activeTab === "activity"}
-                    class:active={activeTab === "activity"}
-                    id="nav-activity-{runId}"
-                    role="tabpanel"
-                >
+                <div role="tabpanel" style:display={activeTab === "activity" ? "block" : "none"}>
                     {#if visitedTabs["activity"]}
                         <ActivityTab id={runId} />
                     {/if}
@@ -683,5 +488,8 @@
     }
     .top-bar {
         overflow: hidden;
+    }
+    :global([data-bs-theme="dark"]) .testrun-card {
+        background-color: #2b3035;
     }
 </style>

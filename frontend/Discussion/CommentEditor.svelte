@@ -229,67 +229,67 @@
                         class="btn btn-sm btn-outline-dark ms-1"
                         onclick={() => performButtonAction("heading")}
                     >
-                        <Fa icon={faHeading} />
+                        <Fa icon={faHeading} class="editor-icon" />
                     </button>
                     <button
                         class="btn btn-sm btn-outline-dark ms-1"
                         onclick={() => performButtonAction("bold")}
                     >
-                        <Fa icon={faBold} />
+                        <Fa icon={faBold} class="editor-icon" />
                     </button>
                     <button
                         class="btn btn-sm btn-outline-dark ms-1"
                         onclick={() => performButtonAction("italic")}
                     >
-                        <Fa icon={faItalic} />
+                        <Fa icon={faItalic} class="editor-icon" />
                     </button>
                     <button
                         class="btn btn-sm btn-outline-dark ms-1"
                         onclick={() => performButtonAction("underline")}
                     >
-                        <Fa icon={faUnderline} />
+                        <Fa icon={faUnderline} class="editor-icon" />
                     </button>
                     <button
                         class="btn btn-sm btn-outline-dark ms-1"
                         onclick={() => performButtonAction("quote")}
                     >
-                        <Fa icon={faQuoteLeft} />
+                        <Fa icon={faQuoteLeft} class="editor-icon" />
                     </button>
                     <button
                         class="btn btn-sm btn-outline-dark ms-1"
                         onclick={() => performButtonAction("code")}
                     >
-                        <Fa icon={faCode} />
+                        <Fa icon={faCode} class="editor-icon" />
                     </button>
                     <button
                         class="btn btn-sm btn-outline-dark ms-1"
                         onclick={() => performButtonAction("link")}
                     >
-                        <Fa icon={faLink} />
+                        <Fa icon={faLink} class="editor-icon" />
                     </button>
                     <button
                         class="btn btn-sm btn-outline-dark ms-1"
                         onclick={() => performButtonAction("listOl")}
                     >
-                        <Fa icon={faListOl} />
+                        <Fa icon={faListOl} class="editor-icon" />
                     </button>
                     <button
                         class="btn btn-sm btn-outline-dark ms-1"
                         onclick={() => performButtonAction("listUl")}
                     >
-                        <Fa icon={faListUl} />
+                        <Fa icon={faListUl} class="editor-icon" />
                     </button>
                     <button
                         class="btn btn-sm btn-outline-dark ms-1"
                         onclick={() => performButtonAction("tasks")}
                     >
-                        <Fa icon={faTasks} />
+                        <Fa icon={faTasks} class="editor-icon" />
                     </button>
                     <button
                         class="btn btn-sm btn-outline-dark ms-1"
                         onclick={() => (mentioning = true)}
                     >
-                        <Fa icon={faAt} />
+                        <Fa icon={faAt} class="editor-icon" />
                         {#if mentioning}
                             <div class="position-absolute">
                                 <MentionSelector
@@ -330,7 +330,7 @@
             role="tabpanel"
         >
             {#if commentBody.message}
-                <div class="p-2 rounded bg-light">
+                <div class="p-2 rounded bg-light preview-body">
                     <div class="border rounded p-2 bg-white markdown-body">
                         {@html markdownParse(
                             commentBody.message,
@@ -376,5 +376,35 @@
 
     .fs-8 {
         font-size: 0.7em;
+    }
+    .editor-icon {
+        color: #1f1f1f !important;
+    }
+
+    :global([data-bs-theme="dark"]) .bg-editor {
+        background-color: #1a1d21;
+    }
+
+    :global([data-bs-theme="dark"]) .editor-icon {
+        color: #dee2e6 !important;
+    }
+
+    :global([data-bs-theme="dark"]) .preview-body :global(.markdown-body) {
+        background-color: #161b22;
+        color: #c9d1d9;
+    }
+
+    :global([data-bs-theme="dark"]) .preview-body :global(.markdown-body code),
+    :global([data-bs-theme="dark"]) .preview-body :global(.markdown-body tt) {
+        background-color: rgba(110, 118, 129, 0.3);
+        color: #e6edf3;
+    }
+
+    :global([data-bs-theme="dark"]) .preview-body :global(.markdown-body pre) {
+        background-color: #161b22;
+    }
+
+    :global([data-bs-theme="dark"]) .preview-body :global(.markdown-body pre code) {
+        background-color: transparent;
     }
 </style>

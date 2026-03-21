@@ -245,4 +245,8 @@
     .bg-editor {
         background-color: #f2f2f2;
     }
+
+    :global([data-bs-theme="dark"]) .bg-editor {
+        background-color: #1a1d21;
+    }
 </style>

@@ -138,6 +138,8 @@
     let cloneRequested = $state(false);
     let execRequested = $state(false);
     let open = $state(true);
+    let innerWidth = $state(window.innerWidth);
+    const smallScreen = $derived(innerWidth < 768);
     let pluginFixed = $state(false);
     let runsBody = $state(undefined);
     let clickedTestRuns = $state({});
@@ -314,7 +316,8 @@
     });
 </script>
 
-<div class:d-none={filtered} class="accordion-item border-none  bg-main mb-1">
+<svelte:window bind:innerWidth={innerWidth} />
+<div class:d-none={filtered} class="accordion-item border-none px-2 bg-main mb-1">
 {#if testInfo}
     <div
         class="border-none mb-2"
@@ -338,10 +341,10 @@
                     ></span
                 >
             {/if}
-                <div>{testInfo.test.name} ({testInfo.release.name}/{testInfo.group.name})</div>
+                <div class="text-truncate" style="min-width: 0;">{testInfo.test.name}{#if !smallScreen} ({testInfo.release.name}/{testInfo.group.name}){/if}</div>
             {#if runs.length > 0}
-                <div class="ms-auto flex-fill text-end">{timestampToISODate(runs[0].start_time)}</div>
-                <div class="mx-2">#{extractBuildNumber(runs[0])}</div>
+                {#if !smallScreen}<div class="ms-auto text-end text-nowrap">{timestampToISODate(runs[0].start_time)}</div>{/if}
+                <div class="mx-2" class:ms-auto={smallScreen}>#{extractBuildNumber(runs[0])}</div>
             {/if}
                 <div class="btn-group">
                     {#if applicationCurrentUser.roles.some(v => ["ROLE_ADMIN", "ROLE_MANAGER"].includes(v)) || testInfo.release.name.includes("staging")}

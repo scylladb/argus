@@ -102,21 +102,21 @@
 
 <div class="border rounded shadow-sm testrun-card mb-4 top-bar">
     <div class="d-flex px-2 py-2 mb-1 border-bottom bg-white ">
-        <div class="p-1">
+        <div class="p-1 min-width-0 text-truncate">
             {#if testRun}
                 <a class="link-dark" href="/tests/{testInfo.test.plugin_name}/{testRun.id}">
                     {testRun.build_id}#{buildNumber}
                 </a>
             {/if}
         </div>
-        <div class="ms-auto text-end">
+        <div class="ms-auto text-end flex-shrink-0">
             <button class="btn btn-sm btn-outline-dark" title="Refresh" onclick={() => {
                 fetchTestRunData();
             }}
                 ><Fa icon={faRefresh} /></button
             >
         </div>
-        <div class="ms-2 text-end">
+        <div class="ms-2 text-end flex-shrink-0">
             <button class="btn btn-sm btn-outline-dark" title="Close" onclick={() => {
                 dispatch("closeRun", { id: runId });
             }}
@@ -127,7 +127,7 @@
     {#if testRun}
         <div class="p-2">
             <div class="row p-2">
-                <div class="col-6">
+                <div class="col-12 col-md-6">
                     <div class="d-flex align-items-center">
                         <RunStatusButton {testRun} on:statusUpdate={(e) => {
                             testRun.status = e.detail.status;
@@ -139,116 +139,54 @@
                         }}/>
                     </div>
                 </div>
-                <div class="col-6">
+                <div class="col-12 col-md-6">
                     <RunAssigneeSelector {testRun} on:assigneeUpdate={(e) => {
                         testRun.assignee = e.detail.assignee;
                     }} />
                 </div>
             </div>
-            <nav>
-                <div class="nav nav-tabs" id="nav-tab-{runId}" role="tablist">
-                    <button
-                        class="nav-link"
-                        class:active={activeTab === 'details'}
-                        id="nav-details-tab-{runId}"
-                        data-bs-toggle="tab"
-                        data-bs-target="#nav-details-{runId}"
-                        type="button"
-                        role="tab"
-                        onclick={() => setActiveTab("details")}
-                        onkeydown={(e) => e.key === "Enter" && setActiveTab("details")}
-                        ><Fa icon={faInfoCircle}/> Details</button
-                    >
-                    <button
-                        class="nav-link"
-                        class:active={activeTab === 'results'}
-                        id="nav-results-tab-{runId}"
-                        data-bs-toggle="tab"
-                        data-bs-target="#nav-results-{runId}"
-                        type="button"
-                        role="tab"
-                        onclick={() => setActiveTab("results")}
-                        onkeydown={(e) => e.key === "Enter" && setActiveTab("results")}
-                        ><Fa icon={faClipboard}/> Results</button
-                    >
-                    <button
-                        class="nav-link"
-                        class:active={activeTab === 'discuss'}
-                        id="nav-discuss-tab-{runId}"
-                        data-bs-toggle="tab"
-                        data-bs-target="#nav-discuss-{runId}"
-                        type="button"
-                        onclick={() => setActiveTab("discuss")}
-                        onkeydown={(e) => e.key === "Enter" && setActiveTab("discuss")}
-                        role="tab"
-                        ><Fa icon={faComments}/> Discussion</button
-                    >
-                    <button
-                        class="nav-link"
-                        class:active={activeTab === 'issues'}
-                        id="nav-issues-tab-{runId}"
-                        data-bs-toggle="tab"
-                        data-bs-target="#nav-issues-{runId}"
-                        type="button"
-                        role="tab"
-                        onclick={() => setActiveTab("issues")}
-                        onkeydown={(e) => e.key === "Enter" && setActiveTab("issues")}
-                        ><Fa icon={faCodeBranch}/> Issues</button
-                    >
-                    <button
-                        class="nav-link"
-                        class:active={activeTab === 'activity'}
-                        id="nav-activity-tab-{runId}"
-                        data-bs-toggle="tab"
-                        data-bs-target="#nav-activity-{runId}"
-                        type="button"
-                        onclick={() => setActiveTab("activity")}
-                        onkeydown={(e) => e.key === "Enter" && setActiveTab("activity")}
-                        role="tab"
-                        ><Fa icon={faExclamationTriangle}/> Activity</button
-                    >
+            <div class="argus-tab-bar" role="tablist">
+                    <button class="argus-tab" class:active={activeTab === 'details'} type="button" role="tab" onclick={() => setActiveTab("details")}>
+                        <Fa icon={faInfoCircle}/> Details
+                    </button>
+                    <button class="argus-tab" class:active={activeTab === 'results'} type="button" role="tab" onclick={() => setActiveTab("results")}>
+                        <Fa icon={faClipboard}/> Results
+                    </button>
+                    <button class="argus-tab" class:active={activeTab === 'discuss'} type="button" role="tab" onclick={() => setActiveTab("discuss")}>
+                        <Fa icon={faComments}/> Discussion
+                    </button>
+                    <button class="argus-tab" class:active={activeTab === 'issues'} type="button" role="tab" onclick={() => setActiveTab("issues")}>
+                        <Fa icon={faCodeBranch}/> Issues
+                    </button>
+                    <button class="argus-tab" class:active={activeTab === 'activity'} type="button" role="tab" onclick={() => setActiveTab("activity")}>
+                        <Fa icon={faExclamationTriangle}/> Activity
+                    </button>
                 </div>
-            </nav>
+                <div class="argus-tab-select">
+                    <select onchange={(e) => setActiveTab(e.currentTarget.value)} value={activeTab}>
+                        <option value="details">Details</option>
+                        <option value="results">Results</option>
+                        <option value="discuss">Discussion</option>
+                        <option value="issues">Issues</option>
+                        <option value="activity">Activity</option>
+                    </select>
+                </div>
             <div
-                class="tab-content border-start border-end border-bottom bg-white"
+                class="argus-tab-content"
                 id="nav-tabContent-{runId}"
             >
-                <div
-                    class="tab-pane fade"
-                    class:show={activeTab === 'details'}
-                    class:active={activeTab === 'details'}
-                    id="nav-details-{runId}"
-                    role="tabpanel"
-                >
+                <div role="tabpanel" style:display={activeTab === 'details' ? "block" : "none"}>
                     <SirenadaRunInfo testRun={testRun} {testInfo}/>
                 </div>
-                <div
-                    class="tab-pane fade"
-                    class:show={activeTab === 'results'}
-                    class:active={activeTab === 'results'}
-                    id="nav-results-{runId}"
-                    role="tabpanel"
-                >
+                <div role="tabpanel" style:display={activeTab === 'results' ? "block" : "none"}>
                     <SirenadaTestBreakdown {testRun} {testInfo}/>
                 </div>
-                <div
-                    class="tab-pane fade"
-                    class:show={activeTab === 'discuss'}
-                    class:active={activeTab === 'discuss'}
-                    id="nav-discuss-{runId}"
-                    role="tabpanel"
-                >
+                <div role="tabpanel" style:display={activeTab === 'discuss' ? "block" : "none"}>
                     {#if visitedTabs['discuss']}
                         <TestRunComments {testRun} {testInfo}/>
                     {/if}
                 </div>
-                <div
-                    class="tab-pane fade"
-                    class:show={activeTab === 'issues'}
-                    class:active={activeTab === 'issues'}
-                    id="nav-issues-{runId}"
-                    role="tabpanel"
-                >
+                <div role="tabpanel" style:display={activeTab === 'issues' ? "block" : "none"}>
                     <SirenadaIssueTemplate test_run={testRun} test={testInfo.test} />
                     <div class="py-2 bg-white">
                         {#if visitedTabs['issues']}
@@ -256,13 +194,7 @@
                         {/if}
                     </div>
                 </div>
-                <div
-                    class="tab-pane fade"
-                    class:show={activeTab === 'activity'}
-                    class:active={activeTab === 'activity'}
-                    id="nav-activity-{runId}"
-                    role="tabpanel"
-                >
+                <div role="tabpanel" style:display={activeTab === 'activity' ? "block" : "none"}>
                     {#if visitedTabs['activity']}
                         <ActivityTab id={runId} />
                     {/if}
@@ -295,5 +227,9 @@
 
     .top-bar {
         overflow: hidden;
+    }
+
+    :global([data-bs-theme="dark"]) .testrun-card {
+        background-color: #2b3035;
     }
 </style>

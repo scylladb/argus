@@ -84,4 +84,8 @@
     .mention-select:hover {
         color: black;
     }
+
+    :global([data-bs-theme="dark"]) .mention-select:hover {
+        color: #dee2e6;
+    }
 </style>

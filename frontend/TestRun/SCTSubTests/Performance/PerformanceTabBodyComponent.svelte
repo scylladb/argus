@@ -94,63 +94,57 @@
     });
 </script>
 
-<div
-    class="tab-pane fade"
-    id="nav-performance-{testRun.id}"
-    role="tabpanel"
->
+<div class="p-2">
+    <div class="mb-2 p-2">
+        <h5>Performance</h5>
+        <ul class="border-start list-unstyled p-2">
+            <li><span class="fw-bold">Test name: </span>{testRun.test_name}</li>
+            <li><span class="fw-bold">Stress command: </span>{testRun.stress_cmd}</li>
+            <li><span class="fw-bold">Operation Rate: </span>{testRun.perf_op_rate_total}</li>
+            <li><span class="fw-bold">Average Operation Rate: </span>{testRun.perf_op_rate_average}</li>
+            <li><span class="fw-bold">Latency 99th Percentile: </span>{testRun.perf_avg_latency_99th}</li>
+            <li><span class="fw-bold">Mean Latency: </span>{testRun.perf_avg_latency_mean}</li>
+            <li><span class="fw-bold">Total Errors: </span>{testRun.perf_total_errors}</li>
+        </ul>
+    </div>
     <div class="p-2">
-        <div class="mb-2 p-2">
-            <h5>Performance</h5>
-            <ul class="border-start list-unstyled p-2">
-                <li><span class="fw-bold">Test name: </span>{testRun.test_name}</li>
-                <li><span class="fw-bold">Stress command: </span>{testRun.stress_cmd}</li>
-                <li><span class="fw-bold">Operation Rate: </span>{testRun.perf_op_rate_total}</li>
-                <li><span class="fw-bold">Average Operation Rate: </span>{testRun.perf_op_rate_average}</li>
-                <li><span class="fw-bold">Latency 99th Percentile: </span>{testRun.perf_avg_latency_99th}</li>
-                <li><span class="fw-bold">Mean Latency: </span>{testRun.perf_avg_latency_mean}</li>
-                <li><span class="fw-bold">Total Errors: </span>{testRun.perf_total_errors}</li>
-            </ul>
-        </div>
-        <div class="p-2">
-            {#each MONITORED_METRICS as metricName}
-                {@const resultsByMetric = findBestAndLastResult(resultsByVersion, metricName)}
-                <h2>{metricName.slice("perf_".length)}</h2>
-                <div class="mb-2">
-                    <table class="table table-bordered">
-                        <thead>
+        {#each MONITORED_METRICS as metricName}
+            {@const resultsByMetric = findBestAndLastResult(resultsByVersion, metricName)}
+            <h2>{metricName.slice("perf_".length)}</h2>
+            <div class="mb-2">
+                <table class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Current Result</th>
+                            <th>Compared Version</th>
+                            <th>Best</th>
+                            <th>Diff</th>
+                            <th>Commit, Date</th>
+                            <th>last</th>
+                            <th>Diff</th>
+                            <th>Commit, Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {#each Object.entries(resultsByMetric) as [versionName, results] (versionName)}
+                            {@const bestPackage = getScyllaPackage(results.best.packages)}
+                            {@const lastPackage = getScyllaPackage(results.last.packages)}
+                            {@const cmpToBest = cmp(testRun[metricName], results.best[metricName])}
+                            {@const cmpToLast = cmp(testRun[metricName], results.last[metricName])}
                             <tr>
-                                <th>Current Result</th>
-                                <th>Compared Version</th>
-                                <th>Best</th>
-                                <th>Diff</th>
-                                <th>Commit, Date</th>
-                                <th>last</th>
-                                <th>Diff</th>
-                                <th>Commit, Date</th>
+                                <td>{testRun[metricName].toFixed(1)}</td>
+                                <td>{versionName}</td>
+                                <td>{results.best[metricName].toFixed(1)}</td>
+                                <td class="table-{cmpToBest > 5 ? "success" : cmpToBest < -5 ? "danger" : "dark"}">{cmpToBest}%</td>
+                                <td>#{bestPackage.revision_id}, {bestPackage.date}</td>
+                                <td>{results.last[metricName].toFixed(1)}</td>
+                                <td class="table-{cmpToLast > 5 ? "success" : cmpToBest < -5 ? "danger" : "dark"}">{cmpToLast}%</td>
+                                <td>#{lastPackage.revision_id}, {lastPackage.date}</td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            {#each Object.entries(resultsByMetric) as [versionName, results] (versionName)}
-                                {@const bestPackage = getScyllaPackage(results.best.packages)}
-                                {@const lastPackage = getScyllaPackage(results.last.packages)}
-                                {@const cmpToBest = cmp(testRun[metricName], results.best[metricName])}
-                                {@const cmpToLast = cmp(testRun[metricName], results.last[metricName])}
-                                <tr>
-                                    <td>{testRun[metricName].toFixed(1)}</td>
-                                    <td>{versionName}</td>
-                                    <td>{results.best[metricName].toFixed(1)}</td>
-                                    <td class="table-{cmpToBest > 5 ? "success" : cmpToBest < -5 ? "danger" : "dark"}">{cmpToBest}%</td>
-                                    <td>#{bestPackage.revision_id}, {bestPackage.date}</td>
-                                    <td>{results.last[metricName].toFixed(1)}</td>
-                                    <td class="table-{cmpToLast > 5 ? "success" : cmpToBest < -5 ? "danger" : "dark"}">{cmpToLast}%</td>
-                                    <td>#{lastPackage.revision_id}, {lastPackage.date}</td>
-                                </tr>
-                            {/each}
-                        </tbody>
-                    </table>
-                </div>
-            {/each}
-        </div>
+                        {/each}
+                    </tbody>
+                </table>
+            </div>
+        {/each}
     </div>
 </div>

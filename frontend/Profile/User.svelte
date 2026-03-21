@@ -38,4 +38,8 @@
         background-position: center;
         background-size: cover;
     }
+
+    :global([data-bs-theme="dark"]) .img-profile {
+        background-color: rgb(90, 90, 90);
+    }
 </style>

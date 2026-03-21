@@ -20,6 +20,8 @@
     let ignoreReason = $state("");
     let modal = $state();
     let showGraphButton = $state(false);
+    let innerWidth = $state(window.innerWidth);
+    const smallScreen = $derived(innerWidth < 768);
 
     const showGraphsButtonIfResultsExist = async function () {
         try {
@@ -52,9 +54,10 @@
 
 </script>
 
+<svelte:window bind:innerWidth={innerWidth} />
 <div class="h-small" bind:this={header}></div>
-<div class="p-2 mb-2 bg-main" class:sticky={sticky} class:border={sticky} class:shadow={sticky}>
-    {#if sticky}
+<div class="p-2 mb-2 bg-main" class:sticky={sticky && !smallScreen} class:border={sticky && !smallScreen} class:shadow={sticky && !smallScreen}>
+    {#if sticky && !smallScreen}
         <div class="mb-1 p-1">
             {testInfo.test.name} ({testInfo.release.name}/{testInfo.group.name})
         </div>
