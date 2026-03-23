@@ -49,11 +49,14 @@ func (t *textOutputter) Write(v any) error {
 	if !ok {
 		switch v := v.(type) {
 		case fmt.Stringer:
-			return t.Write(v.String())
+			_, err := fmt.Fprintln(t.w, v.String())
+			return err
 		case error:
-			return t.Write(v.Error())
+			_, err := fmt.Fprintln(t.w, v.Error())
+			return err
 		case string:
-			return t.Write(v)
+			_, err := fmt.Fprintln(t.w, v)
+			return err
 		}
 
 		return t.writeRawJSON(v)

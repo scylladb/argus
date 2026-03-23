@@ -296,3 +296,75 @@ func TestHasValidCFToken_ExpiredToken(t *testing.T) {
 	_, err := keychain.LoadCFToken()
 	assert.ErrorIs(t, err, keychain.ErrCFTokenNotFound)
 }
+
+// --------------------------------------------------------------------------
+// lastNonEmptyLine edge cases
+// --------------------------------------------------------------------------
+
+func TestLastNonEmptyLine_EmptyString(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "", auth.LastNonEmptyLine(""),
+		"empty string should return empty string")
+}
+
+func TestLastNonEmptyLine_AllWhitespace(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "", auth.LastNonEmptyLine("   \n\t\n  \n"),
+		"all-whitespace string should return empty string")
+}
+
+func TestLastNonEmptyLine_SingleLine(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "hello", auth.LastNonEmptyLine("hello"),
+		"single non-empty line should be returned")
+}
+
+func TestLastNonEmptyLine_NoTrailingNewline(t *testing.T) {
+	t.Parallel()
+
+	// "line1\nline2" — last line is "line2" with no trailing newline.
+	assert.Equal(t, "line2", auth.LastNonEmptyLine("line1\nline2"))
+}
+
+func TestLastNonEmptyLine_TrailingNewlines(t *testing.T) {
+	t.Parallel()
+
+	// The function should skip trailing empty lines.
+	assert.Equal(t, "last", auth.LastNonEmptyLine("first\nlast\n\n\n"))
+}
+
+func TestLastNonEmptyLine_MultipleLines(t *testing.T) {
+	t.Parallel()
+
+	input := "line one\nline two\nline three"
+	assert.Equal(t, "line three", auth.LastNonEmptyLine(input))
+}
+
+// --------------------------------------------------------------------------
+// ErrStartingProcess — binary path does not exist
+// --------------------------------------------------------------------------
+
+func TestArgusService_Login_ErrStartingProcess(t *testing.T) {
+	setupMockKeyring(t)
+
+	// Use a path that does not exist as the cloudflared binary.
+	nonExistentBin := filepath.Join(t.TempDir(), "does-not-exist")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		t.Error("login endpoint should not be called when binary does not exist")
+	}))
+	t.Cleanup(srv.Close)
+
+	svc := auth.NewArgusService(srv.URL, nonExistentBin,
+		auth.WithHTTPClient(srv.Client()),
+	)
+
+	err := svc.Login(t.Context())
+	require.Error(t, err)
+	// The underlying exec error wraps ErrCFLogin (exec.Command fails with
+	// "no such file or directory" which surfaces through runCFLogin).
+	assert.ErrorIs(t, err, auth.ErrCFLogin)
+}

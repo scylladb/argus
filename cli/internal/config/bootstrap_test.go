@@ -139,3 +139,135 @@ func newRootWithURL(t *testing.T, urlValue string) *cobra.Command {
 
 	return root
 }
+
+// --------------------------------------------------------------------------
+// Error paths
+// --------------------------------------------------------------------------
+
+// TestLoad_ErrReadingConfigFile verifies that a malformed YAML config file
+// surfaces as ErrReadingConfigFile.
+func TestLoad_ErrReadingConfigFile(t *testing.T) {
+	dir := t.TempDir()
+	reloadXDG(t, dir)
+
+	// Create a syntactically invalid YAML file at the default config path.
+	cfgPath := configPath(dir)
+	require.NoError(t, os.MkdirAll(filepath.Dir(cfgPath), 0o700))
+	require.NoError(t, os.WriteFile(cfgPath, []byte(":\n  bad: [yaml\n"), 0o600))
+
+	_, err := config.Load("", nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, config.ErrReadingConfigFile)
+}
+
+// TestLoad_ErrCreatingConfigDir verifies that when the config directory cannot
+// be created (a regular file is blocking the path), ErrCreatingConfigDir is
+// returned.
+func TestLoad_ErrCreatingConfigDir(t *testing.T) {
+	dir := t.TempDir()
+	reloadXDG(t, dir)
+
+	// Place a regular file at the location where the config directory would be
+	// created, so MkdirAll fails.
+	blockingFile := filepath.Join(dir, "argus-cli")
+	require.NoError(t, os.WriteFile(blockingFile, []byte("block"), 0o600))
+
+	_, err := config.Load("", nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, config.ErrCreatingConfigDir)
+}
+
+// TestLoad_ErrWritingConfigFile verifies that when the config file path is
+// read-only, ErrWritingConfigFile is returned.
+func TestLoad_ErrWritingConfigFile(t *testing.T) {
+	dir := t.TempDir()
+	reloadXDG(t, dir)
+
+	// Create the config directory but make it read-only, so WriteConfigAs fails.
+	cfgDir := filepath.Join(dir, "argus-cli")
+	require.NoError(t, os.MkdirAll(cfgDir, 0o700))
+	require.NoError(t, os.Chmod(cfgDir, 0o500)) // r-x: read + execute, no write
+	t.Cleanup(func() {
+		_ = os.Chmod(cfgDir, 0o700) // restore so TempDir cleanup can remove it
+	})
+
+	_, err := config.Load("", nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, config.ErrWritingConfigFile)
+}
+
+// --------------------------------------------------------------------------
+// Environment variable override
+// --------------------------------------------------------------------------
+
+// TestLoad_EnvVarOverride verifies that ARGUS_URL overrides the config file
+// value when the flag is not explicitly set.
+func TestLoad_EnvVarOverride(t *testing.T) {
+	dir := t.TempDir()
+	reloadXDG(t, dir)
+
+	// Write a config file with a known URL.
+	cfgPath := configPath(dir)
+	require.NoError(t, os.MkdirAll(filepath.Dir(cfgPath), 0o700))
+	require.NoError(t, os.WriteFile(cfgPath, []byte("url: https://from-file.example.com\n"), 0o600))
+
+	// Override via environment variable.
+	t.Setenv("ARGUS_URL", "https://from-env.example.com")
+
+	cfg, err := config.Load("", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "https://from-env.example.com", cfg.URL)
+}
+
+// --------------------------------------------------------------------------
+// Path helpers
+// --------------------------------------------------------------------------
+
+// TestConfigDir_ContainsAppName verifies that ConfigDir returns a path that
+// includes the "argus-cli" application name segment.
+func TestConfigDir_ContainsAppName(t *testing.T) {
+	dir := t.TempDir()
+	reloadXDG(t, dir)
+
+	got := config.ConfigDir()
+	assert.Contains(t, got, "argus-cli")
+}
+
+// TestCacheDir_ContainsAppName verifies that CacheDir returns a path that
+// includes the "argus-cli" application name segment.
+func TestCacheDir_ContainsAppName(t *testing.T) {
+	// CacheDir uses XDG_CACHE_HOME. Set it to our temp dir for isolation.
+	dir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", dir)
+	xdg.Reload()
+	t.Cleanup(xdg.Reload)
+
+	got := config.CacheDir()
+	assert.Contains(t, got, "argus-cli")
+}
+
+// TestConfigFile_ContainsAppName verifies that ConfigFile returns a path that
+// contains both the application name and the requested file name.
+func TestConfigFile_ContainsAppName(t *testing.T) {
+	dir := t.TempDir()
+	reloadXDG(t, dir)
+
+	got, err := config.ConfigFile("myfile.yaml")
+	require.NoError(t, err)
+	assert.Contains(t, got, "argus-cli")
+	assert.Contains(t, got, "myfile.yaml")
+}
+
+// TestCacheFile_ContainsAppName verifies that CacheFile returns a path that
+// contains both the application name and the requested file name.
+func TestCacheFile_ContainsAppName(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", dir)
+	xdg.Reload()
+	t.Cleanup(xdg.Reload)
+
+	got, err := config.CacheFile("mylog.log")
+	require.NoError(t, err)
+	assert.Contains(t, got, "argus-cli")
+	assert.Contains(t, got, "mylog.log")
+}

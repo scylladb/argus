@@ -414,3 +414,60 @@ func TestWithHTTPClient_UsedForRequests(t *testing.T) {
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// --------------------------------------------------------------------------
+// NewRequest – body encoding error (ErrEncodingBody)
+// --------------------------------------------------------------------------
+
+func TestNewRequest_ErrEncodingBody(t *testing.T) {
+	t.Parallel()
+
+	c, err := api.New("https://argus.scylladb.com")
+	require.NoError(t, err)
+
+	// A channel cannot be JSON-marshalled; NewRequest must return ErrEncodingBody.
+	_, err = c.NewRequest(context.Background(), http.MethodPost, "/api/v1/runs", make(chan int))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, api.ErrEncodingBody)
+}
+
+// --------------------------------------------------------------------------
+// APIError.Error() – string format
+// --------------------------------------------------------------------------
+
+func TestAPIError_ErrorString(t *testing.T) {
+	t.Parallel()
+
+	apiErr := &api.APIError{
+		Body: models.ErrorBody{
+			Message:   "something went wrong",
+			Exception: "SomeException",
+		},
+	}
+
+	s := apiErr.Error()
+	assert.Contains(t, s, "something went wrong")
+	assert.Contains(t, s, "SomeException")
+	// ErrAPIError sentinel text must also appear.
+	assert.Contains(t, s, api.ErrAPIError.Error())
+}
+
+// --------------------------------------------------------------------------
+// BaseURL – trailing slash normalisation
+// --------------------------------------------------------------------------
+
+func TestBaseURL_NoTrailingSlash(t *testing.T) {
+	t.Parallel()
+
+	c, err := api.New("https://argus.scylladb.com")
+	require.NoError(t, err)
+	assert.Equal(t, "https://argus.scylladb.com", c.BaseURL())
+}
+
+func TestBaseURL_WithPath(t *testing.T) {
+	t.Parallel()
+
+	c, err := api.New("https://argus.scylladb.com/some/path")
+	require.NoError(t, err)
+	assert.Equal(t, "https://argus.scylladb.com/some/path", c.BaseURL())
+}

@@ -286,3 +286,145 @@ func makeTarball(t *testing.T, name string, content []byte) []byte {
 
 	return buf.Bytes()
 }
+
+// --------------------------------------------------------------------------
+// Additional AssetURL cases
+// --------------------------------------------------------------------------
+
+func TestAssetURL_Linux_Arm_And_386(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		arch       string
+		wantSuffix string
+	}{
+		{"arm", "cloudflared-linux-arm"},
+		{"386", "cloudflared-linux-386"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.arch, func(t *testing.T) {
+			t.Parallel()
+			url, tarball, err := services.AssetURL("linux", tc.arch)
+			require.NoError(t, err)
+			assert.Contains(t, url, tc.wantSuffix)
+			assert.False(t, tarball, "linux assets are not tarballs")
+		})
+	}
+}
+
+// --------------------------------------------------------------------------
+// ErrUnexpectedHTTPStatus via errors.Is
+// --------------------------------------------------------------------------
+
+func TestEnsure_Download_HTTPError_IsErrUnexpectedHTTPStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+
+	destBin := filepath.Join(t.TempDir(), "cloudflared")
+	t.Setenv("PATH", "")
+
+	svc := services.NewCloudflaredService(
+		services.WithBinaryPath(destBin),
+		services.WithHTTPClient(srv.Client()),
+		services.WithDownloadURL(srv.URL+"/cloudflared-linux-amd64", false),
+	)
+
+	_, err := svc.Ensure(t.Context())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, services.ErrUnexpectedHTTPStatus,
+		"a non-200 response should wrap ErrUnexpectedHTTPStatus")
+}
+
+// --------------------------------------------------------------------------
+// Tarball error cases
+// --------------------------------------------------------------------------
+
+func TestEnsure_Download_CorruptedGzip(t *testing.T) {
+	// Serve data that is not a valid gzip stream to trigger ErrOpeningGzipStream.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("this is not gzip data at all"))
+	}))
+	t.Cleanup(srv.Close)
+
+	destBin := filepath.Join(t.TempDir(), "cloudflared")
+	t.Setenv("PATH", "")
+
+	svc := services.NewCloudflaredService(
+		services.WithBinaryPath(destBin),
+		services.WithHTTPClient(srv.Client()),
+		services.WithDownloadURL(srv.URL+"/cloudflared-darwin-arm64.tgz", true),
+	)
+
+	_, err := svc.Ensure(t.Context())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, services.ErrOpeningGzipStream)
+}
+
+func TestEnsure_Download_CorruptedTar(t *testing.T) {
+	// Build a valid gzip wrapper around corrupted tar data to trigger ErrReadingTarball.
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	_, _ = gz.Write([]byte("this is not valid tar data"))
+	_ = gz.Close()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(buf.Bytes())
+	}))
+	t.Cleanup(srv.Close)
+
+	destBin := filepath.Join(t.TempDir(), "cloudflared")
+	t.Setenv("PATH", "")
+
+	svc := services.NewCloudflaredService(
+		services.WithBinaryPath(destBin),
+		services.WithHTTPClient(srv.Client()),
+		services.WithDownloadURL(srv.URL+"/cloudflared-darwin-arm64.tgz", true),
+	)
+
+	_, err := svc.Ensure(t.Context())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, services.ErrReadingTarball)
+}
+
+func TestEnsure_Download_BinaryNotInTarball(t *testing.T) {
+	// Tarball that contains a file with a different name.
+	tarball := makeTarball(t, "not-cloudflared", []byte("some content"))
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(tarball)
+	}))
+	t.Cleanup(srv.Close)
+
+	destBin := filepath.Join(t.TempDir(), "cloudflared")
+	t.Setenv("PATH", "")
+
+	svc := services.NewCloudflaredService(
+		services.WithBinaryPath(destBin),
+		services.WithHTTPClient(srv.Client()),
+		services.WithDownloadURL(srv.URL+"/cloudflared-darwin-arm64.tgz", true),
+	)
+
+	_, err := svc.Ensure(t.Context())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, services.ErrBinaryNotInTarball)
+}
+
+// --------------------------------------------------------------------------
+// BinaryPath
+// --------------------------------------------------------------------------
+
+func TestBinaryPath_ReturnsConfiguredPath(t *testing.T) {
+	t.Parallel()
+
+	customPath := filepath.Join(t.TempDir(), "my-cloudflared")
+	svc := services.NewCloudflaredService(
+		services.WithBinaryPath(customPath),
+	)
+	assert.Equal(t, customPath, svc.BinaryPath())
+}
