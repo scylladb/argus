@@ -60,6 +60,22 @@ argus auth
 
 Or edit the config file (see below).
 
+### CI / headless authentication
+
+In CI environments where browser-based login is not possible, authenticate
+using environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `ARGUS_TOKEN` | Argus API token (skips Cloudflare login) |
+| `ARGUS_CLIENT_ID` | Cloudflare Access service-token client ID |
+| `ARGUS_CLIENT_SECRET` | Cloudflare Access service-token client secret |
+| `ARGUS_EXTRA_HEADERS` | Comma-separated extra HTTP headers (`Key:Value,Key2:Value2`) |
+
+When `ARGUS_TOKEN` is set, `argus auth` is a no-op. If `ARGUS_CLIENT_ID` and
+`ARGUS_CLIENT_SECRET` are also set, they are sent as `CF-Access-Client-Id` and
+`CF-Access-Client-Secret` headers on every request.
+
 ## Configuration
 
 On first run, a config file is created at:
@@ -97,6 +113,29 @@ Values are resolved in this order (highest wins):
 | Command | Description |
 |---------|-------------|
 | `argus auth` | Authenticate with Argus via Cloudflare Access |
+| `argus run details <run_id>` | Show run metadata and configuration |
+| `argus run events <run_id>` | Show ERROR/CRITICAL events (SCT only) |
+| `argus run nemeses <run_id>` | List nemesis executions (SCT only) |
+| `argus run logs <run_id>` | List or download run logs (SCT only) |
+| `argus run resources <run_id>` | Show allocated cloud resources (SCT only) |
+| `argus run tests <run_id>` | Show test results (DTest only) |
+
+### Filtering by time
+
+The `events` and `nemeses` subcommands support `--after` and `--before` flags
+to filter results by time period. Values can be unix timestamps or RFC3339:
+
+```bash
+argus run events <run_id> --after 2026-03-20T00:00:00Z --before 2026-03-21T00:00:00Z
+argus run nemeses <run_id> --after 1742428800
+```
+
+The `events` command also supports `--limit` to control the maximum number of
+events returned per severity (default 100):
+
+```bash
+argus run events <run_id> --limit 50
+```
 
 ## Troubleshooting
 

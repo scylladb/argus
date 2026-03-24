@@ -7,4 +7,11 @@ var (
 	ContextWithAPIClient = contextWithAPIClient
 	ContextWithOutputter = contextWithOutputter
 	ContextWithCleanup   = contextWithCleanup
+	ContextWithCache     = contextWithCache
+
+	ParseTimeFlag       = parseTimeFlag
+	ParseEventTimestamp = parseEventTimestamp
+	ParseRunID          = parseRunID
+	FormatTimestamp     = formatTimestamp
+	IsValidUUID         = isValidUUID
 )
