@@ -85,3 +85,4 @@ CLOUDFLARE_ACCESS_AUD: your-application-aud-tag-from-cloudflare-dashboard
 # Zeus host for proxying zeus endpoints
 ZEUS_SCHEMA: http
 ZEUS_HOST: example.com:80
+ZEUS_TOKEN: your-token

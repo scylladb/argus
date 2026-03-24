@@ -630,14 +630,18 @@ def user_planned_jobs():
 def zeus_proxy(endpoint: str):
     zeus_host = current_app.config.get("ZEUS_HOST")
     zeus_schema = current_app.config.get("ZEUS_SCHEMA", "http")
+    zeus_token = current_app.config.get("ZEUS_TOKEN")
     if not zeus_host:
         raise Exception("ZEUS_HOST is not configured, proxying is impossible.")
+    if not zeus_token:
+        raise Exception("Missing authorization token for Zeus [ZEUS_TOKEN]")
 
     query_str = request.query_string.decode("utf-8")
     method = request.method.lower()
     headers = dict(request.headers)
     headers["X-Forwarded-For"] = request.remote_addr
     headers["X-Argus-Proxy"] = "1"
+    headers["Authorization"] = f"Bearer {zeus_token}"
     body = request.get_data()
 
     zeus_host = current_app.config.get("ZEUS_HOST")
