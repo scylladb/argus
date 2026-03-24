@@ -15,6 +15,13 @@ import (
 )
 
 const (
+	// maxResponseSize is the maximum number of bytes read from an HTTP response
+	// body. This prevents a misbehaving or malicious server from exhausting
+	// memory.
+	maxResponseSize = 10 << 20 // 10 MB
+)
+
+const (
 	defaultTimeout = 30 * time.Second
 )
 
@@ -41,6 +48,10 @@ var (
 	// ErrDecodingResponse is returned when the HTTP response cannot be decoded
 	// as a valid [models.APIResponse] envelope.
 	ErrDecodingResponse = errors.New("api: decoding response")
+
+	// ErrUnexpectedStatus is returned when the server responds with a
+	// non-2xx status code and the body is not a valid API error envelope.
+	ErrUnexpectedStatus = errors.New("api: unexpected HTTP status")
 
 	// ErrAPIError is returned (wrapped inside an [APIError]) when the backend
 	// returns a response with status "error".
@@ -204,13 +215,18 @@ func DoJSON[T any](c *Client, req *http.Request) (T, error) {
 	}
 	defer resp.Body.Close()
 
-	raw, err := io.ReadAll(resp.Body)
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 	if err != nil {
 		return zero, fmt.Errorf("%w: %w", ErrReadingBody, err)
 	}
 
 	var envelope models.APIResponse[T]
 	if err := json.Unmarshal(raw, &envelope); err != nil {
+		// If the status code indicates an error and the body isn't valid JSON
+		// (e.g. an HTML error page), return a clear status-based error.
+		if resp.StatusCode >= 400 {
+			return zero, fmt.Errorf("%w: %d %s", ErrUnexpectedStatus, resp.StatusCode, http.StatusText(resp.StatusCode))
+		}
 		return zero, fmt.Errorf("%w: %w", ErrDecodingResponse, err)
 	}
 

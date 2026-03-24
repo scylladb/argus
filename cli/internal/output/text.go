@@ -63,7 +63,6 @@ func (t *textOutputter) Write(v any) error {
 	}
 
 	table := tablewriter.NewTable(t.w)
-	defer table.Close()
 
 	if headers := tab.Headers(); len(headers) > 0 {
 		table.Header(headers)

@@ -15,10 +15,6 @@ import (
 
 // Sentinel errors for the Argus authentication step.
 var (
-	// ErrGettingCFToken is returned when the cloudflared access token
-	// sub-command fails.
-	ErrGettingCFToken = errors.New("auth: getting cloudflare access token")
-
 	// ErrCFLogin is returned when the cloudflared access login sub-command
 	// fails or produces no recognisable JWT in its output.
 	ErrCFLogin = errors.New("auth: cloudflared access login failed")
@@ -122,6 +118,10 @@ func HasValidCFToken() bool {
 //     parse the JWT from its output, and store it for future use.
 func (s *ArgusService) Login(ctx context.Context) error {
 	// Fast path: a valid Argus session is already cached.
+	// NOTE: we do not validate the session here (e.g. via a lightweight API
+	// call) — if the session turns out to be stale the caller should handle
+	// the resulting 401 and retry. This avoids an extra round-trip on every
+	// CLI invocation.
 	if _, err := keychain.Load(); err == nil {
 		return nil
 	}
@@ -199,21 +199,6 @@ func (s *ArgusService) runCFLogin(ctx context.Context) (string, error) {
 	}
 
 	return token, nil
-}
-
-// getCFToken shells out to `cloudflared access token --app=<argusURL>` to
-// read a previously cached Cloudflare Access JWT from ~/.cloudflared/.
-// This is the fast path used when cloudflared already stored a token on disk
-// but our keychain cache is empty (e.g. first run on a new machine after
-// cloudflared login was already done separately).
-func (s *ArgusService) getCFToken(ctx context.Context) (string, error) {
-	out, err := exec.CommandContext(ctx, s.cloudflaredBin, //nolint:gosec
-		"access", "token", "--no-verbose", fmt.Sprintf("-app=%s", s.argusURL),
-	).CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("%w: %w\n%s", ErrGettingCFToken, err, out)
-	}
-	return strings.TrimSpace(string(out)), nil
 }
 
 // login POSTs to /auth/login/cf with the CF token attached via api.Client and

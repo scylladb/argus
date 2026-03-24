@@ -53,8 +53,8 @@ var configKeys = map[string]struct{}{
 //
 // Automatic flag binding means any persistent flag registered on cmd (or its
 // root) whose name matches a Viper/config key is honoured without any manual
-// BindPFlag call in the caller. Flag values win over the config file, which
-// wins over env vars, which wins over built-in defaults — following Viper's
+// BindPFlag call in the caller. Flag values win over env vars, which win over
+// the config file, which wins over built-in defaults — following Viper's
 // standard precedence.
 //
 // If the config file does not exist, Load creates the directory and file,

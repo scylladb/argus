@@ -215,10 +215,12 @@ func (s *CloudflaredService) download(ctx context.Context) error {
 
 	if isTarball {
 		// macOS assets are .tgz archives containing the bare binary.
-		src, err = extractFromTarball(resp.Body)
+		var gz io.Closer
+		src, gz, err = extractFromTarball(resp.Body)
 		if err != nil {
 			return err
 		}
+		defer gz.Close()
 	}
 
 	if _, err = io.Copy(tmp, src); err != nil {
@@ -241,11 +243,12 @@ func (s *CloudflaredService) download(ctx context.Context) error {
 }
 
 // extractFromTarball returns a reader positioned at the cloudflared binary
-// inside a .tgz archive stream.
-func extractFromTarball(r io.Reader) (io.Reader, error) {
+// inside a .tgz archive stream, plus the gzip closer that the caller must
+// close after reading is complete.
+func extractFromTarball(r io.Reader) (io.Reader, io.Closer, error) {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrOpeningGzipStream, err)
+		return nil, nil, fmt.Errorf("%w: %w", ErrOpeningGzipStream, err)
 	}
 
 	tr := tar.NewReader(gz)
@@ -255,15 +258,17 @@ func extractFromTarball(r io.Reader) (io.Reader, error) {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("%w: %w", ErrReadingTarball, err)
+			gz.Close()
+			return nil, nil, fmt.Errorf("%w: %w", ErrReadingTarball, err)
 		}
 
 		if filepath.Base(hdr.Name) == cloudflaredBinary {
-			return tr, nil
+			return tr, gz, nil
 		}
 	}
 
-	return nil, ErrBinaryNotInTarball
+	gz.Close()
+	return nil, nil, ErrBinaryNotInTarball
 }
 
 // AssetURL returns the download URL for the cloudflared binary on the given
