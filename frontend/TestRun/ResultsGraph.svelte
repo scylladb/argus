@@ -364,7 +364,7 @@
 
 {#if showModal}
     <div class="modal">
-        <div class="modal-content" onclick={stopPropagation(bubble('click'))}>
+        <div class="modal-content bg-white" onclick={stopPropagation(bubble('click'))}>
             <button class="close-btn" onclick={closeModal}>&times;</button>
             <button class="modal-copy-btn" onclick={() => copyToClipboard(true)}>
                 <Fa icon={faCopy}/>
