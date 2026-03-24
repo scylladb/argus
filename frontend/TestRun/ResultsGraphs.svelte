@@ -364,4 +364,11 @@
     .add-btn:hover {
         color: #333;
     }
+
+    :global([data-bs-theme="dark"]) .add-btn {
+        color: #333;
+    }
+    :global([data-bs-theme="dark"]) .add-btn:hover {
+        color: #888;
+    }
 </style>

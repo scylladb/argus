@@ -80,7 +80,7 @@
                 ]}"
             >
                 <Fa
-                    color="#000"
+                    class="fa-icon"
                     icon={InvestigationStatusIcon[
                         testStats.investigation_status as keyof typeof InvestigationStatusIcon
                     ]}
@@ -89,12 +89,12 @@
         {/if}
         {#if testStats.hasBugReport}
             <div class="p-1" title="Has a bug report">
-                <Fa color="#000" icon={faBug} />
+                <Fa class="fa-icon" icon={faBug} />
             </div>
         {/if}
         {#if testStats.hasComments}
             <div class="p-1" title="Has a comment">
-                <Fa color="#000" icon={faComment} />
+                <Fa class="fa-icon" icon={faComment} />
             </div>
         {/if}
     </div>
@@ -112,6 +112,14 @@
         max-height: 220px;
         box-sizing: border-box;
         cursor: pointer;
+    }
+
+    .fa-icon {
+        color: #000;
+    }
+
+    :global([data-bs-theme="dark"]) .fa-icon {
+        color: #fff;
     }
 
     .img-thumb {
