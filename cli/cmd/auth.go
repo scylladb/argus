@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+
 	"github.com/scylladb/argus/cli/internal/auth"
 	"github.com/scylladb/argus/cli/internal/logging"
 	"github.com/scylladb/argus/cli/internal/services"
@@ -24,6 +26,13 @@ and that session is also stored in the keychain.`,
 		ctx := cmd.Context()
 		cfg := ConfigFrom(ctx)
 		log := logging.For(LoggerFrom(ctx), "auth")
+
+		// If ARGUS_TOKEN is set, the user is already authenticated via
+		// environment variable — no Cloudflare login needed.
+		if os.Getenv("ARGUS_TOKEN") != "" {
+			log.Info().Msg("authenticated via ARGUS_TOKEN environment variable")
+			return nil
+		}
 
 		// Ensure cloudflared is available (PATH → cache → download).
 		log.Debug().Msg("locating cloudflared binary")

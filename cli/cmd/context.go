@@ -5,6 +5,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/scylladb/argus/cli/internal/api"
+	"github.com/scylladb/argus/cli/internal/cache"
 	"github.com/scylladb/argus/cli/internal/config"
 	"github.com/scylladb/argus/cli/internal/logging"
 	"github.com/scylladb/argus/cli/internal/output"
@@ -104,6 +105,29 @@ func LoggerFrom(ctx context.Context) zerolog.Logger {
 	}
 
 	return logger
+}
+
+// cacheKey is the context key used to store the [cache.Cache].
+type cacheKey struct{}
+
+// contextWithCache returns a copy of ctx carrying c.
+func contextWithCache(ctx context.Context, c *cache.Cache) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	return context.WithValue(ctx, cacheKey{}, c)
+}
+
+// CacheFrom retrieves the [cache.Cache] stored in ctx.
+// It panics if no Cache is present.
+func CacheFrom(ctx context.Context) *cache.Cache {
+	c, ok := ctx.Value(cacheKey{}).(*cache.Cache)
+	if !ok {
+		panic("cmd: no cache.Cache in context; ensure run PersistentPreRun propagates")
+	}
+
+	return c
 }
 
 // cleanupKey is the context key used to store the logging [logging.CleanupFunc].

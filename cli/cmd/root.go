@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/scylladb/argus/cli/internal/api"
 	"github.com/scylladb/argus/cli/internal/config"
@@ -19,10 +20,11 @@ import (
 var ErrInvalidURL = errors.New("cmd: invalid argus URL")
 
 var (
-	useText  bool
-	argusURL string
-	cfgFile  string
-	logLevel string
+	useText      bool
+	argusURL     string
+	cfgFile      string
+	logLevel     string
+	extraHeaders []string
 )
 
 func init() {
@@ -30,6 +32,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&useText, "text", false, "render output as a text table instead of JSON")
 	rootCmd.PersistentFlags().StringVar(&argusURL, "url", "", "base URL of the Argus service (overrides config file)")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", `log verbosity: trace, debug, info, warn, error`)
+	rootCmd.PersistentFlags().StringArrayVarP(&extraHeaders, "header", "H", nil, `extra HTTP header in "Key:Value" format (repeatable)`)
 }
 
 var rootCmd = &cobra.Command{
@@ -77,11 +80,44 @@ var rootCmd = &cobra.Command{
 
 		// ---- API client ----------------------------------------------
 		var apiOpts []api.ClientOption
-		if session, keychainErr := keychain.Load(); keychainErr == nil {
+
+		// Auth priority: ARGUS_TOKEN env var > keychain session > unauthenticated.
+		if token := os.Getenv("ARGUS_TOKEN"); token != "" {
+			apiOpts = append(apiOpts, api.WithAPIToken(token))
+			logger.Debug().Msg("using ARGUS_TOKEN from environment")
+			if id, secret := os.Getenv("ARGUS_CLIENT_ID"), os.Getenv("ARGUS_CLIENT_SECRET"); id != "" && secret != "" {
+				apiOpts = append(apiOpts, api.WithCFAccessHeaders(id, secret))
+				logger.Debug().Msg("using CF Access headers from environment")
+			}
+		} else if session, keychainErr := keychain.Load(); keychainErr == nil {
 			apiOpts = append(apiOpts, api.WithSession(session))
 			logger.Debug().Msg("session loaded from keychain")
+			// Also attach the CF Access JWT so Cloudflare lets the
+			// request through to the Argus backend.
+			if cfToken, cfErr := keychain.LoadCFToken(); cfErr == nil {
+				apiOpts = append(apiOpts, api.WithCFToken(cfToken))
+				logger.Debug().Msg("CF token loaded from keychain")
+			}
 		} else {
 			logger.Debug().Err(keychainErr).Msg("no session in keychain")
+		}
+
+		// Parse extra headers from -H flags and ARGUS_EXTRA_HEADERS env var.
+		// Env var format: comma-separated "Key:Value" pairs.
+		allHeaders := append([]string{}, extraHeaders...)
+		if envHeaders := os.Getenv("ARGUS_EXTRA_HEADERS"); envHeaders != "" {
+			allHeaders = append(allHeaders, strings.Split(envHeaders, ",")...)
+		}
+		if len(allHeaders) > 0 {
+			hm := make(map[string]string, len(allHeaders))
+			for _, h := range allHeaders {
+				parts := strings.SplitN(h, ":", 2)
+				if len(parts) != 2 {
+					return fmt.Errorf("invalid header format %q, expected Key:Value", h)
+				}
+				hm[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+			}
+			apiOpts = append(apiOpts, api.WithExtraHeaders(hm))
 		}
 
 		client, err := api.New(cfg.URL, apiOpts...)

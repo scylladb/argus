@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/scylladb/argus/cli/internal/models"
@@ -82,6 +83,13 @@ type Client struct {
 	cfToken string
 	// apiToken is used as "Authorization: token <apiToken>" header, if any.
 	apiToken string
+	// cfAccessClientID is sent as "CF-Access-Client-Id" header for
+	// Cloudflare Access service-token auth.
+	cfAccessClientID string
+	// cfAccessClientSecret is sent as "CF-Access-Client-Secret" header.
+	cfAccessClientSecret string
+	// extraHeaders are arbitrary headers added to every request.
+	extraHeaders map[string]string
 }
 
 // ClientOption is a functional option for [New].
@@ -105,6 +113,20 @@ func WithCFToken(token string) ClientOption {
 // "Authorization: token <apiToken>" header.
 func WithAPIToken(token string) ClientOption {
 	return func(c *Client) { c.apiToken = token }
+}
+
+// WithCFAccessHeaders attaches Cloudflare Access service-token headers
+// (CF-Access-Client-Id and CF-Access-Client-Secret) to every request.
+func WithCFAccessHeaders(clientID, clientSecret string) ClientOption {
+	return func(c *Client) {
+		c.cfAccessClientID = clientID
+		c.cfAccessClientSecret = clientSecret
+	}
+}
+
+// WithExtraHeaders attaches arbitrary headers to every request.
+func WithExtraHeaders(headers map[string]string) ClientOption {
+	return func(c *Client) { c.extraHeaders = headers }
 }
 
 // WithHTTPClient replaces the underlying [http.Client]. Useful in tests.
@@ -174,8 +196,8 @@ func (c *Client) NewRequest(ctx context.Context, method, path string, body any) 
 	return req, nil
 }
 
-// attachAuth adds the session cookie, CF_Authorization cookie, and/or API
-// token header to req.
+// attachAuth adds the session cookie, CF_Authorization cookie, API token
+// header, CF Access service-token headers, and extra headers to req.
 func (c *Client) attachAuth(req *http.Request) {
 	if c.session != "" {
 		req.AddCookie(&http.Cookie{Name: "session", Value: c.session})
@@ -185,6 +207,15 @@ func (c *Client) attachAuth(req *http.Request) {
 	}
 	if c.apiToken != "" {
 		req.Header.Set("Authorization", "token "+c.apiToken)
+	}
+	if c.cfAccessClientID != "" {
+		req.Header.Set("CF-Access-Client-Id", c.cfAccessClientID)
+	}
+	if c.cfAccessClientSecret != "" {
+		req.Header.Set("CF-Access-Client-Secret", c.cfAccessClientSecret)
+	}
+	for k, v := range c.extraHeaders {
+		req.Header.Set(k, v)
 	}
 }
 
@@ -244,4 +275,79 @@ func DoJSON[T any](c *Client, req *http.Request) (T, error) {
 	}
 
 	return result, nil
+}
+
+// DoRedirect performs a request that may return a redirect. It returns the
+// Location header if the server issues a 3xx redirect, or parses the Argus
+// envelope for a URL string on a 200 response.
+func DoRedirect(c *Client, ctx context.Context, method, path string) (string, error) {
+	req, err := c.NewRequest(ctx, method, path, nil)
+	if err != nil {
+		return "", err
+	}
+
+	// Use a client that does not follow redirects.
+	noRedirectClient := *c.httpClient
+	noRedirectClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+
+	resp, err := noRedirectClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if loc := resp.Header.Get("Location"); loc != "" {
+		return loc, nil
+	}
+
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", ErrReadingBody, err)
+	}
+
+	if resp.StatusCode == http.StatusOK {
+		var envelope struct {
+			Status   string `json:"status"`
+			Response string `json:"response"`
+		}
+		if json.Unmarshal(raw, &envelope) == nil && envelope.Response != "" {
+			return envelope.Response, nil
+		}
+	}
+
+	return "", fmt.Errorf("%w: %d %s", ErrUnexpectedStatus, resp.StatusCode, http.StatusText(resp.StatusCode))
+}
+
+// DownloadFile downloads a file from url (no auth headers — typically a
+// pre-signed S3 URL) and saves it to dst using an atomic temp-file + rename.
+func DownloadFile(url, dst string) (int64, error) {
+	resp, err := http.Get(url) //nolint:gosec // pre-signed URL from Argus API
+	if err != nil {
+		return 0, fmt.Errorf("downloading file: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("download failed: HTTP %d", resp.StatusCode)
+	}
+
+	tmp := dst + ".tmp"
+	f, err := os.Create(tmp)
+	if err != nil {
+		return 0, fmt.Errorf("creating file: %w", err)
+	}
+
+	n, err := io.Copy(f, resp.Body)
+	f.Close()
+	if err != nil {
+		os.Remove(tmp)
+		return 0, fmt.Errorf("writing file: %w", err)
+	}
+	if err := os.Rename(tmp, dst); err != nil {
+		os.Remove(tmp)
+		return 0, fmt.Errorf("renaming file: %w", err)
+	}
+	return n, nil
 }
