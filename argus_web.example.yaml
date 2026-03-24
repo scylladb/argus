@@ -81,3 +81,7 @@ APP_DOC_LINK:
 CLOUDFLARE_ACCESS_TEAM_DOMAIN: your-team.cloudflareaccess.com
 # Application Audience (AUD) Tag for the Access app
 CLOUDFLARE_ACCESS_AUD: your-application-aud-tag-from-cloudflare-dashboard
+
+# Zeus host for proxying zeus endpoints
+ZEUS_SCHEMA: http
+ZEUS_HOST: example.com:80

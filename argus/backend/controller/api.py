@@ -4,6 +4,7 @@ from uuid import UUID
 import requests
 from flask import (
     Blueprint,
+    current_app,
     g,
     redirect,
     request, Response
@@ -622,3 +623,30 @@ def user_planned_jobs():
         "status": "ok",
         "response": result
     }
+
+
+@bp.route("/zeus/<path:endpoint>", methods=["GET", "POST", "HEAD", "PUT", "DELETE"])
+@api_login_required
+def zeus_proxy(endpoint: str):
+    zeus_host = current_app.config.get("ZEUS_HOST")
+    zeus_schema = current_app.config.get("ZEUS_SCHEMA", "http")
+    if not zeus_host:
+        raise Exception("ZEUS_HOST is not configured, proxying is impossible.")
+
+    query_str = request.query_string.decode("utf-8")
+    method = request.method.lower()
+    headers = dict(request.headers)
+    headers["X-Forwarded-For"] = request.remote_addr
+    headers["X-Argus-Proxy"] = "1"
+    body = request.get_data()
+
+    zeus_host = current_app.config.get("ZEUS_HOST")
+    zeus_schema = current_app.config.get("ZEUS_SCHEMA")
+
+    session = requests.Session()
+    proxy_request = requests.Request(method=method, url=f"{zeus_schema}://{zeus_host}/{endpoint}?{query_str}", headers=headers, data=body)
+    prepared = proxy_request.prepare()
+
+    response = session.send(prepared)
+
+    return (response.content, response.status_code, response.headers.items())
