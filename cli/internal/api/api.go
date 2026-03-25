@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/scylladb/argus/cli/internal/models"
@@ -57,6 +58,11 @@ var (
 	// ErrAPIError is returned (wrapped inside an [APIError]) when the backend
 	// returns a response with status "error".
 	ErrAPIError = errors.New("api: server returned error")
+
+	// ErrAuthRequired is returned when the server responds with HTML instead
+	// of JSON, which typically indicates a Cloudflare Access login page.
+	// The user should re-authenticate with `argus auth --force`.
+	ErrAuthRequired = errors.New("api: authentication required (got HTML instead of JSON — run `argus auth --force` to re-authenticate)")
 )
 
 // APIError wraps a backend error response so callers can inspect the details
@@ -230,6 +236,18 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	return c.httpClient.Do(req)
 }
 
+// isHTMLResponse returns true when the response body looks like HTML rather
+// than JSON. This typically happens when Cloudflare Access intercepts the
+// request and returns a login page.
+func isHTMLResponse(body []byte, header http.Header) bool {
+	ct := header.Get("Content-Type")
+	if strings.Contains(ct, "text/html") {
+		return true
+	}
+	trimmed := bytes.TrimLeft(body, " \t\r\n")
+	return len(trimmed) > 0 && trimmed[0] == '<'
+}
+
 // DoJSON executes req, reads the response body, and decodes it as an
 // [models.APIResponse] envelope. It returns the decoded payload T on success
 // or an [*APIError] (wrapping [ErrAPIError]) when the backend signals an error
@@ -249,6 +267,12 @@ func DoJSON[T any](c *Client, req *http.Request) (T, error) {
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 	if err != nil {
 		return zero, fmt.Errorf("%w: %w", ErrReadingBody, err)
+	}
+
+	// Detect HTML responses (e.g. Cloudflare Access login page) before
+	// attempting JSON parsing.
+	if isHTMLResponse(raw, resp.Header) {
+		return zero, ErrAuthRequired
 	}
 
 	var envelope models.APIResponse[T]

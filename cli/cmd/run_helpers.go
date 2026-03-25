@@ -3,7 +3,9 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"time"
 
@@ -63,11 +65,21 @@ func fetchRunInfo(ctx context.Context, client *api.Client, c *cache.Cache, runID
 			continue
 		}
 
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			lastErr = readErr
+			continue
+		}
+
+		// Detect HTML responses (e.g. Cloudflare Access login page).
+		if len(body) > 0 && body[0] == '<' {
+			return nil, errors.New("authentication required: server returned HTML instead of JSON — run `argus auth --force` to re-authenticate")
+		}
+
 		var raw json.RawMessage
 		var envelope models.APIResponse[json.RawMessage]
 
-		dec := json.NewDecoder(resp.Body)
-		if err := dec.Decode(&envelope); err != nil {
+		if err := json.Unmarshal(body, &envelope); err != nil {
 			log.Debug().Err(err).Str("type", argusType).Msg("failed to decode envelope")
 			lastErr = err
 			continue
@@ -85,6 +97,14 @@ func fetchRunInfo(ctx context.Context, client *api.Client, c *cache.Cache, runID
 			continue
 		}
 
+		// The API returns {"status":"ok","response":null} when the run
+		// does not exist in this plugin table — treat as not-found.
+		if string(raw) == "null" || len(raw) == 0 {
+			lastErr = fmt.Errorf("run not found in %s", argusType)
+			log.Debug().Str("type", argusType).Msg("response was null, trying next type")
+			continue
+		}
+
 		log.Debug().Str("type", argusType).Msg("run found")
 		_ = c.Set(cacheKey, []byte(raw))
 		_ = c.Set(typeKey, []byte(argusType))
@@ -92,9 +112,9 @@ func fetchRunInfo(ctx context.Context, client *api.Client, c *cache.Cache, runID
 	}
 
 	if lastErr != nil {
-		return nil, fmt.Errorf("run %s not found: %w", runID, lastErr)
+		log.Debug().Err(lastErr).Msg("all plugin types exhausted")
 	}
-	return nil, fmt.Errorf("run %s not found (tried scylla-cluster-tests and generic)", runID)
+	return nil, fmt.Errorf("run %s does not exist in Argus", runID)
 }
 
 func unmarshalRunInfo(data []byte, argusType string) (*RunInfo, error) {

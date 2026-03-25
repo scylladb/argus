@@ -9,6 +9,7 @@ import (
 
 	"github.com/scylladb/argus/cli/internal/api"
 	"github.com/scylladb/argus/cli/internal/config"
+	"github.com/scylladb/argus/cli/internal/jwt"
 	"github.com/scylladb/argus/cli/internal/keychain"
 	"github.com/scylladb/argus/cli/internal/logging"
 	"github.com/scylladb/argus/cli/internal/output"
@@ -82,6 +83,11 @@ var rootCmd = &cobra.Command{
 		var apiOpts []api.ClientOption
 
 		// Auth priority: ARGUS_TOKEN env var > keychain session > unauthenticated.
+		//
+		// Before using cached keychain credentials, validate the CF token.
+		// If it has expired, Cloudflare will reject requests (returning HTML
+		// instead of proxying to Argus), so we must discard both the CF token
+		// and the derived session to avoid confusing errors downstream.
 		if token := os.Getenv("ARGUS_TOKEN"); token != "" {
 			apiOpts = append(apiOpts, api.WithAPIToken(token))
 			logger.Debug().Msg("using ARGUS_TOKEN from environment")
@@ -90,13 +96,23 @@ var rootCmd = &cobra.Command{
 				logger.Debug().Msg("using CF Access headers from environment")
 			}
 		} else if session, keychainErr := keychain.Load(); keychainErr == nil {
-			apiOpts = append(apiOpts, api.WithSession(session))
-			logger.Debug().Msg("session loaded from keychain")
-			// Also attach the CF Access JWT so Cloudflare lets the
-			// request through to the Argus backend.
+			// Check CF token validity first — if expired, everything is stale.
+			cfValid := false
 			if cfToken, cfErr := keychain.LoadCFToken(); cfErr == nil {
-				apiOpts = append(apiOpts, api.WithCFToken(cfToken))
-				logger.Debug().Msg("CF token loaded from keychain")
+				expired, jwtErr := jwt.IsExpired(cfToken)
+				if jwtErr != nil || expired {
+					logger.Warn().Msg("CF token expired — clearing cached credentials; run `argus auth` to re-authenticate")
+					_ = keychain.DeleteCFToken()
+					_ = keychain.Delete()
+				} else {
+					apiOpts = append(apiOpts, api.WithCFToken(cfToken))
+					logger.Debug().Msg("CF token loaded from keychain (valid)")
+					cfValid = true
+				}
+			}
+			if cfValid {
+				apiOpts = append(apiOpts, api.WithSession(session))
+				logger.Debug().Msg("session loaded from keychain")
 			}
 		} else {
 			logger.Debug().Err(keychainErr).Msg("no session in keychain")

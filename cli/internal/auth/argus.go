@@ -117,11 +117,18 @@ func HasValidCFToken() bool {
 //  3. Otherwise run `cloudflared access login` to open the browser auth flow,
 //     parse the JWT from its output, and store it for future use.
 func (s *ArgusService) Login(ctx context.Context) error {
-	// Fast path: a valid Argus session is already cached.
-	// NOTE: we do not validate the session here (e.g. via a lightweight API
-	// call) — if the session turns out to be stale the caller should handle
-	// the resulting 401 and retry. This avoids an extra round-trip on every
-	// CLI invocation.
+	// If the CF token has expired, the Argus session that was derived from it
+	// is also invalid. Clear both so we go through the full re-auth flow.
+	if cfTok, err := keychain.LoadCFToken(); err == nil {
+		expired, jwtErr := jwt.IsExpired(cfTok)
+		if jwtErr != nil || expired {
+			_ = keychain.DeleteCFToken()
+			_ = keychain.Delete() // session derived from expired CF token is stale
+		}
+	}
+
+	// Fast path: a valid Argus session is already cached and the CF token
+	// is still valid (checked above).
 	if _, err := keychain.Load(); err == nil {
 		return nil
 	}

@@ -292,6 +292,47 @@ func TestDoJSON_BackendError(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
+// DoJSON – HTML response (auth required)
+// --------------------------------------------------------------------------
+
+func TestDoJSON_HTMLResponse_ReturnsAuthError(t *testing.T) {
+	html := []byte(`<!DOCTYPE html><html><body>Please log in</body></html>`)
+
+	srv := httptest.NewServer(staticHandler(http.StatusOK, html))
+	t.Cleanup(srv.Close)
+
+	c, err := api.New(srv.URL, api.WithHTTPClient(srv.Client()))
+	require.NoError(t, err)
+
+	req, err := c.NewRequest(context.Background(), http.MethodGet, "/", nil)
+	require.NoError(t, err)
+
+	_, err = api.DoJSON[samplePayload](c, req)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, api.ErrAuthRequired)
+}
+
+func TestDoJSON_HTMLContentType_ReturnsAuthError(t *testing.T) {
+	handler := func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(`{"status":"ok"}`)) //nolint:errcheck
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(handler))
+	t.Cleanup(srv.Close)
+
+	c, err := api.New(srv.URL, api.WithHTTPClient(srv.Client()))
+	require.NoError(t, err)
+
+	req, err := c.NewRequest(context.Background(), http.MethodGet, "/", nil)
+	require.NoError(t, err)
+
+	_, err = api.DoJSON[samplePayload](c, req)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, api.ErrAuthRequired)
+}
+
+// --------------------------------------------------------------------------
 // DoJSON – malformed JSON
 // --------------------------------------------------------------------------
 

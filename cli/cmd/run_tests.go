@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/scylladb/argus/cli/internal/api"
@@ -22,6 +23,7 @@ type PytestView struct {
 type PytestResultsView struct {
 	TotalTests  int          `json:"total_tests"`
 	FailedCount int          `json:"failed_count"`
+	LogsLink    string       `json:"logs_link,omitempty"`
 	FailedTests []PytestView `json:"failed_tests"`
 }
 
@@ -32,8 +34,12 @@ func (v *PytestResultsView) Headers() []string {
 
 // Rows implements output.Tabular.
 func (v *PytestResultsView) Rows() [][]string {
+	summary := fmt.Sprintf("total=%d failed=%d", v.TotalTests, v.FailedCount)
 	rows := [][]string{
-		{"[summary]", fmt.Sprintf("total=%d failed=%d", v.TotalTests, v.FailedCount), "", ""},
+		{"[summary]", summary, "", ""},
+	}
+	if v.LogsLink != "" {
+		rows = append(rows, []string{"[logs]", v.LogsLink, "", ""})
 	}
 	for _, t := range v.FailedTests {
 		msg := t.Message
@@ -66,14 +72,6 @@ SCT runs have no pytest results — use 'argus run events' instead.`,
 			return err
 		}
 
-		info, err := fetchRunInfo(ctx, client, c, runID)
-		if err != nil {
-			return err
-		}
-		if info.IsSCT() {
-			return fmt.Errorf("pytest results are only available for DTest runs; use 'argus run events' for SCT")
-		}
-
 		// Fetch pytest results (with cache).
 		cacheKey := fmt.Sprintf("pytest_results_%s.json", runID)
 		var results []models.PytestResult
@@ -94,6 +92,18 @@ SCT runs have no pytest results — use 'argus run events' instead.`,
 			}
 			if raw, marshalErr := json.Marshal(results); marshalErr == nil {
 				_ = c.Set(cacheKey, raw)
+			}
+		}
+
+		// Fetch LOGS_LINK from user fields of the first result.
+		var logsLink string
+		if len(results) > 0 {
+			r := results[0]
+			fieldsPath := fmt.Sprintf("/api/v1/views/widgets/pytest/%s/%s/fields", r.Name, r.ID)
+			if fieldsReq, reqErr := client.NewRequest(ctx, "GET", fieldsPath, nil); reqErr == nil {
+				if fields, doErr := api.DoJSON[map[string]string](client, fieldsReq); doErr == nil {
+					logsLink = extractHref(fields["LOGS_LINK"])
+				}
 			}
 		}
 
@@ -125,7 +135,18 @@ SCT runs have no pytest results — use 'argus run events' instead.`,
 		return out.Write(&PytestResultsView{
 			TotalTests:  len(results),
 			FailedCount: len(failed),
+			LogsLink:    logsLink,
 			FailedTests: failed,
 		})
 	},
+}
+
+var hrefRe = regexp.MustCompile(`href=["']?([^"'> ]+)`)
+
+// extractHref pulls the URL out of an HTML anchor tag, or returns s as-is.
+func extractHref(s string) string {
+	if m := hrefRe.FindStringSubmatch(s); len(m) > 1 {
+		return m[1]
+	}
+	return s
 }

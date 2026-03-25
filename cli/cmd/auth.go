@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"github.com/scylladb/argus/cli/internal/auth"
+	"github.com/scylladb/argus/cli/internal/keychain"
 	"github.com/scylladb/argus/cli/internal/logging"
 	"github.com/scylladb/argus/cli/internal/services"
 	"github.com/spf13/cobra"
@@ -21,7 +22,10 @@ or the Secret Service on Linux) and reused on subsequent invocations until
 it expires.
 
 The JWT is then exchanged for an Argus session token via POST /auth/login/cf
-and that session is also stored in the keychain.`,
+and that session is also stored in the keychain.
+
+Use --force to clear cached tokens and force a fresh login, which is useful
+when the cached session has become stale.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		ctx := cmd.Context()
 		cfg := ConfigFrom(ctx)
@@ -32,6 +36,13 @@ and that session is also stored in the keychain.`,
 		if os.Getenv("ARGUS_TOKEN") != "" {
 			log.Info().Msg("authenticated via ARGUS_TOKEN environment variable")
 			return nil
+		}
+
+		force, _ := cmd.Flags().GetBool("force")
+		if force {
+			log.Info().Msg("--force: clearing cached tokens")
+			_ = keychain.Delete()
+			_ = keychain.DeleteCFToken()
 		}
 
 		// Ensure cloudflared is available (PATH → cache → download).
@@ -62,5 +73,6 @@ and that session is also stored in the keychain.`,
 }
 
 func init() {
+	authCmd.Flags().BoolP("force", "f", false, "Clear cached tokens and force a fresh login")
 	rootCmd.AddCommand(authCmd)
 }
