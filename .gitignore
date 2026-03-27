@@ -138,3 +138,4 @@ argus_web.yaml
 /profile/*
 !/profile/.gitkeep
 argus/_version.py
+/cli/cli
