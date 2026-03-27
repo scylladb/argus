@@ -31,6 +31,7 @@ SCT_REGION_PROPERTY_MAP = {
     "gce-siren": "gce_datacenter",
     "k8s-gke": "gce_datacenter",
     "azure": "azure_region_name",
+    "oci": "oci_region_name",
     "default": "region_name",
 }
 
