@@ -1,6 +1,6 @@
 from flask import Blueprint
 
-from argus.backend.plugins.sct.testrun import SCTEvent, SCTJunitReports, SCTTestRun, SCTUnprocessedEvent, StressCommand
+from argus.backend.plugins.sct.testrun import SCTEvent, SCTJunitReports, SCTNemesis, SCTTestRun, SCTUnprocessedEvent, StressCommand
 from argus.backend.plugins.sct.controller import bp as sct_bp
 from argus.backend.plugins.core import PluginInfoBase, PluginModelBase
 from argus.backend.plugins.sct.udt import (
@@ -26,6 +26,7 @@ class PluginInfo(PluginInfoBase):
         SCTEvent,
         SCTUnprocessedEvent,
         StressCommand,
+        SCTNemesis,
     ]
     all_types = [
         NemesisRunInfo,
