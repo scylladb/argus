@@ -200,7 +200,9 @@ func (s *ArgusService) runCFLogin(ctx context.Context) (string, error) {
 	cmd.Stdout = io.MultiWriter(os.Stdout, &out)
 	cmd.Stderr = io.MultiWriter(os.Stderr, &out)
 
-	cmd.Start()
+	if err := cmd.Start(); err != nil {
+		return "", fmt.Errorf("%w: %w", ErrCFLogin, err)
+	}
 
 	if err := cmd.Wait(); err != nil {
 		return "", fmt.Errorf("%w: %w\n%s", ErrCFLogin, err, out.String())

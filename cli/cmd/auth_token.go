@@ -25,7 +25,9 @@ You probably want to use this for local and dev deployments as production deploy
 			return nil
 		}
 		tok := args[0]
-		keychain.StorePAT(tok)
+		if err := keychain.StorePAT(tok); err != nil {
+			return err
+		}
 		log.Info().Msg("saved token into keychain.")
 
 		return nil

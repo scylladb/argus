@@ -72,9 +72,9 @@ type Client struct {
 	// apiToken is used as "Authorization: token <apiToken>" header, if any.
 	apiToken string
 
-	//cfAccessClientId is part one of the cf login jwt override (service level)
+	// cfAccessClientId is part one of the cf login jwt override (service level)
 	cfAccessClientId string
-	//cfAccessClientSecret is part two of the cf login jwt override (service level)
+	// cfAccessClientSecret is part two of the cf login jwt override (service level)
 	cfAccessClientSecret string
 }
 
@@ -106,6 +106,7 @@ func WithHTTPClient(hc *http.Client) ClientOption {
 	return func(c *Client) { c.httpClient = hc }
 }
 
+// WithCFAccessSecret attaches ID and Secret for CF Access
 func WithCFAccessSecret(id string, secret string) ClientOption {
 	return func(c *Client) { c.cfAccessClientId = id; c.cfAccessClientSecret = secret }
 }
@@ -218,6 +219,14 @@ func DoJSON[T any](c *Client, req *http.Request) (T, error) {
 		return zero, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return zero, fmt.Errorf("server returned %d: %s", resp.StatusCode, http.StatusText(resp.StatusCode))
+	}
+
+	if contentType := resp.Header.Get("Content-Type"); contentType != "application/json" {
+		return zero, fmt.Errorf("server returned Content-Type %s, Expected application/json", contentType)
+	}
 
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
