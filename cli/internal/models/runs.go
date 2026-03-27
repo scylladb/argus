@@ -1,5 +1,11 @@
 package models
 
+import (
+	"encoding/json"
+	"fmt"
+	"sort"
+)
+
 // ---------------------------------------------------------------------------
 // Shared enumerations
 // ---------------------------------------------------------------------------
@@ -403,4 +409,136 @@ type RunMeta struct {
 	EndTime             string                  `json:"end_time"`
 	InvestigationStatus TestInvestigationStatus `json:"investigation_status"`
 	Heartbeat           int64                   `json:"heartbeat"`
+}
+
+// ---------------------------------------------------------------------------
+// Activity response (GET /run/<run_id>/activity)
+// ---------------------------------------------------------------------------
+
+// ActivityResponse is the response payload for the test-run activity endpoint.
+// Events maps event IDs to their human-readable descriptions.
+type ActivityResponse struct {
+	RunID     string            `json:"run_id"`
+	RawEvents json.RawMessage   `json:"raw_events"`
+	Events    map[string]string `json:"events"`
+}
+
+// Headers implements output.Tabular for ActivityResponse.
+func (ActivityResponse) Headers() []string {
+	return []string{"Event Id", "Description"}
+}
+
+// Rows implements output.Tabular for ActivityResponse.  Events are sorted by
+// key so that output is deterministic.
+func (a ActivityResponse) Rows() [][]string {
+	keys := make([]string, 0, len(a.Events))
+	for k := range a.Events {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	rows := make([][]string, 0, len(keys))
+	for _, k := range keys {
+		rows = append(rows, []string{k, a.Events[k]})
+	}
+	return rows
+}
+
+// ---------------------------------------------------------------------------
+// Fetch results (GET /run/<test_id>/<run_id>/fetch_results)
+// ---------------------------------------------------------------------------
+
+// ResultCell is a single cell inside a ResultTable.
+type ResultCell struct {
+	Value  any    `json:"value"`
+	Status string `json:"status"`
+}
+
+// ResultColumnMeta describes one column in a ResultTable.
+type ResultColumnMeta struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+}
+
+// ResultTable is one performance/result table returned by the fetch_results
+// endpoint.  TableData is keyed as row-name → column-name → cell.
+type ResultTable struct {
+	Description string                           `json:"description"`
+	TableData   map[string]map[string]ResultCell `json:"table_data"`
+	Columns     []ResultColumnMeta               `json:"columns"`
+	Rows        []string                         `json:"rows"`
+	TableStatus string                           `json:"table_status"`
+}
+
+// Headers implements output.Tabular for ResultTable.  The first column is the
+// row name; subsequent columns come from the table's Columns metadata.
+func (rt ResultTable) Headers() []string {
+	h := make([]string, 0, 1+len(rt.Columns))
+	h = append(h, "Row")
+	for _, c := range rt.Columns {
+		h = append(h, c.Name)
+	}
+	return h
+}
+
+// Rows implements output.Tabular for ResultTable.  Row order follows
+// rt.Rows; column order follows rt.Columns.
+func (rt ResultTable) TableRows() [][]string {
+	out := make([][]string, 0, len(rt.Rows))
+	for _, rowName := range rt.Rows {
+		row := make([]string, 0, 1+len(rt.Columns))
+		row = append(row, rowName)
+		colData := rt.TableData[rowName]
+		for _, col := range rt.Columns {
+			cell, ok := colData[col.Name]
+			if !ok {
+				row = append(row, "")
+			} else {
+				row = append(row, fmt.Sprint(cell.Value))
+			}
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
+// FetchResultsEnvelope is the non-standard envelope returned by the
+// fetch_results endpoint.  Unlike other endpoints the payload key is "tables"
+// rather than "response".
+type FetchResultsEnvelope struct {
+	Status string        `json:"status"`
+	Tables []ResultTable `json:"tables"`
+}
+
+// FetchResultsResponse wraps []ResultTable to implement output.Tabular by
+// rendering all tables sequentially.
+type FetchResultsResponse struct {
+	Tables []ResultTable
+}
+
+// Headers implements output.Tabular.  Uses the first table's headers or
+// returns a single "Table" column when empty.
+func (f FetchResultsResponse) Headers() []string {
+	if len(f.Tables) == 0 {
+		return []string{"Table"}
+	}
+	// Prefix with "Table" column to distinguish between tables.
+	h := []string{"Table"}
+	h = append(h, f.Tables[0].Headers()...)
+	return h
+}
+
+// Rows implements output.Tabular.  Each result table's rows are emitted with
+// the table description prepended as the first column.
+func (f FetchResultsResponse) Rows() [][]string {
+	var rows [][]string
+	for _, tbl := range f.Tables {
+		for _, r := range tbl.TableRows() {
+			row := make([]string, 0, 1+len(r))
+			row = append(row, tbl.Description)
+			row = append(row, r...)
+			rows = append(rows, row)
+		}
+	}
+	return rows
 }
