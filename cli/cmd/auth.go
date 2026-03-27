@@ -26,28 +26,32 @@ and that session is also stored in the keychain.`,
 		log := logging.For(LoggerFrom(ctx), "auth")
 
 		// Ensure cloudflared is available (PATH → cache → download).
-		log.Debug().Msg("locating cloudflared binary")
-		cfSvc := services.NewCloudflaredService()
-		binPath, err := cfSvc.Ensure(ctx)
-		if err != nil {
-			log.Error().Err(err).Msg("failed to locate cloudflared")
-			return err
-		}
-		log.Debug().Str("bin", binPath).Msg("cloudflared binary ready")
+		if cfg.UseCf {
+			log.Debug().Msg("locating cloudflared binary")
+			cfSvc := services.NewCloudflaredService()
+			binPath, err := cfSvc.Ensure(ctx)
+			if err != nil {
+				log.Error().Err(err).Msg("failed to locate cloudflared")
+				return err
+			}
+			log.Debug().Str("bin", binPath).Msg("cloudflared binary ready")
+			// ArgusService handles the full flow:
+			//   1. Cache hit  → reuse keychain JWT, skip browser entirely.
+			//   2. Cache miss → run `cloudflared access login` (opens browser),
+			//                   parse JWT from output, cache it.
+			//   3. Exchange JWT for Argus session, store in keychain.
+			log.Info().Str("url", cfg.URL).Msg("authenticating with Argus")
+			argusSvc := auth.NewArgusService(cfg.URL, binPath)
+			if err := argusSvc.Login(ctx); err != nil {
+				log.Error().Err(err).Msg("Argus login failed")
+				return err
+			}
 
-		// ArgusService handles the full flow:
-		//   1. Cache hit  → reuse keychain JWT, skip browser entirely.
-		//   2. Cache miss → run `cloudflared access login` (opens browser),
-		//                   parse JWT from output, cache it.
-		//   3. Exchange JWT for Argus session, store in keychain.
-		log.Info().Str("url", cfg.URL).Msg("authenticating with Argus")
-		argusSvc := auth.NewArgusService(cfg.URL, binPath)
-		if err := argusSvc.Login(ctx); err != nil {
-			log.Error().Err(err).Msg("Argus login failed")
-			return err
+			log.Info().Msg("authentication successful; session stored in keychain")
+		} else {
+			log.Info().Msg("cloudflare auth disabled; login with auth-token instead")
 		}
 
-		log.Info().Msg("authentication successful; session stored in keychain")
 		return nil
 	},
 }

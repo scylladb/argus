@@ -1,10 +1,13 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -121,6 +124,11 @@ func HasValidCFToken() bool {
 //  3. Otherwise run `cloudflared access login` to open the browser auth flow,
 //     parse the JWT from its output, and store it for future use.
 func (s *ArgusService) Login(ctx context.Context) error {
+	// Fast path: a valid Argus token is already cached.
+	if _, err := keychain.LoadPAT(); err == nil {
+		return nil
+	}
+
 	// Fast path: a valid Argus session is already cached.
 	if _, err := keychain.Load(); err == nil {
 		return nil
@@ -181,21 +189,27 @@ func (s *ArgusService) getOrFetchCFToken(ctx context.Context) (string, error) {
 // non-empty line of stdout.  This function captures that output and returns
 // the JWT.
 func (s *ArgusService) runCFLogin(ctx context.Context) (string, error) {
-	out, err := exec.CommandContext(ctx, s.cloudflaredBin, //nolint:gosec
+	cmd := exec.CommandContext(ctx, s.cloudflaredBin, //nolint:gosec
 		"access", "login",
 		"--no-verbose",
 		"--auto-close",
 		"--app", s.argusURL,
 		s.argusURL,
-	).CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("%w: %w\n%s", ErrCFLogin, err, out)
+	)
+	var out bytes.Buffer
+	cmd.Stdout = io.MultiWriter(os.Stdout, &out)
+	cmd.Stderr = io.MultiWriter(os.Stderr, &out)
+
+	cmd.Start()
+
+	if err := cmd.Wait(); err != nil {
+		return "", fmt.Errorf("%w: %w\n%s", ErrCFLogin, err, out.String())
 	}
 
 	// The JWT is the last non-empty line of the output.
-	token := lastNonEmptyLine(string(out))
+	token := lastNonEmptyLine(out.String())
 	if token == "" {
-		return "", fmt.Errorf("%w: no token found in cloudflared output:\n%s", ErrCFLogin, out)
+		return "", fmt.Errorf("%w: no token found in cloudflared output:\n%s", ErrCFLogin, out.String())
 	}
 
 	return token, nil

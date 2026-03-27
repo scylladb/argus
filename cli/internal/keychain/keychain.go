@@ -16,6 +16,9 @@ const (
 	// token is stored.
 	sessionKey = "session"
 
+	// patKey is the keychain account name which hosts the Argus API token
+	patKey = "pat"
+
 	// cfTokenKey is the keychain account name under which the Cloudflare
 	// Access JWT is stored so it can be reused across invocations without
 	// having to re-run cloudflared.
@@ -66,6 +69,24 @@ func Load() (string, error) {
 		return "", errors.Join(ErrNotFound, err)
 	}
 	return token, nil
+}
+
+func LoadPAT() (string, error) {
+	token, err := keyring.Get(serviceName, patKey)
+	if err != nil {
+		if errors.Is(err, keyring.ErrNotFound) {
+			return "", ErrNotFound
+		}
+		return "", errors.Join(ErrNotFound, err)
+	}
+	return token, nil
+}
+
+func StorePAT(token string) error {
+	if err := keyring.Set(serviceName, patKey, token); err != nil {
+		return errors.Join(ErrStoring, err)
+	}
+	return nil
 }
 
 // Delete removes the session token from the system keychain.
