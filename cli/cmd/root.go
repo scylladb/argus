@@ -77,11 +77,14 @@ var rootCmd = &cobra.Command{
 
 		// ---- API client ----------------------------------------------
 		var apiOpts []api.ClientOption
-		if session, keychainErr := keychain.Load(); keychainErr == nil {
+		if token, keychainErr := keychain.LoadPAT(); keychainErr == nil {
+			apiOpts = append(apiOpts, api.WithAPIToken(token))
+			logger.Debug().Msg("token loaded from keychain")
+		} else if session, keychainErr := keychain.Load(); keychainErr == nil {
 			apiOpts = append(apiOpts, api.WithSession(session))
 			logger.Debug().Msg("session loaded from keychain")
 		} else {
-			logger.Debug().Err(keychainErr).Msg("no session in keychain")
+			logger.Debug().Err(keychainErr).Msg("no session or token in keychain")
 		}
 
 		client, err := api.New(cfg.URL, apiOpts...)
