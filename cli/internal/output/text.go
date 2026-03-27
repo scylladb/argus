@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/olekukonko/tablewriter"
+	"github.com/olekukonko/tablewriter/tw"
 )
 
 // Sentinel errors returned by the text outputter.
@@ -64,6 +65,7 @@ func (t *textOutputter) Write(v any) error {
 
 	table := tablewriter.NewTable(t.w)
 	defer table.Close()
+	configureTableWidths(table)
 
 	if headers := tab.Headers(); len(headers) > 0 {
 		table.Header(headers)
@@ -91,6 +93,7 @@ func (t *textOutputter) writeRawJSON(v any) error {
 
 	table := tablewriter.NewTable(t.w)
 	table.Header([]string{"json"})
+	configureTableWidths(table)
 
 	if err := table.Append([]string{string(raw)}); err != nil {
 		return fmt.Errorf("%w: %w", ErrTextOutputJSONFallbackRow, err)
@@ -101,4 +104,19 @@ func (t *textOutputter) writeRawJSON(v any) error {
 	}
 
 	return nil
+}
+
+// colMaxWidth is the maximum character width for any single table column.
+const colMaxWidth = 80
+
+// configureTableWidths sets a per-column max width and enables word-wrapping
+// on both headers and data rows so that long values are split across lines
+// instead of breaking the table layout.
+func configureTableWidths(table *tablewriter.Table) {
+	table.Configure(func(cfg *tablewriter.Config) {
+		cfg.Header.ColMaxWidths.Global = colMaxWidth
+		cfg.Header.Formatting.AutoWrap = tw.WrapBreak
+		cfg.Row.ColMaxWidths.Global = colMaxWidth
+		cfg.Row.Formatting.AutoWrap = tw.WrapBreak
+	})
 }
