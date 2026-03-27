@@ -87,6 +87,19 @@ var rootCmd = &cobra.Command{
 			logger.Debug().Err(keychainErr).Msg("no session or token in keychain")
 		}
 
+		if token := os.Getenv("ARGUS_TOKEN"); token != "" {
+			apiOpts = append(apiOpts, api.WithAPIToken(token))
+			logger.Debug().Msg("Using token from ARGUS_TOKEN")
+		}
+
+		if clientId := os.Getenv("ARGUS_CF_ACCESS_CLIENT_ID"); clientId != "" {
+			clientSecret := os.Getenv("ARGUS_CF_ACCESS_CLIENT_SECRET")
+			if clientSecret != "" {
+				apiOpts = append(apiOpts, api.WithCFAccessSecret(clientId, clientSecret))
+				logger.Debug().Msg("Using CF Service User from ARGUS_CF_ACCESS_CLIENT_*")
+			}
+		}
+
 		client, err := api.New(cfg.URL, apiOpts...)
 		if err != nil {
 			return fmt.Errorf("%w %q: %w", ErrInvalidURL, cfg.URL, err)

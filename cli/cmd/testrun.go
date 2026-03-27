@@ -141,7 +141,6 @@ var getRunTypeCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-
 		result, err := api.DoJSON[models.RunType](client, req)
 		if err != nil {
 			return err
