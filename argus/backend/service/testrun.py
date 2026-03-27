@@ -74,6 +74,16 @@ class TestRunService:
             except plugin.model.DoesNotExist:
                 return None
 
+    def get_test_type_for_run(self, run_id: str) -> str:
+        for name, plugin in AVAILABLE_PLUGINS.items():
+            try:
+                run = plugin.model.get(id=run_id)
+                if run:
+                    return name
+            except plugin.model.DoesNotExist:
+                continue
+        return "unknown-does-not-exist"
+
     def get_run_response(self, run_type: str, run_id: UUID) -> dict | None:
         plugin = self.plugins.get(run_type)
         if plugin:

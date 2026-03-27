@@ -57,6 +57,20 @@ def get_runs_for_test(test_id: str):
     }
 
 
+@bp.route("/run/<string:run_id>/type")
+@api_login_required
+def get_type_for_run(run_id: str):
+    service = TestRunService()
+    run_type = service.get_test_type_for_run(run_id)
+
+    return {
+        "status": "ok",
+        "response": {
+            "run_type": run_type,
+        }
+    }
+
+
 @bp.route("/run/<string:run_type>/<string:run_id>")
 @api_login_required
 def get_testrun(run_type: str, run_id: str):

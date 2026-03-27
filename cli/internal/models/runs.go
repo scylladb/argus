@@ -411,6 +411,10 @@ type RunMeta struct {
 	Heartbeat           int64                   `json:"heartbeat"`
 }
 
+type RunType struct {
+	RunType string `json:"run_type"`
+}
+
 // ---------------------------------------------------------------------------
 // Activity response (GET /run/<run_id>/activity)
 // ---------------------------------------------------------------------------
