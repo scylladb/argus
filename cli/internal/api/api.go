@@ -71,6 +71,11 @@ type Client struct {
 	cfToken string
 	// apiToken is used as "Authorization: token <apiToken>" header, if any.
 	apiToken string
+
+	//cfAccessClientId is part one of the cf login jwt override (service level)
+	cfAccessClientId string
+	//cfAccessClientSecret is part two of the cf login jwt override (service level)
+	cfAccessClientSecret string
 }
 
 // ClientOption is a functional option for [New].
@@ -99,6 +104,10 @@ func WithAPIToken(token string) ClientOption {
 // WithHTTPClient replaces the underlying [http.Client]. Useful in tests.
 func WithHTTPClient(hc *http.Client) ClientOption {
 	return func(c *Client) { c.httpClient = hc }
+}
+
+func WithCFAccessSecret(id string, secret string) ClientOption {
+	return func(c *Client) { c.cfAccessClientId = id; c.cfAccessClientSecret = secret }
 }
 
 // New constructs a Client targeting rawBaseURL.
@@ -174,6 +183,12 @@ func (c *Client) attachAuth(req *http.Request) {
 	}
 	if c.apiToken != "" {
 		req.Header.Set("Authorization", "token "+c.apiToken)
+	}
+	if c.cfAccessClientId != "" {
+		req.Header.Set("CF-Access-Client-Id", c.cfAccessClientId)
+	}
+	if c.cfAccessClientSecret != "" {
+		req.Header.Set("CF-Access-Client-Secret", c.cfAccessClientSecret)
 	}
 }
 

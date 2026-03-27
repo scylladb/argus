@@ -44,7 +44,8 @@ type Config struct {
 // fields. Adding a new Config field requires adding its flag name here so the
 // auto-binder picks it up — no other wiring needed.
 var configKeys = map[string]struct{}{
-	"url": {},
+	"url":            {},
+	"use_cloudflare": {},
 }
 
 // Load builds a Viper instance, auto-binds every persistent flag on cmd whose
@@ -71,6 +72,7 @@ func Load(cfgFile string, cmd *cobra.Command) (*Config, error) {
 
 	// ---- defaults ----------------------------------------------------
 	v.SetDefault("url", "https://argus.scylladb.com")
+	v.SetDefault("use_cloudflare", true)
 
 	// ---- environment variables ---------------------------------------
 	v.SetEnvPrefix("ARGUS")
