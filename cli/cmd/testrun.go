@@ -123,6 +123,34 @@ and an optional --full flag that returns complete run objects.`,
 }
 
 // ---------------------------------------------------------------------------
+// Subcommand: run get-type
+// ---------------------------------------------------------------------------
+
+var getRunTypeCmd = &cobra.Command{
+	Use:   "get-type",
+	Short: "Get a test run type",
+	Long:  `Fetch the run type if exists for a specific run ID.`,
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		ctx := cmd.Context()
+		client := APIClientFrom(ctx)
+		out := OutputterFrom(ctx)
+
+		runID, _ := cmd.Flags().GetString("run-id")
+		route := fmt.Sprintf(api.TestRunGetType, runID)
+		req, err := client.NewRequest(ctx, "GET", route, nil)
+		if err != nil {
+			return err
+		}
+
+		result, err := api.DoJSON[models.RunType](client, req)
+		if err != nil {
+			return err
+		}
+		return out.Write(models.NewTabularSlice([]models.RunType{result}))
+	},
+}
+
+// ---------------------------------------------------------------------------
 // Subcommand: run get
 // ---------------------------------------------------------------------------
 
@@ -350,6 +378,10 @@ func init() {
 	_ = getRunCmd.MarkFlagRequired("type")
 	_ = getRunCmd.MarkFlagRequired("run-id")
 
+	// run get-type
+	getRunTypeCmd.Flags().String("run-id", "", "Run UUID (required)")
+	_ = getRunTypeCmd.MarkFlagRequired("run-id")
+
 	// run activity
 	activityCmd.Flags().String("run-id", "", "Run UUID (required)")
 	_ = activityCmd.MarkFlagRequired("run-id")
@@ -372,7 +404,7 @@ func init() {
 	getCommentCmd.Flags().String("comment-id", "", "Comment UUID (required)")
 	_ = getCommentCmd.MarkFlagRequired("comment-id")
 
-	runCmd.AddCommand(listRunsCmd, getRunCmd, activityCmd, resultsCmd, runCommentsCmd, runPytestResultsCmd)
+	runCmd.AddCommand(listRunsCmd, getRunCmd, getRunTypeCmd, activityCmd, resultsCmd, runCommentsCmd, runPytestResultsCmd)
 	commentCmd.AddCommand(getCommentCmd)
 	rootCmd.AddCommand(runCmd, commentCmd)
 }
