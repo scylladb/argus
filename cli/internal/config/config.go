@@ -36,7 +36,8 @@ var (
 type Config struct {
 	// URL is the base URL of the Argus service.
 	// Config key: "url" | Flag: --url | Env: ARGUS_URL
-	URL string `mapstructure:"url"`
+	URL   string `mapstructure:"url"`
+	UseCf bool   `mapstructure:"use_cloudflare"`
 }
 
 // configKeys is the set of persistent flag names that correspond to Config

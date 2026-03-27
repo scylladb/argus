@@ -134,7 +134,7 @@ func Setup(levelStr, command string, opts ...Option) (zerolog.Logger, CleanupFun
 		stderrDst = os.Stderr
 	}
 	stderrWriter := &levelFilterWriter{
-		min: zerolog.ErrorLevel,
+		min: level,
 		cw:  newConsoleWriter(stderrDst),
 	}
 
