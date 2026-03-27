@@ -19,16 +19,18 @@ import (
 var ErrInvalidURL = errors.New("cmd: invalid argus URL")
 
 var (
-	useText  bool
-	argusURL string
-	cfgFile  string
-	logLevel string
+	useText       bool
+	useCloudflare bool
+	argusURL      string
+	cfgFile       string
+	logLevel      string
 )
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default: $XDG_CONFIG_HOME/argus-cli/config.yaml)")
 	rootCmd.PersistentFlags().BoolVar(&useText, "text", false, "render output as a text table instead of JSON")
 	rootCmd.PersistentFlags().StringVar(&argusURL, "url", "", "base URL of the Argus service (overrides config file)")
+	rootCmd.PersistentFlags().BoolVar(&useCloudflare, "use-cloudflare", true, "Use cloudflare access (overrides config file)")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", `log verbosity: trace, debug, info, warn, error`)
 }
 
