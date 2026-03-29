@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/scylladb/argus/cli/internal/api"
+	"github.com/scylladb/argus/cli/internal/cache"
 	"github.com/scylladb/argus/cli/internal/models"
 	"github.com/spf13/cobra"
 )
@@ -37,6 +39,80 @@ var runTypeHandlers = map[string]runTypeHandler{
 	"sirenada": func(c *api.Client, r *http.Request) (any, error) {
 		return api.DoJSON[models.SirenadaRun](c, r)
 	},
+}
+
+// runTypeCacheGetter retrieves a typed run from the cache and returns it as any.
+type runTypeCacheGetter func(c *cache.Cache, key string) (any, error)
+
+// runTypeCacheGetters mirrors runTypeHandlers for cache lookups.
+// Each entry must correspond to the same key in runTypeHandlers.
+var runTypeCacheGetters = map[string]runTypeCacheGetter{
+	"scylla-cluster-tests": func(c *cache.Cache, key string) (any, error) {
+		v, _, err := cache.Get[models.SCTTestRun](c, key)
+		return v, err
+	},
+	"generic": func(c *cache.Cache, key string) (any, error) {
+		v, _, err := cache.Get[models.GenericRun](c, key)
+		return v, err
+	},
+	"driver-matrix-tests": func(c *cache.Cache, key string) (any, error) {
+		v, _, err := cache.Get[models.DriverTestRun](c, key)
+		return v, err
+	},
+	"sirenada": func(c *cache.Cache, key string) (any, error) {
+		v, _, err := cache.Get[models.SirenadaRun](c, key)
+		return v, err
+	},
+}
+
+// runTypeCacheSetter stores a typed run value in the cache.
+// The value parameter is the concrete type returned by the matching runTypeHandler.
+type runTypeCacheSetter func(c *cache.Cache, key string, value any) error
+
+// runTypeCacheSetters mirrors runTypeHandlers for cache writes.
+var runTypeCacheSetters = map[string]runTypeCacheSetter{
+	"scylla-cluster-tests": func(c *cache.Cache, key string, value any) error {
+		v, ok := value.(models.SCTTestRun)
+		if !ok {
+			return nil
+		}
+		return cache.Set(c, key, v, "", cache.TTLRun)
+	},
+	"generic": func(c *cache.Cache, key string, value any) error {
+		v, ok := value.(models.GenericRun)
+		if !ok {
+			return nil
+		}
+		return cache.Set(c, key, v, "", cache.TTLRun)
+	},
+	"driver-matrix-tests": func(c *cache.Cache, key string, value any) error {
+		v, ok := value.(models.DriverTestRun)
+		if !ok {
+			return nil
+		}
+		return cache.Set(c, key, v, "", cache.TTLRun)
+	},
+	"sirenada": func(c *cache.Cache, key string, value any) error {
+		v, ok := value.(models.SirenadaRun)
+		if !ok {
+			return nil
+		}
+		return cache.Set(c, key, v, "", cache.TTLRun)
+	},
+}
+
+// isCacheable reports whether an error from a cache getter should be treated
+// as a miss (i.e. proceed to network).  Any non-nil error other than
+// ErrExpired is unexpected and is logged, but we still fall through to the
+// network so the user is never left without a result.
+func isCacheable(err error) bool {
+	return err == nil
+}
+
+// isCacheMiss reports whether err indicates the entry was absent or expired,
+// meaning we should fetch from the network.
+func isCacheMiss(err error) bool {
+	return errors.Is(err, cache.ErrCacheMiss) || errors.Is(err, cache.ErrExpired)
 }
 
 // validRunTypes returns a sorted, comma-separated list of recognised plugin
@@ -134,8 +210,15 @@ var getRunTypeCmd = &cobra.Command{
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
+		c := CacheFrom(ctx)
 
 		runID, _ := cmd.Flags().GetString("run-id")
+		cacheKey := cache.RunTypeKey(runID)
+
+		if cached, _, err := cache.Get[models.RunType](c, cacheKey); isCacheable(err) {
+			return out.Write(models.NewTabularSlice([]models.RunType{cached}))
+		}
+
 		route := fmt.Sprintf(api.TestRunGetType, runID)
 		req, err := client.NewRequest(ctx, "GET", route, nil)
 		if err != nil {
@@ -145,6 +228,7 @@ var getRunTypeCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		_ = cache.Set(c, cacheKey, result, route, cache.TTLRunType)
 		return out.Write(models.NewTabularSlice([]models.RunType{result}))
 	},
 }
@@ -161,6 +245,7 @@ var getRunCmd = &cobra.Command{
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
+		c := CacheFrom(ctx)
 
 		runType, _ := cmd.Flags().GetString("type")
 		runID, _ := cmd.Flags().GetString("run-id")
@@ -170,15 +255,25 @@ var getRunCmd = &cobra.Command{
 			return fmt.Errorf("unknown run type %q, valid types: %s", runType, validRunTypes())
 		}
 
+		cacheKey := cache.RunKey(runType, runID)
+
+		if getter, ok := runTypeCacheGetters[runType]; ok {
+			if cached, err := getter(c, cacheKey); isCacheable(err) {
+				return out.Write(models.NewKVTabular(cached))
+			}
+		}
+
 		route := fmt.Sprintf(api.TestRunGet, runType, runID)
 		req, err := client.NewRequest(ctx, "GET", route, nil)
 		if err != nil {
 			return err
 		}
-
 		result, err := handler(client, req)
 		if err != nil {
 			return err
+		}
+		if setter, ok := runTypeCacheSetters[runType]; ok {
+			_ = setter(c, cacheKey, result)
 		}
 		return out.Write(models.NewKVTabular(result))
 	},
@@ -196,19 +291,25 @@ var activityCmd = &cobra.Command{
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
+		c := CacheFrom(ctx)
 
 		runID, _ := cmd.Flags().GetString("run-id")
+		cacheKey := cache.ActivityKey(runID)
+
+		if cached, _, err := cache.Get[models.ActivityResponse](c, cacheKey); isCacheable(err) {
+			return out.Write(cached)
+		}
 
 		route := fmt.Sprintf(api.TestRunActivity, runID)
 		req, err := client.NewRequest(ctx, "GET", route, nil)
 		if err != nil {
 			return err
 		}
-
 		result, err := api.DoJSON[models.ActivityResponse](client, req)
 		if err != nil {
 			return err
 		}
+		_ = cache.Set(c, cacheKey, result, route, cache.TTLActivity)
 		// ActivityResponse has a manual Tabular implementation.
 		return out.Write(result)
 	},
@@ -226,9 +327,15 @@ var resultsCmd = &cobra.Command{
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
+		c := CacheFrom(ctx)
 
 		testID, _ := cmd.Flags().GetString("test-id")
 		runID, _ := cmd.Flags().GetString("run-id")
+		cacheKey := cache.ResultsKey(testID, runID)
+
+		if cached, _, err := cache.Get[models.FetchResultsResponse](c, cacheKey); isCacheable(err) {
+			return out.Write(cached)
+		}
 
 		route := fmt.Sprintf(api.TestRunFetchResults, testID, runID)
 		req, err := client.NewRequest(ctx, "GET", route, nil)
@@ -257,7 +364,9 @@ var resultsCmd = &cobra.Command{
 			return fmt.Errorf("server returned status %q", envelope.Status)
 		}
 
-		return out.Write(models.FetchResultsResponse{Tables: envelope.Tables})
+		result := models.FetchResultsResponse{Tables: envelope.Tables}
+		_ = cache.Set(c, cacheKey, result, route, cache.TTLResults)
+		return out.Write(result)
 	},
 }
 
@@ -273,19 +382,25 @@ var runCommentsCmd = &cobra.Command{
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
+		c := CacheFrom(ctx)
 
 		runID, _ := cmd.Flags().GetString("run-id")
+		cacheKey := cache.RunCommentsKey(runID)
+
+		if cached, _, err := cache.Get[models.CommentListResponse](c, cacheKey); isCacheable(err) {
+			return out.Write(models.NewTabularSlice(cached))
+		}
 
 		route := fmt.Sprintf(api.TestRunComments, runID)
 		req, err := client.NewRequest(ctx, "GET", route, nil)
 		if err != nil {
 			return err
 		}
-
 		result, err := api.DoJSON[models.CommentListResponse](client, req)
 		if err != nil {
 			return err
 		}
+		_ = cache.Set(c, cacheKey, result, route, cache.TTLComments)
 		return out.Write(models.NewTabularSlice(result))
 	},
 }
@@ -302,19 +417,25 @@ var runPytestResultsCmd = &cobra.Command{
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
+		c := CacheFrom(ctx)
 
 		runID, _ := cmd.Flags().GetString("run-id")
+		cacheKey := cache.PytestResultsKey(runID)
+
+		if cached, _, err := cache.Get[models.PytestResultListResponse](c, cacheKey); isCacheable(err) {
+			return out.Write(models.NewTabularSlice(cached))
+		}
 
 		route := fmt.Sprintf(api.TestRunPytestResults, runID)
 		req, err := client.NewRequest(ctx, "GET", route, nil)
 		if err != nil {
 			return err
 		}
-
 		result, err := api.DoJSON[models.PytestResultListResponse](client, req)
 		if err != nil {
 			return err
 		}
+		_ = cache.Set(c, cacheKey, result, route, cache.TTLPytestResults)
 		return out.Write(models.NewTabularSlice(result))
 	},
 }
@@ -341,19 +462,25 @@ var getCommentCmd = &cobra.Command{
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
+		c := CacheFrom(ctx)
 
 		commentID, _ := cmd.Flags().GetString("comment-id")
+		cacheKey := cache.CommentKey(commentID)
+
+		if cached, _, err := cache.Get[models.Comment](c, cacheKey); isCacheable(err) {
+			return out.Write(models.NewKVTabular(cached))
+		}
 
 		route := fmt.Sprintf(api.CommentGet, commentID)
 		req, err := client.NewRequest(ctx, "GET", route, nil)
 		if err != nil {
 			return err
 		}
-
 		result, err := api.DoJSON[models.Comment](client, req)
 		if err != nil {
 			return err
 		}
+		_ = cache.Set(c, cacheKey, result, route, cache.TTLComments)
 		return out.Write(models.NewKVTabular(result))
 	},
 }
