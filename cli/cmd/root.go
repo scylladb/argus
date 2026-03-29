@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/scylladb/argus/cli/internal/api"
+	"github.com/scylladb/argus/cli/internal/cache"
 	"github.com/scylladb/argus/cli/internal/config"
 	"github.com/scylladb/argus/cli/internal/keychain"
 	"github.com/scylladb/argus/cli/internal/logging"
@@ -24,6 +26,8 @@ var (
 	argusURL      string
 	cfgFile       string
 	logLevel      string
+	noCache       bool
+	cacheTTL      string
 )
 
 func init() {
@@ -32,6 +36,8 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&argusURL, "url", "", "base URL of the Argus service (overrides config file)")
 	rootCmd.PersistentFlags().BoolVar(&useCloudflare, "use-cloudflare", true, "Use cloudflare access (overrides config file)")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", `log verbosity: trace, debug, info, warn, error`)
+	rootCmd.PersistentFlags().BoolVar(&noCache, "no-cache", false, "bypass the local response cache; always fetch from the API")
+	rootCmd.PersistentFlags().StringVar(&cacheTTL, "cache-ttl", "", "override the default cache TTL (e.g. 10m, 1h); ignored when --no-cache is set")
 }
 
 var rootCmd = &cobra.Command{
@@ -76,6 +82,21 @@ var rootCmd = &cobra.Command{
 		logger.Debug().Str("url", cfg.URL).Msg("config loaded")
 
 		ctx = contextWithConfig(ctx, cfg)
+
+		// ---- cache ---------------------------------------------------
+		cacheOpts := []cache.Option{
+			cache.WithDisabled(noCache),
+		}
+		if cacheTTL != "" {
+			if d, parseErr := time.ParseDuration(cacheTTL); parseErr == nil {
+				cacheOpts = append(cacheOpts, cache.WithDefaultTTL(d))
+			} else {
+				logger.Warn().Str("cache_ttl", cacheTTL).Msg("ignoring invalid --cache-ttl value; expected a Go duration (e.g. 10m, 1h)")
+			}
+		}
+		c := cache.New(config.CacheDir(), cacheOpts...)
+		ctx = contextWithCache(ctx, c)
+		logger.Debug().Bool("disabled", noCache).Str("dir", c.Dir()).Msg("cache initialised")
 
 		// ---- API client ----------------------------------------------
 		var apiOpts []api.ClientOption

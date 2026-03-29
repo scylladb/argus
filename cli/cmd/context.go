@@ -5,6 +5,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/scylladb/argus/cli/internal/api"
+	"github.com/scylladb/argus/cli/internal/cache"
 	"github.com/scylladb/argus/cli/internal/config"
 	"github.com/scylladb/argus/cli/internal/logging"
 	"github.com/scylladb/argus/cli/internal/output"
@@ -126,4 +127,24 @@ func CleanupFrom(ctx context.Context) logging.CleanupFunc {
 		return fn
 	}
 	return func() {}
+}
+
+// cacheKey is the context key used to store the [cache.Cache].
+type cacheKey struct{}
+
+// contextWithCache returns a copy of ctx carrying c.
+func contextWithCache(ctx context.Context, c *cache.Cache) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, cacheKey{}, c)
+}
+
+// CacheFrom retrieves the [cache.Cache] stored in ctx.
+// Returns a disabled cache if none is present so callers never need to nil-check.
+func CacheFrom(ctx context.Context) *cache.Cache {
+	if c, ok := ctx.Value(cacheKey{}).(*cache.Cache); ok {
+		return c
+	}
+	return cache.New("", cache.WithDisabled(true))
 }
