@@ -89,15 +89,20 @@ var rootCmd = &cobra.Command{
 			logger.Debug().Err(keychainErr).Msg("no session or token in keychain")
 		}
 
+		if cfCookie, keychainErr := keychain.LoadCFToken(); keychainErr == nil && cfg.UseCf {
+			apiOpts = append(apiOpts, api.WithCFToken(cfCookie))
+			logger.Debug().Msg("loaded CF cookie from keychain")
+		}
+
 		if token := os.Getenv("ARGUS_TOKEN"); token != "" {
 			apiOpts = append(apiOpts, api.WithAPIToken(token))
 			logger.Debug().Msg("Using token from ARGUS_TOKEN")
 		}
 
-		if clientId := os.Getenv("ARGUS_CF_ACCESS_CLIENT_ID"); clientId != "" {
+		if clientID := os.Getenv("ARGUS_CF_ACCESS_CLIENT_ID"); clientID != "" {
 			clientSecret := os.Getenv("ARGUS_CF_ACCESS_CLIENT_SECRET")
 			if clientSecret != "" {
-				apiOpts = append(apiOpts, api.WithCFAccessSecret(clientId, clientSecret))
+				apiOpts = append(apiOpts, api.WithCFAccessSecret(clientID, clientSecret))
 				logger.Debug().Msg("Using CF Service User from ARGUS_CF_ACCESS_CLIENT_*")
 			}
 		}
