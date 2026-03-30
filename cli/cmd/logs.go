@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"archive/tar"
-	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -41,14 +40,14 @@ var logsListCmd = &cobra.Command{
 
 		runID, _ := cmd.Flags().GetString("run-id")
 
-		runType, err := resolveRunType(ctx, client, runID)
+		runType, err := ResolveRunType(ctx, client, runID)
 		if err != nil {
 			return err
 		}
 
-		handler, ok := runTypeHandlers[runType]
+		handler, ok := RunTypeHandlers[runType]
 		if !ok {
-			return fmt.Errorf("unknown run type %q, valid types: %s", runType, validRunTypes())
+			return fmt.Errorf("unknown run type %q, valid types: %s", runType, ValidRunTypes())
 		}
 
 		route := fmt.Sprintf(api.TestRunGet, runType, runID)
@@ -99,7 +98,7 @@ If --dest is omitted the files are extracted into the current working directory.
 			}
 		}
 
-		pluginName, err := resolveRunType(ctx, client, runID)
+		pluginName, err := ResolveRunType(ctx, client, runID)
 		if err != nil {
 			return err
 		}
@@ -132,20 +131,6 @@ If --dest is omitted the files are extracted into the current working directory.
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-// resolveRunType fetches the plugin/type name for a run from the get-type
-// endpoint, so callers don't have to supply --type manually.
-func resolveRunType(ctx context.Context, client *api.Client, runID string) (string, error) {
-	req, err := client.NewRequest(ctx, "GET", fmt.Sprintf(api.TestRunGetType, runID), nil)
-	if err != nil {
-		return "", err
-	}
-	rt, err := api.DoJSON[models.RunType](client, req)
-	if err != nil {
-		return "", fmt.Errorf("resolving run type for %s: %w", runID, err)
-	}
-	return rt.RunType, nil
-}
 
 // runLogEntries extracts log entries from a typed run object.
 // SCT and DriverMatrix store logs as [][]string ([name, url] pairs);

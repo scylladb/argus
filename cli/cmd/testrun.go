@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,9 +25,9 @@ import (
 // reflection-based tabular output).
 type runTypeHandler func(*api.Client, *http.Request) (any, error)
 
-// runTypeHandlers maps plugin names (as accepted by the --type flag) to typed
+// RunTypeHandlers maps plugin names (as accepted by the --type flag) to typed
 // fetch functions.  Adding a new plugin requires only a new map entry.
-var runTypeHandlers = map[string]runTypeHandler{
+var RunTypeHandlers = map[string]runTypeHandler{
 	"scylla-cluster-tests": func(c *api.Client, r *http.Request) (any, error) {
 		return api.DoJSON[models.SCTTestRun](c, r)
 	},
@@ -115,11 +116,25 @@ func isCacheMiss(err error) bool {
 	return errors.Is(err, cache.ErrCacheMiss) || errors.Is(err, cache.ErrExpired)
 }
 
-// validRunTypes returns a sorted, comma-separated list of recognised plugin
+// ResolveRunType fetches the plugin/type name for a run from the get-type
+// endpoint, so callers don't have to supply --type manually.
+func ResolveRunType(ctx context.Context, client *api.Client, runID string) (string, error) {
+	req, err := client.NewRequest(ctx, "GET", fmt.Sprintf(api.TestRunGetType, runID), nil)
+	if err != nil {
+		return "", err
+	}
+	rt, err := api.DoJSON[models.RunType](client, req)
+	if err != nil {
+		return "", fmt.Errorf("resolving run type for %s: %w", runID, err)
+	}
+	return rt.RunType, nil
+}
+
+// ValidRunTypes returns a sorted, comma-separated list of recognised plugin
 // type keys (for help text and error messages).
-func validRunTypes() string {
-	keys := make([]string, 0, len(runTypeHandlers))
-	for k := range runTypeHandlers {
+func ValidRunTypes() string {
+	keys := make([]string, 0, len(RunTypeHandlers))
+	for k := range RunTypeHandlers {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
@@ -250,9 +265,9 @@ var getRunCmd = &cobra.Command{
 		runType, _ := cmd.Flags().GetString("type")
 		runID, _ := cmd.Flags().GetString("run-id")
 
-		handler, ok := runTypeHandlers[runType]
+		handler, ok := RunTypeHandlers[runType]
 		if !ok {
-			return fmt.Errorf("unknown run type %q, valid types: %s", runType, validRunTypes())
+			return fmt.Errorf("unknown run type %q, valid types: %s", runType, ValidRunTypes())
 		}
 
 		cacheKey := cache.RunKey(runType, runID)
@@ -499,7 +514,7 @@ func init() {
 	_ = listRunsCmd.MarkFlagRequired("test-id")
 
 	// run get
-	getRunCmd.Flags().String("type", "", "Plugin type (required): "+validRunTypes())
+	getRunCmd.Flags().String("type", "", "Plugin type (required): "+ValidRunTypes())
 	getRunCmd.Flags().String("run-id", "", "Run UUID (required)")
 	_ = getRunCmd.MarkFlagRequired("type")
 	_ = getRunCmd.MarkFlagRequired("run-id")
