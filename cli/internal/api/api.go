@@ -204,6 +204,24 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	return c.httpClient.Do(req)
 }
 
+// DoStream executes req using a client with no timeout, suitable for streaming
+// large responses such as log file downloads. The caller is responsible for
+// closing the response body.
+func (c *Client) DoStream(req *http.Request) (*http.Response, error) {
+	if req.URL.Host == "" {
+		resolved := c.baseURL.ResolveReference(req.URL)
+		req.URL = resolved
+	}
+
+	streamClient := &http.Client{
+		Transport:     c.httpClient.Transport,
+		CheckRedirect: c.httpClient.CheckRedirect,
+		Jar:           c.httpClient.Jar,
+		// No Timeout: large downloads must not be cut off by the default 30 s limit.
+	}
+	return streamClient.Do(req)
+}
+
 // DoJSON executes req, reads the response body, and decodes it as an
 // [models.APIResponse] envelope. It returns the decoded payload T on success
 // or an [*APIError] (wrapping [ErrAPIError]) when the backend signals an error

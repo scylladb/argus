@@ -152,6 +152,12 @@ type PerformanceHDRHistogram struct {
 // PluginModelBase fields (shared by every run type)
 // ---------------------------------------------------------------------------
 
+// LogEntry represents a single log file attached to a test run.
+type LogEntry struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
 // RunBase contains the fields from PluginModelBase that every plugin run
 // shares. All UUID fields are serialised as strings by ArgusJSONProvider.
 // Datetime fields use ISO-8601 with milliseconds.
