@@ -97,6 +97,11 @@ var rootCmd = &cobra.Command{
 		c := cache.New(config.CacheDir(), cacheOpts...)
 		ctx = contextWithCache(ctx, c)
 		logger.Debug().Bool("disabled", noCache).Str("dir", c.Dir()).Msg("cache initialised")
+		go func() {
+			if n := c.PurgeExpired(); n > 0 {
+				logger.Debug().Int("removed", n).Msg("purged expired cache entries")
+			}
+		}()
 
 		// ---- API client ----------------------------------------------
 		var apiOpts []api.ClientOption

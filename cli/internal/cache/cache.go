@@ -210,6 +210,28 @@ func (c *Cache) Invalidate(key string) error {
 	return nil
 }
 
+// PurgeExpired walks the cache and removes every entry whose TTL has passed.
+// It is safe to call concurrently with [Get] and [Set] — each removal is an
+// atomic directory delete. Errors on individual entries are skipped so that
+// one corrupt file does not abort the whole sweep.
+// Returns the number of entries removed.
+func (c *Cache) PurgeExpired() int {
+	if c.Disabled() {
+		return 0
+	}
+	removed := 0
+	_ = walkEntries(c.baseDir, func(_, entryDir string, rawMeta []byte) {
+		var meta Meta
+		if err := json.Unmarshal(rawMeta, &meta); err != nil || !meta.IsExpired() {
+			return
+		}
+		if err := os.RemoveAll(entryDir); err == nil {
+			removed++
+		}
+	})
+	return removed
+}
+
 // Clear removes every entry from the cache.
 // It is not an error if the cache directory does not exist.
 func (c *Cache) Clear() error {
