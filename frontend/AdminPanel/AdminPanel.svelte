@@ -15,7 +15,7 @@
         views: ViewsManager,
     };
 
-    const handleRouteClick = function(route, event) {
+    const handleRouteClick = function (route, event) {
         history.pushState({}, "", `/admin/${route}`);
         let prevRoute = currentRoute;
         currentRoute = route;
@@ -75,8 +75,8 @@
                 </li>
             </ul>
         </div>
-        <div class="col-9 min-vh-100 ">
-            <SvelteComponent />
+        <div class="col-9 min-vh-100">
+            <SvelteComponent enableManager={true} />
         </div>
     </div>
 </div>
