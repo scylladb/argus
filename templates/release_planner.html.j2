@@ -7,7 +7,7 @@ Release Planner for {{ release_name }}
 {% block javascripts %}
 {{ super() }}
 <script>
-    window.releaseData = JSON.parse('{{ planner_data | tojson | safe }}');
+    window.releaseData = {{ planner_data | tojson | safe }};
 </script>
 <script defer type="module" src="/s/dist/releasePlanner.bundle.js"></script>
 {% endblock javascripts %}
