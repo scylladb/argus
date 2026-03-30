@@ -19,4 +19,7 @@ const (
 
 	// Pytest result routes
 	TestRunPytestResults = "/api/v1/run/%s/pytest/results" // GET  – pytest results for a run (run_id)
+
+	// Log file routes
+	TestRunLogDownload = "/testrun/tests/%s/%s/log/%s/download" // GET  – download log file, 302 to S3 (plugin_name, run_id, log_name)
 )
