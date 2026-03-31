@@ -92,6 +92,35 @@ def _prepare_azure_resource_setup(sct_config: dict) -> CloudSetupDetails:
     return cloud_setup
 
 
+def _prepare_oci_resource_setup(sct_config: dict) -> CloudSetupDetails:
+    num_db_nodes, n_loaders = _get_node_amounts(sct_config)
+    db_node_setup = CloudNodesInfo(
+        image_id=sct_config.get("oci_image_db"),
+        instance_type=sct_config.get("oci_instance_type_db"),
+        node_amount=num_db_nodes,
+        post_behaviour=sct_config.get("post_behavior_db_nodes"),
+    )
+    loader_node_setup = CloudNodesInfo(
+        image_id=sct_config.get("oci_image_loader"),
+        instance_type=sct_config.get("oci_instance_type_loader"),
+        node_amount=n_loaders,
+        post_behaviour=sct_config.get("post_behavior_loader_nodes"),
+    )
+    monitor_node_setup = CloudNodesInfo(
+        image_id=sct_config.get("oci_image_monitor"),
+        instance_type=sct_config.get("oci_instance_type_monitor"),
+        node_amount=_resolve_node_count(sct_config.get("n_monitor_nodes")),
+        post_behaviour=sct_config.get("post_behavior_monitor_nodes"),
+    )
+    cloud_setup = CloudSetupDetails(
+        db_node=db_node_setup,
+        loader_node=loader_node_setup,
+        monitor_node=monitor_node_setup,
+        backend=sct_config.get("cluster_backend"),
+    )
+    return cloud_setup
+
+
 def _prepare_unknown_resource_setup(sct_config: dict) -> CloudSetupDetails:
     LOGGER.error("Unknown backend encountered: %s", sct_config.get("cluster_backend"))
     db_node_setup = CloudNodesInfo(image_id="UNKNOWN",
@@ -181,6 +210,7 @@ class ResourceSetup:
         "aws": _prepare_aws_resource_setup,
         "aws-siren": _prepare_aws_resource_setup,
         "azure": _prepare_azure_resource_setup,
+        "oci": _prepare_oci_resource_setup,
         "gce": _prepare_gce_resource_setup,
         "gce-siren": _prepare_gce_resource_setup,
         "k8s-eks": _prepare_k8s_eks_resource_setup,

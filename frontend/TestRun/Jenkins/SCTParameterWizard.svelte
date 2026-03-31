@@ -26,6 +26,7 @@
             scylla_ami_id: "scylla_image",
             gce_image_db: "scylla_image",
             azure_image_db: "scylla_image",
+            oci_image_db: "scylla_image",
         };
 
         for (const [key, type] of Object.entries(keysToCheck)) {
@@ -58,6 +59,7 @@
     const ALL_BACKENDS = {
         azure: "Microsoft Azure",
         aws: "Amazon AWS",
+        oci: "Oracle Cloud",
         "aws-siren": "Amazon AWS (Siren-tests)",
         "k8s-local-kind-aws": "Kubernetes in Docker on AWS",
         "k8s-eks": "Kubernetes (Amazon EKS)",
@@ -76,6 +78,7 @@
         const BACKEND_GROUPS = {
             aws: ["aws", "aws-siren", "k8s-local-kind-aws", "k8s-eks"],
             azure: ["azure"],
+            oci: ["oci"],
             gce: ["gce", "gce-siren", "k8s-local-kind-gce", "k8s-gke"],
             k8s: ["k8s-local-kind-aws", "k8s-eks", "k8s-gke"],
         };
@@ -130,6 +133,22 @@
                     },
                     values: ["eastus"],
                 },
+                ociRegion: {
+                    name: "Cloud Region",
+                    description: "Only supported regions are displayed",
+                    type: SelectParam,
+                    internalName: "oci_region_name",
+                    condition: (params, defs) => inBackendGroup(params.backend, "oci"),
+                    onShow: function (params) {
+                        if (!params[this.internalName]) {
+                            params[this.internalName] = this.values[0];
+                        }
+                    },
+                    onChange: function (e, params) {
+                        //empty
+                    },
+                    values: ["us-ashburn-1", "us-phoenix-1"],
+                },
                 gceRegion: {
                     name: "Cloud Region",
                     description: "Only supported regions are displayed",
@@ -180,7 +199,7 @@
                 const PARAMS_TO_CHECK = {
                     scylla_version: ["scyllaVersion"],
                     scylla_repo: ["scyllaRepo"],
-                    scylla_image: ["scyllaImageAWS", "scyllaImageGCE", "scyllaImageAzure", ],
+                    scylla_image: ["scyllaImageAWS", "scyllaImageGCE", "scyllaImageAzure", "scyllaImageOci", ],
                     rolling_upgrade: ["newScyllaRepo"],
                     scylla_byo: ["scyllaRepoBYO", "scyllaBranchBYO"],
                 };
@@ -234,6 +253,7 @@
                         params.scylla_ami_id = "";
                         params.gce_image_db = "";
                         params.azure_image_db = "";
+                        params.oci_image_db = "";
                     }
                 },
                 scyllaRepo: {
@@ -254,6 +274,7 @@
                         params.scylla_ami_id = "";
                         params.gce_image_db = "";
                         params.azure_image_db = "";
+                        params.oci_image_db = "";
                     }
                 },
                 scyllaImageAWS: {
@@ -311,6 +332,24 @@
                         params.scylla_repo = "";
                     }
                 },
+                scyllaImageOci: {
+                    name: "Scylla OCI ImageId",
+                    description: "OracleCloud ImageId",
+                    type: StringParam,
+                    internalName: "oci_image_db",
+                    requiresValidation: true,
+                    validated: true,
+                    validationHelpText: "Malformed OCI Image Id\nFormat should be: ocid1.image.oc1.<region_short>.aaaaaaaa<unique_id>",
+                    validate: function (params) {
+                        const OCI_RE = /^ocid1.image.oc1.(?<region_short>.+).aaaaaaaa(?<unique_id>.+)$/;
+                        return !!params[this.internalName] && OCI_RE.test(params[this.internalName]);
+                    },
+                    condition: (params, defs) => (defs.scyllaVersion.currentSource == "scylla_image" && inBackendGroup(params.backend, "oci")),
+                    onChange: function (e, params) {
+                        params.scylla_version = "";
+                        params.scylla_repo = "";
+                    }
+                },
                 scyllaRepoBYO: {
                     name: "Scylla BYO Repository",
                     description: "ScyllaDB GitHub repository in SSH format (git@github.com:personal-username/scylla.git)",
@@ -330,6 +369,7 @@
                         params.scylla_ami_id = "";
                         params.gce_image_db = "";
                         params.azure_image_db = "";
+                        params.oci_image_db = "";
                     }
                 },
                 scyllaBranchBYO: {
@@ -350,6 +390,7 @@
                         params.scylla_ami_id = "";
                         params.gce_image_db = "";
                         params.azure_image_db = "";
+                        params.oci_image_db = "";
                     }
                 },
                 newScyllaRepo: {

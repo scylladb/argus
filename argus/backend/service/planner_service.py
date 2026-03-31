@@ -579,6 +579,8 @@ class PlanningService:
                         region_key = "gce_datacenter"
                     case ["azure", *_]:
                         region_key = "azure_region_name"
+                    case ["oci", *_]:
+                        region_key = "oci_region_name"
                     case _:
                         raise PlannerServiceException(f"Unknown backend encountered: {backend}", backend)
 
