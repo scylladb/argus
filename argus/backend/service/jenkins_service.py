@@ -260,3 +260,21 @@ class JenkinsService:
                 "inQueueSince": build_info["inQueueSince"],
                 "taskUrl": build_info["task"]["url"],
             }
+
+    def get_requested_by_user(self, build_id: str, build_number: int) -> str | None:
+        """Return the value of the REQUESTED_BY_USER parameter for a specific build, or None."""
+        try:
+            build_info = self._jenkins.get_build_info(name=build_id, number=build_number)
+        except jenkins.JenkinsException:
+            LOGGER.warning("Could not retrieve build info for %s #%s", build_id, build_number)
+            return None
+        params_action = next(
+            (a for a in build_info.get("actions", []) if a.get("_class") == "hudson.model.ParametersAction"),
+            None,
+        )
+        if not params_action:
+            return None
+        for param in params_action.get("parameters", []):
+            if param.get("name") == self.RESERVED_PARAMETER_NAME:
+                return param.get("value") or None
+        return None
