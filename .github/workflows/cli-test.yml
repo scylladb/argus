@@ -1,0 +1,54 @@
+name: CLI – Lint & Test
+
+on:
+    push:
+        branches: [master, main]
+        paths:
+            - "cli/**"
+    pull_request:
+        paths:
+            - "cli/**"
+
+permissions:
+    contents: read
+
+defaults:
+    run:
+        working-directory: cli
+
+jobs:
+    lint:
+        name: Lint
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-go@v5
+              with:
+                  go-version-file: cli/go.mod
+
+            - name: Run golangci-lint
+              uses: golangci/golangci-lint-action@v7
+              with:
+                  version: latest
+                  working-directory: cli
+
+    test:
+        name: Test
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-go@v5
+              with:
+                  go-version-file: cli/go.mod
+
+            - name: Install gotestfmt
+              uses: gotesttools/gotestfmt-action@v2
+              with:
+                  token: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Run tests
+              run: |
+                  set -euo pipefail
+                  go test -race -json -v ./... 2>&1 | tee /tmp/gotest.log | gotestfmt
