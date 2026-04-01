@@ -15,6 +15,7 @@ import (
 	"github.com/scylladb/argus/cli/internal/api"
 	"github.com/scylladb/argus/cli/internal/cache"
 	"github.com/scylladb/argus/cli/internal/models"
+	"github.com/scylladb/argus/cli/internal/services"
 	"github.com/spf13/cobra"
 )
 
@@ -143,66 +144,50 @@ func ValidRunTypes() string {
 	return strings.Join(keys, ", ")
 }
 
-// resolveTestID returns testID from the flag if provided, otherwise fetches
-// the run to extract the test_id field automatically.
-func resolveTestID(ctx context.Context, client *api.Client, c *cache.Cache, runID, flagTestID string) (string, error) {
-	if flagTestID != "" {
-		return flagTestID, nil
-	}
-
-	// Resolve the run type first.
-	runType, err := ResolveRunType(ctx, client, runID)
-	if err != nil {
-		return "", fmt.Errorf("resolving test_id: %w", err)
-	}
-
-	handler, ok := RunTypeHandlers[runType]
-	if !ok {
-		return "", fmt.Errorf("unknown run type %q returned by server", runType)
-	}
-
-	// Check cache first.
-	cacheKey := cache.RunKey(runType, runID)
-	if getter, ok := runTypeCacheGetters[runType]; ok {
-		if cached, err := getter(c, cacheKey); isCacheable(err) {
-			return extractTestID(cached)
+// runFetcher is the RunFetcher used by comment commands to resolve test IDs.
+// It delegates to the cmd-level run-type handler registry and cache maps.
+var runFetcher = services.NewRunFetcher(
+	// resolveRunType
+	func(ctx context.Context, client *api.Client, runID string) (string, error) {
+		return ResolveRunType(ctx, client, runID)
+	},
+	// fetchRun (with cache)
+	func(ctx context.Context, client *api.Client, c *cache.Cache, runType, runID string) (any, error) {
+		handler, ok := RunTypeHandlers[runType]
+		if !ok {
+			return nil, fmt.Errorf("unknown run type %q returned by server", runType)
 		}
-	}
 
-	route := fmt.Sprintf(api.TestRunGet, runType, runID)
-	req, err := client.NewRequest(ctx, "GET", route, nil)
-	if err != nil {
-		return "", err
-	}
-	result, err := handler(client, req)
-	if err != nil {
-		return "", fmt.Errorf("fetching run for test_id: %w", err)
-	}
+		// Check cache first.
+		cacheKey := cache.RunKey(runType, runID)
+		if getter, ok := runTypeCacheGetters[runType]; ok {
+			if cached, err := getter(c, cacheKey); isCacheable(err) {
+				return cached, nil
+			}
+		}
 
-	if setter, ok := runTypeCacheSetters[runType]; ok {
-		_ = setter(c, cacheKey, result)
-	}
+		route := fmt.Sprintf(api.TestRunGet, runType, runID)
+		req, err := client.NewRequest(ctx, "GET", route, nil)
+		if err != nil {
+			return nil, err
+		}
+		result, err := handler(client, req)
+		if err != nil {
+			return nil, err
+		}
 
-	return extractTestID(result)
-}
+		if setter, ok := runTypeCacheSetters[runType]; ok {
+			_ = setter(c, cacheKey, result)
+		}
 
-// extractTestID marshals a run object to JSON and pulls out the test_id field.
-// This avoids type-switching over every plugin type since they all embed RunBase.
-func extractTestID(run any) (string, error) {
-	raw, err := json.Marshal(run)
-	if err != nil {
-		return "", fmt.Errorf("extracting test_id: %w", err)
-	}
-	var partial struct {
-		TestID string `json:"test_id"`
-	}
-	if err := json.Unmarshal(raw, &partial); err != nil {
-		return "", fmt.Errorf("extracting test_id: %w", err)
-	}
-	if partial.TestID == "" {
-		return "", fmt.Errorf("run object has no test_id field")
-	}
-	return partial.TestID, nil
+		return result, nil
+	},
+)
+
+// resolveTestID is a convenience wrapper that calls services.ResolveTestID
+// with the package-level runFetcher.
+func resolveTestID(ctx context.Context, client *api.Client, c *cache.Cache, runID, flagTestID string) (string, error) {
+	return services.ResolveTestID(ctx, client, c, runFetcher, runID, flagTestID)
 }
 
 // readMessage returns the message from the flag value, or reads from stdin

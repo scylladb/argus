@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 	"github.com/scylladb/argus/cli/internal/cache"
 	"github.com/scylladb/argus/cli/internal/models"
 	"github.com/scylladb/argus/cli/internal/output"
+	"github.com/scylladb/argus/cli/internal/services"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -89,7 +91,7 @@ func TestExtractTestID_FromSCTRun(t *testing.T) {
 			TestID: "test-abc",
 		},
 	}
-	got, err := cmd.ExtractTestIDFn(run)
+	got, err := services.ExtractTestID(run)
 	require.NoError(t, err)
 	assert.Equal(t, "test-abc", got)
 }
@@ -102,7 +104,7 @@ func TestExtractTestID_FromGenericRun(t *testing.T) {
 			TestID: "test-xyz",
 		},
 	}
-	got, err := cmd.ExtractTestIDFn(run)
+	got, err := services.ExtractTestID(run)
 	require.NoError(t, err)
 	assert.Equal(t, "test-xyz", got)
 }
@@ -110,7 +112,7 @@ func TestExtractTestID_FromGenericRun(t *testing.T) {
 func TestExtractTestID_EmptyTestID(t *testing.T) {
 	t.Parallel()
 	run := models.RunBase{ID: "run-3", TestID: ""}
-	_, err := cmd.ExtractTestIDFn(run)
+	_, err := services.ExtractTestID(run)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "test_id")
 }
@@ -165,7 +167,19 @@ func TestResolveTestID_UsesProvidedFlag(t *testing.T) {
 	require.NoError(t, err)
 	ca := cache.New(t.TempDir(), cache.WithDisabled(true))
 
-	got, err := cmd.ResolveTestIDFn(context.Background(), c, ca, "run-1", "explicit-test-id")
+	// Fetcher is unused when flag is provided, but we still need one.
+	fetcher := services.NewRunFetcher(
+		func(_ context.Context, _ *api.Client, _ string) (string, error) {
+			t.Fatal("should not be called")
+			return "", nil
+		},
+		func(_ context.Context, _ *api.Client, _ *cache.Cache, _, _ string) (any, error) {
+			t.Fatal("should not be called")
+			return nil, nil
+		},
+	)
+
+	got, err := services.ResolveTestID(context.Background(), c, ca, fetcher, "run-1", "explicit-test-id")
 	require.NoError(t, err)
 	assert.Equal(t, "explicit-test-id", got)
 }
@@ -191,7 +205,28 @@ func TestResolveTestID_ResolvesFromServer(t *testing.T) {
 	require.NoError(t, err)
 	ca := cache.New(t.TempDir(), cache.WithDisabled(true))
 
-	got, err := cmd.ResolveTestIDFn(context.Background(), client, ca, "run-1", "")
+	fetcher := services.NewRunFetcher(
+		func(ctx context.Context, cl *api.Client, runID string) (string, error) {
+			req, err := cl.NewRequest(ctx, "GET", fmt.Sprintf("/api/v1/run/%s/type", runID), nil)
+			if err != nil {
+				return "", err
+			}
+			rt, err := api.DoJSON[models.RunType](cl, req)
+			if err != nil {
+				return "", err
+			}
+			return rt.RunType, nil
+		},
+		func(ctx context.Context, cl *api.Client, _ *cache.Cache, runType, runID string) (any, error) {
+			req, err := cl.NewRequest(ctx, "GET", fmt.Sprintf("/api/v1/run/%s/%s", runType, runID), nil)
+			if err != nil {
+				return nil, err
+			}
+			return api.DoJSON[models.GenericRun](cl, req)
+		},
+	)
+
+	got, err := services.ResolveTestID(context.Background(), client, ca, fetcher, "run-1", "")
 	require.NoError(t, err)
 	assert.Equal(t, "resolved-test-id", got)
 }
@@ -415,7 +450,24 @@ func TestResolveTestID_FailsOnBadRunType(t *testing.T) {
 	require.NoError(t, err)
 	ca := cache.New(t.TempDir(), cache.WithDisabled(true))
 
-	_, err = cmd.ResolveTestIDFn(context.Background(), client, ca, "run-1", "")
+	fetcher := services.NewRunFetcher(
+		func(ctx context.Context, cl *api.Client, runID string) (string, error) {
+			req, err := cl.NewRequest(ctx, "GET", fmt.Sprintf("/api/v1/run/%s/type", runID), nil)
+			if err != nil {
+				return "", err
+			}
+			rt, err := api.DoJSON[models.RunType](cl, req)
+			if err != nil {
+				return "", err
+			}
+			return rt.RunType, nil
+		},
+		func(_ context.Context, _ *api.Client, _ *cache.Cache, runType, _ string) (any, error) {
+			return nil, fmt.Errorf("unknown run type %q returned by server", runType)
+		},
+	)
+
+	_, err = services.ResolveTestID(context.Background(), client, ca, fetcher, "run-1", "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown run type")
 }
