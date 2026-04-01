@@ -127,14 +127,14 @@ func Setup(levelStr, command string, opts ...Option) (zerolog.Logger, CleanupFun
 	// All log entries go to the file (or injected writer).
 	fileWriter := newConsoleWriter(w)
 
-	// Errors and above are also mirrored to stderr so the user sees them in
-	// the terminal without having to tail the log file.
+	// Messages at or above the configured level are also mirrored to stderr
+	// so the user sees them in the terminal without having to tail the log file.
 	stderrDst := o.stderrWriter
 	if stderrDst == nil {
 		stderrDst = os.Stderr
 	}
 	stderrWriter := &levelFilterWriter{
-		min: zerolog.ErrorLevel,
+		min: level,
 		cw:  newConsoleWriter(stderrDst),
 	}
 

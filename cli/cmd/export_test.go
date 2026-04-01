@@ -9,8 +9,3 @@ var (
 	ContextWithCleanup   = contextWithCleanup
 	ContextWithCache     = contextWithCache
 )
-
-// Exports of discussion helper functions for testing.
-var (
-	ParseMentionsFn = parseMentions
-)
