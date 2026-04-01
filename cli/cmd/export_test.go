@@ -12,7 +12,5 @@ var (
 
 // Exports of discussion helper functions for testing.
 var (
-	ResolveTestIDFn = resolveTestID
-	ExtractTestIDFn = extractTestID
 	ParseMentionsFn = parseMentions
 )
