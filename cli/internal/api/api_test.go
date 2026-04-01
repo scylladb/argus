@@ -49,9 +49,10 @@ func errEnvelope(t *testing.T, body models.ErrorBody) []byte {
 }
 
 // staticHandler returns a handler that always writes body with the given HTTP
-// status code.
+// status code and a Content-Type of application/json.
 func staticHandler(code int, body []byte) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(code)
 		_, _ = w.Write(body)
 	}
@@ -366,6 +367,7 @@ func TestDoJSON_RelativePath(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/runs", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		w.Write(okEnvelope(t, want)) //nolint:errcheck
 	})
 
@@ -394,6 +396,7 @@ func TestWithHTTPClient_UsedForRequests(t *testing.T) {
 		body := okEnvelope(t, samplePayload{ID: "1", Name: "custom"})
 		return &http.Response{
 			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
 			Body:       io.NopCloser(strings.NewReader(string(body))),
 		}, nil
 	})

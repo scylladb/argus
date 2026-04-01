@@ -1,12 +1,14 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 
@@ -139,6 +141,117 @@ func ValidRunTypes() string {
 	}
 	sort.Strings(keys)
 	return strings.Join(keys, ", ")
+}
+
+// resolveTestID returns testID from the flag if provided, otherwise fetches
+// the run to extract the test_id field automatically.
+func resolveTestID(ctx context.Context, client *api.Client, c *cache.Cache, runID, flagTestID string) (string, error) {
+	if flagTestID != "" {
+		return flagTestID, nil
+	}
+
+	// Resolve the run type first.
+	runType, err := ResolveRunType(ctx, client, runID)
+	if err != nil {
+		return "", fmt.Errorf("resolving test_id: %w", err)
+	}
+
+	handler, ok := RunTypeHandlers[runType]
+	if !ok {
+		return "", fmt.Errorf("unknown run type %q returned by server", runType)
+	}
+
+	// Check cache first.
+	cacheKey := cache.RunKey(runType, runID)
+	if getter, ok := runTypeCacheGetters[runType]; ok {
+		if cached, err := getter(c, cacheKey); isCacheable(err) {
+			return extractTestID(cached)
+		}
+	}
+
+	route := fmt.Sprintf(api.TestRunGet, runType, runID)
+	req, err := client.NewRequest(ctx, "GET", route, nil)
+	if err != nil {
+		return "", err
+	}
+	result, err := handler(client, req)
+	if err != nil {
+		return "", fmt.Errorf("fetching run for test_id: %w", err)
+	}
+
+	if setter, ok := runTypeCacheSetters[runType]; ok {
+		_ = setter(c, cacheKey, result)
+	}
+
+	return extractTestID(result)
+}
+
+// extractTestID marshals a run object to JSON and pulls out the test_id field.
+// This avoids type-switching over every plugin type since they all embed RunBase.
+func extractTestID(run any) (string, error) {
+	raw, err := json.Marshal(run)
+	if err != nil {
+		return "", fmt.Errorf("extracting test_id: %w", err)
+	}
+	var partial struct {
+		TestID string `json:"test_id"`
+	}
+	if err := json.Unmarshal(raw, &partial); err != nil {
+		return "", fmt.Errorf("extracting test_id: %w", err)
+	}
+	if partial.TestID == "" {
+		return "", fmt.Errorf("run object has no test_id field")
+	}
+	return partial.TestID, nil
+}
+
+// readMessage returns the message from the flag value, or reads from stdin
+// when the flag is empty. This allows piping content into submit/update.
+func readMessage(cmd *cobra.Command) (string, error) {
+	msg, _ := cmd.Flags().GetString("message")
+	if msg != "" {
+		return msg, nil
+	}
+
+	// Check if stdin has data (not a terminal).
+	info, err := os.Stdin.Stat()
+	if err != nil {
+		return "", fmt.Errorf("checking stdin: %w", err)
+	}
+	if info.Mode()&os.ModeCharDevice != 0 {
+		return "", fmt.Errorf("--message is required (or pipe content via stdin)")
+	}
+
+	scanner := bufio.NewScanner(os.Stdin)
+	var lines []string
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("reading stdin: %w", err)
+	}
+	result := strings.Join(lines, "\n")
+	if result == "" {
+		return "", fmt.Errorf("--message is required (stdin was empty)")
+	}
+	return result, nil
+}
+
+// parseMentions splits a comma-separated --mention flag into a slice of
+// user-ID strings. Returns nil when the flag is empty.
+func parseMentions(cmd *cobra.Command) []string {
+	raw, _ := cmd.Flags().GetString("mention")
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // ---------------------------------------------------------------------------
@@ -501,6 +614,166 @@ var getCommentCmd = &cobra.Command{
 }
 
 // ---------------------------------------------------------------------------
+// Subcommand: comment submit
+// ---------------------------------------------------------------------------
+
+var submitCommentCmd = &cobra.Command{
+	Use:   "submit",
+	Short: "Post a new comment on a test run",
+	Long: `Submit a new comment to a test run's discussion.
+
+The message can be provided via the --message flag or piped through stdin:
+  echo "my comment" | argus comment submit --run-id <uuid>
+
+If --test-id is omitted it will be resolved automatically from the run.`,
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		ctx := cmd.Context()
+		client := APIClientFrom(ctx)
+		out := OutputterFrom(ctx)
+		c := CacheFrom(ctx)
+
+		runID, _ := cmd.Flags().GetString("run-id")
+		flagTestID, _ := cmd.Flags().GetString("test-id")
+
+		testID, err := resolveTestID(ctx, client, c, runID, flagTestID)
+		if err != nil {
+			return err
+		}
+
+		message, err := readMessage(cmd)
+		if err != nil {
+			return err
+		}
+
+		body := models.CommentSubmitRequest{
+			Message:   message,
+			Reactions: map[string]int{},
+			Mentions:  parseMentions(cmd),
+		}
+		if body.Mentions == nil {
+			body.Mentions = []string{}
+		}
+
+		route := fmt.Sprintf(api.TestRunCommentSubmit, testID, runID)
+		req, err := client.NewRequest(ctx, "POST", route, body)
+		if err != nil {
+			return err
+		}
+		result, err := api.DoJSON[models.CommentListResponse](client, req)
+		if err != nil {
+			return err
+		}
+
+		_ = c.Invalidate(cache.RunCommentsKey(runID))
+
+		return out.Write(models.NewTabularSlice(result))
+	},
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: comment update
+// ---------------------------------------------------------------------------
+
+var updateCommentCmd = &cobra.Command{
+	Use:   "update",
+	Short: "Update an existing comment",
+	Long: `Edit a comment you previously posted on a test run.
+
+The updated message can be provided via the --message flag or piped through stdin:
+  echo "updated text" | argus comment update --run-id <uuid> --comment-id <uuid>
+
+If --test-id is omitted it will be resolved automatically from the run.
+Only the comment author can update their comment.`,
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		ctx := cmd.Context()
+		client := APIClientFrom(ctx)
+		out := OutputterFrom(ctx)
+		c := CacheFrom(ctx)
+
+		runID, _ := cmd.Flags().GetString("run-id")
+		commentID, _ := cmd.Flags().GetString("comment-id")
+		flagTestID, _ := cmd.Flags().GetString("test-id")
+
+		testID, err := resolveTestID(ctx, client, c, runID, flagTestID)
+		if err != nil {
+			return err
+		}
+
+		message, err := readMessage(cmd)
+		if err != nil {
+			return err
+		}
+
+		body := models.CommentSubmitRequest{
+			Message:   message,
+			Reactions: map[string]int{},
+			Mentions:  parseMentions(cmd),
+		}
+		if body.Mentions == nil {
+			body.Mentions = []string{}
+		}
+
+		route := fmt.Sprintf(api.TestRunCommentUpdate, testID, runID, commentID)
+		req, err := client.NewRequest(ctx, "POST", route, body)
+		if err != nil {
+			return err
+		}
+		result, err := api.DoJSON[models.CommentListResponse](client, req)
+		if err != nil {
+			return err
+		}
+
+		_ = c.Invalidate(cache.RunCommentsKey(runID))
+		_ = c.Invalidate(cache.CommentKey(commentID))
+
+		return out.Write(models.NewTabularSlice(result))
+	},
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: comment delete
+// ---------------------------------------------------------------------------
+
+var deleteCommentCmd = &cobra.Command{
+	Use:   "delete",
+	Short: "Delete a comment from a test run",
+	Long: `Delete a comment you previously posted on a test run.
+
+If --test-id is omitted it will be resolved automatically from the run.
+Only the comment author can delete their comment.`,
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		ctx := cmd.Context()
+		client := APIClientFrom(ctx)
+		out := OutputterFrom(ctx)
+		c := CacheFrom(ctx)
+
+		runID, _ := cmd.Flags().GetString("run-id")
+		commentID, _ := cmd.Flags().GetString("comment-id")
+		flagTestID, _ := cmd.Flags().GetString("test-id")
+
+		testID, err := resolveTestID(ctx, client, c, runID, flagTestID)
+		if err != nil {
+			return err
+		}
+
+		route := fmt.Sprintf(api.TestRunCommentDelete, testID, runID, commentID)
+		req, err := client.NewRequest(ctx, "POST", route, nil)
+		if err != nil {
+			return err
+		}
+		result, err := api.DoJSON[models.CommentListResponse](client, req)
+		if err != nil {
+			return err
+		}
+
+		_ = c.Invalidate(cache.RunCommentsKey(runID))
+		_ = c.Invalidate(cache.CommentKey(commentID))
+
+		return out.Write(models.NewTabularSlice(result))
+	},
+}
+
+// ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
 
@@ -545,7 +818,30 @@ func init() {
 	getCommentCmd.Flags().String("comment-id", "", "Comment UUID (required)")
 	_ = getCommentCmd.MarkFlagRequired("comment-id")
 
+	// comment submit
+	submitCommentCmd.Flags().String("run-id", "", "Run UUID (required)")
+	submitCommentCmd.Flags().String("test-id", "", "Test UUID (optional, resolved from the run if omitted)")
+	submitCommentCmd.Flags().String("message", "", "Comment message (reads from stdin if omitted)")
+	submitCommentCmd.Flags().String("mention", "", "Comma-separated user IDs to mention")
+	_ = submitCommentCmd.MarkFlagRequired("run-id")
+
+	// comment update
+	updateCommentCmd.Flags().String("run-id", "", "Run UUID (required)")
+	updateCommentCmd.Flags().String("comment-id", "", "Comment UUID (required)")
+	updateCommentCmd.Flags().String("test-id", "", "Test UUID (optional, resolved from the run if omitted)")
+	updateCommentCmd.Flags().String("message", "", "Updated comment message (reads from stdin if omitted)")
+	updateCommentCmd.Flags().String("mention", "", "Comma-separated user IDs to mention")
+	_ = updateCommentCmd.MarkFlagRequired("run-id")
+	_ = updateCommentCmd.MarkFlagRequired("comment-id")
+
+	// comment delete
+	deleteCommentCmd.Flags().String("run-id", "", "Run UUID (required)")
+	deleteCommentCmd.Flags().String("comment-id", "", "Comment UUID (required)")
+	deleteCommentCmd.Flags().String("test-id", "", "Test UUID (optional, resolved from the run if omitted)")
+	_ = deleteCommentCmd.MarkFlagRequired("run-id")
+	_ = deleteCommentCmd.MarkFlagRequired("comment-id")
+
 	runCmd.AddCommand(listRunsCmd, getRunCmd, getRunTypeCmd, activityCmd, resultsCmd, runCommentsCmd, runPytestResultsCmd)
-	commentCmd.AddCommand(getCommentCmd)
+	commentCmd.AddCommand(getCommentCmd, submitCommentCmd, updateCommentCmd, deleteCommentCmd)
 	rootCmd.AddCommand(runCmd, commentCmd)
 }

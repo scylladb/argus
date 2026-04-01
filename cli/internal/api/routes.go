@@ -14,8 +14,11 @@ const (
 	TestRunFetchResults = "/api/v1/run/%s/%s/fetch_results" // GET  – result tables (test_id, run_id)
 
 	// Comment routes
-	TestRunComments = "/api/v1/run/%s/comments" // GET  – list comments for a run (run_id)
-	CommentGet      = "/api/v1/comment/%s/get"  // GET  – single comment (comment_id)
+	TestRunComments      = "/api/v1/run/%s/comments"                  // GET  – list comments for a run (run_id)
+	CommentGet           = "/api/v1/comment/%s/get"                   // GET  – single comment (comment_id)
+	TestRunCommentSubmit = "/api/v1/test/%s/run/%s/comments/submit"   // POST – submit a comment (test_id, run_id)
+	TestRunCommentUpdate = "/api/v1/test/%s/run/%s/comment/%s/update" // POST – update a comment (test_id, run_id, comment_id)
+	TestRunCommentDelete = "/api/v1/test/%s/run/%s/comment/%s/delete" // POST – delete a comment (test_id, run_id, comment_id)
 
 	// Pytest result routes
 	TestRunPytestResults = "/api/v1/run/%s/pytest/results" // GET  – pytest results for a run (run_id)

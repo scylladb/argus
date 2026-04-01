@@ -7,4 +7,12 @@ var (
 	ContextWithAPIClient = contextWithAPIClient
 	ContextWithOutputter = contextWithOutputter
 	ContextWithCleanup   = contextWithCleanup
+	ContextWithCache     = contextWithCache
+)
+
+// Exports of discussion helper functions for testing.
+var (
+	ResolveTestIDFn = resolveTestID
+	ExtractTestIDFn = extractTestID
+	ParseMentionsFn = parseMentions
 )

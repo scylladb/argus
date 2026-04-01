@@ -21,3 +21,10 @@ type Comment struct {
 // CommentListResponse is the response payload for the comment-list endpoint.
 // The backend wraps this in the standard APIResponse envelope.
 type CommentListResponse = []Comment
+
+// CommentSubmitRequest is the JSON body for submitting or updating a comment.
+type CommentSubmitRequest struct {
+	Message   string         `json:"message"`
+	Reactions map[string]int `json:"reactions"`
+	Mentions  []string       `json:"mentions"`
+}
