@@ -169,9 +169,9 @@ func TestStderr_ErrorAppearsOnStderr(t *testing.T) {
 	assert.Contains(t, stderr.String(), "something went wrong", "stderr must mirror the error")
 }
 
-// TestStderr_InfoDoesNotAppearOnStderr verifies that an Info-level entry is
-// written to the file writer but NOT to stderr.
-func TestStderr_InfoDoesNotAppearOnStderr(t *testing.T) {
+// TestStderr_InfoAppearsOnStderrAtDebugLevel verifies that an Info-level entry
+// is mirrored to stderr when the configured level is "debug" (info >= debug).
+func TestStderr_InfoAppearsOnStderrAtDebugLevel(t *testing.T) {
 	t.Parallel()
 	var file, stderr bytes.Buffer
 
@@ -184,12 +184,31 @@ func TestStderr_InfoDoesNotAppearOnStderr(t *testing.T) {
 	cleanup()
 
 	assert.Contains(t, file.String(), "just informational", "file must contain the info entry")
-	assert.NotContains(t, stderr.String(), "just informational", "stderr must not contain info entries")
+	assert.Contains(t, stderr.String(), "just informational", "stderr must mirror the info entry at debug level")
 }
 
-// TestStderr_WarnDoesNotAppearOnStderr verifies that Warn is below the stderr
-// threshold and stays file-only.
-func TestStderr_WarnDoesNotAppearOnStderr(t *testing.T) {
+// TestStderr_DebugDoesNotAppearOnStderrAtInfoLevel verifies that a Debug-level
+// entry is suppressed on stderr when the configured level is "info".
+func TestStderr_DebugDoesNotAppearOnStderrAtInfoLevel(t *testing.T) {
+	t.Parallel()
+	var file, stderr bytes.Buffer
+
+	logger, cleanup, err := logging.Setup("info", "cmd",
+		logging.WithWriter(&file),
+		logging.WithStderrWriter(&stderr),
+	)
+	require.NoError(t, err)
+	logger.Debug().Msg("should be suppressed")
+	cleanup()
+
+	// Debug is below info, so it should not appear in either writer.
+	assert.NotContains(t, file.String(), "should be suppressed", "file must not contain debug at info level")
+	assert.NotContains(t, stderr.String(), "should be suppressed", "stderr must not contain debug at info level")
+}
+
+// TestStderr_WarnAppearsOnStderrAtDebugLevel verifies that Warn-level entries
+// are mirrored to stderr when the configured level is "debug" (warn >= debug).
+func TestStderr_WarnAppearsOnStderrAtDebugLevel(t *testing.T) {
 	t.Parallel()
 	var file, stderr bytes.Buffer
 
@@ -202,16 +221,35 @@ func TestStderr_WarnDoesNotAppearOnStderr(t *testing.T) {
 	cleanup()
 
 	assert.Contains(t, file.String(), "just a warning", "file must contain the warn entry")
-	assert.NotContains(t, stderr.String(), "just a warning", "stderr must not contain warn entries")
+	assert.Contains(t, stderr.String(), "just a warning", "stderr must mirror the warn entry at debug level")
 }
 
-// TestStderr_OnlyErrorsAndAboveReachStderr confirms the exact boundary:
-// warn stays file-only, error crosses to stderr.
-func TestStderr_OnlyErrorsAndAboveReachStderr(t *testing.T) {
+// TestStderr_WarnDoesNotAppearOnStderrAtErrorLevel verifies that Warn-level
+// entries stay file-only when the configured level is "error".
+func TestStderr_WarnDoesNotAppearOnStderrAtErrorLevel(t *testing.T) {
 	t.Parallel()
 	var file, stderr bytes.Buffer
 
-	logger, cleanup, err := logging.Setup("debug", "cmd",
+	logger, cleanup, err := logging.Setup("error", "cmd",
+		logging.WithWriter(&file),
+		logging.WithStderrWriter(&stderr),
+	)
+	require.NoError(t, err)
+	logger.Warn().Msg("just a warning")
+	cleanup()
+
+	// Warn is below error, so the logger itself suppresses this message.
+	assert.NotContains(t, file.String(), "just a warning", "file must not contain warn at error level")
+	assert.NotContains(t, stderr.String(), "just a warning", "stderr must not contain warn at error level")
+}
+
+// TestStderr_OnlyConfiguredLevelAndAboveReachStderr confirms the exact
+// boundary: at error level, warn stays suppressed and error crosses to stderr.
+func TestStderr_OnlyConfiguredLevelAndAboveReachStderr(t *testing.T) {
+	t.Parallel()
+	var file, stderr bytes.Buffer
+
+	logger, cleanup, err := logging.Setup("error", "cmd",
 		logging.WithWriter(&file),
 		logging.WithStderrWriter(&stderr),
 	)
@@ -220,13 +258,37 @@ func TestStderr_OnlyErrorsAndAboveReachStderr(t *testing.T) {
 	logger.Error().Msg("error-msg")
 	cleanup()
 
-	// Both appear in the file.
-	assert.Contains(t, file.String(), "warn-msg")
-	assert.Contains(t, file.String(), "error-msg")
-
-	// Only the error reaches stderr.
+	// Warn is below the configured "error" level, so the logger itself
+	// suppresses it — it doesn't appear in either writer.
+	assert.NotContains(t, file.String(), "warn-msg")
 	assert.NotContains(t, stderr.String(), "warn-msg")
+
+	// Error is at the configured level — appears in both.
+	assert.Contains(t, file.String(), "error-msg")
 	assert.Contains(t, stderr.String(), "error-msg")
+}
+
+// TestStderr_AllLevelsAppearAtDebugLevel confirms that when the configured
+// level is "debug", all messages appear on both file and stderr.
+func TestStderr_AllLevelsAppearAtDebugLevel(t *testing.T) {
+	t.Parallel()
+	var file, stderr bytes.Buffer
+
+	logger, cleanup, err := logging.Setup("debug", "cmd",
+		logging.WithWriter(&file),
+		logging.WithStderrWriter(&stderr),
+	)
+	require.NoError(t, err)
+	logger.Debug().Msg("debug-msg")
+	logger.Info().Msg("info-msg")
+	logger.Warn().Msg("warn-msg")
+	logger.Error().Msg("error-msg")
+	cleanup()
+
+	for _, msg := range []string{"debug-msg", "info-msg", "warn-msg", "error-msg"} {
+		assert.Contains(t, file.String(), msg, "file must contain %s", msg)
+		assert.Contains(t, stderr.String(), msg, "stderr must contain %s at debug level", msg)
+	}
 }
 
 func TestFor_AddsComponentField(t *testing.T) {
