@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
+	"time"
 )
 
 // ---------------------------------------------------------------------------
@@ -611,4 +613,224 @@ func (f FetchResultsResponse) Rows() [][]string {
 		}
 	}
 	return rows
+}
+
+// ---------------------------------------------------------------------------
+// SCT events (GET /api/v1/sct/<run_id>/events/get)
+// ---------------------------------------------------------------------------
+
+// SCTEventsResponse is the response payload for the SCT events endpoint.
+// Events is the list of individual SCT events returned by the server.
+type SCTEventsResponse struct {
+	RunID  string     `json:"run_id"`
+	Events []SCTEvent `json:"response"`
+}
+
+// Headers implements output.Tabular for SCTEventsResponse.
+func (SCTEventsResponse) Headers() []string {
+	return []string{"Severity", "Timestamp", "Type", "Node", "Nemesis", "Message"}
+}
+
+// Rows implements output.Tabular for SCTEventsResponse.
+func (r SCTEventsResponse) Rows() [][]string {
+	rows := make([][]string, 0, len(r.Events))
+	for _, e := range r.Events {
+		msg := e.Message
+		if len(msg) > 200 {
+			msg = msg[:200] + "..."
+		}
+		rows = append(rows, []string{
+			string(e.Severity),
+			e.Ts,
+			e.EventType,
+			e.Node,
+			e.NemesisName,
+			msg,
+		})
+	}
+	return rows
+}
+
+// MarshalJSON implements json.Marshaler so that the JSON outputter serialises
+// the event list directly.
+func (r SCTEventsResponse) MarshalJSON() ([]byte, error) {
+	return json.Marshal(r.Events)
+}
+
+// ---------------------------------------------------------------------------
+// NemesisResponse – nemesis summary extracted from a cached SCTTestRun
+// ---------------------------------------------------------------------------
+
+// NemesisResponse wraps the nemesis list from an SCTTestRun so it can be
+// rendered as a table without re-fetching the full run.
+type NemesisResponse struct {
+	RunID   string           `json:"run_id"`
+	Nemeses []NemesisRunInfo `json:"nemeses"`
+}
+
+// Headers implements output.Tabular for NemesisResponse.
+func (NemesisResponse) Headers() []string {
+	return []string{"Class", "Name", "Status", "Duration(s)", "Start Time", "End Time", "Target Node", "Stack Trace"}
+}
+
+// Rows implements output.Tabular for NemesisResponse.
+func (n NemesisResponse) Rows() [][]string {
+	rows := make([][]string, 0, len(n.Nemeses))
+	for _, nem := range n.Nemeses {
+		startStr := ""
+		if nem.StartTime > 0 {
+			startStr = time.Unix(nem.StartTime, 0).UTC().Format(time.RFC3339)
+		}
+		endStr := ""
+		if nem.EndTime > 0 {
+			endStr = time.Unix(nem.EndTime, 0).UTC().Format(time.RFC3339)
+		}
+		targetNode := ""
+		if nem.TargetNode != nil {
+			targetNode = nem.TargetNode.Name
+			if nem.TargetNode.IP != "" {
+				targetNode += " (" + nem.TargetNode.IP + ")"
+			}
+		}
+		stackTrace := nem.StackTrace
+		if len(stackTrace) > 120 {
+			stackTrace = stackTrace[:120] + "..."
+		}
+		rows = append(rows, []string{
+			nem.ClassName,
+			nem.Name,
+			nem.Status,
+			fmt.Sprint(nem.Duration),
+			startStr,
+			endStr,
+			targetNode,
+			stackTrace,
+		})
+	}
+	return rows
+}
+
+// MarshalJSON implements json.Marshaler.
+func (n NemesisResponse) MarshalJSON() ([]byte, error) {
+	return json.Marshal(n.Nemeses)
+}
+
+// ---------------------------------------------------------------------------
+// RunDetails – structured "Details page" style output for run get
+// ---------------------------------------------------------------------------
+
+// RunDetails renders an SCTTestRun as two side-by-side sections mirroring the
+// Argus web UI "Details" tab: Run Details on the left, System Information on
+// the right.  Events and nemesis data are excluded — use the dedicated
+// `run events` and `run nemesis` sub-commands instead.
+type RunDetails struct {
+	Run SCTTestRun
+}
+
+// Headers implements output.Tabular.
+func (RunDetails) Headers() []string {
+	return []string{"Field", "Value"}
+}
+
+// Rows implements output.Tabular.
+func (d RunDetails) Rows() [][]string {
+	r := d.Run
+
+	// Duration: compute from start/end when available.
+	duration := ""
+	if r.StartTime != "" && r.EndTime != "" {
+		if start, err1 := time.Parse("2006-01-02T15:04:05.000000", r.StartTime); err1 == nil {
+			if end, err2 := time.Parse("2006-01-02T15:04:05.000000", r.EndTime); err2 == nil {
+				dur := end.Sub(start).Round(time.Minute)
+				duration = dur.String()
+			}
+		}
+	}
+
+	// Cloud setup summary.
+	backend := ""
+	region := strings.Join(r.RegionName, ", ")
+	imageID := ""
+	instanceType := ""
+	nodeAmount := 0
+	if r.CloudSetup != nil {
+		backend = r.CloudSetup.Backend
+		if r.CloudSetup.DBNode != nil {
+			imageID = r.CloudSetup.DBNode.ImageID
+			instanceType = r.CloudSetup.DBNode.InstanceType
+			nodeAmount = r.CloudSetup.DBNode.NodeAmount
+		}
+	}
+
+	// Event summary: count per severity.
+	eventSummary := ""
+	if len(r.Events) > 0 {
+		parts := make([]string, 0, len(r.Events))
+		for _, ev := range r.Events {
+			parts = append(parts, fmt.Sprintf("%s: %d", ev.Severity, ev.EventAmount))
+		}
+		eventSummary = strings.Join(parts, "  |  ")
+	}
+
+	// Nemesis summary: count by status.
+	nemesisSummary := ""
+	if len(r.NemesisData) > 0 {
+		statusCount := make(map[string]int)
+		for _, nem := range r.NemesisData {
+			statusCount[nem.Status]++
+		}
+		parts := make([]string, 0, len(statusCount))
+		for status, count := range statusCount {
+			parts = append(parts, fmt.Sprintf("%s: %d", status, count))
+		}
+		sort.Strings(parts)
+		nemesisSummary = fmt.Sprintf("total: %d  (%s)", len(r.NemesisData), strings.Join(parts, ", "))
+	}
+
+	rows := [][]string{
+		{"--- Run Details ---", ""},
+		{"Release", r.ReleaseID},
+		{"Group", r.GroupID},
+		{"Test", r.TestName},
+		{"Test Method", r.TestMethod},
+		{"Id", r.ID},
+		{"Status", string(r.Status)},
+		{"Investigation Status", string(r.InvestigationStatus)},
+		{"Start Time", r.StartTime},
+		{"End Time", r.EndTime},
+		{"Duration", duration},
+		{"Custom Stress Duration", fmt.Sprint(r.StressDuration)},
+		{"Started By", r.StartedBy},
+		{"Build Job", r.BuildJobURL},
+		{"Scylla Version", r.ScyllaVersion},
+		{"Product Version", r.ProductVersion},
+		{"--- System Information ---", ""},
+		{"Backend", backend},
+		{"Region", region},
+		{"Image Id", imageID},
+		{"SCT Commit SHA", r.ScmRevisionID},
+		{"SCT Repository", r.OriginURL},
+		{"SCT Branch Name", r.BranchName},
+		{"Kernel Version", ""},
+		{"Instance Type", instanceType},
+		{"Node Amount", fmt.Sprint(nodeAmount)},
+		{"--- Summary ---", ""},
+		{"Events", eventSummary},
+		{"Nemesis", nemesisSummary},
+	}
+
+	// Remove empty rows to keep output clean.
+	out := rows[:0]
+	for _, row := range rows {
+		if row[0] != "" {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
+// MarshalJSON implements json.Marshaler so the JSON outputter serialises the
+// underlying run directly.
+func (d RunDetails) MarshalJSON() ([]byte, error) {
+	return json.Marshal(d.Run)
 }
