@@ -299,7 +299,11 @@ var getRunTypeCmd = &cobra.Command{
 var getRunCmd = &cobra.Command{
 	Use:   "get",
 	Short: "Get a single test run",
-	Long:  `Fetch the full details of a test run by its plugin type and run ID.`,
+	Long: `Fetch the full details of a test run by its run ID.
+
+When --type is omitted the plugin type is resolved automatically via the
+/run/<run_id>/type endpoint and cached for 24 h so subsequent invocations
+require no network round-trip for type resolution.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
@@ -308,6 +312,23 @@ var getRunCmd = &cobra.Command{
 
 		runType, _ := cmd.Flags().GetString("type")
 		runID, _ := cmd.Flags().GetString("run-id")
+
+		// Auto-resolve run type when --type is not provided.
+		if runType == "" {
+			// Check cache first (long TTL — run type is immutable).
+			typeKey := cache.RunTypeKey(runID)
+			if cached, _, err := cache.Get[models.RunType](c, typeKey); isCacheable(err) {
+				runType = cached.RunType
+			} else {
+				var resolveErr error
+				runType, resolveErr = ResolveRunType(ctx, client, runID)
+				if resolveErr != nil {
+					return resolveErr
+				}
+				// Cache the resolved type with the long TTL.
+				_ = cache.Set(c, typeKey, models.RunType{RunType: runType}, fmt.Sprintf(api.TestRunGetType, runID), cache.TTLRunType)
+			}
+		}
 
 		handler, ok := RunTypeHandlers[runType]
 		if !ok {
@@ -558,9 +579,8 @@ func init() {
 	_ = listRunsCmd.MarkFlagRequired("test-id")
 
 	// run get
-	getRunCmd.Flags().String("type", "", "Plugin type (required): "+ValidRunTypes())
+	getRunCmd.Flags().String("type", "", "Plugin type (optional, auto-resolved when omitted): "+ValidRunTypes())
 	getRunCmd.Flags().String("run-id", "", "Run UUID (required)")
-	_ = getRunCmd.MarkFlagRequired("type")
 	_ = getRunCmd.MarkFlagRequired("run-id")
 
 	// run get-type

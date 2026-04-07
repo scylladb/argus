@@ -139,8 +139,9 @@ def sct_events_submit(run_id: str):
 def sct_events_get(run_id: str):
     limit = int(request.args.get("limit", 100))
     before = request.args.get("before")
+    after = request.args.get("after")
     severities = request.args.getlist("severity")
-    result = SCTService.get_events(run_id=run_id, limit=limit, before=before, severities=severities)
+    result = SCTService.get_events(run_id=run_id, limit=limit, before=before, after=after, severities=severities)
     return {
         "status": "ok",
         "response": result
@@ -152,7 +153,8 @@ def sct_events_get(run_id: str):
 def sct_events_get_by_severity(run_id: str, severity: str):
     limit = int(request.args.get("limit", 100))
     before = request.args.get("before")
-    result = SCTService.get_events(run_id=run_id, limit=limit, before=before, severities=[SCTEventSeverity(severity)])
+    after = request.args.get("after")
+    result = SCTService.get_events(run_id=run_id, limit=limit, before=before, after=after, severities=[SCTEventSeverity(severity)])
     return {
         "status": "ok",
         "response": result

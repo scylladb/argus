@@ -470,11 +470,11 @@ class SCTService:
 
 
     @staticmethod
-    def get_events(run_id: str, limit: int, severities: list[str], before: str | None) -> list[dict]:
-        if before:
-            before = datetime.fromtimestamp(int(before), tz=UTC)
+    def get_events(run_id: str, limit: int, severities: list[str], before: str | None, after: str | None = None) -> list[dict]:
+        before_dt = datetime.fromtimestamp(int(before), tz=UTC) if before else None
+        after_dt = datetime.fromtimestamp(int(after), tz=UTC) if after else None
 
-        return SCTTestRun.get_events_limited(run_id=UUID(run_id), before=before, severities=severities, per_partition_limit=limit)
+        return SCTTestRun.get_events_limited(run_id=UUID(run_id), before=before_dt, after=after_dt, severities=severities, per_partition_limit=limit)
 
     @staticmethod
     def count_events_by_severity(run_id: str, severity: SCTEventSeverity) -> int:

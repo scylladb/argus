@@ -25,4 +25,9 @@ const (
 
 	// Log file routes
 	TestRunLogDownload = "/testrun/tests/%s/%s/log/%s/download" // GET  – download log file, 302 to S3 (plugin_name, run_id, log_name)
+
+	// SCT-specific routes (mounted under /api/v1/client/sct/)
+	SCTEventsGet        = "/api/v1/client/sct/%s/events/get"    // GET – events (run_id); query: severity, limit, before, after
+	SCTEventsBySeverity = "/api/v1/client/sct/%s/events/%s/get" // GET – events by severity (run_id, severity); query: limit, before, after
+	SCTNemesisGet       = "/api/v1/client/sct/%s/nemesis/get"   // GET – nemesis records (run_id); query: before, after
 )
