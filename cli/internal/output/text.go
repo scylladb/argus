@@ -64,7 +64,6 @@ func (t *textOutputter) Write(v any) error {
 	}
 
 	table := tablewriter.NewTable(t.w)
-	defer table.Close()
 	configureTableWidths(table)
 
 	if headers := tab.Headers(); len(headers) > 0 {
@@ -73,15 +72,17 @@ func (t *textOutputter) Write(v any) error {
 
 	for _, row := range tab.Rows() {
 		if err := table.Append(row); err != nil {
+			_ = table.Close()
 			return fmt.Errorf("%w: %w", ErrTextOutputRow, err)
 		}
 	}
 
 	if err := table.Render(); err != nil {
+		_ = table.Close()
 		return fmt.Errorf("%w: %w", ErrTextOutputRender, err)
 	}
 
-	return nil
+	return table.Close()
 }
 
 // writeRawJSON is the fallback path for values that do not implement Tabular.

@@ -214,5 +214,5 @@ func TestNewRunFetcher_ImplementsInterface(t *testing.T) {
 		func(_ context.Context, _ *api.Client, _ *cache.Cache, _, _ string) (any, error) { return nil, nil },
 	)
 	// Verify it satisfies the interface at compile time (done by type assertion).
-	var _ services.RunFetcher = fetcher
+	var _ = fetcher.(services.RunFetcher)
 }

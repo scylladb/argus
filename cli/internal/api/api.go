@@ -236,7 +236,10 @@ func DoJSON[T any](c *Client, req *http.Request) (T, error) {
 	if err != nil {
 		return zero, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return zero, fmt.Errorf("server returned %d: %s", resp.StatusCode, http.StatusText(resp.StatusCode))

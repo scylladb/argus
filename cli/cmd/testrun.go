@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -110,12 +109,6 @@ var runTypeCacheSetters = map[string]runTypeCacheSetter{
 // network so the user is never left without a result.
 func isCacheable(err error) bool {
 	return err == nil
-}
-
-// isCacheMiss reports whether err indicates the entry was absent or expired,
-// meaning we should fetch from the network.
-func isCacheMiss(err error) bool {
-	return errors.Is(err, cache.ErrCacheMiss) || errors.Is(err, cache.ErrExpired)
 }
 
 // ResolveRunType fetches the plugin/type name for a run from the get-type

@@ -103,21 +103,45 @@ func VersionKey() string {
 	return "version"
 }
 
+// fullCursor is the sentinel value stored in a cache key component to indicate
+// that the entry covers the full (unfiltered) dataset for a run.
+const fullCursor = "full"
+
 // SCTEventsKey returns the cache key for a page of SCT events for a run.
-// The key encodes the severity filter and the before-timestamp cursor so that
-// each distinct page is cached independently.
+// The key encodes the severity filter and the before/after timestamp cursors so
+// that each distinct query is cached independently.
 //
-// On disk: cache/sct-events/{runID}/{severity}/{before}/
+// On disk: cache/sct-events/{runID}/{severity}/{before}/{after}/
+//
 // Pass an empty string for severity to represent "all severities".
-// Pass an empty string for before to represent the first/latest page.
-func SCTEventsKey(runID, severity, before string) string {
+// Pass an empty string for before/after to represent "no bound on that side".
+// When both before and after are empty the key represents the full dataset
+// (all events, no time window); use [SCTEventsFullKey] as a shorthand.
+func SCTEventsKey(runID, severity, before, after string) string {
 	if severity == "" {
 		severity = "all"
 	}
 	if before == "" {
-		before = "latest"
+		before = "none"
 	}
-	return path.Join("sct-events", runID, severity, before)
+	if after == "" {
+		after = "none"
+	}
+	return path.Join("sct-events", runID, severity, before, after)
+}
+
+// SCTEventsFullKey returns the cache key that represents the complete,
+// unfiltered set of SCT events for a run at the given severity level.
+// This is the key written when no --before/--after flags are supplied, and
+// read first when a filtered request arrives so that local filtering can be
+// attempted before hitting the network.
+//
+// On disk: cache/sct-events/{runID}/{severity}/full/full/
+func SCTEventsFullKey(runID, severity string) string {
+	if severity == "" {
+		severity = "all"
+	}
+	return path.Join("sct-events", runID, severity, fullCursor, fullCursor)
 }
 
 // NemesisKey returns the cache key for the nemesis summary of a run.
@@ -129,10 +153,24 @@ func NemesisKey(runID string) string {
 }
 
 // NemesesKey returns the cache key for a run's nemesis records fetched from
-// the dedicated nemesis endpoint.  Kept alongside NemesisKey to support both
-// the legacy endpoint-based fetch and the run-object-derived summary.
+// the dedicated nemesis endpoint (unfiltered / full dataset).
 //
-// On disk: cache/nemeses/{runID}/
+// On disk: cache/nemeses/{runID}/full/
 func NemesesKey(runID string) string {
-	return path.Join("nemeses", runID)
+	return path.Join("nemeses", runID, fullCursor)
+}
+
+// NemesesFilteredKey returns the cache key for a filtered page of nemesis
+// records.  The key encodes both timestamp bounds so that each distinct query
+// is stored separately.
+//
+// On disk: cache/nemeses/{runID}/{before}/{after}/
+func NemesesFilteredKey(runID, before, after string) string {
+	if before == "" {
+		before = "none"
+	}
+	if after == "" {
+		after = "none"
+	}
+	return path.Join("nemeses", runID, before, after)
 }
