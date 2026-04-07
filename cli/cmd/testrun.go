@@ -339,6 +339,9 @@ require no network round-trip for type resolution.`,
 
 		if getter, ok := runTypeCacheGetters[runType]; ok {
 			if cached, err := getter(c, cacheKey); isCacheable(err) {
+				if sct, ok := cached.(models.SCTTestRun); ok {
+					return out.Write(models.RunDetails{Run: sct})
+				}
 				return out.Write(models.NewKVTabular(cached))
 			}
 		}
@@ -354,6 +357,12 @@ require no network round-trip for type resolution.`,
 		}
 		if setter, ok := runTypeCacheSetters[runType]; ok {
 			_ = setter(c, cacheKey, result)
+		}
+
+		// For SCT runs use the structured RunDetails view (mirrors the Argus
+		// Details page).  All other run types fall back to the generic KV table.
+		if sct, ok := result.(models.SCTTestRun); ok {
+			return out.Write(models.RunDetails{Run: sct})
 		}
 		return out.Write(models.NewKVTabular(result))
 	},

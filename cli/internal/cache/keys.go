@@ -33,13 +33,18 @@ const (
 	// The version only changes on a new server deployment.
 	TTLVersion = time.Hour
 
-	// TTLEvents is the TTL for SCT event lists.
-	// Events are written frequently during execution.
-	TTLEvents = time.Minute
+	// TTLSCTEvents is the TTL for SCT event pages fetched from the server.
+	// Events are append-only once a run finishes, so a longer TTL is fine.
+	// During a live run we keep it short so new events appear quickly.
+	TTLSCTEvents = 5 * time.Minute
 
-	// TTLNemeses is the TTL for nemesis records.
-	// Nemeses are updated during execution but finalized quickly.
-	TTLNemeses = 2 * time.Minute
+	// TTLNemeses is an alias kept for backwards compatibility with code that
+	// references the old name.  New code should prefer TTLNemesis.
+	TTLNemeses = TTLRun
+
+	// TTLNemesis is the TTL for the nemesis summary derived from a cached run.
+	// Nemesis data is part of the run object itself and shares its TTL.
+	TTLNemesis = TTLRun
 )
 
 // RunKey returns the cache key for a specific test run.
@@ -98,14 +103,34 @@ func VersionKey() string {
 	return "version"
 }
 
-// EventsKey returns the cache key for a run's SCT events (no filter params).
+// SCTEventsKey returns the cache key for a page of SCT events for a run.
+// The key encodes the severity filter and the before-timestamp cursor so that
+// each distinct page is cached independently.
 //
-// On disk: cache/events/{runID}/
-func EventsKey(runID string) string {
-	return path.Join("events", runID)
+// On disk: cache/sct-events/{runID}/{severity}/{before}/
+// Pass an empty string for severity to represent "all severities".
+// Pass an empty string for before to represent the first/latest page.
+func SCTEventsKey(runID, severity, before string) string {
+	if severity == "" {
+		severity = "all"
+	}
+	if before == "" {
+		before = "latest"
+	}
+	return path.Join("sct-events", runID, severity, before)
 }
 
-// NemesesKey returns the cache key for a run's nemesis records (no filter params).
+// NemesisKey returns the cache key for the nemesis summary of a run.
+// The nemesis data is derived from the run object itself.
+//
+// On disk: cache/nemesis/{runID}/
+func NemesisKey(runID string) string {
+	return path.Join("nemesis", runID)
+}
+
+// NemesesKey returns the cache key for a run's nemesis records fetched from
+// the dedicated nemesis endpoint.  Kept alongside NemesisKey to support both
+// the legacy endpoint-based fetch and the run-object-derived summary.
 //
 // On disk: cache/nemeses/{runID}/
 func NemesesKey(runID string) string {
