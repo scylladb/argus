@@ -159,3 +159,24 @@ func CacheFrom(ctx context.Context) *cache.Cache {
 	}
 	return cache.New("", cache.WithDisabled(true))
 }
+
+// ---------------------------------------------------------------------------
+// NonInteractive flag
+// ---------------------------------------------------------------------------
+
+type nonInteractiveKey struct{}
+
+// WithNonInteractive returns a copy of ctx with the non-interactive flag set to v.
+func WithNonInteractive(ctx context.Context, v bool) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, nonInteractiveKey{}, v)
+}
+
+// NonInteractiveFrom returns the non-interactive flag stored in ctx.
+// Returns false if not set.
+func NonInteractiveFrom(ctx context.Context) bool {
+	v, _ := ctx.Value(nonInteractiveKey{}).(bool)
+	return v
+}

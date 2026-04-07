@@ -6,6 +6,11 @@ const (
 	// Receive version information
 	ArgusVersion = "/api/v1/version"
 
+	// User token route
+	// GET – returns (or generates on first call) the caller's Argus API token.
+	// Requires an active session cookie or an existing Authorization: token header.
+	UserToken = "/api/v1/user/token"
+
 	// Test run routes
 	TestRunsList        = "/api/v1/test/%s/runs"            // GET  – list runs for a test (test_id)
 	TestRunGetType      = "/api/v1/run/%s/type"             // GET  – run type (run_id)

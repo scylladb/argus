@@ -5,14 +5,17 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/scylladb/argus/cli/internal/api"
+	"github.com/scylladb/argus/cli/internal/auth"
 	"github.com/scylladb/argus/cli/internal/cache"
 	"github.com/scylladb/argus/cli/internal/config"
 	"github.com/scylladb/argus/cli/internal/keychain"
 	"github.com/scylladb/argus/cli/internal/logging"
 	"github.com/scylladb/argus/cli/internal/output"
+	"github.com/scylladb/argus/cli/internal/services"
 	"github.com/spf13/cobra"
 )
 
@@ -20,14 +23,19 @@ import (
 // absolute URL.
 var ErrInvalidURL = errors.New("cmd: invalid argus URL")
 
+// ErrUnauthorized is returned (or wrapped) when a command fails due to an
+// expired / missing credential and --non-interactive is set.
+var ErrUnauthorized = errors.New("cmd: unauthorized")
+
 var (
-	useText       bool
-	useCloudflare bool
-	argusURL      string
-	cfgFile       string
-	logLevel      string
-	noCache       bool
-	cacheTTL      string
+	useText        bool
+	useCloudflare  bool
+	argusURL       string
+	cfgFile        string
+	logLevel       string
+	noCache        bool
+	cacheTTL       string
+	nonInteractive bool
 )
 
 func init() {
@@ -38,6 +46,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", `log verbosity: trace, debug, info, warn, error`)
 	rootCmd.PersistentFlags().BoolVar(&noCache, "no-cache", false, "bypass the local response cache; always fetch from the API")
 	rootCmd.PersistentFlags().StringVar(&cacheTTL, "cache-ttl", "", "override the default cache TTL (e.g. 10m, 1h); ignored when --no-cache is set")
+	rootCmd.PersistentFlags().BoolVar(&nonInteractive, "non-interactive", false, "disable interactive prompts; return an error instead of triggering re-authentication")
 }
 
 var rootCmd = &cobra.Command{
@@ -68,6 +77,9 @@ var rootCmd = &cobra.Command{
 		// and closed on both success and error paths.
 		ctx := contextWithCleanup(cmd.Context(), cleanup)
 		ctx = contextWithLogger(ctx, logger)
+
+		// ---- non-interactive flag ------------------------------------
+		ctx = contextWithNonInteractive(ctx, nonInteractive)
 
 		// ---- output --------------------------------------------------
 		out := output.New(cmd.OutOrStdout(), useText)
@@ -104,45 +116,117 @@ var rootCmd = &cobra.Command{
 		}()
 
 		// ---- API client ----------------------------------------------
-		var apiOpts []api.ClientOption
-		if token, keychainErr := keychain.LoadPAT(); keychainErr == nil {
-			apiOpts = append(apiOpts, api.WithAPIToken(token))
-			logger.Debug().Msg("token loaded from keychain")
-		} else if session, keychainErr := keychain.Load(); keychainErr == nil {
-			apiOpts = append(apiOpts, api.WithSession(session))
-			logger.Debug().Msg("session loaded from keychain")
-		} else {
-			logger.Debug().Err(keychainErr).Msg("no session or token in keychain")
+		client, buildErr := buildAPIClientRaw(cfg)
+		if buildErr != nil {
+			return buildErr
 		}
-
-		if cfCookie, keychainErr := keychain.LoadCFToken(); keychainErr == nil && cfg.UseCf {
-			apiOpts = append(apiOpts, api.WithCFToken(cfCookie))
-			logger.Debug().Msg("loaded CF cookie from keychain")
-		}
-
-		if token := os.Getenv("ARGUS_TOKEN"); token != "" {
-			apiOpts = append(apiOpts, api.WithAPIToken(token))
-			logger.Debug().Msg("Using token from ARGUS_TOKEN")
-		}
-
-		if clientID := os.Getenv("ARGUS_CF_ACCESS_CLIENT_ID"); clientID != "" {
-			clientSecret := os.Getenv("ARGUS_CF_ACCESS_CLIENT_SECRET")
-			if clientSecret != "" {
-				apiOpts = append(apiOpts, api.WithCFAccessSecret(clientID, clientSecret))
-				logger.Debug().Msg("Using CF Service User from ARGUS_CF_ACCESS_CLIENT_*")
-			}
-		}
-
-		client, err := api.New(cfg.URL, apiOpts...)
-		if err != nil {
-			return fmt.Errorf("%w %q: %w", ErrInvalidURL, cfg.URL, err)
-		}
+		logger.Debug().Msg("API client built")
 
 		ctx = contextWithAPIClient(ctx, client)
 
 		cmd.SetContext(ctx)
 		return nil
 	},
+}
+
+// buildAPIClientRaw constructs an [api.Client] using credentials from the
+// keychain and environment, applying them in priority order:
+//
+//  1. PAT from keychain
+//  2. Session cookie from keychain
+//  3. CF JWT from keychain (when CF is enabled)
+//  4. ARGUS_TOKEN env var
+//  5. CF Access service-account credentials from env
+func buildAPIClientRaw(cfg *config.Config) (*api.Client, error) {
+	var apiOpts []api.ClientOption
+	if token, keychainErr := keychain.LoadPAT(); keychainErr == nil {
+		apiOpts = append(apiOpts, api.WithAPIToken(token))
+	} else if session, keychainErr := keychain.Load(); keychainErr == nil {
+		apiOpts = append(apiOpts, api.WithSession(session))
+	}
+
+	if cfCookie, keychainErr := keychain.LoadCFToken(); keychainErr == nil && cfg.UseCf {
+		apiOpts = append(apiOpts, api.WithCFToken(cfCookie))
+	}
+
+	if token := os.Getenv("ARGUS_TOKEN"); token != "" {
+		apiOpts = append(apiOpts, api.WithAPIToken(token))
+	}
+
+	if clientID := os.Getenv("ARGUS_CF_ACCESS_CLIENT_ID"); clientID != "" {
+		clientSecret := os.Getenv("ARGUS_CF_ACCESS_CLIENT_SECRET")
+		if clientSecret != "" {
+			apiOpts = append(apiOpts, api.WithCFAccessSecret(clientID, clientSecret))
+		}
+	}
+
+	client, err := api.New(cfg.URL, apiOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("%w %q: %w", ErrInvalidURL, cfg.URL, err)
+	}
+	return client, nil
+}
+
+// isUnauthorizedErr reports whether err looks like an unauthorized / expired
+// session error returned by [api.DoJSON].
+func isUnauthorizedErr(err error) bool {
+	return err != nil && strings.HasPrefix(err.Error(), "unauthorized:")
+}
+
+// RunWithAuthRetry wraps fn so that if it returns an unauthorized error and
+// the command context does not have --non-interactive set, it triggers the
+// full login flow and retries fn once with a freshly built API client.
+//
+// Sub-commands that make API calls should wrap their logic with this helper:
+//
+//	RunE: func(cmd *cobra.Command, args []string) error {
+//	    return RunWithAuthRetry(cmd, args, func(cmd *cobra.Command, args []string) error {
+//	        // ... normal command logic ...
+//	    })
+//	},
+func RunWithAuthRetry(cmd *cobra.Command, args []string, fn func(*cobra.Command, []string) error) error {
+	err := fn(cmd, args)
+	if err == nil {
+		return nil
+	}
+
+	if !isUnauthorizedErr(err) {
+		return err
+	}
+
+	ctx := cmd.Context()
+
+	// --non-interactive: surface the error immediately without prompting.
+	if NonInteractiveFrom(ctx) {
+		return fmt.Errorf("%w: %w", ErrUnauthorized, err)
+	}
+
+	// Interactive retry: run the full login flow then rebuild the API client.
+	cfg := ConfigFrom(ctx)
+	log := LoggerFrom(ctx)
+	log.Info().Msg("session expired; re-authenticating")
+
+	if cfg.UseCf {
+		cfSvc := services.NewCloudflaredService()
+		binPath, cfErr := cfSvc.Ensure(ctx)
+		if cfErr != nil {
+			return fmt.Errorf("re-auth: locating cloudflared: %w", cfErr)
+		}
+		argusSvc := auth.NewArgusService(cfg.URL, binPath)
+		if loginErr := argusSvc.Login(ctx); loginErr != nil {
+			return fmt.Errorf("re-auth: login failed: %w", loginErr)
+		}
+	}
+
+	// Rebuild client with fresh credentials.
+	newClient, buildErr := buildAPIClientRaw(cfg)
+	if buildErr != nil {
+		return fmt.Errorf("re-auth: building client: %w", buildErr)
+	}
+	cmd.SetContext(contextWithAPIClient(ctx, newClient))
+
+	log.Info().Msg("re-authentication successful; retrying command")
+	return fn(cmd, args)
 }
 
 func ExecuteContext(ctx context.Context) error {
