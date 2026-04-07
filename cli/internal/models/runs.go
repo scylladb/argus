@@ -397,8 +397,55 @@ type SirenadaRun struct {
 }
 
 // ---------------------------------------------------------------------------
-// Run meta (lightweight, used for list views)
+// Run details (lightweight view — no logs, events, resources, screenshots)
 // ---------------------------------------------------------------------------
+
+// SCTRunDetails is the basic view of an SCTTestRun as shown on the Argus
+// Details page.  Heavy fields (logs, events, nemesis_data, screenshots,
+// allocated_resources, histograms, junit_reports) are intentionally omitted;
+// use the dedicated subcommands (run logs, run activity, run nemeses, etc.)
+// to retrieve those.
+type SCTRunDetails struct {
+	RunBase
+
+	TestName         string           `json:"test_name"`
+	ScyllaVersion    string           `json:"scylla_version"`
+	StartedBy        string           `json:"started_by"`
+	BranchName       string           `json:"branch_name"`
+	OriginURL        string           `json:"origin_url"`
+	ConfigFiles      []string         `json:"config_files"`
+	ScmRevisionID    string           `json:"scm_revision_id"`
+	SubtestName      string           `json:"subtest_name"`
+	StressDuration   float32          `json:"stress_duration"`
+	YAMLTestDuration int              `json:"yaml_test_duration"`
+	RegionName       []string         `json:"region_name"`
+	Packages         []PackageVersion `json:"packages"`
+}
+
+// GenericRunDetails is the basic view of a GenericRun.
+type GenericRunDetails struct {
+	RunBase
+
+	StartedBy     string `json:"started_by"`
+	SubType       string `json:"sub_type"`
+	ScyllaVersion string `json:"scylla_version"`
+}
+
+// DriverRunDetails is the basic view of a DriverTestRun.
+type DriverRunDetails struct {
+	RunBase
+
+	ScyllaVersion string `json:"scylla_version"`
+}
+
+// SirenadaRunDetails is the basic view of a SirenadaRun.
+type SirenadaRunDetails struct {
+	RunBase
+
+	ScyllaVersion string `json:"scylla_version"`
+	Region        string `json:"region"`
+	SCTTestID     string `json:"sct_test_id"`
+}
 
 // RunMeta contains the subset of fields returned by get_run_meta_by_build_id
 // and get_run_meta_by_run_id queries.
@@ -419,6 +466,19 @@ type RunMeta struct {
 
 type RunType struct {
 	RunType string `json:"run_type"`
+}
+
+// NemesisRecord is the CLI-facing model for a nemesis record returned by
+// GET /api/v1/client/sct/<run_id>/nemesis/get.
+type NemesisRecord struct {
+	ClassName  string           `json:"class_name"`
+	Name       string           `json:"name"`
+	Duration   int              `json:"duration"`
+	TargetNode *NodeDescription `json:"target_node"`
+	Status     string           `json:"status"`
+	StartTime  int64            `json:"start_time"`
+	EndTime    int64            `json:"end_time"`
+	StackTrace string           `json:"stack_trace"`
 }
 
 // ---------------------------------------------------------------------------

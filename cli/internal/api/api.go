@@ -243,7 +243,17 @@ func DoJSON[T any](c *Client, req *http.Request) (T, error) {
 	}
 
 	if contentType := resp.Header.Get("Content-Type"); contentType != "application/json" {
-		return zero, fmt.Errorf("server returned Content-Type %s, Expected application/json", contentType)
+		// Non-JSON response from a non-error status code is almost always a
+		// Cloudflare or reverse-proxy authentication challenge (HTML login
+		// page). Treat it as an authorization failure with an actionable
+		// message so LLM consumers and humans can self-correct by
+		// re-authenticating rather than seeing a confusing decode error.
+		return zero, fmt.Errorf(
+			"unauthorized: server returned Content-Type %q instead of application/json — "+
+				"this usually means authentication failed or the session expired; "+
+				"re-authenticate with `argus auth` or set the ARGUS_TOKEN environment variable",
+			contentType,
+		)
 	}
 
 	raw, err := io.ReadAll(resp.Body)

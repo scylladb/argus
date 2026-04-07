@@ -330,7 +330,7 @@ class SCTTestRun(PluginModelBase):
         return self.events
 
     @classmethod
-    def get_events_limited(cls, run_id: UUID, before: datetime | None = None, severities: list[SCTEventSeverity] = None, per_partition_limit: int = 100) -> list[dict]:
+    def get_events_limited(cls, run_id: UUID, before: datetime | None = None, after: datetime | None = None, severities: list[SCTEventSeverity] = None, per_partition_limit: int = 100) -> list[dict]:
         db = ScyllaCluster.get()
         query = f"SELECT * FROM {SCTEvent.table_name()} WHERE run_id = ? AND severity IN ?"
         params = [run_id]
@@ -342,6 +342,9 @@ class SCTTestRun(PluginModelBase):
         if before:
             query += " AND ts <= ?"
             params.append(before)
+        if after:
+            query += " AND ts >= ?"
+            params.append(after)
         query += " PER PARTITION LIMIT ?"
         params.append(per_partition_limit)
         prepared = db.prepare(query)

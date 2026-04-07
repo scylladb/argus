@@ -32,6 +32,14 @@ const (
 	// TTLVersion is the TTL for the API version response.
 	// The version only changes on a new server deployment.
 	TTLVersion = time.Hour
+
+	// TTLEvents is the TTL for SCT event lists.
+	// Events are written frequently during execution.
+	TTLEvents = time.Minute
+
+	// TTLNemeses is the TTL for nemesis records.
+	// Nemeses are updated during execution but finalized quickly.
+	TTLNemeses = 2 * time.Minute
 )
 
 // RunKey returns the cache key for a specific test run.
@@ -88,4 +96,18 @@ func PytestResultsKey(runID string) string {
 // On disk: cache/version/
 func VersionKey() string {
 	return "version"
+}
+
+// EventsKey returns the cache key for a run's SCT events (no filter params).
+//
+// On disk: cache/events/{runID}/
+func EventsKey(runID string) string {
+	return path.Join("events", runID)
+}
+
+// NemesesKey returns the cache key for a run's nemesis records (no filter params).
+//
+// On disk: cache/nemeses/{runID}/
+func NemesesKey(runID string) string {
+	return path.Join("nemeses", runID)
 }
