@@ -175,6 +175,23 @@ func logEntriesFromMap(m map[string]string) []models.LogEntry {
 	return entries
 }
 
+// extractTarFile opens target for writing, copies src into it, and closes the
+// file — propagating both copy and close errors.
+func extractTarFile(target string, mode int64, src io.Reader) error {
+	f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(mode)&0777)
+	if err != nil {
+		return fmt.Errorf("creating file %q: %w", target, err)
+	}
+	if _, err := io.Copy(f, src); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("writing file %q: %w", target, err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("closing file %q: %w", target, err)
+	}
+	return nil
+}
+
 // extractTarZst decompresses a zstandard-compressed tar archive from r and
 // writes its contents under dest. Path traversal entries are rejected.
 func extractTarZst(r io.Reader, dest string) error {
@@ -210,15 +227,9 @@ func extractTarZst(r io.Reader, dest string) error {
 			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 				return fmt.Errorf("creating parent directory for %q: %w", target, err)
 			}
-			f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode)&0777)
-			if err != nil {
-				return fmt.Errorf("creating file %q: %w", target, err)
+			if err := extractTarFile(target, hdr.Mode, tr); err != nil {
+				return err
 			}
-			if _, err := io.Copy(f, tr); err != nil {
-				f.Close()
-				return fmt.Errorf("writing file %q: %w", target, err)
-			}
-			f.Close()
 		}
 	}
 	return nil

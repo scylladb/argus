@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -45,6 +46,80 @@ func parseTimeFlag(value string) (string, error) {
 }
 
 // ---------------------------------------------------------------------------
+// Local filter helpers
+// ---------------------------------------------------------------------------
+
+// filterNemeses returns the subset of records whose StartTime falls within
+// [afterTS, beforeTS].  A zero value for either bound means "no bound".
+func filterNemeses(all []models.NemesisRecord, beforeTS, afterTS int64) []models.NemesisRecord {
+	if beforeTS == 0 && afterTS == 0 {
+		return all
+	}
+	out := make([]models.NemesisRecord, 0, len(all))
+	for _, n := range all {
+		if beforeTS != 0 && n.StartTime > beforeTS {
+			continue
+		}
+		if afterTS != 0 && n.StartTime < afterTS {
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
+// filterEvents returns the subset of events whose Ts timestamp falls within
+// [afterTS, beforeTS].  A zero value for either bound means "no bound".
+// Events whose timestamp cannot be parsed are kept (fail-open).
+func filterEvents(all []models.SCTEvent, beforeTS, afterTS int64) []models.SCTEvent {
+	if beforeTS == 0 && afterTS == 0 {
+		return all
+	}
+	out := make([]models.SCTEvent, 0, len(all))
+	for _, e := range all {
+		ts, err := parseEventTimestamp(e.Ts)
+		if err != nil {
+			// Keep unparseable events rather than silently dropping them.
+			out = append(out, e)
+			continue
+		}
+		if beforeTS != 0 && ts > beforeTS {
+			continue
+		}
+		if afterTS != 0 && ts < afterTS {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// parseEventTimestamp parses the Ts field of an SCTEvent.
+// The backend stores it as an RFC3339 string; falls back to a plain Unix integer.
+func parseEventTimestamp(ts string) (int64, error) {
+	if t, err := time.Parse(time.RFC3339Nano, ts); err == nil {
+		return t.Unix(), nil
+	}
+	if t, err := time.Parse(time.RFC3339, ts); err == nil {
+		return t.Unix(), nil
+	}
+	if v, err := strconv.ParseInt(ts, 10, 64); err == nil {
+		return v, nil
+	}
+	return 0, fmt.Errorf("cannot parse event timestamp %q", ts)
+}
+
+// tsFromFlag converts the string produced by parseTimeFlag (Unix seconds or
+// empty) back to an int64 for use in local filtering.  Returns 0 when empty.
+func tsFromFlag(s string) int64 {
+	if s == "" {
+		return 0
+	}
+	v, _ := strconv.ParseInt(s, 10, 64)
+	return v
+}
+
+// ---------------------------------------------------------------------------
 // Subcommand: run events
 // ---------------------------------------------------------------------------
 
@@ -65,6 +140,7 @@ Only SCT runs have per-event records; for other plugin types use
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
+		c := CacheFrom(ctx)
 
 		runID, _ := cmd.Flags().GetString("run-id")
 		beforeRaw, _ := cmd.Flags().GetString("before")
@@ -80,35 +156,99 @@ Only SCT runs have per-event records; for other plugin types use
 			return fmt.Errorf("--after: %w", err)
 		}
 
+		isFiltered := beforeTS != "" || afterTS != ""
+		beforeInt := tsFromFlag(beforeTS)
+		afterInt := tsFromFlag(afterTS)
+
 		var allEvents []models.SCTEvent
-
 		for _, severity := range []string{"CRITICAL", "ERROR"} {
-			route := fmt.Sprintf(api.SCTEventsBySeverity, runID, severity)
-			params := url.Values{}
-			params.Set("limit", strconv.Itoa(limit))
-			if beforeTS != "" {
-				params.Set("before", beforeTS)
+			severityEvents, fetchErr := fetchEventsForSeverity(
+				ctx, client, c,
+				runID, severity,
+				beforeTS, afterTS, beforeInt, afterInt,
+				isFiltered, limit,
+			)
+			if fetchErr != nil {
+				return fetchErr
 			}
-			if afterTS != "" {
-				params.Set("after", afterTS)
-			}
-			if q := params.Encode(); q != "" {
-				route += "?" + q
-			}
-
-			req, err := client.NewRequest(ctx, "GET", route, nil)
-			if err != nil {
-				return err
-			}
-			events, err := api.DoJSON[[]models.SCTEvent](client, req)
-			if err != nil {
-				return err
-			}
-			allEvents = append(allEvents, events...)
+			allEvents = append(allEvents, severityEvents...)
 		}
 
 		return out.Write(models.NewTabularSlice(allEvents))
 	},
+}
+
+// fetchEventsForSeverity implements the cache-first strategy for one severity:
+//
+//  1. Try the full-dataset cache key (no filters).
+//     - No filters requested → return the cached data directly.
+//     - Filters requested    → apply them locally and return; no network call.
+//  2. (Filtered only) Try the exact filtered cache key.
+//     - Hit → return the cached filtered slice directly.
+//  3. Fetch from the API, forwarding the filter params to the server.
+//  4. Cache the result:
+//     - Unfiltered fetch → store under the full-dataset key.
+//     - Filtered fetch   → store under the specific filtered key.
+func fetchEventsForSeverity(
+	ctx context.Context,
+	client *api.Client,
+	c *cache.Cache,
+	runID, severity string,
+	beforeTS, afterTS string,
+	beforeInt, afterInt int64,
+	isFiltered bool,
+	limit int,
+) ([]models.SCTEvent, error) {
+	fullKey := cache.SCTEventsFullKey(runID, severity)
+
+	// Step 1: full-dataset cache.
+	if full, _, err := cache.Get[[]models.SCTEvent](c, fullKey); isCacheable(err) {
+		if !isFiltered {
+			return full, nil
+		}
+		return filterEvents(full, beforeInt, afterInt), nil
+	}
+
+	// Step 2: exact filtered cache (only when filters are active).
+	if isFiltered {
+		filteredKey := cache.SCTEventsKey(runID, severity, beforeTS, afterTS)
+		if filtered, _, err := cache.Get[[]models.SCTEvent](c, filteredKey); isCacheable(err) {
+			return filtered, nil
+		}
+	}
+
+	// Step 3: network fetch.
+	route := fmt.Sprintf(api.SCTEventsBySeverity, runID, severity)
+	params := url.Values{}
+	params.Set("limit", strconv.Itoa(limit))
+	if beforeTS != "" {
+		params.Set("before", beforeTS)
+	}
+	if afterTS != "" {
+		params.Set("after", afterTS)
+	}
+	if q := params.Encode(); q != "" {
+		route += "?" + q
+	}
+
+	req, err := client.NewRequest(ctx, "GET", route, nil)
+	if err != nil {
+		return nil, err
+	}
+	events, err := api.DoJSON[[]models.SCTEvent](client, req)
+	if err != nil {
+		return nil, err
+	}
+
+	// Step 4: cache the result under the right key.
+	if !isFiltered {
+		_ = cache.Set(c, fullKey, events, route, cache.TTLSCTEvents)
+	} else {
+		filteredKey := cache.SCTEventsKey(runID, severity, beforeTS, afterTS)
+		_ = cache.Set(c, filteredKey, events, route, cache.TTLSCTEvents)
+	}
+
+	return events, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -148,17 +288,30 @@ for other run types.`,
 			return fmt.Errorf("--after: %w", err)
 		}
 
-		// Only cache when no time filters are applied (filtered results
-		// would otherwise shadow each other under the same key).
-		useCache := beforeTS == "" && afterTS == ""
-		cacheKey := cache.NemesesKey(runID)
+		isFiltered := beforeTS != "" || afterTS != ""
+		beforeInt := tsFromFlag(beforeTS)
+		afterInt := tsFromFlag(afterTS)
 
-		if useCache {
-			if cached, _, err := cache.Get[[]models.NemesisRecord](c, cacheKey); isCacheable(err) {
-				return out.Write(models.NewTabularSlice(cached))
+		fullKey := cache.NemesesKey(runID)
+
+		// Step 1: full-dataset cache.
+		if full, _, err := cache.Get[[]models.NemesisRecord](c, fullKey); isCacheable(err) {
+			if !isFiltered {
+				return out.Write(models.NewTabularSlice(full))
+			}
+			// Full corpus cached — apply filters locally, skip the network.
+			return out.Write(models.NewTabularSlice(filterNemeses(full, beforeInt, afterInt)))
+		}
+
+		// Step 2: exact filtered cache (only when filters are active).
+		if isFiltered {
+			filteredKey := cache.NemesesFilteredKey(runID, beforeTS, afterTS)
+			if filtered, _, err := cache.Get[[]models.NemesisRecord](c, filteredKey); isCacheable(err) {
+				return out.Write(models.NewTabularSlice(filtered))
 			}
 		}
 
+		// Step 3: network fetch.
 		route := fmt.Sprintf(api.SCTNemesisGet, runID)
 		params := url.Values{}
 		if beforeTS != "" {
@@ -180,8 +333,12 @@ for other run types.`,
 			return err
 		}
 
-		if useCache {
-			_ = cache.Set(c, cacheKey, nemeses, route, cache.TTLNemeses)
+		// Step 4: cache the result under the right key.
+		if !isFiltered {
+			_ = cache.Set(c, fullKey, nemeses, route, cache.TTLNemeses)
+		} else {
+			filteredKey := cache.NemesesFilteredKey(runID, beforeTS, afterTS)
+			_ = cache.Set(c, filteredKey, nemeses, route, cache.TTLNemeses)
 		}
 
 		return out.Write(models.NewTabularSlice(nemeses))

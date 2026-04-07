@@ -192,7 +192,10 @@ func (s *CloudflaredService) download(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrDownloading, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("%w: %d from %s", ErrUnexpectedHTTPStatus, resp.StatusCode, url)
@@ -206,9 +209,9 @@ func (s *CloudflaredService) download(ctx context.Context) error {
 	}
 	tmpName := tmp.Name()
 	defer func() {
-		tmp.Close()
+		_ = tmp.Close()
 		// Clean up temp file on any error path; ignore removal errors.
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName)
 	}()
 
 	var src io.Reader = resp.Body

@@ -257,10 +257,10 @@ func (c *Cache) Clear() error {
 // Stats walks the cache directory tree and returns aggregate information
 // suitable for the `argus cache info` command.
 func (c *Cache) Stats() (Stats, error) {
-	s := Stats{Dir: c.baseDir, Categories: make(map[string]CategoryStats)}
 	if c == nil {
-		return s, nil
+		return Stats{Categories: make(map[string]CategoryStats)}, nil
 	}
+	s := Stats{Dir: c.baseDir, Categories: make(map[string]CategoryStats)}
 	err := walkEntries(c.baseDir, func(category, entryDir string, rawMeta []byte) {
 		cat := s.Categories[category]
 		cat.Entries++

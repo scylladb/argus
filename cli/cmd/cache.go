@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/spf13/cobra"
 )
@@ -31,8 +32,8 @@ var cacheClearCmd = &cobra.Command{
 		if err := c.Clear(); err != nil {
 			return err
 		}
-		fmt.Fprintln(cmd.OutOrStdout(), "cache cleared")
-		return nil
+		_, err := fmt.Fprintln(cmd.OutOrStdout(), "cache cleared")
+		return err
 	},
 }
 
@@ -49,22 +50,42 @@ var cacheInfoCmd = &cobra.Command{
 		}
 
 		w := cmd.OutOrStdout()
-		fmt.Fprintf(w, "Directory : %s\n", stats.Dir)
-		fmt.Fprintf(w, "Entries   : %d (%d expired)\n", stats.Entries, stats.Expired)
-		fmt.Fprintf(w, "Size      : %s\n", formatBytes(stats.TotalBytes))
+		if err := fprintfAll(w,
+			fmt.Sprintf("Directory : %s\n", stats.Dir),
+			fmt.Sprintf("Entries   : %d (%d expired)\n", stats.Entries, stats.Expired),
+			fmt.Sprintf("Size      : %s\n", formatBytes(stats.TotalBytes)),
+		); err != nil {
+			return err
+		}
 
 		if len(stats.Categories) > 0 {
-			fmt.Fprintln(w)
-			fmt.Fprintln(w, "Category             Entries  Expired  Size")
-			fmt.Fprintln(w, "--------------------  -------  -------  ----")
+			if err := fprintfAll(w,
+				"\n",
+				"Category             Entries  Expired  Size\n",
+				"--------------------  -------  -------  ----\n",
+			); err != nil {
+				return err
+			}
 			for name, cat := range stats.Categories {
-				fmt.Fprintf(w, "%-20s  %7d  %7d  %s\n",
-					name, cat.Entries, cat.Expired, formatBytes(cat.Bytes))
+				if _, err := fmt.Fprintf(w, "%-20s  %7d  %7d  %s\n",
+					name, cat.Entries, cat.Expired, formatBytes(cat.Bytes)); err != nil {
+					return err
+				}
 			}
 		}
 
 		return nil
 	},
+}
+
+// fprintfAll writes each string in lines to w, returning on the first error.
+func fprintfAll(w io.Writer, lines ...string) error {
+	for _, line := range lines {
+		if _, err := io.WriteString(w, line); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func init() {

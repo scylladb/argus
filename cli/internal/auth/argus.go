@@ -268,21 +268,6 @@ func (s *ArgusService) runCFLogin(ctx context.Context) (string, error) {
 	return token, nil
 }
 
-// getCFToken shells out to `cloudflared access token --app=<argusURL>` to
-// read a previously cached Cloudflare Access JWT from ~/.cloudflared/.
-// This is the fast path used when cloudflared already stored a token on disk
-// but our keychain cache is empty (e.g. first run on a new machine after
-// cloudflared login was already done separately).
-func (s *ArgusService) getCFToken(ctx context.Context) (string, error) {
-	out, err := exec.CommandContext(ctx, s.cloudflaredBin, //nolint:gosec
-		"access", "token", "--no-verbose", fmt.Sprintf("-app=%s", s.argusURL),
-	).CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("%w: %w\n%s", ErrGettingCFToken, err, out)
-	}
-	return strings.TrimSpace(string(out)), nil
-}
-
 // login POSTs to /auth/login/cf with the CF token attached via api.Client and
 // returns the session cookie value from the response.
 func (s *ArgusService) login(ctx context.Context, cfToken string) (string, error) {
@@ -314,7 +299,10 @@ func (s *ArgusService) login(ctx context.Context, cfToken string) (string, error
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", ErrLoginRequest, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
 
 	for _, c := range resp.Cookies() {
 		if c.Name == "session" {
