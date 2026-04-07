@@ -14,6 +14,7 @@ import (
 	"github.com/scylladb/argus/cli/internal/api"
 	"github.com/scylladb/argus/cli/internal/jwt"
 	"github.com/scylladb/argus/cli/internal/keychain"
+	"github.com/scylladb/argus/cli/internal/models"
 )
 
 // Sentinel errors for the Argus authentication step.
@@ -37,15 +38,23 @@ var (
 	// ErrStoringSession is returned when the session token cannot be persisted
 	// in the system keychain.
 	ErrStoringSession = errors.New("auth: storing session token")
+
+	// ErrFetchingToken is returned when the GET /api/v1/user/token call fails.
+	ErrFetchingToken = errors.New("auth: fetching API token from server")
+
+	// ErrStoringPAT is returned when the PAT cannot be persisted in the
+	// system keychain after successful token exchange.
+	ErrStoringPAT = errors.New("auth: storing API token in keychain")
 )
 
 // ArgusService handles the Argus-side of authentication: it fetches a
 // Cloudflare Access token via the cloudflared binary, exchanges it for an
-// Argus session token, and persists both tokens in the system keychain.
+// Argus session token, immediately exchanges that session for a durable
+// Argus API token (PAT), and persists the PAT in the system keychain.
 //
-// On subsequent invocations the CF Access JWT is loaded from the keychain and
-// reused as long as it has not expired, which means cloudflared does not need
-// to be invoked again.
+// Using a PAT rather than a session cookie as the long-lived credential is
+// more robust: sessions have short server-side TTLs and are tied to CF,
+// whereas PATs survive CF token expiry and work in CI without a browser.
 //
 // The full flow on a cache miss is:
 //  1. Run `cloudflared access login --no-verbose --auto-close --app <url> <url>`.
@@ -53,6 +62,10 @@ var (
 //     file to ~/.cloudflared/.  The JWT is the last non-empty line of stdout.
 //  2. Cache the JWT in the OS keychain for future invocations.
 //  3. Exchange the JWT for an Argus session cookie via POST /auth/login/cf.
+//  4. Use that session to call GET /api/v1/user/token, obtaining (or generating)
+//     the caller's Argus API token.
+//  5. Store the API token as the primary credential under the "pat" keychain key
+//     and discard the session cookie — the PAT is the durable credential.
 type ArgusService struct {
 	// argusURL is the base URL of the Argus instance (e.g. https://argus.example.com).
 	argusURL string
@@ -114,23 +127,19 @@ func HasValidCFToken() bool {
 	return true
 }
 
-// Login obtains a Cloudflare Access token, exchanges it for an Argus session
-// token, and stores both tokens in the system keychain.
+// Login obtains a Cloudflare Access token, exchanges it for an Argus session,
+// immediately trades that session for a durable Argus API token (PAT) via
+// GET /api/v1/user/token, and stores the PAT in the system keychain.
 //
 // Short-circuit order:
-//  1. If a valid Argus session already exists → return immediately.
+//  1. If a valid Argus PAT is already in the keychain → return immediately.
 //  2. If a valid (non-expired) CF token is cached in the keychain → reuse it,
-//     skipping cloudflared entirely.
+//     skipping cloudflared entirely, then obtain the PAT as above.
 //  3. Otherwise run `cloudflared access login` to open the browser auth flow,
 //     parse the JWT from its output, and store it for future use.
 func (s *ArgusService) Login(ctx context.Context) error {
-	// Fast path: a valid Argus token is already cached.
+	// Fast path: a valid Argus PAT is already cached.
 	if _, err := keychain.LoadPAT(); err == nil {
-		return nil
-	}
-
-	// Fast path: a valid Argus session is already cached.
-	if _, err := keychain.Load(); err == nil {
 		return nil
 	}
 
@@ -144,11 +153,53 @@ func (s *ArgusService) Login(ctx context.Context) error {
 		return err
 	}
 
-	if err := keychain.Store(session); err != nil {
-		return errors.Join(ErrStoringSession, err)
+	// Exchange the short-lived session for a durable PAT.
+	pat, err := s.fetchPAT(ctx, session)
+	if err != nil {
+		// Fetching the PAT failed. Fall back to persisting the session so the
+		// user is at least authenticated for this invocation, but warn them.
+		_ = keychain.Store(session)
+		return fmt.Errorf("%w (falling back to session cookie): %w", ErrFetchingToken, err)
 	}
 
+	if err := keychain.StorePAT(pat); err != nil {
+		return errors.Join(ErrStoringPAT, err)
+	}
+
+	// The PAT supersedes the session — drop it from the keychain so we never
+	// accidentally send a stale session cookie alongside the PAT.
+	_ = keychain.Delete()
+
 	return nil
+}
+
+// fetchPAT calls GET /api/v1/user/token authenticated with the given session
+// cookie and returns the Argus API token string.
+func (s *ArgusService) fetchPAT(ctx context.Context, session string) (string, error) {
+	opts := make([]api.ClientOption, 0, 1+len(s.clientOpts))
+	opts = append(opts, api.WithSession(session))
+	opts = append(opts, s.clientOpts...)
+
+	client, err := api.New(s.argusURL, opts...)
+	if err != nil {
+		return "", fmt.Errorf("%w: building client: %w", ErrFetchingToken, err)
+	}
+
+	req, err := client.NewRequest(ctx, http.MethodGet, api.UserToken, nil)
+	if err != nil {
+		return "", fmt.Errorf("%w: building request: %w", ErrFetchingToken, err)
+	}
+
+	result, err := api.DoJSON[models.UserTokenResponse](client, req)
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", ErrFetchingToken, err)
+	}
+
+	if result.Token == "" {
+		return "", fmt.Errorf("%w: server returned an empty token", ErrFetchingToken)
+	}
+
+	return result.Token, nil
 }
 
 // getOrFetchCFToken returns a valid CF Access JWT. It first checks the

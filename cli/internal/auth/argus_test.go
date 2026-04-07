@@ -95,17 +95,67 @@ func validJWT() string { return makeJWT(time.Now().Add(time.Hour).Unix()) }
 // expiredJWT returns a JWT with an expiry one hour in the past.
 func expiredJWT() string { return makeJWT(time.Now().Add(-time.Hour).Unix()) }
 
+// userTokenJSON returns a JSON body that mimics the /api/v1/user/token response.
+func userTokenJSON(token string) []byte {
+	type inner struct {
+		Token string `json:"token"`
+	}
+	type envelope struct {
+		Status   string `json:"status"`
+		Response inner  `json:"response"`
+	}
+	b, _ := json.Marshal(envelope{Status: "ok", Response: inner{Token: token}})
+	return b
+}
+
+// newArgusTestServer creates an httptest.Server that handles both the CF login
+// endpoint and the user-token endpoint used by the PAT exchange step.
+//
+//   - POST /auth/login/cf with the expected CF JWT → sets a session cookie.
+//   - GET  /api/v1/user/token with a valid session → returns patToken as JSON.
+//   - Everything else → 404.
+func newArgusTestServer(t *testing.T, cfJWT, sessionValue, patToken string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/auth/login/cf":
+			c, err := r.Cookie("CF_Authorization")
+			if err != nil || c.Value != cfJWT {
+				http.Error(w, "missing or wrong CF_Authorization cookie", http.StatusBadRequest)
+				return
+			}
+			http.SetCookie(w, &http.Cookie{Name: "session", Value: sessionValue})
+			w.WriteHeader(http.StatusOK)
+
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/user/token":
+			// Verify the session cookie is present.
+			c, err := r.Cookie("session")
+			if err != nil || c.Value != sessionValue {
+				http.Error(w, "missing or wrong session cookie", http.StatusUnauthorized)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(userTokenJSON(patToken))
+
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
 // ---- tests -----------------------------------------------------------------
 
 // TestArgusService_Login_AlreadyCached verifies that Login is a no-op when a
-// session token is already stored in the keychain.
+// PAT is already stored in the keychain (the primary fast-path).
 func TestArgusService_Login_AlreadyCached(t *testing.T) {
 	setupMockKeyring(t)
-	require.NoError(t, keychain.Store("existing-session"))
+	require.NoError(t, keychain.StorePAT("existing-pat"))
 
 	// A server that must never be called.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		t.Error("login endpoint should not be called when session is cached")
+		t.Error("login endpoint should not be called when PAT is cached")
 	}))
 	t.Cleanup(srv.Close)
 
@@ -160,36 +210,31 @@ func TestArgusService_Login_NoSessionCookie(t *testing.T) {
 
 // TestArgusService_Login_HappyPath verifies the full flow: cloudflared access
 // login is invoked, JWT is parsed from its output, login endpoint returns a
-// session cookie, and both tokens are stored in the keychain.
+// session cookie, the session is exchanged for a PAT, and the PAT is stored in
+// the keychain while the session is discarded.
 func TestArgusService_Login_HappyPath(t *testing.T) {
 	setupMockKeyring(t)
 
 	const wantSession = "argus-session-xyz"
+	const wantPAT = "test-pat-token-abc"
 	cfJWT := validJWT()
 
 	binPath := fakeCFBin(t, cfJWT, 0, 0)
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify the CF_Authorization cookie was sent.
-		c, err := r.Cookie("CF_Authorization")
-		if err != nil || c.Value != cfJWT {
-			http.Error(w, "missing or wrong CF_Authorization cookie", http.StatusBadRequest)
-			return
-		}
-		http.SetCookie(w, &http.Cookie{Name: "session", Value: wantSession})
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(srv.Close)
+	srv := newArgusTestServer(t, cfJWT, wantSession, wantPAT)
 
 	svc := auth.NewArgusService(srv.URL, binPath,
 		auth.WithHTTPClient(srv.Client()),
 	)
 	require.NoError(t, svc.Login(t.Context()))
 
-	// Argus session must be stored.
-	gotSession, err := keychain.Load()
+	// PAT must be stored in the keychain.
+	gotPAT, err := keychain.LoadPAT()
 	require.NoError(t, err)
-	assert.Equal(t, wantSession, gotSession)
+	assert.Equal(t, wantPAT, gotPAT)
+
+	// The session should have been deleted after PAT exchange.
+	_, sessionErr := keychain.Load()
+	assert.Error(t, sessionErr, "session should be deleted after PAT is stored")
 
 	// CF token must also be stored in the keychain.
 	gotCF, err := keychain.LoadCFToken()
@@ -199,7 +244,7 @@ func TestArgusService_Login_HappyPath(t *testing.T) {
 
 // TestArgusService_Login_UsesCachedCFToken verifies that when a valid CF token
 // is already in the keychain, cloudflared is NOT invoked and the cached token
-// is used directly.
+// is used directly, then a PAT is obtained and stored.
 func TestArgusService_Login_UsesCachedCFToken(t *testing.T) {
 	setupMockKeyring(t)
 
@@ -207,37 +252,30 @@ func TestArgusService_Login_UsesCachedCFToken(t *testing.T) {
 	require.NoError(t, keychain.StoreCFToken(cfJWT))
 
 	const wantSession = "argus-session-from-cache"
+	const wantPAT = "pat-from-cached-cf"
 
 	// A cloudflared binary that would fail if called.
 	binPath := fakeCFBin(t, "", 1, 1)
 
-	callCount := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		callCount++
-		c, err := r.Cookie("CF_Authorization")
-		if err != nil || c.Value != cfJWT {
-			http.Error(w, "wrong CF_Authorization cookie", http.StatusBadRequest)
-			return
-		}
-		http.SetCookie(w, &http.Cookie{Name: "session", Value: wantSession})
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(srv.Close)
+	srv := newArgusTestServer(t, cfJWT, wantSession, wantPAT)
 
 	svc := auth.NewArgusService(srv.URL, binPath,
 		auth.WithHTTPClient(srv.Client()),
 	)
 	require.NoError(t, svc.Login(t.Context()))
-	assert.Equal(t, 1, callCount, "login endpoint should be called exactly once")
 
-	gotSession, err := keychain.Load()
+	// PAT must be stored; session should be gone.
+	gotPAT, err := keychain.LoadPAT()
 	require.NoError(t, err)
-	assert.Equal(t, wantSession, gotSession)
+	assert.Equal(t, wantPAT, gotPAT)
+
+	_, sessionErr := keychain.Load()
+	assert.Error(t, sessionErr, "session should be deleted after PAT is stored")
 }
 
 // TestArgusService_Login_ExpiredCFToken verifies that an expired cached CF
 // token is discarded and cloudflared access login is invoked to obtain a fresh
-// one.
+// one, then a PAT is exchanged and stored.
 func TestArgusService_Login_ExpiredCFToken(t *testing.T) {
 	setupMockKeyring(t)
 
@@ -248,26 +286,22 @@ func TestArgusService_Login_ExpiredCFToken(t *testing.T) {
 	binPath := fakeCFBin(t, freshCFJWT, 0, 0)
 
 	const wantSession = "argus-session-after-refresh"
+	const wantPAT = "pat-after-refresh"
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c, err := r.Cookie("CF_Authorization")
-		if err != nil || c.Value != freshCFJWT {
-			http.Error(w, "wrong CF_Authorization cookie", http.StatusBadRequest)
-			return
-		}
-		http.SetCookie(w, &http.Cookie{Name: "session", Value: wantSession})
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(srv.Close)
+	srv := newArgusTestServer(t, freshCFJWT, wantSession, wantPAT)
 
 	svc := auth.NewArgusService(srv.URL, binPath,
 		auth.WithHTTPClient(srv.Client()),
 	)
 	require.NoError(t, svc.Login(t.Context()))
 
-	gotSession, err := keychain.Load()
+	// PAT must be stored; session should be gone.
+	gotPAT, err := keychain.LoadPAT()
 	require.NoError(t, err)
-	assert.Equal(t, wantSession, gotSession)
+	assert.Equal(t, wantPAT, gotPAT)
+
+	_, sessionErr := keychain.Load()
+	assert.Error(t, sessionErr, "session should be deleted after PAT is stored")
 
 	// The fresh CF token must replace the expired one.
 	gotCF, err := keychain.LoadCFToken()

@@ -79,3 +79,13 @@ func contextWithCache(ctx context.Context, c *cache.Cache) context.Context {
 func CacheFrom(ctx context.Context) *cache.Cache {
 	return cmdctx.CacheFrom(ctx)
 }
+
+// contextWithNonInteractive returns a copy of ctx with the non-interactive flag set.
+func contextWithNonInteractive(ctx context.Context, v bool) context.Context {
+	return cmdctx.WithNonInteractive(ctx, v)
+}
+
+// NonInteractiveFrom retrieves the non-interactive flag from ctx.
+func NonInteractiveFrom(ctx context.Context) bool {
+	return cmdctx.NonInteractiveFrom(ctx)
+}

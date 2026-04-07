@@ -12,3 +12,8 @@ func (Version) Headers() []string {
 func (v Version) Rows() [][]string {
 	return [][]string{{v.CommitId}}
 }
+
+// UserTokenResponse is the payload of GET /api/v1/user/token.
+type UserTokenResponse struct {
+	Token string `json:"token"`
+}
