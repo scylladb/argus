@@ -13,29 +13,16 @@ import (
 // Subcommand: run details
 // ---------------------------------------------------------------------------
 
-// runDetailsCmd fetches the basic summary of a run — the same information
-// visible on the Argus "Details" tab — without heavy fields such as logs,
-// screenshots, events, nemeses, or allocated cloud resources.
-//
-// For those fields use the dedicated subcommands:
-//   - argus run logs list / download
-//   - argus run activity
-//   - argus run nemeses
-//   - argus run events
-//   - argus run results
+// runDetailsCmd fetches the full details of a test run, including all fields
+// such as logs, screenshots, events, nemeses, and allocated cloud resources.
 var runDetailsCmd = &cobra.Command{
 	Use:   "details",
-	Short: "Show basic details of a test run",
-	Long: `Show the basic summary of a test run — the same information visible
-on the Argus Details tab — without heavy fields such as logs, screenshots,
-events, nemeses, or cloud resources.
+	Short: "Get full details of a test run",
+	Long: `Fetch the full details of a test run by its run ID.
 
-For additional information use the dedicated subcommands:
-  argus run logs list / download
-  argus run activity
-  argus run nemeses
-  argus run events
-  argus run results`,
+When --type is omitted the plugin type is resolved automatically via the
+/run/<run_id>/type endpoint and cached for 24 h so subsequent invocations
+require no network round-trip for type resolution.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
 		ctx := cmd.Context()
@@ -61,17 +48,33 @@ For additional information use the dedicated subcommands:
 			}
 		}
 
+		handler, ok := RunTypeHandlers[runType]
+		if !ok {
+			return fmt.Errorf("unknown run type %q, valid types: %s", runType, ValidRunTypes())
+		}
+
+		cacheKey := cache.RunKey(runType, runID)
+
+		if getter, ok := runTypeCacheGetters[runType]; ok {
+			if cached, err := getter(c, cacheKey); isCacheable(err) {
+				return out.Write(models.NewKVTabular(cached))
+			}
+		}
+
 		route := fmt.Sprintf(api.TestRunGet, runType, runID)
 		req, err := client.NewRequest(ctx, "GET", route, nil)
 		if err != nil {
 			return err
 		}
-
-		result, err := DispatchDetails(runType, client, req)
+		result, err := handler(client, req)
 		if err != nil {
 			return err
 		}
-		return out.Write(result)
+		if setter, ok := runTypeCacheSetters[runType]; ok {
+			_ = setter(c, cacheKey, result)
+		}
+
+		return out.Write(models.NewKVTabular(result))
 	},
 }
 
