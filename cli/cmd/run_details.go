@@ -67,54 +67,11 @@ For additional information use the dedicated subcommands:
 			return err
 		}
 
-		switch runType {
-		case "scylla-cluster-tests":
-			full, err := api.DoJSON[models.SCTTestRun](client, req)
-			if err != nil {
-				return err
-			}
-			return out.Write(models.RunDetails{Run: full})
-
-		case "generic":
-			full, err := api.DoJSON[models.GenericRun](client, req)
-			if err != nil {
-				return err
-			}
-			details := models.GenericRunDetails{
-				RunBase:       full.RunBase,
-				StartedBy:     full.StartedBy,
-				SubType:       full.SubType,
-				ScyllaVersion: full.ScyllaVersion,
-			}
-			return out.Write(models.NewKVTabular(details))
-
-		case "driver-matrix-tests":
-			full, err := api.DoJSON[models.DriverTestRun](client, req)
-			if err != nil {
-				return err
-			}
-			details := models.DriverRunDetails{
-				RunBase:       full.RunBase,
-				ScyllaVersion: full.ScyllaVersion,
-			}
-			return out.Write(models.NewKVTabular(details))
-
-		case "sirenada":
-			full, err := api.DoJSON[models.SirenadaRun](client, req)
-			if err != nil {
-				return err
-			}
-			details := models.SirenadaRunDetails{
-				RunBase:       full.RunBase,
-				ScyllaVersion: full.ScyllaVersion,
-				Region:        full.Region,
-				SCTTestID:     full.SCTTestID,
-			}
-			return out.Write(models.NewKVTabular(details))
-
-		default:
-			return fmt.Errorf("unknown run type %q, valid types: %s", runType, ValidRunTypes())
+		result, err := DispatchDetails(runType, client, req)
+		if err != nil {
+			return err
 		}
+		return out.Write(result)
 	},
 }
 
