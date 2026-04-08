@@ -117,7 +117,7 @@ while not stop_signal.is_set():
 
 After 5 consecutive failures (~2.5 minutes), the heartbeat thread exits permanently. No further heartbeats are sent for the rest of the test run.
 
-#### 1.5.3 Event Pipeline — Fire-and-Forget
+#### 1.5.3 Event Pipeline — Fire-and-Forget with Side-Log
 
 The three-stage event pipeline (`sdcm/sct_events/argus.py`) uses `verbose_suppress()` around every operation:
 
@@ -125,81 +125,60 @@ The three-stage event pipeline (`sdcm/sct_events/argus.py`) uses `verbose_suppre
 - **ArgusEventAggregator** — deduplicates within 90-second windows, skips on error
 - **ArgusEventPostman** — calls `client.submit_event()`, suppresses on error
 
-There is **no retry, no buffer, no queue persistence**. If `submit_event()` fails, the event is lost from the real-time pipeline.
+Events are not lost permanently even when `submit_event()` fails: the underlying `sct_events.log` file on disk contains all raw events and can be re-parsed. However, re-parsing that file requires running the full event-checking logic again. To make replay straightforward, every `submit_event()` call also appends the exact `RawEventPayload` body to a dedicated side-log file (see Section 2.2) **before** the HTTP call is made. This file can be fed directly to the ingest endpoint without any re-parsing.
 
-#### 1.5.4 Offline Event Recovery (`argus_offline_collect_events`)
+#### 1.5.4 Offline Event Recovery — Removed
 
-This is SCT's primary recovery mechanism (`sdcm/utils/argus.py:94-107`). Called from `store_logs_in_argus()` in `sct.py:1865-1866`:
+The previous `argus_offline_collect_events()` function (`sdcm/utils/argus.py:94-107`) was a SCT-specific recovery mechanism that read `EventsProcessesRegistry` from disk and re-submitted the last 100 events via the legacy `submit_events()` (aggregated severity/count) endpoint. It was triggered from `store_logs_in_argus()` in `sct.py:1865-1866`.
 
-```python
-# sct.py — after log collection
-if not argus_client.get_run().get("events"):
-    argus_offline_collect_events(client=argus_client)
-```
+**This mechanism and the `submit_events()` endpoint it depends on are removed.** The replay log (Section 2) replaces this recovery with a universal, data-type-agnostic approach that covers all endpoints, all test types, and is not limited to 100 events.
 
-The function:
+**Code removed from SCT:**
 
-1. Reads the local `~/sct-results/latest/` directory
-2. Reconstructs `EventsProcessesRegistry` from disk
-3. Collects the last 100 events grouped by severity
-4. Submits them as a batch via `client.submit_events()`
+1. `argus_offline_collect_events()` in `sdcm/utils/argus.py`
+2. The `if not argus_client.get_run().get("events"):` conditional in `sct.py:1865-1866`
+3. The one-shot re-fire block in `sdcm/tester.py` that called `submit_events` when the pipeline stage crashed or ended prematurely
 
-**Limitations:**
+**Removed from the Python client:**
 
-- Only recovers **events** — not results, resources, packages, nemesis, configs, or any other data type
-- Only triggered during the `collect-logs` CLI step — if that step doesn't run, no recovery
-- Checks `get_run().get("events")` — if the run itself wasn't submitted (argus was down from the start), `get_run()` will fail and recovery is skipped
-- Limited to 100 most recent events — older events are lost
-- SCT-specific — doesn't help generic, driver-matrix, or sirenada tests
+4. `ArgusSCTClient.submit_events()` (`argus/client/sct/client.py:326`) — legacy aggregated severity/count bulk submit
 
-#### 1.5.5 Test Finalization — Single Attempt
+**Removed from the backend:**
 
-`argus_finalize_test_run()` (`sdcm/tester.py:659-683`) submits events, sets status, and finalizes — all in a single try/except. If any call fails, the entire finalization is logged and skipped. No retry.
+5. `POST /client/sct/<run_id>/events/submit` — the legacy aggregated events endpoint
+
+#### 1.5.5 Test Finalization — Combined with Status
+
+The original `argus_finalize_test_run()` in `sdcm/tester.py:659-683` performed three operations in a single try/except: submit events (legacy), set status, and call finalize. If any call failed, the entire block was skipped.
+
+**This is simplified as follows:**
+
+- The legacy event submission step is removed (covered by the replay log).
+- `finalize_run()` — which only set `end_time` — is removed from the client call path.
+- When the backend receives a **terminal status** (`Failed`, `Aborted`, `Passed`, `Error`, `NotRun`) via `set_status`, it sets `end_time = now()` automatically **if `end_time` is not already set**.
+- The client calls only `set_status(terminal_status)` as the final operation. No separate finalize call is needed.
+- The `POST /client/testrun/:type/:id/finalize` endpoint remains on the backend for manual/forced finalization but is no longer part of the normal client flow.
 
 #### 1.5.6 Node Operations — No Retry
 
-All node-level argus operations (`_add_node_to_argus`, `update_shards_in_argus`, `_terminate_node_in_argus` in `sdcm/cluster.py`) catch exceptions and log them. No retry, no recovery.
+All node-level argus operations (`_add_node_to_argus`, `update_shards_in_argus`, `_terminate_node_in_argus` in `sdcm/cluster.py`) catch exceptions and log them. No retry, no recovery. These calls are captured by the replay log and can be replayed after an outage.
 
-#### 1.5.7 Summary of Gaps
+#### 1.5.7 Summary of Gaps Addressed
 
-| Data Type           | Current Recovery                                    | Gap                                                                      |
-| ------------------- | --------------------------------------------------- | ------------------------------------------------------------------------ |
-| Events (real-time)  | None — fire-and-forget                              | Lost if argus is down during event                                       |
-| Events (batch)      | `argus_offline_collect_events` — last 100 from disk | Only 100 events, only during `collect-logs`, only if run exists in argus |
-| Test run submission | None                                                | If argus is down at test start, nothing works                            |
-| Test status         | None                                                | Lost                                                                     |
-| Results/performance | None                                                | Lost — most expensive data                                               |
-| Resources (nodes)   | None                                                | Lost                                                                     |
-| Packages            | None                                                | Lost                                                                     |
-| Nemesis records     | None                                                | Lost                                                                     |
-| Logs/screenshots    | None                                                | Lost (links only, actual files are on S3)                                |
-| JUnit reports       | None                                                | Lost                                                                     |
-| Config              | None                                                | Lost                                                                     |
-| Stress commands     | None                                                | Lost                                                                     |
-
-**The replay log addresses all of these gaps** because it records at the HTTP layer — every `post()` call is captured regardless of the data type. SCT's existing recovery is event-specific and limited; the replay log is universal.
-
-#### 1.5.8 How the Replay Log Replaces SCT's Self-Healing
-
-With the replay log in place, SCT's custom recovery code becomes redundant and can be removed. The replay log operates at the HTTP layer inside `ArgusClient` itself, so it captures every data type across all test types — something SCT's event-specific recovery never could.
-
-**Code that can be deleted from SCT:**
-
-1. **`argus_offline_collect_events()`** (`sdcm/utils/argus.py:94-107`) — This function reads events from disk and re-submits them. The replay log captures the original `submit_event()` calls with full payloads (not limited to 100), making offline collection redundant.
-
-2. **The `if not argus_client.get_run().get("events")` check** (`sct.py:1865-1866`) — This conditional triggers offline event recovery during `store_logs_in_argus()`. With the replay log, there's no need to check whether events made it to argus and manually re-collect them.
-
-3. **`MagicMock` fallback** (`sdcm/test_config.py`) — Replaced by the client's replay-only mode. The real `ArgusClient` is always instantiated (with replay log), so data is never silently lost.
-
-**Code that remains unchanged in SCT:**
-
-- `verbose_suppress()` wrappers in the event pipeline — still useful for preventing test failures from argus errors
-- `try/except` wrappers around argus calls in `tester.py`, `cluster.py` — still useful for graceful degradation
-- Heartbeat thread — still useful for signaling test liveness to argus
-
-**What changes for other consumers (dtest, driver-matrix, sirenada):**
-
-Nothing. They get the replay log automatically because it's in `ArgusClient`. They never had SCT-style recovery code, so there's nothing to delete — they just gain recovery capability they never had.
+| Data Type           | Previous Recovery                        | With Replay Log                               |
+| ------------------- | ---------------------------------------- | --------------------------------------------- |
+| Events (real-time)  | None — fire-and-forget                   | Captured in JSONL side-log before HTTP call   |
+| Events (batch)      | `argus_offline_collect_events` — removed | Replaced by replay log                        |
+| Test run submission | None                                     | Captured in JSONL                             |
+| Test status         | None                                     | Captured in JSONL                             |
+| Results/performance | None                                     | Captured in JSONL                             |
+| Resources (nodes)   | None                                     | Captured in JSONL                             |
+| Packages            | None                                     | Captured in JSONL                             |
+| Nemesis records     | None                                     | Captured in JSONL                             |
+| Logs/screenshots    | None                                     | Captured in JSONL (links; actual files on S3) |
+| JUnit reports       | None                                     | Captured in JSONL                             |
+| Config              | None                                     | Captured in JSONL                             |
+| Stress commands     | None                                     | Captured in JSONL                             |
 
 ---
 
@@ -210,27 +189,32 @@ Nothing. They get the replay log automatically because it's in `ArgusClient`. Th
 This is **not** request logging for debugging. This is a **replay journal** — a write-ahead log of every API call that can be used to reconstruct Argus state from scratch.
 
 1. **Always on by default** — we don't know when Argus will start failing, so every mutating request must be recorded
-2. **Independent of request outcome** — captures what _should_ be sent to achieve the desired state, not what happened
-3. **Single file per test run** — one test run is always one type, no need for multi-file complexity
-4. **Persistent atomic sequence numbers** — `seq` field uses a lock-protected counter that survives process restarts; this determines the exact replay order even in concurrent environments
-5. **Records success/failure** — so replay can filter to only re-send what failed
+2. **Written before the HTTP call** — the record exists on disk even if the process crashes during the request
+3. **One file per process per run** — timestamp in the filename prevents parallel processes from overwriting each other (see Section 2.2)
+4. **Persistent atomic sequence numbers** — `seq` field uses a lock-protected counter; determines the exact replay order even in concurrent environments
+5. **`request_id` for idempotency** — a UUID generated per record before the HTTP call; the server uses this as the idempotency key, making it safe to replay records that may have succeeded server-side despite a client-side error
 
-### 2.2 New Module: `argus/client/replay_log.py`
+### 2.2 File Naming
 
-A `ReplayLog` class initialized in `ArgusClient.__init__()`, always active. Writes to a single JSONL file.
+```
+{log_dir}/sct_argus_events_{run_id}_{unix_ms}.jsonl
+```
 
-**File location:** `{log_dir}/argus_replay_{run_id}.jsonl`
+- `run_id` scopes the file to one test run.
+- `unix_ms` is Unix epoch time in milliseconds captured once at `ArgusClient.__init__()` time. This disambiguates parallel processes sharing the same `log_dir` and `run_id` (e.g. parallel pytest shards all reporting to the same run — each shard gets its own file).
+- `log_dir` is determined by constructor parameter or `ARGUS_LOG_DIR` env var, falling back to the current working directory.
 
-- `log_dir` determined by constructor param or `ARGUS_LOG_DIR` env var, falling back to current working directory
+**Multiple files per run are expected and supported.** The CLI upload command and backend ingest endpoint both handle multiple JSONL files for the same `run_id` by merging and sorting records by `seq` before execution.
 
 ### 2.3 JSONL Record Schema
 
-Each line in the file is a self-contained JSON object:
+Each line in the file is a self-contained JSON object written **before** the HTTP call:
 
 ```json
 {
+  "request_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "seq": 1,
-  "ts": "2024-01-15T10:30:00.123456Z",
+  "ts": 1712345678901,
   "method": "POST",
   "endpoint": "/testrun/$type/$id/submit_results",
   "location_params": {"type": "scylla-cluster-tests", "id": "550e8400-e29b-41d4-a716-446655440000"},
@@ -239,51 +223,70 @@ Each line in the file is a self-contained JSON object:
     "schema_version": "v8",
     "run_id": "550e8400-e29b-41d4-a716-446655440000",
     "name": "Performance Results",
-    "description": "Throughput metrics",
     "columns": [...],
     "results": [...]
   },
   "test_type": "scylla-cluster-tests",
-  "success": true
+  "success": null
 }
+```
+
+After the HTTP call completes (or fails), the record is updated in place with the outcome:
+
+```json
+{ ..., "success": true }
+```
+
+or
+
+```json
+{ ..., "success": false, "error": "ConnectionError: ..." }
 ```
 
 **Field descriptions:**
 
-| Field             | Type         | Description                                                                                                                 |
-| ----------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| `seq`             | int          | Atomic, persistent sequence number. Determines replay order.                                                                |
-| `ts`              | string       | ISO 8601 timestamp of when the request was made.                                                                            |
-| `method`          | string       | HTTP method: `"GET"` or `"POST"`.                                                                                           |
-| `endpoint`        | string       | Route template with `$` placeholders (e.g. `/testrun/$type/$id/submit_results`). Enables replay against any Argus instance. |
-| `location_params` | object       | Parameters to resolve the endpoint template into a full path.                                                               |
-| `params`          | object\|null | URL query parameters.                                                                                                       |
-| `body`            | object\|null | Full request body as sent to the API. Includes `schema_version` via `generic_body`.                                         |
-| `test_type`       | string       | The client's test type (redundant with body but useful for filtering).                                                      |
-| `success`         | bool         | `true` if HTTP status is 2xx and the response body does not contain an `"error"` key, `false` otherwise.                    |
+| Field             | Type              | Description                                                                                                                 |
+| ----------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `request_id`      | string (UUID v4)  | Generated before the HTTP call. Server idempotency key — replaying the same `request_id` is a no-op.                        |
+| `seq`             | int               | Atomic, persistent sequence number. Determines replay order across files.                                                   |
+| `ts`              | int               | Unix epoch milliseconds at record write time.                                                                               |
+| `method`          | string            | HTTP method: always `"POST"` (only mutating calls are recorded).                                                            |
+| `endpoint`        | string            | Route template with `$` placeholders (e.g. `/testrun/$type/$id/submit_results`). Enables replay against any Argus instance. |
+| `location_params` | object\|null      | Parameters to resolve the endpoint template into a full path.                                                               |
+| `params`          | object\|null      | URL query parameters.                                                                                                       |
+| `body`            | object\|null      | Full request body as sent to the API.                                                                                       |
+| `test_type`       | string            | The client's test type (redundant with body but useful for filtering).                                                      |
+| `success`         | bool\|null        | `null` before the call. `true` if HTTP 2xx and response body has no `"error"` key. `false` otherwise.                       |
+| `error`           | string (optional) | Present only when `success` is `false`. Human-readable error description.                                                   |
 
 **What is NOT stored (by design):**
 
-- Auth token — security: tokens are per-user and may rotate
-- HTTP headers — reconstructed at replay time
-- Response body — not needed for replay; success/failure is enough
-- `schema_version` as separate field — already embedded in every `body` via `generic_body`
+- Auth token — tokens are per-user and may rotate; reconstructed at replay time
+- HTTP response body — not needed for replay
+- `schema_version` as a separate field — already embedded in every `body`
 
-### 2.4 Persistent Sequence Number
+### 2.4 Why "Failed Only" Replay is Unsafe
 
-The `seq` counter must survive process restarts. If the log file already exists (e.g. a test process crashed and restarted, or another component writes to the same run's log), the counter resumes from the last recorded value.
+A record with `"success": false` does not mean the server-side operation failed. The server may have completed the write and prepared a response, but the connection dropped before the client received it. Additionally, a backend serialization bug (e.g. missing JSON serializer) can cause the response to fail even though the service function completed successfully.
+
+Therefore: **the replay system does not filter by `success` field.** All records are uploaded. The server deduplicates using `request_id` — if a `request_id` has already been processed (and stored in the processed-IDs set), the record is skipped silently. This correctly handles both "actually failed" and "client thought it failed but server succeeded" cases.
+
+### 2.5 Persistent Sequence Number
+
+The `seq` counter resumes from the last recorded value if the file already exists (process restart, crash recovery):
 
 ```python
 import threading
 import json
-import datetime
+import uuid
+import time
 from pathlib import Path
 
 
 class ReplayLog:
-    def __init__(self, log_dir: str, run_id: str, test_type: str):
+    def __init__(self, log_dir: str, run_id: str, test_type: str, init_ts_ms: int):
         self._lock = threading.Lock()
-        self._path = Path(log_dir) / f"argus_replay_{run_id}.jsonl"
+        self._path = Path(log_dir) / f"sct_argus_events_{run_id}_{init_ts_ms}.jsonl"
         self._test_type = test_type
         self._seq = self._load_last_seq()
         self._file = open(self._path, "a")
@@ -293,13 +296,11 @@ class ReplayLog:
         if not self._path.exists() or self._path.stat().st_size == 0:
             return 0
         with open(self._path, "rb") as f:
-            # Seek backwards from EOF to find the last complete line
             try:
                 f.seek(-2, 2)
                 while f.read(1) != b"\n":
                     f.seek(-2, 1)
             except OSError:
-                # File has only one line
                 f.seek(0)
             last_line = f.readline().decode()
         try:
@@ -307,32 +308,36 @@ class ReplayLog:
         except (json.JSONDecodeError, KeyError):
             return 0
 
-    def record(self, method: str, endpoint: str, location_params: dict | None,
-               params: dict | None, body: dict | None, success: bool):
-        """Record a request to the replay log.
-
-        Only the seq counter is synchronized. File writes happen outside
-        the lock since replay sorts by seq — disk order doesn't matter.
-        """
+    def record_before(self, method: str, endpoint: str, location_params: dict | None,
+                      params: dict | None, body: dict | None) -> tuple[int, str]:
+        """Write the pre-call record (success=null). Returns (seq, request_id)."""
+        request_id = str(uuid.uuid4())
         with self._lock:
             self._seq += 1
             seq = self._seq
 
         entry = {
+            "request_id": request_id,
             "seq": seq,
-            "ts": datetime.datetime.now(datetime.UTC).isoformat(),
+            "ts": int(time.time() * 1000),
             "method": method,
             "endpoint": endpoint,
             "location_params": location_params,
             "params": params,
             "body": body,
             "test_type": self._test_type,
-            "success": success,
+            "success": None,
         }
-        # json.dumps + write + flush happen outside the lock.
-        # Lines may interleave on disk but each is a complete JSON line
-        # and replay sorts by seq, so disk order is irrelevant.
         self._file.write(json.dumps(entry, default=str) + "\n")
+        self._file.flush()
+        return seq, request_id
+
+    def record_after(self, seq: int, success: bool, error: str | None = None):
+        """Append outcome record for an already-written pre-call entry."""
+        outcome = {"seq": seq, "success": success}
+        if error:
+            outcome["error"] = error
+        self._file.write(json.dumps(outcome, default=str) + "\n")
         self._file.flush()
 
     def close(self):
@@ -343,46 +348,53 @@ class ReplayLog:
 
 The replay tool sorts entries by `seq` before executing, so lines don't need to be ordered on disk. By holding the lock only for the integer increment (nanoseconds), we eliminate contention from JSON serialization and disk I/O. In concurrent systems like SCT's event pipeline (multiple threads submitting events simultaneously), this is a significant performance win.
 
-Python's `file.write()` under the GIL guarantees that individual `write()` calls won't produce interleaved bytes, so concurrent writes of complete JSON lines are safe without a write lock.
+Python's `file.write()` under the GIL guarantees that individual `write()` calls won't produce interleaved bytes within a single call, so concurrent writes of complete JSON lines are safe without a write lock.
 
-### 2.5 Integration into ArgusClient
+### 2.6 Integration into ArgusClient
 
-The replay log is initialized in `ArgusClient.__init__()` and called from `post()`:
+The replay log is initialized in `ArgusClient.__init__()` and wraps `post()`:
 
 ```python
 class ArgusClient:
     def __init__(self, auth_token, base_url, ..., log_dir: str | None = None):
         # ... existing init code ...
+        init_ts_ms = int(time.time() * 1000)
         self._replay_log = ReplayLog(
             log_dir=log_dir or os.environ.get("ARGUS_LOG_DIR", "."),
             run_id=getattr(self, "run_id", "unknown"),
             test_type=getattr(self, "test_type", "unknown"),
+            init_ts_ms=init_ts_ms,
         )
 
     def post(self, endpoint, location_params=None, params=None, body=None):
         url = self.get_url_for_endpoint(endpoint=endpoint, location_params=location_params)
         LOGGER.debug("POST Request: %s, params: %s, body: %s", url, params, body)
-        response = self.session.post(url=url, params=params, json=body,
-                                      headers=self.request_headers, timeout=self._timeout)
-        LOGGER.debug("POST Response: %s %s", response.status_code, response.url)
 
-        # Record to replay log — determine success without raising
-        success = 199 < response.status_code < 300
-        if success:
-            try:
-                success = "error" not in response.json()
-            except Exception:
-                success = False
-        self._replay_log.record(
+        # Write pre-call record before the HTTP attempt
+        seq, _request_id = self._replay_log.record_before(
             method="POST", endpoint=endpoint,
-            location_params=location_params, params=params,
-            body=body, success=success,
+            location_params=location_params, params=params, body=body,
         )
+
+        try:
+            response = self.session.post(url=url, params=params, json=body,
+                                          headers=self.request_headers, timeout=self._timeout)
+            LOGGER.debug("POST Response: %s %s", response.status_code, response.url)
+            success = 199 < response.status_code < 300
+            if success:
+                try:
+                    success = "error" not in response.json()
+                except Exception:
+                    success = False
+            self._replay_log.record_after(seq, success=success)
+        except Exception as exc:
+            self._replay_log.record_after(seq, success=False, error=str(exc))
+            raise
 
         return response
 ```
 
-Only `post()` is recorded — `get()` calls are read-only and do not mutate state, so they are not included in the replay log. The replay log write happens after the request completes (or fails), before the response is returned to the caller. This ensures we capture the actual success/failure status.
+Only `post()` is recorded — `get()` calls are read-only and do not mutate state.
 
 ---
 
@@ -390,91 +402,140 @@ Only `post()` is recorded — `get()` calls are read-only and do not mutate stat
 
 ### 3.1 Storage Location
 
-The JSONL replay file is written to the **test's existing log directory**. For now, this is the only supported storage target. How replay files are stored and accessed for other use-cases (e.g. generic CI environments) will be determined in the future.
+The JSONL replay file is written to the **test's existing log directory**. For now, this is the only supported storage target.
 
 - For SCT: `~/sct-results/latest/`
-- For other consumers: pass `log_dir` to the client constructor or set the `ARGUS_LOG_DIR` environment variable. Falls back to the current working directory.
+- For other consumers: pass `log_dir` to the client constructor or set `ARGUS_LOG_DIR`. Falls back to the current working directory.
 
-### 3.2 Convention
+### 3.2 Multiple Files per Run
 
-1. File naming: `argus_replay_{run_id}.jsonl` — one file per test run.
+Because the filename includes `init_ts_ms`, parallel processes using the same `log_dir` and `run_id` each write to their own file:
+
+```
+sct_argus_events_550e8400-..._1712345600000.jsonl   ← shard 0
+sct_argus_events_550e8400-..._1712345600042.jsonl   ← shard 1
+sct_argus_events_550e8400-..._1712345600107.jsonl   ← shard 2
+```
+
+The CLI upload command and backend ingest endpoint accept all files matching `sct_argus_events_{run_id}_*.jsonl` and merge their records by `seq` before processing.
+
+### 3.3 Convention
+
+1. File naming: `sct_argus_events_{run_id}_{unix_ms}.jsonl`
 2. The file is co-located with other test artifacts; no new upload mechanism is needed.
 3. For `pytest-argus-reporter`: add `--argus-log-dir` command-line option that passes through to `ArgusGenericClient`.
 
 ---
 
-## 4. `argus replay` CLI Command
+## 4. Backend — Terminal Status Auto-Finalize
 
-The `argus replay` CLI command is a thin uploader. It reads the local JSONL file and POSTs it to the Argus server-side ingest endpoint (`POST /api/v1/client/replay/ingest`). All replay logic — ordering, idempotency, execution — runs on the server.
+When `set_status` receives a terminal status (`Failed`, `Aborted`, `Passed`, `Error`, `NotRun`):
 
-### 4.1 Command Interface
+- The backend sets `end_time = now()` **if `end_time` is not already set**.
+- No separate `finalize` call is needed from the client.
+- The `POST /client/testrun/:type/:id/finalize` endpoint remains on the backend for manual or forced finalization but is removed from the normal client flow.
+
+This simplifies finalization from a two-step sequence (`set_status` → `finalize`) to a single call.
+
+---
+
+## 5. `argus replay` CLI Command
+
+The `argus replay` CLI command collects all matching JSONL files, bundles them into a `tar.zst` archive, and uploads the archive to the Argus server-side ingest endpoint. All replay logic — ordering, idempotency, execution — runs on the server.
+
+### 5.1 Command Interface
 
 ```
-argus replay <path-to-jsonl-file> [flags]
+argus replay [flags]
 
 Flags:
-  --failed-only       Only replay requests that originally failed (default: true)
-  --dry-run           Validate on the server without executing
-  --force-all         Ignore idempotency checks, replay everything
-  --target-url        Override the base URL (replay against different Argus instance)
-  --report            Output format for summary: "text" (default) or "json"
+  --dir <path>         Directory to scan for sct_argus_events_*.jsonl files
+  --run-id <uuid>      Filter files by run ID (used with --dir)
+  --file <path>        Explicit file path (repeatable; mutually exclusive with --dir)
+  --dry-run            Validate on the server without executing
+  --target-url         Override the base URL (replay against a different Argus instance)
+  --report             Output format for summary: "text" (default) or "json"
 ```
 
 **Examples:**
 
 ```bash
-# Upload replay file to Argus for server-side processing
-argus replay ./argus_replay_550e8400.jsonl
+# Replay all files for a specific run in the SCT results directory
+argus replay --dir ~/sct-results/latest --run-id 550e8400-e29b-41d4-a716-446655440000
 
-# Dry-run to see what would be replayed
-argus replay ./argus_replay_550e8400.jsonl --dry-run
+# Replay explicit files
+argus replay --file sct_argus_events_550e8400-..._1712345600000.jsonl \
+             --file sct_argus_events_550e8400-..._1712345600042.jsonl
+
+# Dry-run to preview what would be replayed
+argus replay --dir ~/sct-results/latest --run-id 550e8400-... --dry-run
 
 # Replay against a different Argus instance
-argus replay ./argus_replay_550e8400.jsonl --target-url https://argus-staging.example.com
+argus replay --dir ~/sct-results/latest --target-url https://argus-staging.example.com
 ```
 
-### 4.2 Go Package Structure
+### 5.2 Upload Format
+
+All collected JSONL files are bundled into a **`tar.zst` archive** and uploaded as a single POST:
+
+- Uses `archive/tar` + `github.com/klauspost/compress/zstd` — both already in `go.mod`
+- `Content-Type: application/x-tar-zstd`
+- Single round-trip; server handles decompression, merging, and ordering
+
+The archive contains one entry per JSONL file, preserving original filenames so the server can associate files with their `run_id` via the filename convention.
+
+### 5.3 No `--failed-only` Flag
+
+There is no `--failed-only` flag. All records are uploaded unconditionally. The server handles deduplication via `request_id`. See Section 2.4 for the rationale.
+
+### 5.4 Go Package Structure
 
 New package: `cli/internal/replay/`
 
 ```
 cli/internal/replay/
-├── uploader.go     # Reads JSONL file, POSTs to ingest endpoint
+├── collector.go    # Scans directory or accepts explicit file list
+├── archiver.go     # Builds tar.zst archive from collected files
+├── uploader.go     # POSTs archive to ingest endpoint
 ├── reporter.go     # Formats and prints server summary response
-└── *_test.go       # Tests for each component
+└── *_test.go
 ```
 
 New command file: `cli/cmd/replay.go` — follows patterns from `cli/cmd/testrun.go`.
 
+New route constant in `cli/internal/api/routes.go`:
+
+```go
+ReplayIngest = "/api/v1/client/replay/ingest"  // POST – upload tar.zst archive of JSONL files
+```
+
 ---
 
-## 5. Endpoint Idempotency Classification
+## 6. Endpoint Idempotency Classification
 
-Each API endpoint is classified into one of four replay strategies. The server-side ingest endpoint uses this classification to determine how to handle each entry.
+Each API endpoint is classified into one of four replay strategies. The server-side ingest service uses this classification when processing each JSONL entry.
 
-### 5.1 SAFE — Replay Freely
+### 6.1 SAFE — Replay Freely
 
 These endpoints are idempotent or last-write-wins. Replaying them multiple times produces the same result.
 
-| Endpoint                                    | Client Methods                                                   |
-| ------------------------------------------- | ---------------------------------------------------------------- |
-| `/testrun/$type/$id/set_status`             | `set_status()`, `set_sct_run_status()`, `set_matrix_status()`    |
-| `/testrun/$type/$id/update_product_version` | `update_product_version()`, `update_scylla_version()`            |
-| `/sct/$id/sct_runner/set`                   | `set_sct_runner()`                                               |
-| `/testrun/$type/$id/logs/submit`            | `submit_logs()`, `submit_sct_logs()`                             |
-| `/sct/$id/screenshots/submit`               | `submit_screenshots()`                                           |
-| `/sct/$id/packages/submit`                  | `submit_packages()`                                              |
-| `/sct/$id/events/submit`                    | `submit_events()` (batch overwrites)                             |
-| `/sct/$id/resource/$name/update`            | `update_resource()`                                              |
-| `/sct/$id/resource/$name/shards`            | `update_shards_for_resource()`                                   |
-| `/$id/config/submit`                        | `sct_submit_config()`                                            |
-| `/driver_matrix/env/submit`                 | `submit_env()`                                                   |
-| `/testrun/$type/$id/finalize`               | `finalize_run()`, `finalize_sct_run()`, `finalize_generic_run()` |
-| `/testrun/$type/$id/submit_results`         | `submit_results()` — keyed by table name, overwrites             |
+| Endpoint                                    | Client Methods                                                |
+| ------------------------------------------- | ------------------------------------------------------------- |
+| `/testrun/$type/$id/set_status`             | `set_status()`, `set_sct_run_status()`, `set_matrix_status()` |
+| `/testrun/$type/$id/update_product_version` | `update_product_version()`, `update_scylla_version()`         |
+| `/sct/$id/sct_runner/set`                   | `set_sct_runner()`                                            |
+| `/testrun/$type/$id/logs/submit`            | `submit_logs()`, `submit_sct_logs()`                          |
+| `/sct/$id/screenshots/submit`               | `submit_screenshots()`                                        |
+| `/sct/$id/packages/submit`                  | `submit_packages()`                                           |
+| `/sct/$id/resource/$name/update`            | `update_resource()`                                           |
+| `/sct/$id/resource/$name/shards`            | `update_shards_for_resource()`                                |
+| `/$id/config/submit`                        | `sct_submit_config()`                                         |
+| `/driver_matrix/env/submit`                 | `submit_env()`                                                |
+| `/testrun/$type/$id/submit_results`         | `submit_results()` — keyed by table name, overwrites          |
 
 > **Note:** Heartbeat calls (`/testrun/$type/$id/heartbeat`) are **not replayed**. They serve only to signal live test activity and have no value after the test has finished.
 
-### 5.2 CHECK_FIRST — Verify Before Replay
+### 6.2 CHECK_FIRST — Verify Before Replay
 
 These endpoints create new entities. Replaying when the entity already exists would cause errors or duplicates.
 
@@ -483,9 +544,9 @@ These endpoints create new entities. Replaying when the entity already exists wo
 | `/testrun/$type/submit`    | `GET /testrun/$type/$id/get` — if 200, skip | `submit_run()`, `submit_sct_run()`, `submit_generic_run()`, `submit_driver_matrix_run()`, `submit_sirenada_run()` |
 | `/sct/$id/resource/create` | Check by resource name in run data          | `create_resource()`                                                                                               |
 
-### 5.3 APPEND — Safe to Replay
+### 6.3 APPEND_IDEMPOTENT — Deduplicate via `request_id`
 
-These endpoints append records. All inserts are safe — replaying them is idempotent from a data-integrity standpoint because duplicate entries are acceptable.
+These endpoints append records. Duplicate detection uses `request_id` — the server stores processed `request_id` values and silently skips any record whose `request_id` has already been processed.
 
 | Endpoint                       | Client Methods                 |
 | ------------------------------ | ------------------------------ |
@@ -499,9 +560,9 @@ These endpoints append records. All inserts are safe — replaying them is idemp
 | `/sct/$id/gemini/submit`       | `submit_gemini_results()`      |
 | `/sct/$id/performance/submit`  | `submit_performance_results()` |
 
-### 5.4 SKIP — Do Not Replay by Default
+### 6.4 SKIP — Do Not Replay
 
-These endpoints have side effects beyond Argus state. They are skipped unless `--force-all` is passed.
+These endpoints have side effects beyond Argus state. They are always skipped during replay.
 
 | Endpoint                 | Side Effect         | Client Methods   |
 | ------------------------ | ------------------- | ---------------- |
@@ -510,48 +571,29 @@ These endpoints have side effects beyond Argus state. They are skipped unless `-
 
 ---
 
-## 6. Automation
-
-The goal is full automation without adding new services.
-
-### 6.1 Manual Replay via CLI
-
-After an outage, download the replay JSONL file from the test log directory and upload it to Argus for server-side processing:
-
-```bash
-# Upload replay file to Argus for server-side processing
-argus replay ./argus_replay_550e8400.jsonl --server-side
-```
-
-The CLI's only job is to upload the file. All replay logic runs server-side.
-
-### 6.2 Server-Side Replay Ingest Endpoint
-
-Argus itself accepts a JSONL replay file and processes it internally. This is the only supported replay path — Argus heals itself.
-
-**New API endpoint:**
+## 7. Server-Side Replay Ingest Endpoint
 
 ```
 POST /api/v1/client/replay/ingest
-Content-Type: multipart/form-data
-
-Body: JSONL file upload
+Content-Type: application/x-tar-zstd
 ```
 
 **Query parameters:**
 
-- `failed_only=true` (default) — only process entries with `"success": false`
 - `dry_run=false` — if true, validate and return what would be replayed without executing
-- `force_all=false` — if true, skip idempotency checks
 
 **How it works:**
 
-1. Argus receives the JSONL file
-2. Parses entries, sorts by `seq`
-3. Applies ordering rules (submit first, finalize last)
-4. Applies idempotency classification (Section 5) — checks existence before creating, skips email/trigger endpoints
-5. Executes each entry against its own internal service layer directly (no HTTP overhead — calls the service functions that the API controller would call)
-6. Returns a summary report:
+1. Flask receives the `tar.zst` body and decompresses it using `zstandard`
+2. Extracts all JSONL files from the archive
+3. Parses all records, merges across files, sorts by `seq`
+4. Applies ordering rules: `submit_run` first, terminal `set_status` / finalize last
+5. For each record:
+    - Apply idempotency classification (Section 6)
+    - Check processed `request_id` set — skip duplicates silently
+    - Call the corresponding internal service function directly (no HTTP self-requests)
+    - Record outcome (success or error with detail)
+6. Returns a summary:
 
 ```json
 {
@@ -559,79 +601,117 @@ Body: JSONL file upload
     "processed": 12,
     "succeeded": 11,
     "failed": 1,
-    "skipped": 35,
-    "errors": [{ "seq": 23, "endpoint": "/sct/$id/nemesis/submit", "error": "Duplicate nemesis record" }]
+    "skipped_duplicate": 30,
+    "skipped_no_replay": 4,
+    "errors": [{ "seq": 23, "request_id": "...", "endpoint": "/sct/$id/nemesis/submit", "error": "..." }]
 }
 ```
 
-**Advantages:**
-
-- **No HTTP round-trip overhead** — Argus processes the replay internally by calling service functions directly, not re-issuing HTTP requests to itself
-- **Argus can self-heal** — upload the file and Argus does the rest
-- **Atomic processing** — Argus can wrap the replay in a database transaction or batch operation
-- **Access control** — The endpoint uses the same `@api_login_required` auth as other client endpoints
+**Idempotency key storage:** Processed `request_id` values are stored per `run_id`. The storage mechanism (a Cassandra set column on the run record, a dedicated table, or an in-memory set for the duration of the ingest request) is an implementation detail decided during Phase 4.
 
 ---
 
-## 7. Implementation Phases
+## 8. Implementation Phases
 
-### Phase 1: Replay Log and Replay-Only Mode (Python Client)
+### Phase 1: Replay Log (Python Client)
 
 **New file:** `argus/client/replay_log.py`
 
-- `ReplayLog` class with persistent sequence counter
-- Thread-safe recording with minimal lock contention
-- `replay_failed()` method for in-process retry
+- `ReplayLog` class with `record_before()` and `record_after()` methods
+- Persistent sequence counter (resume from last `seq` in existing file)
+- Thread-safe counter increment with minimal lock contention
+- Filename convention: `sct_argus_events_{run_id}_{unix_ms}.jsonl`
 
 **Modify:** `argus/client/base.py`
 
 - Add `log_dir` parameter to `ArgusClient.__init__()`
+- Capture `init_ts_ms` at construction time; pass to `ReplayLog`
 - Initialize `ReplayLog` (always on)
-- Add `replay_only` mode: when `True`, `get()` and `post()` skip the HTTP call but still write to the replay log with `"success": false`
-- Optional health check on init: if argus is unreachable, auto-enter replay-only mode
-- Call `record()` from `post()` after each request
+- Add `replay_only` mode: `get()` and `post()` skip the HTTP call but still write to the replay log
+- Wrap `post()` to call `record_before()` then `record_after()`
+
+**Remove from `argus/client/sct/client.py`:**
+
+- `submit_events()` method (legacy aggregated severity/count)
 
 **New file:** `argus/client/tests/test_replay_log.py`
 
-- Test JSONL format correctness
-- Test sequence number persistence across restarts
-- Test thread safety with concurrent writes
-- Test replay-only mode skips HTTP but writes JSONL
+- JSONL format correctness
+- Sequence number persistence across restarts
+- Thread safety with concurrent writes
+- `replay_only` mode: no HTTP calls, JSONL written with `success=false`
+- Multiple files for the same run do not interfere
 
-### Phase 2: pytest-argus-reporter Integration
+### Phase 2: Backend Terminal Status Auto-Finalize
+
+**Modify:** `argus/backend/service/client_service.py`
+
+- In `update_run_status()`: if status is terminal, set `end_time = now()` when not already set
+
+**Remove from backend:**
+
+- `POST /client/sct/<run_id>/events/submit` legacy endpoint
+
+### Phase 3: Remove SCT Self-Healing Code
+
+**Modify `sdcm/utils/argus.py`:**
+
+- Remove `argus_offline_collect_events()`
+
+**Modify `sct.py`:**
+
+- Remove the `if not argus_client.get_run().get("events"):` block at line 1865-1866
+
+**Modify `sdcm/tester.py`:**
+
+- Remove the one-shot `submit_events` re-fire block in `argus_finalize_test_run()`
+- Replace separate `set_status` + `finalize_run` calls with a single `set_status(terminal_status)` call
+
+**Modify `sdcm/test_config.py`:**
+
+- Replace `MagicMock` fallback with replay-only mode client instantiation
+
+### Phase 4: pytest-argus-reporter Integration
 
 **Modify:** `pytest-argus-reporter/pytest_argus_reporter.py`
 
 - Add `--argus-log-dir` command-line option
 - Pass `log_dir` to `ArgusGenericClient` constructor
 
-### Phase 3: `argus replay` CLI Command (Go)
+### Phase 5: `argus replay` CLI Command (Go)
 
 **New command:** `cli/cmd/replay.go`
 
-- Cobra command following `testrun.go` patterns
-- Uploads the JSONL file to the Argus server-side ingest endpoint (`POST /api/v1/client/replay/ingest`)
-- Flags: `--failed-only`, `--dry-run`, `--force-all`, `--target-url`
-- Prints the summary report returned by the server
+- Cobra command; flags: `--dir`, `--run-id`, `--file` (repeatable), `--dry-run`, `--target-url`, `--report`
+- No `--failed-only` flag
 
 **New package:** `cli/internal/replay/`
 
-- `uploader.go` — reads the JSONL file and POSTs it to the ingest endpoint
+- `collector.go` — scans directory matching `sct_argus_events_*.jsonl`; optionally filters by `run_id`
+- `archiver.go` — builds in-memory `tar.zst` from collected files using `archive/tar` + `github.com/klauspost/compress/zstd`
+- `uploader.go` — POSTs archive to `POST /api/v1/client/replay/ingest`
 - `reporter.go` — formats and prints the server summary response
-- `*_test.go` — Unit tests
+- `*_test.go` — unit tests for each component
 
-### Phase 4: Server-Side Replay Ingest (Argus Backend)
+**Add to `cli/internal/api/routes.go`:**
+
+```go
+ReplayIngest = "/api/v1/client/replay/ingest"  // POST – tar.zst archive of JSONL replay files
+```
+
+### Phase 6: Server-Side Replay Ingest (Argus Backend)
 
 **New blueprint:** `argus/backend/controller/replay_api.py`
 
-- `POST /api/v1/client/replay/ingest` — accepts JSONL file upload, processes internally
-- Applies ordering rules and idempotency classification
-- Calls service layer directly (no HTTP self-requests)
-- Returns summary report with per-entry status
+- `POST /api/v1/client/replay/ingest`
+- Decompresses `tar.zst` body with `zstandard`
+- Delegates to `ReplayService`
 
-**New service:** `argus/backend/service/replay.py`
+**New service:** `argus/backend/service/replay_service.py`
 
-- Parses JSONL entries
-- Maps endpoints to internal service functions
-- Applies idempotency checks (Section 5)
-- Batch processing with error collection
+- Extracts and merges JSONL files from archive
+- Sorts records by `seq`, applies ordering rules
+- Maps endpoint templates to internal service functions
+- Checks and stores processed `request_id` values for deduplication
+- Applies idempotency classification (Section 6)
+- Collects per-record outcomes; returns summary
