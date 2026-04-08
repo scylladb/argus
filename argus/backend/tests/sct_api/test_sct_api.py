@@ -4,7 +4,7 @@ import time
 from uuid import uuid4
 import pytest
 
-from argus.backend.plugins.sct.testrun import SCTTestRun
+from argus.backend.plugins.sct.testrun import SCTNemesis, SCTTestRun
 from argus.common.utils import clamp_ts_to_milliseconds
 
 API_PREFIX = "/api/v1/client/sct"
@@ -226,7 +226,8 @@ def test_nemesis_submit_and_finalize(flask_client, sct_run_id):
 
     # Verify nemesis created
     run = SCTTestRun.get(id=sct_run_id)
-    nem = next(n for n in run.nemesis_data if n.name == "ChaosMonkey" and n.start_time == 123456)
+    nemesis_data = SCTNemesis.filter(run_id=run.id).all()
+    nem = next(n for n in nemesis_data if n.name == "ChaosMonkey" and n.start_time == 123456)
     assert nem.status == "running"
 
     finalize_payload = {
@@ -247,7 +248,8 @@ def test_nemesis_submit_and_finalize(flask_client, sct_run_id):
 
     # Verify nemesis finalized
     run = SCTTestRun.get(id=sct_run_id)
-    nem = next(n for n in run.nemesis_data if n.name == "ChaosMonkey" and n.start_time == 123456)
+    nemesis_data = SCTNemesis.filter(run_id=run.id).all()
+    nem = next(n for n in nemesis_data if n.name == "ChaosMonkey" and n.start_time == 123456)
     assert nem.status == "succeeded"
     assert nem.end_time and nem.end_time > 0
     assert nem.stack_trace == "done"
