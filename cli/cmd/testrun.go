@@ -103,6 +103,71 @@ var runTypeCacheSetters = map[string]runTypeCacheSetter{
 	},
 }
 
+// RunTypeDetailsHandlers maps plugin names to typed fetch functions that return
+// a lightweight "details" projection of a run — the same subset visible on the
+// Argus Details tab — without heavy fields such as logs, events, nemeses, or
+// allocated cloud resources.
+//
+// Adding a new plugin requires only a new map entry that mirrors the
+// corresponding entry in RunTypeHandlers.
+var RunTypeDetailsHandlers = map[string]runTypeHandler{
+	"scylla-cluster-tests": func(c *api.Client, r *http.Request) (any, error) {
+		full, err := api.DoJSON[models.SCTTestRun](c, r)
+		if err != nil {
+			return nil, err
+		}
+		return models.RunDetails{Run: full}, nil
+	},
+	"generic": func(c *api.Client, r *http.Request) (any, error) {
+		full, err := api.DoJSON[models.GenericRun](c, r)
+		if err != nil {
+			return nil, err
+		}
+		return models.NewKVTabular(models.GenericRunDetails{
+			RunBase:       full.RunBase,
+			StartedBy:     full.StartedBy,
+			SubType:       full.SubType,
+			ScyllaVersion: full.ScyllaVersion,
+		}), nil
+	},
+	"driver-matrix-tests": func(c *api.Client, r *http.Request) (any, error) {
+		full, err := api.DoJSON[models.DriverTestRun](c, r)
+		if err != nil {
+			return nil, err
+		}
+		return models.NewKVTabular(models.DriverRunDetails{
+			RunBase:       full.RunBase,
+			ScyllaVersion: full.ScyllaVersion,
+		}), nil
+	},
+	"sirenada": func(c *api.Client, r *http.Request) (any, error) {
+		full, err := api.DoJSON[models.SirenadaRun](c, r)
+		if err != nil {
+			return nil, err
+		}
+		return models.NewKVTabular(models.SirenadaRunDetails{
+			RunBase:       full.RunBase,
+			ScyllaVersion: full.ScyllaVersion,
+			Region:        full.Region,
+			SCTTestID:     full.SCTTestID,
+		}), nil
+	},
+}
+
+// DispatchDetails fetches a run of the given type and returns the
+// output-ready details value (already projected, wrapped in the appropriate
+// Tabular helper).  Callers only need to pass the result straight to
+// out.Write.
+//
+// Returns an error when runType is not registered.
+func DispatchDetails(runType string, client *api.Client, req *http.Request) (any, error) {
+	handler, ok := RunTypeDetailsHandlers[runType]
+	if !ok {
+		return nil, fmt.Errorf("unknown run type %q, valid types: %s", runType, ValidRunTypes())
+	}
+	return handler(client, req)
+}
+
 // isCacheable reports whether an error from a cache getter should be treated
 // as a miss (i.e. proceed to network).  Any non-nil error other than
 // ErrExpired is unexpected and is logged, but we still fall through to the
