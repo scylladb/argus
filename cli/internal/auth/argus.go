@@ -330,7 +330,7 @@ func printCFLoginOutput(output, token string) {
 			// Skip the JWT — it is a secret and should not appear on the terminal.
 			continue
 		}
-		fmt.Fprintln(os.Stdout, line)
+		_, _ = fmt.Fprintln(os.Stdout, line)
 	}
 }
 

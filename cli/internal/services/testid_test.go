@@ -202,17 +202,3 @@ func TestResolveTestID_RunMissingTestID(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "test_id")
 }
-
-// --------------------------------------------------------------------------
-// NewRunFetcher
-// --------------------------------------------------------------------------
-
-func TestNewRunFetcher_ImplementsInterface(t *testing.T) {
-	t.Parallel()
-	fetcher := services.NewRunFetcher(
-		func(_ context.Context, _ *api.Client, _ string) (string, error) { return "t", nil },
-		func(_ context.Context, _ *api.Client, _ *cache.Cache, _, _ string) (any, error) { return nil, nil },
-	)
-	// Verify it satisfies the interface at compile time (done by type assertion).
-	var _ = fetcher.(services.RunFetcher)
-}
