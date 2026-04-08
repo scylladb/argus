@@ -27,6 +27,20 @@ func makeToken(exp int64) string {
 	return fmt.Sprintf("%s.%s.stub-signature", header, payloadB64)
 }
 
+// makeTokenWithIat builds a JWT with both exp and iat claims.
+func makeTokenWithIat(exp, iat int64) string {
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"RS256","typ":"JWT"}`))
+
+	type payload struct {
+		Exp int64 `json:"exp"`
+		Iat int64 `json:"iat"`
+	}
+	raw, _ := json.Marshal(payload{Exp: exp, Iat: iat})
+	payloadB64 := base64.RawURLEncoding.EncodeToString(raw)
+
+	return fmt.Sprintf("%s.%s.stub-signature", header, payloadB64)
+}
+
 func TestIsExpired_NotExpired(t *testing.T) {
 	tok := makeToken(time.Now().Add(time.Hour).Unix())
 
@@ -125,4 +139,92 @@ func TestIsExpired_ExactBoundary(t *testing.T) {
 	expired, err := jwt.IsExpired(tok)
 	require.NoError(t, err)
 	assert.True(t, expired, "token whose exp == now should be considered expired")
+}
+
+// --------------------------------------------------------------------------
+// IsOlderThan tests
+// --------------------------------------------------------------------------
+
+func TestIsOlderThan_WithIat_Young(t *testing.T) {
+	t.Parallel()
+
+	// Token issued 1 hour ago, max age 12 h — should NOT be considered old.
+	iat := time.Now().Add(-time.Hour).Unix()
+	exp := time.Now().Add(23 * time.Hour).Unix()
+	tok := makeTokenWithIat(exp, iat)
+
+	old, err := jwt.IsOlderThan(tok, 12*time.Hour)
+	require.NoError(t, err)
+	assert.False(t, old, "token issued 1h ago should not be older than 12h")
+}
+
+func TestIsOlderThan_WithIat_Old(t *testing.T) {
+	t.Parallel()
+
+	// Token issued 13 hours ago, max age 12 h — should be considered old.
+	iat := time.Now().Add(-13 * time.Hour).Unix()
+	exp := time.Now().Add(11 * time.Hour).Unix()
+	tok := makeTokenWithIat(exp, iat)
+
+	old, err := jwt.IsOlderThan(tok, 12*time.Hour)
+	require.NoError(t, err)
+	assert.True(t, old, "token issued 13h ago should be older than 12h")
+}
+
+func TestIsOlderThan_WithIat_ExactBoundary(t *testing.T) {
+	t.Parallel()
+
+	// Token issued exactly 12 hours ago — at boundary, should be old (>=).
+	iat := time.Now().Add(-12 * time.Hour).Unix()
+	exp := time.Now().Add(12 * time.Hour).Unix()
+	tok := makeTokenWithIat(exp, iat)
+
+	old, err := jwt.IsOlderThan(tok, 12*time.Hour)
+	require.NoError(t, err)
+	assert.True(t, old, "token issued exactly 12h ago should be at boundary (old)")
+}
+
+func TestIsOlderThan_NoIat_LongRemainingLifetime(t *testing.T) {
+	t.Parallel()
+
+	// No iat, but exp is 24h away — there's more than 12h left, treat as fresh.
+	exp := time.Now().Add(24 * time.Hour).Unix()
+	tok := makeToken(exp)
+
+	old, err := jwt.IsOlderThan(tok, 12*time.Hour)
+	require.NoError(t, err)
+	assert.False(t, old, "token with 24h remaining should not be treated as older than 12h")
+}
+
+func TestIsOlderThan_NoIat_ShortRemainingLifetime(t *testing.T) {
+	t.Parallel()
+
+	// No iat, only 6h left — less than 12h remaining, treat as old.
+	exp := time.Now().Add(6 * time.Hour).Unix()
+	tok := makeToken(exp)
+
+	old, err := jwt.IsOlderThan(tok, 12*time.Hour)
+	require.NoError(t, err)
+	assert.True(t, old, "token with only 6h remaining should be treated as older than 12h")
+}
+
+func TestIsOlderThan_NoIatNoExp(t *testing.T) {
+	t.Parallel()
+
+	// No iat, no exp — cannot determine age, should return false.
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"RS256","typ":"JWT"}`))
+	payloadB64 := base64.RawURLEncoding.EncodeToString([]byte(`{"sub":"user"}`))
+	tok := fmt.Sprintf("%s.%s.stub", header, payloadB64)
+
+	old, err := jwt.IsOlderThan(tok, 12*time.Hour)
+	require.NoError(t, err)
+	assert.False(t, old, "token with neither iat nor exp should be treated as fresh")
+}
+
+func TestIsOlderThan_MalformedToken(t *testing.T) {
+	t.Parallel()
+
+	_, err := jwt.IsOlderThan("not.a.valid.jwt.at.all", time.Hour)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, jwt.ErrMalformed)
 }

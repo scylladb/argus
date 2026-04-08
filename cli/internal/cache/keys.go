@@ -37,14 +37,6 @@ const (
 	// Events are append-only once a run finishes, so a longer TTL is fine.
 	// During a live run we keep it short so new events appear quickly.
 	TTLSCTEvents = 5 * time.Minute
-
-	// TTLNemeses is an alias kept for backwards compatibility with code that
-	// references the old name.  New code should prefer TTLNemesis.
-	TTLNemeses = TTLRun
-
-	// TTLNemesis is the TTL for the nemesis summary derived from a cached run.
-	// Nemesis data is part of the run object itself and shares its TTL.
-	TTLNemesis = TTLRun
 )
 
 // RunKey returns the cache key for a specific test run.
@@ -142,14 +134,6 @@ func SCTEventsFullKey(runID, severity string) string {
 		severity = "all"
 	}
 	return path.Join("sct-events", runID, severity, fullCursor, fullCursor)
-}
-
-// NemesisKey returns the cache key for the nemesis summary of a run.
-// The nemesis data is derived from the run object itself.
-//
-// On disk: cache/nemesis/{runID}/
-func NemesisKey(runID string) string {
-	return path.Join("nemesis", runID)
 }
 
 // NemesesKey returns the cache key for a run's nemesis records fetched from

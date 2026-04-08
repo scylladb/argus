@@ -28,6 +28,7 @@ var (
 // claims is the minimal set of standard JWT claims we care about.
 type claims struct {
 	Exp int64 `json:"exp"`
+	Iat int64 `json:"iat"`
 }
 
 // IsExpired reports whether the JWT token string has passed its expiry time.
@@ -47,6 +48,47 @@ func IsExpired(tokenStr string) (bool, error) {
 		return false, nil
 	}
 	return time.Now().Unix() >= c.Exp, nil
+}
+
+// IsOlderThan reports whether the JWT was issued more than maxAge ago.
+// It uses the standard "iat" (issued-at) claim for this check.
+//
+// If the token has no "iat" claim, the function falls back to checking
+// whether fewer than maxAge seconds remain before "exp". If there is no
+// "exp" claim either, it returns (false, nil) — i.e. cannot determine age.
+//
+// This is useful for enforcing a maximum cached lifetime independent of what
+// the issuer puts in "exp".  For example, capping a CF Access token at 12 h
+// even when the token itself has a longer validity period.
+func IsOlderThan(tokenStr string, maxAge time.Duration) (bool, error) {
+	c, err := parseClaims(tokenStr)
+	if err != nil {
+		return false, err
+	}
+
+	now := time.Now()
+
+	if c.Iat != 0 {
+		issued := time.Unix(c.Iat, 0)
+		return now.Sub(issued) >= maxAge, nil
+	}
+
+	// No iat — fall back: check whether there is less than maxAge left on exp.
+	// If exp - now < maxAge, the token was almost certainly issued recently
+	// but we can't be sure; treat it as older than maxAge to be safe unless
+	// the remaining lifetime still exceeds maxAge (meaning we're early in the
+	// token's life).
+	if c.Exp != 0 {
+		remaining := time.Until(time.Unix(c.Exp, 0))
+		// We cannot determine exactly when the token was issued, so compare
+		// what's left. If the remaining lifetime is ≤ 0 (expired) or the
+		// remaining lifetime is less than we'd expect had the token just been
+		// issued, treat it as older than maxAge.
+		return remaining <= 0 || remaining < maxAge, nil
+	}
+
+	// Cannot determine age — assume not older.
+	return false, nil
 }
 
 // parseClaims base64-decodes and JSON-unmarshals the payload segment of a JWT.

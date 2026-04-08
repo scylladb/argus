@@ -74,26 +74,32 @@ func main() {
 	return binPath
 }
 
-// makeJWT builds a minimal unsigned JWT with the given exp Unix timestamp.
-// The header and signature are stubs — only the payload matters for our tests.
-func makeJWT(exp int64) string {
+// makeJWT builds a minimal unsigned JWT with the given exp and iat Unix
+// timestamps. The header and signature are stubs — only the payload matters
+// for our tests. Pass iat=0 to omit the iat claim.
+func makeJWT(exp, iat int64) string {
 	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"RS256","typ":"JWT"}`))
 
 	type payload struct {
 		Sub string `json:"sub"`
 		Exp int64  `json:"exp"`
+		Iat int64  `json:"iat,omitempty"`
 	}
-	raw, _ := json.Marshal(payload{Sub: "testuser", Exp: exp})
+	raw, _ := json.Marshal(payload{Sub: "testuser", Exp: exp, Iat: iat})
 	payloadB64 := base64.RawURLEncoding.EncodeToString(raw)
 
 	return fmt.Sprintf("%s.%s.stub-signature", header, payloadB64)
 }
 
-// validJWT returns a JWT with an expiry one hour in the future.
-func validJWT() string { return makeJWT(time.Now().Add(time.Hour).Unix()) }
+// validJWT returns a JWT with an expiry 13 hours in the future and an iat of
+// now, so it passes the 12 h maximum-age cap enforced by IsOlderThan.
+func validJWT() string {
+	now := time.Now()
+	return makeJWT(now.Add(13*time.Hour).Unix(), now.Unix())
+}
 
 // expiredJWT returns a JWT with an expiry one hour in the past.
-func expiredJWT() string { return makeJWT(time.Now().Add(-time.Hour).Unix()) }
+func expiredJWT() string { return makeJWT(time.Now().Add(-time.Hour).Unix(), 0) }
 
 // userTokenJSON returns a JSON body that mimics the /api/v1/user/token response.
 func userTokenJSON(token string) []byte {

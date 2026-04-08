@@ -10,11 +10,20 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/scylladb/argus/cli/internal/api"
 	"github.com/scylladb/argus/cli/internal/jwt"
 	"github.com/scylladb/argus/cli/internal/keychain"
 	"github.com/scylladb/argus/cli/internal/models"
+)
+
+const (
+	// cfTokenMaxAge is the maximum time a Cloudflare Access JWT is considered
+	// fresh after it was issued. Tokens older than this are evicted from the
+	// keychain and a new one is obtained even if the token's own "exp" claim
+	// has not yet been reached.
+	cfTokenMaxAge = 12 * time.Hour
 )
 
 // Sentinel errors for the Argus authentication step.
@@ -124,6 +133,12 @@ func HasValidCFToken() bool {
 		_ = keychain.DeleteCFToken()
 		return false
 	}
+	// Enforce the 12 h maximum age cap regardless of the token's own exp.
+	tooOld, err := jwt.IsOlderThan(tok, cfTokenMaxAge)
+	if err != nil || tooOld {
+		_ = keychain.DeleteCFToken()
+		return false
+	}
 	return true
 }
 
@@ -143,6 +158,20 @@ func (s *ArgusService) Login(ctx context.Context) error {
 		return nil
 	}
 
+	// Second fast path: a valid session is already cached — skip CF login and
+	// attempt to exchange it for a PAT directly.  This covers the case where a
+	// previous `argus auth` stored a session but the PAT exchange failed.
+	if session, err := keychain.Load(); err == nil {
+		cfToken, _ := keychain.LoadCFToken() // best-effort; empty string is fine
+		if pat, fetchErr := s.fetchPAT(ctx, session, cfToken); fetchErr == nil {
+			if storeErr := keychain.StorePAT(pat); storeErr == nil {
+				_ = keychain.Delete()
+				return nil
+			}
+		}
+		// Session-to-PAT exchange failed — fall through to full CF login.
+	}
+
 	cfToken, err := s.getOrFetchCFToken(ctx)
 	if err != nil {
 		return err
@@ -154,7 +183,9 @@ func (s *ArgusService) Login(ctx context.Context) error {
 	}
 
 	// Exchange the short-lived session for a durable PAT.
-	pat, err := s.fetchPAT(ctx, session)
+	// The CF token must accompany the session cookie so the request passes
+	// through Cloudflare Access to reach the Argus backend.
+	pat, err := s.fetchPAT(ctx, session, cfToken)
 	if err != nil {
 		// Fetching the PAT failed. Fall back to persisting the session so the
 		// user is at least authenticated for this invocation, but warn them.
@@ -174,10 +205,15 @@ func (s *ArgusService) Login(ctx context.Context) error {
 }
 
 // fetchPAT calls GET /api/v1/user/token authenticated with the given session
-// cookie and returns the Argus API token string.
-func (s *ArgusService) fetchPAT(ctx context.Context, session string) (string, error) {
-	opts := make([]api.ClientOption, 0, 1+len(s.clientOpts))
+// cookie and CF Access JWT, and returns the Argus API token string.
+//
+// Both the session cookie and the CF token are required: the session
+// authenticates against Argus itself while the CF token passes through the
+// Cloudflare Access layer that sits in front of the service.
+func (s *ArgusService) fetchPAT(ctx context.Context, session, cfToken string) (string, error) {
+	opts := make([]api.ClientOption, 0, 2+len(s.clientOpts))
 	opts = append(opts, api.WithSession(session))
+	opts = append(opts, api.WithCFToken(cfToken))
 	opts = append(opts, s.clientOpts...)
 
 	client, err := api.New(s.argusURL, opts...)
@@ -203,19 +239,28 @@ func (s *ArgusService) fetchPAT(ctx context.Context, session string) (string, er
 }
 
 // getOrFetchCFToken returns a valid CF Access JWT. It first checks the
-// keychain; if a non-expired token is found it is returned immediately.
-// Otherwise `cloudflared access login` is invoked to perform the browser auth
-// flow, the resulting token is stored in the keychain for future use, and it
-// is returned.
+// keychain; if a non-expired token that is not older than cfTokenMaxAge (12h)
+// is found it is returned immediately. Otherwise `cloudflared access login` is
+// invoked to perform the browser auth flow, the resulting token is stored in
+// the keychain for future use, and it is returned.
 func (s *ArgusService) getOrFetchCFToken(ctx context.Context) (string, error) {
 	// Try the keychain first.
 	if cached, err := keychain.LoadCFToken(); err == nil {
 		expired, jwtErr := jwt.IsExpired(cached)
-		if jwtErr == nil && !expired {
-			return cached, nil
+		if jwtErr != nil || expired {
+			// Token is expired or malformed — purge it.
+			_ = keychain.DeleteCFToken()
+		} else {
+			// Also enforce a hard 12 h maximum regardless of what the token's
+			// own "exp" claim says — CF tokens can be issued with long
+			// lifetimes but we want to re-authenticate regularly.
+			tooOld, ageErr := jwt.IsOlderThan(cached, cfTokenMaxAge)
+			if ageErr != nil || tooOld {
+				_ = keychain.DeleteCFToken()
+			} else {
+				return cached, nil
+			}
 		}
-		// Token is expired or malformed — purge it so we fetch a fresh one.
-		_ = keychain.DeleteCFToken()
 	}
 
 	// Fall back to the full browser-based login flow.
@@ -248,8 +293,12 @@ func (s *ArgusService) runCFLogin(ctx context.Context) (string, error) {
 		s.argusURL,
 	)
 	var out bytes.Buffer
-	cmd.Stdout = io.MultiWriter(os.Stdout, &out)
-	cmd.Stderr = io.MultiWriter(os.Stderr, &out)
+	// Capture stdout entirely; we will selectively print browser-URL lines
+	// and suppress the JWT token line so it does not appear on the terminal.
+	cmd.Stdout = &out
+	// Stderr carries progress / error messages and goes directly to the
+	// terminal without capturing — no sensitive data appears there.
+	cmd.Stderr = os.Stderr
 
 	if err := cmd.Start(); err != nil {
 		return "", fmt.Errorf("%w: %w", ErrCFLogin, err)
@@ -259,13 +308,30 @@ func (s *ArgusService) runCFLogin(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("%w: %w\n%s", ErrCFLogin, err, out.String())
 	}
 
-	// The JWT is the last non-empty line of the output.
+	// The JWT is the last non-empty line of stdout.  Print all lines except
+	// the token itself so the user sees the browser-URL prompt.
 	token := lastNonEmptyLine(out.String())
 	if token == "" {
 		return "", fmt.Errorf("%w: no token found in cloudflared output:\n%s", ErrCFLogin, out.String())
 	}
+	printCFLoginOutput(out.String(), token)
 
 	return token, nil
+}
+
+// printCFLoginOutput writes every non-empty line from cloudflared stdout to
+// os.Stdout, skipping the JWT token line so it is never displayed to the user.
+func printCFLoginOutput(output, token string) {
+	for _, line := range strings.Split(output, "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		if strings.TrimSpace(line) == token {
+			// Skip the JWT — it is a secret and should not appear on the terminal.
+			continue
+		}
+		fmt.Fprintln(os.Stdout, line)
+	}
 }
 
 // login POSTs to /auth/login/cf with the CF token attached via api.Client and

@@ -36,6 +36,9 @@ var (
 	// present in the keychain.
 	ErrCFTokenNotFound = errors.New("keychain: CF token not found")
 
+	// ErrPATNotFound is returned by LoadPAT when no PAT is stored.
+	ErrPATNotFound = errors.New("keychain: PAT not found")
+
 	// ErrStoring is returned when the OS keychain rejects a Store call.
 	ErrStoring = errors.New("keychain: storing session token")
 
@@ -47,6 +50,9 @@ var (
 
 	// ErrDeletingCFToken is returned when the OS keychain rejects a DeleteCFToken call.
 	ErrDeletingCFToken = errors.New("keychain: deleting CF token")
+
+	// ErrDeletingPAT is returned when the OS keychain rejects a DeletePAT call.
+	ErrDeletingPAT = errors.New("keychain: deleting PAT")
 )
 
 // Store persists token in the system keychain under the argus-cli service.
@@ -75,9 +81,14 @@ func LoadPAT() (string, error) {
 	token, err := keyring.Get(serviceName, patKey)
 	if err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
-			return "", ErrNotFound
+			return "", ErrPATNotFound
 		}
-		return "", errors.Join(ErrNotFound, err)
+		return "", errors.Join(ErrPATNotFound, err)
+	}
+	if token == "" {
+		// An empty string was stored — treat it as absent and clean it up.
+		_ = keyring.Delete(serviceName, patKey)
+		return "", ErrPATNotFound
 	}
 	return token, nil
 }
@@ -85,6 +96,16 @@ func LoadPAT() (string, error) {
 func StorePAT(token string) error {
 	if err := keyring.Set(serviceName, patKey, token); err != nil {
 		return errors.Join(ErrStoring, err)
+	}
+	return nil
+}
+
+// DeletePAT removes the PAT from the system keychain.
+// It is a no-op (returns nil) if no PAT is currently stored.
+func DeletePAT() error {
+	err := keyring.Delete(serviceName, patKey)
+	if err != nil && !errors.Is(err, keyring.ErrNotFound) {
+		return errors.Join(ErrDeletingPAT, err)
 	}
 	return nil
 }
