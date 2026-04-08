@@ -26,6 +26,7 @@ class ArgusSCTClient(ArgusClient):
         SUBMIT_GEMINI_RESULTS = "/sct/$id/gemini/submit"
         SUBMIT_PERFORMANCE_RESULTS = "/sct/$id/performance/submit"
         FINALIZE_NEMESIS = "/sct/$id/nemesis/finalize"
+        GET_NEMESIS = "/sct/$id/nemesis/get"
         SUBMIT_EVENTS = "/sct/$id/events/submit"
         SUBMIT_EVENT = "/sct/$id/event/submit"
         SUBMIT_JUNIT_REPORT = "/sct/$id/junit/submit"
@@ -61,7 +62,8 @@ class ArgusSCTClient(ArgusClient):
         """
             Sets an SCT run's status.
         """
-        response = super().set_status(run_type=self.test_type, run_id=self.run_id, new_status=new_status)
+        response = super().set_status(run_type=self.test_type,
+                                      run_id=self.run_id, new_status=new_status)
         self.check_response(response)
 
     def set_sct_runner(self, public_ip: str, private_ip: str, region: str, backend: str, name: str = None) -> None:
@@ -86,7 +88,8 @@ class ArgusSCTClient(ArgusClient):
         """
             Updates scylla server version used for filtering test results by version.
         """
-        response = super().update_product_version(run_type=self.test_type, run_id=self.run_id, product_version=version)
+        response = super().update_product_version(run_type=self.test_type,
+                                                  run_id=self.run_id, product_version=version)
         self.check_response(response)
 
     def submit_event(self, event_data: RawEventPayload | list[RawEventPayload]):
@@ -278,6 +281,17 @@ class ArgusSCTClient(ArgusClient):
             }
         )
         self.check_response(response)
+
+    def get_nemeses(self):
+        """
+            Get a list of all nemeses already submitted to argus
+        """
+        response = self.get(
+            endpoint=self.Routes.GET_NEMESIS,
+            location_params={"id": str(self.run_id)},
+        )
+        self.check_response(response)
+        return response.json()["response"]
 
     def submit_nemesis(self, name: str, class_name: str, start_time: int,
                        target_name: str, target_ip: str, target_shards: int,

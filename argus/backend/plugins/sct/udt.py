@@ -61,6 +61,7 @@ class CloudResource(UserType):
     def get_instance_info(self) -> CloudInstanceDetails:
         return self.instance_info
 
+
 class EventsBySeverity(UserType):
     __type_name__ = "EventsBySeverity"
     severity = columns.Text()

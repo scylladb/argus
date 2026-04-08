@@ -107,6 +107,16 @@ def sct_nemesis_submit(run_id: str):
     }
 
 
+@bp.route("/<string:run_id>/nemesis/get", methods=["GET"])
+@api_login_required
+def sct_nemesis_get(run_id: str):
+    result = SCTService.get_nemesis(run_id=run_id)
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
 @bp.route("/<string:run_id>/nemesis/finalize", methods=["POST"])
 @api_login_required
 def sct_nemesis_finalize(run_id: str):

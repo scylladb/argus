@@ -55,8 +55,8 @@
     </div>
     <div class="d-flex flex-fill align-items-end justify-content-end p-1">
         <div class="p-1 me-auto text-small">
-            {#if (lastRun?.nemesis_data ?? []).length}
-                <Fa icon={faSpider} /> {(lastRun?.nemesis_data ?? []).filter((n: {status: string}) => n.status == "failed").length} / {(lastRun?.nemesis_data ?? []).length}
+            {#if ((lastRun?.nemesis_stats ?? {})?.total ?? false)}
+                <Fa icon={faSpider} /> {lastRun?.nemesis_stats?.failed ?? 0} / {lastRun?.nemesis_stats.total}
             {/if}
         </div>
         <div class="p-1 me-2">

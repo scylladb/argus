@@ -7,7 +7,7 @@ from typing import Any
 
 from flask import render_template
 import humanize
-from argus.backend.plugins.sct.testrun import SCTEventSeverity, SCTTestRun
+from argus.backend.plugins.sct.testrun import SCTEventSeverity, SCTNemesis, SCTTestRun
 from argus.backend.service.results_service import ResultsService
 from argus.backend.util.send_email import Attachment, Email
 from argus.common.email import RawAttachment, RawReportSendRequest, ReportSection, ReportSectionShortHand
@@ -165,7 +165,7 @@ class Nemesis(Partial):
     TEMPLATE_PATH = "email/partials/nemesis.html.j2"
     def create_context(self, options: dict[str, Any]):
         status_filter = options.get("status_filter") or ["failed", "succeeded"]
-        nemesis = list(filter(lambda nem: nem.status in status_filter, self.test_run.nemesis_data))
+        nemesis = list(filter(lambda nem: nem.status in status_filter, SCTNemesis.filter(run_id=self.test_run.id).all()))
         return {
             **self.default_options(),
             "run_id": self.test_run.id,

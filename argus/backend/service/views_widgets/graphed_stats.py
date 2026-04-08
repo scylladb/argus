@@ -1,9 +1,10 @@
+from collections import defaultdict
 import logging
 from uuid import UUID
 import json
 import re
 from argus.backend.db import ScyllaCluster
-from argus.backend.plugins.sct.testrun import SCTTestRun
+from argus.backend.plugins.sct.testrun import SCTNemesis, SCTTestRun
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.util.common import chunk
 from argus.backend.util.nemesis_map import get_nemesis_name
@@ -16,16 +17,25 @@ class GraphedStatsService:
         self.cluster = ScyllaCluster.get()
 
     def get_graphed_stats(self, test_id: UUID, filters=None):
-        rows = SCTTestRun.filter(test_id=test_id).only([
+        rows = list(SCTTestRun.filter(test_id=test_id).only([
             "build_id",
             "start_time",
             "end_time",
             "id",
-            "nemesis_data",
             "investigation_status",
             "packages",
             "status"
-        ]).all()
+        ]).all())
+
+        nemesis_rows = []
+        for batch in chunk({r.id for r in rows}):
+            # Typically this should result in <100 runs per test, but
+            # we batch to make sure we don't exceed max cartesian product
+            nemesis_rows.extend(SCTNemesis.filter(run_id__in=batch).all())
+
+        nemesis_data = defaultdict(list)
+        for row in nemesis_rows:
+            nemesis_data[row.run_id].append(row)
 
         release_data = {
             "test_runs": [],
@@ -59,8 +69,8 @@ class GraphedStatsService:
                 "investigation_status": run["investigation_status"]
             })
 
-            if run["nemesis_data"]:
-                for nemesis in [n for n in run["nemesis_data"] if n.status in ("succeeded", "failed")]:
+            if nemeses := nemesis_data.get(run["id"]):
+                for nemesis in [n for n in nemeses if n.status in ("succeeded", "failed")]:
                     release_data["nemesis_data"].append({
                         "version": version,
                         "name": get_nemesis_name(nemesis.name),
