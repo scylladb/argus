@@ -113,17 +113,17 @@ If --dest is omitted the files are extracted into the current working directory.
 		if err != nil {
 			return err
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			return fmt.Errorf("server returned %d: %s", resp.StatusCode, http.StatusText(resp.StatusCode))
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "Extracting %s to %s\n", logName, dest)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Extracting %s to %s\n", logName, dest)
 		if err := extractTarZst(resp.Body, dest); err != nil {
 			return err
 		}
-		fmt.Fprintln(cmd.OutOrStdout(), "Done.")
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Done.")
 		return nil
 	},
 }

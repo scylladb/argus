@@ -50,10 +50,10 @@ and that session is also stored in the keychain.`,
 			}
 
 			log.Info().Msg("authentication successful; credentials stored in keychain")
-			fmt.Fprintln(cmd.OutOrStdout(), "Authentication successful.")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Authentication successful.")
 		} else {
 			log.Info().Msg("cloudflare auth disabled; login with auth-token instead")
-			fmt.Fprintln(cmd.OutOrStdout(), "Cloudflare auth disabled; use 'argus auth-token' instead.")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Cloudflare auth disabled; use 'argus auth-token' instead.")
 		}
 
 		return nil
