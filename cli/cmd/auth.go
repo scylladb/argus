@@ -23,6 +23,7 @@ it expires.
 The JWT is then exchanged for an Argus session token via POST /auth/login/cf
 and that session is also stored in the keychain.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		cmd.SilenceUsage = true
 		ctx := cmd.Context()
 		cfg := ConfigFrom(ctx)
 		log := logging.For(LoggerFrom(ctx), "auth")

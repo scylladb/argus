@@ -28,6 +28,7 @@ var cacheClearCmd = &cobra.Command{
 	Short: "Delete all cached responses",
 	Long:  `Remove every entry from the local cache. The next command invocation will fetch fresh data from the API.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		cmd.SilenceUsage = true
 		c := CacheFrom(cmd.Context())
 		if err := c.Clear(); err != nil {
 			return err
@@ -42,6 +43,7 @@ var cacheInfoCmd = &cobra.Command{
 	Short: "Show cache location and statistics",
 	Long:  `Display the cache directory path, total disk usage, entry count, and a per-category breakdown.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		cmd.SilenceUsage = true
 		c := CacheFrom(cmd.Context())
 
 		stats, err := c.Stats()

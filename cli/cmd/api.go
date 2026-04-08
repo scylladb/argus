@@ -18,6 +18,7 @@ var versionCmd = &cobra.Command{
 	Short: "Print API commit-id",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		cmd.SilenceUsage = true
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)

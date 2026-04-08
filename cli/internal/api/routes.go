@@ -29,12 +29,14 @@ const (
 	TestRunPytestResults = "/api/v1/run/%s/pytest/results" // GET  – pytest results for a run (run_id)
 
 	// Log file routes
-	TestRunLogDownload = "/testrun/tests/%s/%s/log/%s/download" // GET  – download log file, 302 to S3 (plugin_name, run_id, log_name)
+	TestRunLogDownload = "/api/v1/tests/%s/%s/log/%s/download" // GET  – download log file, 302 to S3 (plugin_name, run_id, log_name)
 
 	// SCT event routes (scylla-cluster-tests plugin)
-	SCTEventsGet             = "/api/v1/sct/%s/events/get"      // GET  – paginated SCT events (run_id); params: limit, before, severity[]
-	SCTEventsBySeverity      = "/api/v1/sct/%s/events/%s/get"   // GET  – SCT events filtered by severity (run_id, severity)
-	SCTEventsCountBySeverity = "/api/v1/sct/%s/events/%s/count" // GET  – count SCT events by severity (run_id, severity)
-	SCTNemesisGet            = "/api/v1/sct/%s/nemesis/get"     // GET  – nemesis records for a run (run_id); params: before, after
+	// Mounted at /api/v1/client/sct/ via: api(url_prefix=/api/v1) → client_api(url_prefix=/client) → sct_api(url_prefix=/sct)
+	SCTEventsGet             = "/api/v1/client/sct/%s/events/get"      // GET  – paginated SCT events (run_id); params: limit, before, severity[]
+	SCTEventsBySeverity      = "/api/v1/client/sct/%s/events/%s/get"   // GET  – SCT events filtered by severity (run_id, severity)
+	SCTEventsCountBySeverity = "/api/v1/client/sct/%s/events/%s/count" // GET  – count SCT events by severity (run_id, severity)
+	// Note: there is no GET nemesis endpoint. Nemesis data is embedded in the
+	// full run response (SCTTestRun.NemesisData) from TestRunGet.
 
 )

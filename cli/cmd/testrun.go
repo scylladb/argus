@@ -198,6 +198,7 @@ var listRunsCmd = &cobra.Command{
 	Long: `Fetch test runs belonging to a test, with optional pagination
 and an optional --full flag that returns complete run objects.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		cmd.SilenceUsage = true
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
@@ -259,6 +260,7 @@ var getRunTypeCmd = &cobra.Command{
 	Short: "Get a test run type",
 	Long:  `Fetch the run type if exists for a specific run ID.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		cmd.SilenceUsage = true
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
@@ -298,6 +300,7 @@ When --type is omitted the plugin type is resolved automatically via the
 /run/<run_id>/type endpoint and cached for 24 h so subsequent invocations
 require no network round-trip for type resolution.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		cmd.SilenceUsage = true
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
@@ -332,9 +335,6 @@ require no network round-trip for type resolution.`,
 
 		if getter, ok := runTypeCacheGetters[runType]; ok {
 			if cached, err := getter(c, cacheKey); isCacheable(err) {
-				if sct, ok := cached.(models.SCTTestRun); ok {
-					return out.Write(models.RunDetails{Run: sct})
-				}
 				return out.Write(models.NewKVTabular(cached))
 			}
 		}
@@ -352,11 +352,6 @@ require no network round-trip for type resolution.`,
 			_ = setter(c, cacheKey, result)
 		}
 
-		// For SCT runs use the structured RunDetails view (mirrors the Argus
-		// Details page).  All other run types fall back to the generic KV table.
-		if sct, ok := result.(models.SCTTestRun); ok {
-			return out.Write(models.RunDetails{Run: sct})
-		}
 		return out.Write(models.NewKVTabular(result))
 	},
 }
@@ -370,6 +365,7 @@ var activityCmd = &cobra.Command{
 	Short: "Get the activity log for a test run",
 	Long:  `Fetch the event/activity log for a specific test run.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		cmd.SilenceUsage = true
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
@@ -406,6 +402,7 @@ var resultsCmd = &cobra.Command{
 	Short: "Fetch result tables for a test run",
 	Long:  `Fetch generic performance/result tables for a specific test run.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		cmd.SilenceUsage = true
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
@@ -461,6 +458,7 @@ var runCommentsCmd = &cobra.Command{
 	Short: "List comments for a test run",
 	Long:  `Fetch all comments posted on a specific test run.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		cmd.SilenceUsage = true
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
@@ -496,6 +494,7 @@ var runPytestResultsCmd = &cobra.Command{
 	Short: "List pytest results for a test run",
 	Long:  `Fetch all pytest results associated with a specific test run.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		cmd.SilenceUsage = true
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
@@ -541,6 +540,7 @@ var getCommentCmd = &cobra.Command{
 	Short: "Get a single comment",
 	Long:  `Fetch the full details of a comment by its ID.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		cmd.SilenceUsage = true
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
