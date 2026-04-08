@@ -11,6 +11,7 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/scylladb/argus/cli/internal/api"
+	"github.com/scylladb/argus/cli/internal/logging"
 	"github.com/scylladb/argus/cli/internal/models"
 	"github.com/spf13/cobra"
 )
@@ -38,34 +39,48 @@ var logsListCmd = &cobra.Command{
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
+		log := logging.For(LoggerFrom(ctx), "run-logs-list")
 
 		runID, _ := cmd.Flags().GetString("run-id")
 
+		log.Debug().Str("run_id", runID).Msg("listing log files for run")
+
 		runType, err := ResolveRunType(ctx, client, runID)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Msg("failed to resolve run type")
 			return err
 		}
 
+		log.Debug().Str("run_id", runID).Str("run_type", runType).Msg("run type resolved")
+
 		handler, ok := RunTypeHandlers[runType]
 		if !ok {
-			return fmt.Errorf("unknown run type %q, valid types: %s", runType, ValidRunTypes())
+			err := fmt.Errorf("unknown run type %q, valid types: %s", runType, ValidRunTypes())
+			log.Error().Err(err).Str("run_type", runType).Msg("unsupported run type")
+			return err
 		}
 
 		route := fmt.Sprintf(api.TestRunGet, runType, runID)
+		log.Debug().Str("run_id", runID).Str("route", route).Msg("fetching run to list logs")
 		req, err := client.NewRequest(ctx, "GET", route, nil)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Str("route", route).Msg("failed to build request")
 			return err
 		}
 
 		run, err := handler(client, req)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Str("run_type", runType).Msg("failed to fetch run")
 			return err
 		}
 
 		entries, err := runLogEntries(run)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Msg("failed to extract log entries from run")
 			return err
 		}
+
+		log.Info().Str("run_id", runID).Int("log_count", len(entries)).Msg("log files listed successfully")
 		return out.Write(models.NewTabularSlice(entries))
 	},
 }
@@ -87,6 +102,7 @@ If --dest is omitted the files are extracted into the current working directory.
 		cmd.SilenceUsage = true
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
+		log := logging.For(LoggerFrom(ctx), "run-logs-download")
 
 		logName := args[0]
 		runID, _ := cmd.Flags().GetString("run-id")
@@ -96,35 +112,53 @@ If --dest is omitted the files are extracted into the current working directory.
 			var err error
 			dest, err = os.Getwd()
 			if err != nil {
+				log.Error().Err(err).Msg("failed to get current working directory")
 				return fmt.Errorf("getting current directory: %w", err)
 			}
 		}
 
+		log.Debug().Str("run_id", runID).Str("log_name", logName).Str("dest", dest).Msg("downloading log file")
+
 		pluginName, err := ResolveRunType(ctx, client, runID)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Msg("failed to resolve run type")
 			return err
 		}
 
+		log.Debug().Str("run_id", runID).Str("plugin", pluginName).Msg("run type resolved for download")
+
 		route := fmt.Sprintf(api.TestRunLogDownload, pluginName, runID, logName)
+		log.Debug().Str("run_id", runID).Str("log_name", logName).Str("route", route).Msg("requesting log download")
 		req, err := client.NewRequest(ctx, "GET", route, nil)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Str("route", route).Msg("failed to build download request")
 			return err
 		}
 
 		resp, err := client.DoStream(req)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Str("log_name", logName).Msg("log download request failed")
 			return err
 		}
 		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return fmt.Errorf("server returned %d: %s", resp.StatusCode, http.StatusText(resp.StatusCode))
-		}
-
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Extracting %s to %s\n", logName, dest)
-		if err := extractTarZst(resp.Body, dest); err != nil {
+			err := fmt.Errorf("server returned %d: %s", resp.StatusCode, http.StatusText(resp.StatusCode))
+			log.Error().Err(err).
+				Str("run_id", runID).Str("log_name", logName).
+				Int("status_code", resp.StatusCode).
+				Msg("unexpected HTTP status from log download")
 			return err
 		}
+
+		log.Debug().Str("run_id", runID).Str("log_name", logName).Str("dest", dest).Msg("extracting log archive")
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Extracting %s to %s\n", logName, dest)
+		if err := extractTarZst(resp.Body, dest); err != nil {
+			log.Error().Err(err).Str("run_id", runID).Str("log_name", logName).Str("dest", dest).Msg("failed to extract log archive")
+			return err
+		}
+
+		log.Info().Str("run_id", runID).Str("log_name", logName).Str("dest", dest).Msg("log downloaded and extracted successfully")
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Done.")
 		return nil
 	},
