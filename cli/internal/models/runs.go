@@ -448,19 +448,6 @@ type RunType struct {
 	RunType string `json:"run_type"`
 }
 
-// NemesisRecord is the CLI-facing model for a nemesis record returned by
-// GET /api/v1/client/sct/<run_id>/nemesis/get.
-type NemesisRecord struct {
-	ClassName  string           `json:"class_name"`
-	Name       string           `json:"name"`
-	Duration   int              `json:"duration"`
-	TargetNode *NodeDescription `json:"target_node"`
-	Status     string           `json:"status"`
-	StartTime  int64            `json:"start_time"`
-	EndTime    int64            `json:"end_time"`
-	StackTrace string           `json:"stack_trace"`
-}
-
 // ---------------------------------------------------------------------------
 // Activity response (GET /run/<run_id>/activity)
 // ---------------------------------------------------------------------------
@@ -646,6 +633,14 @@ type NemesisResponse struct {
 	Nemeses []NemesisRunInfo `json:"nemeses"`
 }
 
+// NewNemesisResponse constructs a NemesisResponse for the given run and nemesis list.
+func NewNemesisResponse(runID string, nemeses []NemesisRunInfo) NemesisResponse {
+	if nemeses == nil {
+		nemeses = []NemesisRunInfo{}
+	}
+	return NemesisResponse{RunID: runID, Nemeses: nemeses}
+}
+
 // Headers implements output.Tabular for NemesisResponse.
 func (NemesisResponse) Headers() []string {
 	return []string{"Class", "Name", "Status", "Duration(s)", "Start Time", "End Time", "Target Node", "Stack Trace"}
@@ -797,18 +792,129 @@ func (d RunDetails) Rows() [][]string {
 		{"Nemesis", nemesisSummary},
 	}
 
-	// Remove empty rows to keep output clean.
+	// Remove rows whose value is empty or a zero placeholder, keeping section
+	// headers (identifiable by "---" prefix) and rows with meaningful content.
+	isHeader := func(row []string) bool {
+		return strings.HasPrefix(row[0], "---")
+	}
 	out := make([][]string, 0, len(rows))
 	for _, row := range rows {
-		if row[0] != "" {
+		if isHeader(row) || (row[0] != "" && row[1] != "" && row[1] != "0" && row[1] != "<nil>") {
 			out = append(out, row)
 		}
 	}
 	return out
 }
 
-// MarshalJSON implements json.Marshaler so the JSON outputter serialises the
-// underlying run directly.
+// runDetailsJSON is the JSON representation of a RunDetails — it contains only
+// the fields that are shown in the text table (Rows), so that JSON and text
+// output are consistent with each other.
+type runDetailsJSON struct {
+	// Run Details section
+	ID                  string                  `json:"id"`
+	ReleaseID           string                  `json:"release_id"`
+	GroupID             string                  `json:"group_id"`
+	TestID              string                  `json:"test_id"`
+	TestName            string                  `json:"test_name,omitempty"`
+	TestMethod          string                  `json:"test_method,omitempty"`
+	Status              TestStatus              `json:"status"`
+	InvestigationStatus TestInvestigationStatus `json:"investigation_status"`
+	StartTime           string                  `json:"start_time"`
+	EndTime             string                  `json:"end_time,omitempty"`
+	Duration            string                  `json:"duration,omitempty"`
+	StressDuration      float32                 `json:"stress_duration,omitempty"`
+	StartedBy           string                  `json:"started_by,omitempty"`
+	BuildJobURL         string                  `json:"build_job_url,omitempty"`
+	ScyllaVersion       string                  `json:"scylla_version,omitempty"`
+	ProductVersion      string                  `json:"product_version,omitempty"`
+	// System Information section
+	Backend      string `json:"backend,omitempty"`
+	Region       string `json:"region,omitempty"`
+	ImageID      string `json:"image_id,omitempty"`
+	SCMRevision  string `json:"scm_revision_id,omitempty"`
+	OriginURL    string `json:"origin_url,omitempty"`
+	BranchName   string `json:"branch_name,omitempty"`
+	InstanceType string `json:"instance_type,omitempty"`
+	NodeAmount   int    `json:"node_amount,omitempty"`
+	// Summary section
+	Events  string `json:"events_summary,omitempty"`
+	Nemesis string `json:"nemesis_summary,omitempty"`
+}
+
+// MarshalJSON implements json.Marshaler so the JSON outputter serialises only
+// the fields visible in the text table, keeping JSON and text output consistent.
 func (d RunDetails) MarshalJSON() ([]byte, error) {
-	return json.Marshal(d.Run)
+	r := d.Run
+
+	duration := ""
+	if r.StartTime != "" && r.EndTime != "" {
+		if start, err1 := time.Parse("2006-01-02T15:04:05.000000", r.StartTime); err1 == nil {
+			if end, err2 := time.Parse("2006-01-02T15:04:05.000000", r.EndTime); err2 == nil {
+				duration = end.Sub(start).Round(time.Minute).String()
+			}
+		}
+	}
+
+	backend, region, imageID, instanceType := "", strings.Join(r.RegionName, ", "), "", ""
+	nodeAmount := 0
+	if r.CloudSetup != nil {
+		backend = r.CloudSetup.Backend
+		if r.CloudSetup.DBNode != nil {
+			imageID = r.CloudSetup.DBNode.ImageID
+			instanceType = r.CloudSetup.DBNode.InstanceType
+			nodeAmount = r.CloudSetup.DBNode.NodeAmount
+		}
+	}
+
+	eventSummary := ""
+	if len(r.Events) > 0 {
+		parts := make([]string, 0, len(r.Events))
+		for _, ev := range r.Events {
+			parts = append(parts, fmt.Sprintf("%s: %d", ev.Severity, ev.EventAmount))
+		}
+		eventSummary = strings.Join(parts, "  |  ")
+	}
+
+	nemesisSummary := ""
+	if len(r.NemesisData) > 0 {
+		statusCount := make(map[string]int)
+		for _, nem := range r.NemesisData {
+			statusCount[nem.Status]++
+		}
+		parts := make([]string, 0, len(statusCount))
+		for status, count := range statusCount {
+			parts = append(parts, fmt.Sprintf("%s: %d", status, count))
+		}
+		sort.Strings(parts)
+		nemesisSummary = fmt.Sprintf("total: %d  (%s)", len(r.NemesisData), strings.Join(parts, ", "))
+	}
+
+	return json.Marshal(runDetailsJSON{
+		ID:                  r.ID,
+		ReleaseID:           r.ReleaseID,
+		GroupID:             r.GroupID,
+		TestID:              r.TestID,
+		TestName:            r.TestName,
+		TestMethod:          r.TestMethod,
+		Status:              r.Status,
+		InvestigationStatus: r.InvestigationStatus,
+		StartTime:           r.StartTime,
+		EndTime:             r.EndTime,
+		Duration:            duration,
+		StressDuration:      r.StressDuration,
+		StartedBy:           r.StartedBy,
+		BuildJobURL:         r.BuildJobURL,
+		ScyllaVersion:       r.ScyllaVersion,
+		ProductVersion:      r.ProductVersion,
+		Backend:             backend,
+		Region:              region,
+		ImageID:             imageID,
+		SCMRevision:         r.ScmRevisionID,
+		OriginURL:           r.OriginURL,
+		BranchName:          r.BranchName,
+		InstanceType:        instanceType,
+		NodeAmount:          nodeAmount,
+		Events:              eventSummary,
+		Nemesis:             nemesisSummary,
+	})
 }

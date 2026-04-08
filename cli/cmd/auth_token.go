@@ -14,6 +14,7 @@ var authToken = &cobra.Command{
 
 You probably want to use this for local and dev deployments as production deployments should use cloudflared login process via 'auth' command.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.SilenceUsage = true
 		ctx := cmd.Context()
 		cfg := ConfigFrom(ctx)
 		log := logging.For(LoggerFrom(ctx), "auth")

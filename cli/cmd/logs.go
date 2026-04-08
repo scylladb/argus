@@ -34,6 +34,7 @@ var logsListCmd = &cobra.Command{
 	Short: "List log files for a test run",
 	Long:  `Fetch the names of all log files attached to a test run.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		cmd.SilenceUsage = true
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
@@ -83,6 +84,7 @@ The log-name argument must match a name shown by "argus run logs list".
 If --dest is omitted the files are extracted into the current working directory.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.SilenceUsage = true
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 

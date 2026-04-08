@@ -37,6 +37,7 @@ For additional information use the dedicated subcommands:
   argus run events
   argus run results`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		cmd.SilenceUsage = true
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)

@@ -51,11 +51,11 @@ func parseTimeFlag(value string) (string, error) {
 
 // filterNemeses returns the subset of records whose StartTime falls within
 // [afterTS, beforeTS].  A zero value for either bound means "no bound".
-func filterNemeses(all []models.NemesisRecord, beforeTS, afterTS int64) []models.NemesisRecord {
+func filterNemeses(all []models.NemesisRunInfo, beforeTS, afterTS int64) []models.NemesisRunInfo {
 	if beforeTS == 0 && afterTS == 0 {
 		return all
 	}
-	out := make([]models.NemesisRecord, 0, len(all))
+	out := make([]models.NemesisRunInfo, 0, len(all))
 	for _, n := range all {
 		if beforeTS != 0 && n.StartTime > beforeTS {
 			continue
@@ -137,6 +137,7 @@ Time filtering with --before and --after accepts:
 Only SCT runs have per-event records; for other plugin types use
 "argus run activity" instead.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		cmd.SilenceUsage = true
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
@@ -260,6 +261,9 @@ var runNemesesCmd = &cobra.Command{
 	Short: "Fetch nemesis records for an SCT test run",
 	Long: `Fetch nemesis injection records for a scylla-cluster-tests run.
 
+Nemesis data is embedded in the run object and extracted locally; no
+dedicated nemesis endpoint is required.
+
 Time filtering with --before and --after accepts:
   - Unix timestamps (integer seconds, e.g. 1711234567)
   - RFC3339 / ISO-8601 datetimes (e.g. 2024-03-24T12:00:00Z)
@@ -270,6 +274,7 @@ The filter is applied to the nemesis start_time field.
 Only SCT runs have nemesis records; this command returns an empty list
 for other run types.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		cmd.SilenceUsage = true
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
@@ -295,53 +300,53 @@ for other run types.`,
 		fullKey := cache.NemesesKey(runID)
 
 		// Step 1: full-dataset cache.
-		if full, _, err := cache.Get[[]models.NemesisRecord](c, fullKey); isCacheable(err) {
+		if full, _, err := cache.Get[[]models.NemesisRunInfo](c, fullKey); isCacheable(err) {
 			if !isFiltered {
-				return out.Write(models.NewTabularSlice(full))
+				return out.Write(models.NewNemesisResponse(runID, full))
 			}
-			// Full corpus cached — apply filters locally, skip the network.
-			return out.Write(models.NewTabularSlice(filterNemeses(full, beforeInt, afterInt)))
+			return out.Write(models.NewNemesisResponse(runID, filterNemeses(full, beforeInt, afterInt)))
 		}
 
 		// Step 2: exact filtered cache (only when filters are active).
 		if isFiltered {
 			filteredKey := cache.NemesesFilteredKey(runID, beforeTS, afterTS)
-			if filtered, _, err := cache.Get[[]models.NemesisRecord](c, filteredKey); isCacheable(err) {
-				return out.Write(models.NewTabularSlice(filtered))
+			if filtered, _, err := cache.Get[[]models.NemesisRunInfo](c, filteredKey); isCacheable(err) {
+				return out.Write(models.NewNemesisResponse(runID, filtered))
 			}
 		}
 
-		// Step 3: network fetch.
-		route := fmt.Sprintf(api.SCTNemesisGet, runID)
-		params := url.Values{}
-		if beforeTS != "" {
-			params.Set("before", beforeTS)
+		// Step 3: fetch the full run and extract nemesis_data.
+		runType, err := ResolveRunType(ctx, client, runID)
+		if err != nil {
+			return err
 		}
-		if afterTS != "" {
-			params.Set("after", afterTS)
-		}
-		if q := params.Encode(); q != "" {
-			route += "?" + q
+		if runType != "scylla-cluster-tests" {
+			// Other run types have no nemesis data.
+			return out.Write(models.NewNemesisResponse(runID, nil))
 		}
 
+		route := fmt.Sprintf(api.TestRunGet, runType, runID)
 		req, err := client.NewRequest(ctx, "GET", route, nil)
 		if err != nil {
 			return err
 		}
-		nemeses, err := api.DoJSON[[]models.NemesisRecord](client, req)
+		run, err := api.DoJSON[models.SCTTestRun](client, req)
 		if err != nil {
 			return err
 		}
 
-		// Step 4: cache the result under the right key.
-		if !isFiltered {
-			_ = cache.Set(c, fullKey, nemeses, route, cache.TTLRun)
-		} else {
-			filteredKey := cache.NemesesFilteredKey(runID, beforeTS, afterTS)
-			_ = cache.Set(c, filteredKey, nemeses, route, cache.TTLRun)
-		}
+		nemeses := run.NemesisData
 
-		return out.Write(models.NewTabularSlice(nemeses))
+		// Step 4: cache the full nemesis list, then apply filters locally.
+		_ = cache.Set(c, fullKey, nemeses, route, cache.TTLRun)
+
+		if isFiltered {
+			filtered := filterNemeses(nemeses, beforeInt, afterInt)
+			filteredKey := cache.NemesesFilteredKey(runID, beforeTS, afterTS)
+			_ = cache.Set(c, filteredKey, filtered, route, cache.TTLRun)
+			return out.Write(models.NewNemesisResponse(runID, filtered))
+		}
+		return out.Write(models.NewNemesisResponse(runID, nemeses))
 	},
 }
 
