@@ -72,22 +72,7 @@ For additional information use the dedicated subcommands:
 			if err != nil {
 				return err
 			}
-			details := models.SCTRunDetails{
-				RunBase:          full.RunBase,
-				TestName:         full.TestName,
-				ScyllaVersion:    full.ScyllaVersion,
-				StartedBy:        full.StartedBy,
-				BranchName:       full.BranchName,
-				OriginURL:        full.OriginURL,
-				ConfigFiles:      full.ConfigFiles,
-				ScmRevisionID:    full.ScmRevisionID,
-				SubtestName:      full.SubtestName,
-				StressDuration:   full.StressDuration,
-				YAMLTestDuration: full.YAMLTestDuration,
-				RegionName:       full.RegionName,
-				Packages:         full.Packages,
-			}
-			return out.Write(models.NewKVTabular(details))
+			return out.Write(models.RunDetails{Run: full})
 
 		case "generic":
 			full, err := api.DoJSON[models.GenericRun](client, req)

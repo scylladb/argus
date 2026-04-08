@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/scylladb/argus/cli/internal/auth"
 	"github.com/scylladb/argus/cli/internal/logging"
 	"github.com/scylladb/argus/cli/internal/services"
@@ -47,9 +49,11 @@ and that session is also stored in the keychain.`,
 				return err
 			}
 
-			log.Info().Msg("authentication successful; session stored in keychain")
+			log.Info().Msg("authentication successful; credentials stored in keychain")
+			fmt.Fprintln(cmd.OutOrStdout(), "Authentication successful.")
 		} else {
 			log.Info().Msg("cloudflare auth disabled; login with auth-token instead")
+			fmt.Fprintln(cmd.OutOrStdout(), "Cloudflare auth disabled; use 'argus auth-token' instead.")
 		}
 
 		return nil

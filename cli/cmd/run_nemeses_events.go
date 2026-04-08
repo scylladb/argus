@@ -335,10 +335,10 @@ for other run types.`,
 
 		// Step 4: cache the result under the right key.
 		if !isFiltered {
-			_ = cache.Set(c, fullKey, nemeses, route, cache.TTLNemeses)
+			_ = cache.Set(c, fullKey, nemeses, route, cache.TTLRun)
 		} else {
 			filteredKey := cache.NemesesFilteredKey(runID, beforeTS, afterTS)
-			_ = cache.Set(c, filteredKey, nemeses, route, cache.TTLNemeses)
+			_ = cache.Set(c, filteredKey, nemeses, route, cache.TTLRun)
 		}
 
 		return out.Write(models.NewTabularSlice(nemeses))

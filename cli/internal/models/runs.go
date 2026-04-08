@@ -402,28 +402,6 @@ type SirenadaRun struct {
 // Run details (lightweight view — no logs, events, resources, screenshots)
 // ---------------------------------------------------------------------------
 
-// SCTRunDetails is the basic view of an SCTTestRun as shown on the Argus
-// Details page.  Heavy fields (logs, events, nemesis_data, screenshots,
-// allocated_resources, histograms, junit_reports) are intentionally omitted;
-// use the dedicated subcommands (run logs, run activity, run nemeses, etc.)
-// to retrieve those.
-type SCTRunDetails struct {
-	RunBase
-
-	TestName         string           `json:"test_name"`
-	ScyllaVersion    string           `json:"scylla_version"`
-	StartedBy        string           `json:"started_by"`
-	BranchName       string           `json:"branch_name"`
-	OriginURL        string           `json:"origin_url"`
-	ConfigFiles      []string         `json:"config_files"`
-	ScmRevisionID    string           `json:"scm_revision_id"`
-	SubtestName      string           `json:"subtest_name"`
-	StressDuration   float32          `json:"stress_duration"`
-	YAMLTestDuration int              `json:"yaml_test_duration"`
-	RegionName       []string         `json:"region_name"`
-	Packages         []PackageVersion `json:"packages"`
-}
-
 // GenericRunDetails is the basic view of a GenericRun.
 type GenericRunDetails struct {
 	RunBase
@@ -820,7 +798,7 @@ func (d RunDetails) Rows() [][]string {
 	}
 
 	// Remove empty rows to keep output clean.
-	out := rows[:0]
+	out := make([][]string, 0, len(rows))
 	for _, row := range rows {
 		if row[0] != "" {
 			out = append(out, row)

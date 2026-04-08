@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/scylladb/argus/cli/internal/api"
 	"github.com/scylladb/argus/cli/internal/auth"
 	"github.com/scylladb/argus/cli/internal/cache"
@@ -36,6 +36,7 @@ var (
 	noCache        bool
 	cacheTTL       string
 	nonInteractive bool
+	verbosity      int
 )
 
 func init() {
@@ -47,6 +48,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&noCache, "no-cache", false, "bypass the local response cache; always fetch from the API")
 	rootCmd.PersistentFlags().StringVar(&cacheTTL, "cache-ttl", "", "override the default cache TTL (e.g. 10m, 1h); ignored when --no-cache is set")
 	rootCmd.PersistentFlags().BoolVar(&nonInteractive, "non-interactive", false, "disable interactive prompts; return an error instead of triggering re-authentication")
+	rootCmd.PersistentFlags().CountVarP(&verbosity, "verbose", "v", "increase log verbosity: -v/-vv mirrors info logs to stderr, -vvv mirrors debug logs to stdout")
 }
 
 var rootCmd = &cobra.Command{
@@ -58,15 +60,35 @@ var rootCmd = &cobra.Command{
 	// so every sub-command has access without repeating flag parsing.
 	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 		// ---- logging -------------------------------------------------
-		// Use the full command path (e.g. "argus auth") as the log tag so
-		// every line is traceable back to the exact sub-command that ran.
-		//
-		// stderr is wired to the command's error writer so that cobra's own
-		// error output and our logger both go to the same destination.
+		// File log level is controlled by --log-level (default: info).
+		// Console (stderr) is only active when -v flags are given:
+		//   -v    → error level and above  → cmd.ErrOrStderr()
+		//   -vv   → info level and above   → cmd.ErrOrStderr()
+		//   -vvv  → debug level and above  → cmd.ErrOrStderr()
+		// The two levels are independent: --log-level only affects the file.
+		var logOpts []logging.Option
+		switch {
+		case verbosity >= 3:
+			logOpts = append(logOpts, logging.WithConsoleWriter(
+				cmd.ErrOrStderr(),
+				zerolog.DebugLevel,
+			))
+		case verbosity == 2:
+			logOpts = append(logOpts, logging.WithConsoleWriter(
+				cmd.ErrOrStderr(),
+				zerolog.InfoLevel,
+			))
+		case verbosity == 1:
+			logOpts = append(logOpts, logging.WithConsoleWriter(
+				cmd.ErrOrStderr(),
+				zerolog.ErrorLevel,
+			))
+		}
+
 		logger, cleanup, err := logging.Setup(
 			logLevel,
 			cmd.CommandPath(),
-			logging.WithStderrWriter(cmd.ErrOrStderr()),
+			logOpts...,
 		)
 		if err != nil {
 			return err
@@ -167,10 +189,10 @@ func buildAPIClientRaw(cfg *config.Config) (*api.Client, error) {
 	return client, nil
 }
 
-// isUnauthorizedErr reports whether err looks like an unauthorized / expired
-// session error returned by [api.DoJSON].
+// isUnauthorizedErr reports whether err is (or wraps) an unauthorized /
+// expired-session error returned by [api.DoJSON].
 func isUnauthorizedErr(err error) bool {
-	return err != nil && strings.HasPrefix(err.Error(), "unauthorized:")
+	return errors.Is(err, api.ErrUnauthorized)
 }
 
 // RunWithAuthRetry wraps fn so that if it returns an unauthorized error and

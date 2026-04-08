@@ -45,6 +45,12 @@ var (
 	// ErrAPIError is returned (wrapped inside an [APIError]) when the backend
 	// returns a response with status "error".
 	ErrAPIError = errors.New("api: server returned error")
+
+	// ErrUnauthorized is returned (wrapped) by [DoJSON] when the server
+	// responds with a non-JSON content type on a 2xx status, which almost
+	// always means a Cloudflare Access authentication challenge was served
+	// instead of the expected API response.
+	ErrUnauthorized = errors.New("unauthorized")
 )
 
 // APIError wraps a backend error response so callers can inspect the details
@@ -252,9 +258,10 @@ func DoJSON[T any](c *Client, req *http.Request) (T, error) {
 		// message so LLM consumers and humans can self-correct by
 		// re-authenticating rather than seeing a confusing decode error.
 		return zero, fmt.Errorf(
-			"unauthorized: server returned Content-Type %q instead of application/json — "+
+			"%w: server returned Content-Type %q instead of application/json — "+
 				"this usually means authentication failed or the session expired; "+
 				"re-authenticate with `argus auth` or set the ARGUS_TOKEN environment variable",
+			ErrUnauthorized,
 			contentType,
 		)
 	}
