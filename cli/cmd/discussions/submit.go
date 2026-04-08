@@ -2,6 +2,7 @@ package discussions
 
 import (
 	"github.com/scylladb/argus/cli/internal/cmdctx"
+	"github.com/scylladb/argus/cli/internal/logging"
 	"github.com/scylladb/argus/cli/internal/models"
 	"github.com/scylladb/argus/cli/internal/services"
 	"github.com/spf13/cobra"
@@ -36,28 +37,39 @@ func runSubmitComment(cmd *cobra.Command, _ []string) error {
 	client := cmdctx.APIClientFrom(ctx)
 	out := cmdctx.OutputterFrom(ctx)
 	c := cmdctx.CacheFrom(ctx)
+	log := logging.For(cmdctx.LoggerFrom(ctx), "comment-submit")
 
 	runID, _ := cmd.Flags().GetString("run-id")
 	flagTestID, _ := cmd.Flags().GetString("test-id")
+
+	log.Debug().Str("run_id", runID).Str("test_id", flagTestID).Msg("submitting comment")
 
 	svc := services.NewDiscussionService(client, c, RunFetcher)
 
 	testID, err := svc.ResolveTestID(ctx, runID, flagTestID)
 	if err != nil {
+		log.Error().Err(err).Str("run_id", runID).Msg("failed to resolve test ID")
 		return err
 	}
+	log.Debug().Str("run_id", runID).Str("test_id", testID).Msg("test ID resolved")
 
 	message, err := readMessage(cmd)
 	if err != nil {
+		log.Error().Err(err).Str("run_id", runID).Msg("failed to read comment message")
 		return err
 	}
 
 	mentions := ParseMentions(cmd)
+	if len(mentions) > 0 {
+		log.Debug().Strs("mentions", mentions).Msg("mentions parsed")
+	}
 
 	result, err := svc.SubmitComment(ctx, testID, runID, message, mentions)
 	if err != nil {
+		log.Error().Err(err).Str("run_id", runID).Str("test_id", testID).Msg("failed to submit comment")
 		return err
 	}
 
+	log.Info().Str("run_id", runID).Str("test_id", testID).Msg("comment submitted successfully")
 	return out.Write(models.NewTabularSlice(result))
 }

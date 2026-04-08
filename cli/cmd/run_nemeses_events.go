@@ -7,8 +7,10 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/scylladb/argus/cli/internal/api"
 	"github.com/scylladb/argus/cli/internal/cache"
+	"github.com/scylladb/argus/cli/internal/logging"
 	"github.com/scylladb/argus/cli/internal/models"
 	"github.com/spf13/cobra"
 )
@@ -142,18 +144,28 @@ Only SCT runs have per-event records; for other plugin types use
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
 		c := CacheFrom(ctx)
+		log := logging.For(LoggerFrom(ctx), "run-events")
 
 		runID, _ := cmd.Flags().GetString("run-id")
 		beforeRaw, _ := cmd.Flags().GetString("before")
 		afterRaw, _ := cmd.Flags().GetString("after")
 		limit, _ := cmd.Flags().GetInt("limit")
 
+		log.Debug().
+			Str("run_id", runID).
+			Str("before", beforeRaw).
+			Str("after", afterRaw).
+			Int("limit", limit).
+			Msg("fetching SCT events")
+
 		beforeTS, err := parseTimeFlag(beforeRaw)
 		if err != nil {
+			log.Error().Err(err).Str("value", beforeRaw).Msg("invalid --before flag")
 			return fmt.Errorf("--before: %w", err)
 		}
 		afterTS, err := parseTimeFlag(afterRaw)
 		if err != nil {
+			log.Error().Err(err).Str("value", afterRaw).Msg("invalid --after flag")
 			return fmt.Errorf("--after: %w", err)
 		}
 
@@ -161,20 +173,30 @@ Only SCT runs have per-event records; for other plugin types use
 		beforeInt := tsFromFlag(beforeTS)
 		afterInt := tsFromFlag(afterTS)
 
+		if isFiltered {
+			log.Debug().
+				Int64("before_ts", beforeInt).
+				Int64("after_ts", afterInt).
+				Msg("time filters applied")
+		}
+
 		var allEvents []models.SCTEvent
 		for _, severity := range []string{"CRITICAL", "ERROR"} {
 			severityEvents, fetchErr := fetchEventsForSeverity(
-				ctx, client, c,
+				ctx, client, c, log,
 				runID, severity,
 				beforeTS, afterTS, beforeInt, afterInt,
 				isFiltered, limit,
 			)
 			if fetchErr != nil {
+				log.Error().Err(fetchErr).Str("run_id", runID).Str("severity", severity).Msg("failed to fetch events")
 				return fetchErr
 			}
+			log.Debug().Str("severity", severity).Int("count", len(severityEvents)).Msg("events fetched for severity")
 			allEvents = append(allEvents, severityEvents...)
 		}
 
+		log.Info().Str("run_id", runID).Int("total_events", len(allEvents)).Msg("SCT events fetched successfully")
 		return out.Write(models.NewTabularSlice(allEvents))
 	},
 }
@@ -194,6 +216,7 @@ func fetchEventsForSeverity(
 	ctx context.Context,
 	client *api.Client,
 	c *cache.Cache,
+	log zerolog.Logger,
 	runID, severity string,
 	beforeTS, afterTS string,
 	beforeInt, afterInt int64,
@@ -205,15 +228,21 @@ func fetchEventsForSeverity(
 	// Step 1: full-dataset cache.
 	if full, _, err := cache.Get[[]models.SCTEvent](c, fullKey); isCacheable(err) {
 		if !isFiltered {
+			log.Debug().Str("run_id", runID).Str("severity", severity).Int("count", len(full)).Msg("events served from full cache")
 			return full, nil
 		}
-		return filterEvents(full, beforeInt, afterInt), nil
+		filtered := filterEvents(full, beforeInt, afterInt)
+		log.Debug().Str("run_id", runID).Str("severity", severity).
+			Int("total", len(full)).Int("filtered", len(filtered)).
+			Msg("events filtered from full cache")
+		return filtered, nil
 	}
 
 	// Step 2: exact filtered cache (only when filters are active).
 	if isFiltered {
 		filteredKey := cache.SCTEventsKey(runID, severity, beforeTS, afterTS)
 		if filtered, _, err := cache.Get[[]models.SCTEvent](c, filteredKey); isCacheable(err) {
+			log.Debug().Str("run_id", runID).Str("severity", severity).Int("count", len(filtered)).Msg("events served from filtered cache")
 			return filtered, nil
 		}
 	}
@@ -232,6 +261,8 @@ func fetchEventsForSeverity(
 		route += "?" + q
 	}
 
+	log.Debug().Str("run_id", runID).Str("severity", severity).Str("route", route).Msg("fetching events from API")
+
 	req, err := client.NewRequest(ctx, "GET", route, nil)
 	if err != nil {
 		return nil, err
@@ -241,12 +272,18 @@ func fetchEventsForSeverity(
 		return nil, err
 	}
 
+	log.Debug().Str("run_id", runID).Str("severity", severity).Int("count", len(events)).Msg("events received from API")
+
 	// Step 4: cache the result under the right key.
 	if !isFiltered {
-		_ = cache.Set(c, fullKey, events, route, cache.TTLSCTEvents)
+		if cacheErr := cache.Set(c, fullKey, events, route, cache.TTLSCTEvents); cacheErr != nil {
+			log.Warn().Err(cacheErr).Str("run_id", runID).Str("severity", severity).Msg("failed to cache full events")
+		}
 	} else {
 		filteredKey := cache.SCTEventsKey(runID, severity, beforeTS, afterTS)
-		_ = cache.Set(c, filteredKey, events, route, cache.TTLSCTEvents)
+		if cacheErr := cache.Set(c, filteredKey, events, route, cache.TTLSCTEvents); cacheErr != nil {
+			log.Warn().Err(cacheErr).Str("run_id", runID).Str("severity", severity).Msg("failed to cache filtered events")
+		}
 	}
 
 	return events, nil
@@ -279,17 +316,22 @@ for other run types.`,
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
 		c := CacheFrom(ctx)
+		log := logging.For(LoggerFrom(ctx), "run-nemeses")
 
 		runID, _ := cmd.Flags().GetString("run-id")
 		beforeRaw, _ := cmd.Flags().GetString("before")
 		afterRaw, _ := cmd.Flags().GetString("after")
 
+		log.Debug().Str("run_id", runID).Str("before", beforeRaw).Str("after", afterRaw).Msg("fetching nemeses")
+
 		beforeTS, err := parseTimeFlag(beforeRaw)
 		if err != nil {
+			log.Error().Err(err).Str("value", beforeRaw).Msg("invalid --before flag")
 			return fmt.Errorf("--before: %w", err)
 		}
 		afterTS, err := parseTimeFlag(afterRaw)
 		if err != nil {
+			log.Error().Err(err).Str("value", afterRaw).Msg("invalid --after flag")
 			return fmt.Errorf("--after: %w", err)
 		}
 
@@ -297,55 +339,78 @@ for other run types.`,
 		beforeInt := tsFromFlag(beforeTS)
 		afterInt := tsFromFlag(afterTS)
 
+		if isFiltered {
+			log.Debug().Int64("before_ts", beforeInt).Int64("after_ts", afterInt).Msg("time filters applied")
+		}
+
 		fullKey := cache.NemesesKey(runID)
 
 		// Step 1: full-dataset cache.
 		if full, _, err := cache.Get[[]models.NemesisRunInfo](c, fullKey); isCacheable(err) {
 			if !isFiltered {
+				log.Debug().Str("run_id", runID).Int("count", len(full)).Msg("nemeses served from full cache")
 				return out.Write(models.NewNemesisResponse(runID, full))
 			}
-			return out.Write(models.NewNemesisResponse(runID, filterNemeses(full, beforeInt, afterInt)))
+			filtered := filterNemeses(full, beforeInt, afterInt)
+			log.Debug().Str("run_id", runID).Int("total", len(full)).Int("filtered", len(filtered)).Msg("nemeses filtered from full cache")
+			return out.Write(models.NewNemesisResponse(runID, filtered))
 		}
 
 		// Step 2: exact filtered cache (only when filters are active).
 		if isFiltered {
 			filteredKey := cache.NemesesFilteredKey(runID, beforeTS, afterTS)
 			if filtered, _, err := cache.Get[[]models.NemesisRunInfo](c, filteredKey); isCacheable(err) {
+				log.Debug().Str("run_id", runID).Int("count", len(filtered)).Msg("nemeses served from filtered cache")
 				return out.Write(models.NewNemesisResponse(runID, filtered))
 			}
 		}
 
 		// Step 3: fetch the full run and extract nemesis_data.
+		log.Debug().Str("run_id", runID).Msg("resolving run type for nemeses fetch")
 		runType, err := ResolveRunType(ctx, client, runID)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Msg("failed to resolve run type")
 			return err
 		}
+
 		if runType != "scylla-cluster-tests" {
 			// Other run types have no nemesis data.
+			log.Info().Str("run_id", runID).Str("run_type", runType).Msg("run type has no nemesis data; returning empty list")
 			return out.Write(models.NewNemesisResponse(runID, nil))
 		}
 
 		route := fmt.Sprintf(api.TestRunGet, runType, runID)
+		log.Debug().Str("run_id", runID).Str("route", route).Msg("fetching full run to extract nemeses")
 		req, err := client.NewRequest(ctx, "GET", route, nil)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Str("route", route).Msg("failed to build request")
 			return err
 		}
 		run, err := api.DoJSON[models.SCTTestRun](client, req)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Msg("API request for nemeses failed")
 			return err
 		}
 
 		nemeses := run.NemesisData
+		log.Debug().Str("run_id", runID).Int("count", len(nemeses)).Msg("nemeses extracted from run")
 
 		// Step 4: cache the full nemesis list, then apply filters locally.
-		_ = cache.Set(c, fullKey, nemeses, route, cache.TTLRun)
+		if cacheErr := cache.Set(c, fullKey, nemeses, route, cache.TTLRun); cacheErr != nil {
+			log.Warn().Err(cacheErr).Str("run_id", runID).Msg("failed to cache nemeses")
+		}
 
 		if isFiltered {
 			filtered := filterNemeses(nemeses, beforeInt, afterInt)
 			filteredKey := cache.NemesesFilteredKey(runID, beforeTS, afterTS)
-			_ = cache.Set(c, filteredKey, filtered, route, cache.TTLRun)
+			if cacheErr := cache.Set(c, filteredKey, filtered, route, cache.TTLRun); cacheErr != nil {
+				log.Warn().Err(cacheErr).Str("run_id", runID).Msg("failed to cache filtered nemeses")
+			}
+			log.Info().Str("run_id", runID).Int("total", len(nemeses)).Int("filtered", len(filtered)).Msg("nemeses fetched and filtered successfully")
 			return out.Write(models.NewNemesisResponse(runID, filtered))
 		}
+
+		log.Info().Str("run_id", runID).Int("count", len(nemeses)).Msg("nemeses fetched successfully")
 		return out.Write(models.NewNemesisResponse(runID, nemeses))
 	},
 }

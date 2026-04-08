@@ -12,6 +12,7 @@ import (
 	"github.com/scylladb/argus/cli/cmd/discussions"
 	"github.com/scylladb/argus/cli/internal/api"
 	"github.com/scylladb/argus/cli/internal/cache"
+	"github.com/scylladb/argus/cli/internal/logging"
 	"github.com/scylladb/argus/cli/internal/models"
 	"github.com/scylladb/argus/cli/internal/services"
 	"github.com/spf13/cobra"
@@ -267,12 +268,21 @@ and an optional --full flag that returns complete run objects.`,
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
+		log := logging.For(LoggerFrom(ctx), "run-list")
 
 		testID, _ := cmd.Flags().GetString("test-id")
 		limit, _ := cmd.Flags().GetInt("limit")
 		before, _ := cmd.Flags().GetFloat64("before")
 		after, _ := cmd.Flags().GetFloat64("after")
 		full, _ := cmd.Flags().GetBool("full")
+
+		log.Debug().
+			Str("test_id", testID).
+			Int("limit", limit).
+			Float64("before", before).
+			Float64("after", after).
+			Bool("full", full).
+			Msg("listing runs for test")
 
 		route := fmt.Sprintf(api.TestRunsList, testID)
 
@@ -293,8 +303,11 @@ and an optional --full flag that returns complete run objects.`,
 			addParam("full", "1")
 		}
 
+		log.Debug().Str("test_id", testID).Str("route", route).Msg("fetching run list from API")
+
 		req, err := client.NewRequest(ctx, "GET", route, nil)
 		if err != nil {
+			log.Error().Err(err).Str("test_id", testID).Str("route", route).Msg("failed to build request")
 			return err
 		}
 
@@ -303,15 +316,19 @@ and an optional --full flag that returns complete run objects.`,
 			// Output as raw JSON.
 			result, err := api.DoJSON[json.RawMessage](client, req)
 			if err != nil {
+				log.Error().Err(err).Str("test_id", testID).Msg("failed to fetch full run list")
 				return err
 			}
+			log.Info().Str("test_id", testID).Msg("full run list fetched successfully")
 			return out.Write(result)
 		}
 
 		result, err := api.DoJSON[[]models.RunMeta](client, req)
 		if err != nil {
+			log.Error().Err(err).Str("test_id", testID).Msg("failed to fetch run list")
 			return err
 		}
+		log.Info().Str("test_id", testID).Int("count", len(result)).Msg("run list fetched successfully")
 		return out.Write(models.NewTabularSlice(result))
 	},
 }
@@ -330,24 +347,34 @@ var getRunTypeCmd = &cobra.Command{
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
 		c := CacheFrom(ctx)
+		log := logging.For(LoggerFrom(ctx), "run-get-type")
 
 		runID, _ := cmd.Flags().GetString("run-id")
+		log.Debug().Str("run_id", runID).Msg("fetching run type")
+
 		cacheKey := cache.RunTypeKey(runID)
 
 		if cached, _, err := cache.Get[models.RunType](c, cacheKey); isCacheable(err) {
+			log.Debug().Str("run_id", runID).Str("run_type", cached.RunType).Msg("run type served from cache")
 			return out.Write(models.NewTabularSlice([]models.RunType{cached}))
 		}
 
 		route := fmt.Sprintf(api.TestRunGetType, runID)
+		log.Debug().Str("run_id", runID).Str("route", route).Msg("fetching run type from API")
 		req, err := client.NewRequest(ctx, "GET", route, nil)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Str("route", route).Msg("failed to build request")
 			return err
 		}
 		result, err := api.DoJSON[models.RunType](client, req)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Msg("failed to fetch run type")
 			return err
 		}
-		_ = cache.Set(c, cacheKey, result, route, cache.TTLRunType)
+		if cacheErr := cache.Set(c, cacheKey, result, route, cache.TTLRunType); cacheErr != nil {
+			log.Warn().Err(cacheErr).Str("run_id", runID).Msg("failed to cache run type")
+		}
+		log.Info().Str("run_id", runID).Str("run_type", result.RunType).Msg("run type fetched successfully")
 		return out.Write(models.NewTabularSlice([]models.RunType{result}))
 	},
 }
@@ -375,9 +402,12 @@ For additional information use the dedicated subcommands:
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
 		c := CacheFrom(ctx)
+		log := logging.For(LoggerFrom(ctx), "run-get")
 
 		runType, _ := cmd.Flags().GetString("type")
 		runID, _ := cmd.Flags().GetString("run-id")
+
+		log.Debug().Str("run_id", runID).Str("type_flag", runType).Msg("fetching run summary")
 
 		// Auto-resolve run type when --type is not provided.
 		if runType == "" {
@@ -385,27 +415,37 @@ For additional information use the dedicated subcommands:
 			typeKey := cache.RunTypeKey(runID)
 			if cached, _, err := cache.Get[models.RunType](c, typeKey); isCacheable(err) {
 				runType = cached.RunType
+				log.Debug().Str("run_id", runID).Str("run_type", runType).Msg("run type resolved from cache")
 			} else {
+				log.Debug().Str("run_id", runID).Msg("resolving run type from API")
 				var resolveErr error
 				runType, resolveErr = ResolveRunType(ctx, client, runID)
 				if resolveErr != nil {
+					log.Error().Err(resolveErr).Str("run_id", runID).Msg("failed to resolve run type")
 					return resolveErr
 				}
+				log.Debug().Str("run_id", runID).Str("run_type", runType).Msg("run type resolved from API")
 				// Cache the resolved type with the long TTL.
-				_ = cache.Set(c, typeKey, models.RunType{RunType: runType}, fmt.Sprintf(api.TestRunGetType, runID), cache.TTLRunType)
+				if cacheErr := cache.Set(c, typeKey, models.RunType{RunType: runType}, fmt.Sprintf(api.TestRunGetType, runID), cache.TTLRunType); cacheErr != nil {
+					log.Warn().Err(cacheErr).Str("run_id", runID).Msg("failed to cache run type")
+				}
 			}
 		}
 
 		route := fmt.Sprintf(api.TestRunGet, runType, runID)
+		log.Debug().Str("run_id", runID).Str("run_type", runType).Str("route", route).Msg("fetching run from API")
 		req, err := client.NewRequest(ctx, "GET", route, nil)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Str("route", route).Msg("failed to build request")
 			return err
 		}
 
 		result, err := DispatchDetails(runType, client, req)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Str("run_type", runType).Msg("failed to fetch run")
 			return err
 		}
+		log.Info().Str("run_id", runID).Str("run_type", runType).Msg("run fetched successfully")
 		return out.Write(result)
 	},
 }
@@ -424,24 +464,34 @@ var activityCmd = &cobra.Command{
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
 		c := CacheFrom(ctx)
+		log := logging.For(LoggerFrom(ctx), "run-activity")
 
 		runID, _ := cmd.Flags().GetString("run-id")
+		log.Debug().Str("run_id", runID).Msg("fetching run activity")
+
 		cacheKey := cache.ActivityKey(runID)
 
 		if cached, _, err := cache.Get[models.ActivityResponse](c, cacheKey); isCacheable(err) {
+			log.Debug().Str("run_id", runID).Msg("activity served from cache")
 			return out.Write(cached)
 		}
 
 		route := fmt.Sprintf(api.TestRunActivity, runID)
+		log.Debug().Str("run_id", runID).Str("route", route).Msg("fetching activity from API")
 		req, err := client.NewRequest(ctx, "GET", route, nil)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Str("route", route).Msg("failed to build request")
 			return err
 		}
 		result, err := api.DoJSON[models.ActivityResponse](client, req)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Msg("failed to fetch activity")
 			return err
 		}
-		_ = cache.Set(c, cacheKey, result, route, cache.TTLActivity)
+		if cacheErr := cache.Set(c, cacheKey, result, route, cache.TTLActivity); cacheErr != nil {
+			log.Warn().Err(cacheErr).Str("run_id", runID).Msg("failed to cache activity")
+		}
+		log.Info().Str("run_id", runID).Msg("activity fetched successfully")
 		// ActivityResponse has a manual Tabular implementation.
 		return out.Write(result)
 	},
@@ -461,18 +511,24 @@ var resultsCmd = &cobra.Command{
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
 		c := CacheFrom(ctx)
+		log := logging.For(LoggerFrom(ctx), "run-results")
 
 		testID, _ := cmd.Flags().GetString("test-id")
 		runID, _ := cmd.Flags().GetString("run-id")
+		log.Debug().Str("test_id", testID).Str("run_id", runID).Msg("fetching run results")
+
 		cacheKey := cache.ResultsKey(testID, runID)
 
 		if cached, _, err := cache.Get[models.FetchResultsResponse](c, cacheKey); isCacheable(err) {
+			log.Debug().Str("run_id", runID).Msg("results served from cache")
 			return out.Write(cached)
 		}
 
 		route := fmt.Sprintf(api.TestRunFetchResults, testID, runID)
+		log.Debug().Str("run_id", runID).Str("route", route).Msg("fetching results from API")
 		req, err := client.NewRequest(ctx, "GET", route, nil)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Str("route", route).Msg("failed to build request")
 			return err
 		}
 
@@ -480,25 +536,33 @@ var resultsCmd = &cobra.Command{
 		// "response"), so we do the HTTP call and JSON decoding ourselves.
 		resp, err := client.Do(req)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Msg("API request for results failed")
 			return err
 		}
 		defer func() { _ = resp.Body.Close() }()
 
 		raw, err := io.ReadAll(resp.Body)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Msg("failed to read results response body")
 			return fmt.Errorf("reading response body: %w", err)
 		}
 
 		var envelope models.FetchResultsEnvelope
 		if err := json.Unmarshal(raw, &envelope); err != nil {
+			log.Error().Err(err).Str("run_id", runID).Msg("failed to decode results response")
 			return fmt.Errorf("decoding response: %w", err)
 		}
 		if envelope.Status != "ok" {
-			return fmt.Errorf("server returned status %q", envelope.Status)
+			err := fmt.Errorf("server returned status %q", envelope.Status)
+			log.Error().Err(err).Str("run_id", runID).Str("status", envelope.Status).Msg("unexpected status in results response")
+			return err
 		}
 
 		result := models.FetchResultsResponse{Tables: envelope.Tables}
-		_ = cache.Set(c, cacheKey, result, route, cache.TTLResults)
+		if cacheErr := cache.Set(c, cacheKey, result, route, cache.TTLResults); cacheErr != nil {
+			log.Warn().Err(cacheErr).Str("run_id", runID).Msg("failed to cache results")
+		}
+		log.Info().Str("test_id", testID).Str("run_id", runID).Int("table_count", len(result.Tables)).Msg("results fetched successfully")
 		return out.Write(result)
 	},
 }
@@ -517,24 +581,34 @@ var runCommentsCmd = &cobra.Command{
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
 		c := CacheFrom(ctx)
+		log := logging.For(LoggerFrom(ctx), "run-comments")
 
 		runID, _ := cmd.Flags().GetString("run-id")
+		log.Debug().Str("run_id", runID).Msg("fetching run comments")
+
 		cacheKey := cache.RunCommentsKey(runID)
 
 		if cached, _, err := cache.Get[models.CommentListResponse](c, cacheKey); isCacheable(err) {
+			log.Debug().Str("run_id", runID).Msg("comments served from cache")
 			return out.Write(models.NewTabularSlice(cached))
 		}
 
 		route := fmt.Sprintf(api.TestRunComments, runID)
+		log.Debug().Str("run_id", runID).Str("route", route).Msg("fetching comments from API")
 		req, err := client.NewRequest(ctx, "GET", route, nil)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Str("route", route).Msg("failed to build request")
 			return err
 		}
 		result, err := api.DoJSON[models.CommentListResponse](client, req)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Msg("failed to fetch comments")
 			return err
 		}
-		_ = cache.Set(c, cacheKey, result, route, cache.TTLComments)
+		if cacheErr := cache.Set(c, cacheKey, result, route, cache.TTLComments); cacheErr != nil {
+			log.Warn().Err(cacheErr).Str("run_id", runID).Msg("failed to cache comments")
+		}
+		log.Info().Str("run_id", runID).Int("count", len(result)).Msg("comments fetched successfully")
 		return out.Write(models.NewTabularSlice(result))
 	},
 }
@@ -553,24 +627,34 @@ var runPytestResultsCmd = &cobra.Command{
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
 		c := CacheFrom(ctx)
+		log := logging.For(LoggerFrom(ctx), "run-pytest-results")
 
 		runID, _ := cmd.Flags().GetString("run-id")
+		log.Debug().Str("run_id", runID).Msg("fetching pytest results")
+
 		cacheKey := cache.PytestResultsKey(runID)
 
 		if cached, _, err := cache.Get[models.PytestResultListResponse](c, cacheKey); isCacheable(err) {
+			log.Debug().Str("run_id", runID).Msg("pytest results served from cache")
 			return out.Write(models.NewTabularSlice(cached))
 		}
 
 		route := fmt.Sprintf(api.TestRunPytestResults, runID)
+		log.Debug().Str("run_id", runID).Str("route", route).Msg("fetching pytest results from API")
 		req, err := client.NewRequest(ctx, "GET", route, nil)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Str("route", route).Msg("failed to build request")
 			return err
 		}
 		result, err := api.DoJSON[models.PytestResultListResponse](client, req)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Msg("failed to fetch pytest results")
 			return err
 		}
-		_ = cache.Set(c, cacheKey, result, route, cache.TTLPytestResults)
+		if cacheErr := cache.Set(c, cacheKey, result, route, cache.TTLPytestResults); cacheErr != nil {
+			log.Warn().Err(cacheErr).Str("run_id", runID).Msg("failed to cache pytest results")
+		}
+		log.Info().Str("run_id", runID).Int("count", len(result)).Msg("pytest results fetched successfully")
 		return out.Write(models.NewTabularSlice(result))
 	},
 }
@@ -599,24 +683,34 @@ var getCommentCmd = &cobra.Command{
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
 		c := CacheFrom(ctx)
+		log := logging.For(LoggerFrom(ctx), "comment-get")
 
 		commentID, _ := cmd.Flags().GetString("comment-id")
+		log.Debug().Str("comment_id", commentID).Msg("fetching comment")
+
 		cacheKey := cache.CommentKey(commentID)
 
 		if cached, _, err := cache.Get[models.Comment](c, cacheKey); isCacheable(err) {
+			log.Debug().Str("comment_id", commentID).Msg("comment served from cache")
 			return out.Write(models.NewKVTabular(cached))
 		}
 
 		route := fmt.Sprintf(api.CommentGet, commentID)
+		log.Debug().Str("comment_id", commentID).Str("route", route).Msg("fetching comment from API")
 		req, err := client.NewRequest(ctx, "GET", route, nil)
 		if err != nil {
+			log.Error().Err(err).Str("comment_id", commentID).Str("route", route).Msg("failed to build request")
 			return err
 		}
 		result, err := api.DoJSON[models.Comment](client, req)
 		if err != nil {
+			log.Error().Err(err).Str("comment_id", commentID).Msg("failed to fetch comment")
 			return err
 		}
-		_ = cache.Set(c, cacheKey, result, route, cache.TTLComments)
+		if cacheErr := cache.Set(c, cacheKey, result, route, cache.TTLComments); cacheErr != nil {
+			log.Warn().Err(cacheErr).Str("comment_id", commentID).Msg("failed to cache comment")
+		}
+		log.Info().Str("comment_id", commentID).Msg("comment fetched successfully")
 		return out.Write(models.NewKVTabular(result))
 	},
 }

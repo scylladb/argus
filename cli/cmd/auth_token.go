@@ -22,7 +22,7 @@ You probably want to use this for local and dev deployments as production deploy
 			log.Warn().Msg("cloudflare auth enabled; login with auth instead.")
 		}
 		if len(args) == 0 {
-			log.Err(nil).Msg("Token not provided")
+			log.Error().Msg("token not provided")
 			return nil
 		}
 		tok := args[0]
