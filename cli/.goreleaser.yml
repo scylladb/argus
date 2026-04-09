@@ -8,11 +8,10 @@ project_name: argus
 changelog:
     disable: true
 
-# Run from repo root, so tidy the module relative to the cli/ dir.
-before:
-    hooks:
-        - sh -c "cd cli && go mod tidy"
-
+# NOTE: `go mod tidy` was deliberately removed from before.hooks.
+# Running it during release can silently modify go.sum, meaning the binary
+# would not be built from the exact committed state.  Enforce tidy in CI
+# checks or pre-tag scripts instead.
 builds:
     - id: argus
       # GoReleaser is invoked from the repo root; point it at the cli/ module.
@@ -52,9 +51,15 @@ archives:
           - goos: windows
             formats:
                 - zip
+      # Use src glob syntax so that missing files are silently skipped
+      # instead of causing a hard error.
       files:
-          - cli/LICENSE*
-          - cli/README*
+          - src: "cli/LICENSE*"
+            dst: .
+            strip_parent: true
+          - src: "cli/README*"
+            dst: .
+            strip_parent: true
 
 checksum:
     name_template: "argus_{{ .Version }}_checksums.txt"
