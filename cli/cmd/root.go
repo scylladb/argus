@@ -147,7 +147,7 @@ var rootCmd = &cobra.Command{
 		}()
 
 		// ---- API client ----------------------------------------------
-		client, buildErr := buildAPIClientRaw(cfg)
+		client, buildErr := buildAPIClientRaw(ctx, cfg)
 		if buildErr != nil {
 			return buildErr
 		}
@@ -173,9 +173,12 @@ var rootCmd = &cobra.Command{
 //
 //  1. PAT from keychain
 //  2. Session cookie from keychain
-//  3. ARGUS_TOKEN env var
-//  4. CF Access service-account credentials from env
-func buildAPIClientRaw(cfg *config.Config) (*api.Client, error) {
+//  3. Cached Cloudflare Access JWT from cloudflared's local token cache
+//  4. ARGUS_TOKEN env var
+//  5. CF Access service-account credentials from env
+//
+// The optional extraOpts are appended last, after all other options.
+func buildAPIClientRaw(ctx context.Context, cfg *config.Config, extraOpts ...api.ClientOption) (*api.Client, error) {
 	var apiOpts []api.ClientOption
 
 	if !cfg.UseCf {
@@ -191,6 +194,14 @@ func buildAPIClientRaw(cfg *config.Config) (*api.Client, error) {
 		} else if session, err := keychain.Load(); err == nil {
 			apiOpts = append(apiOpts, api.WithSession(session))
 		}
+
+		// Attach the cached Cloudflare Access JWT so requests pass through
+		// the CF Access layer that sits in front of the Argus backend.
+		// This is a best-effort read from cloudflared's local token cache
+		// (~/.cloudflared/) — no network call or browser interaction.
+		if cfToken, err := cachedCFToken(ctx, cfg.URL); err == nil {
+			apiOpts = append(apiOpts, api.WithCFToken(cfToken))
+		}
 	}
 
 	if token := os.Getenv("ARGUS_TOKEN"); token != "" {
@@ -204,11 +215,30 @@ func buildAPIClientRaw(cfg *config.Config) (*api.Client, error) {
 		}
 	}
 
+	apiOpts = append(apiOpts, extraOpts...)
+
 	client, err := api.New(cfg.URL, apiOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("%w %q: %w", ErrInvalidURL, cfg.URL, err)
 	}
 	return client, nil
+}
+
+// cachedCFToken attempts to read a valid Cloudflare Access JWT from
+// cloudflared's local token cache.  It locates the cloudflared binary (PATH
+// or managed cache) and delegates to [auth.ArgusService.CachedCFToken].
+//
+// This is best-effort: if cloudflared is not installed, not on PATH, or the
+// cached token is expired/missing, it returns an error and the caller should
+// proceed without the CF token (the auth-retry mechanism will handle it).
+func cachedCFToken(ctx context.Context, argusURL string) (string, error) {
+	cfSvc := services.NewCloudflaredService()
+	binPath, err := cfSvc.Ensure(ctx)
+	if err != nil {
+		return "", err
+	}
+	argusSvc := auth.NewArgusService(argusURL, binPath)
+	return argusSvc.CachedCFToken(ctx)
 }
 
 // isUnauthorizedErr reports whether err is (or wraps) an unauthorized /
@@ -267,7 +297,7 @@ func runWithAuthRetry(cmd *cobra.Command, args []string, fn func(*cobra.Command,
 	}
 
 	// Rebuild client with fresh credentials.
-	newClient, buildErr := buildAPIClientRaw(cfg)
+	newClient, buildErr := buildAPIClientRaw(ctx, cfg)
 	if buildErr != nil {
 		return fmt.Errorf("re-auth: building client: %w", buildErr)
 	}
