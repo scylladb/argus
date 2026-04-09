@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -28,6 +29,10 @@ var (
 	// ErrWritingConfigFile is returned when the initial config file cannot be
 	// written on first run.
 	ErrWritingConfigFile = errors.New("config: writing config file")
+
+	// ErrUnknownKey is returned by [Set] and [Get] when the supplied key is
+	// not a recognised config key.
+	ErrUnknownKey = errors.New("config: unknown key")
 )
 
 // Config holds all runtime configuration for the Argus CLI.
@@ -142,4 +147,88 @@ func writeNewConfig(v *viper.Viper, path string) error {
 // wrapped inside a Viper error but are not ConfigFileNotFoundError.
 func isNotExist(err error) bool {
 	return errors.Is(err, os.ErrNotExist)
+}
+
+// Keys returns the sorted list of recognised config key names.
+func Keys() []string {
+	out := make([]string, 0, len(configKeys))
+	for k := range configKeys {
+		out = append(out, k)
+	}
+	// Deterministic order.
+	sort.Strings(out)
+	return out
+}
+
+// IsValidKey reports whether key is a recognised config key.
+func IsValidKey(key string) bool {
+	_, ok := configKeys[key]
+	return ok
+}
+
+// Set updates a single config key on disk (in the default or user-supplied
+// config file) without disturbing other keys.  value is stored as a string;
+// Viper/mapstructure will coerce it to the correct Go type when the config is
+// next loaded.
+//
+// cfgFile may be empty to use the default XDG path.
+func Set(cfgFile, key, value string) error {
+	if !IsValidKey(key) {
+		return fmt.Errorf("%w: %q (valid keys: %v)", ErrUnknownKey, key, Keys())
+	}
+
+	v, path := newFileViper(cfgFile)
+	// Best-effort read of existing file so we don't clobber other keys.
+	_ = v.ReadInConfig()
+
+	v.Set(key, value)
+	return writeNewConfig(v, path)
+}
+
+// Get reads a single config key from disk and returns its string
+// representation.  cfgFile may be empty to use the default XDG path.
+func Get(cfgFile, key string) (string, error) {
+	if !IsValidKey(key) {
+		return "", fmt.Errorf("%w: %q (valid keys: %v)", ErrUnknownKey, key, Keys())
+	}
+
+	v, _ := newFileViper(cfgFile)
+	// Apply defaults so we always return something meaningful.
+	v.SetDefault("url", "https://argus.scylladb.com")
+	v.SetDefault("use_cloudflare", true)
+	_ = v.ReadInConfig()
+
+	return v.GetString(key), nil
+}
+
+// GetAll returns all config key-value pairs as a map.  cfgFile may be empty.
+func GetAll(cfgFile string) map[string]string {
+	v, _ := newFileViper(cfgFile)
+	v.SetDefault("url", "https://argus.scylladb.com")
+	v.SetDefault("use_cloudflare", true)
+	_ = v.ReadInConfig()
+
+	out := make(map[string]string, len(configKeys))
+	for k := range configKeys {
+		out[k] = v.GetString(k)
+	}
+	return out
+}
+
+// newFileViper creates a Viper instance pointed at the config file, suitable
+// for reading or writing individual keys without flag/env interference.
+func newFileViper(cfgFile string) (*viper.Viper, string) {
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	var path string
+	if cfgFile != "" {
+		v.SetConfigFile(cfgFile)
+		path = cfgFile
+	} else {
+		v.AddConfigPath(ConfigDir())
+		v.SetConfigName("config")
+		path = filepath.Join(ConfigDir(), "config.yaml")
+	}
+	return v, path
 }
