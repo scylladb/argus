@@ -23,7 +23,7 @@ jobs:
             prev_tag: ${{ steps.prev_tag.outputs.tag }}
 
         steps:
-            - name: Checkout (full history required for changelog)
+            - name: Checkout
               uses: actions/checkout@v4
               with:
                   fetch-depth: 0
@@ -34,13 +34,11 @@ jobs:
               run: |
                   CURRENT_TAG="${GITHUB_REF_NAME}"   # e.g. cli/v1.2.0
 
-                  # List all cli/v* tags, exclude the current one, sort semantically,
-                  # then keep only tags that sort before the current tag and take
-                  # the highest — i.e. the immediate predecessor.
-                  PREV=$(git tag --list 'cli/v*' \
+                  # List cli/v* tags reachable from HEAD, exclude the current one,
+                  # sort semantically and take the highest — i.e. the immediate predecessor.
+                  PREV=$(git tag --merged HEAD --list 'cli/v*' \
                            | grep -v "^${CURRENT_TAG}$" \
                            | sort -V \
-                           | awk -v cur="$CURRENT_TAG" '$0 < cur' \
                            | tail -1)
 
                   if [[ -z "$PREV" ]]; then
