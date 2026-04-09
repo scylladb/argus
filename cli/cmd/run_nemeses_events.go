@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
 	"time"
 
@@ -121,6 +122,53 @@ func tsFromFlag(s string) int64 {
 	return v
 }
 
+// deduplicateEvents aggregates duplicate events into their originals.
+// Duplicate events (DuplicateID != "") are removed from the output; their
+// timestamps are collected into the RepeatedAt field of the original event.
+//
+// When the original event is absent (e.g. filtered out by a time range), the
+// earliest duplicate is promoted to stand in as the original and the remaining
+// duplicates' timestamps are collected into its RepeatedAt field.
+func deduplicateEvents(events []models.SCTEvent) []models.SCTEvent {
+	idxByEventID := make(map[string]int, len(events))
+	originals := make([]models.SCTEvent, 0, len(events))
+
+	for _, e := range events {
+		if e.DuplicateID == "" {
+			idxByEventID[e.EventID] = len(originals)
+			originals = append(originals, e)
+		}
+	}
+
+	// Group orphaned duplicates (original not in the set) by DuplicateID.
+	orphans := make(map[string][]models.SCTEvent)
+	for _, e := range events {
+		if e.DuplicateID == "" {
+			continue
+		}
+		if idx, ok := idxByEventID[e.DuplicateID]; ok {
+			originals[idx].RepeatedAt = append(originals[idx].RepeatedAt, e.Ts)
+		} else {
+			orphans[e.DuplicateID] = append(orphans[e.DuplicateID], e)
+		}
+	}
+
+	// Promote the earliest orphan in each group; rest become its repeats.
+	for _, group := range orphans {
+		sort.Slice(group, func(i, j int) bool {
+			return group[i].Ts < group[j].Ts
+		})
+		promoted := group[0]
+		promoted.DuplicateID = ""
+		for _, dup := range group[1:] {
+			promoted.RepeatedAt = append(promoted.RepeatedAt, dup.Ts)
+		}
+		originals = append(originals, promoted)
+	}
+
+	return originals
+}
+
 // ---------------------------------------------------------------------------
 // Subcommand: run events
 // ---------------------------------------------------------------------------
@@ -196,8 +244,10 @@ Only SCT runs have per-event records; for other plugin types use
 			allEvents = append(allEvents, severityEvents...)
 		}
 
+		allEvents = deduplicateEvents(allEvents)
+
 		log.Info().Str("run_id", runID).Int("total_events", len(allEvents)).Msg("SCT events fetched successfully")
-		return out.Write(models.NewTabularSlice(allEvents))
+		return out.Write(models.SCTEventsResponse{RunID: runID, Events: allEvents})
 	},
 }
 

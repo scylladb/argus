@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -207,6 +208,7 @@ type SCTEvent struct {
 	TargetNode        string           `json:"target_node"`
 	NemesisStatus     string           `json:"nemesis_status"`
 	KnownIssue        string           `json:"known_issue"`
+	RepeatedAt        []string         `json:"repeated_at,omitempty"`
 }
 
 // SCTTestRun is the full run response for the scylla-cluster-tests plugin.
@@ -593,7 +595,7 @@ type SCTEventsResponse struct {
 
 // Headers implements output.Tabular for SCTEventsResponse.
 func (SCTEventsResponse) Headers() []string {
-	return []string{"Severity", "Timestamp", "Type", "Node", "Nemesis", "Message"}
+	return []string{"Severity", "Timestamp", "Type", "Node", "Nemesis", "Repeats", "Message"}
 }
 
 // Rows implements output.Tabular for SCTEventsResponse.
@@ -604,12 +606,17 @@ func (r SCTEventsResponse) Rows() [][]string {
 		if len(msg) > 200 {
 			msg = msg[:200] + "..."
 		}
+		repeats := ""
+		if n := len(e.RepeatedAt); n > 0 {
+			repeats = strconv.Itoa(n)
+		}
 		rows = append(rows, []string{
 			string(e.Severity),
 			e.Ts,
 			e.EventType,
 			e.Node,
 			e.NemesisName,
+			repeats,
 			msg,
 		})
 	}
