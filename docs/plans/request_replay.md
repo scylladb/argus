@@ -94,7 +94,7 @@ Using `unittest.mock.MagicMock` as a production fallback is an anti-pattern. It 
 **Proposed replacement:** If argus client initialization fails (network error, auth error, etc.), the client should either:
 
 1. **Fail the test** — if the team decides argus data is mandatory, the test should not run without it. This is the safest option for preventing silent data loss.
-2. **Switch to replay-only mode** — the `ArgusClient` is still instantiated with a valid `ReplayLog`, but all HTTP calls are skipped. The replay log records every intended request with `"success": false`. When argus recovers, the entire test run can be reconstructed from the JSONL file via `argus replay` or the server-side ingest endpoint (Section 6.4). This gives the same graceful degradation as MagicMock but with **zero data loss**.
+2. **Switch to replay-only mode** — the `ArgusClient` is still instantiated with a valid `ReplayLog`, but all HTTP calls are skipped. The replay log records every intended request with `"success": false`. When argus recovers, the entire test run can be reconstructed from the JSONL file via `argus replay` or the server-side ingest endpoint (Section 7). This gives the same graceful degradation as MagicMock but with **zero data loss**.
 
 The replay-only mode is implemented at the `ArgusClient` level — no changes needed in consumer projects. The client constructor accepts a `replay_only: bool` flag (or detects it from a failed health check), and `get()`/`post()` skip the HTTP call but still write to the replay log.
 
@@ -146,7 +146,7 @@ All node-level argus operations (`_add_node_to_argus`, `update_shards_in_argus`,
 | Data Type           | Previous Recovery                        | With Replay Log                               |
 | ------------------- | ---------------------------------------- | --------------------------------------------- |
 | Events (real-time)  | None — fire-and-forget                   | Captured in JSONL replay log                  |
-| Events (batch)      | `argus_offline_collect_events` — removed | Replaced by replay log                        |
+| Events (batch)      | `argus_offline_collect_events`           | Replaced by replay log                        |
 | Test run submission | None                                     | Captured in JSONL                             |
 | Test status         | None                                     | Captured in JSONL                             |
 | Results/performance | None                                     | Captured in JSONL                             |
@@ -491,38 +491,33 @@ The CLI implementation details (package structure, command wiring) are handled i
 
 ## 6. Endpoint Idempotency Classification
 
-Each API endpoint is classified into one of four replay strategies. The server-side ingest service uses this classification when processing each JSONL entry.
+Each API endpoint is classified into one of three replay strategies. The server-side ingest service uses this classification when processing each JSONL entry.
 
 ### 6.1 SAFE — Replay Freely
 
 These endpoints are idempotent or last-write-wins. Replaying them multiple times produces the same result.
 
-| Endpoint                                    | Client Methods                                                |
-| ------------------------------------------- | ------------------------------------------------------------- |
-| `/testrun/$type/$id/set_status`             | `set_status()`, `set_sct_run_status()`, `set_matrix_status()` |
-| `/testrun/$type/$id/update_product_version` | `update_product_version()`, `update_scylla_version()`         |
-| `/sct/$id/sct_runner/set`                   | `set_sct_runner()`                                            |
-| `/testrun/$type/$id/logs/submit`            | `submit_logs()`, `submit_sct_logs()`                          |
-| `/sct/$id/screenshots/submit`               | `submit_screenshots()`                                        |
-| `/sct/$id/packages/submit`                  | `submit_packages()`                                           |
-| `/sct/$id/resource/$name/update`            | `update_resource()`                                           |
-| `/sct/$id/resource/$name/shards`            | `update_shards_for_resource()`                                |
-| `/$id/config/submit`                        | `sct_submit_config()`                                         |
-| `/driver_matrix/env/submit`                 | `submit_env()`                                                |
-| `/testrun/$type/$id/submit_results`         | `submit_results()` — keyed by table name, overwrites          |
+| Endpoint                                    | Client Methods                                                                                                    |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `/testrun/$type/$id/set_status`             | `set_status()`, `set_sct_run_status()`, `set_matrix_status()`                                                     |
+| `/testrun/$type/$id/update_product_version` | `update_product_version()`, `update_scylla_version()`                                                             |
+| `/testrun/$type/submit`                     | `submit_run()`, `submit_sct_run()`, `submit_generic_run()`, `submit_driver_matrix_run()`, `submit_sirenada_run()` |
+| `/sct/$id/sct_runner/set`                   | `set_sct_runner()`                                                                                                |
+| `/testrun/$type/$id/logs/submit`            | `submit_logs()`, `submit_sct_logs()`                                                                              |
+| `/sct/$id/screenshots/submit`               | `submit_screenshots()`                                                                                            |
+| `/sct/$id/packages/submit`                  | `submit_packages()`                                                                                               |
+| `/sct/$id/resource/create`                  | `create_resource()` — deduplicates by resource name                                                               |
+| `/sct/$id/resource/$name/update`            | `update_resource()`                                                                                               |
+| `/sct/$id/resource/$name/shards`            | `update_shards_for_resource()`                                                                                    |
+| `/$id/config/submit`                        | `sct_submit_config()`                                                                                             |
+| `/driver_matrix/env/submit`                 | `submit_env()`                                                                                                    |
+| `/testrun/$type/$id/submit_results`         | `submit_results()` — keyed by table name, overwrites                                                              |
 
 > **Note:** For heartbeat calls (`/testrun/$type/$id/heartbeat`), only the **last** heartbeat record is replayed. This sets the heartbeat timestamp to the expected final value without replaying every intermediate heartbeat (which would serve no purpose after the test has finished).
 
-### 6.2 CHECK_FIRST — Verify Before Replay
+> **Sirenada bug:** `submit_sirenada_run` (`argus/backend/plugins/sirenada/model.py`) appends to `run.results` without dedup when the run already exists — replaying it duplicates results. The other list fields (`sirenada_test_ids`, `browsers`, `clusters`, `s3_folder_ids`) already have `not in` guards. Fix: add the same `not in` guard to `results` before appending. This should be done as a prerequisite in Phase 2.
 
-These endpoints create new entities. Replaying when the entity already exists would cause errors or duplicates.
-
-| Endpoint                   | Check Method                                | Client Methods                                                                                                    |
-| -------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `/testrun/$type/submit`    | `GET /testrun/$type/$id/get` — if 200, skip | `submit_run()`, `submit_sct_run()`, `submit_generic_run()`, `submit_driver_matrix_run()`, `submit_sirenada_run()` |
-| `/sct/$id/resource/create` | Check by resource name in run data          | `create_resource()`                                                                                               |
-
-### 6.3 APPEND — Naturally Idempotent
+### 6.2 APPEND — Naturally Idempotent
 
 These endpoints append records. The backend endpoints are inherently idempotent — duplicate submissions with identical payloads are handled gracefully (either ignored or produce the same result).
 
@@ -538,7 +533,7 @@ These endpoints append records. The backend endpoints are inherently idempotent 
 | `/sct/$id/gemini/submit`       | `submit_gemini_results()`      |
 | `/sct/$id/performance/submit`  | `submit_performance_results()` |
 
-### 6.4 SKIP — Do Not Replay
+### 6.3 SKIP — Do Not Replay
 
 These endpoints have side effects beyond Argus state. They are always skipped during replay.
 
@@ -603,10 +598,6 @@ Content-Type: application/x-tar-zstd
 - Add `replay_only` mode: `get()` and `post()` skip the HTTP call but still write to the replay log
 - Wrap `post()` with `self._replay_log.record(...)` context manager
 
-**Remove from `argus/client/sct/client.py`:**
-
-- `submit_events()` method (legacy aggregated severity/count)
-
 **New file:** `argus/client/tests/test_replay_log.py`
 
 - JSONL format correctness (single line per request, all fields present)
@@ -615,11 +606,15 @@ Content-Type: application/x-tar-zstd
 - Multiple files for the same run do not interfere
 - Writer thread clean shutdown via `close()`
 
-### Phase 2: Backend Terminal Status Auto-Finalize
+### Phase 2: Backend Changes
 
 **Modify:** `argus/backend/service/client_service.py`
 
 - In `update_run_status()`: if status is terminal, set `end_time = now()` when not already set
+
+**Fix:** `argus/backend/plugins/sirenada/model.py`
+
+- In `submit_sirenada_run()`: add dedup guard on `run.results` before appending (same `not in` pattern already used for `sirenada_test_ids`, `browsers`, `clusters`, `s3_folder_ids`)
 
 ### Phase 3: Remove SCT Self-Healing Code
 
