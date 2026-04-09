@@ -19,6 +19,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// SkipAuthRetryAnnotation is the cobra annotation key that, when present on a
+// command, prevents [wrapAllCommandsWithAuthRetry] from wrapping that command's
+// RunE with the transparent re-authentication logic.
+//
+// Commands that perform the authentication themselves (e.g. "auth",
+// "auth-token") or that never touch the API (e.g. "cache clear") should carry
+// this annotation.
+const SkipAuthRetryAnnotation = "skipAuthRetry"
+
 // ErrInvalidURL is returned when the resolved Argus service URL is not a valid
 // absolute URL.
 var ErrInvalidURL = errors.New("cmd: invalid argus URL")
@@ -152,23 +161,36 @@ var rootCmd = &cobra.Command{
 }
 
 // buildAPIClientRaw constructs an [api.Client] using credentials from the
-// keychain and environment, applying them in priority order:
+// keychain and environment, applying them in priority order.
+//
+// When use_cloudflare is disabled (headless mode):
+//
+//  1. Headless CF Access credentials from keychain (stored by "auth headless")
+//  2. ARGUS_TOKEN env var
+//  3. CF Access service-account credentials from env
+//
+// When use_cloudflare is enabled (cloudflared mode):
 //
 //  1. PAT from keychain
 //  2. Session cookie from keychain
-//  3. CF JWT from keychain (when CF is enabled)
-//  4. ARGUS_TOKEN env var
-//  5. CF Access service-account credentials from env
+//  3. ARGUS_TOKEN env var
+//  4. CF Access service-account credentials from env
 func buildAPIClientRaw(cfg *config.Config) (*api.Client, error) {
 	var apiOpts []api.ClientOption
-	if token, keychainErr := keychain.LoadPAT(); keychainErr == nil {
-		apiOpts = append(apiOpts, api.WithAPIToken(token))
-	} else if session, keychainErr := keychain.Load(); keychainErr == nil {
-		apiOpts = append(apiOpts, api.WithSession(session))
-	}
 
-	if cfCookie, keychainErr := keychain.LoadCFToken(); keychainErr == nil && cfg.UseCf {
-		apiOpts = append(apiOpts, api.WithCFToken(cfCookie))
+	if !cfg.UseCf {
+		// Headless mode: use CF Access service-token credentials from keychain.
+		if cfID, cfSecret, argusToken, err := keychain.LoadCFAccess(); err == nil {
+			apiOpts = append(apiOpts, api.WithCFAccessSecret(cfID, cfSecret))
+			apiOpts = append(apiOpts, api.WithAPIToken(argusToken))
+		}
+	} else {
+		// Cloudflared mode: use PAT or session from keychain.
+		if token, err := keychain.LoadPAT(); err == nil {
+			apiOpts = append(apiOpts, api.WithAPIToken(token))
+		} else if session, err := keychain.Load(); err == nil {
+			apiOpts = append(apiOpts, api.WithSession(session))
+		}
 	}
 
 	if token := os.Getenv("ARGUS_TOKEN"); token != "" {
@@ -195,18 +217,10 @@ func isUnauthorizedErr(err error) bool {
 	return errors.Is(err, api.ErrUnauthorized)
 }
 
-// RunWithAuthRetry wraps fn so that if it returns an unauthorized error and
+// runWithAuthRetry wraps fn so that if it returns an unauthorized error and
 // the command context does not have --non-interactive set, it triggers the
 // full login flow and retries fn once with a freshly built API client.
-//
-// Sub-commands that make API calls should wrap their logic with this helper:
-//
-//	RunE: func(cmd *cobra.Command, args []string) error {
-//	    return RunWithAuthRetry(cmd, args, func(cmd *cobra.Command, args []string) error {
-//	        // ... normal command logic ...
-//	    })
-//	},
-func RunWithAuthRetry(cmd *cobra.Command, args []string, fn func(*cobra.Command, []string) error) error {
+func runWithAuthRetry(cmd *cobra.Command, args []string, fn func(*cobra.Command, []string) error) error {
 	err := fn(cmd, args)
 	if err == nil {
 		return nil
@@ -228,16 +242,28 @@ func RunWithAuthRetry(cmd *cobra.Command, args []string, fn func(*cobra.Command,
 	log := LoggerFrom(ctx)
 	log.Info().Msg("session expired; re-authenticating")
 
-	if cfg.UseCf {
-		cfSvc := services.NewCloudflaredService()
-		binPath, cfErr := cfSvc.Ensure(ctx)
-		if cfErr != nil {
-			return fmt.Errorf("re-auth: locating cloudflared: %w", cfErr)
-		}
-		argusSvc := auth.NewArgusService(cfg.URL, binPath)
-		if loginErr := argusSvc.Login(ctx); loginErr != nil {
-			return fmt.Errorf("re-auth: login failed: %w", loginErr)
-		}
+	// Purge stale credentials from the keychain so the login flow does not
+	// short-circuit on the same invalid PAT / CF token that just failed.
+	_ = keychain.DeletePAT()
+	_ = keychain.Delete()
+
+	// When cloudflare is disabled the user is in headless mode — cloudflared
+	// cannot help.  The user needs to update the headless credentials.
+	if !cfg.UseCf {
+		return fmt.Errorf(
+			"re-auth: headless credentials are invalid or expired; " +
+				"run `argus auth headless` to update them",
+		)
+	}
+
+	cfSvc := services.NewCloudflaredService()
+	binPath, cfErr := cfSvc.Ensure(ctx)
+	if cfErr != nil {
+		return fmt.Errorf("re-auth: locating cloudflared: %w", cfErr)
+	}
+	argusSvc := auth.NewArgusService(cfg.URL, binPath)
+	if loginErr := argusSvc.Login(ctx); loginErr != nil {
+		return fmt.Errorf("re-auth: login failed: %w", loginErr)
 	}
 
 	// Rebuild client with fresh credentials.
@@ -251,9 +277,36 @@ func RunWithAuthRetry(cmd *cobra.Command, args []string, fn func(*cobra.Command,
 	return fn(cmd, args)
 }
 
+// wrapAllCommandsWithAuthRetry recursively walks the command tree rooted at
+// root and wraps every leaf command's RunE with [runWithAuthRetry] — unless the
+// command carries the [SkipAuthRetryAnnotation].
+//
+// This is called once from [ExecuteContext] before execution starts, so every
+// API-calling command gets transparent re-authentication for free without
+// having to remember to wrap its RunE manually.
+func wrapAllCommandsWithAuthRetry(root *cobra.Command) {
+	for _, child := range root.Commands() {
+		wrapAllCommandsWithAuthRetry(child) // recurse into sub-trees first
+
+		if child.RunE == nil {
+			continue
+		}
+		if _, skip := child.Annotations[SkipAuthRetryAnnotation]; skip {
+			continue
+		}
+		orig := child.RunE
+		child.RunE = func(cmd *cobra.Command, args []string) error {
+			return runWithAuthRetry(cmd, args, orig)
+		}
+	}
+}
+
 func ExecuteContext(ctx context.Context) error {
 	rootCmd.SetOut(os.Stdout)
 	rootCmd.SetErr(os.Stderr)
+
+	// Wrap every leaf command with transparent auth retry before execution.
+	wrapAllCommandsWithAuthRetry(rootCmd)
 
 	err := rootCmd.ExecuteContext(ctx)
 

@@ -74,6 +74,51 @@ func main() {
 	return binPath
 }
 
+// fakeCFBinDualToken compiles a stub cloudflared binary where:
+//   - `access token …` → prints tokenForAccess and exits 0.
+//   - `access login …` → prints loginToken (with a fake URL line) and exits 0.
+//
+// This is used to test the flow where `access token` returns an expired JWT
+// and `access login` must provide a fresh one.
+func fakeCFBinDualToken(t *testing.T, tokenForAccess, loginToken string) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	binPath := filepath.Join(dir, "cloudflared")
+
+	src := fmt.Sprintf(`package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func main() {
+	if len(os.Args) >= 3 && os.Args[1] == "access" {
+		switch os.Args[2] {
+		case "login":
+			fmt.Println("A browser window should have opened at the following URL:")
+			fmt.Println("https://example.cloudflareaccess.com/cdn-cgi/access/cli?fake=1")
+			fmt.Println(%q)
+			os.Exit(0)
+		case "token":
+			fmt.Println(%q)
+			os.Exit(0)
+		}
+	}
+	os.Exit(0)
+}
+`, loginToken, tokenForAccess)
+
+	srcFile := filepath.Join(dir, "main.go")
+	require.NoError(t, os.WriteFile(srcFile, []byte(src), 0o644))
+
+	out, err := exec.Command("go", "build", "-o", binPath, srcFile).CombinedOutput()
+	require.NoError(t, err, "failed to build fake cloudflared: %s", out)
+
+	return binPath
+}
+
 // makeJWT builds a minimal unsigned JWT with the given exp and iat Unix
 // timestamps. The header and signature are stubs — only the payload matters
 // for our tests. Pass iat=0 to omit the iat claim.
@@ -153,22 +198,30 @@ func newArgusTestServer(t *testing.T, cfJWT, sessionValue, patToken string) *htt
 
 // ---- tests -----------------------------------------------------------------
 
-// TestArgusService_Login_AlreadyCached verifies that Login is a no-op when a
-// PAT is already stored in the keychain (the primary fast-path).
-func TestArgusService_Login_AlreadyCached(t *testing.T) {
+// TestArgusService_Login_OverwritesCachedPAT verifies that Login always
+// performs the full cloudflared flow even when a PAT is already stored in
+// the keychain, replacing the old PAT with a freshly obtained one.
+func TestArgusService_Login_OverwritesCachedPAT(t *testing.T) {
 	setupMockKeyring(t)
-	require.NoError(t, keychain.StorePAT("existing-pat"))
+	require.NoError(t, keychain.StorePAT("stale-pat"))
 
-	// A server that must never be called.
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		t.Error("login endpoint should not be called when PAT is cached")
-	}))
-	t.Cleanup(srv.Close)
+	const wantSession = "fresh-session"
+	const wantPAT = "fresh-pat"
+	cfJWT := validJWT()
 
-	svc := auth.NewArgusService(srv.URL, "/does-not-matter",
+	// access token fails (no local cache), access login succeeds.
+	binPath := fakeCFBin(t, cfJWT, 0, 1)
+	srv := newArgusTestServer(t, cfJWT, wantSession, wantPAT)
+
+	svc := auth.NewArgusService(srv.URL, binPath,
 		auth.WithHTTPClient(srv.Client()),
 	)
 	require.NoError(t, svc.Login(t.Context()))
+
+	// The freshly obtained PAT must replace the stale one.
+	gotPAT, err := keychain.LoadPAT()
+	require.NoError(t, err)
+	assert.Equal(t, wantPAT, gotPAT)
 }
 
 // TestArgusService_Login_CFLoginFails verifies that a cloudflared access login
@@ -225,7 +278,8 @@ func TestArgusService_Login_HappyPath(t *testing.T) {
 	const wantPAT = "test-pat-token-abc"
 	cfJWT := validJWT()
 
-	binPath := fakeCFBin(t, cfJWT, 0, 0)
+	// access token fails (no local cache), access login succeeds.
+	binPath := fakeCFBin(t, cfJWT, 0, 1)
 	srv := newArgusTestServer(t, cfJWT, wantSession, wantPAT)
 
 	svc := auth.NewArgusService(srv.URL, binPath,
@@ -241,27 +295,22 @@ func TestArgusService_Login_HappyPath(t *testing.T) {
 	// The session should have been deleted after PAT exchange.
 	_, sessionErr := keychain.Load()
 	assert.Error(t, sessionErr, "session should be deleted after PAT is stored")
-
-	// CF token must also be stored in the keychain.
-	gotCF, err := keychain.LoadCFToken()
-	require.NoError(t, err)
-	assert.Equal(t, cfJWT, gotCF)
 }
 
 // TestArgusService_Login_UsesCachedCFToken verifies that when a valid CF token
-// is already in the keychain, cloudflared is NOT invoked and the cached token
-// is used directly, then a PAT is obtained and stored.
+// is already available from `cloudflared access token`, the full `access login`
+// browser flow is NOT invoked and the cached token is used directly to obtain
+// a PAT.
 func TestArgusService_Login_UsesCachedCFToken(t *testing.T) {
 	setupMockKeyring(t)
 
 	cfJWT := validJWT()
-	require.NoError(t, keychain.StoreCFToken(cfJWT))
 
 	const wantSession = "argus-session-from-cache"
 	const wantPAT = "pat-from-cached-cf"
 
-	// A cloudflared binary that would fail if called.
-	binPath := fakeCFBin(t, "", 1, 1)
+	// access token succeeds (returns cached JWT), access login would fail.
+	binPath := fakeCFBin(t, cfJWT, 1, 0)
 
 	srv := newArgusTestServer(t, cfJWT, wantSession, wantPAT)
 
@@ -279,17 +328,18 @@ func TestArgusService_Login_UsesCachedCFToken(t *testing.T) {
 	assert.Error(t, sessionErr, "session should be deleted after PAT is stored")
 }
 
-// TestArgusService_Login_ExpiredCFToken verifies that an expired cached CF
-// token is discarded and cloudflared access login is invoked to obtain a fresh
-// one, then a PAT is exchanged and stored.
+// TestArgusService_Login_ExpiredCFToken verifies that when `cloudflared access
+// token` returns an expired CF token, the CLI falls through to
+// `cloudflared access login` to obtain a fresh one, then exchanges it for a PAT.
 func TestArgusService_Login_ExpiredCFToken(t *testing.T) {
 	setupMockKeyring(t)
 
-	// Plant an expired token in the keychain.
-	require.NoError(t, keychain.StoreCFToken(expiredJWT()))
-
+	expiredCFJWT := expiredJWT()
 	freshCFJWT := validJWT()
-	binPath := fakeCFBin(t, freshCFJWT, 0, 0)
+
+	// We need a binary where `access token` returns the expired token and
+	// `access login` returns the fresh one. Build a custom binary for this.
+	binPath := fakeCFBinDualToken(t, expiredCFJWT, freshCFJWT)
 
 	const wantSession = "argus-session-after-refresh"
 	const wantPAT = "pat-after-refresh"
@@ -308,33 +358,6 @@ func TestArgusService_Login_ExpiredCFToken(t *testing.T) {
 
 	_, sessionErr := keychain.Load()
 	assert.Error(t, sessionErr, "session should be deleted after PAT is stored")
-
-	// The fresh CF token must replace the expired one.
-	gotCF, err := keychain.LoadCFToken()
-	require.NoError(t, err)
-	assert.Equal(t, freshCFJWT, gotCF)
-}
-
-// TestHasValidCFToken verifies the HasValidCFToken helper covers all branches.
-func TestHasValidCFToken_NoCachedToken(t *testing.T) {
-	setupMockKeyring(t)
-	assert.False(t, auth.HasValidCFToken(), "should be false when no token is stored")
-}
-
-func TestHasValidCFToken_ValidToken(t *testing.T) {
-	setupMockKeyring(t)
-	require.NoError(t, keychain.StoreCFToken(validJWT()))
-	assert.True(t, auth.HasValidCFToken(), "should be true when a valid token is stored")
-}
-
-func TestHasValidCFToken_ExpiredToken(t *testing.T) {
-	setupMockKeyring(t)
-	require.NoError(t, keychain.StoreCFToken(expiredJWT()))
-	assert.False(t, auth.HasValidCFToken(), "should be false when cached token is expired")
-
-	// The expired token must have been cleaned up.
-	_, err := keychain.LoadCFToken()
-	assert.ErrorIs(t, err, keychain.ErrCFTokenNotFound)
 }
 
 // --------------------------------------------------------------------------

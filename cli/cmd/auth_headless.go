@@ -47,7 +47,7 @@ credentials, simply re-run the command — existing values are overwritten.`,
 			return fmt.Errorf("reading CF Access Client ID: %w", err)
 		}
 		if clientID == "" {
-			return fmt.Errorf("CF Access Client ID must not be empty")
+			return fmt.Errorf("cf access client id must not be empty")
 		}
 
 		clientSecret, err := readSecret(fd, "CF Access Client Secret: ")
@@ -55,7 +55,7 @@ credentials, simply re-run the command — existing values are overwritten.`,
 			return fmt.Errorf("reading CF Access Client Secret: %w", err)
 		}
 		if clientSecret == "" {
-			return fmt.Errorf("CF Access Client Secret must not be empty")
+			return fmt.Errorf("cf access client secret must not be empty")
 		}
 
 		argusToken, err := readSecret(fd, "Argus API Token: ")
@@ -63,7 +63,7 @@ credentials, simply re-run the command — existing values are overwritten.`,
 			return fmt.Errorf("reading Argus API Token: %w", err)
 		}
 		if argusToken == "" {
-			return fmt.Errorf("Argus API Token must not be empty")
+			return fmt.Errorf("argus api token must not be empty")
 		}
 
 		if err := keychain.StoreCFAccess(clientID, clientSecret, argusToken); err != nil {
