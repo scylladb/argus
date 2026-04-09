@@ -43,6 +43,8 @@ fi
 
 # ---------------------------------------------------------------------------
 # Collect commits that touched the cli/ subtree.
+# --diff-filter=ACDMRT ensures we only include commits that actually added,
+# copied, deleted, modified, renamed, or type-changed files under cli/.
 # We use a record separator (RS=0x1E, ASCII "record separator") between
 # fields so subjects containing pipes or special chars are handled safely.
 # Format per commit: SHA RS subject RS author NL
@@ -52,6 +54,7 @@ FIELD_SEP=$'\x1e'   # ASCII record separator — safe to use as field delimiter
 mapfile -t RAW_COMMITS < <(
     git log \
         --no-merges \
+        --diff-filter=ACDMRT \
         --pretty=format:"%H${FIELD_SEP}%s${FIELD_SEP}%an" \
         "$GIT_RANGE" \
         -- "cli/" 2>/dev/null
@@ -67,9 +70,10 @@ fi
 
 # ---------------------------------------------------------------------------
 # Parse each commit into type / scope / description
-# Supported types (from the project's Conventional Commits style):
-#   feature | feat | fix | refactor | improvement | chore | docs | test | ci
-# Pattern: type[(scope)]: description
+# Best-effort categorisation: if the subject matches a conventional commit
+# pattern (type[(scope)][!]: description) we use that; otherwise we try to
+# infer the type from common leading keywords.  Anything that cannot be
+# categorised lands in "other".
 # ---------------------------------------------------------------------------
 declare -A SECTIONS
 SECTION_ORDER=()
@@ -101,19 +105,29 @@ map_type_to_heading() {
 # Canonical display order for sections
 CANONICAL_ORDER=(feature feat fix improvement refactor docs test chore ci other)
 
-# Store the regex in a variable — avoids quoting pitfalls with bash's =~
-CONV_COMMIT_RE='^([a-zA-Z]+)(\([^)]*\))?[[:space:]]*:[[:space:]]*(.+)$'
+# Conventional commit: type[(scope)][!]: description
+CONV_COMMIT_RE='^([a-zA-Z]+)(\([^)]*\))?(!)?[[:space:]]*:[[:space:]]*(.+)$'
+
+# Build the GitHub repo URL for commit links.  $GITHUB_REPOSITORY is set by
+# Actions (e.g. "owner/repo"); fall back to parsing the remote when running
+# locally.
+if [[ -n "${GITHUB_REPOSITORY:-}" ]]; then
+    REPO_URL="https://github.com/${GITHUB_REPOSITORY}"
+else
+    REPO_URL=$(git remote get-url origin 2>/dev/null \
+               | sed -E 's#git@github\.com:#https://github.com/#; s/\.git$//' || true)
+fi
 
 for raw in "${RAW_COMMITS[@]}"; do
     # Split on the field separator
     IFS="$FIELD_SEP" read -r sha subject author <<< "$raw"
     short_sha="${sha:0:7}"
 
-    # Try to parse as a conventional commit: type[(scope)]: description
+    # Try to parse as a conventional commit: type[(scope)][!]: description
     if [[ "$subject" =~ $CONV_COMMIT_RE ]]; then
         type="${BASH_REMATCH[1],,}"   # lowercase the type
         scope="${BASH_REMATCH[2]}"    # parenthesised scope, may be empty
-        desc="${BASH_REMATCH[3]}"
+        desc="${BASH_REMATCH[4]}"
 
         # Strip the leading "(cli)" scope — all commits are already scoped to
         # cli/ so repeating it in the output adds no information.
@@ -126,11 +140,27 @@ for raw in "${RAW_COMMITS[@]}"; do
             formatted_desc="${desc}"
         fi
     else
-        type="other"
-        formatted_desc="$subject"
+        # Best-effort keyword detection from the subject line
+        subject_lower="${subject,,}"
+        case "$subject_lower" in
+            fix\ *|fix:*|bugfix\ *)        type="fix";         formatted_desc="${subject}" ;;
+            feat\ *|feature\ *|add\ *)     type="feat";        formatted_desc="${subject}" ;;
+            refactor\ *|refactored\ *)     type="refactor";    formatted_desc="${subject}" ;;
+            doc\ *|docs\ *|document\ *)    type="docs";        formatted_desc="${subject}" ;;
+            test\ *|tests\ *)             type="test";        formatted_desc="${subject}" ;;
+            chore\ *|chore:*)              type="chore";       formatted_desc="${subject}" ;;
+            ci\ *|ci:*)                    type="ci";          formatted_desc="${subject}" ;;
+            improve*|enhancement\ *)       type="improvement"; formatted_desc="${subject}" ;;
+            *)                             type="other";       formatted_desc="${subject}" ;;
+        esac
     fi
 
-    entry="- ${formatted_desc} (\`${short_sha}\`)"
+    # Build the entry with a hyperlinked SHA when we have a repo URL
+    if [[ -n "$REPO_URL" ]]; then
+        entry="- ${formatted_desc} ([\`${short_sha}\`](${REPO_URL}/commit/${sha}))"
+    else
+        entry="- ${formatted_desc} (\`${short_sha}\`)"
+    fi
     add_to_section "$type" "$entry"
 done
 
@@ -193,7 +223,11 @@ echo "|-----|--------|---------|"
 for raw in "${RAW_COMMITS[@]}"; do
     IFS="$FIELD_SEP" read -r sha subject author <<< "$raw"
     short_sha="${sha:0:7}"
-    echo "| \`${short_sha}\` | ${author} | ${subject} |"
+    if [[ -n "$REPO_URL" ]]; then
+        echo "| [\`${short_sha}\`](${REPO_URL}/commit/${sha}) | ${author} | ${subject} |"
+    else
+        echo "| \`${short_sha}\` | ${author} | ${subject} |"
+    fi
 done
 echo ""
 echo "</details>"
