@@ -115,6 +115,35 @@ func NewArgusService(argusURL, cloudflaredBin string, opts ...ArgusOption) *Argu
 	return s
 }
 
+// CachedCFToken reads the Cloudflare Access JWT from cloudflared's local
+// token cache (~/.cloudflared/) without any network call or browser
+// interaction.  It returns a non-expired, non-stale token on success, or an
+// error if the cached token is missing, expired, or older than [cfTokenMaxAge].
+//
+// This is intended for attaching the CF Access cookie to normal API requests
+// so they pass through Cloudflare Access to the backend.
+func (s *ArgusService) CachedCFToken(ctx context.Context) (string, error) {
+	cached, err := s.runCFAccessToken(ctx)
+	if err != nil {
+		return "", err
+	}
+	expired, jwtErr := jwt.IsExpired(cached)
+	if jwtErr != nil {
+		return "", jwtErr
+	}
+	if expired {
+		return "", fmt.Errorf("%w: cached CF token is expired", ErrGettingCFToken)
+	}
+	tooOld, ageErr := jwt.IsOlderThan(cached, cfTokenMaxAge)
+	if ageErr != nil {
+		return "", ageErr
+	}
+	if tooOld {
+		return "", fmt.Errorf("%w: cached CF token is older than %s", ErrGettingCFToken, cfTokenMaxAge)
+	}
+	return cached, nil
+}
+
 // Login obtains a Cloudflare Access token, exchanges it for an Argus session,
 // immediately trades that session for a durable Argus API token (PAT) via
 // GET /api/v1/user/token, and stores the PAT in the system keychain.
