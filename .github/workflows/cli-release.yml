@@ -8,9 +8,9 @@ on:
         tags:
             - "cli/v*"
 
-# Needed to create GitHub Releases and upload assets
+# Least-privilege: default to read-only; the release job escalates below.
 permissions:
-    contents: write
+    contents: read
 
 jobs:
     # -------------------------------------------------------------------------
@@ -35,10 +35,12 @@ jobs:
                   CURRENT_TAG="${GITHUB_REF_NAME}"   # e.g. cli/v1.2.0
 
                   # List all cli/v* tags, exclude the current one, sort semantically,
-                  # and take the most recent one that came before.
+                  # then keep only tags that sort before the current tag and take
+                  # the highest — i.e. the immediate predecessor.
                   PREV=$(git tag --list 'cli/v*' \
                            | grep -v "^${CURRENT_TAG}$" \
                            | sort -V \
+                           | awk -v cur="$CURRENT_TAG" '$0 < cur' \
                            | tail -1)
 
                   if [[ -z "$PREV" ]]; then
@@ -108,6 +110,8 @@ jobs:
         name: Release
         runs-on: ubuntu-latest
         needs: [changelog, test]
+        permissions:
+            contents: write
 
         steps:
             - name: Checkout
