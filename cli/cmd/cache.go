@@ -24,9 +24,10 @@ cache directory, organised by resource type so you can browse them directly:
 }
 
 var cacheClearCmd = &cobra.Command{
-	Use:   "clear",
-	Short: "Delete all cached responses",
-	Long:  `Remove every entry from the local cache. The next command invocation will fetch fresh data from the API.`,
+	Use:         "clear",
+	Short:       "Delete all cached responses",
+	Long:        `Remove every entry from the local cache. The next command invocation will fetch fresh data from the API.`,
+	Annotations: map[string]string{SkipAuthRetryAnnotation: "true"},
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
 		c := CacheFrom(cmd.Context())
@@ -39,9 +40,10 @@ var cacheClearCmd = &cobra.Command{
 }
 
 var cacheInfoCmd = &cobra.Command{
-	Use:   "info",
-	Short: "Show cache location and statistics",
-	Long:  `Display the cache directory path, total disk usage, entry count, and a per-category breakdown.`,
+	Use:         "info",
+	Short:       "Show cache location and statistics",
+	Long:        `Display the cache directory path, total disk usage, entry count, and a per-category breakdown.`,
+	Annotations: map[string]string{SkipAuthRetryAnnotation: "true"},
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
 		c := CacheFrom(cmd.Context())
