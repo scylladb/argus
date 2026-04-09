@@ -13,6 +13,7 @@ var authToken = &cobra.Command{
 	Long: `auth-token saves provides Argus PAT into OS keyring.
 
 You probably want to use this for local and dev deployments as production deployments should use cloudflared login process via 'auth' command.`,
+	Annotations: map[string]string{SkipAuthRetryAnnotation: "true"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceUsage = true
 		ctx := cmd.Context()

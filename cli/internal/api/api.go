@@ -247,6 +247,15 @@ func DoJSON[T any](c *Client, req *http.Request) (T, error) {
 		_ = resp.Body.Close()
 	}()
 
+	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
+		return zero, fmt.Errorf(
+			"%w: server returned %d %s — re-authenticate with `argus auth` or set the ARGUS_TOKEN environment variable",
+			ErrUnauthorized,
+			resp.StatusCode,
+			http.StatusText(resp.StatusCode),
+		)
+	}
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return zero, fmt.Errorf("server returned %d: %s", resp.StatusCode, http.StatusText(resp.StatusCode))
 	}
