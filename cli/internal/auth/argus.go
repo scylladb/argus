@@ -20,9 +20,9 @@ import (
 
 const (
 	// cfTokenMaxAge is the maximum time a Cloudflare Access JWT is considered
-	// fresh after it was issued. Tokens older than this are evicted from the
-	// keychain and a new one is obtained even if the token's own "exp" claim
-	// has not yet been reached.
+	// fresh after it was issued. Tokens older than this trigger a new
+	// `cloudflared access login` even if the token's own "exp" claim has not
+	// yet been reached.
 	cfTokenMaxAge = 12 * time.Hour
 )
 
@@ -115,63 +115,15 @@ func NewArgusService(argusURL, cloudflaredBin string, opts ...ArgusOption) *Argu
 	return s
 }
 
-// HasValidCFToken reports whether a non-expired Cloudflare Access JWT is
-// currently stored in the keychain.  It is intended to be called by the
-// command layer so it can decide whether the CF tunnel step is still required.
-func HasValidCFToken() bool {
-	tok, err := keychain.LoadCFToken()
-	if err != nil {
-		return false
-	}
-	expired, err := jwt.IsExpired(tok)
-	if err != nil {
-		// Malformed token in keychain — treat as absent.
-		_ = keychain.DeleteCFToken()
-		return false
-	}
-	if expired {
-		_ = keychain.DeleteCFToken()
-		return false
-	}
-	// Enforce the 12 h maximum age cap regardless of the token's own exp.
-	tooOld, err := jwt.IsOlderThan(tok, cfTokenMaxAge)
-	if err != nil || tooOld {
-		_ = keychain.DeleteCFToken()
-		return false
-	}
-	return true
-}
-
 // Login obtains a Cloudflare Access token, exchanges it for an Argus session,
 // immediately trades that session for a durable Argus API token (PAT) via
 // GET /api/v1/user/token, and stores the PAT in the system keychain.
 //
-// Short-circuit order:
-//  1. If a valid Argus PAT is already in the keychain → return immediately.
-//  2. If a valid (non-expired) CF token is cached in the keychain → reuse it,
-//     skipping cloudflared entirely, then obtain the PAT as above.
-//  3. Otherwise run `cloudflared access login` to open the browser auth flow,
-//     parse the JWT from its output, and store it for future use.
+// Login always performs the full cloudflared authentication flow.  Callers
+// that want to avoid unnecessary logins should verify their existing
+// credentials first (e.g. by making a lightweight API call) and only call
+// Login when those credentials are known to be invalid.
 func (s *ArgusService) Login(ctx context.Context) error {
-	// Fast path: a valid Argus PAT is already cached.
-	if _, err := keychain.LoadPAT(); err == nil {
-		return nil
-	}
-
-	// Second fast path: a valid session is already cached — skip CF login and
-	// attempt to exchange it for a PAT directly.  This covers the case where a
-	// previous `argus auth` stored a session but the PAT exchange failed.
-	if session, err := keychain.Load(); err == nil {
-		cfToken, _ := keychain.LoadCFToken() // best-effort; empty string is fine
-		if pat, fetchErr := s.fetchPAT(ctx, session, cfToken); fetchErr == nil {
-			if storeErr := keychain.StorePAT(pat); storeErr == nil {
-				_ = keychain.Delete()
-				return nil
-			}
-		}
-		// Session-to-PAT exchange failed — fall through to full CF login.
-	}
-
 	cfToken, err := s.getOrFetchCFToken(ctx)
 	if err != nil {
 		return err
@@ -238,26 +190,21 @@ func (s *ArgusService) fetchPAT(ctx context.Context, session, cfToken string) (s
 	return result.Token, nil
 }
 
-// getOrFetchCFToken returns a valid CF Access JWT. It first checks the
-// keychain; if a non-expired token that is not older than cfTokenMaxAge (12h)
-// is found it is returned immediately. Otherwise `cloudflared access login` is
-// invoked to perform the browser auth flow, the resulting token is stored in
-// the keychain for future use, and it is returned.
+// getOrFetchCFToken returns a valid CF Access JWT.  It first tries
+// `cloudflared access token --app <url>` which reads the token from
+// cloudflared's local token cache (~/.cloudflared/) without any network call
+// or browser interaction.  If that fails or the token is expired / too old,
+// it falls back to `cloudflared access login` which opens a browser.
 func (s *ArgusService) getOrFetchCFToken(ctx context.Context) (string, error) {
-	// Try the keychain first.
-	if cached, err := keychain.LoadCFToken(); err == nil {
+	// Try the fast, local-only `access token` subcommand first.
+	if cached, err := s.runCFAccessToken(ctx); err == nil {
 		expired, jwtErr := jwt.IsExpired(cached)
-		if jwtErr != nil || expired {
-			// Token is expired or malformed — purge it.
-			_ = keychain.DeleteCFToken()
-		} else {
+		if jwtErr == nil && !expired {
 			// Also enforce a hard 12 h maximum regardless of what the token's
 			// own "exp" claim says — CF tokens can be issued with long
 			// lifetimes but we want to re-authenticate regularly.
 			tooOld, ageErr := jwt.IsOlderThan(cached, cfTokenMaxAge)
-			if ageErr != nil || tooOld {
-				_ = keychain.DeleteCFToken()
-			} else {
+			if ageErr == nil && !tooOld {
 				return cached, nil
 			}
 		}
@@ -269,11 +216,35 @@ func (s *ArgusService) getOrFetchCFToken(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	// Best-effort: store the fresh token so the next invocation can skip
-	// cloudflared.  A failure here is non-fatal — we still have the token.
-	_ = keychain.StoreCFToken(fresh)
-
 	return fresh, nil
+}
+
+// runCFAccessToken runs:
+//
+//	cloudflared access token --app <argusURL>
+//
+// This reads the CF Access JWT from cloudflared's local token cache
+// (~/.cloudflared/) without any network call or browser interaction.
+// It returns the token string on success.
+func (s *ArgusService) runCFAccessToken(ctx context.Context) (string, error) {
+	cmd := exec.CommandContext(ctx, s.cloudflaredBin, //nolint:gosec
+		"access", "token",
+		"--app", s.argusURL,
+	)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = io.Discard // suppress progress/error output
+
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("%w: %w", ErrGettingCFToken, err)
+	}
+
+	token := lastNonEmptyLine(out.String())
+	if token == "" {
+		return "", fmt.Errorf("%w: no token in cloudflared output", ErrGettingCFToken)
+	}
+
+	return token, nil
 }
 
 // runCFLogin shells out to:
