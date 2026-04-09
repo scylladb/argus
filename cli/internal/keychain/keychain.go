@@ -19,10 +19,18 @@ const (
 	// patKey is the keychain account name which hosts the Argus API token
 	patKey = "pat"
 
-	// cfTokenKey is the keychain account name under which the Cloudflare
-	// Access JWT is stored so it can be reused across invocations without
-	// having to re-run cloudflared.
-	cfTokenKey = "cf_token"
+	// cfAccessClientIDKey is the keychain account name for the Cloudflare
+	// Access service-token client ID, stored by "auth headless".
+	cfAccessClientIDKey = "cf-access-client-id"
+
+	// cfAccessClientSecretKey is the keychain account name for the Cloudflare
+	// Access service-token client secret, stored by "auth headless".
+	cfAccessClientSecretKey = "cf-access-client-secret"
+
+	// cfAccessArgusTokenKey is the keychain account name for the Argus API
+	// token that accompanies the CF Access service-token headers, stored by
+	// "auth headless".
+	cfAccessArgusTokenKey = "cf-access-argus-token"
 )
 
 // Sentinel errors returned by the keychain package.
@@ -32,27 +40,25 @@ var (
 	// rather than a hard failure.
 	ErrNotFound = errors.New("keychain: session token not found")
 
-	// ErrCFTokenNotFound is returned by LoadCFToken when no CF Access JWT is
-	// present in the keychain.
-	ErrCFTokenNotFound = errors.New("keychain: CF token not found")
-
 	// ErrPATNotFound is returned by LoadPAT when no PAT is stored.
 	ErrPATNotFound = errors.New("keychain: PAT not found")
 
 	// ErrStoring is returned when the OS keychain rejects a Store call.
 	ErrStoring = errors.New("keychain: storing session token")
 
-	// ErrStoringCFToken is returned when the OS keychain rejects a StoreCFToken call.
-	ErrStoringCFToken = errors.New("keychain: storing CF token")
-
 	// ErrDeleting is returned when the OS keychain rejects a Delete call.
 	ErrDeleting = errors.New("keychain: deleting session token")
 
-	// ErrDeletingCFToken is returned when the OS keychain rejects a DeleteCFToken call.
-	ErrDeletingCFToken = errors.New("keychain: deleting CF token")
-
 	// ErrDeletingPAT is returned when the OS keychain rejects a DeletePAT call.
 	ErrDeletingPAT = errors.New("keychain: deleting PAT")
+
+	// ErrCFAccessNotFound is returned by LoadCFAccess when one or more of the
+	// headless CF Access credentials are missing from the keychain.
+	ErrCFAccessNotFound = errors.New("keychain: CF Access headless credentials not found")
+
+	// ErrStoringCFAccess is returned when persisting headless CF Access
+	// credentials fails.
+	ErrStoringCFAccess = errors.New("keychain: storing CF Access headless credentials")
 )
 
 // Store persists token in the system keychain under the argus-cli service.
@@ -120,35 +126,65 @@ func Delete() error {
 	return nil
 }
 
-// StoreCFToken persists the Cloudflare Access JWT in the system keychain so
-// it can be reused on subsequent invocations without re-running cloudflared.
-// It overwrites any previously stored value.
-func StoreCFToken(token string) error {
-	if err := keyring.Set(serviceName, cfTokenKey, token); err != nil {
-		return errors.Join(ErrStoringCFToken, err)
+// StoreCFAccess persists the three headless CF Access credentials
+// (client ID, client secret, and Argus API token) in the system keychain.
+// All three are required; an error storing any one of them is returned
+// immediately.
+func StoreCFAccess(clientID, clientSecret, argusToken string) error {
+	for _, kv := range []struct {
+		key, val string
+	}{
+		{cfAccessClientIDKey, clientID},
+		{cfAccessClientSecretKey, clientSecret},
+		{cfAccessArgusTokenKey, argusToken},
+	} {
+		if err := keyring.Set(serviceName, kv.key, kv.val); err != nil {
+			return errors.Join(ErrStoringCFAccess, err)
+		}
 	}
 	return nil
 }
 
-// LoadCFToken retrieves the Cloudflare Access JWT from the system keychain.
-// If no token has been stored yet it returns ("", ErrCFTokenNotFound).
-func LoadCFToken() (string, error) {
-	token, err := keyring.Get(serviceName, cfTokenKey)
-	if err != nil {
-		if errors.Is(err, keyring.ErrNotFound) {
-			return "", ErrCFTokenNotFound
-		}
-		return "", errors.Join(ErrCFTokenNotFound, err)
+// LoadCFAccess retrieves all three headless CF Access credentials from the
+// system keychain.  If any of the three is missing or empty the function
+// returns ErrCFAccessNotFound.
+func LoadCFAccess() (clientID, clientSecret, argusToken string, err error) {
+	clientID, err = keyring.Get(serviceName, cfAccessClientIDKey)
+	if err != nil || clientID == "" {
+		return "", "", "", ErrCFAccessNotFound
 	}
-	return token, nil
+
+	clientSecret, err = keyring.Get(serviceName, cfAccessClientSecretKey)
+	if err != nil || clientSecret == "" {
+		return "", "", "", ErrCFAccessNotFound
+	}
+
+	argusToken, err = keyring.Get(serviceName, cfAccessArgusTokenKey)
+	if err != nil || argusToken == "" {
+		return "", "", "", ErrCFAccessNotFound
+	}
+
+	return clientID, clientSecret, argusToken, nil
 }
 
-// DeleteCFToken removes the Cloudflare Access JWT from the system keychain.
-// It is a no-op (returns nil) if no token is currently stored.
-func DeleteCFToken() error {
-	err := keyring.Delete(serviceName, cfTokenKey)
-	if err != nil && !errors.Is(err, keyring.ErrNotFound) {
-		return errors.Join(ErrDeletingCFToken, err)
+// HasCFAccess reports whether all three headless CF Access credentials are
+// present in the system keychain.
+func HasCFAccess() bool {
+	_, _, _, err := LoadCFAccess()
+	return err == nil
+}
+
+// DeleteCFAccess removes all three headless CF Access credentials from the
+// system keychain.  Missing entries are silently ignored.
+func DeleteCFAccess() error {
+	for _, key := range []string{
+		cfAccessClientIDKey,
+		cfAccessClientSecretKey,
+		cfAccessArgusTokenKey,
+	} {
+		if err := keyring.Delete(serviceName, key); err != nil && !errors.Is(err, keyring.ErrNotFound) {
+			return errors.Join(ErrDeleting, err)
+		}
 	}
 	return nil
 }

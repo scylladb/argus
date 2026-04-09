@@ -61,75 +61,64 @@ func TestDelete_WhenEmpty_IsNoOp(t *testing.T) {
 	require.NoError(t, keychain.Delete())
 }
 
-// ---- CF token helpers -------------------------------------------------------
+// ---------------------------------------------------------------------------
+// CF Access headless credentials
+// ---------------------------------------------------------------------------
 
-func TestStoreCFToken_And_LoadCFToken(t *testing.T) {
+func TestStoreCFAccess_And_LoadCFAccess(t *testing.T) {
 	setupMock(t)
 
-	require.NoError(t, keychain.StoreCFToken("cf-jwt-abc"))
+	require.NoError(t, keychain.StoreCFAccess("cid-123", "sec-456", "tok-789"))
 
-	got, err := keychain.LoadCFToken()
+	gotID, gotSecret, gotToken, err := keychain.LoadCFAccess()
 	require.NoError(t, err)
-	assert.Equal(t, "cf-jwt-abc", got)
+	assert.Equal(t, "cid-123", gotID)
+	assert.Equal(t, "sec-456", gotSecret)
+	assert.Equal(t, "tok-789", gotToken)
 }
 
-func TestLoadCFToken_NotFound(t *testing.T) {
+func TestLoadCFAccess_NotFound(t *testing.T) {
 	setupMock(t)
 
-	_, err := keychain.LoadCFToken()
+	_, _, _, err := keychain.LoadCFAccess()
 	require.Error(t, err)
-	assert.ErrorIs(t, err, keychain.ErrCFTokenNotFound)
+	assert.ErrorIs(t, err, keychain.ErrCFAccessNotFound)
 }
 
-func TestStoreCFToken_Overwrites(t *testing.T) {
+func TestLoadCFAccess_PartiallyStored(t *testing.T) {
 	setupMock(t)
 
-	require.NoError(t, keychain.StoreCFToken("first-cf"))
-	require.NoError(t, keychain.StoreCFToken("second-cf"))
+	// Only store one of the three — LoadCFAccess must still fail.
+	require.NoError(t, keychain.StoreCFAccess("cid", "sec", "tok"))
+	// Delete just the secret to simulate partial state.
+	require.NoError(t, keychain.DeleteCFAccess())
+	require.NoError(t, gokeyring.Set("argus-cli", "cf-access-client-id", "cid"))
 
-	got, err := keychain.LoadCFToken()
-	require.NoError(t, err)
-	assert.Equal(t, "second-cf", got)
+	_, _, _, err := keychain.LoadCFAccess()
+	require.Error(t, err)
+	assert.ErrorIs(t, err, keychain.ErrCFAccessNotFound)
 }
 
-func TestDeleteCFToken_Removes(t *testing.T) {
+func TestHasCFAccess(t *testing.T) {
 	setupMock(t)
 
-	require.NoError(t, keychain.StoreCFToken("cf-tok"))
-	require.NoError(t, keychain.DeleteCFToken())
+	assert.False(t, keychain.HasCFAccess())
 
-	_, err := keychain.LoadCFToken()
-	assert.ErrorIs(t, err, keychain.ErrCFTokenNotFound)
+	require.NoError(t, keychain.StoreCFAccess("a", "b", "c"))
+	assert.True(t, keychain.HasCFAccess())
 }
 
-func TestDeleteCFToken_WhenEmpty_IsNoOp(t *testing.T) {
+func TestDeleteCFAccess(t *testing.T) {
 	setupMock(t)
 
-	// Deleting when nothing is stored must not error.
-	require.NoError(t, keychain.DeleteCFToken())
+	require.NoError(t, keychain.StoreCFAccess("a", "b", "c"))
+	require.NoError(t, keychain.DeleteCFAccess())
+
+	assert.False(t, keychain.HasCFAccess())
 }
 
-func TestCFToken_IndependentFromSession(t *testing.T) {
+func TestDeleteCFAccess_WhenEmpty_IsNoOp(t *testing.T) {
 	setupMock(t)
 
-	// Storing a session must not affect CF token and vice versa.
-	require.NoError(t, keychain.Store("session-tok"))
-	require.NoError(t, keychain.StoreCFToken("cf-tok"))
-
-	session, err := keychain.Load()
-	require.NoError(t, err)
-	assert.Equal(t, "session-tok", session)
-
-	cf, err := keychain.LoadCFToken()
-	require.NoError(t, err)
-	assert.Equal(t, "cf-tok", cf)
-
-	// Deleting one must not affect the other.
-	require.NoError(t, keychain.DeleteCFToken())
-	_, err = keychain.LoadCFToken()
-	assert.ErrorIs(t, err, keychain.ErrCFTokenNotFound)
-
-	session2, err := keychain.Load()
-	require.NoError(t, err)
-	assert.Equal(t, "session-tok", session2)
+	require.NoError(t, keychain.DeleteCFAccess())
 }
