@@ -153,7 +153,7 @@ func (s *ArgusService) CachedCFToken(ctx context.Context) (string, error) {
 // credentials first (e.g. by making a lightweight API call) and only call
 // Login when those credentials are known to be invalid.
 func (s *ArgusService) Login(ctx context.Context) error {
-	cfToken, err := s.getOrFetchCFToken(ctx)
+	cfToken, err := s.GetOrFetchCFToken(ctx)
 	if err != nil {
 		return err
 	}
@@ -219,12 +219,12 @@ func (s *ArgusService) fetchPAT(ctx context.Context, session, cfToken string) (s
 	return result.Token, nil
 }
 
-// getOrFetchCFToken returns a valid CF Access JWT.  It first tries
+// GetOrFetchCFToken returns a valid CF Access JWT.  It first tries
 // `cloudflared access token --app <url>` which reads the token from
 // cloudflared's local token cache (~/.cloudflared/) without any network call
 // or browser interaction.  If that fails or the token is expired / too old,
 // it falls back to `cloudflared access login` which opens a browser.
-func (s *ArgusService) getOrFetchCFToken(ctx context.Context) (string, error) {
+func (s *ArgusService) GetOrFetchCFToken(ctx context.Context) (string, error) {
 	// Try the fast, local-only `access token` subcommand first.
 	if cached, err := s.runCFAccessToken(ctx); err == nil {
 		expired, jwtErr := jwt.IsExpired(cached)
