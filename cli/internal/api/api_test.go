@@ -474,3 +474,203 @@ func TestBaseURL_WithPath(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "https://argus.scylladb.com/some/path", c.BaseURL())
 }
+
+// --------------------------------------------------------------------------
+// DoJSON – Content-Type handling
+// --------------------------------------------------------------------------
+
+// staticHandlerWithContentType returns a handler that writes body with the
+// given HTTP status code and the specified Content-Type header.
+func staticHandlerWithContentType(code int, contentType string, body []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", contentType)
+		w.WriteHeader(code)
+		_, _ = w.Write(body)
+	}
+}
+
+func TestDoJSON_ContentTypeWithCharset(t *testing.T) {
+	t.Parallel()
+
+	want := samplePayload{ID: "ct-1", Name: "charset-test"}
+
+	srv := httptest.NewServer(staticHandlerWithContentType(
+		http.StatusOK,
+		"application/json; charset=utf-8",
+		okEnvelope(t, want),
+	))
+	t.Cleanup(srv.Close)
+
+	c, err := api.New(srv.URL, api.WithHTTPClient(srv.Client()))
+	require.NoError(t, err)
+
+	req, err := c.NewRequest(context.Background(), http.MethodGet, "/", nil)
+	require.NoError(t, err)
+
+	got, err := api.DoJSON[samplePayload](c, req)
+	require.NoError(t, err, "application/json; charset=utf-8 should be accepted")
+	assert.Equal(t, want, got)
+}
+
+func TestDoJSON_HTMLContentType_ReturnsUnauthorized(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(staticHandlerWithContentType(
+		http.StatusOK,
+		"text/html",
+		[]byte("<html><body>Cloudflare Access Login</body></html>"),
+	))
+	t.Cleanup(srv.Close)
+
+	c, err := api.New(srv.URL, api.WithHTTPClient(srv.Client()))
+	require.NoError(t, err)
+
+	req, err := c.NewRequest(context.Background(), http.MethodGet, "/", nil)
+	require.NoError(t, err)
+
+	_, err = api.DoJSON[samplePayload](c, req)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, api.ErrUnauthorized)
+	assert.Contains(t, err.Error(), "text/html")
+}
+
+func TestDoJSON_HTMLContentTypeWithCharset_ReturnsUnauthorized(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(staticHandlerWithContentType(
+		http.StatusOK,
+		"text/html; charset=utf-8",
+		[]byte("<html><body>Login</body></html>"),
+	))
+	t.Cleanup(srv.Close)
+
+	c, err := api.New(srv.URL, api.WithHTTPClient(srv.Client()))
+	require.NoError(t, err)
+
+	req, err := c.NewRequest(context.Background(), http.MethodGet, "/", nil)
+	require.NoError(t, err)
+
+	_, err = api.DoJSON[samplePayload](c, req)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, api.ErrUnauthorized)
+}
+
+// --------------------------------------------------------------------------
+// DoJSON – HTTP 401 / 403 status codes
+// --------------------------------------------------------------------------
+
+func TestDoJSON_Status401_ReturnsUnauthorized(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(staticHandler(http.StatusUnauthorized, []byte(`{"error":"not authenticated"}`)))
+	t.Cleanup(srv.Close)
+
+	c, err := api.New(srv.URL, api.WithHTTPClient(srv.Client()))
+	require.NoError(t, err)
+
+	req, err := c.NewRequest(context.Background(), http.MethodGet, "/", nil)
+	require.NoError(t, err)
+
+	_, err = api.DoJSON[samplePayload](c, req)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, api.ErrUnauthorized)
+	assert.Contains(t, err.Error(), "401")
+}
+
+func TestDoJSON_Status403_ReturnsUnauthorized(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(staticHandler(http.StatusForbidden, []byte(`{"error":"forbidden"}`)))
+	t.Cleanup(srv.Close)
+
+	c, err := api.New(srv.URL, api.WithHTTPClient(srv.Client()))
+	require.NoError(t, err)
+
+	req, err := c.NewRequest(context.Background(), http.MethodGet, "/", nil)
+	require.NoError(t, err)
+
+	_, err = api.DoJSON[samplePayload](c, req)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, api.ErrUnauthorized)
+	assert.Contains(t, err.Error(), "403")
+}
+
+// --------------------------------------------------------------------------
+// DoJSON – redirect handling (CF Access scenario)
+// --------------------------------------------------------------------------
+
+func TestDoJSON_RedirectPreservesAuth(t *testing.T) {
+	t.Parallel()
+
+	want := samplePayload{ID: "redir-1", Name: "redirect-test"}
+
+	// Mux that redirects / → /final, and /final serves the JSON payload.
+	// The /final handler verifies that the auth credentials survived the
+	// redirect.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		http.Redirect(w, r, "/final", http.StatusFound)
+	})
+	mux.HandleFunc("/final", func(w http.ResponseWriter, r *http.Request) {
+		// Verify auth credentials survived the redirect.
+		assert.Equal(t, "token mytoken", r.Header.Get("Authorization"),
+			"Authorization header must survive redirect")
+
+		cookie, err := r.Cookie("CF_Authorization")
+		require.NoError(t, err, "CF_Authorization cookie must survive redirect")
+		assert.Equal(t, "cf-jwt-123", cookie.Value)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(okEnvelope(t, want))
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, err := api.New(srv.URL,
+		api.WithAPIToken("mytoken"),
+		api.WithCFToken("cf-jwt-123"),
+	)
+	require.NoError(t, err)
+
+	req, err := c.NewRequest(context.Background(), http.MethodGet, "/", nil)
+	require.NoError(t, err)
+
+	got, err := api.DoJSON[samplePayload](c, req)
+	require.NoError(t, err, "request through redirect should succeed with auth preserved")
+	assert.Equal(t, want, got)
+}
+
+func TestDoJSON_RedirectToHTMLStillReturnsUnauthorized(t *testing.T) {
+	t.Parallel()
+
+	// Simulates CF Access redirecting to an HTML login page even after
+	// credentials are re-attached (e.g. the token is expired/invalid).
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/run", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/cdn-cgi/access/login", http.StatusFound)
+	})
+	mux.HandleFunc("/cdn-cgi/access/login", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("<html><body>Please log in</body></html>"))
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, err := api.New(srv.URL, api.WithAPIToken("expired-token"))
+	require.NoError(t, err)
+
+	req, err := c.NewRequest(context.Background(), http.MethodGet, "/api/v1/run", nil)
+	require.NoError(t, err)
+
+	_, err = api.DoJSON[samplePayload](c, req)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, api.ErrUnauthorized)
+}

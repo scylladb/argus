@@ -173,7 +173,9 @@ var rootCmd = &cobra.Command{
 //
 //  1. PAT from keychain
 //  2. Session cookie from keychain
-//  3. Cached Cloudflare Access JWT from cloudflared's local token cache
+//  3. CF Access JWT obtained from cloudflared CLI (`cloudflared access token`);
+//     if the cached token is expired or missing AND interactive mode is allowed,
+//     the full browser-based login flow is triggered automatically.
 //  4. ARGUS_TOKEN env var
 //  5. CF Access service-account credentials from env
 //
@@ -195,11 +197,10 @@ func buildAPIClientRaw(ctx context.Context, cfg *config.Config, extraOpts ...api
 			apiOpts = append(apiOpts, api.WithSession(session))
 		}
 
-		// Attach the cached Cloudflare Access JWT so requests pass through
-		// the CF Access layer that sits in front of the Argus backend.
-		// This is a best-effort read from cloudflared's local token cache
-		// (~/.cloudflared/) — no network call or browser interaction.
-		if cfToken, err := cachedCFToken(ctx, cfg.URL); err == nil {
+		// Obtain a valid Cloudflare Access JWT via the cloudflared CLI.
+		// This is required for every request to pass through CF Access.
+		interactive := !NonInteractiveFrom(ctx)
+		if cfToken, err := ensureCFToken(ctx, cfg.URL, interactive); err == nil {
 			apiOpts = append(apiOpts, api.WithCFToken(cfToken))
 		}
 	}
@@ -224,21 +225,39 @@ func buildAPIClientRaw(ctx context.Context, cfg *config.Config, extraOpts ...api
 	return client, nil
 }
 
-// cachedCFToken attempts to read a valid Cloudflare Access JWT from
-// cloudflared's local token cache.  It locates the cloudflared binary (PATH
-// or managed cache) and delegates to [auth.ArgusService.CachedCFToken].
+// ensureCFToken returns a valid Cloudflare Access JWT. It always uses the
+// cloudflared CLI (`cloudflared access token`) to read from cloudflared's
+// local token cache. If the token is expired/missing/stale and interactive
+// is true, it triggers the full browser-based login flow
+// (`cloudflared access login`) to obtain a fresh one.
 //
-// This is best-effort: if cloudflared is not installed, not on PATH, or the
-// cached token is expired/missing, it returns an error and the caller should
-// proceed without the CF token (the auth-retry mechanism will handle it).
-func cachedCFToken(ctx context.Context, argusURL string) (string, error) {
+// When interactive is false (--non-interactive), it returns whatever the
+// cached token is (if any) without opening a browser.
+func ensureCFToken(ctx context.Context, argusURL string, interactive bool) (string, error) {
 	cfSvc := services.NewCloudflaredService()
 	binPath, err := cfSvc.Ensure(ctx)
 	if err != nil {
 		return "", err
 	}
 	argusSvc := auth.NewArgusService(argusURL, binPath)
-	return argusSvc.CachedCFToken(ctx)
+
+	// Try the fast path: read from cloudflared's local cache.
+	if cfToken, err := argusSvc.CachedCFToken(ctx); err == nil {
+		return cfToken, nil
+	}
+
+	// Cached token is expired/missing/stale. If we can't interact with the
+	// user, return the error — the auth-retry layer will surface it.
+	if !interactive {
+		return "", fmt.Errorf("CF Access token is expired or missing; run `argus auth` or use --non-interactive=false")
+	}
+
+	// Interactive: run the full cloudflared login flow (opens browser).
+	cfToken, loginErr := argusSvc.GetOrFetchCFToken(ctx)
+	if loginErr != nil {
+		return "", loginErr
+	}
+	return cfToken, nil
 }
 
 // isUnauthorizedErr reports whether err is (or wraps) an unauthorized /
@@ -249,7 +268,10 @@ func isUnauthorizedErr(err error) bool {
 
 // runWithAuthRetry wraps fn so that if it returns an unauthorized error and
 // the command context does not have --non-interactive set, it triggers the
-// full login flow and retries fn once with a freshly built API client.
+// full login flow (including obtaining a fresh CF Access token via the
+// cloudflared CLI) and retries fn once with a freshly built API client.
+//
+// If the retry also fails, that error is returned as-is — no further retries.
 func runWithAuthRetry(cmd *cobra.Command, args []string, fn func(*cobra.Command, []string) error) error {
 	err := fn(cmd, args)
 	if err == nil {
@@ -292,11 +314,15 @@ func runWithAuthRetry(cmd *cobra.Command, args []string, fn func(*cobra.Command,
 		return fmt.Errorf("re-auth: locating cloudflared: %w", cfErr)
 	}
 	argusSvc := auth.NewArgusService(cfg.URL, binPath)
+
+	// Full login: obtains a fresh CF token (browser if needed), exchanges
+	// it for an Argus session, then for a durable PAT.
 	if loginErr := argusSvc.Login(ctx); loginErr != nil {
 		return fmt.Errorf("re-auth: login failed: %w", loginErr)
 	}
 
-	// Rebuild client with fresh credentials.
+	// Rebuild client with fresh credentials. Use interactive=true so
+	// ensureCFToken can also obtain a fresh CF token if needed.
 	newClient, buildErr := buildAPIClientRaw(ctx, cfg)
 	if buildErr != nil {
 		return fmt.Errorf("re-auth: building client: %w", buildErr)

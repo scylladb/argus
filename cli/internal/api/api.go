@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"time"
@@ -136,6 +137,19 @@ func New(rawBaseURL string, opts ...ClientOption) (*Client, error) {
 		o(c)
 	}
 
+	// Install a redirect policy that re-attaches auth credentials on every
+	// hop.  Go's default http.Client strips cookies set via Request.AddCookie
+	// and drops the Authorization header on cross-origin redirects, which
+	// breaks Cloudflare Access: CF responds with a 302 to its interstitial
+	// page, the redirect loses the CF_Authorization cookie / API token, and
+	// the CLI ends up with an HTML login page instead of JSON.
+	//
+	// This must be set after applying opts so that WithHTTPClient (used by
+	// tests) can override the entire http.Client including CheckRedirect.
+	if c.httpClient.CheckRedirect == nil {
+		c.httpClient.CheckRedirect = c.reattachAuthOnRedirect
+	}
+
 	return c, nil
 }
 
@@ -199,6 +213,23 @@ func (c *Client) attachAuth(req *http.Request) {
 	}
 }
 
+// reattachAuthOnRedirect is a [http.Client.CheckRedirect] callback that
+// re-applies the client's authentication credentials to every redirect
+// request.
+//
+// Go's default redirect handling strips cookies set via [http.Request.AddCookie]
+// and drops the Authorization header when the redirect target is on a different
+// origin.  This breaks Cloudflare Access, which sits in front of the Argus
+// backend and may issue same-origin redirects (e.g. to /cdn-cgi/access/…)
+// while requiring the CF_Authorization cookie on every hop.
+func (c *Client) reattachAuthOnRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return errors.New("stopped after 10 redirects")
+	}
+	c.attachAuth(req)
+	return nil
+}
+
 // Do executes req and returns the raw [http.Response].
 // The caller is responsible for closing the response body.
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
@@ -260,19 +291,22 @@ func DoJSON[T any](c *Client, req *http.Request) (T, error) {
 		return zero, fmt.Errorf("server returned %d: %s", resp.StatusCode, http.StatusText(resp.StatusCode))
 	}
 
-	if contentType := resp.Header.Get("Content-Type"); contentType != "application/json" {
-		// Non-JSON response from a non-error status code is almost always a
-		// Cloudflare or reverse-proxy authentication challenge (HTML login
-		// page). Treat it as an authorization failure with an actionable
-		// message so LLM consumers and humans can self-correct by
-		// re-authenticating rather than seeing a confusing decode error.
-		return zero, fmt.Errorf(
-			"%w: server returned Content-Type %q instead of application/json — "+
-				"this usually means authentication failed or the session expired; "+
-				"re-authenticate with `argus auth` or set the ARGUS_TOKEN environment variable",
-			ErrUnauthorized,
-			contentType,
-		)
+	if rawCT := resp.Header.Get("Content-Type"); rawCT != "" {
+		mediaType, _, _ := mime.ParseMediaType(rawCT)
+		if mediaType != "application/json" {
+			// Non-JSON response from a non-error status code is almost always a
+			// Cloudflare or reverse-proxy authentication challenge (HTML login
+			// page). Treat it as an authorization failure with an actionable
+			// message so LLM consumers and humans can self-correct by
+			// re-authenticating rather than seeing a confusing decode error.
+			return zero, fmt.Errorf(
+				"%w: server returned Content-Type %q instead of application/json — "+
+					"this usually means authentication failed or the session expired; "+
+					"re-authenticate with `argus auth` or set the ARGUS_TOKEN environment variable",
+				ErrUnauthorized,
+				rawCT,
+			)
+		}
 	}
 
 	raw, err := io.ReadAll(resp.Body)
