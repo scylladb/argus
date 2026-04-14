@@ -23,6 +23,7 @@ from argus.backend.plugins.sct.udt import (
     PerformanceHDRHistogram
 )
 from argus.backend.util.common import chunk, get_build_number
+from argus.common.enums import ResourceState
 
 LOGGER = logging.getLogger(__name__)
 SCT_REGION_PROPERTY_MAP = {
@@ -127,6 +128,16 @@ class SCTNemesis(Model):
     stack_trace = columns.Text()
 
 
+class SCTResource(Model):
+    __table_name__ = "sct_resource"
+
+    run_id = columns.UUID(primary_key=True, partition_key=True)
+    name = columns.Text(primary_key=True)
+    state = columns.Text(default=lambda: ResourceState.RUNNING.value)
+    resource_type = columns.Text()
+    instance_info = columns.UserDefinedType(user_type=CloudInstanceDetails)
+
+
 class SCTTestRun(PluginModelBase):
     __table_name__ = "sct_test_run"
     _plugin_name = "scylla-cluster-tests"
@@ -195,7 +206,7 @@ class SCTTestRun(PluginModelBase):
     @classmethod
     def _stats_query(cls) -> str:
         return ("SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, nemesis_stats, "
-                f"assignee, end_time, investigation_status, heartbeat, build_number, scylla_version, cloud_setup, allocated_resources FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT 15")
+                f"assignee, end_time, investigation_status, heartbeat, build_number, scylla_version, cloud_setup FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT 15")
 
     @classmethod
     def load_test_run(cls, run_id: UUID) -> 'SCTTestRun':
@@ -327,8 +338,8 @@ class SCTTestRun(PluginModelBase):
 
         return run
 
-    def get_resources(self) -> list[CloudResource]:
-        return self.allocated_resources
+    def get_resources(self) -> list[SCTResource]:
+        return list(SCTResource.filter(run_id=self.id).all())
 
     def get_nemeses(self) -> list[SCTNemesis]:
         return list(SCTNemesis.filter(run_id=self.id).all())
@@ -472,6 +483,8 @@ class SCTTestRun(PluginModelBase):
         response["junit_reports"] = list(
             SCTJunitReports.filter(test_id=run_id).all())
         response["nemesis_data"] = list(SCTNemesis.filter(run_id=run.id).all())
+        response["allocated_resources"] = list(
+            SCTResource.filter(run_id=run_id).all())
         return response
 
 

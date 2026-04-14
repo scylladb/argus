@@ -14,11 +14,10 @@ from argus.backend.db import ScyllaCluster
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.web import ArgusEventTypes, ErrorEventEmbeddings, CriticalEventEmbeddings
 from argus.backend.models.argus_ai import SCTErrorEventEmbedding, SCTCriticalEventEmbedding
-from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTJunitReports, SCTNemesis, SCTTestRun, SubtestType, SCTUnprocessedEvent, StressCommand
+from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTJunitReports, SCTResource, SCTNemesis, SCTTestRun, SubtestType, SCTUnprocessedEvent, StressCommand
 from argus.common.sct_types import GeminiResultsRequest, PerformanceResultsRequest, RawEventPayload, ResourceUpdateRequest
 from argus.backend.plugins.sct.udt import (
     CloudInstanceDetails,
-    CloudResource,
     EventsBySeverity,
     NemesisRunInfo,
     NodeDescription,
@@ -122,11 +121,15 @@ class SCTService:
                 region=region,
             )
             run.sct_runner_host = details
-            resource = CloudResource(
-                name=name or "sct-runner", resource_type="sct-runner", instance_info=details)
-            if not any(r.name == resource.name for r in run.allocated_resources):
-                run.allocated_resources.append(resource)
             run.save()
+            resource_name = name or "sct-runner"
+            if not SCTResource.objects(run_id=UUID(run_id), name=resource_name).count():
+                SCTResource.create(
+                    run_id=UUID(run_id),
+                    name=resource_name,
+                    resource_type="sct-runner",
+                    instance_info=details,
+                )
         except SCTTestRun.DoesNotExist as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
             raise SCTServiceException("Run not found", run_id) from exception
@@ -309,16 +312,29 @@ class SCTService:
             raise SCTServiceException("Run not found", run_id) from exception
 
     @staticmethod
+    def get_resources(run_id: str):
+        return list(SCTResource.filter(run_id=run_id).all())
+
+    @staticmethod
+    def get_resource(run_id: str, name: str):
+        return SCTResource.get(run_id=run_id, name=name)
+
+    @staticmethod
     def create_resource(run_id: str, resource_details: dict) -> str:
         instance_details = CloudInstanceDetails(
             **resource_details.pop("instance_details"))
-        resource = CloudResource(
-            **resource_details, instance_info=instance_details)
+        resource_name = resource_details.get("name")
         try:
-            run: SCTTestRun = SCTTestRun.get(id=run_id)
-            if not any(r.name == resource.name for r in run.get_resources()):
-                run.get_resources().append(resource)
-                run.save()
+            SCTTestRun.get(id=run_id)
+            if not SCTResource.objects(run_id=UUID(run_id), name=resource_name).count():
+                SCTResource.create(
+                    run_id=UUID(run_id),
+                    name=resource_name,
+                    state=resource_details.get(
+                        "state", ResourceState.RUNNING.value),
+                    resource_type=resource_details.get("resource_type"),
+                    instance_info=instance_details,
+                )
         except SCTTestRun.DoesNotExist as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
             raise SCTServiceException("Run not found", run_id) from exception
@@ -328,19 +344,18 @@ class SCTService:
     @staticmethod
     def update_resource_shards(run_id: str, resource_name: str, new_shards: int) -> str:
         try:
-            run: SCTTestRun = SCTTestRun.get(id=run_id)
-            resource = next(res for res in run.get_resources()
-                            if res.name == resource_name)
-            resource.get_instance_info().shards_amount = new_shards
-            run.save()
-        except StopIteration as exception:
+            resource = SCTResource.get(run_id=UUID(run_id), name=resource_name)
+            info = CloudInstanceDetails(**resource.instance_info)
+            if not info:
+                info = CloudInstanceDetails()
+            info.shards_amount = new_shards
+            resource.instance_info = info
+            resource.save()
+        except SCTResource.DoesNotExist as exception:
             LOGGER.error("Resource %s not found in run %s",
                          resource_name, run_id)
             raise SCTServiceException(
                 "Resource not found", resource_name) from exception
-        except SCTTestRun.DoesNotExist as exception:
-            LOGGER.error("Run %s not found for SCTTestRun", run_id)
-            raise SCTServiceException("Run not found", run_id) from exception
 
         return "updated"
 
@@ -348,27 +363,24 @@ class SCTService:
     def update_resource(run_id: str, resource_name: str, update_data: ResourceUpdateRequest) -> str:
         try:
             fields_updated = {}
-            run: SCTTestRun = SCTTestRun.get(id=run_id)
-            resource = next(res for res in run.get_resources()
-                            if res.name == resource_name)
+            resource = SCTResource.get(run_id=UUID(run_id), name=resource_name)
             instance_info = update_data.pop("instance_info", None)
             resource.state = ResourceState(
                 update_data.get("state", resource.state)).value
             if instance_info:
-                resource_instance_info = resource.get_instance_info()
+                resource_instance_info = CloudInstanceDetails(
+                    **resource.instance_info)
                 for k, v in instance_info.items():
                     if k in resource_instance_info.keys():
                         resource_instance_info[k] = v
                         fields_updated[k] = v
-            run.save()
-        except StopIteration as exception:
+                resource.update(instance_info=resource_instance_info)
+            resource.save()
+        except SCTResource.DoesNotExist as exception:
             LOGGER.error("Resource %s not found in run %s",
                          resource_name, run_id)
             raise SCTServiceException(
                 "Resource not found", resource_name) from exception
-        except SCTTestRun.DoesNotExist as exception:
-            LOGGER.error("Run %s not found for SCTTestRun", run_id)
-            raise SCTServiceException("Run not found", run_id) from exception
 
         return {
             "state": "updated",
@@ -378,25 +390,24 @@ class SCTService:
     @staticmethod
     def terminate_resource(run_id: str, resource_name: str, reason: str) -> str:
         try:
-            run: SCTTestRun = SCTTestRun.get(id=run_id)
             if "sct-runner" in resource_name:  # FIXME: Temp solution until sct-runner name is propagated on submit
-                resource = next(res for res in run.get_resources()
-                                if "sct-runner" in res.name)
+                resources = list(SCTResource.filter(run_id=UUID(run_id)).all())
+                resource = next(
+                    res for res in resources if "sct-runner" in res.name)
             else:
-                resource = next(res for res in run.get_resources()
-                                if res.name == resource_name)
-            resource.get_instance_info().termination_reason = reason
-            resource.get_instance_info().termination_time = int(time())
+                resource = SCTResource.get(
+                    run_id=UUID(run_id), name=resource_name)
+            info = CloudInstanceDetails(**resource.instance_info)
+            info.termination_reason = reason
+            info.termination_time = int(time())
             resource.state = ResourceState.TERMINATED.value
-            run.save()
-        except StopIteration as exception:
+            resource.update(instance_info=info)
+            resource.save()
+        except (StopIteration, SCTResource.DoesNotExist) as exception:
             LOGGER.error("Resource %s not found in run %s",
                          resource_name, run_id)
             raise SCTServiceException(
                 "Resource not found", resource_name) from exception
-        except SCTTestRun.DoesNotExist as exception:
-            LOGGER.error("Run %s not found for SCTTestRun", run_id)
-            raise SCTServiceException("Run not found", run_id) from exception
 
         return "terminated"
 
@@ -514,8 +525,10 @@ class SCTService:
 
     @staticmethod
     def get_events(run_id: str, limit: int, severities: list[str], before: str | None, after: str | None = None) -> list[dict]:
-        before_dt = datetime.fromtimestamp(int(before), tz=UTC) if before else None
-        after_dt = datetime.fromtimestamp(int(after), tz=UTC) if after else None
+        before_dt = datetime.fromtimestamp(
+            int(before), tz=UTC) if before else None
+        after_dt = datetime.fromtimestamp(
+            int(after), tz=UTC) if after else None
 
         return SCTTestRun.get_events_limited(run_id=UUID(run_id), before=before_dt, after=after_dt, severities=severities, per_partition_limit=limit)
 
