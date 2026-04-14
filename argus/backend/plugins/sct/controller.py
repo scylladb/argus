@@ -52,6 +52,27 @@ def sct_set_runner(run_id: str):
     }
 
 
+
+@bp.route("/<string:run_id>/resource/all", methods=["GET"])
+@api_login_required
+def sct_resource_all(run_id: str):
+    result = SCTService.get_resources(run_id=run_id)
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
+@bp.route("/<string:run_id>/resource/<string:name>/get", methods=["GET"])
+@api_login_required
+def sct_resource_get(run_id: str, name: str):
+    result = SCTService.get_resource(run_id=run_id, name=name)
+    return {
+        "status": "ok",
+        "response": result
+    }
+
+
 @bp.route("/<string:run_id>/resource/create", methods=["POST"])
 @api_login_required
 def sct_resource_create(run_id: str):
