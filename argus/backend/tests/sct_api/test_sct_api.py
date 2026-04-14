@@ -4,7 +4,7 @@ import time
 from uuid import uuid4
 import pytest
 
-from argus.backend.plugins.sct.testrun import SCTNemesis, SCTTestRun
+from argus.backend.plugins.sct.testrun import SCTResource, SCTNemesis, SCTTestRun
 from argus.common.utils import clamp_ts_to_milliseconds
 
 API_PREFIX = "/api/v1/client/sct"
@@ -102,7 +102,7 @@ def test_set_runner(flask_client, sct_run_id):
     assert run.sct_runner_host is not None
     assert run.sct_runner_host.provider == "aws"
     assert run.sct_runner_host.public_ip == "1.2.3.4"
-    assert any(res.resource_type == "sct-runner" and res.name == "runner-1" for res in run.allocated_resources)
+    assert any(res.resource_type == "sct-runner" and res.name == "runner-1" for res in SCTResource.filter(run_id=sct_run_id).all())
 
 
 def _create_resource(flask_client, sct_run_id, resource_name="node-1"):
@@ -137,8 +137,7 @@ def test_resource_create(flask_client, sct_run_id):
     assert resp.json["status"] == "ok"
 
     # Verify resource persisted
-    run = SCTTestRun.get(id=sct_run_id)
-    res = next(r for r in run.allocated_resources if r.name == "node-1")
+    res = SCTResource.get(run_id=sct_run_id, name="node-1")
     assert res.resource_type == "db_node"
     assert res.instance_info.shards_amount == 8
     assert res.state == "running"
@@ -160,8 +159,7 @@ def test_resource_update_shards(flask_client, sct_run_id):
     assert resp.json["status"] == "ok"
 
     # Verify shards updated
-    run = SCTTestRun.get(id=sct_run_id)
-    res = next(r for r in run.allocated_resources if r.name == "node-2")
+    res = SCTResource.get(run_id=sct_run_id, name="node-2")
     assert res.instance_info.shards_amount == 16
 
 
@@ -178,8 +176,7 @@ def test_resource_update(flask_client, sct_run_id):
     assert resp.json["status"] == "ok"
 
     # Verify update applied
-    run = SCTTestRun.get(id=sct_run_id)
-    res = next(r for r in run.allocated_resources if r.name == "node-3")
+    res = SCTResource.get(run_id=sct_run_id, name="node-3")
     assert res.instance_info.shards_amount == 12
 
 
@@ -196,8 +193,7 @@ def test_resource_terminate(flask_client, sct_run_id):
     assert resp.json["status"] == "ok"
 
     # Verify termination reflected in model
-    run = SCTTestRun.get(id=sct_run_id)
-    res = next(r for r in run.allocated_resources if r.name == "node-4")
+    res = SCTResource.get(run_id=sct_run_id, name="node-4")
     assert res.state == "terminated"
     assert res.instance_info.termination_reason == "test-complete"
     assert res.instance_info.termination_time and res.instance_info.termination_time > 0

@@ -493,7 +493,6 @@ class TestStats:
                 "id": run["id"],
                 "status": run["status"],
                 "setup": run.get("cloud_setup"),
-                "resources": run.get("allocated_resources"),
                 "build_number": run["build_number"],
                 "build_job_name": run["build_id"],
                 "start_time": run["start_time"],
