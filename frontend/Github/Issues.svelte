@@ -140,7 +140,6 @@
 </script>
 
 <script lang="ts">
-    import { onMount } from "svelte";
     import { PLUGIN_NAMES } from "../Common/PluginNames";
     import { newIssueDestinations } from "../Common/IssueDestinations";
     import GithubIssue from "./GithubIssue.svelte";
@@ -152,6 +151,7 @@
     import queryString from 'query-string';
     import JiraIssue from "../Jira/JiraIssue.svelte";
     import { sha1 } from "js-sha1";
+    import { untrack } from "svelte";
     interface Props {
         id?: string;
         runId: any;
@@ -160,6 +160,8 @@
         filter_key?: string;
         submitDisabled?: boolean;
         aggregateByIssue?: boolean;
+        productVersion?: string;
+        includeNoVersion?: boolean;
     }
 
     let {
@@ -169,22 +171,29 @@
         pluginName,
         filter_key = "run_id",
         submitDisabled = false,
-        aggregateByIssue = false
+        aggregateByIssue = false,
+        productVersion = undefined,
+        includeNoVersion = false,
     }: Props = $props();
     let newIssueUrl = $state("");
     let issues: Issue[] = $state([]);
     let fetching = $state(false);
     let showAllLabels = $state(false);
     export const fetchIssues = async function () {
-        issues = [];
         fetching = true;
         try {
-
-            let params = queryString.stringify({
+            let queryParams: Record<string, any> = {
                 filterKey: filter_key,
                 id: id,
                 aggregateByIssue: new Number(aggregateByIssue),
-            }).toString();
+            };
+            if (productVersion) {
+                queryParams.productVersion = productVersion;
+                if (includeNoVersion) {
+                    queryParams.includeNoVersion = 1;
+                }
+            }
+            let params = queryString.stringify(queryParams).toString();
             let apiResponse = await fetch("/api/v1/issues/get?" + params);
             let apiJson = await apiResponse.json();
             if (apiJson.status === "ok") {
@@ -332,8 +341,11 @@
 
     let sortedIssues = $derived(paginateIssues(issues, sortCriteria, reverseSort, filterString));
 
-    onMount(() => {
-        fetchIssues();
+    $effect(() => {
+        // Read both props together as a single dependency so the effect fires
+        // exactly once even when both change in the same Svelte flush.
+        void [productVersion, includeNoVersion];
+        untrack(() => fetchIssues());
     });
 </script>
 
@@ -395,7 +407,6 @@
     <div class="container-fluid mb-2">
         {#if issues.length > 0}
             <h6 class="d-flex">
-                <div>Issues</div>
                 <div class="ms-auto">
                     <IssuesCopyModal sortedIssues={sortedIssues} currentPage={currentPage} selectedLabels={selectedLabels}>
                         <Fa icon={faCopy}/>
@@ -480,11 +491,13 @@
             </div>
         {:else}
             <div class="row">
-                <div class="col text-center text-muted">
+                <div class="col text-center text-muted p-3">
                     {#if fetching}
                         <span class="spinner-border spinner-border-sm"></span> Fetching...
+                    {:else if productVersion}
+                        No issues linked for version {productVersion === "!noVersion" ? "runs without a version" : productVersion}.
                     {:else}
-                        No Issues.
+                        No issues found.
                     {/if}
                 </div>
             </div>

@@ -240,12 +240,16 @@ def issues_get():
     key_value = UUID(key_value)
     aggregate_by_issue = request.args.get("aggregateByIssue")
     aggregate_by_issue = bool(int(aggregate_by_issue)) if aggregate_by_issue else False
+    product_version = request.args.get("productVersion") or None
+    include_no_version = bool(int(request.args.get("includeNoVersion", 0)))
 
     service = IssueService()
     issues = service.get(
         filter_key=filter_key,
         filter_id=key_value,
-        aggregate_by_issue=aggregate_by_issue
+        aggregate_by_issue=aggregate_by_issue,
+        product_version=product_version,
+        include_no_version=include_no_version,
     )
 
     return {

@@ -11,6 +11,7 @@
     let clickedTests = $state({});
     let issuesClicked = $state(false);
     let productVersion = $state(queryString.parse(document.location.search)?.productVersion);
+    let includeNoVersion = $state(false);
     let stats = $state();
 
     const handleTestClick = function (detail) {
@@ -29,6 +30,7 @@
 
     const handleVersionChange = function (e) {
         productVersion = e.detail.version;
+        includeNoVersion = e.detail.includeNoVersion;
     };
 
     const handleDeleteRequest = function(e) {
@@ -75,7 +77,7 @@
                             data-bs-target="#collapseIssues"
                             onclick={() => issuesClicked = true}
                         >
-                            All Issues
+                            Issues
                         </button>
                     </h2>
                     <div
@@ -89,6 +91,8 @@
                                 filter_key="release_id"
                                 submitDisabled={true}
                                 aggregateByIssue={true}
+                                {productVersion}
+                                {includeNoVersion}
                             />
                             {/if}
                         </div>

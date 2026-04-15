@@ -375,8 +375,7 @@
         return [...enterpriseVersions, ...ossVersions, ...unrecognizedVersions];
     };
 
-    const fetchImages = async function() {
-        let response = await fetch(PANEL_MODES[dashboardObjectType].imagesRoute(dashboardObject));
+    const fetchImages = async function() {        let response = await fetch(PANEL_MODES[dashboardObjectType].imagesRoute(dashboardObject));
         if (response.status != 200) {
             return Promise.reject("API Error");
         }
@@ -387,6 +386,9 @@
 
         return json.response.map(v => ({ label: v, value : v}));
     };
+
+    let versionsPromise: Promise<string[]> = fetchVersions();
+    let imagesPromise: Promise<{label: string, value: string}[]> = fetchImages();
 
     const shouldFilterVersion = function (version) {
         if (!stats) return false;
@@ -423,7 +425,7 @@
         params.productVersion = versionString;
         history.pushState(undefined, "", `?${queryString.stringify(params, { arrayFormat: "bracket" })}`);
         fetchStats();
-        dispatch("versionChange", { version: productVersion });
+        dispatch("versionChange", { version: productVersion, includeNoVersion: versionsIncludeNoVersion });
     };
 
     const handleTestClick = function (testStats, groupStats) {
@@ -520,7 +522,7 @@
         {/if}
     </div>
     {#if !settings.targetVersion}
-        {#await fetchVersions()}
+        {#await versionsPromise}
             <div>Loading versions...</div>
         {:then versions}
             <div class="d-inline-flex flex-wrap mb-2 rounded bg-white p-2" style="flex-basis: 10%; row-gap: 0.75em">
@@ -642,7 +644,7 @@
                             <div class="mb-2 d-inline-flex w-50 align-items-start flex-column rounded bg-white">
                             <div class="p-2">Filter by ImageId</div>
                             <div class="p-2 w-100">
-                                {#await fetchImages()}
+                                {#await imagesPromise}
                                     <div class="spinner-grow spinner-grow-sm"></div> Loading Images...
                                 {:then images}
                                 <Select

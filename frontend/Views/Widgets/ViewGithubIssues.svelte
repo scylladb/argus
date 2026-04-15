@@ -23,7 +23,7 @@
                 data-bs-target="#collapseIssues"
                 onclick={() => issuesClicked = true}
             >
-                All Issues
+                Issues
             </button>
         </h2>
         <div
@@ -37,7 +37,9 @@
                         filter_key="view_id"
                         submitDisabled={settings.submitDisabled}
                         aggregateByIssue={settings.aggregateByIssue}
+                        {productVersion}
                     />
+                    <!-- includeNoVersion intentionally omitted — Views dashboard has no toggle for it -->
                 {/if}
             </div>
         </div>
