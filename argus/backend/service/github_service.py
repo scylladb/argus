@@ -197,6 +197,10 @@ class GithubService:
             links = list(self._get_github_issues_for_view(filter_id))
         else:
             links = list(IssueLink.filter(**{filter_key: filter_id}).allow_filtering().all())
+        return self.resolve_issues(links, aggregate_by_issue)
+
+    def resolve_issues(self, links: list[IssueLink], aggregate_by_issue: bool = False) -> list[dict]:
+        """Resolve GithubIssue records from pre-filtered links and build response dicts."""
         issues = reduce(lambda acc, link: acc[link.issue_id].append(link) or acc, links, defaultdict(list))
         resolved_issues = []
         for batch in chunk(issues.keys()):
