@@ -162,7 +162,24 @@ aws ec2 describe-instances --filters "Name=tag:Name,Values=argus-*" \
 
 ## Implementation Plan
 
+### Current Status
+
+- [x] Step 1: DB model - `argus/backend/models/ssh_key.py` (done in PR #967)
+- [x] Step 2: Proxy tunnel config in DB - `argus/backend/models/ssh_key.py` (done in PR #967)
+- [x] Step 3: Backend service - `argus/backend/service/tunnel_service.py` (done in PR #967)
+- [x] Step 4a: Client API - `argus/backend/controller/ssh_api.py` (done in PR #967)
+- [x] Step 9 (partial): backend tunnel tests (`argus/backend/tests/tunnel/test_tunnel_service.py`, `argus/backend/tests/tunnel/test_ssh_api.py`) (done in PR #967)
+- [ ] Step 4b: Admin API
+- [ ] Step 4c: Proxy host provisioning template
+- [ ] Step 4d: Admin Panel UI
+- [ ] Step 5: Client module - `argus/client/tunnel.py`
+- [ ] Step 6: Modify `argus/client/base.py`
+- [ ] Step 7: Python CLI integration
+- [ ] Step 7b: Go CLI `ssh-keys` command
+
 ### Step 1: DB model — `argus/backend/models/ssh_key.py`
+
+Status: Done in PR #967.
 
 ```python
 class SSHTunnelKey(Model):
@@ -178,6 +195,8 @@ class SSHTunnelKey(Model):
 Add to `USED_MODELS` list in `argus/backend/models/web.py`.
 
 ### Step 2: Proxy tunnel config in DB — `argus/backend/models/ssh_key.py`
+
+Status: Done in PR #967.
 
 ```python
 class ProxyTunnelConfig(Model):
@@ -199,6 +218,8 @@ Add to `USED_MODELS`. Managed via admin panel (Step 4d). Only one active proxy h
 `admin_user` and `admin_key_path` (SSH credentials for provisioning access to the proxy host) are stored in `argus_web.yaml`.
 
 ### Step 3: Backend service — `argus/backend/service/tunnel_service.py`
+
+Status: Done in PR #967.
 
 Class `TunnelService`:
 
@@ -239,6 +260,8 @@ Class `TunnelService`:
     4. On failure: mark config as inactive, return error to admin
 
 ### Step 4a: Client API — `argus/backend/controller/ssh_api.py`
+
+Status: Done in PR #967.
 
 Blueprint registered under `/client/`:
 
@@ -489,6 +512,8 @@ Behavior:
 **Proxy host deployment:** Binary at `/usr/local/bin/argus-cli`, owned by root, mode 0755. Config via env vars embedded in the `argus-authorized-keys` wrapper script.
 
 ### Step 9: Tests
+
+Status: Partially done in PR #967 (backend tunnel tests for service/API).
 
 **`argus/client/tests/test_tunnel.py`:**
 
