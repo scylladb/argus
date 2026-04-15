@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Iterable
 from datetime import datetime, UTC
 from math import ceil
 from uuid import UUID
@@ -7,6 +8,7 @@ from time import time
 from cassandra.cqlengine import columns
 from cassandra.cqlengine.models import Model
 from cassandra.cqlengine.usertype import UserType
+from cassandra.concurrent import execute_concurrent_with_args
 from flask import Blueprint
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.plan import ArgusReleasePlan
@@ -192,6 +194,19 @@ class PluginModelBase(Model):
         rows = cluster.session.execute(query=query, parameters=(run_id,))
 
         return list(rows)
+
+    @classmethod
+    def get_versions_by_run_ids(cls, run_ids: Iterable[UUID]) -> dict[UUID, str | None]:
+        """Parallel per-run_id lookups of scylla_version from the plugin table."""
+        cluster = ScyllaCluster.get()
+        query = cluster.prepare(f"SELECT scylla_version FROM {cls.table_name()} WHERE id = ?")
+        params = [(rid,) for rid in run_ids]
+        results = execute_concurrent_with_args(cluster.session, query, params, concurrency=50)
+        return {
+            p[0]: rows.one().get("scylla_version")
+            for p, (success, rows) in zip(params, results)
+            if success and rows
+        }
 
     @classmethod
     def get_run_response(cls, run_id: UUID) -> dict | None:

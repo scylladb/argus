@@ -12,7 +12,7 @@ from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.jira import JiraIssue
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.plugins.loader import all_plugin_models
-from argus.backend.util.common import chunk, get_build_number
+from argus.backend.util.common import chunk, get_build_number, check_version
 from argus.common.enums import TestStatus, TestInvestigationStatus
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusScheduleTest, ArgusTest, \
     ArgusTestRunComment, ArgusUserView
@@ -153,14 +153,6 @@ def _get_image(row: dict):
     if cs := row.get("cloud_setup"):
         return cs.db_node.image_id
 
-
-def check_version(filter_string: str, version: str) -> bool:
-    if not version:
-        return False
-    if version.startswith(filter_string):
-        return True
-
-    return False
 
 def _fetch_multiple_release_queries(entity: Model, releases: list[str]):
     result_set = []
