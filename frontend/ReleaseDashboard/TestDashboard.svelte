@@ -422,7 +422,7 @@
         params.productVersion = versionString;
         history.pushState(undefined, "", `?${queryString.stringify(params, { arrayFormat: "bracket" })}`);
         fetchStats();
-        dispatch("versionChange", { version: productVersion });
+        dispatch("versionChange", { version: productVersion, includeNoVersion: versionsIncludeNoVersion });
     };
 
     const handleTestClick = function (testStats, groupStats) {

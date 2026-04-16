@@ -70,3 +70,12 @@ def get_build_number(build_job_url: str) -> int | None:
         except ValueError:
             LOGGER.error("Error parsing build number from %s: got %s as build_number", build_job_url, build_number)
     return None
+
+
+def check_version(filter_string: str, version: str) -> bool:
+    if not version:
+        return False
+    if version.startswith(filter_string):
+        return True
+
+    return False
