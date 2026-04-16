@@ -1,6 +1,8 @@
 <script lang="ts">
     import {faArrowUpRightFromSquare, faCheckCircle, faCopy, faDotCircle, faLink, faPlus} from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
+    import IssueBadge from "../Common/IssueBadge.svelte";
+    import { isJiraIssue, getIssueUrl, getIssueTitle } from "../Common/IssueUtils";
     import { sendMessage } from "../Stores/AlertStore";
     import ModalWindow from "../Common/ModalWindow.svelte";
     import { createEventDispatcher } from "svelte";
@@ -255,20 +257,26 @@
                                                     <div class="mb-1 d-flex align-items-center">
                                                         <div class="btn-group" style="width: 128px">
                                                             <button
-                                                                class:btn-open={issue.state === "open"}
-                                                                class:btn-closed={issue.state !== "open"}
+                                                                class:btn-open={!isJiraIssue(issue) && issue.state === "open"}
+                                                                class:btn-closed={!isJiraIssue(issue) && issue.state !== "open"}
                                                                 class="btn btn-sm"
                                                                 title="Add this issue to the current run"
-                                                                onclick={() => dispatch("issueAttach", { url: issue.url })}
+                                                                onclick={() => dispatch("issueAttach", { url: getIssueUrl(issue) })}
                                                             >
                                                                 <Fa icon={faPlus}/>
                                                             </button>
-                                                            <a href={issue.url} class:btn-open={issue.state === "open"} class:btn-closed={issue.state !== "open"} target="_blank" class="btn btn-sm">
-                                                                <Fa icon={issue.state === "open" ? faDotCircle : faCheckCircle}/> #{issue.number}
+                                                            <a
+                                                                href={getIssueUrl(issue)}
+                                                                class:btn-open={isJiraIssue(issue) || issue.state === "open"}
+                                                                class:btn-closed={!isJiraIssue(issue) && issue.state !== "open"}
+                                                                target="_blank"
+                                                                class="btn btn-sm"
+                                                            >
+                                                                <IssueBadge {issue} stateIcons />
                                                             </a>
                                                         </div>
-                                                        <div class="ms-2 overflow-ellipsis text-truncate" style="max-width: 512px" title="{issue.title}">
-                                                            {issue.title}
+                                                        <div class="ms-2 overflow-ellipsis text-truncate" style="max-width: 512px" title="{getIssueTitle(issue)}">
+                                                            {getIssueTitle(issue)}
                                                         </div>
                                                     </div>
                                                 {/each}

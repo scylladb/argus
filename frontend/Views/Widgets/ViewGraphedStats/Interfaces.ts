@@ -1,4 +1,24 @@
 // Types
+export interface GithubIssue {
+    type: "github";
+    number: number;
+    state: string;
+    title: string;
+    url: string;
+    owner?: string;
+    repo?: string;
+}
+
+export interface JiraIssue {
+    type: "jira";
+    state: string;
+    summary: string;
+    key: string;
+    permalink: string;
+}
+
+export type Issue = GithubIssue | JiraIssue;
+
 export interface TestRun {
     build_id: string;
     version: string;
@@ -10,13 +30,6 @@ export interface TestRun {
     investigation_status: string;
     assignee?: string;
     issues?: Issue[];
-}
-
-export interface Issue {
-    number: number;
-    state: string;
-    title: string;
-    url: string;
 }
 
 export interface RunDetails {

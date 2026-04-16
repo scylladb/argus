@@ -1,5 +1,6 @@
 <script lang="ts">
     import GithubIssue from "../Github/GithubIssue.svelte";
+    import JiraIssue from "../Jira/JiraIssue.svelte";
 
     let { test = {
 
@@ -10,7 +11,11 @@
     <div class="fs-3">{test.name}</div>
     <div class="container-fluid">
         {#each issues as issue}
-            <GithubIssue {issue} />
+            {#if issue.subtype === "jira"}
+                <JiraIssue {issue} runId={issue.run_id} />
+            {:else}
+                <GithubIssue {issue} runId={issue.run_id} />
+            {/if}
         {/each}
     </div>
 </div>

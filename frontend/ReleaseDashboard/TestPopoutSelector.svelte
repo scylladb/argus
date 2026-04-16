@@ -17,7 +17,8 @@
         faComment,
         faArrowUp,
     } from "@fortawesome/free-solid-svg-icons";
-    import { faGithub } from "@fortawesome/free-brands-svg-icons";
+    import { getIssueUrl, getIssueTitle, getIssueLabelFull } from "../Common/IssueUtils";
+    import IssueBadge from "../Common/IssueBadge.svelte";
     interface Props {
         tests?: any;
         releaseName?: string;
@@ -166,22 +167,20 @@
                                                         class="ms-3 d-flex align-items-center"
                                                     >
                                                         <div class="ms-1">
-                                                            <Fa
-                                                                icon={faGithub}
-                                                            />
+                                                            <IssueBadge {issue} iconOnly />
                                                         </div>
                                                         <div class="ms-1">
                                                             <a
                                                                 target="_blank"
-                                                                href={issue.url}
+                                                                href={getIssueUrl(issue)}
                                                             >
-                                                                {issue.title}
+                                                                {getIssueTitle(issue)}
                                                             </a>
                                                         </div>
                                                         <div
                                                             class="ms-auto text-muted"
                                                         >
-                                                            {issue.owner}/{issue.repo}#{issue.number}
+                                                            {getIssueLabelFull(issue)}
                                                         </div>
                                                     </li>
                                                 {/each}

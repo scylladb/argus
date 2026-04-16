@@ -1,5 +1,6 @@
 <script lang="ts">
-    import type { TestRun } from "./Interfaces";
+    import type { TestRun, Issue } from "./Interfaces";
+    import { getIssueLabel, getIssueUrl, getIssueTitle, getIssueKey, isJiraIssue } from "../../../Common/IssueUtils";
 
     interface Props {
         run: TestRun;
@@ -7,22 +8,27 @@
 
     let { run }: Props = $props();
 
-    const issues = run.issues || [];
+    const issues: Issue[] = run.issues || [];
     const hasIssues = issues.length > 0;
+
+    function getIssueColorClass(issue: Issue): string {
+        if (isJiraIssue(issue)) return "issue-jira";
+        return issue.state === "open" ? "issue-open" : "issue-closed";
+    }
 </script>
 
 {#if !hasIssues}
     <span class="text-muted">No issues</span>
 {:else}
     <div class="issues-container">
-        {#each issues as issue (issue.number)}
+        {#each issues as issue (getIssueKey(issue))}
             <a
-                href={issue.url}
+                href={getIssueUrl(issue)}
                 target="_blank"
-                class="badge me-1 {issue.state === 'open' ? 'issue-open' : 'issue-closed'}"
-                title={issue.title}
+                class="badge me-1 {getIssueColorClass(issue)}"
+                title={getIssueTitle(issue)}
             >
-                #{issue.number}
+                {getIssueLabel(issue)}
             </a>
         {/each}
     </div>
@@ -42,6 +48,11 @@
 
     .issue-closed {
         background-color: #6c757d;
+        color: white;
+    }
+
+    .issue-jira {
+        background-color: #0052cc;
         color: white;
     }
 
