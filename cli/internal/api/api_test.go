@@ -234,6 +234,21 @@ func TestNewRequest_AllAuthOptions(t *testing.T) {
 	assert.Equal(t, "token tok", req.Header.Get("Authorization"))
 }
 
+func TestNewRequest_WithCFAccessSecrets(t *testing.T) {
+	t.Parallel()
+
+	c, err := api.New("https://argus.scylladb.com",
+		api.WithCFAccessSecret("cid", "secret"),
+	)
+	require.NoError(t, err)
+
+	req, err := c.NewRequest(context.Background(), http.MethodGet, "/", nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, "cid", req.Header.Get("CF-Access-Client-Id"))
+	assert.Equal(t, "secret", req.Header.Get("CF-Access-Client-Secret"))
+}
+
 // --------------------------------------------------------------------------
 // DoJSON – success path
 // --------------------------------------------------------------------------

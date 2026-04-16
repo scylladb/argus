@@ -249,7 +249,7 @@ func DoJSON[T any](c *Client, req *http.Request) (T, error) {
 
 	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
 		return zero, fmt.Errorf(
-			"%w: server returned %d %s — re-authenticate with `argus auth` or set the ARGUS_TOKEN environment variable",
+			"%w: server returned %d %s — re-authenticate with `argus auth` or set ARGUS_AUTH_TOKEN (or ARGUS_TOKEN)",
 			ErrUnauthorized,
 			resp.StatusCode,
 			http.StatusText(resp.StatusCode),
@@ -269,7 +269,7 @@ func DoJSON[T any](c *Client, req *http.Request) (T, error) {
 		return zero, fmt.Errorf(
 			"%w: server returned Content-Type %q instead of application/json — "+
 				"this usually means authentication failed or the session expired; "+
-				"re-authenticate with `argus auth` or set the ARGUS_TOKEN environment variable",
+				"re-authenticate with `argus auth` or set ARGUS_AUTH_TOKEN (or ARGUS_TOKEN)",
 			ErrUnauthorized,
 			contentType,
 		)
