@@ -1,39 +1,81 @@
-# Quick setup for local development environment
-
-Minimal local dev setup with one db node (adjust accordingly if needed more nodes)
+# Local Development Setup
 
 ## Prerequisites
-1. NodeJS >=16 (with npm)
-2. Yarn (can be installed globally with `npm -g install yarn`)
-3. uv (https://docs.astral.sh/uv/getting-started/installation/)
-4. docker-compose
 
-## Installing argus dependencies
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) (Python package manager)
+- Node.js >= 22 with npm
+- Yarn (`npm -g install yarn`)
+- Docker and Docker Compose
+
+---
+
+## Daily Workflow (TL;DR)
+
+If you've already done the first-time setup below, this is all you need
+each time you sit down to work:
+
 ```bash
-uv sync --all-extras
+# 1. Start the database (wait ~60-90s for ScyllaDB to initialize)
+docker compose -f dev-db/docker-compose.yaml up -d
+docker logs -f dev-db-alpha-1 2>&1 | grep -m1 "initialization completed"
+
+# 2. Start the backend (in one terminal)
+FLASK_ENV=development \
+  FLASK_APP=argus_backend:start_server \
+  CQLENG_ALLOW_SCHEMA_MANAGEMENT=1 \
+  uv run flask run
+
+# 3. Start the frontend (in another terminal)
+ROLLUP_ENV=development yarn rollup -c --watch
+
+# 4. Open http://localhost:5000 — login with admin/admin
+```
+
+When you're done:
+
+```bash
+# Stop Flask with Ctrl+C, then stop the database
+docker compose -f dev-db/docker-compose.yaml down
+```
+
+> The database **must be running** before you start Flask. Flask connects
+> to ScyllaDB at startup and will crash immediately if it can't reach it.
+
+---
+
+## First-Time Setup
+
+Follow these steps once when you first clone the repository.
+
+### 1. Install dependencies
+
+```bash
+# Python (skip --extra dev if you don't need linting/test tooling)
+uv sync --extra web-backend --extra dev
+
+# Frontend
 yarn install
 ```
 
-## Configuring argus
-Create a `argus.local.yaml` configuration file (used to configure database connection) and a `argus_web.yaml` (used for webapp secrets) in your application install directory.
+> **Note:** `uv sync --all-extras` may fail on Python 3.14 due to
+> `onnxruntime`. Use the explicit extras above instead.
 
-### argus.local.yaml
-```yaml
+### 2. Create the config file
 
-contact_points:
-  - 172.18.0.2
-username: cassandra
-password: cassandra
-keyspace_name: argus
+The webapp reads `argus_web.yaml` from the repository root. It is
+gitignored — you need to create it yourself.
 
+```bash
+cp argus_web.example.yaml argus_web.yaml
 ```
 
-### argus_web.yaml
-Replace all <> with your values. Find instructions below.
+Then replace the contents with this minimal local config:
+
 ```yaml
-BASE_URL: "https://argus.scylladb.com"
+BASE_URL: "http://localhost:5000"
 SCYLLA_CONTACT_POINTS:
-  - 172.18.0.2
+    - 172.18.0.2
 SCYLLA_USERNAME: cassandra
 SCYLLA_PASSWORD: cassandra
 SCYLLA_KEYSPACE_NAME: argus
@@ -41,106 +83,213 @@ SCYLLA_KEYSPACE_NAME: argus
 APP_LOG_LEVEL: INFO
 SECRET_KEY: MUSTBEUNIQUE
 
-GITHUB_CLIENT_ID: <>
-GITHUB_CLIENT_SECRET: <>
-GITHUB_ACCESS_TOKEN: unknown
-# List of required organization names (Comment out to disable organization requirement)
-#GITHUB_REQUIRED_ORGANIZATIONS:
+LOGIN_METHODS:
+    - password
 
-JENKINS_URL: https://jenkins.scylladb.com
-JENKINS_USER: <your username>
-JENKINS_API_TOKEN_NAME: argus-dev
-JENKINS_API_TOKEN: <jenkins api token>
+# Placeholders -- the app requires these keys at startup even if you
+# aren't using GitHub or email features. Without them every API call
+# fails with a KeyError.
+GITHUB_CLIENT_ID: "dev-placeholder"
+GITHUB_CLIENT_SECRET: "dev-placeholder"
+GITHUB_ACCESS_TOKEN: "dev-placeholder"
 
-
-EMAIL_SENDER: "qabot@scylladb.com"
+EMAIL_SENDER: "dev@localhost"
 EMAIL_SENDER_USER: ""
 EMAIL_SENDER_PASS: ""
-EMAIL_SERVER: "smtp.gmail.com"
+EMAIL_SERVER: "localhost"
 EMAIL_SERVER_PORT: "587"
 
 JOB_VALIDITY_PERIOD_DAYS: 30
 ```
 
-#### Github OAuth App setup (getting :
-1. GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET
-   1. go to your Account Settings (top right corner) -> Developer settings (left pane) -> OAuth Apps
-   2. Click Create New OAuth App button
-   3. Fill the fields (app name: `argus-dev`, homepage URL `http://localhost:5000`, Auth callback URL: `http://localhost:5000/profile/oauth/github`)
-   4. Confirm and get the tokens/ids required for config - visible on the page
+**Why the placeholders?** `ArgusService.__init__` eagerly reads
+`GITHUB_ACCESS_TOKEN`, and `NotificationManagerService` reads the
+`EMAIL_*` keys at init time. Without them every API request returns a
+`KeyError`.
 
-#### Create Jenkins token for your account
-1. Click your username in top right corner
-2.  write down user id
-3. Go to `Configure` from left panel
-4. Click `Add new Token` and name it `argus-dev`
-5. Get it and paste to config to `JENKINS_API_TOKEN` param
-
-## Configure database
-
-### Start database using docker-compose
-```bash
-docker-compose -f dev-db/docker-compose.yaml up -d
-```
-
-### create keyspace
-```bash
-docker exec -it argus_alpha_1 cqlsh --user cassandra --password cassandra -e "CREATE KEYSPACE argus WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor' : 1};"
-```
-
-### create all tables
-```bash
-FLASK_DEBUG=1 FLASK_ENV=development FLASK_APP=argus_backend:argus_app uv run flask cli sync-models
-```
-
-### import jenkins jobs
-```bash
-FLASK_DEBUG=1 FLASK_ENV=development FLASK_APP=argus_backend:argus_app uv run flask cli scan-jenkins
-```
-
-### import data
-#### Get sample data
-1. From S3
-```bash
-aws s3 cp s3://argus-utilities/sample_data.tar.zst .
-```
-2. From prod db
-   1. Configure prod db (setup argus.local.yaml) by creating a ssh tunnel:
-   ```bash
-   # get argus-web details from the tribe
-   ssh argus-web -L 127.0.0.10:9042:10.10.2.62:9042 -L 127.0.0.11:9042:10.10.2.157:9042 -L 127.0.0.12:9042:10.10.2.74:9042 -L 127.0.0.10:19042:10.10.2.62:19042 -L 127.0.0.11:19042:10.10.2.157:19042 -L 127.0.0.12:19042:10.10.2.74:19042
-   ```
-    argus.local.yaml
-   ```yaml
-      # SCYLLA_CONTACT_POINTS:
-      - 127.0.0.10
-      - 127.0.0.11
-      - 127.0.0.12
-      # get db details from the tribe
-   ```
-Modify `release` variable in `dev-db/export_data.py` and glob paths to your need.
-Run multiple times to download all the releases you need.
-```bash
-python dev-db/export_data.py
-```
-
-#### Import it
-```bash
-python dev-db/import_data.py
-```
-Sporadical errors like `Test entity missing for key "enterprise-2023.1/upgrade-with-raft/rolling-upgrade-centos8-with-raft-test", run won't be visible until this is corrected`
-can be ignored.
-
-## Run the application
-Compile frontend files from `/frontend` into `/public/dist`. Add --watch to recompile files on change.
-```bash
-ROLLUP_ENV=development yarn rollup -c --watch
-```
+### 3. Start the database and seed it
 
 ```bash
-FLASK_ENV="development" FLASK_APP="argus_backend:start_server" FLASK_DEBUG=1 CQLENG_ALLOW_SCHEMA_MANAGEMENT=1 flask run
-```
-Omit `FLASK_DEBUG` if running your own debugger (pdb, pycharm, vscode)
+# Pre-create data directories so Docker doesn't create them as root
+mkdir -p dev-db/scylla dev-db/alpha-config.d
 
-## Try it
-Open browser at `http://localhost:5000` (use localhost as Github OAuth setup instead of 127.0.0.1 )
+# Start ScyllaDB + vector store
+docker compose -f dev-db/docker-compose.yaml up -d
+
+# Wait for ScyllaDB to be ready (~60-90 seconds)
+docker logs -f dev-db-alpha-1 2>&1 | grep -m1 "initialization completed"
+
+# Create keyspaces, sync schemas, create admin user, populate test data
+uv run python dev-db/seed_data.py --create-keyspace
+```
+
+The seed script creates everything you need in one shot: both keyspaces
+(`argus` + `argus_tablets`), all table schemas, an admin user, and
+synthetic test data. See [Seed Script Reference](#seed-script-reference)
+below for details.
+
+### 4. Verify it works
+
+```bash
+# Start the backend
+FLASK_ENV=development \
+  FLASK_APP=argus_backend:start_server \
+  CQLENG_ALLOW_SCHEMA_MANAGEMENT=1 \
+  uv run flask run
+```
+
+Open <http://localhost:5000> and log in with `admin` / `admin`.
+
+You should see the "Seed Release" with longevity and performance test
+groups populated with runs, events, and results.
+
+> Use `localhost` (not `127.0.0.1`) if you later configure GitHub OAuth,
+> since the callback URL is registered against `localhost`.
+
+---
+
+## Seed Script Reference
+
+The seed script (`dev-db/seed_data.py`) runs standalone -- no Flask
+required. It connects directly to ScyllaDB using the settings from
+`argus_web.yaml`.
+
+### Usage
+
+```bash
+# First time: create keyspaces + seed data
+uv run python dev-db/seed_data.py --create-keyspace
+
+# Reset: wipe seed data and recreate from scratch
+uv run python dev-db/seed_data.py --force --create-keyspace
+
+# Custom credentials
+uv run python dev-db/seed_data.py --username dev --password dev123
+```
+
+### Options
+
+| Flag                | Description                                          |
+| ------------------- | ---------------------------------------------------- |
+| `--create-keyspace` | Create `argus` + `argus_tablets` keyspaces if needed |
+| `--force`           | Delete existing seed data before recreating          |
+| `--username NAME`   | Admin username (default: `admin`)                    |
+| `--password PASS`   | Admin password (default: `admin`)                    |
+
+### What it creates
+
+| Entity            | Count | Details                                    |
+| ----------------- | ----: | ------------------------------------------ |
+| Admin user        |     1 | `admin` / `admin` with all roles           |
+| Release           |     1 | `seed-release`                             |
+| Groups            |     2 | `longevity-tests`, `performance-tests`     |
+| Tests             |     6 | 3 per group (SCT plugin)                   |
+| Test runs         |    30 | 5 per test, spread over 30 days            |
+| SCT events        |   ~90 | 2-4 per run across all severities          |
+| Activity events   |   ~42 | Status and investigation changes           |
+| Result tables     |     3 | Throughput + latency for performance tests |
+| Result data cells |   135 | 3 columns x 3 rows x 5 runs x 3 tests      |
+| Best results      |    27 | Per column:row combination                 |
+| Graph views       |     3 | One overview per performance test          |
+| GitHub issues     |     2 | Linked to failed runs                      |
+| Jira issues       |     1 | Linked to failed runs                      |
+
+### Idempotency
+
+The script is safe to run multiple times. On subsequent runs it skips
+entities that already exist. Use `--force` to wipe and recreate.
+
+### Without the seed script (manual setup)
+
+If you prefer to create the keyspace and sync tables by hand:
+
+```bash
+# Create keyspace via CQL
+docker exec dev-db-alpha-1 cqlsh 172.18.0.2 -u cassandra -p cassandra \
+  -e "CREATE KEYSPACE IF NOT EXISTS argus WITH replication = \
+      {'class': 'NetworkTopologyStrategy', 'replication_factor': 1};"
+
+# Sync table schemas via Flask CLI
+CQLENG_ALLOW_SCHEMA_MANAGEMENT=1 FLASK_ENV=development \
+  FLASK_APP=argus_backend:start_server uv run flask cli sync-models
+```
+
+Note: this does **not** create the `argus_tablets` keyspace (needed by AI
+embedding models) and does not create any user or test data. You'll need
+to register a user through the UI or another method.
+
+---
+
+## Quick Reference
+
+| Task              | Command                                                                                                        |
+| ----------------- | -------------------------------------------------------------------------------------------------------------- |
+| Pre-create dirs   | `mkdir -p dev-db/scylla dev-db/alpha-config.d` (first time only)                                               |
+| Start DB          | `docker compose -f dev-db/docker-compose.yaml up -d`                                                           |
+| Wait for DB       | `docker logs -f dev-db-alpha-1 2>&1 \| grep -m1 "initialization completed"`                                    |
+| Seed (first time) | `uv run python dev-db/seed_data.py --create-keyspace`                                                          |
+| Seed (reset)      | `uv run python dev-db/seed_data.py --force --create-keyspace`                                                  |
+| Start backend     | `FLASK_ENV=development FLASK_APP=argus_backend:start_server CQLENG_ALLOW_SCHEMA_MANAGEMENT=1 uv run flask run` |
+| Start frontend    | `ROLLUP_ENV=development yarn rollup -c --watch`                                                                |
+| Run linter        | `uv run ruff check`                                                                                            |
+| Run backend tests | `uv run pytest argus/backend/tests`                                                                            |
+| Run client tests  | `uv run pytest argus/client/tests`                                                                             |
+| Stop DB           | `docker compose -f dev-db/docker-compose.yaml down`                                                            |
+
+---
+
+## Troubleshooting
+
+### Flask crashes on startup with a connection error
+
+The database is not running. Start it first:
+
+```bash
+docker compose -f dev-db/docker-compose.yaml up -d
+```
+
+Then wait for ScyllaDB to finish initializing (~60-90 seconds) before
+starting Flask. Check readiness with:
+
+```bash
+docker exec dev-db-alpha-1 cqlsh 172.18.0.2 -u cassandra -p cassandra \
+  -e "DESCRIBE KEYSPACES"
+```
+
+### `KeyError: 'EMAIL_SENDER'` or `KeyError: 'GITHUB_ACCESS_TOKEN'`
+
+Your `argus_web.yaml` is missing required keys. The app reads these
+eagerly at startup. Add the placeholder values shown in the config
+section above.
+
+### ScyllaDB won't start -- permission denied
+
+Docker volumes (`dev-db/scylla/`, `dev-db/alpha-config.d/`) may have
+wrong ownership. See the permissions fix in the first-time setup section.
+
+### `Connection error: AuthenticationFailed`
+
+ScyllaDB has authentication enabled. Always use `-u cassandra -p cassandra`
+when connecting via `cqlsh`.
+
+### `uv sync --all-extras` fails
+
+Use `uv sync --extra web-backend --extra dev` instead. The `onnxruntime`
+dependency may not build on your Python version. If you don't have
+Python 3.12 installed, `uv` can fetch it for you:
+
+```bash
+uv sync --python 3.12 --extra web-backend --extra dev
+```
+
+### ScyllaDB crashes with `Could not setup Async I/O`
+
+The system `aio-max-nr` limit is too low for the number of CPU cores.
+See the [ScyllaDB Docker image docs](https://hub.docker.com/r/scylladb/scylla)
+for the formula. Increase it:
+
+```bash
+sudo sysctl -w fs.aio-max-nr=1048576
+```
+
+To make it permanent, add `fs.aio-max-nr = 1048576` to `/etc/sysctl.conf`.
