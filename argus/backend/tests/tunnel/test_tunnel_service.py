@@ -14,6 +14,7 @@ from uuid import uuid4
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
+from argus.backend.models.runtime_store import RuntimeStore
 from argus.backend.models.ssh_key import ProxyTunnelConfig, SSHTunnelKey
 from argus.backend.models.web import User, UserRoles
 from argus.backend.service.tunnel_service import TunnelService, TunnelServiceException, _derive_fingerprint
@@ -82,6 +83,13 @@ def _restore_configs(config_ids: list) -> None:
             pass
 
 
+def _clear_proxy_rr_state() -> None:
+    try:
+        RuntimeStore.get(key="ssh_tunnel_proxy_rr_index").delete()
+    except RuntimeStore.DoesNotExist:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -100,6 +108,7 @@ def tunnel_user(argus_db) -> User:
 def active_config(argus_db) -> ProxyTunnelConfig:
     previous_active_ids = _active_config_ids()
     _deactivate_configs(previous_active_ids)
+    _clear_proxy_rr_state()
 
     config = _make_active_config()
     yield config
@@ -224,7 +233,7 @@ def test_get_authorized_keys_format(argus_db, tunnel_user, active_config):
     svc = TunnelService()
     svc.register_tunnel(user=tunnel_user, public_key=pub_key)
 
-    keys_text = svc.get_authorized_keys(service_user_id=active_config.service_user_id)
+    keys_text = svc.get_authorized_keys()
     lines = [ln for ln in keys_text.splitlines() if ln.strip()]
     assert any(pub_key.strip() in ln for ln in lines), "Registered key not found in authorized_keys output"
     for line in lines:
@@ -233,13 +242,41 @@ def test_get_authorized_keys_format(argus_db, tunnel_user, active_config):
 
 
 @pytest.mark.docker_required
-def test_get_authorized_keys_rejects_non_matching_service_user(argus_db, tunnel_user, active_config):
-    """get_authorized_keys should reject callers that are not the active tunnel service user."""
-    svc = TunnelService()
-    svc.register_tunnel(user=tunnel_user, public_key=_make_public_key())
+def test_get_authorized_keys_includes_keys_from_multiple_tunnels(argus_db, tunnel_user, active_config):
+    """authorized_keys should contain all keys across active tunnel hosts."""
+    second = _make_active_config(is_active=True)
+    try:
+        key_a = _make_public_key()
+        key_b = _make_public_key()
 
-    with pytest.raises(Exception, match="Not authorized"):
-        svc.get_authorized_keys(service_user_id=uuid4())
+        now_utc = datetime.now(tz=UTC).replace(tzinfo=None)
+        SSHTunnelKey.objects.ttl(86400).create(
+            id=uuid4(),
+            user_id=tunnel_user.id,
+            tunnel_id=active_config.id,
+            public_key=key_a,
+            fingerprint="SHA256:test-a",
+            created_at=now_utc,
+            expires_at=now_utc,
+        )
+        SSHTunnelKey.objects.ttl(86400).create(
+            id=uuid4(),
+            user_id=tunnel_user.id,
+            tunnel_id=second.id,
+            public_key=key_b,
+            fingerprint="SHA256:test-b",
+            created_at=now_utc,
+            expires_at=now_utc,
+        )
+
+        keys_text = TunnelService().get_authorized_keys()
+        assert key_a.strip() in keys_text
+        assert key_b.strip() in keys_text
+    finally:
+        try:
+            second.delete()
+        except Exception:
+            pass
 
 
 @pytest.mark.docker_required
@@ -313,7 +350,7 @@ def test_save_proxy_tunnel_config_creates_service_user(argus_db):
 
 @pytest.mark.docker_required
 def test_save_proxy_tunnel_config_deactivates_old(argus_db):
-    """Creating a new config should deactivate the previously active one."""
+    """Creating a new config should leave prior active configs active."""
     previous_active_ids = _active_config_ids()
     _deactivate_configs(previous_active_ids)
 
@@ -342,7 +379,7 @@ def test_save_proxy_tunnel_config_deactivates_old(argus_db):
         assert second["is_active"] is True
 
         refreshed_first = ProxyTunnelConfig.get(id=first["id"])
-        assert refreshed_first.is_active is False
+        assert refreshed_first.is_active is True
     finally:
         _restore_configs(previous_active_ids)
 
@@ -402,3 +439,64 @@ def test_get_tunnel_connection_returns_active_fields(argus_db, active_config):
     assert result["target_host"] == active_config.target_host
     assert result["target_port"] == active_config.target_port
     assert result["host_key_fingerprint"] == active_config.host_key_fingerprint
+
+
+@pytest.mark.docker_required
+def test_register_tunnel_uses_round_robin_when_multiple_active(argus_db, tunnel_user, active_config):
+    """register_tunnel should rotate selected host when multiple active configs exist."""
+    second = _make_active_config(is_active=True)
+    try:
+        _clear_proxy_rr_state()
+        svc = TunnelService()
+        first = svc.register_tunnel(user=tunnel_user, public_key=_make_public_key())
+        second_pick = svc.register_tunnel(user=tunnel_user, public_key=_make_public_key())
+
+        assert first["proxy_host"] != second_pick["proxy_host"]
+        assert {first["proxy_host"], second_pick["proxy_host"]} == {active_config.host, second.host}
+    finally:
+        try:
+            second.delete()
+        except Exception:
+            pass
+
+
+@pytest.mark.docker_required
+def test_get_tunnel_connection_selects_specific_host(argus_db, active_config):
+    """get_tunnel_connection should return requested active host when proxy_host is provided."""
+    second = _make_active_config(is_active=True)
+    try:
+        result = TunnelService().get_tunnel_connection(proxy_host=second.host)
+        assert result["proxy_host"] == second.host
+        assert result["proxy_port"] == second.port
+        assert result["proxy_user"] == second.proxy_user
+    finally:
+        try:
+            second.delete()
+        except Exception:
+            pass
+
+
+@pytest.mark.docker_required
+def test_get_tunnel_connection_unknown_host_raises(argus_db, active_config):
+    """Selecting an inactive/unknown host should raise."""
+    with pytest.raises(TunnelServiceException, match="No active proxy tunnel configuration found for host"):
+        TunnelService().get_tunnel_connection(proxy_host="missing-host.example.com")
+
+
+@pytest.mark.docker_required
+def test_get_tunnel_connection_round_robin(argus_db, active_config):
+    """get_tunnel_connection without proxy_host should rotate across active hosts."""
+    second = _make_active_config(is_active=True)
+    try:
+        _clear_proxy_rr_state()
+        svc = TunnelService()
+        first = svc.get_tunnel_connection()
+        second_pick = svc.get_tunnel_connection()
+
+        assert first["proxy_host"] != second_pick["proxy_host"]
+        assert {first["proxy_host"], second_pick["proxy_host"]} == {active_config.host, second.host}
+    finally:
+        try:
+            second.delete()
+        except Exception:
+            pass
