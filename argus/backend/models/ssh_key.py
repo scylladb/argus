@@ -22,7 +22,7 @@ class SSHTunnelKey(Model):
     user_id = columns.UUID(required=True, index=True)
     tunnel_id = columns.UUID(required=True, index=True)
     public_key = columns.Text(required=True)
-    fingerprint = columns.Text(required=True, index=True)
+    fingerprint = columns.Text(required=True)
     created_at = columns.DateTime(required=True, default=_utcnow_naive)
     expires_at = columns.DateTime(required=True)
 
@@ -48,4 +48,4 @@ class ProxyTunnelConfig(Model):
     target_port = columns.Integer(required=True)
     host_key_fingerprint = columns.Text(required=True)
     service_user_id = columns.UUID()
-    is_active = columns.Boolean(default=lambda: False, index=True)
+    is_active = columns.Boolean(default=False)
