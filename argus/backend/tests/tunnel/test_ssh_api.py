@@ -2,6 +2,7 @@
 Flask integration tests for the SSH tunnel API (Step 4a routes).
 
 Routes under test:
+    GET   /api/v1/client/ssh/tunnel
     POST  /api/v1/client/ssh/tunnel
     GET   /api/v1/client/ssh/keys
 
@@ -14,6 +15,7 @@ from uuid import uuid4
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+from flask import g
 from flask.testing import FlaskClient
 
 from argus.backend.models.ssh_key import ProxyTunnelConfig, SSHTunnelKey
@@ -52,21 +54,97 @@ def _json_post(client: FlaskClient, url: str, payload: dict) -> object:
     return client.post(url, data=json.dumps(payload), content_type="application/json")
 
 
+def _active_config_ids() -> list:
+    return [cfg.id for cfg in ProxyTunnelConfig.objects.all() if cfg.is_active]
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
 def active_config(argus_db) -> ProxyTunnelConfig:
-    # Deactivate any stale configs to keep the test environment predictable.
-    for cfg in ProxyTunnelConfig.objects.filter(is_active=True).all():
+    previous_active_ids = _active_config_ids()
+    for cfg_id in previous_active_ids:
+        cfg = ProxyTunnelConfig.get(id=cfg_id)
         cfg.update(is_active=False)
-    config = _make_active_config()
+
+    config = _make_active_config(service_user_id=g.user.id)
     yield config
     try:
         config.delete()
     except Exception:
         pass
+
+    for cfg_id in previous_active_ids:
+        try:
+            cfg = ProxyTunnelConfig.get(id=cfg_id)
+            cfg.update(is_active=True)
+        except Exception:
+            pass
+
+
+@pytest.fixture
+def service_user_identity():
+    previous = getattr(g.user, "service_user", False)
+    g.user.service_user = True
+    yield
+    g.user.service_user = previous
+
+
+@pytest.fixture
+def normal_user_identity():
+    previous = getattr(g.user, "service_user", False)
+    g.user.service_user = False
+    yield
+    g.user.service_user = previous
+
+
+def _deactivate_all_configs() -> list:
+    cfg_ids = _active_config_ids()
+    for cfg_id in cfg_ids:
+        ProxyTunnelConfig.get(id=cfg_id).update(is_active=False)
+    return cfg_ids
+
+
+def _restore_active_configs(cfg_ids: list):
+    for cfg_id in cfg_ids:
+        try:
+            ProxyTunnelConfig.get(id=cfg_id).update(is_active=True)
+        except Exception:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/client/ssh/tunnel
+# ---------------------------------------------------------------------------
+
+@pytest.mark.docker_required
+def test_get_tunnel_connection_success(flask_client: FlaskClient, argus_db, active_config):
+    resp = flask_client.get(f"{API_PREFIX}/tunnel")
+
+    assert resp.status_code == 200
+    body = resp.json
+    assert body["status"] == "ok"
+    data = body["response"]
+    assert data["proxy_host"] == active_config.host
+    assert data["proxy_port"] == active_config.port
+    assert data["proxy_user"] == active_config.proxy_user
+    assert data["target_host"] == active_config.target_host
+    assert data["target_port"] == active_config.target_port
+    assert data["host_key_fingerprint"] == active_config.host_key_fingerprint
+
+
+@pytest.mark.docker_required
+def test_get_tunnel_connection_no_active_config_returns_error(flask_client: FlaskClient, argus_db):
+    previous_active_ids = _deactivate_all_configs()
+    try:
+        resp = flask_client.get(f"{API_PREFIX}/tunnel")
+        assert resp.status_code == 200
+        assert resp.json["status"] == "error"
+        assert "No active proxy tunnel configuration" in resp.json["response"]["message"]
+    finally:
+        _restore_active_configs(previous_active_ids)
 
 
 # ---------------------------------------------------------------------------
@@ -117,20 +195,14 @@ def test_register_tunnel_with_ttl_seconds(flask_client: FlaskClient, argus_db, a
 
 
 @pytest.mark.docker_required
-def test_register_tunnel_with_explicit_tunnel_id(flask_client: FlaskClient, argus_db):
-    """tunnel_id in the payload should register the key against that specific config."""
-    config = _make_active_config(is_active=False)
-    try:
-        payload = {"public_key": _make_public_key(), "tunnel_id": str(config.id)}
-        resp = _json_post(flask_client, f"{API_PREFIX}/tunnel", payload)
+def test_register_tunnel_invalid_ttl(flask_client: FlaskClient, argus_db, active_config):
+    """Invalid ttl_seconds should return an error response."""
+    payload = {"public_key": _make_public_key(), "ttl_seconds": 0}
+    resp = _json_post(flask_client, f"{API_PREFIX}/tunnel", payload)
 
-        assert resp.status_code == 200
-        assert resp.json["response"]["tunnel_id"] == str(config.id)
-    finally:
-        try:
-            config.delete()
-        except Exception:
-            pass
+    assert resp.status_code == 200
+    assert resp.json["status"] == "error"
+    assert "ttl_seconds must be a positive integer" in resp.json["response"]["message"]
 
 
 @pytest.mark.docker_required
@@ -154,25 +226,14 @@ def test_register_tunnel_invalid_public_key(flask_client: FlaskClient, argus_db,
 
 
 @pytest.mark.docker_required
-def test_register_tunnel_invalid_tunnel_id(flask_client: FlaskClient, argus_db, active_config):
-    """A malformed tunnel_id UUID should return 400."""
-    payload = {"public_key": _make_public_key(), "tunnel_id": "not-a-uuid"}
-    resp = _json_post(flask_client, f"{API_PREFIX}/tunnel", payload)
-
-    assert resp.status_code == 400
-
-
-@pytest.mark.docker_required
 def test_register_tunnel_unauthenticated(argus_db, active_config):
     """Requests without a valid auth token should be rejected with 403."""
-    from flask import g
     from argus_backend import argus_app
 
     previous_user = g.user
     try:
         g.user = None
         with argus_app.test_client() as unauthenticated_client:
-            # Don't set any Authorization header — g.user will be None
             resp = unauthenticated_client.post(
                 f"{API_PREFIX}/tunnel",
                 data=json.dumps({"public_key": _make_public_key()}),
@@ -180,6 +241,7 @@ def test_register_tunnel_unauthenticated(argus_db, active_config):
             )
     finally:
         g.user = previous_user
+
     assert resp.status_code == 403
 
 
@@ -188,7 +250,7 @@ def test_register_tunnel_unauthenticated(argus_db, active_config):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.docker_required
-def test_get_authorized_keys_success(flask_client: FlaskClient, argus_db, active_config):
+def test_get_authorized_keys_success(flask_client: FlaskClient, argus_db, active_config, service_user_identity):
     """GET /ssh/keys should return 200 with plain-text content."""
     # Register a key first so there is something to return
     pub_key = _make_public_key()
@@ -203,45 +265,25 @@ def test_get_authorized_keys_success(flask_client: FlaskClient, argus_db, active
 
 
 @pytest.mark.docker_required
-def test_get_authorized_keys_filtered_by_tunnel(flask_client: FlaskClient, argus_db):
-    """GET /ssh/keys?tunnel_id=<id> should only return keys for that tunnel."""
-    config_a = _make_active_config(is_active=False)
-    config_b = _make_active_config(is_active=False)
-    try:
-        pub_key_a = _make_public_key()
-        pub_key_b = _make_public_key()
-
-        _json_post(flask_client, f"{API_PREFIX}/tunnel", {
-            "public_key": pub_key_a, "tunnel_id": str(config_a.id)
-        })
-        _json_post(flask_client, f"{API_PREFIX}/tunnel", {
-            "public_key": pub_key_b, "tunnel_id": str(config_b.id)
-        })
-
-        resp = flask_client.get(f"{API_PREFIX}/keys?tunnel_id={config_a.id}")
-        assert resp.status_code == 200
-        keys_text = resp.data.decode("utf-8")
-        assert pub_key_a.strip() in keys_text
-        assert pub_key_b.strip() not in keys_text
-    finally:
-        for cfg in (config_a, config_b):
-            try:
-                cfg.delete()
-            except Exception:
-                pass
+def test_get_authorized_keys_forbidden_for_normal_user(flask_client: FlaskClient, argus_db, active_config, normal_user_identity):
+    """GET /ssh/keys should fail for non-service users."""
+    resp = flask_client.get(f"{API_PREFIX}/keys")
+    assert resp.status_code == 200
+    assert resp.json["status"] == "error"
+    assert "Only service users can fetch SSH authorized keys" in resp.json["response"]["message"]
 
 
 @pytest.mark.docker_required
-def test_get_authorized_keys_invalid_tunnel_id(flask_client: FlaskClient, argus_db):
-    """GET /ssh/keys with a malformed tunnel_id should return 400."""
-    resp = flask_client.get(f"{API_PREFIX}/keys?tunnel_id=not-a-uuid")
-    assert resp.status_code == 400
+def test_get_authorized_keys_empty_when_no_keys(flask_client: FlaskClient, argus_db, active_config, service_user_identity):
+    """GET /ssh/keys for a tunnel with no registered keys should return empty text."""
+    resp = flask_client.get(f"{API_PREFIX}/keys")
+    assert resp.status_code == 200
+    assert resp.data.decode("utf-8").strip() == ""
 
 
 @pytest.mark.docker_required
 def test_get_authorized_keys_unauthenticated(argus_db, active_config):
     """GET /ssh/keys without auth should return 403."""
-    from flask import g
     from argus_backend import argus_app
 
     previous_user = g.user
@@ -251,19 +293,5 @@ def test_get_authorized_keys_unauthenticated(argus_db, active_config):
             resp = unauthenticated_client.get(f"{API_PREFIX}/keys")
     finally:
         g.user = previous_user
+
     assert resp.status_code == 403
-
-
-@pytest.mark.docker_required
-def test_get_authorized_keys_empty_when_no_keys(flask_client: FlaskClient, argus_db):
-    """GET /ssh/keys for a tunnel with no registered keys should return empty text."""
-    config = _make_active_config(is_active=False)
-    try:
-        resp = flask_client.get(f"{API_PREFIX}/keys?tunnel_id={config.id}")
-        assert resp.status_code == 200
-        assert resp.data.decode("utf-8").strip() == ""
-    finally:
-        try:
-            config.delete()
-        except Exception:
-            pass

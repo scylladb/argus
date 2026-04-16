@@ -4,6 +4,8 @@ Tests for TunnelService — require a running ScyllaDB container.
 Run with:
     uv run pytest argus/backend/tests/tunnel/test_tunnel_service.py -m docker_required -v
 """
+import base64
+import hashlib
 import pytest
 from datetime import UTC, datetime
 from secrets import token_hex
@@ -14,7 +16,7 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from argus.backend.models.ssh_key import ProxyTunnelConfig, SSHTunnelKey
 from argus.backend.models.web import User, UserRoles
-from argus.backend.service.tunnel_service import TunnelService, TunnelServiceException
+from argus.backend.service.tunnel_service import TunnelService, TunnelServiceException, _derive_fingerprint
 
 
 # ---------------------------------------------------------------------------
@@ -53,10 +55,31 @@ def _make_active_config(**overrides) -> ProxyTunnelConfig:
         target_host="10.0.0.1",
         target_port=8080,
         host_key_fingerprint="SHA256:testfingerprint",
+        service_user_id=uuid4(),
         is_active=True,
     )
     defaults.update(overrides)
     return ProxyTunnelConfig.create(**defaults)
+
+
+def _active_config_ids() -> list:
+    return [cfg.id for cfg in ProxyTunnelConfig.objects.all() if cfg.is_active]
+
+
+def _deactivate_configs(config_ids: list) -> None:
+    for cfg_id in config_ids:
+        try:
+            ProxyTunnelConfig.get(id=cfg_id).update(is_active=False)
+        except Exception:
+            pass
+
+
+def _restore_configs(config_ids: list) -> None:
+    for cfg_id in config_ids:
+        try:
+            ProxyTunnelConfig.get(id=cfg_id).update(is_active=True)
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -75,12 +98,17 @@ def tunnel_user(argus_db) -> User:
 
 @pytest.fixture
 def active_config(argus_db) -> ProxyTunnelConfig:
+    previous_active_ids = _active_config_ids()
+    _deactivate_configs(previous_active_ids)
+
     config = _make_active_config()
     yield config
     try:
         config.delete()
     except Exception:
         pass
+
+    _restore_configs(previous_active_ids)
 
 
 # ---------------------------------------------------------------------------
@@ -101,7 +129,7 @@ def test_register_tunnel_stores_key(argus_db, tunnel_user, active_config):
     assert result["target_host"] == active_config.target_host
     assert result["target_port"] == active_config.target_port
     assert result["host_key_fingerprint"] == active_config.host_key_fingerprint
-    assert result["expires_at"].endswith("Z")
+    assert isinstance(result["expires_at"], datetime)
     assert "key_id" in result
     assert "tunnel_id" in result
 
@@ -125,21 +153,33 @@ def test_register_tunnel_custom_ttl(argus_db, tunnel_user, active_config):
     result = svc.register_tunnel(user=tunnel_user, public_key=pub_key, ttl_seconds=ttl)
     after = datetime.now(tz=timezone.utc)
 
-    expires_at = datetime.fromisoformat(result["expires_at"].rstrip("Z")).replace(tzinfo=timezone.utc)
+    expires_at = result["expires_at"].replace(tzinfo=timezone.utc)
     # expires_at should be approximately now + 1 hour (allow ±5 s for test timing)
     assert (before.timestamp() + ttl - 5) <= expires_at.timestamp() <= (after.timestamp() + ttl + 5)
 
 
 @pytest.mark.docker_required
+def test_register_tunnel_invalid_ttl_raises(argus_db, tunnel_user, active_config):
+    """Non-positive or non-integer ttl_seconds should raise TunnelServiceException."""
+    svc = TunnelService()
+
+    for ttl in (0, -1, "abc", "0"):
+        with pytest.raises(TunnelServiceException, match="ttl_seconds must be a positive integer"):
+            svc.register_tunnel(user=tunnel_user, public_key=_make_public_key(), ttl_seconds=ttl)
+
+
+@pytest.mark.docker_required
 def test_register_tunnel_no_active_config_raises(argus_db, tunnel_user):
     """register_tunnel should raise TunnelServiceException when no active config exists."""
-    # Deactivate all configs
-    for cfg in ProxyTunnelConfig.objects.filter(is_active=True).all():
-        cfg.update(is_active=False)
+    previous_active_ids = _active_config_ids()
+    _deactivate_configs(previous_active_ids)
 
-    svc = TunnelService()
-    with pytest.raises(TunnelServiceException, match="No active proxy tunnel"):
-        svc.register_tunnel(user=tunnel_user, public_key=_make_public_key())
+    try:
+        svc = TunnelService()
+        with pytest.raises(TunnelServiceException, match="No active proxy tunnel"):
+            svc.register_tunnel(user=tunnel_user, public_key=_make_public_key())
+    finally:
+        _restore_configs(previous_active_ids)
 
 
 @pytest.mark.docker_required
@@ -158,22 +198,6 @@ def test_register_tunnel_missing_public_key(argus_db, tunnel_user, active_config
         svc.register_tunnel(user=tunnel_user, public_key="")
 
 
-@pytest.mark.docker_required
-def test_register_tunnel_by_tunnel_id(argus_db, tunnel_user):
-    """register_tunnel should accept an explicit tunnel_id."""
-    config = _make_active_config(is_active=False)  # not the active one
-    try:
-        pub_key = _make_public_key()
-        svc = TunnelService()
-        result = svc.register_tunnel(user=tunnel_user, public_key=pub_key, tunnel_id=config.id)
-        assert result["tunnel_id"] == str(config.id)
-    finally:
-        try:
-            config.delete()
-        except Exception:
-            pass
-
-
 # ---------------------------------------------------------------------------
 # TunnelService.get_authorized_keys
 # ---------------------------------------------------------------------------
@@ -185,7 +209,7 @@ def test_get_authorized_keys_format(argus_db, tunnel_user, active_config):
     svc = TunnelService()
     svc.register_tunnel(user=tunnel_user, public_key=pub_key)
 
-    keys_text = svc.get_authorized_keys(tunnel_id=active_config.id)
+    keys_text = svc.get_authorized_keys(service_user_id=active_config.service_user_id)
     lines = [ln for ln in keys_text.splitlines() if ln.strip()]
     assert any(pub_key.strip() in ln for ln in lines), "Registered key not found in authorized_keys output"
     for line in lines:
@@ -194,30 +218,22 @@ def test_get_authorized_keys_format(argus_db, tunnel_user, active_config):
 
 
 @pytest.mark.docker_required
-def test_get_authorized_keys_scoped_by_tunnel(argus_db, tunnel_user):
-    """get_authorized_keys with a specific tunnel_id should not return keys from other tunnels."""
-    config_a = _make_active_config(is_active=False)
-    config_b = _make_active_config(is_active=False)
-    try:
-        pub_key_a = _make_public_key()
-        pub_key_b = _make_public_key()
-        svc = TunnelService()
-        svc.register_tunnel(user=tunnel_user, public_key=pub_key_a, tunnel_id=config_a.id)
-        svc.register_tunnel(user=tunnel_user, public_key=pub_key_b, tunnel_id=config_b.id)
+def test_get_authorized_keys_rejects_non_matching_service_user(argus_db, tunnel_user, active_config):
+    """get_authorized_keys should reject callers that are not the active tunnel service user."""
+    svc = TunnelService()
+    svc.register_tunnel(user=tunnel_user, public_key=_make_public_key())
 
-        keys_for_a = svc.get_authorized_keys(tunnel_id=config_a.id)
-        assert pub_key_a.strip() in keys_for_a
-        assert pub_key_b.strip() not in keys_for_a
+    with pytest.raises(Exception, match="Not authorized"):
+        svc.get_authorized_keys(service_user_id=uuid4())
 
-        keys_for_b = svc.get_authorized_keys(tunnel_id=config_b.id)
-        assert pub_key_b.strip() in keys_for_b
-        assert pub_key_a.strip() not in keys_for_b
-    finally:
-        for cfg in (config_a, config_b):
-            try:
-                cfg.delete()
-            except Exception:
-                pass
+
+@pytest.mark.docker_required
+def test_derive_fingerprint_matches_openssh_wire_blob(argus_db):
+    """Fingerprint derivation should match SHA256 of OpenSSH wire blob (ssh-keygen format)."""
+    public_key = _make_public_key()
+    key_blob = base64.b64decode(public_key.split()[1])
+    expected = f"SHA256:{base64.b64encode(hashlib.sha256(key_blob).digest()).rstrip(b'=').decode('ascii')}"
+    assert _derive_fingerprint(public_key) == expected
 
 
 # ---------------------------------------------------------------------------
@@ -253,65 +269,67 @@ def test_delete_key_nonexistent_raises(argus_db):
 @pytest.mark.docker_required
 def test_save_proxy_tunnel_config_creates_service_user(argus_db):
     """save_proxy_tunnel_config should create a dedicated service user."""
-    # Deactivate all configs first so we start clean
-    for cfg in ProxyTunnelConfig.objects.filter(is_active=True).all():
-        cfg.update(is_active=False)
+    previous_active_ids = _active_config_ids()
+    _deactivate_configs(previous_active_ids)
 
-    host = f"proxy-svcuser-{uuid4().hex[:6]}.example.com"
-    payload = dict(
-        host=host,
-        port=22,
-        proxy_user="argus-proxy",
-        target_host="10.0.1.1",
-        target_port=8080,
-        host_key_fingerprint="SHA256:svcusertest",
-    )
-    svc = TunnelService()
-    result = svc.save_proxy_tunnel_config(payload)
+    try:
+        host = f"proxy-svcuser-{uuid4().hex[:6]}.example.com"
+        payload = dict(
+            host=host,
+            port=22,
+            proxy_user="argus-proxy",
+            target_host="10.0.1.1",
+            target_port=8080,
+            host_key_fingerprint="SHA256:svcusertest",
+        )
+        svc = TunnelService()
+        result = svc.save_proxy_tunnel_config(payload)
 
-    assert result["is_active"] is True
-    assert result["service_user_id"] is not None
-    assert "api_token" in result  # token returned so admin can provision
+        assert result["is_active"] is True
+        assert result["service_user_id"] is not None
+        assert "api_token" in result
 
-    # Service user exists in DB
-    service_user = User.get(id=result["service_user_id"])
-    assert service_user.service_user is True
-    assert f"proxy-tunnel-{host}" in service_user.username
+        service_user = User.get(id=result["service_user_id"])
+        assert service_user.service_user is True
+        assert f"proxy-tunnel-{host}" in service_user.username
+    finally:
+        _restore_configs(previous_active_ids)
 
 
 @pytest.mark.docker_required
 def test_save_proxy_tunnel_config_deactivates_old(argus_db):
     """Creating a new config should deactivate the previously active one."""
-    # Deactivate any stale configs
-    for cfg in ProxyTunnelConfig.objects.filter(is_active=True).all():
-        cfg.update(is_active=False)
+    previous_active_ids = _active_config_ids()
+    _deactivate_configs(previous_active_ids)
 
-    first_payload = dict(
-        host=f"proxy-first-{uuid4().hex[:6]}.example.com",
-        port=22,
-        proxy_user="argus-proxy",
-        target_host="10.0.2.1",
-        target_port=8080,
-        host_key_fingerprint="SHA256:first",
-    )
-    svc = TunnelService()
-    first = svc.save_proxy_tunnel_config(first_payload)
-    assert first["is_active"] is True
+    try:
+        first_payload = dict(
+            host=f"proxy-first-{uuid4().hex[:6]}.example.com",
+            port=22,
+            proxy_user="argus-proxy",
+            target_host="10.0.2.1",
+            target_port=8080,
+            host_key_fingerprint="SHA256:first",
+        )
+        svc = TunnelService()
+        first = svc.save_proxy_tunnel_config(first_payload)
+        assert first["is_active"] is True
 
-    second_payload = dict(
-        host=f"proxy-second-{uuid4().hex[:6]}.example.com",
-        port=22,
-        proxy_user="argus-proxy",
-        target_host="10.0.2.2",
-        target_port=8080,
-        host_key_fingerprint="SHA256:second",
-    )
-    second = svc.save_proxy_tunnel_config(second_payload)
-    assert second["is_active"] is True
+        second_payload = dict(
+            host=f"proxy-second-{uuid4().hex[:6]}.example.com",
+            port=22,
+            proxy_user="argus-proxy",
+            target_host="10.0.2.2",
+            target_port=8080,
+            host_key_fingerprint="SHA256:second",
+        )
+        second = svc.save_proxy_tunnel_config(second_payload)
+        assert second["is_active"] is True
 
-    # The first config should now be inactive in the DB
-    refreshed_first = ProxyTunnelConfig.get(id=first["id"])
-    assert refreshed_first.is_active is False
+        refreshed_first = ProxyTunnelConfig.get(id=first["id"])
+        assert refreshed_first.is_active is False
+    finally:
+        _restore_configs(previous_active_ids)
 
 
 @pytest.mark.docker_required
@@ -329,44 +347,43 @@ def test_save_proxy_tunnel_config_missing_fields(argus_db):
 @pytest.mark.docker_required
 def test_get_proxy_tunnel_config_returns_active(argus_db):
     """get_proxy_tunnel_config should return the currently active config."""
-    for cfg in ProxyTunnelConfig.objects.filter(is_active=True).all():
-        cfg.update(is_active=False)
+    previous_active_ids = _active_config_ids()
+    _deactivate_configs(previous_active_ids)
 
     config = _make_active_config()
     try:
         svc = TunnelService()
         result = svc.get_proxy_tunnel_config()
         assert result is not None
-        assert result["id"] == str(config.id)
+        assert str(result["id"]) == str(config.id)
         assert result["is_active"] is True
     finally:
         try:
             config.delete()
         except Exception:
             pass
-
-
-@pytest.mark.docker_required
-def test_get_proxy_tunnel_config_by_id(argus_db):
-    """get_proxy_tunnel_config with a tunnel_id should return that specific config."""
-    config = _make_active_config(is_active=False)
-    try:
-        svc = TunnelService()
-        result = svc.get_proxy_tunnel_config(tunnel_id=config.id)
-        assert result is not None
-        assert result["id"] == str(config.id)
-    finally:
-        try:
-            config.delete()
-        except Exception:
-            pass
+        _restore_configs(previous_active_ids)
 
 
 @pytest.mark.docker_required
 def test_get_proxy_tunnel_config_none_when_no_active(argus_db):
     """get_proxy_tunnel_config should return None when no active config exists."""
-    for cfg in ProxyTunnelConfig.objects.filter(is_active=True).all():
-        cfg.update(is_active=False)
+    previous_active_ids = _active_config_ids()
+    _deactivate_configs(previous_active_ids)
+    try:
+        svc = TunnelService()
+        assert svc.get_proxy_tunnel_config() is None
+    finally:
+        _restore_configs(previous_active_ids)
 
-    svc = TunnelService()
-    assert svc.get_proxy_tunnel_config() is None
+
+@pytest.mark.docker_required
+def test_get_tunnel_connection_returns_active_fields(argus_db, active_config):
+    """get_tunnel_connection should return active config fields used by SSH clients."""
+    result = TunnelService().get_tunnel_connection()
+    assert result["proxy_host"] == active_config.host
+    assert result["proxy_port"] == active_config.port
+    assert result["proxy_user"] == active_config.proxy_user
+    assert result["target_host"] == active_config.target_host
+    assert result["target_port"] == active_config.target_port
+    assert result["host_key_fingerprint"] == active_config.host_key_fingerprint
