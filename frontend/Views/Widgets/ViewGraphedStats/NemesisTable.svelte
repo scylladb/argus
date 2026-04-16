@@ -3,6 +3,7 @@
     import StackTracePreview from "./StackTracePreview.svelte";
     import StatusBadge from "./StatusBadge.svelte";
     import type { NemesisData } from "./Interfaces";
+    import { compareVersions } from "../../../Common/versionSort";
 
     interface Props {
         nemesisName: string | null;
@@ -42,7 +43,7 @@
         {
             key: "version",
             label: "Version",
-            sort: (a: NemesisData, b: NemesisData) => a.version.localeCompare(b.version),
+            sort: (a: NemesisData, b: NemesisData) => compareVersions(a.version, b.version),
             width: "130px",
         },
         { key: "stack_trace", label: "Stack Trace", component: StackTracePreview },

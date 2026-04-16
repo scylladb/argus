@@ -66,6 +66,7 @@
     import Select from "svelte-select";
     import { Collapse } from "bootstrap";
     import { titleCase } from "../Common/TextUtils";
+    import { compareVersions } from "../Common/versionSort";
     interface Props {
         dashboardObject: any;
         dashboardObjectType?: string;
@@ -362,13 +363,13 @@
             .filter(([_, isEnterprise]) => isEnterprise)
             .map(([version]) => version)
             .filter((version, idx, src) => src.indexOf(version) === idx)
-            .sort()
+            .sort(compareVersions)
             .reverse();
         const ossVersions = uniqueShortVersions
             .filter(([_, isEnterprise]) => !isEnterprise)
             .map(([version]) => version)
             .filter((version, idx, src) => src.indexOf(version) === idx)
-            .sort()
+            .sort(compareVersions)
             .reverse();
 
         return [...enterpriseVersions, ...ossVersions, ...unrecognizedVersions];
