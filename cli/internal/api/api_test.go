@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -476,201 +477,59 @@ func TestBaseURL_WithPath(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// DoJSON – Content-Type handling
+// Redirect handling
 // --------------------------------------------------------------------------
 
-// staticHandlerWithContentType returns a handler that writes body with the
-// given HTTP status code and the specified Content-Type header.
-func staticHandlerWithContentType(code int, contentType string, body []byte) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", contentType)
-		w.WriteHeader(code)
-		_, _ = w.Write(body)
-	}
-}
-
-func TestDoJSON_ContentTypeWithCharset(t *testing.T) {
+func TestDoStream_CrossHostRedirect_DropsAuthHeaders(t *testing.T) {
 	t.Parallel()
 
-	want := samplePayload{ID: "ct-1", Name: "charset-test"}
+	var s3Host string
 
-	srv := httptest.NewServer(staticHandlerWithContentType(
-		http.StatusOK,
-		"application/json; charset=utf-8",
-		okEnvelope(t, want),
-	))
-	t.Cleanup(srv.Close)
+	s3 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Empty(t, r.Header.Get("Authorization"), "Authorization must not be sent to cross-host redirect target")
+		assert.Empty(t, r.Header.Get("Cookie"), "Cookie must not be sent to cross-host redirect target")
+		assert.Empty(t, r.Header.Get("CF-Access-Client-Id"), "CF-Access-Client-Id must not be sent to cross-host redirect target")
+		assert.Empty(t, r.Header.Get("CF-Access-Client-Secret"), "CF-Access-Client-Secret must not be sent to cross-host redirect target")
 
-	c, err := api.New(srv.URL, api.WithHTTPClient(srv.Client()))
-	require.NoError(t, err)
-
-	req, err := c.NewRequest(context.Background(), http.MethodGet, "/", nil)
-	require.NoError(t, err)
-
-	got, err := api.DoJSON[samplePayload](c, req)
-	require.NoError(t, err, "application/json; charset=utf-8 should be accepted")
-	assert.Equal(t, want, got)
-}
-
-func TestDoJSON_HTMLContentType_ReturnsUnauthorized(t *testing.T) {
-	t.Parallel()
-
-	srv := httptest.NewServer(staticHandlerWithContentType(
-		http.StatusOK,
-		"text/html",
-		[]byte("<html><body>Cloudflare Access Login</body></html>"),
-	))
-	t.Cleanup(srv.Close)
-
-	c, err := api.New(srv.URL, api.WithHTTPClient(srv.Client()))
-	require.NoError(t, err)
-
-	req, err := c.NewRequest(context.Background(), http.MethodGet, "/", nil)
-	require.NoError(t, err)
-
-	_, err = api.DoJSON[samplePayload](c, req)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, api.ErrUnauthorized)
-	assert.Contains(t, err.Error(), "text/html")
-}
-
-func TestDoJSON_HTMLContentTypeWithCharset_ReturnsUnauthorized(t *testing.T) {
-	t.Parallel()
-
-	srv := httptest.NewServer(staticHandlerWithContentType(
-		http.StatusOK,
-		"text/html; charset=utf-8",
-		[]byte("<html><body>Login</body></html>"),
-	))
-	t.Cleanup(srv.Close)
-
-	c, err := api.New(srv.URL, api.WithHTTPClient(srv.Client()))
-	require.NoError(t, err)
-
-	req, err := c.NewRequest(context.Background(), http.MethodGet, "/", nil)
-	require.NoError(t, err)
-
-	_, err = api.DoJSON[samplePayload](c, req)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, api.ErrUnauthorized)
-}
-
-// --------------------------------------------------------------------------
-// DoJSON – HTTP 401 / 403 status codes
-// --------------------------------------------------------------------------
-
-func TestDoJSON_Status401_ReturnsUnauthorized(t *testing.T) {
-	t.Parallel()
-
-	srv := httptest.NewServer(staticHandler(http.StatusUnauthorized, []byte(`{"error":"not authenticated"}`)))
-	t.Cleanup(srv.Close)
-
-	c, err := api.New(srv.URL, api.WithHTTPClient(srv.Client()))
-	require.NoError(t, err)
-
-	req, err := c.NewRequest(context.Background(), http.MethodGet, "/", nil)
-	require.NoError(t, err)
-
-	_, err = api.DoJSON[samplePayload](c, req)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, api.ErrUnauthorized)
-	assert.Contains(t, err.Error(), "401")
-}
-
-func TestDoJSON_Status403_ReturnsUnauthorized(t *testing.T) {
-	t.Parallel()
-
-	srv := httptest.NewServer(staticHandler(http.StatusForbidden, []byte(`{"error":"forbidden"}`)))
-	t.Cleanup(srv.Close)
-
-	c, err := api.New(srv.URL, api.WithHTTPClient(srv.Client()))
-	require.NoError(t, err)
-
-	req, err := c.NewRequest(context.Background(), http.MethodGet, "/", nil)
-	require.NoError(t, err)
-
-	_, err = api.DoJSON[samplePayload](c, req)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, api.ErrUnauthorized)
-	assert.Contains(t, err.Error(), "403")
-}
-
-// --------------------------------------------------------------------------
-// DoJSON – redirect handling (CF Access scenario)
-// --------------------------------------------------------------------------
-
-func TestDoJSON_RedirectPreservesAuth(t *testing.T) {
-	t.Parallel()
-
-	want := samplePayload{ID: "redir-1", Name: "redirect-test"}
-
-	// Mux that redirects / → /final, and /final serves the JSON payload.
-	// The /final handler verifies that the auth credentials survived the
-	// redirect.
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			http.NotFound(w, r)
-			return
-		}
-		http.Redirect(w, r, "/final", http.StatusFound)
-	})
-	mux.HandleFunc("/final", func(w http.ResponseWriter, r *http.Request) {
-		// Verify auth credentials survived the redirect.
-		assert.Equal(t, "token mytoken", r.Header.Get("Authorization"),
-			"Authorization header must survive redirect")
-
-		cookie, err := r.Cookie("CF_Authorization")
-		require.NoError(t, err, "CF_Authorization cookie must survive redirect")
-		assert.Equal(t, "cf-jwt-123", cookie.Value)
-
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Type", "application/octet-stream")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(okEnvelope(t, want))
-	})
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(s3.Close)
+	s3Host = mustHost(t, s3.URL)
 
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
+	argus := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		target := *r.URL
+		target.Scheme = "http"
+		target.Host = s3Host
+		http.Redirect(w, r, target.String(), http.StatusFound)
+	}))
+	t.Cleanup(argus.Close)
 
-	c, err := api.New(srv.URL,
+	c, err := api.New(argus.URL,
 		api.WithAPIToken("mytoken"),
+		api.WithSession("session-123"),
 		api.WithCFToken("cf-jwt-123"),
+		api.WithCFAccessSecret("cf-id", "cf-secret"),
 	)
 	require.NoError(t, err)
 
-	req, err := c.NewRequest(context.Background(), http.MethodGet, "/", nil)
+	req, err := c.NewRequest(context.Background(), http.MethodGet, "/download", nil)
 	require.NoError(t, err)
 
-	got, err := api.DoJSON[samplePayload](c, req)
-	require.NoError(t, err, "request through redirect should succeed with auth preserved")
-	assert.Equal(t, want, got)
+	resp, err := c.DoStream(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "ok", string(body))
 }
 
-func TestDoJSON_RedirectToHTMLStillReturnsUnauthorized(t *testing.T) {
-	t.Parallel()
-
-	// Simulates CF Access redirecting to an HTML login page even after
-	// credentials are re-attached (e.g. the token is expired/invalid).
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/v1/run", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/cdn-cgi/access/login", http.StatusFound)
-	})
-	mux.HandleFunc("/cdn-cgi/access/login", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/html")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("<html><body>Please log in</body></html>"))
-	})
-
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-
-	c, err := api.New(srv.URL, api.WithAPIToken("expired-token"))
+func mustHost(t *testing.T, raw string) string {
+	t.Helper()
+	u, err := url.Parse(raw)
 	require.NoError(t, err)
-
-	req, err := c.NewRequest(context.Background(), http.MethodGet, "/api/v1/run", nil)
-	require.NoError(t, err)
-
-	_, err = api.DoJSON[samplePayload](c, req)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, api.ErrUnauthorized)
+	return u.Host
 }

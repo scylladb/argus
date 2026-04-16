@@ -10,6 +10,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/scylladb/argus/cli/internal/models"
@@ -137,15 +138,9 @@ func New(rawBaseURL string, opts ...ClientOption) (*Client, error) {
 		o(c)
 	}
 
-	// Install a redirect policy that re-attaches auth credentials on every
-	// hop.  Go's default http.Client strips cookies set via Request.AddCookie
-	// and drops the Authorization header on cross-origin redirects, which
-	// breaks Cloudflare Access: CF responds with a 302 to its interstitial
-	// page, the redirect loses the CF_Authorization cookie / API token, and
-	// the CLI ends up with an HTML login page instead of JSON.
-	//
-	// This must be set after applying opts so that WithHTTPClient (used by
-	// tests) can override the entire http.Client including CheckRedirect.
+	// Install a redirect policy that re-attaches auth credentials on same-host
+	// redirects only. Cross-host redirects (e.g. to presigned S3 URLs) must not
+	// carry Authorization/Cookie headers.
 	if c.httpClient.CheckRedirect == nil {
 		c.httpClient.CheckRedirect = c.reattachAuthOnRedirect
 	}
@@ -214,19 +209,25 @@ func (c *Client) attachAuth(req *http.Request) {
 }
 
 // reattachAuthOnRedirect is a [http.Client.CheckRedirect] callback that
-// re-applies the client's authentication credentials to every redirect
-// request.
-//
-// Go's default redirect handling strips cookies set via [http.Request.AddCookie]
-// and drops the Authorization header when the redirect target is on a different
-// origin.  This breaks Cloudflare Access, which sits in front of the Argus
-// backend and may issue same-origin redirects (e.g. to /cdn-cgi/access/…)
-// while requiring the CF_Authorization cookie on every hop.
+// re-applies the client's authentication credentials only for redirects that
+// remain on the configured Argus host.
 func (c *Client) reattachAuthOnRedirect(req *http.Request, via []*http.Request) error {
 	if len(via) >= 10 {
 		return errors.New("stopped after 10 redirects")
 	}
-	c.attachAuth(req)
+
+	if strings.EqualFold(req.URL.Host, c.baseURL.Host) {
+		c.attachAuth(req)
+		return nil
+	}
+
+	// Defensive cleanup for cross-host redirects to avoid leaking credentials and
+	// to avoid breaking presigned URLs that already carry auth query parameters.
+	req.Header.Del("Authorization")
+	req.Header.Del("Cookie")
+	req.Header.Del("CF-Access-Client-Id")
+	req.Header.Del("CF-Access-Client-Secret")
+
 	return nil
 }
 
