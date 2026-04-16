@@ -17,6 +17,8 @@ from argus.backend.service.user import UserService
 LOGGER = logging.getLogger(__name__)
 
 DEFAULT_TTL_SECONDS = 86400  # 24 hours
+MIN_TTL_SECONDS = 86400  # 24 hours
+MAX_TTL_SECONDS = 2592000  # 30 days
 DEFAULT_KEYS_LIST_LIMIT = 5000
 
 
@@ -110,9 +112,13 @@ class TunnelService:
             try:
                 ttl = int(ttl_seconds)
             except (TypeError, ValueError) as exc:
-                raise TunnelServiceException("ttl_seconds must be a positive integer") from exc
-            if ttl <= 0:
-                raise TunnelServiceException("ttl_seconds must be a positive integer")
+                raise TunnelServiceException(
+                    f"ttl_seconds must be between {MIN_TTL_SECONDS} and {MAX_TTL_SECONDS} seconds"
+                ) from exc
+            if ttl < MIN_TTL_SECONDS or ttl > MAX_TTL_SECONDS:
+                raise TunnelServiceException(
+                    f"ttl_seconds must be between {MIN_TTL_SECONDS} and {MAX_TTL_SECONDS} seconds"
+                )
 
         now_utc = datetime.now(tz=timezone.utc).replace(tzinfo=None)
         expires_at = now_utc + timedelta(seconds=ttl)
