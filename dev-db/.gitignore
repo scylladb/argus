@@ -1,2 +1,4 @@
 sample_data
 sample_data.tar.zst
+scylla/
+alpha-config.d/
