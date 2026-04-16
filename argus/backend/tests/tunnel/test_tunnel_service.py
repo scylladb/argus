@@ -147,7 +147,7 @@ def test_register_tunnel_custom_ttl(argus_db, tunnel_user, active_config):
     from datetime import datetime, timezone
     pub_key = _make_public_key()
     svc = TunnelService()
-    ttl = 3600  # 1 hour
+    ttl = 172800  # 2 days
 
     before = datetime.now(tz=timezone.utc)
     result = svc.register_tunnel(user=tunnel_user, public_key=pub_key, ttl_seconds=ttl)
@@ -160,12 +160,27 @@ def test_register_tunnel_custom_ttl(argus_db, tunnel_user, active_config):
 
 @pytest.mark.docker_required
 def test_register_tunnel_invalid_ttl_raises(argus_db, tunnel_user, active_config):
-    """Non-positive or non-integer ttl_seconds should raise TunnelServiceException."""
+    """TTL outside [24h, 30d] or non-integer ttl_seconds should raise TunnelServiceException."""
     svc = TunnelService()
 
-    for ttl in (0, -1, "abc", "0"):
-        with pytest.raises(TunnelServiceException, match="ttl_seconds must be a positive integer"):
+    for ttl in (0, -1, 86399, 2592001, "abc", "0"):
+        with pytest.raises(TunnelServiceException, match="ttl_seconds must be between 86400 and 2592000 seconds"):
             svc.register_tunnel(user=tunnel_user, public_key=_make_public_key(), ttl_seconds=ttl)
+
+
+@pytest.mark.docker_required
+def test_register_tunnel_ttl_upper_bound_allowed(argus_db, tunnel_user, active_config):
+    """A TTL of exactly 30 days should be accepted."""
+    from datetime import datetime, timezone
+
+    ttl = 2592000
+    svc = TunnelService()
+    before = datetime.now(tz=timezone.utc)
+    result = svc.register_tunnel(user=tunnel_user, public_key=_make_public_key(), ttl_seconds=ttl)
+    after = datetime.now(tz=timezone.utc)
+
+    expires_at = result["expires_at"].replace(tzinfo=timezone.utc)
+    assert (before.timestamp() + ttl - 5) <= expires_at.timestamp() <= (after.timestamp() + ttl + 5)
 
 
 @pytest.mark.docker_required

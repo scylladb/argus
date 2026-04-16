@@ -181,7 +181,7 @@ def test_register_tunnel_with_ttl_seconds(flask_client: FlaskClient, argus_db, a
     """ttl_seconds should be honoured and reflected in expires_at."""
     from datetime import datetime, timezone
 
-    ttl = 7200  # 2 hours
+    ttl = 172800  # 2 days
     payload = {"public_key": _make_public_key(), "ttl_seconds": ttl}
     before = datetime.now(tz=timezone.utc)
     resp = _json_post(flask_client, f"{API_PREFIX}/tunnel", payload)
@@ -196,13 +196,14 @@ def test_register_tunnel_with_ttl_seconds(flask_client: FlaskClient, argus_db, a
 
 @pytest.mark.docker_required
 def test_register_tunnel_invalid_ttl(flask_client: FlaskClient, argus_db, active_config):
-    """Invalid ttl_seconds should return an error response."""
-    payload = {"public_key": _make_public_key(), "ttl_seconds": 0}
-    resp = _json_post(flask_client, f"{API_PREFIX}/tunnel", payload)
+    """TTL outside [24h, 30d] should return an error response."""
+    for ttl in (0, 86399, 2592001):
+        payload = {"public_key": _make_public_key(), "ttl_seconds": ttl}
+        resp = _json_post(flask_client, f"{API_PREFIX}/tunnel", payload)
 
-    assert resp.status_code == 200
-    assert resp.json["status"] == "error"
-    assert "ttl_seconds must be a positive integer" in resp.json["response"]["message"]
+        assert resp.status_code == 200
+        assert resp.json["status"] == "error"
+        assert "ttl_seconds must be between 86400 and 2592000 seconds" in resp.json["response"]["message"]
 
 
 @pytest.mark.docker_required

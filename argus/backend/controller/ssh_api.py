@@ -22,7 +22,9 @@ def register_tunnel():
     Request JSON body
     -----------------
     public_key  : str  — OpenSSH-format ed25519 (or other) public key (required)
-    ttl_seconds : int  — optional key lifetime in seconds (default 86400 / 24 h)
+    ttl_seconds : int  — optional key lifetime in seconds.
+                         Must be within [86400, 2592000] (24h..30d).
+                         Default is 86400 (24h).
 
     Response
     --------
