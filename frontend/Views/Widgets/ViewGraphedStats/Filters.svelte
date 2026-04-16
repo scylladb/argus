@@ -1,6 +1,7 @@
 <script lang="ts">
     import { derived } from "svelte/store";
     import type { DataResponse } from "./Interfaces";
+    import { compareVersions } from "../../../Common/versionSort";
 
     interface Props {
         allData: DataResponse;
@@ -12,10 +13,10 @@
 
     const versions = derived(
         { subscribe: (fn) => () => {} }, // Dummy store for derived since allData is a prop
-        () => [...new Set(allData.test_runs.map((run) => run.version))].sort()
+        () => [...new Set(allData.test_runs.map((run) => run.version))].sort(compareVersions)
     );
     const releases = derived(versions, ($versions) =>
-        [...new Set($versions.map((v) => v.split(".").slice(0, 2).join(".")))].sort()
+        [...new Set($versions.map((v) => v.split(".").slice(0, 2).join(".")))].sort(compareVersions)
     );
 </script>
 

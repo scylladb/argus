@@ -2,6 +2,7 @@
     import { run as run_1 } from 'svelte/legacy';
 
     import { onMount } from "svelte";
+    import { compareVersions } from "../../Common/versionSort";
     import Chart from "chart.js/auto";
 
     let { viewId, dashboardObject } = $props();
@@ -63,8 +64,8 @@
     }
 
     function extractVersionsAndReleases(data) {
-        versions = [...new Set(data.map((nemesis) => nemesis.version))].sort();
-        releases = [...new Set(versions.map((version) => version.split(".").slice(0, 2).join(".")))].sort();
+        versions = [...new Set(data.map((nemesis) => nemesis.version))].sort(compareVersions);
+        releases = [...new Set(versions.map((version) => version.split(".").slice(0, 2).join(".")))].sort(compareVersions);
     }
 
     function filterData(data) {
@@ -276,7 +277,7 @@
             } else if (sortField === "duration") {
                 comparison = a.duration - b.duration;
             } else if (sortField === "version") {
-                comparison = a.version.localeCompare(b.version);
+                comparison = compareVersions(a.version, b.version);
             } else if (sortField === "start_time") {
                 // Use numeric comparison for timestamps
                 comparison = a.start_time - b.start_time;
