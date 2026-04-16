@@ -6,10 +6,10 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
-from argus.backend.error_handlers import APIException
 from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives.serialization import load_ssh_public_key
 
+from argus.backend.models.runtime_store import RuntimeStore
 from argus.backend.models.ssh_key import ProxyTunnelConfig, SSHTunnelKey
 from argus.backend.models.web import User, UserRoles
 from argus.backend.service.user import UserService
@@ -20,6 +20,7 @@ DEFAULT_TTL_SECONDS = 86400  # 24 hours
 MIN_TTL_SECONDS = 86400  # 24 hours
 MAX_TTL_SECONDS = 2592000  # 30 days
 DEFAULT_KEYS_LIST_LIMIT = 5000
+PROXY_RR_INDEX_KEY = "ssh_tunnel_proxy_rr_index"
 
 
 class TunnelServiceException(Exception):
@@ -58,14 +59,14 @@ class TunnelService:
 
     Key registration flow (called from ``POST /client/ssh/tunnel``):
     1. Validate and fingerprint the supplied public key.
-    2. Fetch the active ``ProxyTunnelConfig`` — raise if none exists.
+    2. Select one active ``ProxyTunnelConfig`` using round-robin.
     3. Insert ``SSHTunnelKey`` with a ScyllaDB TTL so ScyllaDB auto-expires it.
     4. Return the proxy connection parameters plus ``expires_at`` so the client
        knows when to re-register.
 
     Authorised-keys flow (called from ``GET /client/ssh/keys`` by the proxy
     host via ``AuthorizedKeysCommand``):
-    1. Fetch all non-expired ``SSHTunnelKey`` rows for the given tunnel.
+    1. Fetch all non-expired ``SSHTunnelKey`` rows.
     2. Return them as a newline-separated OpenSSH ``authorized_keys`` string.
     """
 
@@ -104,7 +105,7 @@ class TunnelService:
 
         fingerprint = _derive_fingerprint(public_key)
 
-        config = self._get_active_config()
+        config = self._get_active_config_round_robin()
 
         if ttl_seconds is None:
             ttl = DEFAULT_TTL_SECONDS
@@ -145,11 +146,17 @@ class TunnelService:
             "expires_at": expires_at,
         }
 
-    def get_tunnel_connection(self) -> dict:
+    def get_tunnel_connection(self, proxy_host: str | None = None) -> dict:
         """
         Return active proxy tunnel connection details for tunnel clients.
+
+        If ``proxy_host`` is provided, return that active host.
+        Otherwise, select one deterministically.
         """
-        config = self._get_active_config()
+        if proxy_host:
+            config = self._get_active_config(proxy_host=proxy_host)
+        else:
+            config = self._get_active_config_round_robin()
         return {
             "proxy_host": config.host,
             "proxy_port": config.port,
@@ -163,7 +170,7 @@ class TunnelService:
     # Authorised keys (used by the proxy host AuthorizedKeysCommand)
     # ------------------------------------------------------------------
 
-    def get_authorized_keys(self, service_user_id: UUID | str) -> str:
+    def get_authorized_keys(self) -> str:
         """
         Return all non-expired public keys in OpenSSH ``authorized_keys``
         format (one key per line).
@@ -172,14 +179,7 @@ class TunnelService:
         this is called, so a plain table scan is sufficient.
 
         """
-        if not isinstance(service_user_id, UUID):
-            service_user_id = UUID(str(service_user_id))
-
-        config = self._get_active_config()
-        if config.service_user_id != service_user_id:
-            raise APIException("Not authorized to fetch SSH keys for the active tunnel")
-
-        rows = SSHTunnelKey.objects.filter(tunnel_id=config.id).all()
+        rows = SSHTunnelKey.objects.all()
 
         keys = [row.public_key for row in rows if row.public_key]
         return "\n".join(keys)
@@ -188,7 +188,7 @@ class TunnelService:
     # Key management (admin / informational)
     # ------------------------------------------------------------------
 
-    def list_keys(self, tunnel_id: UUID | str | None = None) -> list[dict]:
+    def list_keys(self, tunnel_id: UUID | str | None = None, user_id: UUID | str | None = None) -> list[dict]:
         """
         Return a list of dicts describing all non-expired keys.
 
@@ -196,13 +196,22 @@ class TunnelService:
         ----------
         tunnel_id:
             When supplied, restrict to keys for that tunnel.
+        user_id:
+            When supplied, restrict to keys for that user.
         """
+        query = SSHTunnelKey.objects
+
+        if user_id is not None:
+            if not isinstance(user_id, UUID):
+                user_id = UUID(str(user_id))
+            query = query.filter(user_id=user_id)
+
+        rows = query.limit(DEFAULT_KEYS_LIST_LIMIT).all()
+
         if tunnel_id is not None:
             if not isinstance(tunnel_id, UUID):
                 tunnel_id = UUID(str(tunnel_id))
-            rows = SSHTunnelKey.objects.filter(tunnel_id=tunnel_id).limit(DEFAULT_KEYS_LIST_LIMIT).all()
-        else:
-            rows = SSHTunnelKey.objects.limit(DEFAULT_KEYS_LIST_LIMIT).all()
+            rows = [row for row in rows if row.tunnel_id == tunnel_id]
 
         return [row._as_dict() for row in rows]
 
@@ -248,11 +257,10 @@ class TunnelService:
         """
         Create a new ``ProxyTunnelConfig`` entry.
 
-        1. Deactivates any existing active config.
-        2. Creates a dedicated Argus service user (e.g. ``proxy-tunnel-<host>``)
+        1. Creates a dedicated Argus service user (e.g. ``proxy-tunnel-<host>``)
            with a fresh API token — this user is what the proxy host will
            authenticate as when calling ``GET /client/ssh/keys``.
-        3. Saves the new config with ``is_active=True`` and the service user's
+        2. Saves the new config with ``is_active=True`` and the service user's
            id stored in ``service_user_id``.
 
         Required payload keys: ``host``, ``port``, ``proxy_user``,
@@ -265,11 +273,6 @@ class TunnelService:
         missing = [k for k in required if not payload.get(k)]
         if missing:
             raise TunnelServiceException(f"Missing required fields: {', '.join(missing)}")
-
-        # Deactivate any currently active config.
-        for existing in ProxyTunnelConfig.objects.all():
-            if existing.is_active:
-                existing.update(is_active=False)
 
         # Create a dedicated service user for this proxy host.
         service_user, api_token = self._create_proxy_service_user(payload["host"])
@@ -294,14 +297,52 @@ class TunnelService:
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _get_active_config(self) -> ProxyTunnelConfig:
-        configs = [cfg for cfg in ProxyTunnelConfig.objects.all() if cfg.is_active]
+    @staticmethod
+    def _get_active_configs() -> list[ProxyTunnelConfig]:
+        return [cfg for cfg in ProxyTunnelConfig.objects.all() if cfg.is_active]
+
+    def _get_active_config(self, proxy_host: str | None = None) -> ProxyTunnelConfig:
+        configs = self._get_active_configs()
         if not configs:
             raise TunnelServiceException(
                 "No active proxy tunnel configuration found. "
                 "An admin must configure a proxy host before tunnel registration is possible."
             )
-        return configs[0]
+
+        if proxy_host:
+            matching_configs = [cfg for cfg in configs if cfg.host == proxy_host]
+            if not matching_configs:
+                raise TunnelServiceException(f"No active proxy tunnel configuration found for host: {proxy_host}")
+            return sorted(matching_configs, key=lambda cfg: str(cfg.id))[0]
+
+        return sorted(configs, key=lambda cfg: (cfg.host or "", str(cfg.id)))[0]
+
+    def _get_active_config_round_robin(self) -> ProxyTunnelConfig:
+        configs = sorted(self._get_active_configs(), key=lambda cfg: (cfg.host or "", str(cfg.id)))
+        if not configs:
+            raise TunnelServiceException(
+                "No active proxy tunnel configuration found. "
+                "An admin must configure a proxy host before tunnel registration is possible."
+            )
+
+        current_index = 0
+        store = None
+        try:
+            store = RuntimeStore.get(key=PROXY_RR_INDEX_KEY)
+            if isinstance(store.value, int):
+                current_index = store.value
+        except RuntimeStore.DoesNotExist:
+            pass
+
+        selected = configs[current_index % len(configs)]
+        next_index = (current_index + 1) % len(configs)
+
+        if store is None:
+            store = RuntimeStore(key=PROXY_RR_INDEX_KEY)
+        store.value = next_index
+        store.save()
+
+        return selected
 
     @staticmethod
     def _create_proxy_service_user(host: str) -> tuple[User, str]:

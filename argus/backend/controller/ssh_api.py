@@ -57,7 +57,21 @@ def register_tunnel():
 @bp.route("/tunnel", methods=["GET"])
 @api_login_required
 def get_tunnel_connection():
-    result = TunnelService().get_tunnel_connection()
+    result = TunnelService().get_tunnel_connection(proxy_host=request.args.get("proxy_host"))
+    return {"status": "ok", "response": result}
+
+
+@bp.route("/tunnel/keys", methods=["GET"])
+@api_login_required
+def get_user_keys():
+    """
+    Return SSH keys owned by the authenticated user.
+
+    Optional query params:
+    - tunnel_id: UUID of a specific tunnel to scope keys
+    """
+    tunnel_id = request.args.get("tunnel_id")
+    result = TunnelService().list_keys(tunnel_id=tunnel_id, user_id=g.user.id)
     return {"status": "ok", "response": result}
 
 
@@ -74,5 +88,5 @@ def get_authorized_keys():
     if not g.user or not g.user.is_service_user():
         raise APIException("Only service users can fetch SSH authorized keys")
 
-    keys_text = TunnelService().get_authorized_keys(service_user_id=g.user.id)
+    keys_text = TunnelService().get_authorized_keys()
     return Response(keys_text, mimetype="text/plain")

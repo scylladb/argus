@@ -18,6 +18,7 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from flask import g
 from flask.testing import FlaskClient
 
+from argus.backend.models.runtime_store import RuntimeStore
 from argus.backend.models.ssh_key import ProxyTunnelConfig, SSHTunnelKey
 
 API_PREFIX = "/api/v1/client/ssh"
@@ -69,6 +70,8 @@ def active_config(argus_db) -> ProxyTunnelConfig:
         cfg = ProxyTunnelConfig.get(id=cfg_id)
         cfg.update(is_active=False)
 
+    _clear_proxy_rr_state()
+
     config = _make_active_config(service_user_id=g.user.id)
     yield config
     try:
@@ -115,6 +118,13 @@ def _restore_active_configs(cfg_ids: list):
             pass
 
 
+def _clear_proxy_rr_state() -> None:
+    try:
+        RuntimeStore.get(key="ssh_tunnel_proxy_rr_index").delete()
+    except RuntimeStore.DoesNotExist:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # GET /api/v1/client/ssh/tunnel
 # ---------------------------------------------------------------------------
@@ -133,6 +143,42 @@ def test_get_tunnel_connection_success(flask_client: FlaskClient, argus_db, acti
     assert data["target_host"] == active_config.target_host
     assert data["target_port"] == active_config.target_port
     assert data["host_key_fingerprint"] == active_config.host_key_fingerprint
+
+
+@pytest.mark.docker_required
+def test_get_tunnel_connection_select_specific_host(flask_client: FlaskClient, argus_db, active_config):
+    second = _make_active_config(is_active=True)
+    try:
+        resp = flask_client.get(f"{API_PREFIX}/tunnel?proxy_host={second.host}")
+        assert resp.status_code == 200
+        body = resp.json
+        assert body["status"] == "ok"
+        assert body["response"]["proxy_host"] == second.host
+    finally:
+        try:
+            second.delete()
+        except Exception:
+            pass
+
+
+@pytest.mark.docker_required
+def test_get_tunnel_connection_round_robin(flask_client: FlaskClient, argus_db, active_config):
+    second = _make_active_config(is_active=True)
+    try:
+        _clear_proxy_rr_state()
+        resp1 = flask_client.get(f"{API_PREFIX}/tunnel")
+        resp2 = flask_client.get(f"{API_PREFIX}/tunnel")
+        assert resp1.status_code == 200
+        assert resp2.status_code == 200
+        host1 = resp1.json["response"]["proxy_host"]
+        host2 = resp2.json["response"]["proxy_host"]
+        assert host1 != host2
+        assert {host1, host2} == {active_config.host, second.host}
+    finally:
+        try:
+            second.delete()
+        except Exception:
+            pass
 
 
 @pytest.mark.docker_required
@@ -275,8 +321,43 @@ def test_get_authorized_keys_forbidden_for_normal_user(flask_client: FlaskClient
 
 
 @pytest.mark.docker_required
+def test_get_authorized_keys_with_multiple_active_configs(flask_client: FlaskClient, argus_db, active_config, service_user_identity):
+    """API should still return keys when multiple active tunnel configs are present."""
+    from datetime import UTC, datetime
+
+    second = _make_active_config(is_active=True)
+    try:
+        key_one = _make_public_key()
+        key_two = _make_public_key()
+        _json_post(flask_client, f"{API_PREFIX}/tunnel", {"public_key": key_one})
+        now_utc = datetime.now(tz=UTC).replace(tzinfo=None)
+        SSHTunnelKey.objects.ttl(86400).create(
+            id=uuid4(),
+            user_id=g.user.id,
+            tunnel_id=second.id,
+            public_key=key_two,
+            fingerprint="SHA256:test-second",
+            created_at=now_utc,
+            expires_at=now_utc,
+        )
+
+        now_resp = flask_client.get(f"{API_PREFIX}/keys")
+        assert now_resp.status_code == 200
+        keys_text = now_resp.data.decode("utf-8")
+        assert key_one.strip() in keys_text
+        assert key_two.strip() in keys_text
+    finally:
+        try:
+            second.delete()
+        except Exception:
+            pass
+
+
+@pytest.mark.docker_required
 def test_get_authorized_keys_empty_when_no_keys(flask_client: FlaskClient, argus_db, active_config, service_user_identity):
-    """GET /ssh/keys for a tunnel with no registered keys should return empty text."""
+    """GET /ssh/keys for an empty database should return empty text."""
+    for row in SSHTunnelKey.objects.all():
+        row.delete()
     resp = flask_client.get(f"{API_PREFIX}/keys")
     assert resp.status_code == 200
     assert resp.data.decode("utf-8").strip() == ""
@@ -296,3 +377,70 @@ def test_get_authorized_keys_unauthenticated(argus_db, active_config):
         g.user = previous_user
 
     assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/client/ssh/tunnel/keys
+# ---------------------------------------------------------------------------
+
+@pytest.mark.docker_required
+def test_get_user_keys_returns_only_current_user(flask_client: FlaskClient, argus_db, active_config):
+    from datetime import UTC, datetime
+
+    own_key = _make_public_key()
+    _json_post(flask_client, f"{API_PREFIX}/tunnel", {"public_key": own_key})
+
+    foreign_key = _make_public_key()
+    now_utc = datetime.now(tz=UTC).replace(tzinfo=None)
+    SSHTunnelKey.objects.ttl(86400).create(
+        id=uuid4(),
+        user_id=uuid4(),
+        tunnel_id=active_config.id,
+        public_key=foreign_key,
+        fingerprint="SHA256:foreign",
+        created_at=now_utc,
+        expires_at=now_utc,
+    )
+
+    resp = flask_client.get(f"{API_PREFIX}/tunnel/keys")
+    assert resp.status_code == 200
+    assert resp.json["status"] == "ok"
+
+    rows = resp.json["response"]
+    public_keys = {row["public_key"] for row in rows}
+    assert own_key.strip() in public_keys
+    assert foreign_key.strip() not in public_keys
+
+
+@pytest.mark.docker_required
+def test_get_user_keys_can_filter_by_tunnel(flask_client: FlaskClient, argus_db, active_config):
+    from datetime import UTC, datetime
+
+    own_key = _make_public_key()
+    _json_post(flask_client, f"{API_PREFIX}/tunnel", {"public_key": own_key})
+
+    second = _make_active_config(is_active=True)
+    try:
+        other_tunnel_key = _make_public_key()
+        now_utc = datetime.now(tz=UTC).replace(tzinfo=None)
+        SSHTunnelKey.objects.ttl(86400).create(
+            id=uuid4(),
+            user_id=g.user.id,
+            tunnel_id=second.id,
+            public_key=other_tunnel_key,
+            fingerprint="SHA256:second-tunnel",
+            created_at=now_utc,
+            expires_at=now_utc,
+        )
+
+        resp = flask_client.get(f"{API_PREFIX}/tunnel/keys?tunnel_id={active_config.id}")
+        assert resp.status_code == 200
+        rows = resp.json["response"]
+        keys = {row["public_key"] for row in rows}
+        assert own_key.strip() in keys
+        assert other_tunnel_key.strip() not in keys
+    finally:
+        try:
+            second.delete()
+        except Exception:
+            pass
