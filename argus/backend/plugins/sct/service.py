@@ -12,6 +12,7 @@ from flask import current_app, g
 from cassandra.util import uuid_from_time
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.github_issue import GithubIssue, IssueLink
+from argus.backend.models.jira import JiraIssue
 from argus.backend.models.web import ArgusEventTypes, ErrorEventEmbeddings, CriticalEventEmbeddings
 from argus.backend.models.argus_ai import SCTErrorEventEmbedding, SCTCriticalEventEmbedding
 from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTJunitReports, SCTTestRun, SubtestType, SCTUnprocessedEvent, StressCommand
@@ -698,10 +699,23 @@ class SCTService:
         issues_by_id = {}
         if all_issue_ids:
             for batch_issue_ids in chunk(list(all_issue_ids)):
-                batch_issues = GithubIssue.filter(id__in=batch_issue_ids).all()
-
-                for issue in batch_issues:
-                    issues_by_id[issue.id] = issue
+                for issue in GithubIssue.filter(id__in=batch_issue_ids).all():
+                    issues_by_id[issue.id] = {
+                        "type": "github",
+                        "number": issue.number,
+                        "state": issue.state,
+                        "title": issue.title,
+                        "url": issue.url,
+                    }
+                for issue in JiraIssue.filter(id__in=batch_issue_ids).only(
+                        ["id", "state", "summary", "key", "permalink"]).all():
+                    issues_by_id[issue.id] = {
+                        "type": "jira",
+                        "state": issue.state,
+                        "summary": issue.summary,
+                        "key": issue.key,
+                        "permalink": issue.permalink,
+                    }
 
         # Step 3: Fetch test runs only for run_ids that have issue links (limiting to MAX_SIMILARS runs)
         runs_with_issues = list(all_issue_links.keys())
@@ -723,7 +737,6 @@ class SCTService:
                     continue
 
                 links = all_issue_links.get(run_id, [])
-                issues = [issues_by_id[link.issue_id] for link in links if link.issue_id in issues_by_id]
 
                 try:
                     build_number = int(
@@ -745,13 +758,8 @@ class SCTService:
                     "start_time": test_run.start_time.isoformat(),
                     "version": sut_version or "unknown",
                     "issues": [
-                        {
-                            "number": issue.number,
-                            "state": issue.state,
-                            "title": issue.title,
-                            "url": issue.url,
-                        }
-                        for issue in issues
+                        issues_by_id[link.issue_id]
+                        for link in links if link.issue_id in issues_by_id
                     ],
                 }
             except Exception as e:

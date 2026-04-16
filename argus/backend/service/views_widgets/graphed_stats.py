@@ -5,6 +5,7 @@ import re
 from argus.backend.db import ScyllaCluster
 from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.models.github_issue import GithubIssue, IssueLink
+from argus.backend.models.jira import JiraIssue
 from argus.backend.util.common import chunk
 from argus.backend.util.nemesis_map import get_nemesis_name
 
@@ -107,11 +108,24 @@ class GraphedStatsService:
         issues_by_id = {}
         if all_issue_ids:
             for batch_issue_ids in chunk(list(all_issue_ids)):
-                batch_issues = GithubIssue.filter(id__in=batch_issue_ids).only(
-                    ["id", "state", "title", "number", "url"]).all()
-
-                for issue in batch_issues:
-                    issues_by_id[issue.id] = issue
+                for issue in GithubIssue.filter(id__in=batch_issue_ids).only(
+                        ["id", "state", "title", "number", "url"]).all():
+                    issues_by_id[issue.id] = {
+                        "type": "github",
+                        "number": issue.number,
+                        "state": issue.state,
+                        "title": issue.title,
+                        "url": issue.url,
+                    }
+                for issue in JiraIssue.filter(id__in=batch_issue_ids).only(
+                        ["id", "state", "summary", "key", "permalink"]).all():
+                    issues_by_id[issue.id] = {
+                        "type": "jira",
+                        "state": issue.state,
+                        "summary": issue.summary,
+                        "key": issue.key,
+                        "permalink": issue.permalink,
+                    }
 
         # Step 3: Fetch test runs for all provided run_ids
         test_runs = {}
@@ -138,7 +152,6 @@ class GraphedStatsService:
                     continue
 
                 links = all_issue_links.get(run_id, [])
-                issues = [issues_by_id[issue_id] for issue_id in links if issue_id in issues_by_id]
 
                 build_number = test_run.build_number
 
@@ -159,13 +172,8 @@ class GraphedStatsService:
                     "version": sut_version,
                     "investigation_status": test_run.investigation_status,
                     "issues": [
-                        {
-                            "number": issue.number,
-                            "state": issue.state,
-                            "title": issue.title,
-                            "url": issue.url,
-                        }
-                        for issue in issues
+                        issues_by_id[issue_id]
+                        for issue_id in links if issue_id in issues_by_id
                     ],
                 }
             except Exception as e:
