@@ -39,4 +39,8 @@ const (
 	// Note: there is no GET nemesis endpoint. Nemesis data is embedded in the
 	// full run response (SCTTestRun.NemesisData) from TestRunGet.
 
+	// SSH tunnel routes
+	SSHKeysList = "/api/v1/client/ssh/keys"   // GET  – authorized_keys payload; param: tunnel_id (optional)
+	SSHTunnel   = "/api/v1/client/ssh/tunnel" // GET  – active tunnel config, POST – register public key
+
 )

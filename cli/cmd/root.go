@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -39,6 +40,7 @@ var ErrUnauthorized = errors.New("cmd: unauthorized")
 var (
 	useText        bool
 	useCloudflare  bool
+	disableCf      bool
 	argusURL       string
 	cfgFile        string
 	logLevel       string
@@ -53,6 +55,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&useText, "text", false, "render output as a text table instead of JSON")
 	rootCmd.PersistentFlags().StringVar(&argusURL, "url", "", "base URL of the Argus service (overrides config file)")
 	rootCmd.PersistentFlags().BoolVar(&useCloudflare, "use-cloudflare", true, "Use cloudflare access (overrides config file)")
+	rootCmd.PersistentFlags().BoolVar(&disableCf, "disable-cloudflare", false, "Disable all Cloudflare integration (cloudflared and CF headers/cookies)")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", `log verbosity: trace, debug, info, warn, error`)
 	rootCmd.PersistentFlags().BoolVar(&noCache, "no-cache", false, "bypass the local response cache; always fetch from the API")
 	rootCmd.PersistentFlags().StringVar(&cacheTTL, "cache-ttl", "", "override the default cache TTL (e.g. 10m, 1h); ignored when --no-cache is set")
@@ -123,6 +126,10 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 		logger.Debug().Str("url", cfg.URL).Msg("config loaded")
+		if disableCf || envBoolTrue("ARGUS_DISABLE_CLOUDFLARE") {
+			cfg.UseCf = false
+			logger.Debug().Msg("cloudflare integration disabled via flag/env")
+		}
 
 		ctx = contextWithConfig(ctx, cfg)
 
@@ -166,30 +173,31 @@ var rootCmd = &cobra.Command{
 // When use_cloudflare is disabled (headless mode):
 //
 //  1. Headless CF Access credentials from keychain (stored by "auth headless")
-//  2. ARGUS_TOKEN env var
+//  2. ARGUS_AUTH_TOKEN env var
+//  3. ARGUS_TOKEN env var
 //  3. CF Access service-account credentials from env
 //
 // When use_cloudflare is enabled (cloudflared mode):
 //
 //  1. PAT from keychain
 //  2. Session cookie from keychain
-//  3. CF Access JWT obtained from cloudflared CLI (`cloudflared access token`);
-//     if the cached token is expired or missing AND interactive mode is allowed,
-//     the full browser-based login flow is triggered automatically.
-//  4. ARGUS_TOKEN env var
+//  3. Cached Cloudflare Access JWT from cloudflared's local token cache
+//  4. ARGUS_AUTH_TOKEN env var
+//  5. ARGUS_TOKEN env var
 //  5. CF Access service-account credentials from env
 //
 // The optional extraOpts are appended last, after all other options.
 func buildAPIClientRaw(ctx context.Context, cfg *config.Config, extraOpts ...api.ClientOption) (*api.Client, error) {
 	var apiOpts []api.ClientOption
+	cfBypass := disableCf || envBoolTrue("ARGUS_DISABLE_CLOUDFLARE")
 
-	if !cfg.UseCf {
+	if !cfg.UseCf && !cfBypass {
 		// Headless mode: use CF Access service-token credentials from keychain.
 		if cfID, cfSecret, argusToken, err := keychain.LoadCFAccess(); err == nil {
 			apiOpts = append(apiOpts, api.WithCFAccessSecret(cfID, cfSecret))
 			apiOpts = append(apiOpts, api.WithAPIToken(argusToken))
 		}
-	} else {
+	} else if cfg.UseCf && !cfBypass {
 		// Cloudflared mode: use PAT or session from keychain.
 		if token, err := keychain.LoadPAT(); err == nil {
 			apiOpts = append(apiOpts, api.WithAPIToken(token))
@@ -205,14 +213,18 @@ func buildAPIClientRaw(ctx context.Context, cfg *config.Config, extraOpts ...api
 		}
 	}
 
-	if token := os.Getenv("ARGUS_TOKEN"); token != "" {
+	if token := os.Getenv("ARGUS_AUTH_TOKEN"); token != "" {
+		apiOpts = append(apiOpts, api.WithAPIToken(token))
+	} else if token := os.Getenv("ARGUS_TOKEN"); token != "" {
 		apiOpts = append(apiOpts, api.WithAPIToken(token))
 	}
 
-	if clientID := os.Getenv("ARGUS_CF_ACCESS_CLIENT_ID"); clientID != "" {
-		clientSecret := os.Getenv("ARGUS_CF_ACCESS_CLIENT_SECRET")
-		if clientSecret != "" {
-			apiOpts = append(apiOpts, api.WithCFAccessSecret(clientID, clientSecret))
+	if !cfBypass {
+		if clientID := os.Getenv("ARGUS_CF_ACCESS_CLIENT_ID"); clientID != "" {
+			clientSecret := os.Getenv("ARGUS_CF_ACCESS_CLIENT_SECRET")
+			if clientSecret != "" {
+				apiOpts = append(apiOpts, api.WithCFAccessSecret(clientID, clientSecret))
+			}
 		}
 	}
 
@@ -225,11 +237,14 @@ func buildAPIClientRaw(ctx context.Context, cfg *config.Config, extraOpts ...api
 	return client, nil
 }
 
-// ensureCFToken returns a valid Cloudflare Access JWT. It always uses the
-// cloudflared CLI (`cloudflared access token`) to read from cloudflared's
-// local token cache. If the token is expired/missing/stale and interactive
-// is true, it triggers the full browser-based login flow
-// (`cloudflared access login`) to obtain a fresh one.
+func envBoolTrue(name string) bool {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv(name)))
+	return v == "1" || v == "true" || v == "yes" || v == "on"
+}
+
+// cachedCFToken attempts to read a valid Cloudflare Access JWT from
+// cloudflared's local token cache.  It locates the cloudflared binary (PATH
+// or managed cache) and delegates to [auth.ArgusService.CachedCFToken].
 //
 // When interactive is false (--non-interactive), it returns whatever the
 // cached token is (if any) without opening a browser.

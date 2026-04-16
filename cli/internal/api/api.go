@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"mime"
 	"net/http"
 	"net/url"
 	"strings"
@@ -281,7 +280,7 @@ func DoJSON[T any](c *Client, req *http.Request) (T, error) {
 
 	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
 		return zero, fmt.Errorf(
-			"%w: server returned %d %s — re-authenticate with `argus auth` or set the ARGUS_TOKEN environment variable",
+			"%w: server returned %d %s — re-authenticate with `argus auth` or set ARGUS_AUTH_TOKEN (or ARGUS_TOKEN)",
 			ErrUnauthorized,
 			resp.StatusCode,
 			http.StatusText(resp.StatusCode),
@@ -292,22 +291,19 @@ func DoJSON[T any](c *Client, req *http.Request) (T, error) {
 		return zero, fmt.Errorf("server returned %d: %s", resp.StatusCode, http.StatusText(resp.StatusCode))
 	}
 
-	if rawCT := resp.Header.Get("Content-Type"); rawCT != "" {
-		mediaType, _, _ := mime.ParseMediaType(rawCT)
-		if mediaType != "application/json" {
-			// Non-JSON response from a non-error status code is almost always a
-			// Cloudflare or reverse-proxy authentication challenge (HTML login
-			// page). Treat it as an authorization failure with an actionable
-			// message so LLM consumers and humans can self-correct by
-			// re-authenticating rather than seeing a confusing decode error.
-			return zero, fmt.Errorf(
-				"%w: server returned Content-Type %q instead of application/json — "+
-					"this usually means authentication failed or the session expired; "+
-					"re-authenticate with `argus auth` or set the ARGUS_TOKEN environment variable",
-				ErrUnauthorized,
-				rawCT,
-			)
-		}
+	if contentType := resp.Header.Get("Content-Type"); contentType != "application/json" {
+		// Non-JSON response from a non-error status code is almost always a
+		// Cloudflare or reverse-proxy authentication challenge (HTML login
+		// page). Treat it as an authorization failure with an actionable
+		// message so LLM consumers and humans can self-correct by
+		// re-authenticating rather than seeing a confusing decode error.
+		return zero, fmt.Errorf(
+			"%w: server returned Content-Type %q instead of application/json — "+
+				"this usually means authentication failed or the session expired; "+
+				"re-authenticate with `argus auth` or set ARGUS_AUTH_TOKEN (or ARGUS_TOKEN)",
+			ErrUnauthorized,
+			contentType,
+		)
 	}
 
 	raw, err := io.ReadAll(resp.Body)
