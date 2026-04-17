@@ -21,6 +21,7 @@ from argus.backend.plugins.sct.udt import (
     PerformanceHDRHistogram
 )
 from argus.backend.util.common import chunk, get_build_number
+from argus.common.enums import ResourceState
 
 LOGGER = logging.getLogger(__name__)
 SCT_REGION_PROPERTY_MAP = {
@@ -56,7 +57,6 @@ class SCTTestRunSubmissionRequest():
     runner_private_ip: Optional[str] = field(default=None)
 
 
-
 class SCTEventSeverity(str, Enum):
     CRITICAL = "CRITICAL"
     ERROR = "ERROR"
@@ -65,14 +65,13 @@ class SCTEventSeverity(str, Enum):
     DEBUG = "DEBUG"
 
 
-
 class StressCommand(Model):
     run_id = columns.UUID(primary_key=True, partition_key=True)
-    ts = columns.DateTime(primary_key=True, clustering_order="DESC", default=lambda: datetime.now(tz=UTC))
+    ts = columns.DateTime(
+        primary_key=True, clustering_order="DESC", default=lambda: datetime.now(tz=UTC))
     cmd = columns.Text()
     log_name = columns.Text()
     node_name = columns.Text()
-
 
 
 class SCTEvent(Model):
@@ -88,7 +87,7 @@ class SCTEvent(Model):
 
     # DB Log columns
     node = columns.Text()
-    received_timestamp = columns.DateTime() # SCT DB message timestamp
+    received_timestamp = columns.DateTime()  # SCT DB message timestamp
 
     # Nemesis columns
     nemesis_name = columns.Text()
@@ -98,7 +97,6 @@ class SCTEvent(Model):
 
     # Misc
     known_issue = columns.Text()
-
 
     @classmethod
     def table_name(cls):
@@ -114,6 +112,16 @@ class SCTUnprocessedEvent(Model):
     ts = columns.DateTime(primary_key=True, clustering_order="DESC")
 
 
+class SCTResource(Model):
+    __table_name__ = "sct_resource"
+
+    run_id = columns.UUID(primary_key=True, partition_key=True)
+    name = columns.Text(primary_key=True)
+    state = columns.Text(default=lambda: ResourceState.RUNNING.value)
+    resource_type = columns.Text()
+    instance_info = columns.UserDefinedType(user_type=CloudInstanceDetails)
+
+
 class SCTTestRun(PluginModelBase):
     __table_name__ = "sct_test_run"
     _plugin_name = "scylla-cluster-tests"
@@ -126,7 +134,8 @@ class SCTTestRun(PluginModelBase):
     origin_url = columns.Text()
     started_by = columns.Text()
     config_files = columns.List(value_type=columns.Text())
-    packages = columns.List(value_type=columns.UserDefinedType(user_type=PackageVersion))
+    packages = columns.List(
+        value_type=columns.UserDefinedType(user_type=PackageVersion))
     scylla_version = columns.Text()
     version_source = columns.Text()
     yaml_test_duration = columns.Integer()
@@ -137,11 +146,14 @@ class SCTTestRun(PluginModelBase):
     cloud_setup = columns.UserDefinedType(user_type=CloudSetupDetails)
 
     # Test Runtime Resources
-    allocated_resources = columns.List(value_type=columns.UserDefinedType(user_type=CloudResource))
+    allocated_resources = columns.List(
+        value_type=columns.UserDefinedType(user_type=CloudResource))
 
     # Test Results
-    events = columns.List(value_type=columns.UserDefinedType(user_type=EventsBySeverity))
-    nemesis_data = columns.List(value_type=columns.UserDefinedType(user_type=NemesisRunInfo))
+    events = columns.List(
+        value_type=columns.UserDefinedType(user_type=EventsBySeverity))
+    nemesis_data = columns.List(
+        value_type=columns.UserDefinedType(user_type=NemesisRunInfo))
     screenshots = columns.List(value_type=columns.Text())
 
     # Subtest
@@ -176,7 +188,7 @@ class SCTTestRun(PluginModelBase):
     @classmethod
     def _stats_query(cls) -> str:
         return ("SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, "
-                f"assignee, end_time, investigation_status, heartbeat, build_number, scylla_version, cloud_setup, allocated_resources, nemesis_data FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT 15")
+                f"assignee, end_time, investigation_status, heartbeat, build_number, scylla_version, cloud_setup, nemesis_data FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT 15")
 
     @classmethod
     def load_test_run(cls, run_id: UUID) -> 'SCTTestRun':
@@ -190,9 +202,12 @@ class SCTTestRun(PluginModelBase):
     @classmethod
     def get_distinct_product_versions(cls, release: ArgusRelease) -> list[str]:
         cluster = ScyllaCluster.get()
-        statement = cluster.prepare(f"SELECT scylla_version FROM {cls.table_name()} WHERE release_id = ?")
-        rows = cluster.session.execute(query=statement, parameters=(release.id,))
-        unique_versions = {r["scylla_version"] for r in rows if r["scylla_version"]}
+        statement = cluster.prepare(f"SELECT scylla_version FROM {
+                                    cls.table_name()} WHERE release_id = ?")
+        rows = cluster.session.execute(
+            query=statement, parameters=(release.id,))
+        unique_versions = {r["scylla_version"]
+                           for r in rows if r["scylla_version"]}
 
         return sorted(list(unique_versions), reverse=True)
 
@@ -200,7 +215,8 @@ class SCTTestRun(PluginModelBase):
     def get_version_data_for_release(cls, release_name: str):
         cluster = ScyllaCluster.get()
         release = ArgusRelease.get(name=release_name)
-        query = cluster.prepare(f"SELECT scylla_version, packages, status FROM {cls.table_name()} WHERE release_id = ?")
+        query = cluster.prepare(f"SELECT scylla_version, packages, status FROM {
+                                cls.table_name()} WHERE release_id = ?")
         rows = cluster.session.execute(query=query, parameters=(release.id,))
 
         return list(rows)
@@ -213,8 +229,10 @@ class SCTTestRun(PluginModelBase):
     @classmethod
     def get_distinct_cloud_images_for_release(cls, release: ArgusRelease):
         cluster = ScyllaCluster.get()
-        statement = cluster.prepare(f"SELECT cloud_setup FROM {cls.table_name()} WHERE release_id = ?")
-        rows = cluster.session.execute(query=statement, parameters=(release.id,))
+        statement = cluster.prepare(f"SELECT cloud_setup FROM {
+                                    cls.table_name()} WHERE release_id = ?")
+        rows = cluster.session.execute(
+            query=statement, parameters=(release.id,))
         unique_images = {cls.get_image(r) for r in rows if cls.get_image(r)}
 
         return sorted(list(unique_images), reverse=True)
@@ -222,7 +240,8 @@ class SCTTestRun(PluginModelBase):
     @classmethod
     def get_distinct_cloud_images_for_view(cls, tests: list[ArgusTest]):
         cluster = ScyllaCluster.get()
-        statement = cluster.prepare(f"SELECT cloud_setup FROM {cls.table_name()} WHERE build_id IN ?")
+        statement = cluster.prepare(f"SELECT cloud_setup FROM {
+                                    cls.table_name()} WHERE build_id IN ?")
         futures = []
         for batch in chunk(tests):
             futures.append(cluster.session.execute_async(query=statement,
@@ -241,7 +260,8 @@ class SCTTestRun(PluginModelBase):
         query = cluster.prepare(f"SELECT build_id, packages, scylla_version, test_name, perf_op_rate_average, perf_op_rate_total, "
                                 "perf_avg_latency_99th, perf_avg_latency_mean, perf_total_errors, id, start_time, build_job_url, build_number"
                                 f" FROM {cls.table_name()} WHERE build_id = ? AND start_time < ? AND test_name = ? ALLOW FILTERING")
-        rows = cluster.session.execute(query=query, parameters=(build_id, start_time, test_name))
+        rows = cluster.session.execute(
+            query=query, parameters=(build_id, start_time, test_name))
 
         return list(rows)
 
@@ -278,7 +298,8 @@ class SCTTestRun(PluginModelBase):
             backend = req.sct_config.get("cluster_backend")
             if duration_override := req.sct_config.get("stress_duration"):
                 run.stress_duration = float(duration_override)
-            region_key = SCT_REGION_PROPERTY_MAP.get(backend, SCT_REGION_PROPERTY_MAP["default"])
+            region_key = SCT_REGION_PROPERTY_MAP.get(
+                backend, SCT_REGION_PROPERTY_MAP["default"])
             raw_regions = req.sct_config.get(region_key) or "undefined_region"
             regions = raw_regions.split() if isinstance(raw_regions, str) else raw_regions
             primary_region = regions[0]
@@ -289,7 +310,8 @@ class SCTTestRun(PluginModelBase):
                     provider=backend,
                     region=primary_region,
                 )
-            run.cloud_setup = ResourceSetup.get_resource_setup(backend=backend, sct_config=req.sct_config)
+            run.cloud_setup = ResourceSetup.get_resource_setup(
+                backend=backend, sct_config=req.sct_config)
 
             run.config_files = req.sct_config.get("config_files")
             run.region_name = regions
@@ -298,8 +320,8 @@ class SCTTestRun(PluginModelBase):
 
         return run
 
-    def get_resources(self) -> list[CloudResource]:
-        return self.allocated_resources
+    def get_resources(self) -> list[SCTResource]:
+        return list(SCTResource.filter(run_id=self.id).all())
 
     def get_nemeses(self) -> list[NemesisRunInfo]:
         return self.nemesis_data
@@ -319,7 +341,6 @@ class SCTTestRun(PluginModelBase):
         s.save()
         return True
 
-
     def get_events_legacy(self) -> list[EventsBySeverity]:
         """
             Deprecated. To be replaced by new events system.
@@ -332,7 +353,8 @@ class SCTTestRun(PluginModelBase):
     @classmethod
     def get_events_limited(cls, run_id: UUID, before: datetime | None = None, after: datetime | None = None, severities: list[SCTEventSeverity] = None, per_partition_limit: int = 100) -> list[dict]:
         db = ScyllaCluster.get()
-        query = f"SELECT * FROM {SCTEvent.table_name()} WHERE run_id = ? AND severity IN ?"
+        query = f"SELECT * FROM {SCTEvent.table_name()
+                                 } WHERE run_id = ? AND severity IN ?"
         params = [run_id]
         if severities:
             severity_filter = [s.value for s in severities]
@@ -417,7 +439,8 @@ class SCTTestRun(PluginModelBase):
                          sut_package_name,
                          f"{sut_package_name}-target"
                          ]:
-            scylla_package = next((pkg for pkg in self.packages if pkg.name == sut_name), None)
+            scylla_package = next(
+                (pkg for pkg in self.packages if pkg.name == sut_name), None)
             if scylla_package:
                 break
 
@@ -425,7 +448,8 @@ class SCTTestRun(PluginModelBase):
             return (datetime.strptime(scylla_package.date, '%Y%m%d').replace(tzinfo=timezone.utc).timestamp()
                     + int(scylla_package.revision_id, 16) % 1000000 / 1000000)
         else:
-            raise ValueError(f"{sut_package_name} package not found in packages - cannot determine SUT timestamp")
+            raise ValueError(
+                f"{sut_package_name} package not found in packages - cannot determine SUT timestamp")
 
     @classmethod
     def get_run_response(cls, run_id: UUID) -> dict | None:
@@ -434,7 +458,10 @@ class SCTTestRun(PluginModelBase):
         except cls.DoesNotExist:
             return None
         response = dict(run.items())
-        response["junit_reports"] = list(SCTJunitReports.filter(test_id=run_id).all())
+        response["allocated_resources"] = list(
+            SCTResource.filter(run_id=run_id).all())
+        response["junit_reports"] = list(
+            SCTJunitReports.filter(test_id=run_id).all())
         return response
 
 

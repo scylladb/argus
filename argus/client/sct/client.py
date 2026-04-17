@@ -17,6 +17,8 @@ class ArgusSCTClient(ArgusClient):
     class Routes(ArgusClient.Routes):
         SUBMIT_PACKAGES = "/sct/$id/packages/submit"
         SUBMIT_SCREENSHOTS = "/sct/$id/screenshots/submit"
+        GET_RESOURCES = "/sct/$id/resource/all"
+        GET_RESOURCE = "/sct/$id/resource/$name/get"
         CREATE_RESOURCE = "/sct/$id/resource/create"
         TERMINATE_RESOURCE = "/sct/$id/resource/$name/terminate"
         UPDATE_RESOURCE = "/sct/$id/resource/$name/update"
@@ -63,6 +65,28 @@ class ArgusSCTClient(ArgusClient):
         """
         response = super().set_status(run_type=self.test_type, run_id=self.run_id, new_status=new_status)
         self.check_response(response)
+
+    def get_resources(self) -> dict[str, Any]:
+        """
+            Get resources allocated for the run.
+        """
+        response = self.get(
+            endpoint=self.Routes.GET_RESOURCES,
+            location_params={"id": str(self.run_id)},
+        )
+        self.check_response(response)
+        return response.json()["response"]
+
+    def get_resource(self, name: str) -> dict[str, Any]:
+        """
+            Get a specific resource by name.
+        """
+        response = self.get(
+            endpoint=self.Routes.GET_RESOURCE,
+            location_params={"id": str(self.run_id),  "name": name},
+        )
+        self.check_response(response)
+        return response.json()["response"]
 
     def set_sct_runner(self, public_ip: str, private_ip: str, region: str, backend: str, name: str = None) -> None:
         """
