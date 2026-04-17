@@ -1,0 +1,359 @@
+# Unify GitHub and Jira Issue Support
+
+## Context
+
+Argus tracks issues from two providers: GitHub and Jira. Both are modeled in the database
+(`GithubIssue`, `JiraIssue`) and linked to test runs via a shared `IssueLink` table. A unified
+`IssueService` facade dispatches CRUD operations to the correct provider based on the URL.
+
+However, several backend code paths and most of the frontend were originally written for GitHub only,
+with Jira support bolted on later. This has resulted in silent data loss (Jira issues dropped from
+query results), broken rendering (Jira issues passed to GitHub-only components that access
+nonexistent fields), and ~350 lines of copy-pasted code between two nearly identical Svelte
+components.
+
+---
+
+## Problem Definition
+
+### Backend: Jira issues silently dropped in two code paths
+
+The SCT similar-runs feature (`plugins/sct/service.py:700-704`) and the graphed stats widget
+(`service/views_widgets/graphed_stats.py:110-114`) only query the `GithubIssue` table when resolving
+issue IDs from `IssueLink`. Any Jira issues linked to runs in these contexts are silently dropped —
+they exist in the database but never appear in the API response.
+
+The Jira URL parser (`service/jira_service.py:83`) uses a regex hardcoded to
+`scylladb.atlassian.net`, rejecting issue URLs from any other Atlassian Cloud instance.
+
+### Frontend: Release dashboard renders Jira issues as broken GitHub cards
+
+The release dashboard has a complete rendering pipeline that is GitHub-only:
+
+1. `ReleaseGithubIssues.svelte` fetches from `/api/v1/release/issues` — the backend returns **both**
+   GitHub and Jira issues (confirmed: `stats.py:181` queries both `GithubIssue` and `JiraIssue`).
+2. Issues are passed to `TestWithIssuesCard.svelte` (line 76), which unconditionally renders every
+   issue via `<GithubIssue {issue} />` (line 13).
+3. `GithubIssue.svelte` accesses `issue.repo`, `issue.number`, `issue.owner`, `issue.title`,
+   `issue.url` — none of which exist on Jira issues (which use `key`, `summary`, `project`,
+   `permalink`). The result is broken cards showing `undefined/undefined#undefined`.
+
+The same problem exists in `TestPopoutSelector.svelte` (lines 164-185), which hardcodes the GitHub
+icon and renders `{issue.owner}/{issue.repo}#{issue.number}` — producing `undefined/undefined#undefined`
+for Jira issues.
+
+### Frontend: Graphed stats badges assume GitHub shape
+
+`IssuesCell.svelte` renders compact issue badges using `issue.number` as the keyed-each key (line
+18), `issue.url` for the link (line 20), and `issue.state === 'open'` for coloring (line 22). For
+Jira issues: `issue.number` is undefined (causing key collisions), the state check fails (Jira uses
+states like "todo", "in progress", "done" — not "open"/"closed"), and `#{issue.number}` displays as
+`#undefined`.
+
+The corresponding `Interfaces.ts` (lines 15-20) defines `Issue` with only GitHub fields:
+`number`, `state`, `title`, `url`.
+
+### Frontend: ~350 lines of duplicated code
+
+`GithubIssue.svelte` (351 lines) and `JiraIssue.svelte` (368 lines) are structurally identical
+components with copy-pasted logic. The only differences are:
+
+| Aspect      | GitHub                           | Jira                                        |
+| ----------- | -------------------------------- | ------------------------------------------- |
+| Icon        | `faGithub`                       | `faJira`                                    |
+| Title field | `issue.title`                    | `issue.summary`                             |
+| Identifier  | `issue.repo#issue.number`        | `issue.key`                                 |
+| Link URL    | `issue.url`                      | `issue.permalink`                           |
+| Label color | `#${label.color}` (hex from API) | `label2color(label)` (hash-based)           |
+| State map   | 2 states (open, closed)          | 9 states (todo, in progress, blocked, etc.) |
+
+Everything else is identical: `resolveRuns()`, `resolveFirstUserForAggregation()`, `deleteIssue()`,
+run-list modal, delete confirmation modal, and all CSS.
+
+### Frontend: No compact badge component
+
+There is no reusable badge component for issues. `IssuesCell.svelte` has inline badge markup
+hardcoded to GitHub fields. Other places that need compact issue display (e.g.,
+`TestPopoutSelector`) also inline GitHub-specific markup.
+
+### Frontend: Misleading "Github" names
+
+Several files are named "Github" but handle (or should handle) both types:
+`ViewGithubIssues.svelte`, `ReleaseGithubIssues.svelte`, `ViewTypes.js` key `githubIssues`. Shared
+type definitions and helpers live in `frontend/Github/Issues.svelte`.
+
+---
+
+## Current State
+
+### Backend
+
+| Capability               | GitHub        | Jira          | Location                                                                      |
+| ------------------------ | ------------- | ------------- | ----------------------------------------------------------------------------- |
+| DB model                 | `GithubIssue` | `JiraIssue`   | `models/github_issue.py`, `models/jira.py`                                    |
+| Submit/link to run       | Yes           | Yes           | `service/issue_service.py` via facade                                         |
+| Delete link              | Yes           | Yes           | `service/issue_service.py` via facade                                         |
+| Fetch issues by filter   | Yes           | Yes           | `service/issue_service.py:get()` merges both                                  |
+| Bulk refresh from remote | Yes           | Yes           | `cli.py:refresh_issues()` calls both                                          |
+| SCT similar-runs issues  | Yes           | **No**        | `plugins/sct/service.py:700-704` — only queries `GithubIssue`                 |
+| Graphed stats widget     | Yes           | **No**        | `service/views_widgets/graphed_stats.py:110-114` — only queries `GithubIssue` |
+| Release-level stats      | Yes           | Yes           | `service/stats.py:181` queries both                                           |
+| Jira URL pattern         | N/A           | ScyllaDB only | `service/jira_service.py:83` — regex hardcoded to `scylladb.atlassian.net`    |
+
+### Frontend
+
+| Component / File                               | Purpose                          | Status                                                                                     |
+| ---------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------ |
+| `Github/Issues.svelte`                         | Container + shared types/helpers | Works for both (branches on subtype at lines 465-469)                                      |
+| `Github/GithubIssue.svelte` (351 lines)        | Full issue card for GitHub       | Duplicated with Jira counterpart                                                           |
+| `Jira/JiraIssue.svelte` (368 lines)            | Full issue card for Jira         | Duplicated with GitHub counterpart                                                         |
+| `Github/IssuesCopyModal.svelte`                | Copy issues to clipboard         | Works for both (checks subtype at line 110)                                                |
+| `ReleaseDashboard/ReleaseGithubIssues.svelte`  | Release issues page              | **Broken:** feeds mixed issues into GitHub-only pipeline                                   |
+| `ReleaseDashboard/TestWithIssuesCard.svelte`   | Release issue cards              | **Broken:** only renders `<GithubIssue>` (line 13)                                         |
+| `ReleaseDashboard/TestPopoutSelector.svelte`   | Inline issue list in popout      | **Broken:** hardcoded GitHub icon + `issue.owner/issue.repo#issue.number` (lines 170, 184) |
+| `TestRun/SCT/SctSimilarEvents.svelte`          | Similar runs issue list          | **Broken:** uses `issue.url`, `issue.number`, `issue.title` directly (lines 224-239)       |
+| `TestRun/StructuredEvent.svelte`               | Structured event issue list      | **Broken:** uses `issue.url`, `issue.number`, `issue.title` directly (lines 262-271)       |
+| `ViewGraphedStats/IssuesCell.svelte`           | Compact badge in stats table     | **Broken:** `issue.number` as key, GitHub-only state check, `#issue.number` display        |
+| `ViewGraphedStats/Interfaces.ts`               | Issue type for stats             | **Broken:** only has `number/state/title/url`                                              |
+| `Views/Widgets/ViewGithubIssues.svelte`        | View widget wrapper              | Works (delegates to `Issues.svelte`) but misleadingly named                                |
+| `Views/Widgets/SummaryWidget/RunIssues.svelte` | Issue count badge                | Works (delegates to `IssuesCopyModal`) but has unused `GithubIssue` import                 |
+| `Common/ViewTypes.js:95`                       | View type registry               | Key is `githubIssues`, friendly name "Github Scoped Issue View"                            |
+
+---
+
+## Plan
+
+### Phase 1: Backend — Fix Jira gaps
+
+#### 1a. SCT similar-runs: include Jira issues
+
+**File:** `argus/backend/plugins/sct/service.py` (lines 698-704)
+
+Currently only queries `GithubIssue.filter(id__in=batch_issue_ids)`. After the GitHub query, collect
+any issue IDs not found in `issues_by_id`, and query `JiraIssue` for those. ~10 lines added.
+
+#### 1b. Graphed stats widget: include Jira issues
+
+**File:** `argus/backend/service/views_widgets/graphed_stats.py` (lines 107-114)
+
+Same pattern: import `JiraIssue`, query for IDs not found in `GithubIssue`. Return a `subtype` field
+in each issue dict so the frontend can render the correct badge. Normalize both types to include the
+union of fields needed by the frontend (`number`/`key`, `state`, `title`/`summary`, `url`/`permalink`,
+`subtype`).
+
+#### 1c. Generalize Jira URL regex
+
+**File:** `argus/backend/service/jira_service.py` (line 83)
+
+Change:
+
+```
+r"http(s)?://scylladb\.atlassian\.net/browse/(?P<key>[A-Z\-\d]+)(/)?"
+```
+
+To:
+
+```
+r"http(s)?://[a-zA-Z0-9-]+\.atlassian\.net/browse/(?P<key>[A-Z]+-\d+)(/)?"
+```
+
+---
+
+### Phase 2: Frontend — Create unified components
+
+#### 2a. Extract shared types to `frontend/Common/IssueTypes.ts`
+
+Move the type definitions and helper functions from the `<script module>` block of
+`Github/Issues.svelte` (lines 1-139) into a standalone TypeScript module:
+
+- Types: `Issue`, `GithubSubtype`, `JiraSubtype`, `Label`, `Link`, `TestRun`, `StateFilter`,
+  `GithubState`, `JiraState`, `State`, `RichAssignee`
+- Helpers: `getTitle`, `getUrl`, `getKey`, `getNumber`, `getRepo`, `getAssignees`,
+  `getAssigneesRich`, `label2color`
+- State/icon maps from both card components: `GithubIssueColorMap`, `GithubIssueIcon`,
+  `JiraIssueColorMap`, `JiraIssueIcon`
+
+Update all imports across the codebase.
+
+#### 2b. Create `frontend/Common/IssueCard.svelte`
+
+A single full issue card component replacing both `GithubIssue.svelte` and `JiraIssue.svelte`.
+
+```ts
+interface Props {
+    issue: GithubSubtype | JiraSubtype;
+    runId: string;
+    deleteEnabled?: boolean;
+    aggregated?: boolean;
+}
+```
+
+Uses the polymorphic helpers from `IssueTypes.ts` to resolve display values. Switches icon
+(`faGithub`/`faJira`) and state color/icon maps based on `issue.subtype`. Contains `resolveRuns()`,
+`resolveFirstUserForAggregation()`, `deleteIssue()`, the run-list modal, the delete confirmation
+modal, and all CSS — written once.
+
+Label color logic: uses `#${label.color}` for GitHub and `label2color(label)` for Jira.
+
+Eliminates ~350 lines of duplication.
+
+#### 2c. Create `frontend/Common/IssueBadge.svelte`
+
+A compact badge component for inline/table contexts. Currently no component exists for this —
+`IssuesCell.svelte` uses raw markup hardcoded to GitHub fields.
+
+```ts
+interface Props {
+    issue: Issue;
+}
+```
+
+Displays:
+
+- A colored `<a>` badge linking to the issue URL (via `getUrl()`)
+- Shows `#number` for GitHub, `KEY` for Jira (via `getKey()`)
+- State-based coloring that handles both GitHub (open/closed) and Jira (9 states)
+- Tooltip with title/summary (via `getTitle()`)
+
+---
+
+### Phase 3: Frontend — Fix broken rendering and update consumers
+
+#### 3a. `Github/Issues.svelte` (lines 464-469)
+
+Replace the `{#if issue.subtype == "github"} <GithubIssue> {:else} <JiraIssue> {/if}` branching
+with a single `<IssueCard {issue} ... />`.
+
+#### 3b. `ReleaseDashboard/TestWithIssuesCard.svelte` — **Fixes broken dashboard**
+
+Replace `import GithubIssue` with `import IssueCard` and change `<GithubIssue {issue} />` to
+`<IssueCard {issue} />`. This fixes the critical bug where Jira issues render as broken cards with
+`undefined` fields on the release dashboard.
+
+#### 3c. `ReleaseDashboard/TestPopoutSelector.svelte` (lines 164-185) — **Fixes broken popout**
+
+Replace the hardcoded `<Fa icon={faGithub} />` and `{issue.owner}/{issue.repo}#{issue.number}` with
+either `<IssueBadge {issue} />` or inline use of the polymorphic helpers:
+
+- Icon: `issue.subtype === "github" ? faGithub : faJira`
+- Identifier: `getKey(issue)`
+- Title: `getTitle(issue)`
+- URL: `getUrl(issue)`
+
+#### 3d. `TestRun/SCT/SctSimilarEvents.svelte` (lines 216-241) — **Fixes broken similar events**
+
+Uses `issue.url`, `issue.number`, `issue.title` directly with zero subtype checking, and
+`issue.state === "open"` for button coloring (only works for GitHub's 2 states). For Jira issues:
+`#{issue.number}` displays `#undefined`, `issue.title` displays `undefined`, `issue.url` is
+undefined (broken link), and the attach button sends `undefined` as the URL.
+
+Replace with `<IssueBadge>` or use polymorphic helpers (`getUrl`, `getKey`, `getTitle`). The state
+coloring needs to support both GitHub (`open`/`closed`) and Jira states.
+
+#### 3e. `TestRun/StructuredEvent.svelte` (lines 255-273) — **Fixes broken structured events**
+
+Identical pattern to `SctSimilarEvents.svelte` — uses `issue.url`, `issue.number`, `issue.title`
+directly. Same fix: replace with `<IssueBadge>` or polymorphic helpers.
+
+#### 3f. `Views/Widgets/ViewGraphedStats/IssuesCell.svelte` — **Fixes broken badges**
+
+Replace the inline badge markup (lines 18-26) with `{#each issues as issue (issue.id)} <IssueBadge
+{issue} /> {/each}`. This fixes the undefined `issue.number` key, broken state coloring, and
+`#undefined` display for Jira issues.
+
+#### 3g. `Views/Widgets/ViewGraphedStats/Interfaces.ts` (lines 15-20)
+
+Extend the `Issue` interface to support both subtypes:
+
+```ts
+export interface Issue {
+    id: string;
+    subtype: "github" | "jira";
+    number?: number;
+    key?: string;
+    state: string;
+    title?: string;
+    summary?: string;
+    url?: string;
+    permalink?: string;
+}
+```
+
+Coordinate with backend change 1b to return the `subtype` field in the graphed stats response.
+
+#### 3h. `Views/Widgets/SummaryWidget/RunIssues.svelte` (line 4)
+
+Remove unused `GithubIssue` import.
+
+---
+
+### Phase 4: Naming cleanup
+
+#### 4a. Rename files
+
+| Old name                                               | New name                                         | Reason             |
+| ------------------------------------------------------ | ------------------------------------------------ | ------------------ |
+| `frontend/Views/Widgets/ViewGithubIssues.svelte`       | `frontend/Views/Widgets/ViewIssues.svelte`       | Handles both types |
+| `frontend/ReleaseDashboard/ReleaseGithubIssues.svelte` | `frontend/ReleaseDashboard/ReleaseIssues.svelte` | Handles both types |
+
+Update all imports referencing the old names.
+
+#### 4b. Rename ViewTypes key
+
+**File:** `frontend/Common/ViewTypes.js` (line 95)
+
+Change `githubIssues` to `issues` and `friendlyName` from `"Github Scoped Issue View"` to
+`"Scoped Issue View"`.
+
+**Note:** This changes the view type key stored in DB for existing view configurations. A
+backward-compatible alias (`githubIssues` still resolves to the same component) or a data migration
+may be needed. Investigate before executing.
+
+#### 4c. Deprecate old card components
+
+Mark `frontend/Github/GithubIssue.svelte` and `frontend/Jira/JiraIssue.svelte` as deprecated (add a
+comment at the top) and re-export `IssueCard` from them for backward compatibility during transition.
+Remove them in a follow-up once all consumers are confirmed migrated.
+
+---
+
+## Files to Create/Modify
+
+| File                                                        | Action     | Phase  | Description                                                          |
+| ----------------------------------------------------------- | ---------- | ------ | -------------------------------------------------------------------- |
+| `argus/backend/plugins/sct/service.py`                      | **MODIFY** | 1a     | Import `JiraIssue`, query for missing issue IDs                      |
+| `argus/backend/service/views_widgets/graphed_stats.py`      | **MODIFY** | 1b     | Import `JiraIssue`, query for missing IDs, add `subtype` to response |
+| `argus/backend/service/jira_service.py`                     | **MODIFY** | 1c     | Generalize URL regex to any `*.atlassian.net`                        |
+| `frontend/Common/IssueTypes.ts`                             | **CREATE** | 2a     | Shared types, helpers, and state maps                                |
+| `frontend/Common/IssueCard.svelte`                          | **CREATE** | 2b     | Unified full issue card                                              |
+| `frontend/Common/IssueBadge.svelte`                         | **CREATE** | 2c     | Compact badge component                                              |
+| `frontend/Github/Issues.svelte`                             | **MODIFY** | 2a, 3a | Remove `<script module>` types, use `<IssueCard>`                    |
+| `frontend/Github/GithubIssue.svelte`                        | **MODIFY** | 4c     | Deprecate, re-export `IssueCard`                                     |
+| `frontend/Jira/JiraIssue.svelte`                            | **MODIFY** | 4c     | Deprecate, re-export `IssueCard`                                     |
+| `frontend/ReleaseDashboard/TestWithIssuesCard.svelte`       | **MODIFY** | 3b     | Use `<IssueCard>` — fixes broken dashboard                           |
+| `frontend/ReleaseDashboard/TestPopoutSelector.svelte`       | **MODIFY** | 3c     | Use helpers/badge — fixes broken popout                              |
+| `frontend/TestRun/SCT/SctSimilarEvents.svelte`              | **MODIFY** | 3d     | Use helpers/badge — fixes broken similar events                      |
+| `frontend/TestRun/StructuredEvent.svelte`                   | **MODIFY** | 3e     | Use helpers/badge — fixes broken structured events                   |
+| `frontend/ReleaseDashboard/ReleaseGithubIssues.svelte`      | **RENAME** | 4a     | → `ReleaseIssues.svelte`                                             |
+| `frontend/Views/Widgets/ViewGraphedStats/IssuesCell.svelte` | **MODIFY** | 3f     | Use `<IssueBadge>` — fixes broken badges                             |
+| `frontend/Views/Widgets/ViewGraphedStats/Interfaces.ts`     | **MODIFY** | 3g     | Extend `Issue` for both subtypes                                     |
+| `frontend/Views/Widgets/SummaryWidget/RunIssues.svelte`     | **MODIFY** | 3h     | Remove unused import                                                 |
+| `frontend/Views/Widgets/ViewGithubIssues.svelte`            | **RENAME** | 4a     | → `ViewIssues.svelte`                                                |
+| `frontend/Common/ViewTypes.js`                              | **MODIFY** | 4b     | Rename key + friendly name                                           |
+
+---
+
+## Verification
+
+1. **Backend:** `uv run pytest argus/backend/tests` — existing tests pass.
+2. **Lint:** `uv run ruff check` — no new violations.
+3. **Frontend build:** `ROLLUP_ENV=development yarn rollup -c` — compiles without errors.
+4. **Manual verification:**
+    - Submit a GitHub issue URL to a test run → issue card renders correctly.
+    - Submit a Jira issue URL (any `*.atlassian.net` instance) → issue card renders correctly.
+    - **Release dashboard** shows both GitHub and Jira issues with correct icons, titles, identifiers, and links (previously: Jira showed `undefined/undefined#undefined`).
+    - **Test popout selector** shows correct icon and identifier for both types (previously: always showed GitHub icon + `undefined` fields for Jira).
+    - **Graphed stats widget** shows both GitHub and Jira issues as badges with correct identifiers and state coloring (previously: Jira issues missing entirely from backend, or rendered as `#undefined` in frontend).
+    - **SCT similar-runs** panel shows Jira issues alongside GitHub ones (previously: Jira issues silently dropped).
+    - Deleting an issue (either type) from any context works correctly.
+    - Label filtering works for both types in the main Issues view.
