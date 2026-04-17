@@ -2,6 +2,7 @@
     import { run as run_1 } from 'svelte/legacy';
 
     import PaginatedTable from "./PaginatedTable.svelte";
+    import { compareVersions } from "../../../Common/versionSort";
     import AssigneeCell from "./AssigneeCell.svelte";
     import StatusCell from "./StatusCell.svelte";
     import IssuesCell from "./IssuesCell.svelte";
@@ -102,7 +103,7 @@
         {
             key: "version",
             label: "Version",
-            sort: (a: TestRun, b: TestRun) => a.version.localeCompare(b.version),
+            sort: (a: TestRun, b: TestRun) => compareVersions(a.version, b.version),
             width: "130px",
         },
         {
