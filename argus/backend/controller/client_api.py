@@ -7,9 +7,11 @@ from argus.backend.service.user import api_login_required
 from argus.backend.service.client_service import ClientService
 from argus.backend.util.common import get_payload
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS
+from argus.backend.controller.ssh_api import bp as ssh_bp
 
 bp = Blueprint("client_api", __name__, url_prefix="/client")
 bp.register_error_handler(Exception, handle_api_exception)
+bp.register_blueprint(ssh_bp)
 for plugin in AVAILABLE_PLUGINS.values():
     if plugin.controller:
         bp.register_blueprint(plugin.controller)
