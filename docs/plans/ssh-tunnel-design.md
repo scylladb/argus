@@ -236,13 +236,14 @@ Class `TunnelService`:
     2. Takes immediate effect — next `AuthorizedKeysCommand` call won't include it
 
 - `get_proxy_tunnel_config() -> ProxyTunnelConfig | None`:
-    1. Return active proxy tunnel config (for admin panel display)
+    1. Return one deterministic active proxy tunnel config (for admin panel display)
+    2. Must be non-mutating (does not advance round-robin state used by client tunnel selection)
 
 - `save_proxy_tunnel_config(payload: dict) -> ProxyTunnelConfig`:
     1. Create a proxy tunnel config row (active by default, or explicitly disabled via `is_active=false`)
     2. Create a dedicated Argus service user for this proxy host (e.g., `proxy-tunnel-<host>`), generate API token
-    3. Resolve `host_key_fingerprint` automatically by running `ssh-keyscan` against `host:port`
-    4. Save proxy tunnel config with `service_user_id` and resolved `host_key_fingerprint`
+    3. Verify `host_key_fingerprint` by running `ssh-keyscan` against `host:port` and comparing discovered fingerprint with the provided value
+    4. Save proxy tunnel config with `service_user_id` and verified `host_key_fingerprint`
     5. Run provisioning script on the proxy host (Step 4c), passing the service user's API token
     6. On success: keep requested active state. On failure: mark inactive, return error.
     7. Return saved config
@@ -301,7 +302,7 @@ Add to existing admin API blueprint (follows existing pattern: `@api_login_requi
 @check_roles(UserRoles.Admin)
 def get_proxy_tunnel_config():
     # tunnel_id is optional:
-    # - without tunnel_id: returns one active config (round-robin selection)
+    # - without tunnel_id: returns one deterministic active config (non-mutating)
     # - with tunnel_id: returns that config only if it is active
     config = TunnelService().get_proxy_tunnel_config(tunnel_id=request.args.get("tunnel_id"))
     return {"status": "ok", "response": config}
@@ -417,7 +418,7 @@ New admin panel section "SSH Tunnel" accessible from the admin sidebar. Follows 
 - Proxy User (text input, default "argus-proxy")
 - Target Host (text input — Argus private IP)
 - Target Port (number input, default 8080)
-- Host Key Fingerprint (read-only; auto-discovered by backend using `ssh-keyscan`)
+- Host Key Fingerprint (required input; backend verifies it with `ssh-keyscan` before saving)
 - Service User (read-only, auto-created — shows the dedicated Argus user + token created for this proxy host)
 - Active toggle (boolean; multiple hosts can be active at the same time)
 - Save button → triggers provisioning script on the proxy host. On success: config saved + active. On failure: error message shown, config not activated.

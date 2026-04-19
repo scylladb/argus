@@ -27,6 +27,10 @@ class ProxyTunnelActivePayload(TypedDict):
     is_active: bool
 
 
+class ProxyTunnelConfigCreatePayload(ProxyTunnelConfigPayload):
+    host_key_fingerprint: str
+
+
 def parse_active_only(value: str | None) -> bool | None:
     if value is None:
         return None
@@ -405,7 +409,7 @@ def list_proxy_tunnel_configs():
 @check_roles(UserRoles.Admin)
 @api_login_required
 def save_proxy_tunnel_config():
-    payload: ProxyTunnelConfigPayload = get_payload(request)
+    payload: ProxyTunnelConfigCreatePayload = get_payload(request)
     config = TunnelService().save_proxy_tunnel_config(payload)
     return {
         "status": "ok",
