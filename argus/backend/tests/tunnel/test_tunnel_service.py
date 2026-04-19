@@ -344,6 +344,7 @@ def test_save_proxy_tunnel_config_creates_service_user(argus_db, mock_host_finge
             proxy_user="argus-proxy",
             target_host="10.0.1.1",
             target_port=8080,
+            host_key_fingerprint=f"SHA256:{host}",
         )
         svc = TunnelService()
         result = svc.save_proxy_tunnel_config(payload)
@@ -356,6 +357,31 @@ def test_save_proxy_tunnel_config_creates_service_user(argus_db, mock_host_finge
         assert service_user.service_user is True
         assert f"proxy-tunnel-{host}" in service_user.username
         assert service_user.roles == [UserRoles.SSHTunnelServer.value]
+    finally:
+        _restore_configs(previous_active_ids)
+
+
+@pytest.mark.docker_required
+def test_save_proxy_tunnel_config_reuses_existing_tunnel_service_user(argus_db, mock_host_fingerprint):
+    """Saving config for the same host should re-use the existing tunnel service user."""
+    previous_active_ids = _active_config_ids()
+    _deactivate_configs(previous_active_ids)
+    host = f"proxy-reuse-{uuid4().hex[:6]}.example.com"
+    payload = dict(
+        host=host,
+        port=22,
+        proxy_user="argus-proxy",
+        target_host="10.0.1.1",
+        target_port=8080,
+        host_key_fingerprint=f"SHA256:{host}",
+    )
+
+    try:
+        svc = TunnelService()
+        first = svc.save_proxy_tunnel_config(payload)
+        second = svc.save_proxy_tunnel_config(payload)
+
+        assert first.service_user_id == second.service_user_id
     finally:
         _restore_configs(previous_active_ids)
 
@@ -375,6 +401,7 @@ def test_save_proxy_tunnel_config_deactivates_old(argus_db, mock_host_fingerprin
             target_port=8080,
         )
         svc = TunnelService()
+        first_payload["host_key_fingerprint"] = f"SHA256:{first_payload['host']}"
         first = svc.save_proxy_tunnel_config(first_payload)
         assert first.is_active is True
 
@@ -385,6 +412,7 @@ def test_save_proxy_tunnel_config_deactivates_old(argus_db, mock_host_fingerprin
             target_host="10.0.2.2",
             target_port=8080,
         )
+        second_payload["host_key_fingerprint"] = f"SHA256:{second_payload['host']}"
         second = svc.save_proxy_tunnel_config(second_payload)
         assert second.is_active is True
 
@@ -404,6 +432,7 @@ def test_save_proxy_tunnel_config_can_create_inactive(argus_db, mock_host_finger
         proxy_user="argus-proxy",
         target_host="10.0.3.1",
         target_port=8080,
+        host_key_fingerprint=f"SHA256:{host}",
         is_active=False,
     )
 
@@ -461,6 +490,49 @@ def test_save_proxy_tunnel_config_missing_fields(argus_db, mock_host_fingerprint
     svc = TunnelService()
     with pytest.raises(TunnelServiceException, match="Missing required fields"):
         svc.save_proxy_tunnel_config({"host": "proxy.example.com"})
+
+
+@pytest.mark.docker_required
+def test_save_proxy_tunnel_config_rejects_fingerprint_mismatch(argus_db, mock_host_fingerprint):
+    """Config save should fail when provided fingerprint does not match discovered host key."""
+    host = f"proxy-mismatch-{uuid4().hex[:6]}.example.com"
+    payload = dict(
+        host=host,
+        port=22,
+        proxy_user="argus-proxy",
+        target_host="10.0.7.1",
+        target_port=8080,
+        host_key_fingerprint="SHA256:incorrect",
+    )
+    with pytest.raises(TunnelServiceException, match="Host key fingerprint mismatch"):
+        TunnelService().save_proxy_tunnel_config(payload)
+
+
+@pytest.mark.docker_required
+def test_create_proxy_service_user_rejects_username_collision(argus_db):
+    host = f"proxy-collision-{uuid4().hex[:6]}.example.com"
+    username = f"proxy-tunnel-{host}"
+    now_utc = datetime.now(tz=UTC).replace(tzinfo=None)
+    collision_user = User.create(
+        id=uuid4(),
+        username=username,
+        full_name="Conflicting User",
+        password="",
+        email=f"{username}@example.com",
+        registration_date=now_utc,
+        roles=[UserRoles.User.value],
+        api_token="",
+        service_user=False,
+    )
+
+    try:
+        with pytest.raises(TunnelServiceException, match="already exists and is not a dedicated SSH tunnel service user"):
+            TunnelService()._create_proxy_service_user(host)
+    finally:
+        try:
+            collision_user.delete()
+        except Exception:
+            pass
 
 
 @pytest.mark.docker_required
@@ -561,7 +633,7 @@ def test_get_proxy_tunnel_config_returns_none_for_inactive_tunnel_id(argus_db):
 
 @pytest.mark.docker_required
 def test_get_proxy_tunnel_config_round_robin_without_tunnel_id(argus_db):
-    """get_proxy_tunnel_config() should rotate when multiple active configs exist."""
+    """get_proxy_tunnel_config() should be deterministic for admin reads."""
     first = _make_active_config(is_active=True)
     second = _make_active_config(is_active=True)
     try:
@@ -571,8 +643,7 @@ def test_get_proxy_tunnel_config_round_robin_without_tunnel_id(argus_db):
         pick2 = svc.get_proxy_tunnel_config()
         assert pick1 is not None
         assert pick2 is not None
-        assert pick1.host != pick2.host
-        assert {pick1.host, pick2.host} == {first.host, second.host}
+        assert pick1.host == pick2.host
     finally:
         try:
             first.delete()
@@ -582,6 +653,33 @@ def test_get_proxy_tunnel_config_round_robin_without_tunnel_id(argus_db):
             second.delete()
         except Exception:
             pass
+
+
+@pytest.mark.docker_required
+def test_get_proxy_tunnel_config_does_not_advance_round_robin_index(argus_db):
+    """Admin reads should not mutate RR index used by client tunnel selection."""
+    previous_active_ids = _active_config_ids()
+    _deactivate_configs(previous_active_ids)
+    first = _make_active_config(is_active=True)
+    second = _make_active_config(is_active=True)
+    try:
+        _clear_proxy_rr_state()
+        service = TunnelService()
+        _ = service.get_proxy_tunnel_config()
+        first_pick = service.get_tunnel_connection().proxy_host
+        second_pick = service.get_tunnel_connection().proxy_host
+        assert first_pick != second_pick
+        assert {first_pick, second_pick} == {first.host, second.host}
+    finally:
+        try:
+            first.delete()
+        except Exception:
+            pass
+        try:
+            second.delete()
+        except Exception:
+            pass
+        _restore_configs(previous_active_ids)
 
 
 @pytest.mark.docker_required

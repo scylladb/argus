@@ -55,7 +55,7 @@ class TunnelConnectionResponseDTO:
 
 @dataclass(frozen=True, slots=True)
 class SSHTunnelKeyDTO:
-    id: UUID
+    key_id: UUID
     user_id: UUID
     tunnel_id: UUID
     public_key: str
@@ -84,6 +84,7 @@ class ProxyTunnelConfigPayload(TypedDict, total=False):
     proxy_user: str
     target_host: str
     target_port: int
+    host_key_fingerprint: str
     is_active: bool
 
 
@@ -262,17 +263,24 @@ class TunnelService:
         """
         query = SSHTunnelKey.objects
 
+        if tunnel_id is not None:
+            if not isinstance(tunnel_id, UUID):
+                tunnel_id = UUID(str(tunnel_id))
+
         if user_id is not None:
             if not isinstance(user_id, UUID):
                 user_id = UUID(str(user_id))
             query = query.filter(user_id=user_id)
 
-        rows = query.limit(DEFAULT_KEYS_LIST_LIMIT).all()
+        if tunnel_id is not None and user_id is None:
+            query = query.filter(tunnel_id=tunnel_id)
 
-        if tunnel_id is not None:
-            if not isinstance(tunnel_id, UUID):
-                tunnel_id = UUID(str(tunnel_id))
+        rows = list(query.all())
+
+        if tunnel_id is not None and user_id is not None:
             rows = [row for row in rows if row.tunnel_id == tunnel_id]
+
+        rows = rows[:DEFAULT_KEYS_LIST_LIMIT]
 
         return [self._to_ssh_tunnel_key_dto(row) for row in rows]
 
@@ -300,8 +308,8 @@ class TunnelService:
 
         - If ``tunnel_id`` is provided: return that config only when it exists
           and is active.
-        - If ``tunnel_id`` is not provided: pick one active config using
-          round-robin selection.
+        - If ``tunnel_id`` is not provided: return one active config using
+          deterministic selection (non-mutating).
 
         Returns ``None`` if no matching active config exists.
         """
@@ -317,7 +325,7 @@ class TunnelService:
                 return None
 
         try:
-            config = self._get_active_config_round_robin()
+            config = self._get_active_config()
             return self._to_proxy_tunnel_config_dto(config)
         except TunnelServiceException:
             return None
@@ -333,22 +341,29 @@ class TunnelService:
            service user's id stored in ``service_user_id``.
 
         Required payload keys: ``host``, ``port``, ``proxy_user``,
-        ``target_host``, ``target_port``.
+        ``target_host``, ``target_port``, ``host_key_fingerprint``.
 
-        The host key fingerprint is resolved automatically by connecting to the
-        proxy host with ``ssh-keyscan``.
+        The host key fingerprint is verified by resolving the host key with
+        ``ssh-keyscan`` and comparing it against the provided
+        ``host_key_fingerprint`` value.
 
         Returns the saved config as a dict (including ``service_user_id`` and
         the generated ``api_token`` so the caller can provision the proxy host).
         """
-        required = ("host", "port", "proxy_user", "target_host", "target_port")
+        required = ("host", "port", "proxy_user", "target_host", "target_port", "host_key_fingerprint")
         missing = [k for k in required if not payload.get(k)]
         if missing:
             raise TunnelServiceException(f"Missing required fields: {', '.join(missing)}")
 
         is_active = payload.get("is_active", True)
         port = int(payload["port"])
-        host_key_fingerprint = self._fetch_host_key_fingerprint(payload["host"], port)
+        discovered_fingerprint = self._fetch_host_key_fingerprint(payload["host"], port)
+        provided_fingerprint = payload["host_key_fingerprint"].strip()
+        if discovered_fingerprint != provided_fingerprint:
+            raise TunnelServiceException(
+                "Host key fingerprint mismatch for "
+                f"{payload['host']}:{port}. Expected {provided_fingerprint}, got {discovered_fingerprint}"
+            )
 
         # Create a dedicated service user for this proxy host.
         service_user, api_token = self._create_proxy_service_user(payload["host"])
@@ -360,7 +375,7 @@ class TunnelService:
             proxy_user=payload["proxy_user"],
             target_host=payload["target_host"],
             target_port=int(payload["target_port"]),
-            host_key_fingerprint=host_key_fingerprint,
+            host_key_fingerprint=provided_fingerprint,
             service_user_id=service_user.id,
             is_active=is_active,
         )
@@ -498,18 +513,13 @@ class TunnelService:
         """
         username = f"proxy-tunnel-{host}"
 
-        # Re-use existing service user if it already exists.
+        # Re-use existing tunnel service user if it already exists.
         existing = User.exists_by_name(username)
         if existing:
-            should_save = False
-            if existing.roles != [UserRoles.SSHTunnelServer.value]:
-                existing.roles = [UserRoles.SSHTunnelServer.value]
-                should_save = True
-            if not existing.service_user:
-                existing.service_user = True
-                should_save = True
-            if should_save:
-                existing.save()
+            if not existing.service_user or UserRoles.SSHTunnelServer.value not in (existing.roles or []):
+                raise TunnelServiceException(
+                    f"User '{username}' already exists and is not a dedicated SSH tunnel service user"
+                )
             svc = UserService()
             token = svc.get_or_generate_token(existing)
             return existing, token
@@ -532,7 +542,7 @@ class TunnelService:
     @staticmethod
     def _to_ssh_tunnel_key_dto(row: SSHTunnelKey) -> SSHTunnelKeyDTO:
         return SSHTunnelKeyDTO(
-            id=row.id,
+            key_id=row.id,
             user_id=row.user_id,
             tunnel_id=row.tunnel_id,
             public_key=row.public_key,
