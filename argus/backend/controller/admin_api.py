@@ -1,3 +1,4 @@
+from dataclasses import asdict
 import logging
 from uuid import UUID
 from flask import (
@@ -7,6 +8,7 @@ from flask import (
 )
 from argus.backend.error_handlers import handle_api_exception
 from argus.backend.service.release_manager import ReleaseEditPayload, ReleaseManagerService
+from argus.backend.service.tunnel_service import ProxyTunnelConfigPayload, TunnelService
 from argus.backend.service.user import UserService, api_login_required, check_roles
 from argus.backend.models.web import User, UserRoles
 
@@ -352,4 +354,51 @@ def user_toggle_admin(user_id: str):
     return {
         "status": "ok",
         "response": result
+    }
+
+
+@bp.route("/proxy-tunnel/config", methods=["GET"])
+@check_roles(UserRoles.Admin)
+@api_login_required
+def get_proxy_tunnel_config():
+    config = TunnelService().get_proxy_tunnel_config()
+    return {
+        "status": "ok",
+        "response": asdict(config) if config else None,
+    }
+
+
+@bp.route("/proxy-tunnel/config", methods=["POST"])
+@check_roles(UserRoles.Admin)
+@api_login_required
+def save_proxy_tunnel_config():
+    payload: ProxyTunnelConfigPayload = get_payload(request)
+    config = TunnelService().save_proxy_tunnel_config(payload)
+    return {
+        "status": "ok",
+        "response": asdict(config),
+    }
+
+
+@bp.route("/ssh/keys", methods=["GET"])
+@check_roles(UserRoles.Admin)
+@api_login_required
+def list_ssh_keys():
+    keys = TunnelService().list_keys()
+    return {
+        "status": "ok",
+        "response": [asdict(row) for row in keys],
+    }
+
+
+@bp.route("/ssh/keys/<string:key_id>", methods=["DELETE"])
+@check_roles(UserRoles.Admin)
+@api_login_required
+def delete_ssh_key(key_id: str):
+    TunnelService().delete_key(UUID(key_id))
+    return {
+        "status": "ok",
+        "response": {
+            "deleted": True,
+        },
     }
