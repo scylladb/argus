@@ -161,7 +161,7 @@ aws ec2 describe-instances --filters "Name=tag:Name,Values=argus-*" \
 - [x] Step 3: Backend service - `argus/backend/service/tunnel_service.py` (done in PR #967)
 - [x] Step 4a: Client API - `argus/backend/controller/ssh_api.py` (done in PR #967)
 - [x] Step 4b: Admin API - `argus/backend/controller/admin_api.py`
-- [x] Step 9 (partial): backend tunnel tests (`argus/backend/tests/tunnel/test_tunnel_service.py`, `argus/backend/tests/tunnel/test_ssh_api.py`) (done in PR #967)
+- [x] Step 9 (partial): backend tunnel tests (`argus/backend/tests/tunnel/test_tunnel_service.py`, `argus/backend/tests/tunnel/test_ssh_api.py`, `argus/backend/tests/tunnel/test_admin_proxy_tunnel_api.py`) (done in PR #967)
 - [ ] Step 4c: Proxy host provisioning template
 - [ ] Step 4d: Admin Panel UI
 - [ ] Step 5: Client module - `argus/client/tunnel.py`
@@ -203,9 +203,15 @@ class ProxyTunnelConfig(Model):
     is_active = columns.Boolean()
 ```
 
-Add to `USED_MODELS`. Managed via admin panel (Step 4d). Only one active proxy host at a time (`is_active=True`).
+Add to `USED_MODELS`. Managed via admin panel (Step 4d).
 
-**Service user per proxy host:** When admin saves a new proxy tunnel config, the backend automatically creates a dedicated Argus user (e.g., `proxy-tunnel-<host>`) with a fresh API token. This token is deployed to the proxy host during provisioning for argus-cli to call the authorized keys endpoint. Each proxy host gets its own isolated credentials — revoking a proxy host's access is as simple as deleting its service user.
+**Multi-host active mode:** Multiple proxy hosts may be active at the same time (`is_active=True`).
+
+- Tunnel registration and tunnel-info endpoints can pick among active hosts (round-robin).
+- Admin can disable a host by setting `is_active=False`.
+- Disabled hosts remain in DB for audit/re-enable workflows.
+
+**Service user per proxy host:** When admin saves a new proxy tunnel config, the backend automatically creates a dedicated Argus user (e.g., `proxy-tunnel-<host>`) with a fresh API token. This token is deployed to the proxy host during provisioning for argus-cli to call the authorized keys endpoint. Access is role-scoped (`ROLE_SSH_TUNNEL_SERVER`) and hard-limited to `GET /api/v1/client/ssh/keys`.
 
 `admin_user` and `admin_key_path` (SSH credentials for provisioning access to the proxy host) are stored in `argus_web.yaml`.
 
@@ -217,7 +223,7 @@ Class `TunnelService`:
 
 - `register_tunnel(user: User, public_key: str, ttl_seconds: int = None) -> dict`:
     1. Store `SSHTunnelKey` in DB (public key only) with ScyllaDB TTL (default 86400s / 24h, or client-provided `ttl_seconds`). Set `expires_at = now_utc + ttl` for informational purposes.
-    2. Get active `ProxyTunnelConfig`
+    2. Get one active `ProxyTunnelConfig` (round-robin across active hosts)
     3. Return `{proxy_host, proxy_port, proxy_user, target_host, target_port, host_key_fingerprint, expires_at}` (all datetimes UTC ISO-8601)
 
 - `get_authorized_keys() -> str`:
@@ -233,12 +239,19 @@ Class `TunnelService`:
     1. Return active proxy tunnel config (for admin panel display)
 
 - `save_proxy_tunnel_config(payload: dict) -> ProxyTunnelConfig`:
-    1. Deactivate any existing active config
+    1. Create a proxy tunnel config row (active by default, or explicitly disabled via `is_active=false`)
     2. Create a dedicated Argus service user for this proxy host (e.g., `proxy-tunnel-<host>`), generate API token
-    3. Save proxy tunnel config with `service_user_id`
-    4. Run provisioning script on the proxy host (Step 4c), passing the service user's API token
-    5. On success: mark config as active. On failure: mark inactive, return error.
-    6. Return saved config
+    3. Resolve `host_key_fingerprint` automatically by running `ssh-keyscan` against `host:port`
+    4. Save proxy tunnel config with `service_user_id` and resolved `host_key_fingerprint`
+    5. Run provisioning script on the proxy host (Step 4c), passing the service user's API token
+    6. On success: keep requested active state. On failure: mark inactive, return error.
+    7. Return saved config
+
+- `list_proxy_tunnel_configs(active_only: bool | None = None) -> list[ProxyTunnelConfig]`:
+    1. Return all configs, optionally filtered by active state
+
+- `set_proxy_tunnel_config_active(tunnel_id: UUID, is_active: bool) -> ProxyTunnelConfig`:
+    1. Enable or disable a specific proxy host config
 
 - `provision_proxy_tunnel(config: ProxyTunnelConfig, auth_token: str)`:
     1. SSH to proxy host as admin (admin credentials from `argus_web.yaml`)
@@ -287,8 +300,19 @@ Add to existing admin API blueprint (follows existing pattern: `@api_login_requi
 @api_login_required
 @check_roles(UserRoles.Admin)
 def get_proxy_tunnel_config():
-    config = TunnelService().get_proxy_tunnel_config()
+    # tunnel_id is optional:
+    # - without tunnel_id: returns one active config (round-robin selection)
+    # - with tunnel_id: returns that config only if it is active
+    config = TunnelService().get_proxy_tunnel_config(tunnel_id=request.args.get("tunnel_id"))
     return {"status": "ok", "response": config}
+
+@bp.route("/proxy-tunnel/configs", methods=["GET"])
+@api_login_required
+@check_roles(UserRoles.Admin)
+def list_proxy_tunnel_configs():
+    # active_only is optional: "true" or "false"
+    configs = TunnelService().list_proxy_tunnel_configs(active_only=request.args.get("active_only"))
+    return {"status": "ok", "response": configs}
 
 @bp.route("/proxy-tunnel/config", methods=["POST"])
 @api_login_required
@@ -296,6 +320,14 @@ def get_proxy_tunnel_config():
 def save_proxy_tunnel_config():
     payload = request.get_json()
     config = TunnelService().save_proxy_tunnel_config(payload)
+    return {"status": "ok", "response": config}
+
+@bp.route("/proxy-tunnel/config/<tunnel_id>/active", methods=["POST"])
+@api_login_required
+@check_roles(UserRoles.Admin)
+def set_proxy_tunnel_config_active(tunnel_id):
+    payload = request.get_json()
+    config = TunnelService().set_proxy_tunnel_config_active(UUID(tunnel_id), payload["is_active"])
     return {"status": "ok", "response": config}
 
 # Key management (list, delete, cleanup)
@@ -385,12 +417,12 @@ New admin panel section "SSH Tunnel" accessible from the admin sidebar. Follows 
 - Proxy User (text input, default "argus-proxy")
 - Target Host (text input — Argus private IP)
 - Target Port (number input, default 8080)
-- Host Key Fingerprint (text input — obtain via `ssh-keyscan proxy-host | ssh-keygen -lf -`)
+- Host Key Fingerprint (read-only; auto-discovered by backend using `ssh-keyscan`)
 - Service User (read-only, auto-created — shows the dedicated Argus user + token created for this proxy host)
-- Active toggle (boolean)
+- Active toggle (boolean; multiple hosts can be active at the same time)
 - Save button → triggers provisioning script on the proxy host. On success: config saved + active. On failure: error message shown, config not activated.
 - Re-provision button (re-run provisioning on existing proxy host, e.g., after argus-cli update)
-- Deactivate button
+- Deactivate button (sets `is_active=false` for that host)
 
 **SSH Keys table:**
 

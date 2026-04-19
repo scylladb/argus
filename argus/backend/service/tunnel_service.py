@@ -3,6 +3,7 @@ import binascii
 import hashlib
 import logging
 import secrets
+import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import TypedDict
@@ -77,13 +78,13 @@ class ProxyTunnelConfigDTO:
     api_token: str | None = None
 
 
-class ProxyTunnelConfigPayload(TypedDict):
+class ProxyTunnelConfigPayload(TypedDict, total=False):
     host: str
     port: int
     proxy_user: str
     target_host: str
     target_port: int
-    host_key_fingerprint: str
+    is_active: bool
 
 
 def _derive_fingerprint(public_key_str: str) -> str:
@@ -295,20 +296,28 @@ class TunnelService:
 
     def get_proxy_tunnel_config(self, tunnel_id: UUID | str | None = None) -> ProxyTunnelConfigDTO | None:
         """
-        Return the active proxy tunnel config as a dict, or a specific config
-        if ``tunnel_id`` is provided.  Returns ``None`` if none exists.
+        Return one active proxy tunnel config.
+
+        - If ``tunnel_id`` is provided: return that config only when it exists
+          and is active.
+        - If ``tunnel_id`` is not provided: pick one active config using
+          round-robin selection.
+
+        Returns ``None`` if no matching active config exists.
         """
         if tunnel_id is not None:
             if not isinstance(tunnel_id, UUID):
                 tunnel_id = UUID(str(tunnel_id))
             try:
                 config = ProxyTunnelConfig.get(id=tunnel_id)
+                if not config.is_active:
+                    return None
                 return self._to_proxy_tunnel_config_dto(config)
             except ProxyTunnelConfig.DoesNotExist:
                 return None
 
         try:
-            config = self._get_active_config()
+            config = self._get_active_config_round_robin()
             return self._to_proxy_tunnel_config_dto(config)
         except TunnelServiceException:
             return None
@@ -320,19 +329,26 @@ class TunnelService:
         1. Creates a dedicated Argus service user (e.g. ``proxy-tunnel-<host>``)
            with a fresh API token — this user is what the proxy host will
            authenticate as when calling ``GET /client/ssh/keys``.
-        2. Saves the new config with ``is_active=True`` and the service user's
-           id stored in ``service_user_id``.
+        2. Saves the new config with explicit ``is_active`` (default True) and the
+           service user's id stored in ``service_user_id``.
 
         Required payload keys: ``host``, ``port``, ``proxy_user``,
-        ``target_host``, ``target_port``, ``host_key_fingerprint``.
+        ``target_host``, ``target_port``.
+
+        The host key fingerprint is resolved automatically by connecting to the
+        proxy host with ``ssh-keyscan``.
 
         Returns the saved config as a dict (including ``service_user_id`` and
         the generated ``api_token`` so the caller can provision the proxy host).
         """
-        required = ("host", "port", "proxy_user", "target_host", "target_port", "host_key_fingerprint")
+        required = ("host", "port", "proxy_user", "target_host", "target_port")
         missing = [k for k in required if not payload.get(k)]
         if missing:
             raise TunnelServiceException(f"Missing required fields: {', '.join(missing)}")
+
+        is_active = payload.get("is_active", True)
+        port = int(payload["port"])
+        host_key_fingerprint = self._fetch_host_key_fingerprint(payload["host"], port)
 
         # Create a dedicated service user for this proxy host.
         service_user, api_token = self._create_proxy_service_user(payload["host"])
@@ -340,16 +356,37 @@ class TunnelService:
         config = ProxyTunnelConfig.create(
             id=uuid4(),
             host=payload["host"],
-            port=int(payload["port"]),
+            port=port,
             proxy_user=payload["proxy_user"],
             target_host=payload["target_host"],
             target_port=int(payload["target_port"]),
-            host_key_fingerprint=payload["host_key_fingerprint"],
+            host_key_fingerprint=host_key_fingerprint,
             service_user_id=service_user.id,
-            is_active=True,
+            is_active=is_active,
         )
 
         return self._to_proxy_tunnel_config_dto(config, api_token=api_token)
+
+    def list_proxy_tunnel_configs(self, active_only: bool | None = None) -> list[ProxyTunnelConfigDTO]:
+        """Return proxy tunnel configs, optionally filtered by active state."""
+        rows = list(ProxyTunnelConfig.objects.all())
+        if active_only is not None:
+            rows = [row for row in rows if bool(row.is_active) == active_only]
+        rows = sorted(rows, key=lambda row: (row.host or "", str(row.id)))
+        return [self._to_proxy_tunnel_config_dto(row) for row in rows]
+
+    def set_proxy_tunnel_config_active(self, tunnel_id: UUID | str, is_active: bool) -> ProxyTunnelConfigDTO:
+        """Enable or disable a specific proxy tunnel config."""
+        if not isinstance(tunnel_id, UUID):
+            tunnel_id = UUID(str(tunnel_id))
+        try:
+            config = ProxyTunnelConfig.get(id=tunnel_id)
+        except ProxyTunnelConfig.DoesNotExist as exc:
+            raise TunnelServiceException(f"Proxy tunnel config {tunnel_id} not found") from exc
+
+        config.update(is_active=is_active)
+        refreshed = ProxyTunnelConfig.get(id=tunnel_id)
+        return self._to_proxy_tunnel_config_dto(refreshed)
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -358,6 +395,54 @@ class TunnelService:
     @staticmethod
     def _get_active_configs() -> list[ProxyTunnelConfig]:
         return [cfg for cfg in ProxyTunnelConfig.objects.all() if cfg.is_active]
+
+    @staticmethod
+    def _fetch_host_key_fingerprint(host: str, port: int) -> str:
+        """Resolve host key fingerprint for a proxy host using ssh-keyscan."""
+        try:
+            result = subprocess.run(
+                ["ssh-keyscan", "-p", str(port), "-t", "ed25519,ecdsa,rsa", host],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=10,
+            )
+        except FileNotFoundError as exc:
+            raise TunnelServiceException("ssh-keyscan is required on the Argus backend host") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise TunnelServiceException(f"Timed out fetching host key from {host}:{port}") from exc
+
+        keys_by_type: dict[str, str] = {}
+        for line in result.stdout.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            parts = stripped.split()
+            if len(parts) < 3:
+                continue
+            key_type = parts[1]
+            key_data = parts[2]
+            if key_type.startswith("ssh-") or key_type.startswith("ecdsa-"):
+                keys_by_type.setdefault(key_type, f"{key_type} {key_data}")
+
+        preferred_types = (
+            "ssh-ed25519",
+            "ecdsa-sha2-nistp256",
+            "ecdsa-sha2-nistp384",
+            "ecdsa-sha2-nistp521",
+            "ssh-rsa",
+        )
+        for key_type in preferred_types:
+            if key_type in keys_by_type:
+                return _derive_fingerprint(keys_by_type[key_type])
+
+        if keys_by_type:
+            return _derive_fingerprint(next(iter(keys_by_type.values())))
+
+        stderr = (result.stderr or "").strip()
+        if stderr:
+            raise TunnelServiceException(f"Failed to fetch host key for {host}:{port}: {stderr}")
+        raise TunnelServiceException(f"Failed to fetch host key for {host}:{port}")
 
     def _get_active_config(self, proxy_host: str | None = None) -> ProxyTunnelConfig:
         configs = self._get_active_configs()
