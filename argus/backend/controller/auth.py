@@ -6,7 +6,14 @@ from flask import (
 from werkzeug.security import check_password_hash
 from argus.backend.error_handlers import handle_profile_exception
 from argus.backend.models.web import User, UserRoles
-from argus.backend.service.user import UserService, UserServiceException, check_roles, load_logged_in_user, login_required
+from argus.backend.service.user import (
+    UserService,
+    UserServiceException,
+    check_roles,
+    enforce_ssh_tunnel_server_scope,
+    load_logged_in_user,
+    login_required,
+)
 
 bp = Blueprint('auth', __name__, url_prefix='/auth')
 bp.register_error_handler(UserServiceException, handle_profile_exception)
@@ -111,3 +118,4 @@ def logout():
 
 
 bp.before_app_request(load_logged_in_user)
+bp.before_app_request(enforce_ssh_tunnel_server_scope)

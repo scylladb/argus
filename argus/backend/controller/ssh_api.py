@@ -1,11 +1,18 @@
 import logging
+from dataclasses import asdict
+from typing import TypedDict
 
 from flask import Blueprint, Response, g, request
 
-from argus.backend.error_handlers import APIException
 from argus.backend.error_handlers import handle_api_exception
+from argus.backend.models.web import UserRoles
 from argus.backend.service.tunnel_service import TunnelService
-from argus.backend.service.user import api_login_required
+from argus.backend.service.user import api_login_required, check_roles
+
+
+class RegisterTunnelPayload(TypedDict, total=False):
+    public_key: str
+    ttl_seconds: int
 
 bp = Blueprint("ssh_api", __name__, url_prefix="/ssh")
 bp.register_error_handler(Exception, handle_api_exception)
@@ -23,7 +30,7 @@ def register_tunnel():
     -----------------
     public_key  : str  — OpenSSH-format ed25519 (or other) public key (required)
     ttl_seconds : int  — optional key lifetime in seconds.
-                         Must be within [86400, 2592000] (24h..30d).
+                         Must be within [3600, 2592000] (1h..30d).
                          Default is 86400 (24h).
 
     Response
@@ -42,7 +49,7 @@ def register_tunnel():
         }
     }
     """
-    payload = request.get_json() or {}
+    payload: RegisterTunnelPayload = request.get_json() or {}
     public_key = payload.get("public_key")
     ttl_seconds = payload.get("ttl_seconds")
 
@@ -51,14 +58,14 @@ def register_tunnel():
         public_key=public_key,
         ttl_seconds=ttl_seconds,
     )
-    return {"status": "ok", "response": result}
+    return {"status": "ok", "response": asdict(result)}
 
 
 @bp.route("/tunnel", methods=["GET"])
 @api_login_required
 def get_tunnel_connection():
     result = TunnelService().get_tunnel_connection(proxy_host=request.args.get("proxy_host"))
-    return {"status": "ok", "response": result}
+    return {"status": "ok", "response": asdict(result)}
 
 
 @bp.route("/tunnel/keys", methods=["GET"])
@@ -72,11 +79,12 @@ def get_user_keys():
     """
     tunnel_id = request.args.get("tunnel_id")
     result = TunnelService().list_keys(tunnel_id=tunnel_id, user_id=g.user.id)
-    return {"status": "ok", "response": result}
+    return {"status": "ok", "response": [asdict(row) for row in result]}
 
 
 @bp.route("/keys", methods=["GET"])
 @api_login_required
+@check_roles(UserRoles.SSHTunnelServer)
 def get_authorized_keys():
     """
     Return all non-expired SSH public keys in OpenSSH ``authorized_keys``
@@ -85,8 +93,5 @@ def get_authorized_keys():
     This endpoint is called by the proxy host's ``AuthorizedKeysCommand``
     (via ``argus-cli ssh-keys``) on every SSH connection attempt.
     """
-    if not g.user or not g.user.is_service_user():
-        raise APIException("Only service users can fetch SSH authorized keys")
-
     keys_text = TunnelService().get_authorized_keys()
     return Response(keys_text, mimetype="text/plain")

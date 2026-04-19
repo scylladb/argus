@@ -3,7 +3,9 @@ import binascii
 import hashlib
 import logging
 import secrets
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import TypedDict
 from uuid import UUID, uuid4
 
 from cryptography.exceptions import UnsupportedAlgorithm
@@ -17,7 +19,7 @@ from argus.backend.service.user import UserService
 LOGGER = logging.getLogger(__name__)
 
 DEFAULT_TTL_SECONDS = 86400  # 24 hours
-MIN_TTL_SECONDS = 86400  # 24 hours
+MIN_TTL_SECONDS = 3600  # 1 hour
 MAX_TTL_SECONDS = 2592000  # 30 days
 DEFAULT_KEYS_LIST_LIMIT = 5000
 PROXY_RR_INDEX_KEY = "ssh_tunnel_proxy_rr_index"
@@ -25,6 +27,63 @@ PROXY_RR_INDEX_KEY = "ssh_tunnel_proxy_rr_index"
 
 class TunnelServiceException(Exception):
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class TunnelRegistrationResponseDTO:
+    key_id: UUID
+    tunnel_id: UUID
+    proxy_host: str
+    proxy_port: int
+    proxy_user: str
+    target_host: str
+    target_port: int
+    host_key_fingerprint: str
+    expires_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class TunnelConnectionResponseDTO:
+    proxy_host: str
+    proxy_port: int
+    proxy_user: str
+    target_host: str
+    target_port: int
+    host_key_fingerprint: str
+
+
+@dataclass(frozen=True, slots=True)
+class SSHTunnelKeyDTO:
+    id: UUID
+    user_id: UUID
+    tunnel_id: UUID
+    public_key: str
+    fingerprint: str
+    created_at: datetime
+    expires_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class ProxyTunnelConfigDTO:
+    id: UUID
+    host: str
+    port: int
+    proxy_user: str
+    target_host: str
+    target_port: int
+    host_key_fingerprint: str
+    service_user_id: UUID | None
+    is_active: bool
+    api_token: str | None = None
+
+
+class ProxyTunnelConfigPayload(TypedDict):
+    host: str
+    port: int
+    proxy_user: str
+    target_host: str
+    target_port: int
+    host_key_fingerprint: str
 
 
 def _derive_fingerprint(public_key_str: str) -> str:
@@ -79,7 +138,7 @@ class TunnelService:
         user: User,
         public_key: str,
         ttl_seconds: int | None = None,
-    ) -> dict:
+    ) -> TunnelRegistrationResponseDTO:
         """
         Register ``public_key`` for ``user`` against the active (or specified)
         proxy tunnel config.
@@ -96,9 +155,10 @@ class TunnelService:
 
         Returns
         -------
-        dict with keys: ``proxy_host``, ``proxy_port``, ``proxy_user``,
-        ``target_host``, ``target_port``, ``host_key_fingerprint``,
-        ``expires_at`` (UTC datetime), ``tunnel_id``, ``key_id``.
+        TunnelRegistrationResponseDTO with keys: ``proxy_host``,
+        ``proxy_port``, ``proxy_user``, ``target_host``, ``target_port``,
+        ``host_key_fingerprint``, ``expires_at`` (UTC datetime),
+        ``tunnel_id``, ``key_id``.
         """
         if not public_key or not public_key.strip():
             raise TunnelServiceException("public_key is required")
@@ -134,19 +194,19 @@ class TunnelService:
             expires_at=expires_at,
         )
 
-        return {
-            "key_id": str(key.id),
-            "tunnel_id": str(config.id),
-            "proxy_host": config.host,
-            "proxy_port": config.port,
-            "proxy_user": config.proxy_user,
-            "target_host": config.target_host,
-            "target_port": config.target_port,
-            "host_key_fingerprint": config.host_key_fingerprint,
-            "expires_at": expires_at,
-        }
+        return TunnelRegistrationResponseDTO(
+            key_id=key.id,
+            tunnel_id=config.id,
+            proxy_host=config.host,
+            proxy_port=config.port,
+            proxy_user=config.proxy_user,
+            target_host=config.target_host,
+            target_port=config.target_port,
+            host_key_fingerprint=config.host_key_fingerprint,
+            expires_at=expires_at,
+        )
 
-    def get_tunnel_connection(self, proxy_host: str | None = None) -> dict:
+    def get_tunnel_connection(self, proxy_host: str | None = None) -> TunnelConnectionResponseDTO:
         """
         Return active proxy tunnel connection details for tunnel clients.
 
@@ -157,14 +217,14 @@ class TunnelService:
             config = self._get_active_config(proxy_host=proxy_host)
         else:
             config = self._get_active_config_round_robin()
-        return {
-            "proxy_host": config.host,
-            "proxy_port": config.port,
-            "proxy_user": config.proxy_user,
-            "target_host": config.target_host,
-            "target_port": config.target_port,
-            "host_key_fingerprint": config.host_key_fingerprint,
-        }
+        return TunnelConnectionResponseDTO(
+            proxy_host=config.host,
+            proxy_port=config.port,
+            proxy_user=config.proxy_user,
+            target_host=config.target_host,
+            target_port=config.target_port,
+            host_key_fingerprint=config.host_key_fingerprint,
+        )
 
     # ------------------------------------------------------------------
     # Authorised keys (used by the proxy host AuthorizedKeysCommand)
@@ -188,7 +248,7 @@ class TunnelService:
     # Key management (admin / informational)
     # ------------------------------------------------------------------
 
-    def list_keys(self, tunnel_id: UUID | str | None = None, user_id: UUID | str | None = None) -> list[dict]:
+    def list_keys(self, tunnel_id: UUID | str | None = None, user_id: UUID | str | None = None) -> list[SSHTunnelKeyDTO]:
         """
         Return a list of dicts describing all non-expired keys.
 
@@ -213,7 +273,7 @@ class TunnelService:
                 tunnel_id = UUID(str(tunnel_id))
             rows = [row for row in rows if row.tunnel_id == tunnel_id]
 
-        return [row._as_dict() for row in rows]
+        return [self._to_ssh_tunnel_key_dto(row) for row in rows]
 
     def delete_key(self, key_id: UUID | str) -> None:
         """
@@ -226,14 +286,14 @@ class TunnelService:
         try:
             key = SSHTunnelKey.get(id=key_id)
             key.delete()
-        except SSHTunnelKey.DoesNotExist as exc:
-            raise TunnelServiceException(f"SSH key {key_id} not found") from exc
+        except SSHTunnelKey.DoesNotExist:
+            LOGGER.info("SSH key %s was already deleted or TTL-expired", key_id)
 
     # ------------------------------------------------------------------
     # Proxy tunnel config management
     # ------------------------------------------------------------------
 
-    def get_proxy_tunnel_config(self, tunnel_id: UUID | str | None = None) -> dict | None:
+    def get_proxy_tunnel_config(self, tunnel_id: UUID | str | None = None) -> ProxyTunnelConfigDTO | None:
         """
         Return the active proxy tunnel config as a dict, or a specific config
         if ``tunnel_id`` is provided.  Returns ``None`` if none exists.
@@ -243,17 +303,17 @@ class TunnelService:
                 tunnel_id = UUID(str(tunnel_id))
             try:
                 config = ProxyTunnelConfig.get(id=tunnel_id)
-                return config._as_dict()
+                return self._to_proxy_tunnel_config_dto(config)
             except ProxyTunnelConfig.DoesNotExist:
                 return None
 
         try:
             config = self._get_active_config()
-            return config._as_dict()
+            return self._to_proxy_tunnel_config_dto(config)
         except TunnelServiceException:
             return None
 
-    def save_proxy_tunnel_config(self, payload: dict) -> dict:
+    def save_proxy_tunnel_config(self, payload: ProxyTunnelConfigPayload) -> ProxyTunnelConfigDTO:
         """
         Create a new ``ProxyTunnelConfig`` entry.
 
@@ -289,9 +349,7 @@ class TunnelService:
             is_active=True,
         )
 
-        result = config._as_dict()
-        result["api_token"] = api_token
-        return result
+        return self._to_proxy_tunnel_config_dto(config, api_token=api_token)
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -358,6 +416,15 @@ class TunnelService:
         # Re-use existing service user if it already exists.
         existing = User.exists_by_name(username)
         if existing:
+            should_save = False
+            if existing.roles != [UserRoles.SSHTunnelServer.value]:
+                existing.roles = [UserRoles.SSHTunnelServer.value]
+                should_save = True
+            if not existing.service_user:
+                existing.service_user = True
+                should_save = True
+            if should_save:
+                existing.save()
             svc = UserService()
             token = svc.get_or_generate_token(existing)
             return existing, token
@@ -371,8 +438,35 @@ class TunnelService:
             password="",
             email=f"{username}@argus.internal",
             registration_date=now,
-            roles=[UserRoles.User.value],
+            roles=[UserRoles.SSHTunnelServer.value],
             api_token=api_token,
             service_user=True,
         )
         return user, api_token
+
+    @staticmethod
+    def _to_ssh_tunnel_key_dto(row: SSHTunnelKey) -> SSHTunnelKeyDTO:
+        return SSHTunnelKeyDTO(
+            id=row.id,
+            user_id=row.user_id,
+            tunnel_id=row.tunnel_id,
+            public_key=row.public_key,
+            fingerprint=row.fingerprint,
+            created_at=row.created_at,
+            expires_at=row.expires_at,
+        )
+
+    @staticmethod
+    def _to_proxy_tunnel_config_dto(config: ProxyTunnelConfig, api_token: str | None = None) -> ProxyTunnelConfigDTO:
+        return ProxyTunnelConfigDTO(
+            id=config.id,
+            host=config.host,
+            port=config.port,
+            proxy_user=config.proxy_user,
+            target_host=config.target_host,
+            target_port=config.target_port,
+            host_key_fingerprint=config.host_key_fingerprint,
+            service_user_id=config.service_user_id,
+            is_active=bool(config.is_active),
+            api_token=api_token,
+        )
