@@ -7,6 +7,7 @@ from flask import g
 from flask.testing import FlaskClient
 
 from argus.backend.models.ssh_key import ProxyTunnelConfig, SSHTunnelKey
+from argus.backend.service.tunnel_service import TunnelService
 
 API_PREFIX = "/admin/api/v1"
 
@@ -42,6 +43,15 @@ def normal_user_identity():
     g.user.roles = previous_roles
 
 
+@pytest.fixture(autouse=True)
+def mock_host_fingerprint(monkeypatch):
+    monkeypatch.setattr(
+        TunnelService,
+        "_fetch_host_key_fingerprint",
+        staticmethod(lambda host, _port: f"SHA256:{host}"),
+    )
+
+
 @pytest.mark.docker_required
 def test_admin_can_save_and_get_proxy_tunnel_config(flask_client: FlaskClient, argus_db):
     previous_active_ids = _deactivate_all_configs()
@@ -53,7 +63,6 @@ def test_admin_can_save_and_get_proxy_tunnel_config(flask_client: FlaskClient, a
         "proxy_user": "argus-proxy",
         "target_host": "10.0.0.99",
         "target_port": 8080,
-        "host_key_fingerprint": "SHA256:admin-config",
     }
 
     try:
@@ -67,7 +76,7 @@ def test_admin_can_save_and_get_proxy_tunnel_config(flask_client: FlaskClient, a
         assert saved["proxy_user"] == payload["proxy_user"]
         assert saved["target_host"] == payload["target_host"]
         assert saved["target_port"] == payload["target_port"]
-        assert saved["host_key_fingerprint"] == payload["host_key_fingerprint"]
+        assert saved["host_key_fingerprint"] == f"SHA256:{payload['host']}"
         assert saved["service_user_id"] is not None
         assert saved["api_token"] is not None
         created_config_id = saved["id"]
@@ -79,6 +88,11 @@ def test_admin_can_save_and_get_proxy_tunnel_config(flask_client: FlaskClient, a
         assert config is not None
         assert config["id"] == created_config_id
         assert config["host"] == payload["host"]
+
+        by_id_resp = flask_client.get(f"{API_PREFIX}/proxy-tunnel/config?tunnel_id={created_config_id}")
+        assert by_id_resp.status_code == 200
+        assert by_id_resp.json["status"] == "ok"
+        assert by_id_resp.json["response"]["id"] == created_config_id
     finally:
         if created_config_id:
             try:
@@ -86,6 +100,31 @@ def test_admin_can_save_and_get_proxy_tunnel_config(flask_client: FlaskClient, a
             except Exception:
                 pass
         _restore_active_configs(previous_active_ids)
+
+
+@pytest.mark.docker_required
+def test_admin_get_proxy_tunnel_config_ignores_inactive_tunnel_id(flask_client: FlaskClient, argus_db):
+    cfg = ProxyTunnelConfig.create(
+        id=uuid4(),
+        host=f"proxy-inactive-id-{uuid4().hex[:8]}.example.com",
+        port=22,
+        proxy_user="argus-proxy",
+        target_host="10.0.0.77",
+        target_port=8080,
+        host_key_fingerprint="SHA256:inactive-id",
+        service_user_id=g.user.id,
+        is_active=False,
+    )
+    try:
+        resp = flask_client.get(f"{API_PREFIX}/proxy-tunnel/config?tunnel_id={cfg.id}")
+        assert resp.status_code == 200
+        assert resp.json["status"] == "ok"
+        assert resp.json["response"] is None
+    finally:
+        try:
+            cfg.delete()
+        except Exception:
+            pass
 
 
 @pytest.mark.docker_required
@@ -121,10 +160,76 @@ def test_admin_can_list_and_delete_ssh_key(flask_client: FlaskClient, argus_db):
 
 
 @pytest.mark.docker_required
+def test_admin_can_list_and_toggle_proxy_tunnel_configs(flask_client: FlaskClient, argus_db):
+    payload_active = {
+        "host": f"proxy-list-active-{uuid4().hex[:8]}.example.com",
+        "port": 22,
+        "proxy_user": "argus-proxy",
+        "target_host": "10.0.0.90",
+        "target_port": 8080,
+    }
+    payload_inactive = {
+        "host": f"proxy-list-inactive-{uuid4().hex[:8]}.example.com",
+        "port": 22,
+        "proxy_user": "argus-proxy",
+        "target_host": "10.0.0.91",
+        "target_port": 8080,
+        "is_active": False,
+    }
+
+    active_id = None
+    inactive_id = None
+    try:
+        active_resp = _json_post(flask_client, f"{API_PREFIX}/proxy-tunnel/config", payload_active)
+        inactive_resp = _json_post(flask_client, f"{API_PREFIX}/proxy-tunnel/config", payload_inactive)
+        assert active_resp.status_code == 200
+        assert inactive_resp.status_code == 200
+        active_id = active_resp.json["response"]["id"]
+        inactive_id = inactive_resp.json["response"]["id"]
+
+        list_all = flask_client.get(f"{API_PREFIX}/proxy-tunnel/configs")
+        assert list_all.status_code == 200
+        all_ids = {row["id"] for row in list_all.json["response"]}
+        assert active_id in all_ids
+        assert inactive_id in all_ids
+
+        list_active = flask_client.get(f"{API_PREFIX}/proxy-tunnel/configs?active_only=true")
+        assert list_active.status_code == 200
+        active_ids = {row["id"] for row in list_active.json["response"]}
+        assert active_id in active_ids
+        assert inactive_id not in active_ids
+
+        toggle_resp = _json_post(
+            flask_client,
+            f"{API_PREFIX}/proxy-tunnel/config/{inactive_id}/active",
+            {"is_active": True},
+        )
+        assert toggle_resp.status_code == 200
+        assert toggle_resp.json["response"]["is_active"] is True
+
+        list_active_after = flask_client.get(f"{API_PREFIX}/proxy-tunnel/configs?active_only=true")
+        assert list_active_after.status_code == 200
+        active_ids_after = {row["id"] for row in list_active_after.json["response"]}
+        assert inactive_id in active_ids_after
+    finally:
+        if active_id:
+            try:
+                ProxyTunnelConfig.get(id=active_id).delete()
+            except Exception:
+                pass
+        if inactive_id:
+            try:
+                ProxyTunnelConfig.get(id=inactive_id).delete()
+            except Exception:
+                pass
+
+
+@pytest.mark.docker_required
 @pytest.mark.parametrize(
     "method,path,payload",
     [
         ("GET", f"{API_PREFIX}/proxy-tunnel/config", None),
+        ("GET", f"{API_PREFIX}/proxy-tunnel/configs", None),
         (
             "POST",
             f"{API_PREFIX}/proxy-tunnel/config",
@@ -134,9 +239,9 @@ def test_admin_can_list_and_delete_ssh_key(flask_client: FlaskClient, argus_db):
                 "proxy_user": "argus-proxy",
                 "target_host": "10.0.0.88",
                 "target_port": 8080,
-                "host_key_fingerprint": "SHA256:non-admin",
             },
         ),
+        ("POST", f"{API_PREFIX}/proxy-tunnel/config/{uuid4()}/active", {"is_active": False}),
         ("GET", f"{API_PREFIX}/ssh/keys", None),
         ("DELETE", f"{API_PREFIX}/ssh/keys/{uuid4()}", None),
     ],

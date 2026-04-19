@@ -1,5 +1,6 @@
 from dataclasses import asdict
 import logging
+from typing import TypedDict
 from uuid import UUID
 from flask import (
     Blueprint,
@@ -15,6 +16,24 @@ from argus.backend.models.web import User, UserRoles
 bp = Blueprint('admin_api', __name__, url_prefix='/api/v1')
 LOGGER = logging.getLogger(__name__)
 bp.register_error_handler(Exception, handle_api_exception)
+
+ACTIVE_ONLY_MAP = {
+    "true": True,
+    "false": False,
+}
+
+
+class ProxyTunnelActivePayload(TypedDict):
+    is_active: bool
+
+
+def parse_active_only(value: str | None) -> bool | None:
+    if value is None:
+        return None
+    lowered = value.strip().lower()
+    if lowered not in ACTIVE_ONLY_MAP:
+        raise Exception("active_only must be one of: true,false")
+    return ACTIVE_ONLY_MAP[lowered]
 
 
 def get_payload(client_request: Request):
@@ -361,10 +380,24 @@ def user_toggle_admin(user_id: str):
 @check_roles(UserRoles.Admin)
 @api_login_required
 def get_proxy_tunnel_config():
-    config = TunnelService().get_proxy_tunnel_config()
+    tunnel_id = request.args.get("tunnel_id")
+    config = TunnelService().get_proxy_tunnel_config(tunnel_id=tunnel_id)
     return {
         "status": "ok",
         "response": asdict(config) if config else None,
+    }
+
+
+@bp.route("/proxy-tunnel/configs", methods=["GET"])
+@check_roles(UserRoles.Admin)
+@api_login_required
+def list_proxy_tunnel_configs():
+    active_only = parse_active_only(request.args.get("active_only"))
+
+    configs = TunnelService().list_proxy_tunnel_configs(active_only=active_only)
+    return {
+        "status": "ok",
+        "response": [asdict(row) for row in configs],
     }
 
 
@@ -374,6 +407,18 @@ def get_proxy_tunnel_config():
 def save_proxy_tunnel_config():
     payload: ProxyTunnelConfigPayload = get_payload(request)
     config = TunnelService().save_proxy_tunnel_config(payload)
+    return {
+        "status": "ok",
+        "response": asdict(config),
+    }
+
+
+@bp.route("/proxy-tunnel/config/<string:tunnel_id>/active", methods=["POST"])
+@check_roles(UserRoles.Admin)
+@api_login_required
+def set_proxy_tunnel_config_active(tunnel_id: str):
+    payload: ProxyTunnelActivePayload = get_payload(request)
+    config = TunnelService().set_proxy_tunnel_config_active(UUID(tunnel_id), payload["is_active"])
     return {
         "status": "ok",
         "response": asdict(config),

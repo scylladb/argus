@@ -31,9 +31,8 @@ class ProxyTunnelConfig(Model):
     """
     Stores the configuration of an SSH proxy tunnel server.
 
-    Only one config should have ``is_active=True`` at any time. When
-    ``TunnelService.save_proxy_tunnel_config`` creates a new config it
-    deactivates the previously active one.
+    Multiple configs can be active at the same time. Active configs are used
+    for tunnel connection selection via round-robin.
 
     A dedicated Argus service user (``service_user_id``) is created per
     proxy host so the proxy host can call the authorised-keys API with its
@@ -48,4 +47,4 @@ class ProxyTunnelConfig(Model):
     target_port = columns.Integer(required=True)
     host_key_fingerprint = columns.Text(required=True)
     service_user_id = columns.UUID()
-    is_active = columns.Boolean(default=False)
+    is_active = columns.Boolean(default=True)
