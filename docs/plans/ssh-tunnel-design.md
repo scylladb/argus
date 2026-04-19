@@ -160,8 +160,8 @@ aws ec2 describe-instances --filters "Name=tag:Name,Values=argus-*" \
 - [x] Step 2: Proxy tunnel config in DB - `argus/backend/models/ssh_key.py` (done in PR #967)
 - [x] Step 3: Backend service - `argus/backend/service/tunnel_service.py` (done in PR #967)
 - [x] Step 4a: Client API - `argus/backend/controller/ssh_api.py` (done in PR #967)
+- [x] Step 4b: Admin API - `argus/backend/controller/admin_api.py`
 - [x] Step 9 (partial): backend tunnel tests (`argus/backend/tests/tunnel/test_tunnel_service.py`, `argus/backend/tests/tunnel/test_ssh_api.py`) (done in PR #967)
-- [ ] Step 4b: Admin API
 - [ ] Step 4c: Proxy host provisioning template
 - [ ] Step 4d: Admin Panel UI
 - [ ] Step 5: Client module - `argus/client/tunnel.py`
