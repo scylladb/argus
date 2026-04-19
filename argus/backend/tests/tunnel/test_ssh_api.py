@@ -88,19 +88,19 @@ def active_config(argus_db) -> ProxyTunnelConfig:
 
 
 @pytest.fixture
-def service_user_identity():
-    previous = getattr(g.user, "service_user", False)
-    g.user.service_user = True
+def ssh_tunnel_server_identity():
+    previous_roles = list(getattr(g.user, "roles", []))
+    g.user.roles = ["ROLE_SSH_TUNNEL_SERVER"]
     yield
-    g.user.service_user = previous
+    g.user.roles = previous_roles
 
 
 @pytest.fixture
 def normal_user_identity():
-    previous = getattr(g.user, "service_user", False)
-    g.user.service_user = False
+    previous_roles = list(getattr(g.user, "roles", []))
+    g.user.roles = ["ROLE_USER"]
     yield
-    g.user.service_user = previous
+    g.user.roles = previous_roles
 
 
 def _deactivate_all_configs() -> list:
@@ -242,14 +242,14 @@ def test_register_tunnel_with_ttl_seconds(flask_client: FlaskClient, argus_db, a
 
 @pytest.mark.docker_required
 def test_register_tunnel_invalid_ttl(flask_client: FlaskClient, argus_db, active_config):
-    """TTL outside [24h, 30d] should return an error response."""
-    for ttl in (0, 86399, 2592001):
+    """TTL outside [1h, 30d] should return an error response."""
+    for ttl in (0, 3599, 2592001):
         payload = {"public_key": _make_public_key(), "ttl_seconds": ttl}
         resp = _json_post(flask_client, f"{API_PREFIX}/tunnel", payload)
 
         assert resp.status_code == 200
         assert resp.json["status"] == "error"
-        assert "ttl_seconds must be between 86400 and 2592000 seconds" in resp.json["response"]["message"]
+        assert "ttl_seconds must be between 3600 and 2592000 seconds" in resp.json["response"]["message"]
 
 
 @pytest.mark.docker_required
@@ -297,11 +297,22 @@ def test_register_tunnel_unauthenticated(argus_db, active_config):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.docker_required
-def test_get_authorized_keys_success(flask_client: FlaskClient, argus_db, active_config, service_user_identity):
+def test_get_authorized_keys_success(flask_client: FlaskClient, argus_db, active_config, ssh_tunnel_server_identity):
     """GET /ssh/keys should return 200 with plain-text content."""
-    # Register a key first so there is something to return
+    # Insert a key directly so scoped role does not call other endpoints.
+    from datetime import UTC, datetime
+
     pub_key = _make_public_key()
-    _json_post(flask_client, f"{API_PREFIX}/tunnel", {"public_key": pub_key})
+    now_utc = datetime.now(tz=UTC).replace(tzinfo=None)
+    SSHTunnelKey.objects.ttl(86400).create(
+        id=uuid4(),
+        user_id=g.user.id,
+        tunnel_id=active_config.id,
+        public_key=pub_key,
+        fingerprint="SHA256:test-one",
+        created_at=now_utc,
+        expires_at=now_utc,
+    )
 
     resp = flask_client.get(f"{API_PREFIX}/keys")
 
@@ -313,15 +324,20 @@ def test_get_authorized_keys_success(flask_client: FlaskClient, argus_db, active
 
 @pytest.mark.docker_required
 def test_get_authorized_keys_forbidden_for_normal_user(flask_client: FlaskClient, argus_db, active_config, normal_user_identity):
-    """GET /ssh/keys should fail for non-service users."""
-    resp = flask_client.get(f"{API_PREFIX}/keys")
-    assert resp.status_code == 200
-    assert resp.json["status"] == "error"
-    assert "Only service users can fetch SSH authorized keys" in resp.json["response"]["message"]
+    """GET /ssh/keys should fail for users without SSH tunnel server role."""
+    previous_secret = flask_client.application.secret_key
+    flask_client.application.secret_key = "test-secret"
+    try:
+        resp = flask_client.get(f"{API_PREFIX}/keys")
+    finally:
+        flask_client.application.secret_key = previous_secret
+
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith("/")
 
 
 @pytest.mark.docker_required
-def test_get_authorized_keys_with_multiple_active_configs(flask_client: FlaskClient, argus_db, active_config, service_user_identity):
+def test_get_authorized_keys_with_multiple_active_configs(flask_client: FlaskClient, argus_db, active_config, ssh_tunnel_server_identity):
     """API should still return keys when multiple active tunnel configs are present."""
     from datetime import UTC, datetime
 
@@ -329,8 +345,16 @@ def test_get_authorized_keys_with_multiple_active_configs(flask_client: FlaskCli
     try:
         key_one = _make_public_key()
         key_two = _make_public_key()
-        _json_post(flask_client, f"{API_PREFIX}/tunnel", {"public_key": key_one})
         now_utc = datetime.now(tz=UTC).replace(tzinfo=None)
+        SSHTunnelKey.objects.ttl(86400).create(
+            id=uuid4(),
+            user_id=g.user.id,
+            tunnel_id=active_config.id,
+            public_key=key_one,
+            fingerprint="SHA256:test-first",
+            created_at=now_utc,
+            expires_at=now_utc,
+        )
         SSHTunnelKey.objects.ttl(86400).create(
             id=uuid4(),
             user_id=g.user.id,
@@ -354,7 +378,7 @@ def test_get_authorized_keys_with_multiple_active_configs(flask_client: FlaskCli
 
 
 @pytest.mark.docker_required
-def test_get_authorized_keys_empty_when_no_keys(flask_client: FlaskClient, argus_db, active_config, service_user_identity):
+def test_get_authorized_keys_empty_when_no_keys(flask_client: FlaskClient, argus_db, active_config, ssh_tunnel_server_identity):
     """GET /ssh/keys for an empty database should return empty text."""
     for row in SSHTunnelKey.objects.all():
         row.delete()
@@ -377,6 +401,15 @@ def test_get_authorized_keys_unauthenticated(argus_db, active_config):
         g.user = previous_user
 
     assert resp.status_code == 403
+
+
+@pytest.mark.docker_required
+def test_ssh_tunnel_server_role_cannot_call_other_api(flask_client: FlaskClient, argus_db, ssh_tunnel_server_identity):
+    """ROLE_SSH_TUNNEL_SERVER should be hard-scoped to GET /client/ssh/keys only."""
+    resp = flask_client.get("/api/v1/version")
+    assert resp.status_code == 403
+    assert resp.json["status"] == "error"
+    assert "ROLE_SSH_TUNNEL_SERVER can only call GET /api/v1/client/ssh/keys" in resp.json["response"]["message"]
 
 
 # ---------------------------------------------------------------------------

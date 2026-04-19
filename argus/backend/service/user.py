@@ -23,6 +23,12 @@ from argus.backend.util.common import FlaskView, gen_pass
 
 LOGGER = logging.getLogger(__name__)
 
+SSH_TUNNEL_SERVER_ALLOWED_PATH = "/api/v1/client/ssh/keys"
+SSH_TUNNEL_SERVER_ALLOWED_METHODS = {"GET", "HEAD", "OPTIONS"}
+SSH_TUNNEL_SERVER_SCOPE_ERROR = (
+    "ROLE_SSH_TUNNEL_SERVER can only call GET /api/v1/client/ssh/keys"
+)
+
 class UserServiceException(Exception):
     pass
 
@@ -457,6 +463,36 @@ def load_logged_in_user():
         except User.DoesNotExist:
             session.clear()
     g.user = None
+
+
+def is_ssh_tunnel_server_user(user: User | None) -> bool:
+    if not user:
+        return False
+    return UserService.check_roles(UserRoles.SSHTunnelServer, user)
+
+
+def is_ssh_tunnel_server_request_allowed() -> bool:
+    return request.path == SSH_TUNNEL_SERVER_ALLOWED_PATH and request.method in SSH_TUNNEL_SERVER_ALLOWED_METHODS
+
+
+def is_scoped_ssh_tunnel_server_blocked(user: User | None) -> bool:
+    return is_ssh_tunnel_server_user(user) and not is_ssh_tunnel_server_request_allowed()
+
+
+def enforce_ssh_tunnel_server_scope():
+    if not is_scoped_ssh_tunnel_server_blocked(g.user):
+        return None
+
+    if request.path.startswith("/api/"):
+        return {
+            "status": "error",
+            "response": {
+                "message": SSH_TUNNEL_SERVER_SCOPE_ERROR,
+            },
+        }, 403
+
+    flash(message='Not authorized to access this area', category='error')
+    return redirect(url_for('main.home'))
 
 
 def _get_cf_access_payload(token: str) -> dict | None:

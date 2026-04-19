@@ -132,18 +132,18 @@ def test_register_tunnel_stores_key(argus_db, tunnel_user, active_config):
 
     result = svc.register_tunnel(user=tunnel_user, public_key=pub_key)
 
-    assert result["proxy_host"] == active_config.host
-    assert result["proxy_port"] == active_config.port
-    assert result["proxy_user"] == active_config.proxy_user
-    assert result["target_host"] == active_config.target_host
-    assert result["target_port"] == active_config.target_port
-    assert result["host_key_fingerprint"] == active_config.host_key_fingerprint
-    assert isinstance(result["expires_at"], datetime)
-    assert "key_id" in result
-    assert "tunnel_id" in result
+    assert result.proxy_host == active_config.host
+    assert result.proxy_port == active_config.port
+    assert result.proxy_user == active_config.proxy_user
+    assert result.target_host == active_config.target_host
+    assert result.target_port == active_config.target_port
+    assert result.host_key_fingerprint == active_config.host_key_fingerprint
+    assert isinstance(result.expires_at, datetime)
+    assert result.key_id is not None
+    assert result.tunnel_id is not None
 
     # Verify the DB row exists
-    key = SSHTunnelKey.get(id=result["key_id"])
+    key = SSHTunnelKey.get(id=result.key_id)
     assert str(key.user_id) == str(tunnel_user.id)
     assert str(key.tunnel_id) == str(active_config.id)
     assert key.public_key == pub_key.strip()
@@ -162,18 +162,18 @@ def test_register_tunnel_custom_ttl(argus_db, tunnel_user, active_config):
     result = svc.register_tunnel(user=tunnel_user, public_key=pub_key, ttl_seconds=ttl)
     after = datetime.now(tz=timezone.utc)
 
-    expires_at = result["expires_at"].replace(tzinfo=timezone.utc)
+    expires_at = result.expires_at.replace(tzinfo=timezone.utc)
     # expires_at should be approximately now + 1 hour (allow ±5 s for test timing)
     assert (before.timestamp() + ttl - 5) <= expires_at.timestamp() <= (after.timestamp() + ttl + 5)
 
 
 @pytest.mark.docker_required
 def test_register_tunnel_invalid_ttl_raises(argus_db, tunnel_user, active_config):
-    """TTL outside [24h, 30d] or non-integer ttl_seconds should raise TunnelServiceException."""
+    """TTL outside [1h, 30d] or non-integer ttl_seconds should raise TunnelServiceException."""
     svc = TunnelService()
 
-    for ttl in (0, -1, 86399, 2592001, "abc", "0"):
-        with pytest.raises(TunnelServiceException, match="ttl_seconds must be between 86400 and 2592000 seconds"):
+    for ttl in (0, -1, 3599, 2592001, "abc", "0"):
+        with pytest.raises(TunnelServiceException, match="ttl_seconds must be between 3600 and 2592000 seconds"):
             svc.register_tunnel(user=tunnel_user, public_key=_make_public_key(), ttl_seconds=ttl)
 
 
@@ -188,7 +188,7 @@ def test_register_tunnel_ttl_upper_bound_allowed(argus_db, tunnel_user, active_c
     result = svc.register_tunnel(user=tunnel_user, public_key=_make_public_key(), ttl_seconds=ttl)
     after = datetime.now(tz=timezone.utc)
 
-    expires_at = result["expires_at"].replace(tzinfo=timezone.utc)
+    expires_at = result.expires_at.replace(tzinfo=timezone.utc)
     assert (before.timestamp() + ttl - 5) <= expires_at.timestamp() <= (after.timestamp() + ttl + 5)
 
 
@@ -298,7 +298,7 @@ def test_delete_key_removes_row(argus_db, tunnel_user, active_config):
     pub_key = _make_public_key()
     svc = TunnelService()
     result = svc.register_tunnel(user=tunnel_user, public_key=pub_key)
-    key_id = result["key_id"]
+    key_id = result.key_id
 
     svc.delete_key(key_id)
 
@@ -307,11 +307,10 @@ def test_delete_key_removes_row(argus_db, tunnel_user, active_config):
 
 
 @pytest.mark.docker_required
-def test_delete_key_nonexistent_raises(argus_db):
-    """delete_key for an unknown id should raise TunnelServiceException."""
+def test_delete_key_nonexistent_is_noop(argus_db):
+    """delete_key for an unknown id should not raise (already TTL-expired is valid)."""
     svc = TunnelService()
-    with pytest.raises(TunnelServiceException, match="not found"):
-        svc.delete_key(uuid4())
+    svc.delete_key(uuid4())
 
 
 # ---------------------------------------------------------------------------
@@ -337,13 +336,14 @@ def test_save_proxy_tunnel_config_creates_service_user(argus_db):
         svc = TunnelService()
         result = svc.save_proxy_tunnel_config(payload)
 
-        assert result["is_active"] is True
-        assert result["service_user_id"] is not None
-        assert "api_token" in result
+        assert result.is_active is True
+        assert result.service_user_id is not None
+        assert result.api_token is not None
 
-        service_user = User.get(id=result["service_user_id"])
+        service_user = User.get(id=result.service_user_id)
         assert service_user.service_user is True
         assert f"proxy-tunnel-{host}" in service_user.username
+        assert service_user.roles == [UserRoles.SSHTunnelServer.value]
     finally:
         _restore_configs(previous_active_ids)
 
@@ -365,7 +365,7 @@ def test_save_proxy_tunnel_config_deactivates_old(argus_db):
         )
         svc = TunnelService()
         first = svc.save_proxy_tunnel_config(first_payload)
-        assert first["is_active"] is True
+        assert first.is_active is True
 
         second_payload = dict(
             host=f"proxy-second-{uuid4().hex[:6]}.example.com",
@@ -376,9 +376,9 @@ def test_save_proxy_tunnel_config_deactivates_old(argus_db):
             host_key_fingerprint="SHA256:second",
         )
         second = svc.save_proxy_tunnel_config(second_payload)
-        assert second["is_active"] is True
+        assert second.is_active is True
 
-        refreshed_first = ProxyTunnelConfig.get(id=first["id"])
+        refreshed_first = ProxyTunnelConfig.get(id=first.id)
         assert refreshed_first.is_active is True
     finally:
         _restore_configs(previous_active_ids)
@@ -407,8 +407,8 @@ def test_get_proxy_tunnel_config_returns_active(argus_db):
         svc = TunnelService()
         result = svc.get_proxy_tunnel_config()
         assert result is not None
-        assert str(result["id"]) == str(config.id)
-        assert result["is_active"] is True
+        assert str(result.id) == str(config.id)
+        assert result.is_active is True
     finally:
         try:
             config.delete()
@@ -433,12 +433,12 @@ def test_get_proxy_tunnel_config_none_when_no_active(argus_db):
 def test_get_tunnel_connection_returns_active_fields(argus_db, active_config):
     """get_tunnel_connection should return active config fields used by SSH clients."""
     result = TunnelService().get_tunnel_connection()
-    assert result["proxy_host"] == active_config.host
-    assert result["proxy_port"] == active_config.port
-    assert result["proxy_user"] == active_config.proxy_user
-    assert result["target_host"] == active_config.target_host
-    assert result["target_port"] == active_config.target_port
-    assert result["host_key_fingerprint"] == active_config.host_key_fingerprint
+    assert result.proxy_host == active_config.host
+    assert result.proxy_port == active_config.port
+    assert result.proxy_user == active_config.proxy_user
+    assert result.target_host == active_config.target_host
+    assert result.target_port == active_config.target_port
+    assert result.host_key_fingerprint == active_config.host_key_fingerprint
 
 
 @pytest.mark.docker_required
@@ -451,8 +451,8 @@ def test_register_tunnel_uses_round_robin_when_multiple_active(argus_db, tunnel_
         first = svc.register_tunnel(user=tunnel_user, public_key=_make_public_key())
         second_pick = svc.register_tunnel(user=tunnel_user, public_key=_make_public_key())
 
-        assert first["proxy_host"] != second_pick["proxy_host"]
-        assert {first["proxy_host"], second_pick["proxy_host"]} == {active_config.host, second.host}
+        assert first.proxy_host != second_pick.proxy_host
+        assert {first.proxy_host, second_pick.proxy_host} == {active_config.host, second.host}
     finally:
         try:
             second.delete()
@@ -466,9 +466,9 @@ def test_get_tunnel_connection_selects_specific_host(argus_db, active_config):
     second = _make_active_config(is_active=True)
     try:
         result = TunnelService().get_tunnel_connection(proxy_host=second.host)
-        assert result["proxy_host"] == second.host
-        assert result["proxy_port"] == second.port
-        assert result["proxy_user"] == second.proxy_user
+        assert result.proxy_host == second.host
+        assert result.proxy_port == second.port
+        assert result.proxy_user == second.proxy_user
     finally:
         try:
             second.delete()
@@ -493,8 +493,8 @@ def test_get_tunnel_connection_round_robin(argus_db, active_config):
         first = svc.get_tunnel_connection()
         second_pick = svc.get_tunnel_connection()
 
-        assert first["proxy_host"] != second_pick["proxy_host"]
-        assert {first["proxy_host"], second_pick["proxy_host"]} == {active_config.host, second.host}
+        assert first.proxy_host != second_pick.proxy_host
+        assert {first.proxy_host, second_pick.proxy_host} == {active_config.host, second.host}
     finally:
         try:
             second.delete()

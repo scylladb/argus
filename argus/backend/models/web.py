@@ -32,6 +32,7 @@ class UserRoles(str, Enum):
     User = "ROLE_USER"
     Manager = "ROLE_MANAGER"
     Admin = "ROLE_ADMIN"
+    SSHTunnelServer = "ROLE_SSH_TUNNEL_SERVER"
 
 
 class User(Model):
