@@ -1,0 +1,182 @@
+# Creating a New Argus Skill
+
+A 6-phase process for creating a skill from scratch in the Argus repository.
+
+---
+
+## Phase 1: Capture Intent and Define Scope
+
+**Entry:** You have a task domain in mind (e.g., "unit testing", "code review", "writing plans").
+
+**Actions:**
+
+1. **Gather concrete intent.** Before writing anything, collect:
+    - 5-10 example user prompts that should trigger this skill
+    - 3-5 example prompts that are related but should NOT trigger
+    - 2-3 examples of expected output (what does "good" look like?)
+    - Known failure modes (what would "bad" output look like?)
+
+    This step prevents writing generic skills that don't match real usage. If you're creating the skill for yourself, write the examples from your own experience. If for a team, ask for examples.
+
+2. **Draft the `description` first.** This is the most important field. AI agents use it to decide activation. Use third-person voice, include trigger keywords and exclusions. Verify: under 1024 characters, no angle brackets.
+
+3. **Write the "When to Use" section.** List 4-6 specific scenarios where the skill applies. Draw from the example prompts gathered in step 1. Be concrete: "when writing a new test file in `argus/backend/tests/`" not "when doing testing."
+
+4. **Write the "When NOT to Use" section.** List 3-5 scenarios where a different approach is better. Draw from the should-NOT-trigger prompts. Name the alternative: "use the writing-plans skill for implementation planning" not "not for complex tasks."
+
+5. **Define 3-5 essential principles.** These are non-negotiable rules for every invocation. Ask: "What mistake would ruin the output if the LLM made it?" Each principle guards against a specific failure mode. Every principle must explain WHY — reasoning helps the LLM generalize to cases the rule didn't explicitly cover.
+
+6. **Verify Argus alignment.** Check that your scope aligns with Argus conventions in `AGENTS.md`.
+
+**Exit:** Example prompts collected, draft description, When to Use, When NOT to Use, and essential principles documented.
+
+---
+
+## Phase 2: Plan Content Structure
+
+**Entry:** Phase 1 complete. Scope defined.
+
+**Actions:**
+
+1. **List all content the skill needs.** What guidance, examples, references, and processes are required?
+
+2. **Apply the 500-line test.** Can everything fit in SKILL.md under 500 lines? If not, identify what moves to references/ and workflows/.
+
+3. **Identify reference topics.** Each reference file covers one focused topic (e.g., "anti-patterns.md", "plan-templates.md"). Keep each under 400 lines.
+
+4. **Identify workflow processes.** Each workflow file is a numbered-phase process (e.g., "create-a-plan.md", "create-a-skill.md"). Keep each under 300 lines.
+
+5. **Plan the directory structure:**
+
+    ```
+    skills/<skill-name>/
+    ├── SKILL.md
+    ├── references/
+    │   ├── <topic-a>.md
+    │   └── <topic-b>.md
+    └── workflows/
+        └── <process>.md
+    ```
+
+6. **Verify the one-hop rule.** All files must be reachable directly from SKILL.md. No reference-to-reference links.
+
+**Exit:** Complete file list with content assignments for each file.
+
+---
+
+## Phase 3: Write Content
+
+**Entry:** Phase 2 complete. File structure planned.
+
+**Actions:**
+
+1. **Write reference files first.** These are the foundation that SKILL.md summarizes and links to.
+
+2. **Write workflow files.** Each workflow follows numbered phases:
+
+    ```markdown
+    ### Phase N: <Name>
+
+    **Entry:** <What must be true>
+    **Actions:**
+
+    1. <Specific step>
+    2. <Specific step>
+       **Exit:** <How to know it's done>
+    ```
+
+3. **Write SKILL.md last.** It summarizes and routes to the reference and workflow files. Follow the SKILL.md template structure (see SKILL.md -> Reference Index -> skill-structure.md):
+    - Frontmatter (name, description)
+    - Essential Principles
+    - When to Use / When NOT to Use
+    - Domain-specific quick references
+    - Reference Index (links to all supporting files)
+    - Success Criteria checklist
+
+4. **Include concrete examples.** Every key instruction should have an Argus-specific input -> output example.
+
+5. **Check line counts:**
+    - SKILL.md: under 500 lines
+    - Reference files: under 400 lines each
+    - Workflow files: under 300 lines each
+
+**Exit:** All content files written, line counts within limits.
+
+---
+
+## Phase 4: Configure Discovery
+
+**Entry:** Phase 3 complete. All skill files written.
+
+**Actions:**
+
+1. **Update `AGENTS.md`**. Add a row to the Skills table:
+
+    ```markdown
+    | <skill-name> | <description> | `skills/<skill-name>/SKILL.md` |
+    ```
+
+2. **Verify no other files need updating.** Check if any existing documentation references the skill's domain — if so, add a cross-reference to the skill.
+
+**Exit:** Skill is discoverable by AI agents via AGENTS.md.
+
+---
+
+## Phase 5: Validate
+
+**Entry:** Phase 4 complete. Skill is created and registered.
+
+**Actions:**
+
+1. **Verify all file references.** Every path in SKILL.md must resolve to an existing file.
+
+2. **Check frontmatter.** Valid YAML with:
+    - `name`: kebab-case, matches directory, max 64 characters
+    - `description`: third-person, trigger keywords, max 1024 characters, no angle brackets
+
+3. **Read the description in isolation.** Would it activate for the right requests and stay silent for wrong ones?
+
+4. **Read SKILL.md as a fresh reader.** Is the structure clear? Could an LLM follow it without prior context?
+
+5. **Check every instruction has a WHY.** Scan for rules that only say WHAT to do. Add reasoning where missing.
+
+6. **Scan for anti-patterns.** Check against the anti-pattern catalog (see SKILL.md -> Reference Index -> anti-patterns.md):
+    - No monolithic SKILL.md (AP-2)
+    - No reference chains (AP-3)
+    - No unnumbered phases (AP-4)
+    - No missing exit criteria (AP-5)
+    - No broken file references (AP-7)
+    - No platform-specific content (AP-8)
+    - No missing discovery configuration (AP-9)
+    - No description summarizing workflow steps (AP-11)
+    - No convention violations in examples (AP-12)
+    - No missing trigger tests (AP-14)
+    - No description constraint violations (AP-15)
+    - No missing intent capture (AP-16)
+    - No instructions without reasoning (AP-17)
+
+7. **Run linting.** Execute `uv run ruff check` to verify no formatting issues in any Python examples.
+
+8. **Verify AGENTS.md registration.** The skill must appear in the Skills table.
+
+**Exit:** All structural checks pass.
+
+---
+
+## Phase 6: Test Triggers and Iterate
+
+**Entry:** Phase 5 complete. Skill passes structural validation.
+
+**Actions:**
+
+1. **Use eval queries from Phase 1.** Take the example prompts gathered during intent capture. If you didn't gather them, write them now (5-10 should-trigger, 3-5 should-NOT-trigger).
+
+2. **Test the description against each query.** Read only the description field. For each query, decide: would the LLM activate this skill? Score pass/fail.
+
+3. **Fix any failures.** For false negatives, add missing trigger keywords. For false positives, narrow scope with exclusions or more specific terms. See [test-and-iterate.md](test-and-iterate.md) for the full process.
+
+4. **Apply the lean test.** Re-read every instruction in the skill. Remove anything that doesn't improve output quality — bloated skills dilute LLM attention.
+
+5. **Final verification.** Re-run Phase 5 checks after any changes made during iteration.
+
+**Exit:** All trigger eval queries pass. Skill is lean and well-reasoned. Ready for use.

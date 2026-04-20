@@ -1,0 +1,22 @@
+[
+    {
+        "id": "api-tests",
+        "title": "API Tests Implementation",
+        "file": "docs/plans/api_tests.md",
+        "domain": "api",
+        "status": "in_progress",
+        "created": "2026-03-03",
+        "phases_total": null,
+        "phases_done": 0
+    },
+    {
+        "id": "ssh-tunnel-design",
+        "title": "SSH Tunnel Support for Argus Client",
+        "file": "docs/plans/ssh-tunnel-design.md",
+        "domain": "client",
+        "status": "draft",
+        "created": "2026-04-08",
+        "phases_total": null,
+        "phases_done": 0
+    }
+]

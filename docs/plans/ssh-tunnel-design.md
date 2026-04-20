@@ -1,3 +1,11 @@
+---
+status: draft
+domain: client
+created: 2026-04-08
+last_updated: 2026-04-20
+owner: null
+---
+
 # SSH Tunnel Support for Argus Client
 
 ## Context
