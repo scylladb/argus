@@ -10,7 +10,6 @@ from argus.backend.service.user import (
     UserService,
     UserServiceException,
     check_roles,
-    enforce_ssh_tunnel_server_scope,
     load_logged_in_user,
     login_required,
 )
@@ -118,4 +117,3 @@ def logout():
 
 
 bp.before_app_request(load_logged_in_user)
-bp.before_app_request(enforce_ssh_tunnel_server_scope)

@@ -31,26 +31,26 @@ class TunnelServiceException(Exception):
 
 
 @dataclass(frozen=True, slots=True)
-class TunnelRegistrationResponseDTO:
+class TunnelCommonFieldsDTO:
+    proxy_user: str
+    target_host: str
+    target_port: int
+    host_key_fingerprint: str
+
+
+@dataclass(frozen=True, slots=True)
+class TunnelRegistrationResponseDTO(TunnelCommonFieldsDTO):
     key_id: UUID
     tunnel_id: UUID
     proxy_host: str
     proxy_port: int
-    proxy_user: str
-    target_host: str
-    target_port: int
-    host_key_fingerprint: str
     expires_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
-class TunnelConnectionResponseDTO:
+class TunnelConnectionResponseDTO(TunnelCommonFieldsDTO):
     proxy_host: str
     proxy_port: int
-    proxy_user: str
-    target_host: str
-    target_port: int
-    host_key_fingerprint: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,14 +65,10 @@ class SSHTunnelKeyDTO:
 
 
 @dataclass(frozen=True, slots=True)
-class ProxyTunnelConfigDTO:
+class ProxyTunnelConfigDTO(TunnelCommonFieldsDTO):
     id: UUID
     host: str
     port: int
-    proxy_user: str
-    target_host: str
-    target_port: int
-    host_key_fingerprint: str
     service_user_id: UUID | None
     is_active: bool
     api_token: str | None = None
@@ -285,11 +281,7 @@ class TunnelService:
         return [self._to_ssh_tunnel_key_dto(row) for row in rows]
 
     def delete_key(self, key_id: UUID | str) -> None:
-        """
-        Delete a single ``SSHTunnelKey`` row.  Takes immediate effect — the
-        next ``AuthorizedKeysCommand`` call on the proxy host will not include
-        this key.
-        """
+        """Delete a single ``SSHTunnelKey`` row."""
         if not isinstance(key_id, UUID):
             key_id = UUID(str(key_id))
         try:
@@ -516,7 +508,7 @@ class TunnelService:
         # Re-use existing tunnel service user if it already exists.
         existing = User.exists_by_name(username)
         if existing:
-            if not existing.service_user or UserRoles.SSHTunnelServer.value not in (existing.roles or []):
+            if not existing.is_service_user() or not UserService.check_roles(UserRoles.SSHTunnelServer, existing):
                 raise TunnelServiceException(
                     f"User '{username}' already exists and is not a dedicated SSH tunnel service user"
                 )

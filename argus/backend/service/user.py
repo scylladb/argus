@@ -23,11 +23,7 @@ from argus.backend.util.common import FlaskView, gen_pass
 
 LOGGER = logging.getLogger(__name__)
 
-SSH_TUNNEL_SERVER_ALLOWED_PATH = "/api/v1/client/ssh/keys"
-SSH_TUNNEL_SERVER_ALLOWED_METHODS = {"GET", "HEAD", "OPTIONS"}
-SSH_TUNNEL_SERVER_SCOPE_ERROR = (
-    "ROLE_SSH_TUNNEL_SERVER can only call GET /api/v1/client/ssh/keys"
-)
+SSH_TUNNEL_SERVER_ALLOWED_ENDPOINTS_KEY = "ssh_tunnel_server_allowed_endpoints"
 
 class UserServiceException(Exception):
     pass
@@ -417,6 +413,16 @@ def login_required(view: FlaskView):
                 "message": "Authorization required"
             }, 403
 
+        if is_scoped_ssh_tunnel_server_blocked(g.user):
+            if getattr(view, "api_view", False):
+                return {
+                    "status": "error",
+                    "message": "Authorization required",
+                }, 403
+
+            flash(message='Not authorized to access this area', category='error')
+            return redirect(url_for('main.home'))
+
         return view(*args, **kwargs)
 
     return wrapped_view
@@ -439,6 +445,11 @@ def check_roles(needed_roles: list[str] | str = None):
 
         return wrapped_view
     return inner
+
+
+def allow_ssh_tunnel_server_scope(view: FlaskView):
+    setattr(view, "allow_ssh_tunnel_server_scope", True)
+    return view
 
 
 def load_logged_in_user():
@@ -472,27 +483,25 @@ def is_ssh_tunnel_server_user(user: User | None) -> bool:
 
 
 def is_ssh_tunnel_server_request_allowed() -> bool:
-    return request.path == SSH_TUNNEL_SERVER_ALLOWED_PATH and request.method in SSH_TUNNEL_SERVER_ALLOWED_METHODS
+    endpoint = request.endpoint
+    if not endpoint:
+        return False
+
+    allowed_endpoint_methods = current_app.extensions.get(SSH_TUNNEL_SERVER_ALLOWED_ENDPOINTS_KEY)
+    if allowed_endpoint_methods is None:
+        allowed_endpoint_methods = set()
+        for rule in current_app.url_map.iter_rules():
+            view = current_app.view_functions.get(rule.endpoint)
+            if getattr(view, "allow_ssh_tunnel_server_scope", False):
+                for method in rule.methods:
+                    allowed_endpoint_methods.add((rule.endpoint, method))
+        current_app.extensions[SSH_TUNNEL_SERVER_ALLOWED_ENDPOINTS_KEY] = allowed_endpoint_methods
+
+    return (endpoint, request.method) in allowed_endpoint_methods
 
 
 def is_scoped_ssh_tunnel_server_blocked(user: User | None) -> bool:
     return is_ssh_tunnel_server_user(user) and not is_ssh_tunnel_server_request_allowed()
-
-
-def enforce_ssh_tunnel_server_scope():
-    if not is_scoped_ssh_tunnel_server_blocked(g.user):
-        return None
-
-    if request.path.startswith("/api/"):
-        return {
-            "status": "error",
-            "response": {
-                "message": SSH_TUNNEL_SERVER_SCOPE_ERROR,
-            },
-        }, 403
-
-    flash(message='Not authorized to access this area', category='error')
-    return redirect(url_for('main.home'))
 
 
 def _get_cf_access_payload(token: str) -> dict | None:
