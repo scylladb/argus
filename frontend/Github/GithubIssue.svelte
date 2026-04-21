@@ -157,7 +157,7 @@
 <div class="row m-2">
     <div class="col rounded p-2 bg-white shadow-sm">
         <div class="d-flex">
-            <div class="ms-2 align-self-center">
+            <div class="ms-2 align-self-center flex-shrink-0" style="width: 10em;">
                 <div class="mb-1 py-1 shadow-sm rounded-pill d-inline-flex {GithubIssueColorMap[issue.state]}">
                     <div class="ms-2 me-1"><Fa icon={GithubIssueIcon[issue.state]} /></div>
                     <div class="me-2">{issue.state}</div>
@@ -184,7 +184,7 @@
                     </button>
                 {/each}
             </div>
-            <div class="ms-auto me-2">
+            <div class="ms-auto me-2 d-flex align-items-center gap-2">
                 {#if Object.keys(users).length > 0}
                     <div
                         class="text-muted d-flex align-items-center"
@@ -218,11 +218,11 @@
                     </div>
                 {/if}
                 {#if aggregated}
-                    <div class="text-end my-2">
+                    <div class="d-flex gap-1">
                         {#if runId}
-                            <button class="btn btn-primary" onclick={() => dispatch("submitToCurrent", issue.url)}>Add to current run</button>
+                            <button class="btn btn-sm btn-primary" onclick={() => dispatch("submitToCurrent", issue.url)}>Add to current run</button>
                         {/if}
-                        <button class="btn btn-primary" onclick={() => (showRuns = true)}>View {issue.links.length} runs</button>
+                        <button class="btn btn-sm btn-primary" onclick={() => (showRuns = true)}>View {issue.links.length} runs</button>
                     </div>
                 {/if}
             </div>
