@@ -7,7 +7,7 @@ from flask import Blueprint, Response, g, request
 from argus.backend.error_handlers import handle_api_exception
 from argus.backend.models.web import UserRoles
 from argus.backend.service.tunnel_service import TunnelService
-from argus.backend.service.user import api_login_required, check_roles
+from argus.backend.service.user import allow_ssh_tunnel_server_scope, api_login_required, check_roles
 
 
 class RegisterTunnelPayload(TypedDict, total=False):
@@ -83,6 +83,7 @@ def get_user_keys():
 
 
 @bp.route("/keys", methods=["GET"])
+@allow_ssh_tunnel_server_scope
 @api_login_required
 @check_roles(UserRoles.SSHTunnelServer)
 def get_authorized_keys():
