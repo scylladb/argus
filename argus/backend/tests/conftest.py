@@ -18,7 +18,6 @@ from argus.backend.service.testrun import TestRunService
 from argus.backend.service.views_widgets.pytest import PytestViewService
 from argus.backend.util.config import Config
 
-os.environ['DOCKER_HOST'] = ""
 
 from cassandra.cqlengine.management import sync_type
 from _pytest.fixtures import fixture
@@ -33,6 +32,7 @@ from argus.backend.service.results_service import ResultsService
 import logging
 from cassandra.cluster import Cluster
 
+os.environ['DOCKER_HOST'] = ""
 logging.getLogger().setLevel(logging.INFO)
 os.environ['CQLENG_ALLOW_SCHEMA_MANAGEMENT'] = '1'
 logging.getLogger('cassandra').setLevel(logging.WARNING)
@@ -41,6 +41,7 @@ logging.getLogger('cassandra.pool').setLevel(logging.WARNING)
 logging.getLogger('cassandra.cluster').setLevel(logging.WARNING)
 
 LOGGER = logging.getLogger(__name__)
+
 
 @fixture(scope='session')
 def argus_db():
@@ -104,17 +105,21 @@ def argus_db():
             print("'init - serving' message found.")
             break
         if "FATAL state" in log_line:
-            raise Exception("ScyllaDB exited unexpectedly. Check container logs for more information.")
+            raise Exception(
+                "ScyllaDB exited unexpectedly. Check container logs for more information.")
         if time.time() - start_time > log_wait_timeout:
-            raise Exception("ScyllaDB did not log 'init - serving' within the timeout period.")
+            raise Exception(
+                "ScyllaDB did not log 'init - serving' within the timeout period.")
 
     containers["database"].reload()
     container_ip = "localhost"
     print(f"Container IP: {container_ip}")
 
     if need_sync_models:
-        auth_provider = PlainTextAuthProvider(username='cassandra', password='cassandra')
-        cluster = Cluster([container_ip], port=9042, auth_provider=auth_provider)  # Use container IP
+        auth_provider = PlainTextAuthProvider(
+            username='cassandra', password='cassandra')
+        cluster = Cluster([container_ip], port=9042,
+                          auth_provider=auth_provider)  # Use container IP
         session = cluster.connect()
         session.execute("""
              CREATE KEYSPACE IF NOT EXISTS test_argus
@@ -127,8 +132,12 @@ def argus_db():
     config = {"SCYLLA_KEYSPACE_NAME": "test_argus", "SCYLLA_CONTACT_POINTS": [container_ip],
               "SCYLLA_USERNAME": "cassandra", "SCYLLA_PASSWORD": "cassandra", "APP_LOG_LEVEL": "INFO",
               "EMAIL_ENABLED": False,
-              "JIRA_SERVER": "https://zxqtesting.atlassian.net"}
-    Config.CONFIG = config  # patch config for whole test to avoid using Config.load_yaml_config() required by app context
+              "JIRA_SERVER": "https://zxqtesting.atlassian.net",
+              "EMAIL_SENDER": "unit tester", "EMAIL_SENDER_PASS": "pass", "EMAIL_SENDER_USER": "qa",
+              "EMAIL_SERVER": "fake", "EMAIL_SERVER_PORT": 25,
+              "GITHUB_ACCESS_TOKEN": "test_token"}
+    # patch config for whole test to avoid using Config.load_yaml_config() required by app context
+    Config.CONFIG = config
     database = ScyllaCluster.get(config)
     if need_sync_models:
         for user_type in all_plugin_types():
@@ -137,7 +146,8 @@ def argus_db():
     # Wait a little to let CDC Reader and full scan of Vector Store indices to complete.
     LOGGER.info("Waiting on Vector Store to be ready...")
     ks_name = "argus_tablets"
-    vs_indices = [r["name"] for r in database.session.execute(f"DESCRIBE {ks_name}").all() if r["type"] == "index" and "vector_index" in r["create_statement"]]
+    vs_indices = [r["name"] for r in database.session.execute(f"DESCRIBE {ks_name}").all(
+    ) if r["type"] == "index" and "vector_index" in r["create_statement"]]
     for index_name in vs_indices:
         for log in containers["vs"].logs(stream=True):
             log_line = log.decode('utf-8')
@@ -157,7 +167,8 @@ def argus_db():
 @fixture(scope='session')
 def argus_app():
     with patch('argus.backend.service.user.load_logged_in_user') as mock_load:
-        mock_load.return_value = None  # Make the function do nothing so test can override user
+        # Make the function do nothing so test can override user
+        mock_load.return_value = None
         from argus_backend import argus_app
         yield argus_app
 
