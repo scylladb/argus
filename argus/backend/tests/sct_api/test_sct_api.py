@@ -371,3 +371,240 @@ def test_submit_and_get_junit_report(flask_client, sct_run_id):
     assert resp.json["status"] == "ok"
     assert isinstance(resp.json["response"]["junit_reports"], list)
     assert any(item.get("file_name") == "report.xml" for item in resp.json["response"]["junit_reports"])
+
+
+# ---------------------------------------------------------------------------
+# Iteration 2: SCT controller extensions
+# ---------------------------------------------------------------------------
+#
+# New endpoints exercised below:
+#   - POST /<run_id>/event/submit              (new-style event ingest)
+#   - GET  /<run_id>/events/get
+#   - GET  /<run_id>/events/<severity>/get
+#   - GET  /<run_id>/events/<severity>/count
+#   - GET  /<run_id>/stress_cmd/get
+#   - GET  /<run_id>/similar_events
+#   - POST /similar_runs_info
+#
+# Performance submit/history endpoints are intentionally skipped: the
+# performance tracking on SCTTestRun (perf_op_rate_*, histograms,
+# get_performance_history_for_test) is deprecated functionality and is not
+# being expanded in this coverage push.
+
+
+def _submit_event(flask_client, run_id: str, severity: str, message: str,
+                  ts: float, event_type: str = "DatabaseLogEvent", **extra) -> None:
+    """Submit a single new-style event via /event/submit and assert success."""
+    payload = {
+        "data": {
+            "run_id": run_id,
+            "severity": severity,
+            "ts": ts,
+            "message": message,
+            "event_type": event_type,
+            **extra,
+        },
+        "schema_version": "v8",
+    }
+    resp = flask_client.post(
+        f"{API_PREFIX}/{run_id}/event/submit",
+        data=json.dumps(payload),
+        content_type="application/json",
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json["status"] == "ok"
+    assert resp.json["response"] is True
+
+
+def test_submit_single_event(flask_client, sct_run_id):
+    ts = clamp_ts_to_milliseconds(datetime.datetime.now(tz=datetime.UTC).timestamp())
+    _submit_event(
+        flask_client, sct_run_id,
+        severity="ERROR", message="Something went wrong on node-1", ts=ts,
+        node="node-1",
+    )
+
+    # Verify via paired GET endpoint.
+    resp = flask_client.get(f"{API_PREFIX}/{sct_run_id}/events/get")
+    assert resp.status_code == 200, resp.text
+    body = resp.json
+    assert body["status"] == "ok"
+    events = body["response"]
+    assert isinstance(events, list)
+    assert len(events) == 1
+    event = events[0]
+    assert event["severity"] == "ERROR"
+    assert event["message"] == "Something went wrong on node-1"
+    assert event["event_type"] == "DatabaseLogEvent"
+    assert event["node"] == "node-1"
+
+
+def test_submit_event_batch(flask_client, sct_run_id):
+    base_ts = clamp_ts_to_milliseconds(datetime.datetime.now(tz=datetime.UTC).timestamp())
+    payload = {
+        "data": [
+            {
+                "run_id": sct_run_id,
+                "severity": "WARNING",
+                "ts": base_ts,
+                "message": "Disk usage above 80%",
+                "event_type": "DiskUsageEvent",
+                "node": "node-2",
+            },
+            {
+                "run_id": sct_run_id,
+                "severity": "CRITICAL",
+                "ts": base_ts + 1,
+                "message": "Process crashed unexpectedly",
+                "event_type": "DatabaseLogEvent",
+                "node": "node-3",
+            },
+        ],
+        "schema_version": "v8",
+    }
+    resp = flask_client.post(
+        f"{API_PREFIX}/{sct_run_id}/event/submit",
+        data=json.dumps(payload),
+        content_type="application/json",
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json["status"] == "ok"
+    assert resp.json["response"] is True
+
+    # Both events should be visible via the unfiltered GET.
+    resp = flask_client.get(f"{API_PREFIX}/{sct_run_id}/events/get")
+    assert resp.status_code == 200
+    severities = sorted(e["severity"] for e in resp.json["response"])
+    assert severities == ["CRITICAL", "WARNING"]
+
+
+def test_get_events_by_severity(flask_client, sct_run_id):
+    base_ts = clamp_ts_to_milliseconds(datetime.datetime.now(tz=datetime.UTC).timestamp())
+    _submit_event(flask_client, sct_run_id, "ERROR", "err-A", base_ts)
+    _submit_event(flask_client, sct_run_id, "ERROR", "err-B", base_ts + 1)
+    _submit_event(flask_client, sct_run_id, "WARNING", "warn-A", base_ts + 2)
+
+    resp = flask_client.get(f"{API_PREFIX}/{sct_run_id}/events/ERROR/get")
+    assert resp.status_code == 200, resp.text
+    body = resp.json
+    assert body["status"] == "ok"
+    events = body["response"]
+    assert len(events) == 2
+    assert {e["message"] for e in events} == {"err-A", "err-B"}
+    assert all(e["severity"] == "ERROR" for e in events)
+
+    resp = flask_client.get(f"{API_PREFIX}/{sct_run_id}/events/WARNING/get")
+    assert resp.status_code == 200
+    assert [e["message"] for e in resp.json["response"]] == ["warn-A"]
+
+
+def test_count_events_by_severity(flask_client, sct_run_id):
+    base_ts = clamp_ts_to_milliseconds(datetime.datetime.now(tz=datetime.UTC).timestamp())
+    _submit_event(flask_client, sct_run_id, "CRITICAL", "boom-1", base_ts)
+    _submit_event(flask_client, sct_run_id, "CRITICAL", "boom-2", base_ts + 1)
+    _submit_event(flask_client, sct_run_id, "CRITICAL", "boom-3", base_ts + 2)
+    _submit_event(flask_client, sct_run_id, "ERROR", "err", base_ts + 3)
+
+    resp = flask_client.get(f"{API_PREFIX}/{sct_run_id}/events/CRITICAL/count")
+    assert resp.status_code == 200, resp.text
+    body = resp.json
+    assert body["status"] == "ok"
+    assert body["response"] == 3
+
+    resp = flask_client.get(f"{API_PREFIX}/{sct_run_id}/events/ERROR/count")
+    assert resp.status_code == 200
+    assert resp.json["response"] == 1
+
+    # Severity with zero submitted events.
+    resp = flask_client.get(f"{API_PREFIX}/{sct_run_id}/events/DEBUG/count")
+    assert resp.status_code == 200
+    assert resp.json["response"] == 0
+
+
+def test_get_stress_commands(flask_client, sct_run_id):
+    payloads = [
+        {
+            "log_name": "loader-A.log",
+            "ts": clamp_ts_to_milliseconds(datetime.datetime.now(tz=datetime.UTC).timestamp()),
+            "cmd": "cassandra-stress write n=1M",
+            "loader_name": "loader-1",
+            "schema_version": "v8",
+        },
+        {
+            "log_name": "loader-B.log",
+            "ts": clamp_ts_to_milliseconds(datetime.datetime.now(tz=datetime.UTC).timestamp()) + 1,
+            "cmd": "cassandra-stress read n=1M",
+            "loader_name": "loader-2",
+            "schema_version": "v8",
+        },
+    ]
+    for p in payloads:
+        resp = flask_client.post(
+            f"{API_PREFIX}/{sct_run_id}/stress_cmd/submit",
+            data=json.dumps(p),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200 and resp.json["status"] == "ok"
+
+    resp = flask_client.get(f"{API_PREFIX}/{sct_run_id}/stress_cmd/get")
+    assert resp.status_code == 200, resp.text
+    body = resp.json
+    assert body["status"] == "ok"
+    cmds = body["response"]
+    assert isinstance(cmds, list)
+    assert len(cmds) == 2
+    cmd_strings = {c["cmd"] for c in cmds}
+    assert cmd_strings == {"cassandra-stress write n=1M", "cassandra-stress read n=1M"}
+    by_loader = {c["node_name"]: c for c in cmds}
+    assert set(by_loader) == {"loader-1", "loader-2"}
+    assert by_loader["loader-1"]["log_name"] == "loader-A.log"
+
+
+def test_get_similar_events_empty_for_fresh_run(flask_client, sct_run_id):
+    """A run with no embeddings yields an empty similars list (happy path)."""
+    resp = flask_client.get(f"{API_PREFIX}/{sct_run_id}/similar_events")
+    assert resp.status_code == 200, resp.text
+    body = resp.json
+    assert body["status"] == "ok"
+    assert body["response"] == []
+
+
+def test_similar_runs_info_for_run_without_issues(flask_client, sct_run_id):
+    """Without any IssueLink rows the endpoint still returns a populated entry
+    (build_id, start_time, version) for every requested run id."""
+    payload = {"run_ids": [sct_run_id]}
+    resp = flask_client.post(
+        "/api/v1/client/sct/similar_runs_info",
+        data=json.dumps(payload),
+        content_type="application/json",
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json
+    assert body["status"] == "ok"
+    assert sct_run_id in body["response"]
+    info = body["response"][sct_run_id]
+    assert "build_id" in info
+    assert "start_time" in info
+    assert info["issues"] == []
+
+
+def test_similar_runs_info_missing_run_ids(flask_client):
+    resp = flask_client.post(
+        "/api/v1/client/sct/similar_runs_info",
+        data=json.dumps({}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 400
+    assert resp.json["status"] == "error"
+    assert "run_ids" in resp.json["response"]
+
+
+def test_similar_runs_info_invalid_run_ids_type(flask_client):
+    resp = flask_client.post(
+        "/api/v1/client/sct/similar_runs_info",
+        data=json.dumps({"run_ids": "not-a-list"}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 400
+    assert resp.json["status"] == "error"
+    assert "must be a list" in resp.json["response"]
