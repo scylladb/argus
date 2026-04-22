@@ -265,11 +265,71 @@ func FindFreeLocalPort() (int, error) {
 	return addr.Port, nil
 }
 
+// PrepareKnownHostsFile creates a temporary known_hosts file populated with the
+// proxy host fingerprint value returned by the API.
+func (s *SSHService) PrepareKnownHostsFile(_ context.Context, cfg models.SSHTunnelConfig) (string, error) {
+	knownHostsEntry, err := normalizeKnownHostsEntries(cfg.HostKnownHostsEntry)
+	if err != nil {
+		return "", fmt.Errorf("ssh: invalid host key fingerprint: %w", err)
+	}
+
+	f, err := os.CreateTemp("", "argus-known-hosts-*")
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		_ = f.Close()
+	}()
+
+	if _, err = f.WriteString(knownHostsEntry + "\n"); err != nil {
+		_ = os.Remove(f.Name())
+		return "", err
+	}
+
+	if err = f.Chmod(0o600); err != nil {
+		_ = os.Remove(f.Name())
+		return "", err
+	}
+
+	return f.Name(), nil
+}
+
+func normalizeKnownHostsEntries(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", errors.New("empty value")
+	}
+
+	lines := strings.Split(trimmed, "\n")
+	entries := make([]string, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "SHA256:") {
+			return "", fmt.Errorf("expected known_hosts entry, got raw fingerprint %q", line)
+		}
+
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
+			return "", fmt.Errorf("invalid known_hosts entry %q", line)
+		}
+		entries = append(entries, line)
+	}
+
+	if len(entries) == 0 {
+		return "", errors.New("empty value")
+	}
+
+	return strings.Join(entries, "\n"), nil
+}
+
 // BuildSSHConnectArgs returns ssh arguments to establish the local tunnel.
-func BuildSSHConnectArgs(cfg models.SSHTunnelConfig, privateKeyPath string, localPort int) []string {
+func BuildSSHConnectArgs(cfg models.SSHTunnelConfig, privateKeyPath string, localPort int, knownHostsPath string) []string {
 	localForward := fmt.Sprintf("127.0.0.1:%d:%s:%d", localPort, cfg.TargetHost, cfg.TargetPort)
 	host := fmt.Sprintf("%s@%s", cfg.ProxyUser, cfg.ProxyHost)
-	return []string{
+	args := []string{
 		"-N",
 		"-L", localForward,
 		"-p", strconv.Itoa(cfg.ProxyPort),
@@ -279,8 +339,12 @@ func BuildSSHConnectArgs(cfg models.SSHTunnelConfig, privateKeyPath string, loca
 		"-o", "ServerAliveInterval=30",
 		"-o", "ServerAliveCountMax=3",
 		"-o", "StrictHostKeyChecking=yes",
-		host,
 	}
+	if strings.TrimSpace(knownHostsPath) != "" {
+		args = append(args, "-o", fmt.Sprintf("UserKnownHostsFile=%s", knownHostsPath))
+	}
+	args = append(args, host)
+	return args
 }
 
 // WaitForLocalPort waits until local TCP port starts accepting connections.

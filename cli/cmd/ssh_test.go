@@ -32,6 +32,16 @@ func TestSSHCommand_IsHiddenAndWired(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestSSHKeysListCommand_SkipsAuthRetry(t *testing.T) {
+	cmd, _, err := rootCmd.Find([]string{"ssh", "keys", "list"})
+	require.NoError(t, err)
+	require.NotNil(t, cmd)
+
+	annotations := cmd.Annotations
+	require.NotNil(t, annotations)
+	assert.Equal(t, "true", annotations[SkipAuthRetryAnnotation])
+}
+
 func TestWaitForTunnelReadiness_PortReady(t *testing.T) {
 	t.Parallel()
 
