@@ -3,10 +3,11 @@ from functools import reduce
 import json
 import logging
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, TypedDict
 from uuid import UUID
 
+from flask import current_app
 from cassandra.cqlengine.models import Model
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.jira import JiraIssue
@@ -15,10 +16,14 @@ from argus.backend.plugins.loader import all_plugin_models
 from argus.backend.util.common import chunk, get_build_number, check_version
 from argus.common.enums import TestStatus, TestInvestigationStatus
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusScheduleTest, ArgusTest, \
-    ArgusTestRunComment, ArgusUserView
+    ArgusTestRunComment, ArgusUserView, ReleaseStatsSnapshot
 from argus.backend.db import ScyllaCluster
 
 LOGGER = logging.getLogger(__name__)
+
+
+def snapshot_filter_key(version: str | None, image_id: str | None, include_no_version: bool, limited: bool) -> str:
+    return f"v={version or ''}::img={image_id or ''}::nov={int(include_no_version)}::lim={int(limited)}"
 
 
 class TestRunStatRow(TypedDict):
@@ -536,6 +541,15 @@ class ReleaseStatsCollector:
 
     def collect(self, limited=False, force=False, include_no_version=False, image_id: str = None) -> dict:
         self.release: ArgusRelease = ArgusRelease.get(name=self.release_name)
+
+        if not force:
+            filter_key = snapshot_filter_key(self.release_version, image_id, include_no_version, limited)
+            try:
+                snapshot = ReleaseStatsSnapshot.get(release_id=self.release.id, filter_key=filter_key)
+                return json.loads(snapshot.payload)
+            except ReleaseStatsSnapshot.DoesNotExist:
+                pass
+
         all_tests: list[ArgusTest] = list(ArgusTest.filter(release_id=self.release.id).all())
         build_ids = reduce(lambda acc, test: acc[test.plugin_name or "unknown"].append(
             test.build_system_id) or acc, all_tests, defaultdict(list))
@@ -581,7 +595,20 @@ class ReleaseStatsCollector:
         self.release_stats = ReleaseStats(release=self.release)
         self.release_stats.collect(rows=self.release_rows, limited=limited, force=force,
                                    dict=self.release_dict, tests=all_tests, version_filter=self.release_version)
-        return self.release_stats.to_dict()
+        result = self.release_stats.to_dict()
+
+        filter_key = snapshot_filter_key(self.release_version, image_id, include_no_version, limited)
+        try:
+            ReleaseStatsSnapshot.create(
+                release_id=self.release.id,
+                filter_key=filter_key,
+                payload=current_app.json.dumps(result),
+                generated_at=datetime.now(UTC),
+            )
+        except Exception:
+            LOGGER.warning("Failed to write stats snapshot for release %s", self.release.id, exc_info=True)
+
+        return result
 
 
 class ViewStatsCollector:

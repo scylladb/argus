@@ -29,6 +29,7 @@ from argus.backend.models.web import (
     ArgusTest,
     ArgusTestRunComment,
     User,
+    invalidate_release_snapshots,
 )
 
 from argus.backend.plugins.core import PluginInfoBase, PluginModelBase
@@ -166,6 +167,7 @@ class TestRunService:
             test_id=test.id
         )
 
+        invalidate_release_snapshots(test.release_id)
         return {
             "test_run_id": run.id,
             "status": new_status
@@ -268,6 +270,7 @@ class TestRunService:
             test_id=test.id
         )
 
+        invalidate_release_snapshots(test.release_id)
         return {
             "test_run_id": run.id,
             "investigation_status": new_status
@@ -328,6 +331,7 @@ class TestRunService:
                     "build_number": run.build_number,
                 }
             )
+        invalidate_release_snapshots(test.release_id)
         return {
             "test_run_id": run.id,
             "assignee": str(new_assignee_user.id) if new_assignee_user else None
@@ -389,6 +393,7 @@ class TestRunService:
             "username": g.user.username
         }, user_id=g.user.id, run_id=run_id, release_id=release.id, test_id=test.id)
 
+        invalidate_release_snapshots(release.id)
         return self.get_run_comments(run_id=run_id)
 
     def delete_run_comment(self, comment_id: UUID, test_id: UUID, run_id: UUID):
@@ -402,6 +407,7 @@ class TestRunService:
             "username": g.user.username
         }, user_id=g.user.id, run_id=run_id, release_id=comment.release_id, test_id=test_id)
 
+        invalidate_release_snapshots(comment.release_id)
         return self.get_run_comments(run_id=run_id)
 
     def update_run_comment(self, comment_id: UUID, test_id: UUID, run_id: UUID, message: str, mentions: list[str], reactions: dict):
@@ -418,6 +424,7 @@ class TestRunService:
             "username": g.user.username
         }, user_id=g.user.id, run_id=run_id, release_id=comment.release_id, test_id=test_id)
 
+        invalidate_release_snapshots(comment.release_id)
         return self.get_run_comments(run_id=run_id)
 
     def get_run_events(self, run_id: UUID):
@@ -529,7 +536,7 @@ class TestRunService:
 
         cluster.session.execute(batch)
         event_batch.execute()
-
+        invalidate_release_snapshots(test.release_id)
         return jobs_affected
 
     def get_pytest_test_results(self, test_name: str, before: float = None, after: float = None) -> list[PytestResultTable]:

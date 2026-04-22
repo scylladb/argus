@@ -155,7 +155,6 @@ def view_stats():
         "status": "ok",
         "response": stats
     })
-    res.cache_control.max_age = 300
     return res
 
 

@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 from uuid import UUID, uuid1, uuid4
 from datetime import datetime
@@ -397,6 +398,31 @@ class WebFileStorage(Model):
     filename = columns.Text(min_length=1)
 
 
+class ReleaseStatsSnapshot(Model):
+    __table_name__ = "argus_release_stats_snapshot"
+    release_id = columns.UUID(partition_key=True)
+    filter_key = columns.Text(primary_key=True)
+    payload = columns.Text()
+    generated_at = columns.DateTime()
+
+
+_SNAPSHOT_LOGGER = logging.getLogger(__name__)
+
+
+def invalidate_release_snapshots(release_id: UUID) -> None:
+    """Full-partition delete of all ReleaseStatsSnapshot rows for a release.
+
+    Use this for structural or metadata changes that affect all filter
+    combinations (admin edits, group/test toggles, issue/comment/plan
+    mutations). The next stats request will regenerate the snapshots.
+    Version-scoped invalidation in PluginModelBase.invalidate_release_snapshot()
+    is used only for run lifecycle events (submit/finish).
+    """
+    try:
+        for snapshot in ReleaseStatsSnapshot.filter(release_id=release_id).all():
+            snapshot.delete()
+    except Exception:  # pylint: disable=broad-except
+        _SNAPSHOT_LOGGER.warning("Failed to invalidate release snapshots for %s", release_id, exc_info=True)
 USED_MODELS: list[Model] = [
     RuntimeStore,
     User,
@@ -436,6 +462,7 @@ USED_MODELS: list[Model] = [
     RunConfigParam,
     SSHTunnelKey,
     ProxyTunnelConfig,
+    ReleaseStatsSnapshot,
 ]
 
 USED_TYPES: list[UserType] = [
