@@ -51,10 +51,6 @@ class ArgusService:
         self.session = database_session if database_session else ScyllaCluster.get_session()
         self.database = ScyllaCluster.get()
         self.notification_manager = NotificationManagerService()
-        self.github_headers = {
-            "Accept": "application/vnd.github.v3+json",
-            "Authorization": f"token {current_app.config['GITHUB_ACCESS_TOKEN']}"
-        }
         self.build_id_and_url_statement = self.database.prepare(
             f"SELECT build_id, build_job_url, test_id FROM {SCTTestRun.table_name()} WHERE id = ?"
         )  # TODO: transfer to PluginModelBase
