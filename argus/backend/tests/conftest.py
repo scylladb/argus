@@ -13,9 +13,7 @@ from flask.testing import FlaskClient
 from argus.backend.models.argus_ai import Vector
 from argus.backend.plugins.loader import all_plugin_models, all_plugin_types
 from argus.backend.plugins.sct.service import SCTService
-from argus.backend.service.github_service import GithubService
 from argus.backend.service.issue_service import IssueService
-from argus.backend.service.jira_service import JiraService
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.views_widgets.pytest import PytestViewService
 from argus.backend.util.config import Config
@@ -211,17 +209,6 @@ def results_service(argus_db):
 @fixture(scope='session')
 def issue_service(argus_db) -> IssueService:
     return IssueService(True)
-
-
-@fixture(scope='session')
-def github_service(argus_db) -> GithubService:
-    return GithubService()
-
-
-@fixture(scope='session')
-def jira_service(argus_db) -> JiraService:
-    return JiraService()
-
 
 
 def get_fake_test_run(
