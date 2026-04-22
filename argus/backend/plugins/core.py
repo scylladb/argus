@@ -173,7 +173,8 @@ class PluginModelBase(Model):
         for step in range(0, ceil(len(build_ids) / step_size)):
             start_pos = step*step_size
             next_slice = build_ids[start_pos:start_pos+step_size]
-            futures.append(cluster.session.execute_async(query=query, parameters=(next_slice,)))
+            futures.append(cluster.session.execute_async(query=query, parameters=(next_slice,),
+                                                         execution_profile="read_fast"))
 
         return futures
 
