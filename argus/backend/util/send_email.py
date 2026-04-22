@@ -29,7 +29,6 @@ class Email:
         self._server_host: str = ""
         self._server_port: int = 0
         self._connection: smtplib.SMTP | None = None
-        self._retrieve_credentials()
         if init_connection:
             self._connect()
 
@@ -41,6 +40,7 @@ class Email:
         self._server_port = int(current_app.config["EMAIL_SERVER_PORT"])
 
     def _connect(self):
+        self._retrieve_credentials()
         try:
             self._connection = smtplib.SMTP(host=self._server_host, port=self._server_port)
             self._connection.ehlo()
