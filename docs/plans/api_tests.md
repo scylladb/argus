@@ -2,7 +2,7 @@
 status: in_progress
 domain: api
 created: 2026-03-03
-last_updated: 2026-04-20
+last_updated: 2026-04-23
 owner: null
 ---
 
@@ -366,3 +366,73 @@ rules (should be applied as part of this work):
   (i.e., after the FastAPI migration).
 - Each test run is self-contained: running the same test twice with a fresh database produces the
   same result.
+
+---
+
+## Controller Coverage Matrix
+
+This section tracks the per-controller integration-test coverage for the work that exercises every
+public Flask blueprint (controllers under `argus/backend/controller/` and
+`argus/backend/plugins/*/controller.py`). The work is being delivered as a sequence of small
+commits — one (or two, when scope demands it) per controller module — using the `flask_client`
+fixture and the `test_sct_api.py` style as the reference pattern. JSON-first verification is
+mandatory; ORM (`Model.get(...)`) fallback is allowed only when no GET endpoint surfaces the
+mutation.
+
+| #   | Controller                                                | Test module                                                       | Status     | Notes                                                                                                                                                                                                                   |
+| --- | --------------------------------------------------------- | ----------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `argus/backend/plugins/driver_matrix_tests/controller.py` | `argus/backend/tests/driver_matrix_api/test_driver_matrix_api.py` | `complete` | All 4 endpoints + 2 error paths. ORM fallback for `result/fail` and `env/submit` (no JSON read).                                                                                                                        |
+| 2   | `argus/backend/plugins/sct/controller.py` (extensions)    | `argus/backend/tests/sct_api/test_sct_api.py`                     | `pending`  | Add: events get/severity/count, single event submit (new-style), performance submit/history, stress_cmd get, similar_runs_info, similar_events.                                                                         |
+| 3   | `argus/backend/controller/client_api.py`                  | `argus/backend/tests/client_api/test_client_api.py`               | `pending`  | Lifecycle: submit/get/heartbeat/get_status/set_status/update_product_version/logs/finalize/submit_results, `/testrun/<id>/info`, pytest result submit/stats. Email-report routes mock `EmailService`.                   |
+| 4   | `argus/backend/controller/testrun_api.py`                 | `argus/backend/tests/testrun_api/test_testrun_api.py`             | `pending`  | Run details/activity/fetch_results, status/investigation/assignee, comments CRUD, issues submit/get/delete, terminate_stuck_runs, ignore_jobs, get_runs_by_test_id_run_id. Jenkins routes mocked at the Jenkins client. |
+| 5   | `argus/backend/controller/api.py` (releases/groups/tests) | `argus/backend/tests/api/test_release_api.py`                     | `pending`  | Read endpoints + schedules CRUD + assignees groups/tests + `release/create` + `test/<id>/set_plugin`. Split from #6/#7.                                                                                                 |
+| 6   | `argus/backend/controller/api.py` (users/jobs/polls)      | `argus/backend/tests/api/test_users_jobs_api.py`                  | `pending`  | `/users`, `/user/{token,jobs,planned_jobs}`, `/test_runs/poll`, `/test_run/poll`, `/artifact/resolveSize` (mock S3), `/zeus/<endpoint>` (mock).                                                                         |
+| 7   | `argus/backend/controller/api.py` (graph views)           | `argus/backend/tests/api/test_graphs_api.py`                      | `pending`  | `/{create,update}-graph-view`.                                                                                                                                                                                          |
+| 8   | `argus/backend/controller/admin_api.py` (releases)        | `argus/backend/tests/admin_api/test_admin_release_api.py`         | `pending`  | release CRUD + perpetual/state/dormant/edit/delete.                                                                                                                                                                     |
+| 9   | `argus/backend/controller/admin_api.py` (groups/tests)    | `argus/backend/tests/admin_api/test_admin_group_test_api.py`      | `pending`  | group/test CRUD + getters + state toggles + `test/batch_move`.                                                                                                                                                          |
+| 10  | `argus/backend/controller/admin_api.py` (users)           | `argus/backend/tests/admin_api/test_admin_users_api.py`           | `pending`  | `/users`, `/user/<id>/{email,delete,password,admin/toggle}`. proxy-tunnel/ssh already covered by `tests/tunnel/`.                                                                                                       |
+| 11  | `argus/backend/controller/notification_api.py`            | `argus/backend/tests/notification_api/test_notification_api.py`   | `pending`  | `/get`, `/get_unread`, `/summary`, `/read`. Seed via service layer.                                                                                                                                                     |
+| 12  | `argus/backend/controller/view_api.py`                    | `argus/backend/tests/view_api/test_view_api.py`                   | `pending`  | view CRUD, search, stats, versions, images, resolve, pytest results.                                                                                                                                                    |
+| 13  | `argus/backend/controller/team.py`                        | `argus/backend/tests/team_api/test_team_api.py`                   | `pending`  | team CRUD, motd, user/leader endpoints.                                                                                                                                                                                 |
+| 14  | `argus/backend/controller/planner_api.py`                 | `argus/backend/tests/planner_api/test_planner_api.py`             | `pending`  | plan CRUD/copy/owner/resolve_entities/trigger/list/search/explode. Jenkins trigger mocked.                                                                                                                              |
+| 15  | `argus/backend/controller/views_widgets/summary.py`       | `argus/backend/tests/view_widgets/test_summary_widget.py`         | `pending`  | `/widgets/summary/{versioned_runs,runs_results}`.                                                                                                                                                                       |
+| 16  | `argus/backend/controller/views_widgets/pytest.py`        | `argus/backend/tests/view_widgets/test_pytest_widget.py`          | `pending`  | `/widgets/pytest/{view,release/<id>/results,view/<id>/results,<test_name>/<id>/fields}`.                                                                                                                                |
+| 17  | `argus/backend/controller/views_widgets/nemesis_stats.py` | `argus/backend/tests/view_widgets/test_nemesis_widget.py`         | `pending`  | `/widgets/nemesis_data`.                                                                                                                                                                                                |
+| 18  | `argus/backend/controller/views_widgets/graphs.py`        | `argus/backend/tests/view_widgets/test_graphs_widget.py`          | `pending`  | `/widgets/graphs/graph_views`.                                                                                                                                                                                          |
+| 19  | `argus/backend/controller/views_widgets/graphed_stats.py` | `argus/backend/tests/view_widgets/test_graphed_stats_widget.py`   | `pending`  | `/widgets/graphed_stats`, `/widgets/runs_details`.                                                                                                                                                                      |
+| 20  | `argus/backend/controller/auth.py`                        | `argus/backend/tests/auth_api/test_auth_api.py`                   | `pending`  | `/register`, `/login`, `/logout`, `/profile/api/token/generate`, `/admin/impersonate{,/stop}`. CF login mocked.                                                                                                         |
+| 21  | `argus/backend/controller/main.py` (profile only)         | `argus/backend/tests/main_api/test_profile_api.py`                | `pending`  | `/profile/update/{picture,name,username,email,password}`, `/profile/jobs`, `/profile/schedules`, `/storage/picture/<id>`. GitHub OAuth callback mocked.                                                                 |
+| 22  | `argus/backend/controller/views_widgets/highlights.py`    | `argus/backend/tests/view_widgets/test_highlights_api.py`         | `existing` | Already covered by pre-existing test module. No work needed.                                                                                                                                                            |
+
+### Out of scope
+
+| Controller                                     | Reason                                                           |
+| ---------------------------------------------- | ---------------------------------------------------------------- |
+| `argus/backend/controller/notifications.py`    | Single UI redirect — non-API.                                    |
+| `argus/backend/controller/admin.py`            | UI shell only (`/admin` -> Svelte template).                     |
+| `argus/backend/controller/team_ui.py`          | UI shell only.                                                   |
+| `argus/backend/controller/main.py` (UI routes) | Page-rendering routes (release dashboards, test_run views).      |
+| `argus/backend/controller/ssh_api.py`          | Already covered by `argus/backend/tests/tunnel/test_ssh_api.py`. |
+
+### Per-iteration Definition of Done
+
+Every commit in this matrix must satisfy:
+
+- [ ] New `argus/backend/tests/<area>/__init__.py` and `test_*.py` files created.
+- [ ] All in-scope endpoints have at least one happy-path test.
+- [ ] Each test creates its own UUIDs / does not share mutable state.
+- [ ] JSON-first verification; ORM fallback only where no GET endpoint exists, with an inline
+      comment explaining why.
+- [ ] External services mocked at the lowest stable boundary (Jenkins/GitHub/Jira/S3/CF JWT).
+      Real ScyllaDB always.
+- [ ] `uv run pytest argus/backend/tests/<area>` passes locally.
+- [ ] `uv run ruff check argus/backend/tests/<area>` passes.
+- [ ] This matrix row updated to `complete`.
+
+### Risks (specific to controller coverage rollout)
+
+| Risk                                                                                 | Likelihood | Impact | Mitigation                                                                                                                                                                  |
+| ------------------------------------------------------------------------------------ | ---------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Undocumented payload shapes for `controller/api.py` endpoints.                       | Medium     | Low    | Trace through service-layer code paths to derive payloads; mark unclear endpoints as "Needs Investigation" and skip in the initial commit, file a follow-up.                |
+| Mocked external clients diverge from production behavior.                            | Medium     | Medium | Mock at the lowest stable boundary (the client object on the service); keep controller-level happy-path assertions narrow; comment with a pointer to the real client class. |
+| Some endpoints depend on long-running background services (CDC/Vector Store warmup). | Low        | Medium | Reuse the existing session-scoped `argus_db` fixture; no extra warmup logic in new tests.                                                                                   |
