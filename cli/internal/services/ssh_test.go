@@ -249,12 +249,69 @@ func TestBuildSSHConnectArgs_EnablesStrictHostKeyChecking(t *testing.T) {
 		ProxyUser:  "argus-proxy",
 		TargetHost: "10.0.0.5",
 		TargetPort: 8080,
-	}, "/tmp/id_argus_tunnel", 43210)
+	}, "/tmp/id_argus_tunnel", 43210, "/tmp/argus-known-hosts")
 
 	joined := strings.Join(args, " ")
 	assert.Contains(t, joined, "StrictHostKeyChecking=yes")
+	assert.Contains(t, joined, "UserKnownHostsFile=/tmp/argus-known-hosts")
 	assert.Contains(t, joined, "-L 127.0.0.1:43210:10.0.0.5:8080")
 	assert.Contains(t, joined, "argus-proxy@proxy.example.com")
+}
+
+func TestPrepareKnownHostsFile_WritesMatchingKey(t *testing.T) {
+	t.Parallel()
+
+	client, err := api.New("https://argus.scylladb.com")
+	require.NoError(t, err)
+
+	svc := services.NewSSHService(client)
+	entry := "[proxy.example.com]:2222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMockKey"
+
+	path, err := svc.PrepareKnownHostsFile(context.Background(), models.SSHTunnelConfig{
+		HostKnownHostsEntry: entry,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = os.Remove(path)
+	})
+
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, entry+"\n", string(raw))
+
+	stat, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), stat.Mode().Perm())
+}
+
+func TestPrepareKnownHostsFile_RejectsMissingFingerprint(t *testing.T) {
+	t.Parallel()
+
+	client, err := api.New("https://argus.scylladb.com")
+	require.NoError(t, err)
+
+	svc := services.NewSSHService(client)
+
+	_, err = svc.PrepareKnownHostsFile(context.Background(), models.SSHTunnelConfig{
+		HostKnownHostsEntry: "   ",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid host key fingerprint")
+}
+
+func TestPrepareKnownHostsFile_RejectsRawSHA256Fingerprint(t *testing.T) {
+	t.Parallel()
+
+	client, err := api.New("https://argus.scylladb.com")
+	require.NoError(t, err)
+
+	svc := services.NewSSHService(client)
+
+	_, err = svc.PrepareKnownHostsFile(context.Background(), models.SSHTunnelConfig{
+		HostKnownHostsEntry: "SHA256:abc123",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "expected known_hosts entry")
 }
 
 func TestFindFreeLocalPortAndWaitForLocalPort(t *testing.T) {
