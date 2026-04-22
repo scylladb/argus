@@ -17,8 +17,9 @@ class NotificationManagerService:
     def __init__(self, notification_senders: list["NotificationSenderBase"] | None = None) -> None:
         self.notification_services: list["NotificationSenderBase"] = [
             ArgusDBNotificationSaver(),
-            EmailNotificationServiceSender()
         ]
+        if current_app.config.get("EMAIL_ENABLED", True):
+            self.notification_services.append(EmailNotificationServiceSender())
         if notification_senders:
             self.notification_services.extend(notification_senders)
 

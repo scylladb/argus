@@ -77,6 +77,11 @@ EMAIL_SENDER_USER: ""
 EMAIL_SENDER_PASS: ""
 EMAIL_SERVER: "smtp.gmail.com"
 EMAIL_SERVER_PORT: "587"
+# Enable/disable email notifications (default: true).
+# When false, EMAIL_SENDER, EMAIL_SENDER_USER, EMAIL_SENDER_PASS,
+# EMAIL_SERVER, and EMAIL_SERVER_PORT are not required.
+# In-app (DB-backed) notifications are unaffected.
+EMAIL_ENABLED: true
 
 # Used to determine whether or not assigned job is still considered valid.
 # TODO: Move to user settings
