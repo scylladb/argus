@@ -86,26 +86,31 @@ SECRET_KEY: MUSTBEUNIQUE
 LOGIN_METHODS:
     - password
 
-# Placeholders -- the app requires these keys at startup even if you
-# aren't using GitHub or email features. Without them every API call
-# fails with a KeyError.
-GITHUB_CLIENT_ID: "dev-placeholder"
-GITHUB_CLIENT_SECRET: "dev-placeholder"
-GITHUB_ACCESS_TOKEN: "dev-placeholder"
+# Disable remote issue-tracking integrations not needed locally.
+# When false, the corresponding credentials are not required.
+GITHUB_ENABLED: false
+JIRA_ENABLED: false
 
-EMAIL_SENDER: "dev@localhost"
-EMAIL_SENDER_USER: ""
-EMAIL_SENDER_PASS: ""
-EMAIL_SERVER: "localhost"
-EMAIL_SERVER_PORT: "587"
+# Disable email notifications. When false, EMAIL_* keys are not required.
+# In-app (DB-backed) notifications are unaffected.
+EMAIL_ENABLED: false
 
 JOB_VALIDITY_PERIOD_DAYS: 30
 ```
 
-**Why the placeholders?** `ArgusService.__init__` eagerly reads
-`GITHUB_ACCESS_TOKEN`, and `NotificationManagerService` reads the
-`EMAIL_*` keys at init time. Without them every API request returns a
-`KeyError`.
+**`GITHUB_ENABLED: false` / `JIRA_ENABLED: false`** disables all remote
+calls to GitHub issue tracking and Jira respectively. In this mode no
+credentials are needed for those integrations and attempting to create a
+new remote issue returns an error, while all local DB reads continue to
+work normally.
+
+> **Note:** `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are only needed
+> when `gh` is included in `LOGIN_METHODS`. With password-only login they
+> can be omitted entirely.
+
+**`EMAIL_ENABLED: false`** skips instantiation of the email notification
+sender entirely. In-app DB-backed notifications still work; no `EMAIL_*`
+keys are required.
 
 ### 3. Start the database and seed it
 
@@ -256,11 +261,11 @@ docker exec dev-db-alpha-1 cqlsh 172.18.0.2 -u cassandra -p cassandra \
   -e "DESCRIBE KEYSPACES"
 ```
 
-### `KeyError: 'EMAIL_SENDER'` or `KeyError: 'GITHUB_ACCESS_TOKEN'`
+### `KeyError: 'EMAIL_SENDER'`
 
-Your `argus_web.yaml` is missing required keys. The app reads these
-eagerly at startup. Add the placeholder values shown in the config
-section above.
+Your `argus_web.yaml` is missing email keys and `EMAIL_ENABLED` is not
+set to `false`. Either add the `EMAIL_*` values or disable email entirely
+with `EMAIL_ENABLED: false`.
 
 ### ScyllaDB won't start -- permission denied
 
