@@ -23,6 +23,7 @@ from argus.common.enums import TestStatus
 LOGGER = logging.getLogger(__name__)
 
 
+
 class ClientException(Exception):
     pass
 
@@ -41,7 +42,7 @@ class ClientService:
 
     def submit_run(self, run_type: str, request_data: dict) -> str:
         model = self.get_model(run_type)
-        model.submit_run(request_data=request_data)
+        run = model.submit_run(request_data=request_data)
 
         return "Created"
 

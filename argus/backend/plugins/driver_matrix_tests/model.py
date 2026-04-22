@@ -10,7 +10,7 @@ from xml.etree import ElementTree
 from cassandra.cqlengine import columns
 from cassandra.cqlengine.models import Model
 from argus.backend.db import ScyllaCluster
-from argus.backend.models.web import ArgusRelease
+from argus.backend.models.web import ArgusRelease, ReleaseDistinctVersions
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.driver_matrix_tests.udt import TestCollection, TestSuite, TestCase, EnvironmentInfo
 from argus.backend.plugins.driver_matrix_tests.raw_types import RawMatrixTestResult
@@ -98,7 +98,6 @@ def generic_adapter(xml: ElementTree.ElementTree) -> AdaptedXUnitData:
 class DriverTestRun(PluginModelBase):
     _plugin_name = "driver-matrix-tests"
     __table_name__ = "driver_test_run"
-    scylla_version = columns.Text()
     test_collection = columns.List(value_type=columns.UserDefinedType(user_type=TestCollection))
     environment_info = columns.List(value_type=columns.UserDefinedType(user_type=EnvironmentInfo))
 
@@ -177,6 +176,7 @@ class DriverTestRun(PluginModelBase):
 
         run.status = TestStatus.CREATED.value
         run.save()
+        run.invalidate_release_snapshot()
         return run
 
     @classmethod
@@ -443,11 +443,14 @@ class DriverTestRun(PluginModelBase):
             new_assignee = None
         if new_assignee:
             self.assignee = new_assignee
+        self.index_version()
 
     def finish_run(self, payload: dict = None):
         self.end_time = datetime.utcnow()
         status = payload.get("status", "passed")
         self.status = TestStatus(status).value
+        self.invalidate_release_snapshot()
+        self.index_version()
 
     def submit_logs(self, logs: list[dict]):
         pass

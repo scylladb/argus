@@ -10,7 +10,6 @@ from argus.backend.plugins.generic.types import GenericRunFinishRequest, Generic
 from argus.backend.util.common import get_build_number
 from argus.common.enums import TestStatus
 
-
 class GenericPluginException(Exception):
     pass
 
@@ -21,8 +20,6 @@ class GenericRun(PluginModelBase):
     logs = columns.Map(key_type=columns.Text(), value_type=columns.Text())
     started_by = columns.Text()
     sub_type = columns.Text() # Used to tell which framework the GenericRun belongs to
-    # TODO: Legacy field name, should be renamed to product_version and abstracted
-    scylla_version = columns.Text()
 
     @classmethod
     def _stats_query(cls) -> str:
@@ -50,6 +47,7 @@ class GenericRun(PluginModelBase):
             if new_assignee:
                 self.assignee = new_assignee
             self.set_full_version(version)
+            self.index_version()
 
     @classmethod
     def load_test_run(cls, run_id: UUID) -> 'GenericRun':
@@ -78,7 +76,7 @@ class GenericRun(PluginModelBase):
             run.submit_product_version(version)
         run.status = TestStatus.RUNNING.value
         run.save()
-
+        run.invalidate_release_snapshot()
         return run
 
     def finish_run(self, payload: GenericRunFinishRequest = None):
@@ -86,3 +84,5 @@ class GenericRun(PluginModelBase):
         self.status = TestStatus(payload["status"]).value
         if version := payload.get("scylla_version"):
             self.submit_product_version(version)
+        self.invalidate_release_snapshot()
+        self.index_version()

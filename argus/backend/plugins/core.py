@@ -4,7 +4,6 @@ from datetime import datetime, UTC
 from math import ceil
 from uuid import UUID
 from time import time
-
 from cassandra.cqlengine import columns
 from cassandra.cqlengine.models import Model
 from cassandra.cqlengine.usertype import UserType
@@ -19,7 +18,9 @@ from argus.backend.models.web import (
     ArgusScheduleGroup,
     ArgusSchedule,
     ArgusScheduleTest,
-    ArgusScheduleAssignee
+    ArgusScheduleAssignee,
+    ReleaseStatsSnapshot,
+    ReleaseDistinctVersions,
 )
 from argus.backend.util.common import chunk
 from argus.common.enums import TestInvestigationStatus, TestStatus
@@ -45,6 +46,7 @@ class PluginModelBase(Model):
     build_job_url = columns.Text()
     build_number = columns.Integer()
     product_version = columns.Text(index=True)
+    scylla_version = columns.Text()
 
     # Test Logs Collection
     logs = columns.List(value_type=columns.Tuple(columns.Text(), columns.Text()))
@@ -276,6 +278,27 @@ class PluginModelBase(Model):
 
     def sut_timestamp(self, sut_package_name) -> float:
         raise NotImplementedError()
+
+    def invalidate_release_snapshot(self) -> None:
+        if not self.release_id:
+            return
+        try:
+            version = self.scylla_version or ""
+            version_prefix = f"v={version}::"
+            all_versions_prefix = "v=::"
+            for snapshot in ReleaseStatsSnapshot.filter(release_id=self.release_id).all():
+                if snapshot.filter_key.startswith(version_prefix) or snapshot.filter_key.startswith(all_versions_prefix):
+                    snapshot.delete()
+        except Exception:
+            LOGGER.warning("Failed to invalidate stats snapshot for release %s", self.release_id, exc_info=True)
+
+    def index_version(self) -> None:
+        if not self.release_id or not self.scylla_version:
+            return
+        try:
+            ReleaseDistinctVersions.create(release_id=self.release_id, version=self.scylla_version)
+        except Exception:
+            LOGGER.warning("Failed to index version %s for release %s", self.scylla_version, self.release_id, exc_info=True)
 
 
 class PluginInfoBase:

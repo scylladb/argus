@@ -3,7 +3,7 @@ from typing import TypedDict
 from uuid import UUID
 from argus.backend.db import ScyllaCluster
 from argus.backend.plugins.sct.testrun import SCTTestRun
-from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest
+from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, ReleaseDistinctVersions, ReleaseDistinctImages, ReleaseStatsSnapshot
 
 LOGGER = logging.getLogger(__name__)
 
@@ -203,6 +203,14 @@ class ReleaseManagerService:
 
         for entity in [*release_groups.all(), *release_tests.all()]:
             entity.delete()
+
+        # Clean up denormalized index tables so no orphaned rows remain
+        for row in ReleaseDistinctVersions.filter(release_id=release.id).all():
+            row.delete()
+        for row in ReleaseDistinctImages.filter(release_id=release.id).all():
+            row.delete()
+        for row in ReleaseStatsSnapshot.filter(release_id=release.id).all():
+            row.delete()
 
         release.delete()
         return True
