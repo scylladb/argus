@@ -2,9 +2,9 @@
 BASE_URL: "https://argus.scylladb.com"
 # Main DB Cluster contact points
 SCYLLA_CONTACT_POINTS:
-  - 1.1.1.1
-  - 2.2.2.2
-  - 3.3.3.3
+    - 1.1.1.1
+    - 2.2.2.2
+    - 3.3.3.3
 # Username
 SCYLLA_USERNAME: user
 # Password
@@ -17,9 +17,9 @@ SCYLLA_KEYSPACE_NAME: mykeyspacename
 # Which login methods to enable
 # Enable Cloudflare Access JWT auth by adding "cf" to LOGIN_METHODS.
 LOGIN_METHODS:
-  - password
-  - gh
-  - cf
+    - password
+    - gh
+    - cf
 
 # Application log level
 APP_LOG_LEVEL: INFO
@@ -27,13 +27,13 @@ APP_LOG_LEVEL: INFO
 SECRET_KEY: MUSTBEUNIQUE
 # Allowed buckets for S3 proxying
 S3_ALLOWED_BUCKETS:
-  - my-bucket-name
+    - my-bucket-name
 
 # Allowed mime types for S3 proxying
 S3_ALLOWED_MIME:
-  - image/png
-  - application/zstd
-  - application/gzip
+    - image/png
+    - application/zstd
+    - application/gzip
 
 # AWS Client ID
 AWS_CLIENT_ID: ABCDE
@@ -49,9 +49,13 @@ GITHUB_CLIENT_SECRET: YOUR_GITHUB_CLIENT_SECRET
 GITHUB_ACCESS_TOKEN: YOUR_GITHUB_PERSONAL_ACCESS_TOKEN
 # List of required organization names (Comment out to disable organization requirement)
 GITHUB_REQUIRED_ORGANIZATIONS:
-  # at least one is required for user to successfully authenticate
-  - myorg
-  - otherorg
+    # at least one is required for user to successfully authenticate
+    - myorg
+    - otherorg
+# Enable/disable remote GitHub issue-tracking calls (default: true).
+# When false, GITHUB_ACCESS_TOKEN is not required for issue tracking.
+# Note: GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET are still needed for OAuth login.
+GITHUB_ENABLED: true
 
 # JIRA Server address
 JIRA_SERVER: https://your.jira.instance
@@ -59,6 +63,9 @@ JIRA_SERVER: https://your.jira.instance
 JIRA_EMAIL: user@your.jira.instance
 # API Token of the service user
 JIRA_TOKEN: base64Token
+# Enable/disable remote Jira calls (default: true).
+# When false, JIRA_SERVER, JIRA_EMAIL, and JIRA_TOKEN are not required.
+JIRA_ENABLED: true
 
 JENKINS_URL: https://your_jenkins_hostname
 JENKINS_USER: user
