@@ -1,4 +1,5 @@
 from uuid import UUID
+from flask import current_app
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.service.github_service import GithubService
 from argus.backend.service.issue_utils import build_version_map, filter_links_by_version
@@ -7,9 +8,11 @@ from argus.backend.service.jira_service import JiraService
 
 class IssueService:
 
-    def __init__(self, dry_run = False):
-        self.gh = GithubService(dry_run)
-        self.jira = JiraService(dry_run)
+    def __init__(self, dry_run: bool | None = None):
+        github_dry_run = dry_run if dry_run is not None else not current_app.config.get("GITHUB_ENABLED", True)
+        jira_dry_run = dry_run if dry_run is not None else not current_app.config.get("JIRA_ENABLED", True)
+        self.gh = GithubService(github_dry_run)
+        self.jira = JiraService(jira_dry_run)
 
     def _get_service(self, url):
         return self.gh if "github.com" in url else self.jira
