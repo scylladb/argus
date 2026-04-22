@@ -62,7 +62,11 @@ class GithubService:
         unique_repos = {f"{issue.owner}/{issue.repo}" for issue in all_issues}
         for idx, repo in enumerate(unique_repos):
             LOGGER.info("[%s/%s] Fetching %s...", idx + 1, len(unique_repos), repo)
-            repo = self.gh.get_repo(repo)
+            try:
+                repo = self.gh.get_repo(repo)
+            except Exception:
+                LOGGER.warning(f"Unable to fetch repo {repo}, skipping", exc_info=True)
+                continue
             issues = repo.get_issues(since=last_ran.value, state="all", direction="desc", sort="created")
             for issue_idx, issue in enumerate(issues):
                 match = re.match(
