@@ -41,8 +41,7 @@ class ClientService:
 
     def submit_run(self, run_type: str, request_data: dict) -> str:
         model = self.get_model(run_type)
-        model.submit_run(request_data=request_data)
-
+        run = model.submit_run(request_data=request_data)
         return "Created"
 
     def submit_pytest_result(self, request_data: PytestSubmitData) -> dict[str, str | UUID]:
@@ -130,6 +129,7 @@ class ClientService:
         run = model.load_test_run(UUID(run_id))
         run.finish_run(payload)
         run.save()
+
 
         return "Finalized"
 

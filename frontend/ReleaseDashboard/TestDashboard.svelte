@@ -251,7 +251,7 @@
         let params = queryString.stringify({
             release: dashboardObject.name,
             limited: new Number(false),
-            force: new Number(true),
+            force: new Number(force),
             imageId: imageId,
             includeNoVersion: new Number(versionsIncludeNoVersion),
             productVersion: productVersion ?? (settings.productVersion || ""),
@@ -284,7 +284,7 @@
         let params = queryString.stringify({
             viewId: dashboardObject.id,
             limited: new Number(false),
-            force: new Number(true),
+            force: new Number(force),
             widgetId: widgetId,
             imageId: imageId,
             includeNoVersion: new Number(versionsIncludeNoVersion),
