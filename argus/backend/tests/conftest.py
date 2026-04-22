@@ -126,8 +126,7 @@ def argus_db():
          """)
     config = {"SCYLLA_KEYSPACE_NAME": "test_argus", "SCYLLA_CONTACT_POINTS": [container_ip],
               "SCYLLA_USERNAME": "cassandra", "SCYLLA_PASSWORD": "cassandra", "APP_LOG_LEVEL": "INFO",
-              "EMAIL_SENDER": "unit tester", "EMAIL_SENDER_PASS": "pass", "EMAIL_SENDER_USER": "qa",
-              "EMAIL_SERVER": "fake", "EMAIL_SERVER_PORT": 25}
+              "EMAIL_ENABLED": False}
     Config.CONFIG = config  # patch config for whole test to avoid using Config.load_yaml_config() required by app context
     database = ScyllaCluster.get(config)
     if need_sync_models:
