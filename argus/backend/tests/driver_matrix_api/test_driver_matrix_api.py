@@ -10,10 +10,10 @@ Endpoints exercised (mounted under ``/api/v1/client/driver_matrix``):
 The tests follow the ``test_sct_api`` style:
 
 - Use ``flask_client`` to issue real HTTP calls.
-- Prefer JSON-only verification via paired GET endpoints.
-- Fall back to ORM lookups (``DriverTestRun.get(...)``) only for endpoints
-  that do not have a paired read endpoint exposing the persisted state
-  (``result/fail`` failure messages, ``env/submit`` environment_info).
+- Verify writes through paired GET endpoints — the per-plugin
+  ``GET /api/v1/run/<run_type>/<run_id>`` endpoint exposes every persisted
+  field (``test_collection``, ``environment_info``, ``scylla_version``)
+  via ``dict(run.items())``, so no ORM lookups are needed.
 - Every test creates its own UUIDs so runs are fully isolated.
 """
 
@@ -25,10 +25,10 @@ from uuid import uuid4
 import pytest
 
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest
-from argus.backend.plugins.driver_matrix_tests.model import DriverTestRun
 
 CLIENT_PREFIX = "/api/v1/client"
 DRIVER_MATRIX_PREFIX = f"{CLIENT_PREFIX}/driver_matrix"
+RUN_PREFIX = "/api/v1/run"
 RUN_TYPE = "driver-matrix-tests"
 
 
@@ -168,12 +168,15 @@ def test_submit_driver_matrix_failure(flask_client, driver_matrix_run_id):
     assert body["status"] == "ok"
     assert body["response"] is True
 
-    # No JSON read endpoint exposes failure_message; ORM fallback.
-    run = DriverTestRun.get(id=driver_matrix_run_id)
-    failure = next((c for c in run.test_collection if c.name == "broken-driver"), None)
+    # Verify via the generic per-plugin run read endpoint.
+    run_resp = flask_client.get(f"{RUN_PREFIX}/{RUN_TYPE}/{driver_matrix_run_id}")
+    assert run_resp.status_code == 200, run_resp.text
+    assert run_resp.json["status"] == "ok"
+    test_collection = run_resp.json["response"]["test_collection"]
+    failure = next((c for c in test_collection if c["name"] == "broken-driver"), None)
     assert failure is not None
-    assert failure.failure_message == "compilation error"
-    assert failure.failures == 1
+    assert failure["failure_message"] == "compilation error"
+    assert failure["failures"] == 1
 
 
 def test_submit_driver_matrix_env(flask_client, driver_matrix_run_id):
@@ -193,10 +196,13 @@ def test_submit_driver_matrix_env(flask_client, driver_matrix_run_id):
     assert body["status"] == "ok"
     assert body["response"] is True
 
-    # No JSON read endpoint exposes environment_info; ORM fallback.
-    run = DriverTestRun.get(id=driver_matrix_run_id)
-    assert run.scylla_version == "6.0.0"
-    env_map = {ei.key: ei.value for ei in run.environment_info}
+    # Verify via the generic per-plugin run read endpoint.
+    run_resp = flask_client.get(f"{RUN_PREFIX}/{RUN_TYPE}/{driver_matrix_run_id}")
+    assert run_resp.status_code == 200, run_resp.text
+    assert run_resp.json["status"] == "ok"
+    response = run_resp.json["response"]
+    assert response["scylla_version"] == "6.0.0"
+    env_map = {ei["key"]: ei["value"] for ei in response["environment_info"]}
     assert env_map.get("scylla-version") == "6.0.0"
     assert env_map.get("kernel") == "5.15.0"
 
