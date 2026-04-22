@@ -12,7 +12,7 @@ from flask import g
 from slugify import slugify
 
 from argus.backend.models.plan import ArgusReleasePlan
-from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, ArgusUserView, User
+from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, ArgusUserView, User, invalidate_release_snapshots
 from argus.backend.service.jenkins_service import JenkinsService
 from argus.backend.service.test_lookup import TestLookup
 from argus.backend.service.views import UserViewService
@@ -149,7 +149,7 @@ class PlanningService:
             view = self.update_view_for_plan(plan, existing=True)
 
         plan.save()
-
+        invalidate_release_snapshots(plan.release_id)
         return plan
 
     def update_plan(self, payload: dict[str, Any]) -> bool:
@@ -194,7 +194,7 @@ class PlanningService:
             plan.view_id = view.id
 
         plan.save()
-
+        invalidate_release_snapshots(plan.release_id)
         return True
 
     def update_view_for_plan(self, plan: ArgusReleasePlan, existing: bool = False) -> ArgusUserView:
@@ -355,7 +355,7 @@ class PlanningService:
         new_plan.view_id = view.id
 
         new_plan.save()
-
+        invalidate_release_snapshots(new_plan.release_id)
         return new_plan
 
     def check_plan_copy_eligibility(self, plan_id: str | UUID, target_release_id: str | UUID) -> dict:
@@ -428,6 +428,7 @@ class PlanningService:
                 view.save()
 
         plan.delete()
+        invalidate_release_snapshots(plan.release_id)
         return True
 
     def get_assignee_for_test(self, test_id: str | UUID, target_version: str = None) -> UUID | None:
@@ -493,6 +494,7 @@ class PlanningService:
         plan.completed = True
 
         plan.save()
+        invalidate_release_snapshots(plan.release_id)
         return plan.completed
 
     def resolve_plan(self, plan_id: str | UUID) -> list[dict[str, Any]]:

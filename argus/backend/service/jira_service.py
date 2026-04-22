@@ -12,7 +12,7 @@ from jira import JIRA
 
 from argus.backend.models.jira import JiraIssue
 from argus.backend.models.runtime_store import RuntimeStore
-from argus.backend.models.web import ArgusEventTypes, ArgusTest, ArgusUserView
+from argus.backend.models.web import ArgusEventTypes, ArgusTest, ArgusUserView, invalidate_release_snapshots
 from argus.backend.models.github_issue import IssueLink, IssueLabel
 from argus.backend.plugins.core import PluginInfoBase
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS
@@ -156,6 +156,7 @@ class JiraService:
             test_id=link.test_id
         )
 
+        invalidate_release_snapshots(test.release_id)
         response = {
             **dict(list(issue.items())),
             "summary": issue.summary,
@@ -228,6 +229,7 @@ class JiraService:
         if remaining_links == 0:
             issue.delete()
 
+        invalidate_release_snapshots(link.release_id)
         return {
             "deleted": issue_id if remaining_links == 0 else (link.run_id, link.issue_id)
         }

@@ -3,7 +3,7 @@ from typing import TypedDict
 from uuid import UUID
 from argus.backend.db import ScyllaCluster
 from argus.backend.plugins.sct.testrun import SCTTestRun
-from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest
+from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, ReleaseDistinctVersions, ReleaseDistinctImages, ReleaseStatsSnapshot, invalidate_release_snapshots
 
 LOGGER = logging.getLogger(__name__)
 
@@ -48,14 +48,14 @@ class ReleaseManagerService:
         test: ArgusTest = ArgusTest.get(id=test_id)
         test.enabled = new_state
         test.save()
-
+        invalidate_release_snapshots(test.release_id)
         return test
 
     def toggle_group_enabled(self, group_id: UUID, new_state: bool) -> bool:
         test: ArgusGroup = ArgusGroup.get(id=group_id)
         test.enabled = new_state
         test.save()
-
+        invalidate_release_snapshots(test.release_id)
         return test
 
     def create_release(self, release_name: str, pretty_name: str, perpetual: bool) -> ArgusRelease:
@@ -84,7 +84,7 @@ class ReleaseManagerService:
         new_group.release_id = release.id
         new_group.build_system_id = build_system_id
         new_group.save()
-
+        invalidate_release_snapshots(release.id)
         return new_group
 
     def create_test(self, test_name, pretty_name, build_id, build_url, group_id, release_id, plugin_name) -> ArgusTest:
@@ -102,6 +102,7 @@ class ReleaseManagerService:
         new_test.validate_build_system_id()
         new_test.save()
         self.move_test_runs(new_test)
+        invalidate_release_snapshots(release.id)
         return new_test
 
     def delete_group(self, group_id: str, delete_tests: bool = True, new_group_id: str = "") -> bool:
@@ -119,13 +120,13 @@ class ReleaseManagerService:
                 test.save()
 
         group_to_delete.delete()
-
+        invalidate_release_snapshots(group_to_delete.release_id)
         return True
 
     def delete_test(self, test_id: str) -> bool:
         test_to_delete = ArgusTest.get(id=test_id)
         test_to_delete.delete()
-
+        invalidate_release_snapshots(test_to_delete.release_id)
         return True
 
     def update_group(self, group_id: str, name: str, pretty_name: str, enabled: bool, build_system_id: str) -> bool:
@@ -137,7 +138,7 @@ class ReleaseManagerService:
         group.enabled = enabled
 
         group.save()
-
+        invalidate_release_snapshots(group.release_id)
         return True
 
     def update_test(self, test_id: str, name: str, pretty_name: str, plugin_name: str,
@@ -158,27 +159,28 @@ class ReleaseManagerService:
         test.validate_build_system_id()
         test.save()
         self.move_test_runs(test)
+        invalidate_release_snapshots(test.release_id)
         return True
 
     def set_release_state(self, release_id: str, state: bool) -> bool:
         release = ArgusRelease.get(id=UUID(release_id))
         release.enabled = state
         release.save()
-
+        invalidate_release_snapshots(release.id)
         return True
 
     def set_release_dormancy(self, release_id: str, dormant: bool) -> bool:
         release = ArgusRelease.get(id=UUID(release_id))
         release.dormant = dormant
         release.save()
-
+        invalidate_release_snapshots(release.id)
         return True
 
     def set_release_perpetuality(self, release_id: str, perpetual: bool) -> bool:
         release = ArgusRelease.get(id=UUID(release_id))
         release.perpetual = perpetual
         release.save()
-
+        invalidate_release_snapshots(release.id)
         return True
 
     def edit_release(self, payload: ReleaseEditPayload) -> bool:
@@ -192,6 +194,7 @@ class ReleaseManagerService:
         release.valid_version_regex = payload["valid_version_regex"]
 
         release.save()
+        invalidate_release_snapshots(release.id)
         return True
 
     def delete_release(self, release_id: str) -> bool:
@@ -203,6 +206,14 @@ class ReleaseManagerService:
 
         for entity in [*release_groups.all(), *release_tests.all()]:
             entity.delete()
+
+        # Clean up denormalized index tables so no orphaned rows remain
+        for row in ReleaseDistinctVersions.filter(release_id=release.id).all():
+            row.delete()
+        for row in ReleaseDistinctImages.filter(release_id=release.id).all():
+            row.delete()
+        for row in ReleaseStatsSnapshot.filter(release_id=release.id).all():
+            row.delete()
 
         release.delete()
         return True
@@ -217,6 +228,7 @@ class ReleaseManagerService:
             test.save()
             self.move_test_runs(test)
 
+        invalidate_release_snapshots(group.release_id)
         return True
 
     def move_test_runs(self, test: ArgusTest) -> None:

@@ -9,7 +9,7 @@ from flask import current_app, g
 from github import Github, Auth
 
 from argus.backend.models.runtime_store import RuntimeStore
-from argus.backend.models.web import ArgusEventTypes, ArgusTest, ArgusUserView
+from argus.backend.models.web import ArgusEventTypes, ArgusTest, ArgusUserView, invalidate_release_snapshots
 from argus.backend.models.github_issue import GithubIssue, IssueAssignee, IssueLink, IssueLabel
 from argus.backend.plugins.core import PluginInfoBase
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS
@@ -176,6 +176,7 @@ class GithubService:
             test_id=link.test_id
         )
 
+        invalidate_release_snapshots(test.release_id)
         response = {
             **dict(list(issue.items())),
             "title": issue.title,
@@ -248,6 +249,7 @@ class GithubService:
         if remaining_links == 0:
             issue.delete()
 
+        invalidate_release_snapshots(link.release_id)
         return {
             "deleted": issue_id if remaining_links == 0 else (link.run_id, link.issue_id)
         }
