@@ -14,6 +14,7 @@ from argus.backend.db import ScyllaCluster
 from argus.backend.controller import auth
 from argus.backend.util.config import Config
 from jwt import PyJWKClient
+from argus.backend.service.user import cache_ssh_tunnel_server_allowed_endpoints
 
 LOGGER = logging.getLogger(__name__)
 
@@ -75,6 +76,7 @@ def start_server(config=None) -> Flask:
     app.register_blueprint(api.bp)
     app.register_blueprint(admin.bp)
     app.register_blueprint(cli_bp)
+    cache_ssh_tunnel_server_allowed_endpoints(app)
     with app.app_context():
         try:
             register_metrics()

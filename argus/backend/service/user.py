@@ -487,17 +487,20 @@ def is_ssh_tunnel_server_request_allowed() -> bool:
     if not endpoint:
         return False
 
-    allowed_endpoint_methods = current_app.extensions.get(SSH_TUNNEL_SERVER_ALLOWED_ENDPOINTS_KEY)
-    if allowed_endpoint_methods is None:
-        allowed_endpoint_methods = set()
-        for rule in current_app.url_map.iter_rules():
-            view = current_app.view_functions.get(rule.endpoint)
-            if getattr(view, "allow_ssh_tunnel_server_scope", False):
-                for method in rule.methods:
-                    allowed_endpoint_methods.add((rule.endpoint, method))
-        current_app.extensions[SSH_TUNNEL_SERVER_ALLOWED_ENDPOINTS_KEY] = allowed_endpoint_methods
+    allowed_endpoint_methods = current_app.extensions.get(SSH_TUNNEL_SERVER_ALLOWED_ENDPOINTS_KEY, set())
 
     return (endpoint, request.method) in allowed_endpoint_methods
+
+
+def cache_ssh_tunnel_server_allowed_endpoints(app):
+    allowed_endpoint_methods = set()
+    for rule in app.url_map.iter_rules():
+        view = app.view_functions.get(rule.endpoint)
+        if getattr(view, "allow_ssh_tunnel_server_scope", False):
+            for method in rule.methods:
+                allowed_endpoint_methods.add((rule.endpoint, method))
+
+    app.extensions[SSH_TUNNEL_SERVER_ALLOWED_ENDPOINTS_KEY] = allowed_endpoint_methods
 
 
 def is_scoped_ssh_tunnel_server_blocked(user: User | None) -> bool:
