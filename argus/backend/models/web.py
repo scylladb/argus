@@ -394,6 +394,14 @@ class WebFileStorage(Model):
     filename = columns.Text(min_length=1)
 
 
+class ReleaseStatsSnapshot(Model):
+    __table_name__ = "argus_release_stats_snapshot"
+    release_id = columns.UUID(partition_key=True)
+    filter_key = columns.Text(primary_key=True)
+    payload = columns.Text()
+    generated_at = columns.DateTime()
+
+
 USED_MODELS: list[Model] = [
     RuntimeStore,
     User,
@@ -431,6 +439,7 @@ USED_MODELS: list[Model] = [
     PytestResultTableOld,
     RunConfiguration,
     RunConfigParam,
+    ReleaseStatsSnapshot,
 ]
 
 USED_TYPES: list[UserType] = [
