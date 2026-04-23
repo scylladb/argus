@@ -6,6 +6,7 @@ import re
 from argus.backend.db import ScyllaCluster
 from argus.backend.plugins.sct.testrun import SCTNemesis, SCTTestRun
 from argus.backend.models.github_issue import GithubIssue, IssueLink
+from argus.backend.models.jira import JiraIssue
 from argus.backend.util.common import chunk
 from argus.backend.util.nemesis_map import get_nemesis_name
 
@@ -117,11 +118,16 @@ class GraphedStatsService:
         issues_by_id = {}
         if all_issue_ids:
             for batch_issue_ids in chunk(list(all_issue_ids)):
-                batch_issues = GithubIssue.filter(id__in=batch_issue_ids).only(
-                    ["id", "state", "title", "number", "url"]).all()
-
-                for issue in batch_issues:
+                for issue in GithubIssue.filter(id__in=batch_issue_ids).only(
+                        ["id", "state", "title", "number", "url"]).all():
                     issues_by_id[issue.id] = issue
+
+            missing_ids = [id for id in all_issue_ids if id not in issues_by_id]
+            if missing_ids:
+                for batch_issue_ids in chunk(missing_ids):
+                    for issue in JiraIssue.filter(id__in=batch_issue_ids).only(
+                            ["id", "state", "summary", "key", "permalink"]).all():
+                        issues_by_id[issue.id] = issue
 
         # Step 3: Fetch test runs for all provided run_ids
         test_runs = {}
@@ -170,10 +176,17 @@ class GraphedStatsService:
                     "investigation_status": test_run.investigation_status,
                     "issues": [
                         {
+                            "subtype": "github",
                             "number": issue.number,
                             "state": issue.state,
                             "title": issue.title,
                             "url": issue.url,
+                        } if isinstance(issue, GithubIssue) else {
+                            "subtype": "jira",
+                            "key": issue.key,
+                            "state": issue.state,
+                            "summary": issue.summary,
+                            "permalink": issue.permalink,
                         }
                         for issue in issues
                     ],

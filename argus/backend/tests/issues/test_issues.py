@@ -55,14 +55,14 @@ def test_submit_jira_issue_link_for_existing_issue(client_service: ClientService
     i = JiraIssue()
     uid = uuid4()
     i.user_id = uid
-    i.key = "SCYLLADB-1"
+    i.key = "FROBNICATOR-1"
     i.state = "todo"
     i.summary = "Example Issue"
-    i.project = "SCYLLADB"
-    i.permalink = "https://scylladb.atlassian.net/browse/SCYLLADB-1"
+    i.project = "FROBNICATOR"
+    i.permalink = "https://zxqtesting.atlassian.net/browse/FROBNICATOR-1"
     i.save()
 
-    result = issue_service.submit(issue_url="https://scylladb.atlassian.net/browse/SCYLLADB-1", test_id=run.test_id, run_id=run.id)
+    result = issue_service.submit(issue_url="https://zxqtesting.atlassian.net/browse/FROBNICATOR-1", test_id=run.test_id, run_id=run.id)
 
     assert result["summary"] == "Example Issue"
 

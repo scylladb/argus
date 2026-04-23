@@ -74,7 +74,7 @@ def create_jira_issue(
         state="todo",
         summary=summary,
         project=project,
-        permalink=f"https://scylladb.atlassian.net/browse/{key}",
+        permalink=f"https://zxqtesting.atlassian.net/browse/{key}",
     )
 
 

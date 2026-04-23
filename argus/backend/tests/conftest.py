@@ -126,7 +126,8 @@ def argus_db():
          """)
     config = {"SCYLLA_KEYSPACE_NAME": "test_argus", "SCYLLA_CONTACT_POINTS": [container_ip],
               "SCYLLA_USERNAME": "cassandra", "SCYLLA_PASSWORD": "cassandra", "APP_LOG_LEVEL": "INFO",
-              "EMAIL_ENABLED": False}
+              "EMAIL_ENABLED": False,
+              "JIRA_SERVER": "https://zxqtesting.atlassian.net"}
     Config.CONFIG = config  # patch config for whole test to avoid using Config.load_yaml_config() required by app context
     database = ScyllaCluster.get(config)
     if need_sync_models:

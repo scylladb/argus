@@ -1,30 +1,5 @@
 <script module>
-    export const JiraIssueIcon: Record<JiraState, IconDefinition> = {
-        "in progress": faDotCircle,
-        "in review": faDotCircle,
-        "ready for merge": faDotCircle,
-        "won't fix": faCheckCircle,
-        blocked: faSquare,
-        done: faCheckCircle,
-        duplicate: faCheckCircle,
-        todo: faSquare,
-        new: faDotCircle,
-    };
-
-
-    export const JiraIssueColorMap: Record<JiraState, string> = {
-        "in progress": "jira-progress",
-        "in review": "jira-review",
-        "ready for merge": "jira-merge",
-        "won't fix": "jira-fix",
-        new: "jira-new",
-        blocked: "jira-blocked",
-        done: "jira-done",
-        duplicate: "jira-dupe",
-        todo: "jira-todo",
-    };
-
-
+    export { JiraIssueIcon, JiraIssueColorMap } from "../Common/IssueTypes";
 </script>
 
 <script lang="ts">
@@ -35,18 +10,14 @@
     import Fa from "svelte-fa";
     import { faJira } from "@fortawesome/free-brands-svg-icons";
     import {
-        faCheckCircle,
-        faDotCircle,
         faExternalLinkSquareAlt,
-        faSquare,
         faTrash,
-        type IconDefinition,
     } from "@fortawesome/free-solid-svg-icons";
     import { sendMessage } from "../Stores/AlertStore";
     import { userList } from "../Stores/UserlistSubscriber";
     import { timestampToISODate } from "../Common/DateUtils";
     import { stateEncoder } from "../Common/StateManagement";
-    import { label2color, type JiraState, type JiraSubtype, type Label, type Link, type TestRun } from '../Github/Issues.svelte';
+    import { label2color, type JiraState, type JiraSubtype, type Link, type TestRun, JiraIssueColorMap, JiraIssueIcon, resolveRuns as resolveRunsHelper, resolveFirstUserForAggregation as resolveFirstUserHelper, deleteIssue as deleteIssueHelper } from '../Common/IssueTypes';
     import { getUser } from '../Common/UserUtils';
 
     const dispatch = createEventDispatcher();
@@ -75,6 +46,7 @@
         type: "issues",
         permalink: "https://scylladb.atlassian.com/",
         user_id: "",
+        event_id: "",
         assignees: [],
         added_on: "Mon, 1 Jan 1970 9:00:00 GMT",
     }),
@@ -91,82 +63,27 @@
     };
 
     const resolveRuns = async function(links: Link[]) {
-        if (resolvedRuns) return resolvedRuns;
-        let response = await fetch("/api/v1/get_runs_by_test_id_run_id",
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(links.map(v => [v.test_id, v.run_id]))
-            }
-        );
-
-        let data = await response.json();
-        if (data.status !== "ok") {
-            throw new Error(data.response.arguments[0]);
-        }
-        resolvedRuns = data.response.runs;
-        return data.response.runs;
+        resolvedRuns = await resolveRunsHelper(links, resolvedRuns);
+        return resolvedRuns;
     };
 
     const resolveFirstUserForAggregation = function(issue: JiraSubtype) {
-        if (!issue.links) return {
-            id: issue.user_id,
-            date: issue.added_on,
-        };
-        const resolved = issue.links
-            .filter(l => !!l.added_on && !!l.user_id)
-            .sort((a, b) => {
-                const lhs = Date.parse(a.added_on);
-                const rhs = Date.parse(b.added_on);
-
-                return lhs > rhs ? 1 : rhs > lhs ? -1 : 0;
-            });
-
-        return {
-            id: resolved?.[0]?.user_id ?? issue.user_id,
-            date: resolved?.[0]?.added_on ?? issue.added_on,
-        };
+        return resolveFirstUserHelper(issue);
     };
 
 
     const deleteIssue = async function () {
         deleting = true;
         try {
-            if (aggregated) throw new Error("Cannot delete aggregated issues");
-            let apiResponse = await fetch("/api/v1/issues/delete", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    issue_id: issue.id,
-                    run_id: runId,
-                }),
+            await deleteIssueHelper({
+                issueId: issue.id,
+                runId,
+                aggregated,
+                onDeleted: (id) => dispatch("issueDeleted", { id }),
+                onError: (msg) => sendMessage("error", msg, "JiraIssue::delete"),
             });
-            let apiJson = await apiResponse.json();
-            if (apiJson.status === "ok") {
-                dispatch("issueDeleted", {
-                    id: issue.id,
-                });
-            } else {
-                throw apiJson;
-            }
-        } catch (error) {
-            if ((error as {status: string, response: { arguments: string[] }})?.status === "error") {
-                sendMessage(
-                    "error",
-                    `Unable to delete an issue.\nAPI Response: ${(error as {status: string, response: { arguments: string[] }}).response.arguments[0]}`,
-                    "JiraIssue::delete"
-                );
-            } else {
-                sendMessage(
-                    "error",
-                    "A backend error occurred during issue deleting",
-                    "JiraIssue::delete"
-                );
-            }
+        } finally {
+            deleting = false;
         }
     };
 </script>

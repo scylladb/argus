@@ -1,156 +1,43 @@
 <script module lang="ts">
-    export type GithubState = "open" | "closed";
-    export type JiraState = "in review" | "blocked" | "todo" | "in progress" | "ready for merge" | "done" | "duplicate" | "won't fix" | "new";
-    export type State = GithubState | JiraState;
-    export interface Label {
-        id: string,
-        name: string,
-        color: string,
-        description: string,
-    }
-
-    export interface Link {
-        id: string,
-        test_id: string,
-        run_id: string,
-        release_id: string,
-        type: string,
-        added_on: string,
-        user_id: string,
-    }
-
-    export interface Issue {
-        subtype: "github" | "jira",
-        id: string,
-        state: State,
-        event_id: string,
-        added_on: string,
-        labels: Label[],
-        user_id: string,
-        links: Link[],
-    }
-
-    export interface GithubSubtype extends Issue {
-        repo: string,
-        owner: string,
-        number: string,
-        title: string,
-        state: GithubState,
-        url: string,
-        assignees: { html_url: string, login: string }[]
-    }
-
-    export type StateFilter = Record<State, boolean>;
-
-    export interface JiraSubtype extends Issue {
-        key: string,
-        summary: string,
-        project: string,
-        permalink: string,
-        state: JiraState,
-        assignees: string[],
-    }
-
-    export interface TestRun {
-        build_id: string,
-        build_number: string,
-        build_job_url: string,
-        assignee: string,
-        group_id: string,
-        release_id: string,
-        test_id: string,
-        id: string,
-    }
-
-    export interface RichAssignee {
-        login: string,
-        html_url: string,
-    }
-
-
-    export const getTitle = function(i: Issue): string {
-        if (i.subtype == "github") {
-            return (i as GithubSubtype).title;
-        } else {
-            return (i as JiraSubtype).summary;
-        }
-    };
-
-    export const getRepo = function(i: Issue): string {
-        if (i.subtype == "github") {
-            return (i as GithubSubtype).repo;
-        } else {
-            return (i as JiraSubtype).project;
-        }
-    };
-
-    export const getNumber = function(i: Issue): number {
-        if (i.subtype == "github") {
-            return parseInt((i as GithubSubtype).number);
-        } else {
-            return parseInt((i as JiraSubtype).key.split("-")[1]);
-        }
-    };
-
-    export const getUrl = function(i: Issue): string {
-        if (i.subtype == "github") {
-            return (i as GithubSubtype).url;
-        } else {
-            return (i as JiraSubtype).permalink;
-        }
-    };
-
-    export const getAssignees = function(i: Issue): string[] {
-        if (i.subtype == "github") {
-            return (i as GithubSubtype).assignees.map((v) => v.login);
-        } else {
-            return (i as JiraSubtype).assignees;
-        }
-    };
-
-    export const getKey = function(i: Issue): string {
-        if (i.subtype == "github") {
-            let iss = i as GithubSubtype;
-            return `${iss.owner}/${iss.repo}#${iss.number}`;
-        } else {
-            let iss = i as JiraSubtype;
-            return `${iss.key}`;
-        }
-    };
-
-    export const getAssigneesRich = function(i: Issue): RichAssignee[] {
-        if (i.subtype == "github") {
-            return (i as GithubSubtype).assignees;
-        } else {
-            return (i as JiraSubtype).assignees.map(v => ({ login: v, html_url: "#" }));
-        }
-    };
-
-
-    export const label2color = function (label: Label): string {
-        const START_COLOR = [255, 238, 0];
-        const END_COLOR = [0, 32, 255];
-        const factor = (parseInt(sha1(label.name).slice(0,16), 16) % 10000) / 10000;
-
-        const lerp = (c1: number, c2: number, frac: number) => Math.round(((c2 - c1) * frac + c1)) & 0xff;
-        let color = START_COLOR.map((c1, idx) => lerp(c1, END_COLOR[idx], factor)).join(", ");
-        return `rgb(${color})`;
-    }
-
+    // Re-export all shared types and helpers from IssueTypes.ts so existing importers of
+    // Issues.svelte continue to work without changes.
+    export type {
+        GithubState,
+        JiraState,
+        State,
+        Label,
+        Link,
+        Issue,
+        GithubSubtype,
+        JiraSubtype,
+        StateFilter,
+        TestRun,
+        RichAssignee,
+    } from "../Common/IssueTypes";
+    export {
+        getTitle,
+        getRepo,
+        getNumber,
+        getUrl,
+        getAssignees,
+        getKey,
+        getAssigneesRich,
+        label2color,
+    } from "../Common/IssueTypes";
 </script>
 
 <script lang="ts">
     import { PLUGIN_NAMES } from "../Common/PluginNames";
     import { newIssueDestinations } from "../Common/IssueDestinations";
-    import GithubIssue from "./GithubIssue.svelte";
     import { sendMessage } from "../Stores/AlertStore";
     import { faChevronDown, faChevronUp, faCopy } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
     import Color from "color";
     import IssuesCopyModal from "./IssuesCopyModal.svelte";
     import queryString from 'query-string';
-    import JiraIssue from "../Jira/JiraIssue.svelte";
-    import { sha1 } from "js-sha1";
+    import IssueCard from "../Common/IssueCard.svelte";
+    import type { Issue, GithubSubtype, JiraSubtype, Label, State, StateFilter } from "../Common/IssueTypes";
+    import { getTitle, getRepo, getNumber, label2color } from "../Common/IssueTypes";
     import { untrack } from "svelte";
     interface Props {
         id?: string;
@@ -473,11 +360,7 @@
             </div>
             <div class="row">
                 {#each sortedIssues[currentPage] ?? [] as issue, idx (issue.id)}
-                    {#if issue.subtype == "github"}
-                        <GithubIssue {runId} bind:issue={sortedIssues[currentPage][idx] as GithubSubtype} aggregated={aggregateByIssue} deleteEnabled={!submitDisabled} on:submitToCurrent on:issueDeleted={fetchIssues} on:labelClick={(e) => handleLabelClick(e.detail)}/>
-                    {:else if issue.subtype == "jira"}
-                        <JiraIssue {runId} bind:issue={sortedIssues[currentPage][idx] as JiraSubtype} aggregated={aggregateByIssue} deleteEnabled={!submitDisabled} on:submitToCurrent on:issueDeleted={fetchIssues} on:labelClick={(e) => handleLabelClick(e.detail)}/>
-                    {/if}
+                    <IssueCard {runId} issue={sortedIssues[currentPage][idx]} aggregated={aggregateByIssue} deleteEnabled={!submitDisabled} on:submitToCurrent on:issueDeleted={fetchIssues} on:labelClick={(e: any) => handleLabelClick(e.detail)}/>
                 {/each}
             </div>
             <div class="d-flex ">
