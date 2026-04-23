@@ -12,6 +12,7 @@ from flask import current_app, g
 from cassandra.util import uuid_from_time
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.github_issue import GithubIssue, IssueLink
+from argus.backend.models.jira import JiraIssue
 from argus.backend.models.web import ArgusEventTypes, ErrorEventEmbeddings, CriticalEventEmbeddings
 from argus.backend.models.argus_ai import SCTErrorEventEmbedding, SCTCriticalEventEmbedding
 from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTJunitReports, SCTResource, SCTNemesis, SCTTestRun, SubtestType, SCTUnprocessedEvent, StressCommand
@@ -775,6 +776,12 @@ class SCTService:
                 for issue in batch_issues:
                     issues_by_id[issue.id] = issue
 
+            missing_ids = [id for id in all_issue_ids if id not in issues_by_id]
+            if missing_ids:
+                for batch_issue_ids in chunk(missing_ids):
+                    for issue in JiraIssue.filter(id__in=batch_issue_ids).all():
+                        issues_by_id[issue.id] = issue
+
         # Step 3: Fetch test runs only for run_ids that have issue links (limiting to MAX_SIMILARS runs)
         runs_with_issues = list(all_issue_links.keys())
 
@@ -820,10 +827,17 @@ class SCTService:
                     "version": sut_version or "unknown",
                     "issues": [
                         {
+                            "subtype": "github",
                             "number": issue.number,
                             "state": issue.state,
                             "title": issue.title,
                             "url": issue.url,
+                        } if isinstance(issue, GithubIssue) else {
+                            "subtype": "jira",
+                            "key": issue.key,
+                            "state": issue.state,
+                            "summary": issue.summary,
+                            "permalink": issue.permalink,
                         }
                         for issue in issues
                     ],

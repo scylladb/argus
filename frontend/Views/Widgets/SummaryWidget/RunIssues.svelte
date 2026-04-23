@@ -1,7 +1,6 @@
 <script lang="ts" type="ts">
     import Fa from "svelte-fa";
     import {onMount} from "svelte";
-    import GithubIssue from "../../../Github/GithubIssue.svelte";
     import {faBug} from "@fortawesome/free-solid-svg-icons";
     import IssuesCopyModal from "../../../Github/IssuesCopyModal.svelte";
 

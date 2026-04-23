@@ -18,6 +18,7 @@
         faArrowUp,
     } from "@fortawesome/free-solid-svg-icons";
     import { faGithub } from "@fortawesome/free-brands-svg-icons";
+    import IssueBadge from "../Common/IssueBadge.svelte";
     interface Props {
         tests?: any;
         releaseName?: string;
@@ -165,24 +166,7 @@
                                                     <li
                                                         class="ms-3 d-flex align-items-center"
                                                     >
-                                                        <div class="ms-1">
-                                                            <Fa
-                                                                icon={faGithub}
-                                                            />
-                                                        </div>
-                                                        <div class="ms-1">
-                                                            <a
-                                                                target="_blank"
-                                                                href={issue.url}
-                                                            >
-                                                                {issue.title}
-                                                            </a>
-                                                        </div>
-                                                        <div
-                                                            class="ms-auto text-muted"
-                                                        >
-                                                            {issue.owner}/{issue.repo}#{issue.number}
-                                                        </div>
+                                                        <IssueBadge {issue} />
                                                     </li>
                                                 {/each}
                                             </ul>

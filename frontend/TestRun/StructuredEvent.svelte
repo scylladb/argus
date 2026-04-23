@@ -4,6 +4,8 @@
     import { sendMessage } from "../Stores/AlertStore";
     import ModalWindow from "../Common/ModalWindow.svelte";
     import { createEventDispatcher } from "svelte";
+    import IssueBadge from "../Common/IssueBadge.svelte";
+    import { getUrl } from "../Common/IssueTypes";
 
 
 
@@ -253,23 +255,14 @@
                                             {#if similarRunsInfo[runId]?.issues?.length}
                                                 {#each similarRunsInfo[runId].issues as issue}
                                                     <div class="mb-1 d-flex align-items-center">
-                                                        <div class="btn-group" style="width: 128px">
-                                                            <button
-                                                                class:btn-open={issue.state === "open"}
-                                                                class:btn-closed={issue.state !== "open"}
-                                                                class="btn btn-sm"
-                                                                title="Add this issue to the current run"
-                                                                onclick={() => dispatch("issueAttach", { url: issue.url })}
-                                                            >
-                                                                <Fa icon={faPlus}/>
-                                                            </button>
-                                                            <a href={issue.url} class:btn-open={issue.state === "open"} class:btn-closed={issue.state !== "open"} target="_blank" class="btn btn-sm">
-                                                                <Fa icon={issue.state === "open" ? faDotCircle : faCheckCircle}/> #{issue.number}
-                                                            </a>
-                                                        </div>
-                                                        <div class="ms-2 overflow-ellipsis text-truncate" style="max-width: 512px" title="{issue.title}">
-                                                            {issue.title}
-                                                        </div>
+                                                        <button
+                                                            class="btn btn-sm btn-primary me-2"
+                                                            title="Add this issue to the current run"
+                                                            onclick={() => dispatch("issueAttach", { url: getUrl(issue) })}
+                                                        >
+                                                            <Fa icon={faPlus}/>
+                                                        </button>
+                                                        <IssueBadge {issue} />
                                                     </div>
                                                 {/each}
                                             {:else}

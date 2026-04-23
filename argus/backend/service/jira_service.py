@@ -5,6 +5,7 @@ from collections import defaultdict
 from datetime import UTC, datetime
 from functools import reduce
 from unittest.mock import MagicMock
+from urllib.parse import urlparse
 from uuid import UUID
 from flask import current_app, g
 from jira import JIRA
@@ -79,12 +80,13 @@ class JiraService:
         last_ran.save()
 
     def get_issue(self, issue_url: str) -> tuple[JiraIssue, bool]:
+        server_host = re.escape(urlparse(current_app.config["JIRA_SERVER"]).hostname)
         match = re.match(
-            r"http(s)?://scylladb\.atlassian\.net/browse/(?P<key>[A-Z\-\d]+)(/)?",
+            rf"http(s)?://{server_host}/browse/(?P<key>[A-Z]+-\d+)(/)?",
             issue_url,
         )
         if not match:
-            raise JiraServiceException("URL doesn't match ScyllaDB JIRA schema")
+            raise JiraServiceException("URL doesn't match configured Jira server")
 
         existing = True
         try:

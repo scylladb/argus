@@ -1,4 +1,7 @@
 // Types
+import type { Issue } from "../../../Common/IssueTypes";
+export type { Issue } from "../../../Common/IssueTypes";
+
 export interface TestRun {
     build_id: string;
     version: string;
@@ -10,13 +13,6 @@ export interface TestRun {
     investigation_status: string;
     assignee?: string;
     issues?: Issue[];
-}
-
-export interface Issue {
-    number: number;
-    state: string;
-    title: string;
-    url: string;
 }
 
 export interface RunDetails {
