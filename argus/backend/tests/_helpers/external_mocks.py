@@ -130,7 +130,7 @@ def mock_s3():
         patch("argus.backend.service.testrun.TestRunService.proxy_s3_file") as proxy_file,
     ):
         get_log.return_value = "https://test-bucket.s3.amazonaws.com/log/example.log?signed"
-        proxy_img.return_value = b"\x89PNG\r\n\x1a\nfake-image-data"
+        proxy_img.return_value = "https://test-bucket.s3.amazonaws.com/screenshots/example.png?signed"
         resolve_size.return_value = 1024
         proxy_file.return_value = b"fake-s3-content"
         yield SimpleNamespace(
