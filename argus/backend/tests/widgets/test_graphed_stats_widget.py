@@ -68,3 +68,47 @@ def test_runs_details_run_ids_not_list_errors(flask_client):
     ).json
     assert res["status"] == "error"
     assert "must be a list" in res["response"]["arguments"][0]
+
+
+def test_graphed_stats_with_seeded_view(flask_client, seeded_view_with_run, sct_run):
+    """Seeded SCT run appears in the graphed_stats response."""
+    res = flask_client.get(
+        f"/api/v1/views/widgets/graphed_stats?view_id={seeded_view_with_run.view_id}"
+    ).json
+    assert res["status"] == "ok"
+    body = res["response"]
+    assert body["nemesis_data"] == []
+    assert len(body["test_runs"]) == 1
+    run = body["test_runs"][0]
+    assert run["run_id"] == sct_run.run_id
+    assert run["version"] == sct_run.package_version
+
+
+def test_graphed_stats_with_nemesis(flask_client, seeded_view_with_run, sct_run_with_nemesis):
+    """A finalized nemesis on the seeded run shows up in nemesis_data."""
+    res = flask_client.get(
+        f"/api/v1/views/widgets/graphed_stats?view_id={seeded_view_with_run.view_id}"
+    ).json
+    assert res["status"] == "ok"
+    nemeses = res["response"]["nemesis_data"]
+    assert len(nemeses) == 1
+    assert nemeses[0]["status"] == "succeeded"
+    assert nemeses[0]["run_id"] == sct_run_with_nemesis.run_id
+
+
+def test_runs_details_with_linked_issue(flask_client, linked_github_issue, sct_run):
+    """runs_details returns build_id/version and surfaces linked GitHub issues."""
+    res = flask_client.post(
+        "/api/v1/views/widgets/runs_details",
+        json={"run_ids": [sct_run.run_id]},
+    ).json
+    assert res["status"] == "ok"
+    entry = res["response"][sct_run.run_id]
+    expected_version = f"{sct_run.package_version}-{sct_run.package_date}"
+    assert entry["version"] == expected_version
+    assert entry["build_id"].startswith(sct_run.run_id) or "#" in entry["build_id"]
+    assert len(entry["issues"]) == 1
+    issue = entry["issues"][0]
+    assert issue["number"] == 12345
+    assert issue["state"] == "open"
+    assert issue["title"] == "widget seed issue"
