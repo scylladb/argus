@@ -23,9 +23,11 @@ from argus.backend.util.config import Config
 
 os.environ['DOCKER_HOST'] = ""
 
-# Re-export shared external-service mock fixtures so tests in any subdir can
-# use them without local imports.
-pytest_plugins = ["argus.backend.tests._helpers.external_mocks"]
+# Re-export shared external-service mock fixtures so tests in any subdir under
+# argus/backend/tests can use them without local imports. pytest 8 only honors
+# `pytest_plugins` in the top-level rootdir conftest, so we star-import the
+# fixtures here instead.
+from argus.backend.tests._helpers.external_mocks import *  # noqa: E402,F401,F403
 
 from cassandra.cqlengine.management import sync_type
 from _pytest.fixtures import fixture
