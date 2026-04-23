@@ -223,3 +223,132 @@ def test_check_plan_copy_eligibility_returns_failed_for_missing_tests(
     assert res["response"]["status"] == "failed"
     missing_test_ids = {t.get("id") for t in res["response"]["missing"]["tests"]}
     assert str(fake_test.id) in missing_test_ids
+
+
+def test_copy_plan_creates_plan_in_target_release(
+    flask_client, release_manager_service, release, fake_test, cleanup_plans
+):
+    """Copy a plan into a target release and verify via paired GET.
+
+    Note: copy_plan resolves test/group mappings via build_system_id-based name
+    replacement (release name substring) or by an explicit ``replacements``
+    dict keyed by UUID. The session-scoped ``fake_test`` build_system_id does
+    not contain the source release name, so we exercise the empty-tests path
+    by creating a fresh source plan with no tests/groups; copy then produces
+    a plan with the same metadata in the target release but empty tests.
+    """
+    # Source plan with no tests/groups
+    source_payload = {
+        "name": f"src_{uuid.uuid4().hex[:8]}",
+        "description": "source plan",
+        "owner": str(g.user.id),
+        "participants": [],
+        "target_version": "1.0",
+        "release_id": str(release.id),
+        "tests": [],
+        "groups": [],
+        "assignments": {},
+    }
+    plan_id = flask_client.post(
+        "/api/v1/planning/plan/create", json=source_payload
+    ).json["response"]["id"]
+
+    target_release = release_manager_service.create_release(
+        f"copy_target_{uuid.uuid4().hex[:8]}", "Copy Target", False
+    )
+
+    participant_id = str(uuid.uuid4())
+    payload = {
+        "plan": {
+            "id": plan_id,
+            "name": f"copied_{uuid.uuid4().hex[:8]}",
+            "completed": False,
+            "description": "copied plan",
+            "owner": str(g.user.id),
+            "participants": [participant_id],
+            "target_version": "2.0",
+            "assignee_mapping": {},
+            "release_id": str(target_release.id),
+            "tests": [],
+            "groups": [],
+            "creation_time": "",
+            "last_updated": "",
+            "ends_at": "",
+            "created_from": plan_id,
+        },
+        "keepParticipants": True,
+        "replacements": {},
+        "targetReleaseId": str(target_release.id),
+        "targetReleaseName": target_release.name,
+    }
+    res = flask_client.post("/api/v1/planning/plan/copy", json=payload).json
+    assert res["status"] == "ok", res
+    new_plan_id = res["response"]["id"]
+    assert new_plan_id != plan_id
+
+    fetched = flask_client.get(f"/api/v1/planning/plan/{new_plan_id}/get").json
+    assert fetched["status"] == "ok"
+    body = fetched["response"]
+    assert body["release_id"] == str(target_release.id)
+    assert body["target_version"] == "2.0"
+    assert body["description"] == "copied plan"
+    # keepParticipants=True copies participants from the payload
+    assert body["participants"] == [participant_id]
+
+
+def test_trigger_jobs_no_plans_returns_falsy(flask_client, mock_jenkins_service):
+    """No matching plans => service returns (False, 'No plans to trigger')."""
+    from cassandra.util import uuid_from_time
+    res = flask_client.post(
+        "/api/v1/planning/plan/trigger",
+        json={
+            "plan_id": str(uuid_from_time(datetime.datetime.now(tz=datetime.UTC))),
+            "common_params": {},
+            "params": [],
+        },
+    ).json
+    assert res["status"] == "ok"
+    # Service returns a tuple (False, "No plans to trigger") which Flask
+    # serializes as a 2-element list.
+    assert res["response"] == [False, "No plans to trigger"]
+
+
+def test_trigger_jobs_missing_filters_errors(flask_client, mock_jenkins_service):
+    """Without release/plan_id/version the service raises PlannerServiceException."""
+    res = flask_client.post(
+        "/api/v1/planning/plan/trigger",
+        json={"common_params": {}, "params": []},
+    ).json
+    assert res["status"] == "error"
+
+
+def test_trigger_jobs_for_plan_with_no_tests(
+    flask_client, release, fake_test, cleanup_plans, mock_jenkins_service
+):
+    """Triggering a plan whose tests list is empty returns empty jobs/failures."""
+    # Create a plan with NO tests/groups so the trigger loop has nothing to do
+    payload = {
+        "name": f"plan_{uuid.uuid4().hex[:8]}",
+        "description": "empty plan",
+        "owner": str(g.user.id),
+        "participants": [],
+        "target_version": "1.0",
+        "release_id": str(release.id),
+        "tests": [],
+        "groups": [],
+        "assignments": {},
+    }
+    plan_id = flask_client.post(
+        "/api/v1/planning/plan/create", json=payload
+    ).json["response"]["id"]
+
+    res = flask_client.post(
+        "/api/v1/planning/plan/trigger",
+        json={"plan_id": plan_id, "common_params": {}, "params": []},
+    ).json
+    assert res["status"] == "ok"
+    body = res["response"]
+    assert body["jobs"] == []
+    assert body["failed_to_execute"] == []
+    # Jenkins must NOT be invoked since there are no tests
+    mock_jenkins_service.return_value.build_job.assert_not_called()
