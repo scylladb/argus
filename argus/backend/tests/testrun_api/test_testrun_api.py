@@ -398,8 +398,26 @@ def _submit_pytest_result(flask_client, name: str, *, status: str = "passed",
     assert resp.json["status"] == "ok"
 
 
-def test_get_pytest_test_results_returns_submitted_rows(flask_client):
+@pytest.fixture
+def cleanup_pytest_rows():
+    """Yield a list to which tests append pytest result names; rows are deleted on teardown."""
+    names: list[str] = []
+    yield names
+    from argus.backend.models.pytest import PytestResultTable, PytestUserField
+    for name in names:
+        try:
+            PytestResultTable.filter(name=name).delete()
+        except Exception:
+            pass
+        try:
+            PytestUserField.filter(name=name).delete()
+        except Exception:
+            pass
+
+
+def test_get_pytest_test_results_returns_submitted_rows(flask_client, cleanup_pytest_rows):
     test_name = f"tr_pytest::test_{uuid4().hex}"
+    cleanup_pytest_rows.append(test_name)
     for i in range(2):
         _submit_pytest_result(flask_client, test_name, ts_offset=i)
 
@@ -411,8 +429,9 @@ def test_get_pytest_test_results_returns_submitted_rows(flask_client):
     assert all(r["name"] == test_name for r in rows)
 
 
-def test_get_pytest_test_field_stats_count(flask_client):
+def test_get_pytest_test_field_stats_count(flask_client, cleanup_pytest_rows):
     test_name = f"tr_pytest::test_count_{uuid4().hex}"
+    cleanup_pytest_rows.append(test_name)
     for i in range(3):
         _submit_pytest_result(flask_client, test_name, ts_offset=i)
 
