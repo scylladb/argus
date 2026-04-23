@@ -32,6 +32,9 @@ class SctRun(NamedTuple):
     test_id: str
     package_name: str
     package_version: str
+    package_date: str
+    package_revision_id: str
+    test_method: str
 
 
 class SeededView(NamedTuple):
@@ -58,7 +61,7 @@ def sct_run(flask_client, fake_test) -> SctRun:
         "commit_id": "deadbeef",
         "origin_url": "http://example.com/repo.git",
         "branch_name": "main",
-        "sct_config": {"cluster_backend": "aws"},
+        "sct_config": {"cluster_backend": "aws", "test_method": "widget_seed_module.WidgetSeedTest.test_widget"},
         "schema_version": "v8",
     }
     resp = flask_client.post(
@@ -72,8 +75,9 @@ def sct_run(flask_client, fake_test) -> SctRun:
             {
                 "name": "scylla-server",
                 "version": "6.0.0",
-                "commit_id": "deadbeef",
-                "origin": "scylla",
+                "date": "20260101",
+                "revision_id": "deadbeef",
+                "build_id": "build-1",
             }
         ],
         "schema_version": "v8",
@@ -89,6 +93,9 @@ def sct_run(flask_client, fake_test) -> SctRun:
         test_id=str(fake_test.id),
         package_name="scylla-server",
         package_version="6.0.0",
+        package_date="20260101",
+        package_revision_id="deadbeef",
+        test_method="widget_seed_module.WidgetSeedTest.test_widget",
     )
 
     try:
