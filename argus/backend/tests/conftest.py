@@ -23,6 +23,10 @@ from argus.backend.util.config import Config
 
 os.environ['DOCKER_HOST'] = ""
 
+# Re-export shared external-service mock fixtures so tests in any subdir can
+# use them without local imports.
+pytest_plugins = ["argus.backend.tests._helpers.external_mocks"]
+
 from cassandra.cqlengine.management import sync_type
 from _pytest.fixtures import fixture
 from docker.errors import NotFound
