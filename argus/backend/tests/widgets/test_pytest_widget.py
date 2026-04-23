@@ -19,8 +19,12 @@ def _bracket_params() -> str:
 
 def test_pytest_view_results_empty(flask_client):
     view_id = uuid.uuid4()
+    # `result_filter` queries pytest_v2 globally (view_id/release_id are ignored
+    # by the service), so use a unique `test=` name filter to guarantee zero
+    # hits regardless of rows seeded by other test modules in the same session.
+    marker = f"__widget_empty_marker_{uuid.uuid4().hex}__"
     res = flask_client.get(
-        f"/api/v1/views/widgets/pytest/view/{view_id}/results?{_bracket_params()}"
+        f"/api/v1/views/widgets/pytest/view/{view_id}/results?{_bracket_params()}&test={marker}"
     ).json
     assert res["status"] == "ok"
     body = res["response"]
@@ -32,8 +36,9 @@ def test_pytest_view_results_empty(flask_client):
 
 def test_pytest_release_results_empty(flask_client):
     release_id = uuid.uuid4()
+    marker = f"__widget_empty_marker_{uuid.uuid4().hex}__"
     res = flask_client.get(
-        f"/api/v1/views/widgets/pytest/release/{release_id}/results?{_bracket_params()}"
+        f"/api/v1/views/widgets/pytest/release/{release_id}/results?{_bracket_params()}&test={marker}"
     ).json
     assert res["status"] == "ok"
     body = res["response"]
