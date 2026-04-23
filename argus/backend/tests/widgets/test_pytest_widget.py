@@ -56,3 +56,27 @@ def test_pytest_user_fields_invalid_id_errors(flask_client):
         "/api/v1/views/widgets/pytest/foo.py::bar/not-a-date/fields"
     ).json
     assert res["status"] == "error"
+
+
+def test_pytest_view_results_with_seeded_row(flask_client, seeded_pytest_row):
+    """A seeded pytest row appears in result_filter output (via barChart/pieChart)."""
+    view_id = uuid.uuid4()
+    # status[] is required when filtering by id range -- pytest_v2 has status as
+    # a clustering key before id, so unrestricted id filtering would error.
+    res = flask_client.get(
+        f"/api/v1/views/widgets/pytest/view/{view_id}/results?{_bracket_params()}&status[]=passed"
+    ).json
+    assert res["status"] == "ok"
+    body = res["response"]
+    # The seeded row should be visible somewhere in the unfiltered hits list
+    assert any(hit["name"] == seeded_pytest_row["name"] for hit in body["hits"]), body["hits"][:3]
+    assert body["pieChart"].get("passed", 0) >= 1
+
+
+def test_pytest_user_fields_for_seeded_row(flask_client, seeded_pytest_row):
+    """get_user_fields_for_result returns the user_fields submitted with the row."""
+    res = flask_client.get(
+        f"/api/v1/views/widgets/pytest/{seeded_pytest_row['name']}/{seeded_pytest_row['iso_id']}/fields"
+    ).json
+    assert res["status"] == "ok"
+    assert res["response"] == {"SCYLLA_MODE": "release"}

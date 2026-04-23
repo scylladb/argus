@@ -43,3 +43,17 @@ def test_graph_views_unknown_view_errors(flask_client):
     ).json
     assert res["status"] == "error"
     assert res["response"]["exception"] == "DoesNotExist"
+
+
+def test_graph_views_with_seeded_graph_view(flask_client, seeded_view_with_run, graph_view_for_test):
+    """A test that has an ArgusGraphView attached surfaces in tests_details."""
+    res = flask_client.get(
+        f"/api/v1/views/widgets/graphs/graph_views?view_id={seeded_view_with_run.view_id}"
+    ).json
+    assert res["status"] == "ok"
+    test_id = seeded_view_with_run.test_id
+    # Even if no chart data is renderable, having any graph_view triggers
+    # tests_details lookup for that test.
+    assert test_id in res["tests_details"]
+    assert "name" in res["tests_details"][test_id]
+    assert test_id in res["response"]
