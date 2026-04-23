@@ -211,3 +211,30 @@ def test_view_pytest_results_empty(flask_client, view_name):
     res = flask_client.get(f"/api/v1/views/{view_id}/pytest/results").json
     assert res["status"] == "ok"
     assert res["response"] == []
+
+
+def test_view_stats_missing_view_id_errors(flask_client):
+    """`/views/stats` requires a viewId; absence raises ViewApiException."""
+    res = flask_client.get("/api/v1/views/stats")
+    payload = res.json
+    assert payload["status"] == "error"
+    assert "view id" in payload["response"]["arguments"][0].lower()
+
+
+def test_view_stats_for_empty_view_returns_ok(flask_client, view_name):
+    """Smoke-test `/views/stats` against an empty view; collector should return a stable shape."""
+    created = _create_view(flask_client, view_name)
+    view_id = created["response"]["id"]
+    res = flask_client.get(f"/api/v1/views/stats?viewId={view_id}").json
+    assert res["status"] == "ok"
+    assert isinstance(res["response"], dict)
+
+
+def test_view_stats_with_widget_id_filter_returns_ok(flask_client, view_name):
+    """Widget filter path: passing widgetId resolves widget settings without touching SCT data."""
+    settings = json.dumps([{"position": 0, "filter": []}])
+    created = _create_view(flask_client, view_name, settings=settings)
+    view_id = created["response"]["id"]
+    res = flask_client.get(f"/api/v1/views/stats?viewId={view_id}&widgetId=0").json
+    assert res["status"] == "ok"
+    assert isinstance(res["response"], dict)
