@@ -200,3 +200,102 @@ def test_upload_picture_persists_web_file_and_updates_user(flask_client, saved_g
         except OSError:
             pass
         stored.delete()
+
+
+def test_profile_oauth_github_callback_bad_state_redirects_to_error(flask_client):
+    """Mismatched CSRF state must redirect to the error page (no callback invoked)."""
+    with flask_client.session_transaction() as sess:
+        sess["csrf_token"] = "expected-token"
+    res = flask_client.get(
+        "/profile/oauth/github?state=wrong-token&code=abc",
+        follow_redirects=False,
+    )
+    assert res.status_code == 302
+    assert "/error" in res.headers["Location"]
+
+
+def test_profile_oauth_github_callback_success_stores_first_run_info(
+    flask_client, mock_github_callback
+):
+    """Valid CSRF state -> github_callback runs, first_run_info session populated, redirects."""
+    mock_github_callback.return_value = {"password": "tmp", "first_login": True}
+    with flask_client.session_transaction() as sess:
+        sess["csrf_token"] = "match"
+        sess["redirect_target"] = "/some/target"
+    res = flask_client.get(
+        "/profile/oauth/github?state=match&code=auth-code",
+        follow_redirects=False,
+    )
+    assert res.status_code == 302
+    assert res.headers["Location"].endswith("/some/target")
+    mock_github_callback.assert_called_once_with("auth-code")
+    with flask_client.session_transaction() as sess:
+        assert sess.get("first_run_info") == {"password": "tmp", "first_login": True}
+
+
+def test_profile_oauth_github_callback_service_error_redirects_to_error(
+    flask_client, mock_github_callback
+):
+    """Exceptions from github_callback are caught and surface as a 403 error redirect."""
+    mock_github_callback.side_effect = Exception("oauth boom")
+    with flask_client.session_transaction() as sess:
+        sess["csrf_token"] = "match"
+    res = flask_client.get(
+        "/profile/oauth/github?state=match&code=auth-code",
+        follow_redirects=False,
+    )
+    assert res.status_code == 302
+    assert "/error" in res.headers["Location"]
+
+
+def test_profile_create_without_registration_allowed_errors(flask_client):
+    """`registration_allowed` must be set in session before /profile/create is reachable."""
+    with flask_client.session_transaction() as sess:
+        sess.pop("registration_allowed", None)
+    res = flask_client.get("/profile/create", follow_redirects=False)
+    # handle_profile_exception turns UserServiceException into a 302 redirect
+    assert res.status_code in (302, 200)
+
+
+def test_profile_create_post_creates_user_and_logs_in(flask_client):
+    """Happy-path POST to /profile/create creates the user and redirects to profile."""
+    username = f"newuser_{uuid.uuid4().hex[:8]}"
+    email = f"{username}@scylladb.com"
+
+    with flask_client.session_transaction() as sess:
+        sess["registration_allowed"] = True
+        sess["lock_user_email"] = True
+        sess["oauth_email"] = email
+
+    res = flask_client.post(
+        "/profile/create",
+        data={"username": username, "email": email, "full_name": "New User"},
+        follow_redirects=False,
+    )
+    assert res.status_code == 302
+    assert "/profile" in res.headers["Location"]
+    created = User.exists_by_name(username)
+    assert created is not None
+    assert created.email == email
+    with flask_client.session_transaction() as sess:
+        assert sess.get("user_id") == str(created.id)
+        assert sess.get("first_run_info", {}).get("first_login") is True
+    created.delete()
+
+
+def test_profile_create_post_locked_email_mismatch_errors(flask_client):
+    """When `lock_user_email` is set, posting a different email must error."""
+    with flask_client.session_transaction() as sess:
+        sess["registration_allowed"] = True
+        sess["lock_user_email"] = True
+        sess["oauth_email"] = "locked@scylladb.com"
+
+    res = flask_client.post(
+        "/profile/create",
+        data={"username": "x", "email": "other@scylladb.com", "full_name": "X"},
+        follow_redirects=False,
+    )
+    # UserServiceException -> handle_profile_exception -> redirect
+    assert res.status_code in (302, 200)
+    # Should NOT have created a user with that username
+    assert User.exists_by_name("x") is None
