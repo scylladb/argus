@@ -1,5 +1,7 @@
 import re
 import logging
+import os
+import time
 from dataclasses import asdict
 from typing import Any, Type
 from uuid import UUID
@@ -9,11 +11,18 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from argus.common.enums import TestStatus
+from argus.client.tunnel import (
+    SSHTunnel,
+    TunnelConfig,
+    delete_cached_tunnel_state,
+    resolve_tunnel_config_with_reason,
+)
 from argus.client.generic_result import GenericResultTable
 from argus.client.sct.types import LogLink
 
 JSON = dict[str, Any] | list[Any] | int | str | float | bool | Type[None]
 LOGGER = logging.getLogger(__name__)
+TUNNEL_COOLDOWN_SECONDS = 30
 
 
 class ArgusClientError(Exception):
@@ -36,11 +45,18 @@ class ArgusClient:
         FINALIZE = "/testrun/$type/$id/finalize"
 
     def __init__(self, auth_token: str, base_url: str, api_version="v1", extra_headers: dict | None = None,
-                 timeout: int = 60, max_retries: int = 3) -> None:
+                 timeout: int = 60, max_retries: int = 3, use_tunnel: bool | None = None) -> None:
         self._auth_token = auth_token
+        self._original_base_url = base_url
         self._base_url = base_url
         self._api_ver = api_version
         self._timeout = timeout
+        self._use_tunnel = self._resolve_use_tunnel(use_tunnel)
+        self._tunnel: SSHTunnel | None = None
+        self._tunnel_config: TunnelConfig | None = None
+        self._tunnel_warning_emitted = False
+        self._last_tunnel_failure_reason: str | None = None
+        self._tunnel_disabled_until = 0.0
         self.session = requests.Session()
 
         # Configure retry strategy
@@ -61,6 +77,136 @@ class ArgusClient:
 
         if extra_headers:
             self.session.headers.update(extra_headers)
+
+    @staticmethod
+    def _resolve_use_tunnel(use_tunnel: bool | None) -> bool:
+        if use_tunnel is not None:
+            return use_tunnel
+        return os.environ.get("ARGUS_USE_TUNNEL", "").strip().lower() in ("1", "true", "yes", "on")
+
+    def _is_using_tunnel_base_url(self) -> bool:
+        return self._base_url.startswith("http://127.0.0.1:")
+
+    def _warn_and_backoff_tunnel(self, reason: str) -> None:
+        self._last_tunnel_failure_reason = reason
+        if not self._tunnel_warning_emitted:
+            LOGGER.warning(
+                "SSH tunnel unavailable (%s); falling back to direct connection: %s",
+                reason,
+                self._original_base_url,
+            )
+            self._tunnel_warning_emitted = True
+
+        if self._tunnel:
+            self._tunnel.shutdown()
+
+        self._tunnel = None
+        self._tunnel_config = None
+        self._base_url = self._original_base_url
+        self._tunnel_disabled_until = time.monotonic() + TUNNEL_COOLDOWN_SECONDS
+
+    def _ensure_tunnel(self) -> None:
+        if not self._use_tunnel:
+            return
+
+        if time.monotonic() < self._tunnel_disabled_until:
+            return
+
+        if self._tunnel and self._tunnel.is_alive() and self._tunnel.local_port is not None:
+            self._base_url = f"http://127.0.0.1:{self._tunnel.local_port}"
+            return
+
+        if self._tunnel and self._tunnel_config:
+            reconnected_port, reconnect_reason = self._tunnel.reconnect(self._tunnel_config)
+            if reconnected_port is not None:
+                self._base_url = f"http://127.0.0.1:{reconnected_port}"
+                self._tunnel_warning_emitted = False
+                self._last_tunnel_failure_reason = None
+                return
+            if reconnect_reason:
+                LOGGER.warning("SSH tunnel reconnect failed: %s", reconnect_reason)
+
+        force_refresh = self._tunnel is not None
+        config, config_reason = resolve_tunnel_config_with_reason(
+            auth_token=self._auth_token,
+            base_url=self._original_base_url,
+            force_refresh=force_refresh,
+        )
+        if config is None:
+            delete_cached_tunnel_state()
+            reason = config_reason or "failed to resolve tunnel configuration"
+            self._warn_and_backoff_tunnel(reason)
+            return
+
+        tunnel = SSHTunnel()
+        local_port, establish_reason = tunnel.establish(config)
+
+        if local_port is None and not force_refresh:
+            config, config_reason = resolve_tunnel_config_with_reason(
+                auth_token=self._auth_token,
+                base_url=self._original_base_url,
+                force_refresh=True,
+            )
+            if config is not None:
+                local_port, establish_reason = tunnel.establish(config)
+            else:
+                establish_reason = config_reason
+
+        if local_port is None:
+            delete_cached_tunnel_state()
+            reason = establish_reason or "failed to establish tunnel"
+            self._warn_and_backoff_tunnel(reason)
+            return
+
+        self._tunnel = tunnel
+        self._tunnel_config = config
+        self._base_url = f"http://127.0.0.1:{local_port}"
+        self._tunnel_warning_emitted = False
+        self._last_tunnel_failure_reason = None
+        self._tunnel_disabled_until = 0.0
+
+    def _request_with_tunnel_recovery(
+        self,
+        method: str,
+        endpoint: str,
+        location_params: dict | None,
+        params: dict | None,
+        body: dict | None,
+    ) -> requests.Response:
+        url = self.get_url_for_endpoint(endpoint=endpoint, location_params=location_params)
+        request_kwargs = {
+            "url": url,
+            "params": params,
+            "headers": self.request_headers,
+            "timeout": self._timeout,
+        }
+        if method == "POST":
+            request_kwargs["json"] = body
+
+        request_fn = self.session.get if method == "GET" else self.session.post
+
+        try:
+            return request_fn(**request_kwargs)
+        except requests.ConnectionError as exc:
+            if not self._use_tunnel or not self._is_using_tunnel_base_url():
+                raise
+
+            LOGGER.warning(
+                "%s request through SSH tunnel failed (%s); attempting reconnect and one retry",
+                method,
+                exc,
+            )
+
+            self._ensure_tunnel()
+            retry_url = self.get_url_for_endpoint(endpoint=endpoint, location_params=location_params)
+            request_kwargs["url"] = retry_url
+
+            try:
+                return request_fn(**request_kwargs)
+            except requests.ConnectionError as retry_exc:
+                self._warn_and_backoff_tunnel(f"request retry failed: {retry_exc}")
+                request_kwargs["url"] = self.get_url_for_endpoint(endpoint=endpoint, location_params=location_params)
+                return request_fn(**request_kwargs)
 
     @property
     def auth_token(self) -> str:
@@ -114,16 +260,15 @@ class ArgusClient:
         }
 
     def get(self, endpoint: str, location_params: dict[str, str] = None, params: dict = None) -> requests.Response:
-        url = self.get_url_for_endpoint(
-            endpoint=endpoint,
-            location_params=location_params
-        )
+        self._ensure_tunnel()
+        url = self.get_url_for_endpoint(endpoint=endpoint, location_params=location_params)
         LOGGER.debug("GET Request: %s, params: %s", url, params)
-        response = self.session.get(
-            url=url,
+        response = self._request_with_tunnel_recovery(
+            method="GET",
+            endpoint=endpoint,
+            location_params=location_params,
             params=params,
-            headers=self.request_headers,
-            timeout=self._timeout
+            body=None,
         )
         LOGGER.debug("GET Response: %s %s", response.status_code, response.url)
 
@@ -136,17 +281,15 @@ class ArgusClient:
         params: dict = None,
         body: dict = None,
     ) -> requests.Response:
-        url = self.get_url_for_endpoint(
-            endpoint=endpoint,
-            location_params=location_params
-        )
+        self._ensure_tunnel()
+        url = self.get_url_for_endpoint(endpoint=endpoint, location_params=location_params)
         LOGGER.debug("POST Request: %s, params: %s, body: %s", url, params, body)
-        response = self.session.post(
-            url=url,
+        response = self._request_with_tunnel_recovery(
+            method="POST",
+            endpoint=endpoint,
+            location_params=location_params,
             params=params,
-            json=body,
-            headers=self.request_headers,
-            timeout=self._timeout
+            body=body,
         )
         LOGGER.debug("POST Response: %s %s", response.status_code, response.url)
 
