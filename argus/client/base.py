@@ -1,7 +1,9 @@
 import re
 import logging
 import os
+import threading
 import time
+import atexit
 from dataclasses import asdict
 from typing import Any, Type
 from uuid import UUID
@@ -23,6 +25,7 @@ from argus.client.sct.types import LogLink
 JSON = dict[str, Any] | list[Any] | int | str | float | bool | Type[None]
 LOGGER = logging.getLogger(__name__)
 TUNNEL_COOLDOWN_SECONDS = 30
+DEFAULT_TUNNEL_MONITOR_INTERVAL_SECONDS = 5.0
 
 
 class ArgusClientError(Exception):
@@ -57,6 +60,10 @@ class ArgusClient:
         self._tunnel_warning_emitted = False
         self._last_tunnel_failure_reason: str | None = None
         self._tunnel_disabled_until = 0.0
+        self._tunnel_lock = threading.RLock()
+        self._monitor_stop_event = threading.Event()
+        self._monitor_thread: threading.Thread | None = None
+        self._tunnel_monitor_interval = self._resolve_tunnel_monitor_interval()
         self.session = requests.Session()
 
         # Configure retry strategy
@@ -78,92 +85,162 @@ class ArgusClient:
         if extra_headers:
             self.session.headers.update(extra_headers)
 
+        if self._use_tunnel:
+            self._start_tunnel_monitor()
+
     @staticmethod
     def _resolve_use_tunnel(use_tunnel: bool | None) -> bool:
         if use_tunnel is not None:
             return use_tunnel
         return os.environ.get("ARGUS_USE_TUNNEL", "").strip().lower() in ("1", "true", "yes", "on")
 
+    def _resolve_tunnel_monitor_interval(self) -> float:
+        raw_value = os.environ.get("ARGUS_TUNNEL_MONITOR_INTERVAL")
+        if raw_value is None:
+            return DEFAULT_TUNNEL_MONITOR_INTERVAL_SECONDS
+        try:
+            interval = float(raw_value)
+            if interval <= 0:
+                raise ValueError("interval must be positive")
+            return interval
+        except ValueError:
+            LOGGER.warning(
+                "Invalid ARGUS_TUNNEL_MONITOR_INTERVAL=%s, using default %.1fs",
+                raw_value,
+                DEFAULT_TUNNEL_MONITOR_INTERVAL_SECONDS,
+            )
+            return DEFAULT_TUNNEL_MONITOR_INTERVAL_SECONDS
+
+    def _start_tunnel_monitor(self) -> None:
+        if self._monitor_thread and self._monitor_thread.is_alive():
+            return
+        self._monitor_stop_event.clear()
+        self._monitor_thread = threading.Thread(
+            target=self._tunnel_monitor_loop,
+            name="argus-tunnel-monitor",
+            daemon=True,
+        )
+        self._monitor_thread.start()
+        atexit.register(self._stop_tunnel_monitor)
+
+    def _stop_tunnel_monitor(self) -> None:
+        self._monitor_stop_event.set()
+        monitor = self._monitor_thread
+        if monitor and monitor.is_alive() and monitor is not threading.current_thread():
+            monitor.join(timeout=1.0)
+
+    def _tunnel_monitor_loop(self) -> None:
+        while not self._monitor_stop_event.wait(self._tunnel_monitor_interval):
+            try:
+                self._monitor_tunnel_health_once()
+            except Exception:  # noqa: BLE001
+                LOGGER.debug("SSH tunnel monitor loop failed", exc_info=True)
+
+    def _monitor_tunnel_health_once(self) -> None:
+        if not self._use_tunnel:
+            return
+
+        tunnel = self._tunnel
+        if tunnel is None:
+            return
+
+        if tunnel.is_alive():
+            return
+
+        LOGGER.warning("SSH tunnel monitor detected dead tunnel; attempting reconnection")
+        self._ensure_tunnel()
+
     def _is_using_tunnel_base_url(self) -> bool:
         return self._base_url.startswith("http://127.0.0.1:")
 
     def _warn_and_backoff_tunnel(self, reason: str) -> None:
-        self._last_tunnel_failure_reason = reason
-        if not self._tunnel_warning_emitted:
-            LOGGER.warning(
-                "SSH tunnel unavailable (%s); falling back to direct connection: %s",
-                reason,
-                self._original_base_url,
-            )
-            self._tunnel_warning_emitted = True
+        with self._tunnel_lock:
+            self._last_tunnel_failure_reason = reason
+            if not self._tunnel_warning_emitted:
+                LOGGER.warning(
+                    "SSH tunnel unavailable (%s); falling back to direct connection: %s",
+                    reason,
+                    self._original_base_url,
+                )
+                self._tunnel_warning_emitted = True
 
-        if self._tunnel:
-            self._tunnel.shutdown()
+            if self._tunnel:
+                self._tunnel.shutdown()
 
-        self._tunnel = None
-        self._tunnel_config = None
-        self._base_url = self._original_base_url
-        self._tunnel_disabled_until = time.monotonic() + TUNNEL_COOLDOWN_SECONDS
+            self._tunnel = None
+            self._tunnel_config = None
+            self._base_url = self._original_base_url
+            self._tunnel_disabled_until = time.monotonic() + TUNNEL_COOLDOWN_SECONDS
 
     def _ensure_tunnel(self) -> None:
-        if not self._use_tunnel:
-            return
-
-        if time.monotonic() < self._tunnel_disabled_until:
-            return
-
-        if self._tunnel and self._tunnel.is_alive() and self._tunnel.local_port is not None:
-            self._base_url = f"http://127.0.0.1:{self._tunnel.local_port}"
-            return
-
-        if self._tunnel and self._tunnel_config:
-            reconnected_port, reconnect_reason = self._tunnel.reconnect(self._tunnel_config)
-            if reconnected_port is not None:
-                self._base_url = f"http://127.0.0.1:{reconnected_port}"
-                self._tunnel_warning_emitted = False
-                self._last_tunnel_failure_reason = None
+        with self._tunnel_lock:
+            if not self._use_tunnel:
                 return
-            if reconnect_reason:
-                LOGGER.warning("SSH tunnel reconnect failed: %s", reconnect_reason)
 
-        force_refresh = self._tunnel is not None
-        config, config_reason = resolve_tunnel_config_with_reason(
-            auth_token=self._auth_token,
-            base_url=self._original_base_url,
-            force_refresh=force_refresh,
-        )
-        if config is None:
-            delete_cached_tunnel_state()
-            reason = config_reason or "failed to resolve tunnel configuration"
-            self._warn_and_backoff_tunnel(reason)
-            return
+            if time.monotonic() < self._tunnel_disabled_until:
+                return
 
-        tunnel = SSHTunnel()
-        local_port, establish_reason = tunnel.establish(config)
+            if self._tunnel and self._tunnel.is_alive() and self._tunnel.local_port is not None:
+                self._base_url = f"http://127.0.0.1:{self._tunnel.local_port}"
+                return
 
-        if local_port is None and not force_refresh:
+            if self._tunnel and self._tunnel_config:
+                reconnected_port, reconnect_reason = self._tunnel.reconnect(self._tunnel_config)
+                if reconnected_port is not None:
+                    self._base_url = f"http://127.0.0.1:{reconnected_port}"
+                    self._tunnel_warning_emitted = False
+                    self._last_tunnel_failure_reason = None
+                    return
+                if reconnect_reason:
+                    LOGGER.warning("SSH tunnel reconnect failed: %s", reconnect_reason)
+
+            force_refresh = self._tunnel is not None
             config, config_reason = resolve_tunnel_config_with_reason(
                 auth_token=self._auth_token,
                 base_url=self._original_base_url,
-                force_refresh=True,
+                force_refresh=force_refresh,
             )
-            if config is not None:
-                local_port, establish_reason = tunnel.establish(config)
-            else:
-                establish_reason = config_reason
+            if config is None:
+                delete_cached_tunnel_state()
+                reason = config_reason or "failed to resolve tunnel configuration"
+                self._warn_and_backoff_tunnel(reason)
+                return
 
-        if local_port is None:
-            delete_cached_tunnel_state()
-            reason = establish_reason or "failed to establish tunnel"
-            self._warn_and_backoff_tunnel(reason)
-            return
+            tunnel = SSHTunnel()
+            local_port, establish_reason = tunnel.establish(config)
 
-        self._tunnel = tunnel
-        self._tunnel_config = config
-        self._base_url = f"http://127.0.0.1:{local_port}"
-        self._tunnel_warning_emitted = False
-        self._last_tunnel_failure_reason = None
-        self._tunnel_disabled_until = 0.0
+            if local_port is None and not force_refresh:
+                config, config_reason = resolve_tunnel_config_with_reason(
+                    auth_token=self._auth_token,
+                    base_url=self._original_base_url,
+                    force_refresh=True,
+                )
+                if config is not None:
+                    local_port, establish_reason = tunnel.establish(config)
+                else:
+                    establish_reason = config_reason
+
+            if local_port is None:
+                delete_cached_tunnel_state()
+                reason = establish_reason or "failed to establish tunnel"
+                self._warn_and_backoff_tunnel(reason)
+                return
+
+            self._tunnel = tunnel
+            self._tunnel_config = config
+            self._base_url = f"http://127.0.0.1:{local_port}"
+            self._tunnel_warning_emitted = False
+            self._last_tunnel_failure_reason = None
+            self._tunnel_disabled_until = 0.0
+
+    def close(self) -> None:
+        self._stop_tunnel_monitor()
+        with self._tunnel_lock:
+            if self._tunnel:
+                self._tunnel.shutdown()
+                self._tunnel = None
+                self._tunnel_config = None
+        self.session.close()
 
     def _request_with_tunnel_recovery(
         self,
