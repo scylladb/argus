@@ -122,6 +122,12 @@ var (
 			if err := sshCmd.Start(); err != nil {
 				return err
 			}
+			// Kill the SSH process group when this function returns for any reason
+			// (normal exit, error, Ctrl+C). Setpgid means the PGID == SSH's PID,
+			// so -PID kills the whole group.
+			defer func() {
+				_ = syscall.Kill(-sshCmd.Process.Pid, syscall.SIGKILL)
+			}()
 
 			waitErrC := make(chan error, 1)
 			go func() {

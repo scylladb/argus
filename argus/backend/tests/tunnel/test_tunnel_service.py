@@ -56,7 +56,7 @@ def _make_active_config(**overrides) -> ProxyTunnelConfig:
         proxy_user="argus-proxy",
         target_host="10.0.0.1",
         target_port=8080,
-        host_key_fingerprint="SHA256:testfingerprint",
+        host_key_fingerprint="testhost ssh-ed25519 AAAAtestfingerprint",
         service_user_id=uuid4(),
         is_active=True,
     )
