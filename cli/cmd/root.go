@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -129,6 +131,9 @@ var rootCmd = &cobra.Command{
 		if disableCf || envBoolTrue("ARGUS_DISABLE_CLOUDFLARE") {
 			cfg.UseCf = false
 			logger.Debug().Msg("cloudflare integration disabled via flag/env")
+		} else if isLoopbackURL(cfg.URL) {
+			cfg.UseCf = false
+			logger.Debug().Str("url", cfg.URL).Msg("cloudflare integration auto-disabled for loopback URL")
 		}
 
 		ctx = contextWithConfig(ctx, cfg)
@@ -195,20 +200,22 @@ func buildAPIClientRaw(ctx context.Context, cfg *config.Config, extraOpts ...api
 	var apiOpts []api.ClientOption
 	cfBypass := disableCf || envBoolTrue("ARGUS_DISABLE_CLOUDFLARE")
 
-	if !cfg.UseCf && !cfBypass {
-		// Headless mode: use CF Access service-token credentials from keychain.
+	// PAT from keychain is tried for all modes — it works for local servers,
+	// headless deployments, and (alongside CF token) for Cloudflare mode.
+	if token, err := keychain.LoadPAT(); err == nil {
+		apiOpts = append(apiOpts, api.WithAPIToken(token))
+	} else if !cfg.UseCf && !cfBypass {
+		// Headless CF mode: fall back to the CF Access service-token bundle.
 		if cfID, cfSecret, argusToken, err := keychain.LoadCFAccess(); err == nil {
 			apiOpts = append(apiOpts, api.WithCFAccessSecret(cfID, cfSecret))
 			apiOpts = append(apiOpts, api.WithAPIToken(argusToken))
 		}
-	} else if cfg.UseCf && !cfBypass {
-		// Cloudflared mode: use PAT or session from keychain.
-		if token, err := keychain.LoadPAT(); err == nil {
-			apiOpts = append(apiOpts, api.WithAPIToken(token))
-		} else if session, err := keychain.Load(); err == nil {
-			apiOpts = append(apiOpts, api.WithSession(session))
-		}
+	} else if session, err := keychain.Load(); err == nil {
+		// Cloudflare browser-login mode: use session cookie as fallback.
+		apiOpts = append(apiOpts, api.WithSession(session))
+	}
 
+	if cfg.UseCf && !cfBypass {
 		// Obtain a valid Cloudflare Access JWT via the cloudflared CLI.
 		// This is required for every request to pass through CF Access.
 		interactive := !NonInteractiveFrom(ctx)
@@ -318,9 +325,13 @@ func runWithAuthRetry(cmd *cobra.Command, args []string, fn func(*cobra.Command,
 	_ = keychain.DeletePAT()
 	_ = keychain.Delete()
 
-	// When cloudflare is disabled the user is in headless mode — cloudflared
-	// cannot help.  The user needs to update the headless credentials.
+	// When cloudflare is disabled the user is in headless or local mode.
 	if !cfg.UseCf {
+		if isLoopbackURL(cfg.URL) {
+			return fmt.Errorf(
+				"re-auth: not authenticated — set ARGUS_TOKEN=<token> or run `argus auth-token <token>`",
+			)
+		}
 		return fmt.Errorf(
 			"re-auth: headless credentials are invalid or expired; " +
 				"run `argus auth headless` to update them",
@@ -391,4 +402,19 @@ func ExecuteContext(ctx context.Context) error {
 	CleanupFrom(rootCmd.Context())()
 
 	return err
+}
+
+// isLoopbackURL reports whether rawURL resolves to a loopback address
+// (localhost, 127.x.x.x, ::1). Cloudflare is always skipped for these.
+func isLoopbackURL(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
