@@ -438,6 +438,8 @@ def check_roles(needed_roles: list[str] | str = None):
         @functools.wraps(view)
         def wrapped_view(*args, **kwargs):
             if not UserService.check_roles(needed_roles, g.user):
+                if getattr(view, "api_view", False):
+                    return {"status": "error", "message": "Forbidden"}, 403
                 flash(message='Not authorized to access this area', category='error')
                 return redirect(url_for('main.home'))
 

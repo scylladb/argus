@@ -39,8 +39,16 @@ const (
 	// Note: there is no GET nemesis endpoint. Nemesis data is embedded in the
 	// full run response (SCTTestRun.NemesisData) from TestRunGet.
 
-	// SSH tunnel routes
-	SSHKeysList = "/api/v1/client/ssh/keys"   // GET  – authorized_keys payload; param: tunnel_id (optional)
-	SSHTunnel   = "/api/v1/client/ssh/tunnel" // GET  – active tunnel config, POST – register public key
+	// SSH tunnel routes – client (proxy host / AuthorizedKeysCommand)
+	SSHKeysList = "/api/v1/client/ssh/keys"   // GET  – plain-text authorized_keys; called by AuthorizedKeysCommand
+	SSHTunnel   = "/api/v1/client/ssh/tunnel" // POST – register public key and receive proxy config
+
+	// SSH tunnel routes – admin (requires Admin role)
+	AdminProxyTunnelConfig    = "/admin/api/v1/proxy-tunnel/config"            // GET  – one active config (tunnel_id query param optional); POST – create
+	AdminProxyTunnelConfigs   = "/admin/api/v1/proxy-tunnel/configs"           // GET  – all configs (active_only query param optional)
+	AdminProxyTunnelSetActive = "/admin/api/v1/proxy-tunnel/config/%s/active" // POST   – enable/disable a config (tunnel_id)
+	AdminProxyTunnelDelete    = "/admin/api/v1/proxy-tunnel/config/%s"        // DELETE – permanently remove a config (tunnel_id)
+	AdminSSHKeys              = "/admin/api/v1/ssh/keys"                       // GET  – list all registered keys with metadata
+	AdminSSHKeyDelete         = "/admin/api/v1/ssh/keys/%s"                   // DELETE – revoke a key (key_id)
 
 )
