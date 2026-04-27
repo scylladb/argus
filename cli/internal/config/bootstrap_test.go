@@ -160,40 +160,37 @@ func TestLoad_ErrReadingConfigFile(t *testing.T) {
 	assert.ErrorIs(t, err, config.ErrReadingConfigFile)
 }
 
-// TestLoad_ErrCreatingConfigDir verifies that when the config directory cannot
-// be created (a regular file is blocking the path), ErrCreatingConfigDir is
-// returned.
-func TestLoad_ErrCreatingConfigDir(t *testing.T) {
+// TestLoad_FallsBackToDefaultsWhenConfigDirUnwritable verifies that when the
+// config directory cannot be created, Load still succeeds with in-memory defaults.
+func TestLoad_FallsBackToDefaultsWhenConfigDirUnwritable(t *testing.T) {
 	dir := t.TempDir()
 	reloadXDG(t, dir)
 
-	// Place a regular file at the location where the config directory would be
-	// created, so MkdirAll fails.
+	// Block the config directory path with a regular file so MkdirAll fails.
 	blockingFile := filepath.Join(dir, "argus-cli")
 	require.NoError(t, os.WriteFile(blockingFile, []byte("block"), 0o600))
 
-	_, err := config.Load("", nil)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, config.ErrCreatingConfigDir)
+	cfg, err := config.Load("", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "https://argus.scylladb.com", cfg.URL)
 }
 
-// TestLoad_ErrWritingConfigFile verifies that when the config file path is
-// read-only, ErrWritingConfigFile is returned.
-func TestLoad_ErrWritingConfigFile(t *testing.T) {
+// TestLoad_FallsBackToDefaultsWhenConfigFileUnwritable verifies that when the
+// config file cannot be written (read-only dir), Load still succeeds with defaults.
+func TestLoad_FallsBackToDefaultsWhenConfigFileUnwritable(t *testing.T) {
 	dir := t.TempDir()
 	reloadXDG(t, dir)
 
-	// Create the config directory but make it read-only, so WriteConfigAs fails.
 	cfgDir := filepath.Join(dir, "argus-cli")
 	require.NoError(t, os.MkdirAll(cfgDir, 0o700))
-	require.NoError(t, os.Chmod(cfgDir, 0o500)) // r-x: read + execute, no write
+	require.NoError(t, os.Chmod(cfgDir, 0o500))
 	t.Cleanup(func() {
-		_ = os.Chmod(cfgDir, 0o700) // restore so TempDir cleanup can remove it
+		_ = os.Chmod(cfgDir, 0o700)
 	})
 
-	_, err := config.Load("", nil)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, config.ErrWritingConfigFile)
+	cfg, err := config.Load("", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "https://argus.scylladb.com", cfg.URL)
 }
 
 // --------------------------------------------------------------------------

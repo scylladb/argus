@@ -144,7 +144,11 @@ var rootCmd = &cobra.Command{
 				logger.Warn().Str("cache_ttl", cacheTTL).Msg("ignoring invalid --cache-ttl value; expected a Go duration (e.g. 10m, 1h)")
 			}
 		}
-		c := cache.New(config.CacheDir(), cacheOpts...)
+		cacheDir := config.CacheDir()
+		if noCache {
+			cacheDir = ""
+		}
+		c := cache.New(cacheDir, cacheOpts...)
 		ctx = contextWithCache(ctx, c)
 		logger.Debug().Bool("disabled", noCache).Str("dir", c.Dir()).Msg("cache initialised")
 		go func() {

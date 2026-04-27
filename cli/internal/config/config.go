@@ -115,9 +115,9 @@ func Load(cfgFile string, cmd *cobra.Command) (*Config, error) {
 		}
 
 		// First run: persist the resolved values so future runs use the file.
-		if writeErr := writeNewConfig(v, resolvedPath); writeErr != nil {
-			return nil, writeErr
-		}
+		// If the directory isn't writable (e.g. running as nobody), skip
+		// persisting and proceed with in-memory defaults.
+		_ = writeNewConfig(v, resolvedPath)
 	}
 
 	// ---- decode into struct ------------------------------------------

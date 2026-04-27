@@ -18,7 +18,7 @@ func TestSSHCommand_IsHiddenAndWired(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, cmd)
 	assert.Equal(t, "ssh", cmd.Name())
-	assert.True(t, cmd.Hidden)
+	assert.False(t, cmd.Hidden)
 
 	keysCmd, _, err := rootCmd.Find([]string{"ssh", "keys"})
 	require.NoError(t, err)

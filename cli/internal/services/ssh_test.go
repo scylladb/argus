@@ -284,7 +284,7 @@ func TestPrepareKnownHostsFile_WritesMatchingKey(t *testing.T) {
 	assert.Equal(t, os.FileMode(0o600), stat.Mode().Perm())
 }
 
-func TestPrepareKnownHostsFile_RejectsMissingFingerprint(t *testing.T) {
+func TestPrepareKnownHostsFile_ReturnsEmptyPathForMissingFingerprint(t *testing.T) {
 	t.Parallel()
 
 	client, err := api.New("https://argus.scylladb.com")
@@ -292,14 +292,15 @@ func TestPrepareKnownHostsFile_RejectsMissingFingerprint(t *testing.T) {
 
 	svc := services.NewSSHService(client)
 
-	_, err = svc.PrepareKnownHostsFile(context.Background(), models.SSHTunnelConfig{
+	// Empty / missing entry falls back gracefully (StrictHostKeyChecking=no).
+	path, err := svc.PrepareKnownHostsFile(context.Background(), models.SSHTunnelConfig{
 		HostKnownHostsEntry: "   ",
 	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid host key fingerprint")
+	require.NoError(t, err)
+	assert.Empty(t, path)
 }
 
-func TestPrepareKnownHostsFile_RejectsRawSHA256Fingerprint(t *testing.T) {
+func TestPrepareKnownHostsFile_ReturnsEmptyPathForRawSHA256Fingerprint(t *testing.T) {
 	t.Parallel()
 
 	client, err := api.New("https://argus.scylladb.com")
@@ -307,11 +308,12 @@ func TestPrepareKnownHostsFile_RejectsRawSHA256Fingerprint(t *testing.T) {
 
 	svc := services.NewSSHService(client)
 
-	_, err = svc.PrepareKnownHostsFile(context.Background(), models.SSHTunnelConfig{
+	// Raw SHA256 fingerprint (old backend) falls back gracefully.
+	path, err := svc.PrepareKnownHostsFile(context.Background(), models.SSHTunnelConfig{
 		HostKnownHostsEntry: "SHA256:abc123",
 	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "expected known_hosts entry")
+	require.NoError(t, err)
+	assert.Empty(t, path)
 }
 
 func TestFindFreeLocalPortAndWaitForLocalPort(t *testing.T) {
