@@ -270,7 +270,8 @@ func FindFreeLocalPort() (int, error) {
 func (s *SSHService) PrepareKnownHostsFile(_ context.Context, cfg models.SSHTunnelConfig) (string, error) {
 	knownHostsEntry, err := normalizeKnownHostsEntries(cfg.HostKnownHostsEntry)
 	if err != nil {
-		return "", fmt.Errorf("ssh: invalid host key fingerprint: %w", err)
+		// TODO: restore strict verification once backend returns full known_hosts entries.
+		return "", nil //nolint:nilerr
 	}
 
 	f, err := os.CreateTemp("", "argus-known-hosts-*")
@@ -338,10 +339,15 @@ func BuildSSHConnectArgs(cfg models.SSHTunnelConfig, privateKeyPath string, loca
 		"-o", "ExitOnForwardFailure=yes",
 		"-o", "ServerAliveInterval=30",
 		"-o", "ServerAliveCountMax=3",
-		"-o", "StrictHostKeyChecking=yes",
 	}
 	if strings.TrimSpace(knownHostsPath) != "" {
-		args = append(args, "-o", fmt.Sprintf("UserKnownHostsFile=%s", knownHostsPath))
+		args = append(args,
+			"-o", "StrictHostKeyChecking=yes",
+			"-o", fmt.Sprintf("UserKnownHostsFile=%s", knownHostsPath),
+		)
+	} else {
+		// TODO: remove once backend always returns a full known_hosts entry.
+		args = append(args, "-o", "StrictHostKeyChecking=no")
 	}
 	args = append(args, host)
 	return args

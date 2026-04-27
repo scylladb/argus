@@ -28,7 +28,8 @@ class ProxyTunnelActivePayload(TypedDict):
 
 
 class ProxyTunnelConfigCreatePayload(ProxyTunnelConfigPayload):
-    host_key_fingerprint: str
+    pass
+
 
 
 def parse_active_only(value: str | None) -> bool | None:
@@ -415,6 +416,14 @@ def save_proxy_tunnel_config():
         "status": "ok",
         "response": asdict(config),
     }
+
+
+@bp.route("/proxy-tunnel/config/<string:tunnel_id>", methods=["DELETE"])
+@check_roles(UserRoles.Admin)
+@api_login_required
+def delete_proxy_tunnel_config(tunnel_id: str):
+    TunnelService().delete_proxy_tunnel_config(UUID(tunnel_id))
+    return {"status": "ok", "response": {"deleted": True}}
 
 
 @bp.route("/proxy-tunnel/config/<string:tunnel_id>/active", methods=["POST"])

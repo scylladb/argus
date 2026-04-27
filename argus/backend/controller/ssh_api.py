@@ -85,7 +85,7 @@ def get_user_keys():
 @bp.route("/keys", methods=["GET"])
 @allow_ssh_tunnel_server_scope
 @api_login_required
-@check_roles(UserRoles.SSHTunnelServer)
+@check_roles([UserRoles.SSHTunnelServer, UserRoles.Admin])
 def get_authorized_keys():
     """
     Return all non-expired SSH public keys in OpenSSH ``authorized_keys``

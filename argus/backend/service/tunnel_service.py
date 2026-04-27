@@ -71,7 +71,11 @@ class ProxyTunnelConfigDTO(TunnelCommonFieldsDTO):
     port: int
     service_user_id: UUID | None
     is_active: bool
-    api_token: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ProxyTunnelCreateResponseDTO(ProxyTunnelConfigDTO):
+    api_token: str = ""
 
 
 class ProxyTunnelConfigPayload(TypedDict, total=False):
@@ -322,7 +326,7 @@ class TunnelService:
         except TunnelServiceException:
             return None
 
-    def save_proxy_tunnel_config(self, payload: ProxyTunnelConfigPayload) -> ProxyTunnelConfigDTO:
+    def save_proxy_tunnel_config(self, payload: ProxyTunnelConfigPayload) -> ProxyTunnelCreateResponseDTO:
         """
         Create a new ``ProxyTunnelConfig`` entry.
 
@@ -333,29 +337,22 @@ class TunnelService:
            service user's id stored in ``service_user_id``.
 
         Required payload keys: ``host``, ``port``, ``proxy_user``,
-        ``target_host``, ``target_port``, ``host_key_fingerprint``.
+        ``target_host``, ``target_port``.
 
-        The host key fingerprint is verified by resolving the host key with
-        ``ssh-keyscan`` and comparing it against the provided
-        ``host_key_fingerprint`` value.
+        The host key is always discovered via ``ssh-keyscan`` and stored as
+        the full known_hosts entry. It is never supplied by the caller.
 
         Returns the saved config as a dict (including ``service_user_id`` and
         the generated ``api_token`` so the caller can provision the proxy host).
         """
-        required = ("host", "port", "proxy_user", "target_host", "target_port", "host_key_fingerprint")
+        required = ("host", "port", "proxy_user", "target_host", "target_port")
         missing = [k for k in required if not payload.get(k)]
         if missing:
             raise TunnelServiceException(f"Missing required fields: {', '.join(missing)}")
 
         is_active = payload.get("is_active", True)
         port = int(payload["port"])
-        discovered_fingerprint = self._fetch_host_key_fingerprint(payload["host"], port)
-        provided_fingerprint = payload["host_key_fingerprint"].strip()
-        if discovered_fingerprint != provided_fingerprint:
-            raise TunnelServiceException(
-                "Host key fingerprint mismatch for "
-                f"{payload['host']}:{port}. Expected {provided_fingerprint}, got {discovered_fingerprint}"
-            )
+        known_hosts_entry, _ = self._fetch_host_key(payload["host"], port)
 
         # Create a dedicated service user for this proxy host.
         service_user, api_token = self._create_proxy_service_user(payload["host"])
@@ -367,12 +364,23 @@ class TunnelService:
             proxy_user=payload["proxy_user"],
             target_host=payload["target_host"],
             target_port=int(payload["target_port"]),
-            host_key_fingerprint=provided_fingerprint,
+            host_key_fingerprint=known_hosts_entry,
             service_user_id=service_user.id,
             is_active=is_active,
         )
 
-        return self._to_proxy_tunnel_config_dto(config, api_token=api_token)
+        return ProxyTunnelCreateResponseDTO(
+            id=config.id,
+            host=config.host,
+            port=port,
+            proxy_user=config.proxy_user,
+            target_host=config.target_host,
+            target_port=int(config.target_port),
+            host_key_fingerprint=known_hosts_entry,
+            service_user_id=service_user.id,
+            is_active=bool(config.is_active),
+            api_token=api_token,
+        )
 
     def list_proxy_tunnel_configs(self, active_only: bool | None = None) -> list[ProxyTunnelConfigDTO]:
         """Return proxy tunnel configs, optionally filtered by active state."""
@@ -381,6 +389,24 @@ class TunnelService:
             rows = [row for row in rows if bool(row.is_active) == active_only]
         rows = sorted(rows, key=lambda row: (row.host or "", str(row.id)))
         return [self._to_proxy_tunnel_config_dto(row) for row in rows]
+
+    def delete_proxy_tunnel_config(self, tunnel_id: UUID | str) -> None:
+        """Permanently delete a proxy tunnel config and its associated service user."""
+        if not isinstance(tunnel_id, UUID):
+            tunnel_id = UUID(str(tunnel_id))
+        try:
+            config = ProxyTunnelConfig.get(id=tunnel_id)
+        except ProxyTunnelConfig.DoesNotExist as exc:
+            raise TunnelServiceException(f"Proxy tunnel config {tunnel_id} not found") from exc
+
+        if config.service_user_id:
+            try:
+                from argus.backend.models.web import ArgusUser  # noqa: PLC0415
+                ArgusUser.get(id=config.service_user_id).delete()
+            except Exception:  # noqa: BLE001
+                pass  # service user already gone — proceed with config deletion
+
+        config.delete()
 
     def set_proxy_tunnel_config_active(self, tunnel_id: UUID | str, is_active: bool) -> ProxyTunnelConfigDTO:
         """Enable or disable a specific proxy tunnel config."""
@@ -404,8 +430,14 @@ class TunnelService:
         return [cfg for cfg in ProxyTunnelConfig.objects.all() if cfg.is_active]
 
     @staticmethod
-    def _fetch_host_key_fingerprint(host: str, port: int) -> str:
-        """Resolve host key fingerprint for a proxy host using ssh-keyscan."""
+    def _fetch_host_key(host: str, port: int) -> tuple[str, str]:
+        """Run ssh-keyscan and return ``(known_hosts_entry, sha256_fingerprint)``.
+
+        ``known_hosts_entry`` is the full ``host keytype keydata`` line suitable
+        for writing directly into a known_hosts file.
+        ``sha256_fingerprint`` is the ``SHA256:…`` string used for admin
+        verification only.
+        """
         try:
             result = subprocess.run(
                 ["ssh-keyscan", "-p", str(port), "-t", "ed25519,ecdsa,rsa", host],
@@ -419,7 +451,9 @@ class TunnelService:
         except subprocess.TimeoutExpired as exc:
             raise TunnelServiceException(f"Timed out fetching host key from {host}:{port}") from exc
 
-        keys_by_type: dict[str, str] = {}
+        # Build a map of keytype → (full_known_hosts_line, pubkey_str).
+        # ssh-keyscan output format: "<host> <keytype> <keydata>"
+        keys_by_type: dict[str, tuple[str, str]] = {}
         for line in result.stdout.splitlines():
             stripped = line.strip()
             if not stripped or stripped.startswith("#"):
@@ -430,7 +464,9 @@ class TunnelService:
             key_type = parts[1]
             key_data = parts[2]
             if key_type.startswith("ssh-") or key_type.startswith("ecdsa-"):
-                keys_by_type.setdefault(key_type, f"{key_type} {key_data}")
+                full_line = f"{host} {key_type} {key_data}"
+                pubkey_str = f"{key_type} {key_data}"
+                keys_by_type.setdefault(key_type, (full_line, pubkey_str))
 
         preferred_types = (
             "ssh-ed25519",
@@ -441,10 +477,12 @@ class TunnelService:
         )
         for key_type in preferred_types:
             if key_type in keys_by_type:
-                return _derive_fingerprint(keys_by_type[key_type])
+                full_line, pubkey_str = keys_by_type[key_type]
+                return full_line, _derive_fingerprint(pubkey_str)
 
         if keys_by_type:
-            return _derive_fingerprint(next(iter(keys_by_type.values())))
+            full_line, pubkey_str = next(iter(keys_by_type.values()))
+            return full_line, _derive_fingerprint(pubkey_str)
 
         stderr = (result.stderr or "").strip()
         if stderr:
@@ -544,7 +582,7 @@ class TunnelService:
         )
 
     @staticmethod
-    def _to_proxy_tunnel_config_dto(config: ProxyTunnelConfig, api_token: str | None = None) -> ProxyTunnelConfigDTO:
+    def _to_proxy_tunnel_config_dto(config: ProxyTunnelConfig) -> ProxyTunnelConfigDTO:
         return ProxyTunnelConfigDTO(
             id=config.id,
             host=config.host,
@@ -555,5 +593,4 @@ class TunnelService:
             host_key_fingerprint=config.host_key_fingerprint,
             service_user_id=config.service_user_id,
             is_active=bool(config.is_active),
-            api_token=api_token,
         )
