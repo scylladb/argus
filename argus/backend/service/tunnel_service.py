@@ -186,6 +186,26 @@ class TunnelService:
         now_utc = datetime.now(tz=timezone.utc).replace(tzinfo=None)
         expires_at = now_utc + timedelta(seconds=ttl)
 
+        existing = next(
+            (
+                row for row in SSHTunnelKey.objects.filter(user_id=user.id)
+                if row.fingerprint == fingerprint and row.tunnel_id == config.id
+            ),
+            None,
+        )
+        if existing:
+            return TunnelRegistrationResponseDTO(
+                key_id=existing.id,
+                tunnel_id=config.id,
+                proxy_host=config.host,
+                proxy_port=config.port,
+                proxy_user=config.proxy_user,
+                target_host=config.target_host,
+                target_port=config.target_port,
+                host_key_fingerprint=config.host_key_fingerprint,
+                expires_at=existing.expires_at,
+            )
+
         key = SSHTunnelKey.objects.ttl(ttl).create(
             id=uuid4(),
             user_id=user.id,
@@ -243,7 +263,12 @@ class TunnelService:
         """
         rows = SSHTunnelKey.objects.all()
 
-        keys = [row.public_key for row in rows if row.public_key]
+        seen: set[str] = set()
+        keys: list[str] = []
+        for row in rows:
+            if row.public_key and row.public_key not in seen:
+                seen.add(row.public_key)
+                keys.append(row.public_key)
         return "\n".join(keys)
 
     # ------------------------------------------------------------------

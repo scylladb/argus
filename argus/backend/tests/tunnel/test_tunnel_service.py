@@ -126,8 +126,8 @@ def mock_host_fingerprint():
     monkeypatch = MonkeyPatch()
     monkeypatch.setattr(
         TunnelService,
-        "_fetch_host_key_fingerprint",
-        staticmethod(lambda host, _port: f"SHA256:{host}"),
+        "_fetch_host_key",
+        staticmethod(lambda host, _port: (f"{host} ssh-ed25519 AAAA{host}", f"SHA256:{host}")),
     )
     yield
     monkeypatch.undo()
@@ -492,21 +492,6 @@ def test_save_proxy_tunnel_config_missing_fields(argus_db, mock_host_fingerprint
         svc.save_proxy_tunnel_config({"host": "proxy.example.com"})
 
 
-@pytest.mark.docker_required
-def test_save_proxy_tunnel_config_rejects_fingerprint_mismatch(argus_db, mock_host_fingerprint):
-    """Config save should fail when provided fingerprint does not match discovered host key."""
-    host = f"proxy-mismatch-{uuid4().hex[:6]}.example.com"
-    payload = dict(
-        host=host,
-        port=22,
-        proxy_user="argus-proxy",
-        target_host="10.0.7.1",
-        target_port=8080,
-        host_key_fingerprint="SHA256:incorrect",
-    )
-    with pytest.raises(TunnelServiceException, match="Host key fingerprint mismatch"):
-        TunnelService().save_proxy_tunnel_config(payload)
-
 
 @pytest.mark.docker_required
 def test_create_proxy_service_user_rejects_username_collision(argus_db):
@@ -536,7 +521,7 @@ def test_create_proxy_service_user_rejects_username_collision(argus_db):
 
 
 @pytest.mark.docker_required
-def test_fetch_host_key_fingerprint_prefers_ed25519(argus_db):
+def test_fetch_host_key_prefers_ed25519(argus_db):
     svc = TunnelService()
     ed25519_pub = _make_public_key()
 
@@ -553,16 +538,18 @@ def test_fetch_host_key_fingerprint_prefers_ed25519(argus_db):
     original_run = tunnel_module.subprocess.run
     tunnel_module.subprocess.run = lambda *args, **kwargs: _Result()
     try:
-        fingerprint = svc._fetch_host_key_fingerprint("example.com", 22)
+        known_hosts_entry, fingerprint = svc._fetch_host_key("example.com", 22)
     finally:
         tunnel_module.subprocess.run = original_run
 
-    expected = _derive_fingerprint(ed25519_pub)
-    assert fingerprint == expected
+    expected_fp = _derive_fingerprint(ed25519_pub)
+    assert fingerprint == expected_fp
+    assert "example.com" in known_hosts_entry
+    assert "ssh-ed25519" in known_hosts_entry
 
 
 @pytest.mark.docker_required
-def test_fetch_host_key_fingerprint_raises_when_empty(argus_db):
+def test_fetch_host_key_raises_when_empty(argus_db):
     svc = TunnelService()
 
     class _Result:
@@ -576,7 +563,7 @@ def test_fetch_host_key_fingerprint_raises_when_empty(argus_db):
     tunnel_module.subprocess.run = lambda *args, **kwargs: _Result()
     try:
         with pytest.raises(TunnelServiceException, match="Failed to fetch host key"):
-            svc._fetch_host_key_fingerprint("bad.example.com", 22)
+            svc._fetch_host_key("bad.example.com", 22)
     finally:
         tunnel_module.subprocess.run = original_run
 

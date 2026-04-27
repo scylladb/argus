@@ -161,10 +161,14 @@ func Setup(fileLevelStr, command string, opts ...Option) (zerolog.Logger, Cleanu
 	} else {
 		f, err := openLogFile(o.cacheDir)
 		if err != nil {
-			return zerolog.Nop(), func() {}, err
+			// Can't write a log file (e.g. running as nobody with no home dir).
+			// Fall back to discard so the command still works.
+			fileW = io.Discard
+			closeFn = func() {}
+		} else {
+			fileW = f
+			closeFn = func() { _ = f.Close() }
 		}
-		fileW = f
-		closeFn = func() { _ = f.Close() }
 	}
 
 	// fileFilterWriter ensures only entries at or above fileLevel reach the
@@ -261,8 +265,13 @@ func openLogFile(cacheDir string) (*os.File, error) {
 	if dir == "" {
 		dir = config.CacheDir()
 	}
-	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return nil, fmt.Errorf("%w: creating cache dir %q: %w", ErrOpeningLogFile, dir, err)
+
+	// Only create the directory if it doesn't already exist — never force-create
+	// it (e.g. when running as nobody with no writable home).
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		if mkErr := os.MkdirAll(dir, 0o750); mkErr != nil {
+			return nil, fmt.Errorf("%w: creating cache dir %q: %w", ErrOpeningLogFile, dir, mkErr)
+		}
 	}
 
 	p := filepath.Join(dir, LogFileName)

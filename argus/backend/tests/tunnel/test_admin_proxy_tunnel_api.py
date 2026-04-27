@@ -48,8 +48,8 @@ def normal_user_identity():
 def mock_host_fingerprint(monkeypatch):
     monkeypatch.setattr(
         TunnelService,
-        "_fetch_host_key_fingerprint",
-        staticmethod(lambda host, _port: f"SHA256:{host}"),
+        "_fetch_host_key",
+        staticmethod(lambda host, _port: (f"{host} ssh-ed25519 AAAA{host}", f"SHA256:{host}")),
     )
 
 
