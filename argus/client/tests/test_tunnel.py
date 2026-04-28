@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from io import StringIO
+from unittest.mock import Mock
 
 import pytest
 
@@ -7,6 +8,7 @@ from argus.client.base import ArgusClient
 from argus.client import tunnel_api
 from argus.client import tunnel_ssh
 from argus.client import tunnel_state
+from argus.client.session import TunneledSession
 from argus.client.tunnel import TunnelConfig
 
 
@@ -73,9 +75,21 @@ def test_resolve_tunnel_config_registers_and_caches(tunnel_state_dir, monkeypatc
     assert cached.proxy_host == "proxy.example.com"
 
 
-def test_tunnel_api_retries_requests(monkeypatch):
-    state = {"calls": 0}
+def test_tunnel_api_raises_on_connection_failure():
+    mock_session = Mock(spec=tunnel_api.requests.Session)
+    mock_session.get.side_effect = tunnel_api.requests.RequestException("connection refused")
 
+    with pytest.raises(tunnel_api.TunnelClientError, match="Tunnel API call failed"):
+        tunnel_api._call_tunnel_api(
+            method="GET",
+            url="https://argus.example.com/api/v1/client/ssh/tunnel",
+            auth_token="token",
+            payload=None,
+            session=mock_session,
+        )
+
+
+def test_tunnel_api_succeeds_with_valid_response():
     class _Response:
         status_code = 200
 
@@ -93,16 +107,17 @@ def test_tunnel_api_retries_requests(monkeypatch):
                 },
             }
 
-    def _flaky_get(*args, **kwargs):
-        state["calls"] += 1
-        if state["calls"] < 3:
-            raise tunnel_api.requests.RequestException("transient failure")
-        return _Response()
+    mock_session = Mock(spec=tunnel_api.requests.Session)
+    mock_session.get.return_value = _Response()
 
-    monkeypatch.setattr(tunnel_api.requests, "get", _flaky_get)
-    data = tunnel_api._call_tunnel_api(method="GET", url="https://argus.example.com/api/v1/client/ssh/tunnel", auth_token="token", payload=None)
+    data = tunnel_api._call_tunnel_api(
+        method="GET",
+        url="https://argus.example.com/api/v1/client/ssh/tunnel",
+        auth_token="token",
+        payload=None,
+        session=mock_session,
+    )
     assert data["proxy_host"] == "proxy.example.com"
-    assert state["calls"] == 3
 
 
 def test_establish_uses_strict_host_options_and_temp_known_hosts(tunnel_state_dir, monkeypatch):
@@ -203,8 +218,8 @@ def test_argus_client_warns_and_falls_back_when_tunnel_setup_fails(requests_mock
         status_code=200,
     )
 
-    monkeypatch.setattr("argus.client.base.resolve_tunnel_config_with_reason", lambda **kwargs: (None, "api unreachable"))
-    monkeypatch.setattr("argus.client.base.delete_cached_tunnel_state", lambda: None)
+    monkeypatch.setattr("argus.client.session.resolve_tunnel_config_with_reason", lambda **kwargs: (None, "api unreachable"))
+    monkeypatch.setattr("argus.client.session.delete_cached_tunnel_state", lambda: None)
 
     client = ArgusClient(auth_token="token", base_url="https://argus.scylladb.com", use_tunnel=True)
     with caplog.at_level("WARNING"):
@@ -214,7 +229,7 @@ def test_argus_client_warns_and_falls_back_when_tunnel_setup_fails(requests_mock
         )
 
     assert response.status_code == 200
-    assert client._use_tunnel is True
+    assert isinstance(client.session, TunneledSession)
     assert "api unreachable" in caplog.text
     assert "falling back to direct connection" in caplog.text
 
@@ -265,17 +280,18 @@ def test_argus_client_retries_tunnel_after_cooldown(requests_mock, monkeypatch):
 
     monotonic_values = iter([1000.0, 1001.0, 1032.0])
 
-    monkeypatch.setattr("argus.client.base.resolve_tunnel_config_with_reason", _resolve)
-    monkeypatch.setattr("argus.client.base.SSHTunnel", _FakeTunnel)
-    monkeypatch.setattr("argus.client.base.time.monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr("argus.client.session.resolve_tunnel_config_with_reason", _resolve)
+    monkeypatch.setattr("argus.client.session.SSHTunnel", _FakeTunnel)
+    monkeypatch.setattr("argus.client.session.time.monotonic", lambda: next(monotonic_values))
 
     client = ArgusClient(auth_token="token", base_url="https://argus.scylladb.com", use_tunnel=True)
 
     client.get(endpoint=ArgusClient.Routes.GET, location_params={"type": "test-type", "id": "test-id"})
+    assert client.session._tunnel_port is None
     assert client._base_url == "https://argus.scylladb.com"
 
     client.get(endpoint=ArgusClient.Routes.GET, location_params={"type": "test-type", "id": "test-id"})
-    assert client._base_url == "http://127.0.0.1:9191"
+    assert client.session._tunnel_port == 9191
 
 
 def test_request_level_recovery_reconnects_and_retries_once(requests_mock, monkeypatch):
@@ -286,16 +302,16 @@ def test_request_level_recovery_reconnects_and_retries_once(requests_mock, monke
     requests_mock.get(new_tunnel_url, json={"status": "ok", "response": {}}, status_code=200)
 
     client = ArgusClient(auth_token="token", base_url="https://argus.scylladb.com", use_tunnel=True)
-    client._base_url = "http://127.0.0.1:9191"
+    client.session._tunnel_port = 9191
 
     ensure_state = {"calls": 0}
 
     def _fake_ensure_tunnel():
         ensure_state["calls"] += 1
         if ensure_state["calls"] >= 2:
-            client._base_url = "http://127.0.0.1:9292"
+            client.session._tunnel_port = 9292
 
-    monkeypatch.setattr(client, "_ensure_tunnel", _fake_ensure_tunnel)
+    monkeypatch.setattr(client.session, "_ensure_tunnel", _fake_ensure_tunnel)
 
     response = client.get(
         endpoint=ArgusClient.Routes.GET,
@@ -304,4 +320,4 @@ def test_request_level_recovery_reconnects_and_retries_once(requests_mock, monke
 
     assert response.status_code == 200
     assert ensure_state["calls"] == 2
-    assert client._base_url == "http://127.0.0.1:9292"
+    assert client.session._tunnel_port == 9292

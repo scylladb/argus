@@ -1,7 +1,7 @@
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NotRequired, TypedDict
 
 
 class TunnelClientError(Exception):
@@ -19,6 +19,18 @@ ALLOWED_HOST_KEY_TYPES = (
 )
 
 
+class _TunnelApiResponse(TypedDict):
+    proxy_host: str
+    proxy_port: int
+    proxy_user: str
+    target_host: str
+    target_port: int
+    host_key_fingerprint: str
+    expires_at: NotRequired[str | None]
+    key_id: NotRequired[str | None]
+    tunnel_id: NotRequired[str | None]
+
+
 @dataclass(frozen=True, slots=True)
 class TunnelConfig:
     proxy_host: str
@@ -32,16 +44,8 @@ class TunnelConfig:
     tunnel_id: str | None = None
 
     @classmethod
-    def from_api_response(cls, response: dict[str, Any]) -> "TunnelConfig":
-        required_fields = (
-            "proxy_host",
-            "proxy_port",
-            "proxy_user",
-            "target_host",
-            "target_port",
-            "host_key_fingerprint",
-        )
-        missing = [name for name in required_fields if not response.get(name)]
+    def from_api_response(cls, response: "_TunnelApiResponse") -> "TunnelConfig":
+        missing = [k for k in _TunnelApiResponse.__required_keys__ if not response.get(k)]
         if missing:
             raise TunnelClientError(f"Missing required tunnel response fields: {', '.join(missing)}")
 
@@ -61,7 +65,7 @@ class TunnelConfig:
     def to_cache_payload(self) -> dict[str, Any]:
         payload = asdict(self)
         if self.expires_at is not None:
-            payload["expires_at"] = to_iso_z(self.expires_at)
+            payload["expires_at"] = self.expires_at.astimezone(UTC).isoformat()
         return payload
 
 
@@ -77,12 +81,7 @@ class TunnelStatePaths:
 def parse_datetime(value: str) -> datetime:
     if not value:
         raise ValueError("datetime value is required")
-    normalized = value.replace("Z", "+00:00")
-    parsed = datetime.fromisoformat(normalized)
+    parsed = datetime.fromisoformat(value)
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
-
-
-def to_iso_z(dt: datetime) -> str:
-    return dt.astimezone(UTC).isoformat().replace("+00:00", "Z")

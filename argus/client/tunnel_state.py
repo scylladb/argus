@@ -22,7 +22,7 @@ except ImportError:
     PrivateFormat = None
     PublicFormat = None
 
-from argus.client.tunnel_models import TunnelClientError, TunnelConfig, TunnelStatePaths, parse_datetime, to_iso_z
+from argus.client.tunnel_models import TunnelClientError, TunnelConfig, TunnelStatePaths, parse_datetime
 
 
 LOGGER = logging.getLogger(__name__)
@@ -136,7 +136,7 @@ def is_key_valid(paths: TunnelStatePaths) -> bool:
 def write_key_meta(paths: TunnelStatePaths, expires_at: datetime | None) -> None:
     if expires_at is None:
         return
-    payload = {"expires_at": to_iso_z(expires_at)}
+    payload = {"expires_at": expires_at.astimezone(UTC).isoformat()}
     paths.key_meta.write_text(json.dumps(payload), encoding="utf-8")
     paths.key_meta.chmod(0o600)
 
