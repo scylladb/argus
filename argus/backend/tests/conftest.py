@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import time
 import uuid
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from cassandra.auth import PlainTextAuthProvider
@@ -21,6 +22,12 @@ from argus.backend.service.views_widgets.pytest import PytestViewService
 from argus.backend.util.config import Config
 
 os.environ['DOCKER_HOST'] = ""
+
+# Re-export shared external-service mock fixtures so tests in any subdir under
+# argus/backend/tests can use them without local imports. pytest 8 only honors
+# `pytest_plugins` in the top-level rootdir conftest, so we star-import the
+# fixtures here instead.
+from argus.backend.tests._helpers.external_mocks import *  # noqa: E402,F401,F403
 
 from cassandra.cqlengine.management import sync_type
 from _pytest.fixtures import fixture
@@ -129,7 +136,30 @@ def argus_db():
     config = {"SCYLLA_KEYSPACE_NAME": "test_argus", "SCYLLA_CONTACT_POINTS": [container_ip],
               "SCYLLA_USERNAME": "cassandra", "SCYLLA_PASSWORD": "cassandra", "APP_LOG_LEVEL": "INFO",
               "EMAIL_SENDER": "unit tester", "EMAIL_SENDER_PASS": "pass", "EMAIL_SENDER_USER": "qa",
-              "EMAIL_SERVER": "fake", "EMAIL_SERVER_PORT": 25}
+              "EMAIL_SERVER": "fake", "EMAIL_SERVER_PORT": 25,
+              "GITHUB_ACCESS_TOKEN": "test_token",
+              # External-service config keys: set so service constructors don't crash
+              # in tests. Real network calls are blocked by per-test mocks (see
+              # argus/backend/tests/_helpers/external_mocks.py).
+              "LOGIN_METHODS": ["password", "gh", "cf"],
+              "GITHUB_CLIENT_ID": "test_gh_client_id",
+              "GITHUB_CLIENT_SECRET": "test_gh_client_secret",
+              "JIRA_SERVER": "http://jira.test",
+              "JIRA_EMAIL": "tester@scylladb.com",
+              "JIRA_TOKEN": "test_jira_token",
+              "JENKINS_URL": "http://jenkins.test",
+              "JENKINS_USER": "tester",
+              "JENKINS_API_TOKEN": "test_jenkins_token",
+              "AWS_CLIENT_ID": "test_aws_id",
+              "AWS_CLIENT_SECRET": "test_aws_secret",
+              "S3_ALLOWED_BUCKETS": ["test-bucket"],
+              "S3_ALLOWED_MIME": ["image/png", "image/jpeg", "text/plain"],
+              "CLOUDFLARE_ACCESS_TEAM_DOMAIN": "scylladb.cloudflareaccess.com",
+              "CLOUDFLARE_ACCESS_AUD": "test-aud",
+              # Stub PyJWKClient so _get_cf_access_payload doesn't fetch JWKS over HTTP.
+              "CLOUDFLARE_ACCESS_JWK_CLIENT": SimpleNamespace(
+                  get_signing_key_from_jwt=lambda token: SimpleNamespace(key="test-key")
+              )}
     Config.CONFIG = config  # patch config for whole test to avoid using Config.load_yaml_config() required by app context
     database = ScyllaCluster.get(config)
     if need_sync_models:
