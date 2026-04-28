@@ -38,7 +38,8 @@ class SSHTunnel:
         return self._local_port
 
     def establish(self, config: TunnelConfig) -> tuple[int | None, str | None]:
-        if shutil.which("ssh") is None:
+        ssh_bin = shutil.which("ssh")
+        if ssh_bin is None:
             reason = "ssh binary was not found on PATH"
             LOGGER.warning(reason)
             return None, reason
@@ -65,6 +66,7 @@ class SSHTunnel:
                 config=config,
                 local_port=local_port,
                 known_hosts_path=known_hosts_path,
+                ssh_bin=ssh_bin,
             )
 
             try:
@@ -144,9 +146,9 @@ class SSHTunnel:
         atexit.register(self.shutdown)
         self._atexit_registered = True
 
-    def _build_ssh_command(self, config: TunnelConfig, local_port: int, known_hosts_path: Path) -> list[str]:
+    def _build_ssh_command(self, config: TunnelConfig, local_port: int, known_hosts_path: Path, ssh_bin: str = "ssh") -> list[str]:
         return [
-            "ssh",
+            ssh_bin,
             "-N",
             "-L",
             f"127.0.0.1:{local_port}:{config.target_host}:{config.target_port}",
