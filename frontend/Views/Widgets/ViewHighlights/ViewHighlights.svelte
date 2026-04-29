@@ -656,7 +656,7 @@
                     <div class="modal-content">
                         <div class="modal-header">
                             <h5 class="modal-title">Create Action Item Group</h5>
-                            <button type="button" class="btn-close" aria-label="Close"
+                            <button type="button" class="btn-close" aria-label="Close" title="Close"
                                     onclick={() => { showGroupModal = false; groupCreationError = ""; }}></button>
                         </div>
                         <div class="modal-body">

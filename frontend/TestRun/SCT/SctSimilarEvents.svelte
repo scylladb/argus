@@ -238,35 +238,7 @@
 {/if}
 
 <style>
-    .btn-open {
-        background-color: #28a745;
-        color: white;
-        border-color: #28a745;
-    }
-
-    .btn-open:hover {
-        background-color: #218838;
-        border-color: #1e7e34;
-    }
-
-    .btn-closed {
-        background-color: #6c757d;
-        color: white;
-        border-color: #6c757d;
-    }
-
-    .btn-closed:hover {
-        background-color: #5a6268;
-        border-color: #545b62;
-    }
-
     .date-column {
-        white-space: nowrap;
-    }
-
-    .overflow-ellipsis {
-        overflow: hidden;
-        text-overflow: ellipsis;
         white-space: nowrap;
     }
 </style>

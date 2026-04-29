@@ -349,6 +349,7 @@
                     <button
                         class="btn btn-close"
                         aria-label="Close"
+                        title="Close"
                         onclick={() => {
                             dispatch("cloneCancel");
                         }}
