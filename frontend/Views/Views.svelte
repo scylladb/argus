@@ -55,6 +55,7 @@
 
     let { views }: Props = $props();
 
+    // svelte-ignore non_reactive_update — false positive from compiled enum pattern
     enum Tab {
         Automatic,
         User,
