@@ -5,6 +5,7 @@
     import UserManager from "./UserManager.svelte";
     import ReleaseManager from "./ReleaseManager.svelte";
     import ViewsManager from "./ViewsManager.svelte";
+    import ProxyTunnelManager from "./ProxyTunnelManager.svelte";
 
     let { currentRoute = $bindable() } = $props();
 
@@ -13,17 +14,20 @@
         users: UserManager,
         releases: ReleaseManager,
         views: ViewsManager,
+        "ssh-tunnel": ProxyTunnelManager,
     };
+
+    const routeLabel = (route) => (route === "ssh-tunnel" ? "SSH Tunnel" : titleCase(route));
 
     const handleRouteClick = function (route, event) {
         history.pushState({}, "", `/admin/${route}`);
         let prevRoute = currentRoute;
         currentRoute = route;
-        document.title = document.title.replace(titleCase(prevRoute), titleCase(route));
+        document.title = document.title.replace(routeLabel(prevRoute), routeLabel(route));
     };
 
     onMount(() => {
-        document.title = document.title.replace("%ROUTE", titleCase(currentRoute));
+        document.title = document.title.replace("%ROUTE", routeLabel(currentRoute));
     });
 
     const SvelteComponent = $derived(routes[currentRoute] ?? routes["index"]);
@@ -71,6 +75,16 @@
                         onclick={(e) => handleRouteClick("views", e)}
                     >
                         Views
+                    </button>
+                </li>
+                <li class="list-group-item">
+                    <button
+                        class:btn-primary={currentRoute == "ssh-tunnel"}
+                        class:btn-outline-primary={currentRoute != "ssh-tunnel"}
+                        class="btn h-100 w-100"
+                        onclick={(e) => handleRouteClick("ssh-tunnel", e)}
+                    >
+                        SSH Tunnel
                     </button>
                 </li>
             </ul>
