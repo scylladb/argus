@@ -265,7 +265,7 @@
                         </div>
                     {:else}
                         <div class="flex-fill">
-                            <span class="spinner-border spinner-border-sm" /> Reassigning...
+                            <span class="spinner-border spinner-border-sm"></span> Reassigning...
                         </div>
                     {/if}
                 </div>
@@ -284,7 +284,7 @@
                         type="button"
                         aria-label="Loading"
                     >
-                        <span class="spinner-border spinner-border-sm" />
+                        <span class="spinner-border spinner-border-sm"></span>
                     </button>
                 {:else}
                     <button
@@ -316,7 +316,7 @@
                     class="btn-close"
                     data-bs-dismiss="modal"
                     aria-label="Close"
-                />
+                ></button>
             </div>
             <div class="modal-body">
                 <p>Are you sure you want to delete this schedule?</p>

@@ -74,7 +74,7 @@
 
 
 <div class="d-flex p-2 align-items-center rounded shadow-sm mb-2 bg-white">
-    <img class="img-thumb" src="{getPicture(member.picture_id)}" alt="{member.full_name}">
+    <img class="img-thumb" src={getPicture(member.picture_id)} alt={member.full_name}>
     <div class="ms-2">
         <div>{member.full_name}</div>
         <div class="text-muted">{member.username}</div>
@@ -87,19 +87,19 @@
                 </div>
                 <div class:d-flex={showNotInvestigatedDetailedStats} class:d-none={!showNotInvestigatedDetailedStats}>
                     <div class="ms-2">
-                        <Fa icon={faCircle} class="{StatusCSSClassMap.failed}"/> {stats.failed}
+                        <Fa icon={faCircle} class={StatusCSSClassMap.failed}/> {stats.failed}
                     </div>
                     <div class="ms-2">
-                        <Fa icon={faCircle} class="{StatusCSSClassMap.running}"/> {stats.running}
+                        <Fa icon={faCircle} class={StatusCSSClassMap.running}/> {stats.running}
                     </div>
                     <div class="ms-2">
-                        <Fa icon={faCircle} class="{StatusCSSClassMap.created}"/> {stats.created}
+                        <Fa icon={faCircle} class={StatusCSSClassMap.created}/> {stats.created}
                     </div>
                     <div class="ms-2">
-                        <Fa icon={faCircle} class="{StatusCSSClassMap.aborted}"/> {stats.aborted}
+                        <Fa icon={faCircle} class={StatusCSSClassMap.aborted}/> {stats.aborted}
                     </div>
                     <div class="ms-2">
-                        <Fa icon={faCircle} class="{StatusCSSClassMap.passed}"/> {stats.passed}
+                        <Fa icon={faCircle} class={StatusCSSClassMap.passed}/> {stats.passed}
                     </div>
                 </div>
             {/await}
@@ -111,19 +111,19 @@
                 </div>
                 <div class:d-flex={showInvestigatedDetailedStats} class:d-none={!showInvestigatedDetailedStats}>
                     <div class="ms-2">
-                        <Fa icon={faCircle} class="{StatusCSSClassMap.failed}"/> {stats.failed}
+                        <Fa icon={faCircle} class={StatusCSSClassMap.failed}/> {stats.failed}
                     </div>
                     <div class="ms-2">
-                        <Fa icon={faCircle} class="{StatusCSSClassMap.running}"/> {stats.running}
+                        <Fa icon={faCircle} class={StatusCSSClassMap.running}/> {stats.running}
                     </div>
                     <div class="ms-2">
-                        <Fa icon={faCircle} class="{StatusCSSClassMap.created}"/> {stats.created}
+                        <Fa icon={faCircle} class={StatusCSSClassMap.created}/> {stats.created}
                     </div>
                     <div class="ms-2">
-                        <Fa icon={faCircle} class="{StatusCSSClassMap.aborted}"/> {stats.aborted}
+                        <Fa icon={faCircle} class={StatusCSSClassMap.aborted}/> {stats.aborted}
                     </div>
                     <div class="ms-2">
-                        <Fa icon={faCircle} class="{StatusCSSClassMap.passed}"/> {stats.passed}
+                        <Fa icon={faCircle} class={StatusCSSClassMap.passed}/> {stats.passed}
                     </div>
                 </div>
             {/await}
