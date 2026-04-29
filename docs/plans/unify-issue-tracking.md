@@ -329,7 +329,7 @@ of duplicating it.
 
 1. **Backend:** `uv run pytest argus/backend/tests` — existing tests pass.
 2. **Lint:** `uv run ruff check` — no new violations.
-3. **Frontend build:** `ROLLUP_ENV=development yarn rollup -c` — compiles without errors.
+3. **Frontend build:** `yarn build` — compiles without errors.
 4. **Manual verification:**
     - Submit a GitHub issue URL to a test run → issue card renders correctly.
     - Submit a Jira issue URL (any `*.atlassian.net` instance) → issue card renders correctly.

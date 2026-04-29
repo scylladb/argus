@@ -1,4 +1,3 @@
-import { element } from "svelte/internal";
 import ViewUserResolver from "./Profile/ViewUserResolver.svelte";
 import { mount } from "svelte";
 

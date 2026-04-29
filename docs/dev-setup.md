@@ -27,7 +27,7 @@ FLASK_ENV=development \
   uv run flask run
 
 # 3. Start the frontend (in another terminal)
-ROLLUP_ENV=development yarn rollup -c --watch
+yarn build:watch
 
 # 4. Open http://localhost:5000 — login with admin/admin
 ```
@@ -235,7 +235,7 @@ to register a user through the UI or another method.
 | Seed (first time) | `uv run python dev-db/seed_data.py --create-keyspace`                                                          |
 | Seed (reset)      | `uv run python dev-db/seed_data.py --force --create-keyspace`                                                  |
 | Start backend     | `FLASK_ENV=development FLASK_APP=argus_backend:start_server CQLENG_ALLOW_SCHEMA_MANAGEMENT=1 uv run flask run` |
-| Start frontend    | `ROLLUP_ENV=development yarn rollup -c --watch`                                                                |
+| Start frontend    | `yarn build:watch`                                                                                             |
 | Run linter        | `uv run ruff check`                                                                                            |
 | Run backend tests | `uv run pytest argus/backend/tests`                                                                            |
 | Run client tests  | `uv run pytest argus/client/tests`                                                                             |
