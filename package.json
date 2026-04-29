@@ -35,7 +35,7 @@
     "prettysize": "^2.0.0",
     "query-string": "^9.2.2",
     "string-template": "^1.0.0",
-    "svelte": "5.37.3",
+    "svelte": "^5.46.4",
     "svelte-fa": "^4.0.4",
     "svelte-select": "5.8.3",
     "url-slug": "^4.0.1",
@@ -43,7 +43,7 @@
     "yaml": "^2.8.2"
   },
   "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "6.2.4",
+    "@sveltejs/vite-plugin-svelte": "7.0.0",
     "@testing-library/svelte": "^5.3.1",
     "@tsconfig/svelte": "5.0.4",
     "@types/bootstrap": "^5.2.6",
@@ -62,8 +62,11 @@
     "svelte-check": "^4.3.1",
     "tslib": "^2.8.1",
     "typescript": "^5.9.2",
-    "vite": "6",
+    "vite": "^8.0.0",
     "vitest": "^4.1.4"
+  },
+  "resolutions": {
+    "vite": "^8.0.0"
   },
   "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
 }
