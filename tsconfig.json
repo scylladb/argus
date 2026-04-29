@@ -11,6 +11,6 @@
         "strict": true,
         "forceConsistentCasingInFileNames": true,
         "allowJs": true,
-        "moduleResolution": "node"
+        "moduleResolution": "bundler"
     }
 }

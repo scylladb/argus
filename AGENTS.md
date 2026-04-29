@@ -5,8 +5,7 @@
 Backend services live in `argus/backend` with Flask entry points defined in `argus_backend.py`; shared helpers sit in `argus/common`, while CLI tooling and client integrations are under `argus/client`. Frontend assets are in `frontend/`, compiled into `public/dist`, and HTML templates stay in `templates/`. Test suites are grouped in `argus/backend/tests`, `argus/client/tests`, and `pytest-argus-reporter/tests`.
 
 ## Build, Test, and Development Commands
-
-Install dependencies with `uv sync --all-extras` and `yarn install`. Rebuild the Svelte-based UI with `ROLLUP_ENV=development yarn rollup -c --watch`. Start the API locally via `FLASK_ENV=development FLASK_APP=argus_backend:start_server CQLENG_ALLOW_SCHEMA_MANAGEMENT=1 uv run flask run`. For linting, run `uv run ruff check`. Run server-side tests with `uv run pytest argus/backend/tests` and client utilities through `uv run pytest argus/client/tests`.
+Install dependencies with `uv sync --all-extras` and `yarn install`. Rebuild the Svelte-based UI with `yarn build` (production) or `yarn build:watch` (continuous development build). Start the API locally via `FLASK_ENV=development FLASK_APP=argus_backend:start_server CQLENG_ALLOW_SCHEMA_MANAGEMENT=1 uv run flask run`. For linting, run `uv run ruff check`. Run server-side tests with `uv run pytest argus/backend/tests` and client utilities through `uv run pytest argus/client/tests`.
 
 ## Coding Style & Naming Conventions
 
