@@ -8,6 +8,23 @@ Backend services live in `argus/backend` with Flask entry points defined in `arg
 
 Install dependencies with `uv sync --all-extras` and `yarn install`. Rebuild the Svelte-based UI with `ROLLUP_ENV=development yarn rollup -c --watch`. Start the API locally via `FLASK_ENV=development FLASK_APP=argus_backend:start_server CQLENG_ALLOW_SCHEMA_MANAGEMENT=1 uv run flask run`. For linting, run `uv run ruff check`. Run server-side tests with `uv run pytest argus/backend/tests` and client utilities through `uv run pytest argus/client/tests`.
 
+For full local setup including database, config, seed data, and troubleshooting, see `docs/dev-setup.md`.
+
+## Key Files
+
+| Domain         | Path                        | Purpose                                                             |
+| -------------- | --------------------------- | ------------------------------------------------------------------- |
+| App entry      | `argus_backend.py`          | Flask app factory and server start                                  |
+| Blueprints     | `argus/backend/controller/` | Route handlers (one file per feature)                               |
+| Services       | `argus/backend/service/`    | Business logic layer called by controllers                          |
+| Models         | `argus/backend/models/`     | CQLEngine/ScyllaDB model definitions                                |
+| Client SDK     | `argus/client/`             | Python client for interacting with the Argus API                    |
+| Frontend entry | `frontend/`                 | Per-page JS entry points (e.g., `argus.js`, `release-dashboard.js`) |
+
+| Python config | `pyproject.toml` | Dependencies, Ruff, and tool configuration |
+| Dev setup | `docs/dev-setup.md` | Full local environment setup guide |
+| Plans guide | `docs/plans/INSTRUCTIONS.md` | Authoritative plan structure and rules |
+
 ## Coding Style & Naming Conventions
 
 Python code targets 3.12, uses 4-space indentation, and a 120-character line width enforced by Ruff and Autopep8 (see `pyproject.toml`). Prefer descriptive snake_case for Python modules and functions; keep Svelte/JS components in PascalCase folders aligned with entry files (e.g., `frontend/AdminPanel/`). Organize Flask blueprints by feature under `argus/backend` and export public APIs through `__init__.py`.
