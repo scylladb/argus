@@ -142,10 +142,6 @@
         background-color: #f0f0f0 !important;
     }
 
-    .date-input {
-        max-width: 200px;
-    }
-
     :global([data-bs-theme="dark"]) button.colored:not(.selected):not(:hover) {
         background-color: #3d3d3d !important;
     }

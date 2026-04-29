@@ -194,10 +194,6 @@
         font-size: 0.8em;
     }
 
-    .border-lightish {
-        border-color: lightsteelblue !important;
-    }
-
     .bg-editor {
         background-color: #f2f2f2;
     }
@@ -205,10 +201,6 @@
     .bg-blur {
         background-color: #ffffff00;
         backdrop-filter: blur(4px);
-    }
-
-    :global([data-bs-theme="dark"]) .border-lightish {
-        border-color: #3a4a5c !important;
     }
 
     :global([data-bs-theme="dark"]) .bg-editor {

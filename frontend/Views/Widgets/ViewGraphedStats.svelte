@@ -533,12 +533,6 @@
     .accordion-body {
         padding: 2rem;
     }
-    .bi {
-        position: absolute;
-        right: 0.5rem;
-        top: 50%;
-        transform: translateY(-50%);
-    }
     @media (max-width: 768px) {
         .chart-container {
             height: 300px;

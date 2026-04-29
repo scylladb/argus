@@ -202,8 +202,4 @@
     .invertArrow {
         transform: rotate(180deg);
     }
-
-    .narrow-cell {
-        max-width: 384px;
-    }
 </style>
