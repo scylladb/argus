@@ -1,11 +1,10 @@
 import svelte from "rollup-plugin-svelte";
 import resolve from "@rollup/plugin-node-resolve";
-import postcss from 'rollup-plugin-postcss';
+import postcss from "rollup-plugin-postcss";
 import typescript from "@rollup/plugin-typescript";
 import { sveltePreprocess } from "svelte-preprocess";
 import commonjs from "@rollup/plugin-commonjs";
 import sass from "@csstools/postcss-sass";
-
 
 const environment = process.env.ROLLUP_ENV || "production";
 
@@ -46,23 +45,33 @@ export default {
         entryFileNames: "[name].bundle.js",
         assetFileNames: "public/dist/assets/[name][extname]",
         globals: {
-            globalAlert: 'sendMessage'
-        }
+            globalAlert: "sendMessage",
+        },
     },
     plugins: [
         commonjs(),
         postcss({
             extract: "styles.css",
-            plugins: [
-                sass(),
-            ]
+            plugins: [sass()],
         }),
         typescript(),
-        resolve({ browser: true, exportConditions: ['svelte'], }),
+        resolve({ browser: true, exportConditions: ["svelte"] }),
         svelte({
             preprocess: sveltePreprocess(),
             include: "/**/*.svelte",
             emitCss: true,
+            onwarn(warning, handler) {
+                const suppressedCodes = [
+                    "a11y_click_events_have_key_events",
+                    "a11y_no_static_element_interactions",
+                    "a11y_no_noninteractive_element_interactions",
+                    "a11y_no_noninteractive_element_to_interactive_role",
+                    "a11y_missing_attribute",
+                    "a11y_interactive_supports_focus",
+                ];
+                if (suppressedCodes.includes(warning.code)) return;
+                handler(warning);
+            },
         }),
-    ]
+    ],
 };
