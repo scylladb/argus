@@ -377,15 +377,11 @@
     .fs-8 {
         font-size: 0.7em;
     }
-    .editor-icon {
+    :global(.editor-icon) {
         color: #1f1f1f !important;
     }
 
-    :global([data-bs-theme="dark"]) .bg-editor {
-        background-color: #1a1d21;
-    }
-
-    :global([data-bs-theme="dark"]) .editor-icon {
+    :global([data-bs-theme="dark"]) :global(.editor-icon) {
         color: #dee2e6 !important;
     }
 
