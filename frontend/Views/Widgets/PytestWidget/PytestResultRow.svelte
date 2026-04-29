@@ -1,6 +1,6 @@
 <script lang="ts">
     import Fa from "svelte-fa";
-    import { PytestResult } from "./ViewPytestOverview.svelte";
+    import type { PytestResult } from "./ViewPytestOverview.svelte";
     import { faChevronDown, faChevronUp, faClipboard, faCopy, faFilter, faSearch } from "@fortawesome/free-solid-svg-icons";
     import { PytestBgStyles, PytestTextStyles } from "../../../Common/TestStatus";
     import humanizeDuration from "humanize-duration";

@@ -1,7 +1,7 @@
 <script lang="ts">
     import { NemesisStatusToTestStatus, StatusBackgroundCSSClassMap } from "../../../Common/TestStatus";
     import { subUnderscores, titleCase } from "../../../Common/TextUtils";
-    import { TestRun } from "./Interfaces";
+    import type { TestRun } from "./Interfaces";
 
     interface Props {
         run: TestRun;
