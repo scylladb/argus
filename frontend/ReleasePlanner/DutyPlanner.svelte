@@ -43,7 +43,7 @@
 
     let newSchedule = Object.assign(PayloadTemplate);
     let newScheduleDate = $state(startDate(releaseData.release));
-    let newScheduleEndDate = $state(endDate(releaseData.release, newScheduleDate));
+    let newScheduleEndDate = $state(endDate(releaseData.release, startDate(releaseData.release)));
 
     const fetchSchedules = async function () {
         try {
