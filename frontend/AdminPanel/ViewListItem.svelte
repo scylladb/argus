@@ -32,8 +32,8 @@
             {view.description || "No description provided."}
         </div>
     </div>
-    <div class="ms-auto"><button class="btn btn-primary" onclick={resolveViewForUpdating}><Fa icon={faEdit}/></button></div>
-    <div class="ms-2"><button class="btn btn-danger" onclick={() => (deleting = true)}><Fa icon={faTrash}/></button></div>
+    <div class="ms-auto"><button class="btn btn-primary" title="Edit" aria-label="Edit" onclick={resolveViewForUpdating}><Fa icon={faEdit}/></button></div>
+    <div class="ms-2"><button class="btn btn-danger" title="Delete" aria-label="Delete" onclick={() => (deleting = true)}><Fa icon={faTrash}/></button></div>
 </div>
 
 {#if deleting}

@@ -500,7 +500,7 @@
 </script>
 <div class="rounded bg-light-one shadow-sm p-2">
     <div class="text-end mb-2">
-        <button title="Refresh" class="btn btn-sm btn-outline-dark" onclick={handleDashboardRefreshClick}>
+        <button title="Refresh" aria-label="Refresh" class="btn btn-sm btn-outline-dark" onclick={handleDashboardRefreshClick}>
             <Fa icon={faRefresh}/>
         </button>
         {#if stats}

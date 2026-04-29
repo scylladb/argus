@@ -141,6 +141,7 @@
                                     <button
                                         class="btn btn-sm btn-danger"
                                         title="Remove this issue from this run"
+                                        aria-label="Remove this issue from this run"
                                         type="button"
                                         data-bs-toggle="modal"
                                         data-bs-target="#modalIssueConfirmDelete-{issue.id}"
