@@ -264,12 +264,12 @@
                 </div>
                 <div class="modal-body">
                     <div class="form-group">
-                        <label>Name</label>
-                        <input class="form-control" type="text" bind:value={form.name}/>
+                        <label for="graph-name">Name</label>
+                        <input id="graph-name" class="form-control" type="text" bind:value={form.name}/>
                     </div>
                     <div class="form-group">
-                        <label>Description</label>
-                        <textarea class="form-control" bind:value={form.description}></textarea>
+                        <label for="graph-description">Description</label>
+                        <textarea id="graph-description" class="form-control" bind:value={form.description}></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -291,8 +291,8 @@
                 </div>
                 <div class="modal-body">
                     <div class="form-group">
-                        <label>Select Graph View</label>
-                        <select class="form-control" bind:value={selectedView}>
+                        <label for="graph-view-select">Select Graph View</label>
+                        <select id="graph-view-select" class="form-control" bind:value={selectedView}>
                             <option value="" disabled>Select a view</option>
                             {#each graphViews as v}
                                 <option value={v.name}>{v.name}</option>

@@ -15,6 +15,6 @@
 </script>
 
 <div class="form">
-    <input type="number" class="form-control" bind:value={settings[settingName]}>
-    <label type="text" class="form-label">{definition.displayName}</label> <span title="{definition.help}"><Fa icon={faQuestionCircle}/></span>
+    <input id="integer-{settingName}" type="number" class="form-control" bind:value={settings[settingName]}>
+    <label for="integer-{settingName}" class="form-label">{definition.displayName}</label> <span title="{definition.help}"><Fa icon={faQuestionCircle}/></span>
 </div>

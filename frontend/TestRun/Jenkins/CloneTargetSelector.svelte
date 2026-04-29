@@ -195,8 +195,8 @@
 
 <div>
     <div class="mb-2">
-        <label class="form-label">Test Name</label>
-        <input type="text" class="form-control" bind:value={newTestName}>
+        <label for="clone-test-name" class="form-label">Test Name</label>
+        <input id="clone-test-name" type="text" class="form-control" bind:value={newTestName}>
     </div>
     <div class="mb-2">
         <label for="" class="form-label">Release</label>
@@ -227,8 +227,7 @@
     {/if}
     <div class="mb-2">
         <div class="form-check form-switch">
-            <input type="checkbox" class="form-check-input" bind:checked={advancedSettings}>
-            <label type="checkbox" class="form-check-label">Adjust job configuration</label>
+            <label class="form-check-label"><input type="checkbox" class="form-check-input" bind:checked={advancedSettings}> Adjust job configuration</label>
         </div>
         {#if validationMessage}
             <div class="alert alert-danger my-2">

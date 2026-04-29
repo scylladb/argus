@@ -104,12 +104,12 @@
     </div>
     <div class="m-2 collapse border rounded p-2" id="collapseAddLink-{testRun.id}">
         <div class="mb-2">
-            <label class="form-label">Log Name</label>
-            <input class="form-control" type="text" placeholder="Friendly Log Name" bind:value={logName}>
+            <label for="logName-{testRun.id}" class="form-label">Log Name</label>
+            <input id="logName-{testRun.id}" class="form-control" type="text" placeholder="Friendly Log Name" bind:value={logName}>
         </div>
         <div class="mb-2">
-            <label class="form-label">Log URL</label>
-            <input class="form-control" type="text" placeholder="URL for the Log File" bind:value={logLink}>
+            <label for="logLink-{testRun.id}" class="form-label">Log URL</label>
+            <input id="logLink-{testRun.id}" class="form-control" type="text" placeholder="URL for the Log File" bind:value={logLink}>
         </div>
         <div>
             <button
