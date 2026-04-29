@@ -2,7 +2,7 @@
     import Fa from "svelte-fa";
     import { StatusBackgroundCSSClassMap, TestStatus } from "../Common/TestStatus";
     import { subUnderscores, titleCase } from "../Common/TextUtils";
-    import { PlannedTest } from "./PlannedJobs.svelte";
+    import type { PlannedTest } from "./PlannedJobs.svelte";
     import { faChevronDown, faChevronUp, faHammer } from "@fortawesome/free-solid-svg-icons";
     import TestRuns from "../WorkArea/TestRuns.svelte";
     import { timestampToISODate } from "../Common/DateUtils";

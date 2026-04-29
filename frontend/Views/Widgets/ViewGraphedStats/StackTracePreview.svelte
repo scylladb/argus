@@ -1,7 +1,7 @@
 <!-- New StackTracePreview Component -->
 <script lang="ts">
     import { createEventDispatcher } from "svelte";
-    import { TestRun } from "./Interfaces";
+    import type { TestRun } from "./Interfaces";
     interface Props {
         run: TestRun;
     }
