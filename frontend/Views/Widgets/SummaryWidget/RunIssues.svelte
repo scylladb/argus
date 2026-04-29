@@ -1,4 +1,4 @@
-<script lang="ts" type="ts">
+<script lang="ts">
     import Fa from "svelte-fa";
     import {onMount} from "svelte";
     import {faBug} from "@fortawesome/free-solid-svg-icons";
