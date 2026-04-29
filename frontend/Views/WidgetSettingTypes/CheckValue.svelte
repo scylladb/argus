@@ -15,6 +15,5 @@
 </script>
 
 <div class="form-check form-switch">
-    <input type="checkbox" class="form-check-input" bind:checked={settings[settingName]}>
-    <label type="checkbox" class="form-check-label">{definition.displayName}</label> <span title="{definition.help}"><Fa icon={faQuestionCircle}/></span>
+    <label class="form-check-label"><input type="checkbox" class="form-check-input" bind:checked={settings[settingName]}> {definition.displayName}</label> <span title="{definition.help}"><Fa icon={faQuestionCircle}/></span>
 </div>
