@@ -26,15 +26,7 @@ export default defineConfig({
         sourcemap: process.env.NODE_ENV !== "production",
         minify: process.env.NODE_ENV === "production",
         cssCodeSplit: false,
-        rollupOptions: {
-            // Suppress sourcemap and /* @__PURE__ */ annotation warnings caused by
-            // TypeScript enum compilation inside Svelte components — the TS preprocessor
-            // emits IIFE wrappers with @__PURE__ comments that Rollup cannot map back to
-            // the original source through the Svelte sourcemap chain.
-            onwarn(warning, defaultHandler) {
-                if (warning.code === "SOURCEMAP_ERROR" || warning.code === "INVALID_ANNOTATION") return;
-                defaultHandler(warning);
-            },
+        rolldownOptions: {
             input: {
                 main: "./frontend/argus.js",
                 fontAwesome: "./frontend/font-awesome.js",
@@ -72,7 +64,6 @@ export default defineConfig({
     css: {
         preprocessorOptions: {
             scss: {
-                api: "modern-compiler",
                 silenceDeprecations: ["import", "global-builtin", "color-functions"],
             },
         },
