@@ -25,7 +25,7 @@
     });
     let hasSimilarEventsData = $state(false);
     let isLoading = $state(true);
-    let eventContainer: HTMLDivElement;
+    let eventContainer: HTMLDivElement | undefined = $state();
 
     // Registry of event DOM elements keyed by `event-<SEVERITY>-<INDEX>` for scrolling after toggling duplicates
     let eventElements: Map<string, HTMLElement> = new Map();
