@@ -43,7 +43,7 @@
 
     // Track which tabs have been visited
     let visitedTabs = $state({});
-    visitedTabs[activeTab] = true;
+    visitedTabs[tab.toLowerCase() || "details"] = true;
 
     const setActiveTab = (tabName) => {
         tabName = tabName.toLowerCase();

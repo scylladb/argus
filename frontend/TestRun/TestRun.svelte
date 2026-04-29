@@ -186,7 +186,7 @@
 
     // Track which tabs have been visited
     let visitedTabs: Record<string, boolean> = $state({});
-    visitedTabs[activeTab] = true;
+    visitedTabs[tab.toLowerCase() || "details"] = true;
 
     const fetchTestRunData = async function () {
         try {

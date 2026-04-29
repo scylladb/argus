@@ -121,7 +121,7 @@
         replacements[original.id] = replacement.id;
     };
 
-    let elegiblePromise = $state(checkElegible(selectedRelease));
+    let elegiblePromise = $state(checkElegible(release.id));
 
     onMount(async () => {
         getUsers();
