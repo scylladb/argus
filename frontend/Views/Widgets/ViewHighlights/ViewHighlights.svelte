@@ -58,8 +58,8 @@
     let groupStates = $state<Record<string, GroupState>>({});
     let groupNames = $state<string[]>(["General"]);
     let showGroupModal = $state(false);
-    let newGroupName = "";
-    let groupCreationError = "";
+    let newGroupName = $state("");
+    let groupCreationError = $state("");
     let isCreatingGroup = $state(false);
 
     let defaultGroupItems: string[] = settings.defaultGroupItems || [];
