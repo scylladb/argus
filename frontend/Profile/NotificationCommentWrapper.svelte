@@ -93,7 +93,7 @@
                 <div class="mb-2 d-flex border-bottom pb-2">
                     <h5>Replying to <span class="fw-bold">{replyUser}</span></h5>
                     <div class="ms-auto">
-                        <button class="btn btn-close" onclick={() => (replying = false)}></button>
+                        <button class="btn btn-close" aria-label="Close" onclick={() => (replying = false)}></button>
                     </div>
                 </div>
                 <CommentEditor

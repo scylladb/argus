@@ -156,6 +156,7 @@
                 <div class="ms-auto flex-shrink-0">
                     <button
                         class="btn btn-close"
+                        aria-label="Close"
                         onclick={() => {
                             dispatch("configureCancel");
                         }}

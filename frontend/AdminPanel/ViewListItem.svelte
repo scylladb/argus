@@ -45,6 +45,7 @@
                     <div class="ms-auto">
                         <button
                             class="btn btn-close"
+                            aria-label="Close"
                             onclick={() => {
                                 deleting = false;
                             }}
