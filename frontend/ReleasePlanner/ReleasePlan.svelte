@@ -90,7 +90,7 @@
                 {#if planStats}
                     <button onclick={() => { expandedPlans[plan.id] = (!expandedPlans[plan.id]); }} class="btn btn-primary"><Fa icon={expandedPlans[plan.id] ? faChevronUp : faChevronDown}/></button>
                 {:else}
-                    <button class="btn btn-primary" aria-label="Loading"><span class="spinner-grow spinner-grow-sm"></span></button>
+                    <button class="btn btn-primary" aria-label="Loading" title="Loading"><span class="spinner-grow spinner-grow-sm"></span></button>
                 {/if}
             </div>
             {#if !plan.created_from}

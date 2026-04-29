@@ -25,7 +25,6 @@
     }
     type SeverityValueType = typeof SCTEventSeverity[keyof typeof SCTEventSeverity];
 
-    // svelte-ignore non_reactive_update
     enum TimelineEventType {
         Nemesis = "nemesis",
         Event = "event",
