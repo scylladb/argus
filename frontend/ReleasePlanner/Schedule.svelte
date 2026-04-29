@@ -282,6 +282,7 @@
                         class="btn btn-sm btn-danger"
                         title="Please wait..."
                         type="button"
+                        aria-label="Loading"
                     >
                         <span class="spinner-border spinner-border-sm" />
                     </button>
