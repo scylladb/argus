@@ -73,7 +73,7 @@
         </div>
     {/if}
     <div class="{currentUser.id == team.leader ? "ms-2" : "ms-auto"}">
-        <button class="btn btn-sm btn-success" onclick={handleOpen}><Fa icon={faFolderOpen} /></button>
+        <button class="btn btn-sm btn-success" title="Open team" aria-label="Open team" onclick={handleOpen}><Fa icon={faFolderOpen} /></button>
     </div>
 </div>
 

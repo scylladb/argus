@@ -77,7 +77,7 @@
                 <button class="btn btn-sm btn-outline-secondary me-1" onclick={() => isEditing = !isEditing}>
                     <Fa icon={faEdit}/>
                 </button>
-                <button class="btn btn-sm btn-outline-danger" onclick={deleteComment}>
+                <button class="btn btn-sm btn-outline-danger" title="Delete comment" aria-label="Delete comment" onclick={deleteComment}>
                     <Fa icon={faTrash}/>
                 </button>
             </div>

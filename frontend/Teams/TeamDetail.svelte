@@ -142,8 +142,8 @@
         {#if editingName}
             <div class="d-flex">
                 <input type="text" bind:value={newName}>
-                <button class="ms-2 btn btn-sm btn-success" onclick={handleUpdateTeamName}><Fa icon={faSave}/></button>
-                <button class="ms-2 btn btn-sm btn-secondary" onclick={() => (editingName = false)}><Fa icon={faTimes}/></button>
+                <button class="ms-2 btn btn-sm btn-success" title="Save" aria-label="Save" onclick={handleUpdateTeamName}><Fa icon={faSave}/></button>
+                <button class="ms-2 btn btn-sm btn-secondary" title="Cancel" aria-label="Cancel" onclick={() => (editingName = false)}><Fa icon={faTimes}/></button>
             </div>
         {:else}
             <div class="d-flex">

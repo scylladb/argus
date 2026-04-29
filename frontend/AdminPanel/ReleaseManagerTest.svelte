@@ -71,6 +71,7 @@
         <button
             class="btn btn-light"
             title="Delete"
+            aria-label="Delete"
             data-bs-toggle="modal"
             data-bs-target="#modalTestConfirmDelete-{editedTest.id}"
         >

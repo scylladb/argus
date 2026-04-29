@@ -177,7 +177,7 @@
     <div class="result-content">
         <div class="table-header">
             <h5>{table_name}</h5>
-            <button class="btn btn-link p-0 ms-1" onclick={toggleDescription}>
+            <button class="btn btn-link p-0 ms-1" title="Toggle description" aria-label="Toggle description" onclick={toggleDescription}>
                 <Fa icon={faInfoCircle} size="sm"/>
             </button>
         </div>

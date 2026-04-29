@@ -122,6 +122,7 @@
                 <button
                     class="btn btn-light bg-editor"
                     title="Delete"
+                    aria-label="Delete"
                     data-bs-toggle="modal"
                     data-bs-target="#modalCommentConfirmDelete-{commentBody.id}"
                 >

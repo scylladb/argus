@@ -353,10 +353,10 @@
 </script>
 
 <div class="graph-container">
-    <button class="copy-btn" onclick={copyToClipboard}>
+    <button class="copy-btn" title="Copy to clipboard" aria-label="Copy to clipboard" onclick={copyToClipboard}>
         <Fa icon={faCopy}/>
     </button>
-    <button class="enlarge-btn" onclick={openModal}>
+    <button class="enlarge-btn" title="Enlarge" aria-label="Enlarge" onclick={openModal}>
         <Fa icon={faExpand}/>
     </button>
     <canvas id="graph-{test_id}-{index}" {width} {height}></canvas>

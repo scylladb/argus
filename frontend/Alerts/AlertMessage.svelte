@@ -44,6 +44,7 @@
             onclick={handleClose}
             class="btn btn-sm btn-link text-light p-0 flex-shrink-0"
             aria-label="Dismiss"
+            title="Dismiss"
         >
             <Fa icon={faTimes} />
         </button>
@@ -57,6 +58,8 @@
             <button
                 onclick={handleClose}
                 class="ms-auto btn btn-sm btn-light text-danger"
+                aria-label="Dismiss"
+                title="Dismiss"
             >
                 <Fa icon={faTimes} />
             </button>

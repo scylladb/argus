@@ -94,7 +94,7 @@
                         </button>
                     {/if}
                 {/if}
-                <button class="btn btn-sm btn-outline-secondary" onclick={toggleArchive}>
+                <button class="btn btn-sm btn-outline-secondary" title={highlight.isArchived ? "Unarchive" : "Archive"} aria-label={highlight.isArchived ? "Unarchive" : "Archive"} onclick={toggleArchive}>
                     <Fa icon={highlight.isArchived ? faUndo : faArchive}/>
                 </button>
             </div>

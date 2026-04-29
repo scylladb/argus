@@ -258,6 +258,8 @@
                         <div class="ms-1">
                             <button
                                 class="btn btn-dark"
+                                title="Confirm reassignment"
+                                aria-label="Confirm reassignment"
                                 on:click={handleReassign}
                             >
                                 <Fa icon={faCheck} />
@@ -290,6 +292,7 @@
                     <button
                         class="btn btn-danger"
                         title="Delete schedule"
+                        aria-label="Delete schedule"
                         type="button"
                         data-bs-toggle="modal"
                         data-bs-target="#modalScheduleConfirmDelete-{scheduleData.id}"
