@@ -5,10 +5,9 @@ from typing import Any, Type
 from uuid import UUID
 
 import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 from argus.common.enums import TestStatus
+from argus.client.session import create_session
 from argus.client.generic_result import GenericResultTable
 from argus.client.sct.types import LogLink
 
@@ -36,31 +35,23 @@ class ArgusClient:
         FINALIZE = "/testrun/$type/$id/finalize"
 
     def __init__(self, auth_token: str, base_url: str, api_version="v1", extra_headers: dict | None = None,
-                 timeout: int = 60, max_retries: int = 3) -> None:
+                 timeout: int = 60, max_retries: int = 3, use_tunnel: bool | None = None) -> None:
         self._auth_token = auth_token
         self._base_url = base_url
         self._api_ver = api_version
         self._timeout = timeout
-        self.session = requests.Session()
-
-        # Configure retry strategy
-        retry_strategy = Retry(
-            total=max_retries,
-            connect=max_retries,
-            read=max_retries,
-            status=0,
-            backoff_factor=1,
-            status_forcelist=(),
-            allowed_methods=["GET", "POST"],
+        self.session = create_session(
+            auth_token=auth_token,
+            base_url=base_url,
+            use_tunnel=use_tunnel,
+            max_retries=max_retries,
         )
-
-        # Mount adapter with retry strategy for both http and https
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        self.session.mount("http://", adapter)
-        self.session.mount("https://", adapter)
 
         if extra_headers:
             self.session.headers.update(extra_headers)
+
+    def close(self) -> None:
+        self.session.close()
 
     @property
     def auth_token(self) -> str:
@@ -114,19 +105,10 @@ class ArgusClient:
         }
 
     def get(self, endpoint: str, location_params: dict[str, str] = None, params: dict = None) -> requests.Response:
-        url = self.get_url_for_endpoint(
-            endpoint=endpoint,
-            location_params=location_params
-        )
+        url = self.get_url_for_endpoint(endpoint=endpoint, location_params=location_params)
         LOGGER.debug("GET Request: %s, params: %s", url, params)
-        response = self.session.get(
-            url=url,
-            params=params,
-            headers=self.request_headers,
-            timeout=self._timeout
-        )
+        response = self.session.get(url=url, params=params, headers=self.request_headers, timeout=self._timeout)
         LOGGER.debug("GET Response: %s %s", response.status_code, response.url)
-
         return response
 
     def post(
@@ -136,20 +118,10 @@ class ArgusClient:
         params: dict = None,
         body: dict = None,
     ) -> requests.Response:
-        url = self.get_url_for_endpoint(
-            endpoint=endpoint,
-            location_params=location_params
-        )
+        url = self.get_url_for_endpoint(endpoint=endpoint, location_params=location_params)
         LOGGER.debug("POST Request: %s, params: %s, body: %s", url, params, body)
-        response = self.session.post(
-            url=url,
-            params=params,
-            json=body,
-            headers=self.request_headers,
-            timeout=self._timeout
-        )
+        response = self.session.post(url=url, params=params, json=body, headers=self.request_headers, timeout=self._timeout)
         LOGGER.debug("POST Response: %s %s", response.status_code, response.url)
-
         return response
 
     def submit_run(self, run_type: str, run_body: dict) -> requests.Response:

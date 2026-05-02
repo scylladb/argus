@@ -16,22 +16,34 @@ def cli():
     pass
 
 
-def _submit_driver_result_internal(api_key: str, base_url: str, run_id: str, metadata_path: str, extra_headers: dict):
+def _submit_driver_result_internal(api_key: str, base_url: str, run_id: str, metadata_path: str,
+                                   extra_headers: dict):
     metadata = json.loads(Path(metadata_path).read_text(encoding="utf-8"))
     LOGGER.info("Submitting results for %s [%s/%s] to Argus...", run_id,
                 metadata["driver_name"], metadata["driver_type"])
     raw_xml = (Path(metadata_path).parent / metadata["junit_result"]).read_bytes()
-    client = ArgusDriverMatrixClient(run_id=run_id, auth_token=api_key, base_url=base_url, extra_headers=extra_headers)
+    client = ArgusDriverMatrixClient(
+        run_id=run_id,
+        auth_token=api_key,
+        base_url=base_url,
+        extra_headers=extra_headers,
+    )
     client.submit_driver_result(
         driver_name=metadata["driver_name"], driver_type=metadata["driver_type"], raw_junit_data=base64.encodebytes(raw_xml))
     LOGGER.info("Done.")
 
 
-def _submit_driver_failure_internal(api_key: str, base_url: str, run_id: str, metadata_path: str, extra_headers: dict):
+def _submit_driver_failure_internal(api_key: str, base_url: str, run_id: str, metadata_path: str,
+                                    extra_headers: dict):
     metadata = json.loads(Path(metadata_path).read_text(encoding="utf-8"))
     LOGGER.info("Submitting failure for %s [%s/%s] to Argus...", run_id,
                 metadata["driver_name"], metadata["driver_type"])
-    client = ArgusDriverMatrixClient(run_id=run_id, auth_token=api_key, base_url=base_url, extra_headers=extra_headers)
+    client = ArgusDriverMatrixClient(
+        run_id=run_id,
+        auth_token=api_key,
+        base_url=base_url,
+        extra_headers=extra_headers,
+    )
     client.submit_driver_failure(
         driver_name=metadata["driver_name"], driver_type=metadata["driver_type"], failure_reason=metadata["failure_reason"])
     LOGGER.info("Done.")
@@ -46,7 +58,12 @@ def _submit_driver_failure_internal(api_key: str, base_url: str, run_id: str, me
 @click.option("--build-url", required=True, help="Job URL in the build system")
 def submit_driver_matrix_run(api_key: str, base_url: str, run_id: str, build_id: str, build_url: str, extra_headers: dict):
     LOGGER.info("Submitting %s (%s) to Argus...", build_id, run_id)
-    client = ArgusDriverMatrixClient(run_id=run_id, auth_token=api_key, base_url=base_url, extra_headers=extra_headers)
+    client = ArgusDriverMatrixClient(
+        run_id=run_id,
+        auth_token=api_key,
+        base_url=base_url,
+        extra_headers=extra_headers,
+    )
     client.submit_driver_matrix_run(job_name=build_id, job_url=build_url)
     LOGGER.info("Done.")
 
@@ -98,7 +115,12 @@ def submit_or_fail_driver(api_key: str, base_url: str, run_id: str, metadata_pat
 def submit_driver_env(api_key: str, base_url: str, run_id: str, env_path: str, extra_headers: dict):
     LOGGER.info("Submitting environment for run %s to Argus...", run_id)
     raw_env = Path(env_path).read_text()
-    client = ArgusDriverMatrixClient(run_id=run_id, auth_token=api_key, base_url=base_url, extra_headers=extra_headers)
+    client = ArgusDriverMatrixClient(
+        run_id=run_id,
+        auth_token=api_key,
+        base_url=base_url,
+        extra_headers=extra_headers,
+    )
     client.submit_env(raw_env)
     LOGGER.info("Done.")
 
@@ -110,7 +132,12 @@ def submit_driver_env(api_key: str, base_url: str, run_id: str, env_path: str, e
 @click.option("--id", "run_id", required=True, help="UUID (v4 or v1) unique to the job")
 @click.option("--status", required=True, help="Resulting job status")
 def finish_driver_matrix_run(api_key: str, base_url: str, run_id: str, status: str, extra_headers: dict):
-    client = ArgusDriverMatrixClient(run_id=run_id, auth_token=api_key, base_url=base_url, extra_headers=extra_headers)
+    client = ArgusDriverMatrixClient(
+        run_id=run_id,
+        auth_token=api_key,
+        base_url=base_url,
+        extra_headers=extra_headers,
+    )
     client.finalize_run(run_type=ArgusDriverMatrixClient.test_type, run_id=run_id, body={"status": TestStatus(status)})
 
 
