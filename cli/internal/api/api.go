@@ -61,7 +61,18 @@ type APIError struct {
 }
 
 func (e *APIError) Error() string {
-	return fmt.Sprintf("%s: %s (exception: %s)", ErrAPIError, e.Body.Message, e.Body.Exception)
+	msg := e.Body.Message
+	exc := e.Body.Exception
+	switch {
+	case msg != "" && exc != "":
+		return fmt.Sprintf("%s: %s (%s)", ErrAPIError, msg, exc)
+	case exc != "":
+		return fmt.Sprintf("%s: %s", ErrAPIError, exc)
+	case msg != "":
+		return fmt.Sprintf("%s: %s", ErrAPIError, msg)
+	default:
+		return ErrAPIError.Error()
+	}
 }
 
 func (e *APIError) Unwrap() error { return ErrAPIError }
@@ -280,7 +291,7 @@ func DoJSON[T any](c *Client, req *http.Request) (T, error) {
 
 	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
 		return zero, fmt.Errorf(
-			"%w: server returned %d %s — re-authenticate with `argus auth` or set ARGUS_AUTH_TOKEN (or ARGUS_TOKEN)",
+			"%w: server returned %d %s — set ARGUS_TOKEN=<token> or run `argus auth-token <token>` for local servers, `argus auth` for production",
 			ErrUnauthorized,
 			resp.StatusCode,
 			http.StatusText(resp.StatusCode),

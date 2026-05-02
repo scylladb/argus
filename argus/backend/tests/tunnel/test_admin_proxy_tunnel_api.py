@@ -48,8 +48,8 @@ def normal_user_identity():
 def mock_host_fingerprint(monkeypatch):
     monkeypatch.setattr(
         TunnelService,
-        "_fetch_host_key_fingerprint",
-        staticmethod(lambda host, _port: f"SHA256:{host}"),
+        "_fetch_host_key",
+        staticmethod(lambda host, _port: (f"{host} ssh-ed25519 AAAA{host}", f"SHA256:{host}")),
     )
 
 
@@ -79,7 +79,7 @@ def test_admin_can_save_and_get_proxy_tunnel_config(flask_client: FlaskClient, a
         assert saved["proxy_user"] == payload["proxy_user"]
         assert saved["target_host"] == payload["target_host"]
         assert saved["target_port"] == payload["target_port"]
-        assert saved["host_key_fingerprint"] == f"SHA256:{payload['host']}"
+        assert saved["host_key_fingerprint"] == f"{payload['host']} ssh-ed25519 AAAA{payload['host']}"
         assert saved["service_user_id"] is not None
         assert saved["api_token"] is not None
         created_config_id = saved["id"]
@@ -166,7 +166,7 @@ def test_admin_get_proxy_tunnel_config_ignores_inactive_tunnel_id(flask_client: 
         proxy_user="argus-proxy",
         target_host="10.0.0.77",
         target_port=8080,
-        host_key_fingerprint="SHA256:inactive-id",
+        host_key_fingerprint="inactive-id ssh-ed25519 AAAAinactive-id",
         service_user_id=g.user.id,
         is_active=False,
     )
@@ -361,5 +361,4 @@ def test_admin_proxy_tunnel_endpoints_require_admin_role(
     finally:
         flask_client.application.secret_key = previous_secret
 
-    assert resp.status_code == 302
-    assert resp.headers["Location"].endswith("/")
+    assert resp.status_code == 403
