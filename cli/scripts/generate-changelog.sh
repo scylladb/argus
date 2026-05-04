@@ -223,10 +223,13 @@ echo "|-----|--------|---------|"
 for raw in "${RAW_COMMITS[@]}"; do
     IFS="$FIELD_SEP" read -r sha subject author <<< "$raw"
     short_sha="${sha:0:7}"
+    # Escape pipe characters so they do not break the Markdown table columns.
+    subject_escaped="${subject//|/\\|}"
+    author_escaped="${author//|/\\|}"
     if [[ -n "$REPO_URL" ]]; then
-        echo "| [\`${short_sha}\`](${REPO_URL}/commit/${sha}) | ${author} | ${subject} |"
+        echo "| [\`${short_sha}\`](${REPO_URL}/commit/${sha}) | ${author_escaped} | ${subject_escaped} |"
     else
-        echo "| \`${short_sha}\` | ${author} | ${subject} |"
+        echo "| \`${short_sha}\` | ${author_escaped} | ${subject_escaped} |"
     fi
 done
 echo ""
