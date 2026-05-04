@@ -51,13 +51,13 @@ archives:
           - goos: windows
             formats:
                 - zip
-      # Use src glob syntax so that missing files are silently skipped
-      # instead of causing a hard error.
+      # LICENSE and README live at the repo root, not under cli/.
+      # GoReleaser is invoked from the repo root so these paths resolve correctly.
       files:
-          - src: "cli/LICENSE*"
+          - src: "LICENSE*"
             dst: .
             strip_parent: true
-          - src: "cli/README*"
+          - src: "README*"
             dst: .
             strip_parent: true
 

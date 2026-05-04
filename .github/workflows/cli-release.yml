@@ -6,7 +6,16 @@ name: CLI – Release
 on:
     push:
         tags:
-            - "cli/v*"
+            # Require a numeric version immediately after the prefix so that
+            # accidental tags like cli/vtest or cli/vfoo never trigger a release.
+            - "cli/v[0-9]*"
+
+# Guard: only proceed when the tag is reachable from master/main.
+# This prevents a cli/v* tag pushed on a feature branch from publishing a release.
+# The check runs as the very first step in each job via job-level `if`.
+# github.event.base_ref is the branch the tag points to when pushed via
+# `git push origin <tag>`; for annotated tags it may be empty, so we also
+# perform an explicit ancestry check inside the changelog job.
 
 # Least-privilege: default to read-only; the release job escalates below.
 permissions:
@@ -28,17 +37,37 @@ jobs:
               with:
                   fetch-depth: 0
 
+            - name: Verify tag is on master/main
+              shell: bash
+              run: |
+                  # Abort if the tagged commit is not an ancestor of master (or main).
+                  # This prevents a cli/v* tag pushed on a feature branch from
+                  # accidentally publishing a release.
+                  TAG_SHA=$(git rev-list -n1 "${GITHUB_REF_NAME}")
+                  for branch in master main; do
+                    if git show-ref --verify --quiet "refs/remotes/origin/${branch}"; then
+                      if git merge-base --is-ancestor "${TAG_SHA}" "origin/${branch}"; then
+                        echo "Tag ${GITHUB_REF_NAME} (${TAG_SHA}) is on ${branch}. Proceeding."
+                        exit 0
+                      fi
+                    fi
+                  done
+                  echo "ERROR: Tag ${GITHUB_REF_NAME} is not reachable from master/main. Aborting release." >&2
+                  exit 1
+
             - name: Resolve previous CLI tag
               id: prev_tag
               shell: bash
               run: |
                   CURRENT_TAG="${GITHUB_REF_NAME}"   # e.g. cli/v1.2.0
 
-                  # List cli/v* tags reachable from HEAD, exclude the current one,
-                  # sort semantically and take the highest — i.e. the immediate predecessor.
-                  PREV=$(git tag --merged HEAD --list 'cli/v*' \
+                  # List cli/v[0-9]* tags reachable from HEAD, sorted ascending by
+                  # git's own version comparator (version:refname).  This correctly
+                  # orders pre-releases: cli/v1.0.0-rc1 < cli/v1.0.0, unlike sort -V
+                  # which can produce the wrong result for pre-release suffixes.
+                  # Exclude the current tag then take the last entry = immediate predecessor.
+                  PREV=$(git tag --merged HEAD --list 'cli/v[0-9]*' --sort=version:refname \
                            | grep -v "^${CURRENT_TAG}$" \
-                           | sort -V \
                            | tail -1)
 
                   if [[ -z "$PREV" ]]; then
