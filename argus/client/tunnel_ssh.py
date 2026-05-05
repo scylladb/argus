@@ -207,12 +207,39 @@ class SSHTunnel:
 
     @staticmethod
     def _prepare_known_hosts_file(config: TunnelConfig) -> Path:
-        host_lines = scan_host_keys(config.proxy_host, config.proxy_port)
-        matched_line = match_known_host_line(
-            scanned_lines=host_lines,
-            expected_fingerprint=config.host_key_fingerprint,
+        """Build a temporary known_hosts file covering ``config.proxy_host``.
+
+        Two input shapes are supported, both validated strictly:
+
+        1. **Full known_hosts entry** (``"host keytype keydata"``) — the format
+           returned once the backend stores entries directly. We rewrite the
+           leading host token to match the connection target (using
+           ``[host]:port`` for non-default ports).
+        2. **SHA256 fingerprint** (``"SHA256:..."``) — current backend format;
+           we run ``ssh-keyscan`` and match by fingerprint.
+
+        Anything else raises :class:`TunnelClientError` so strict host
+        verification stays enforced.
+        """
+        raw = (config.host_key_fingerprint or "").strip()
+        if not raw:
+            raise TunnelClientError("host_key_fingerprint is empty; refusing to skip host verification")
+
+        if _looks_like_known_hosts_entry(raw):
+            normalised = _normalise_known_hosts_entry(raw, config.proxy_host, config.proxy_port)
+            return write_temp_known_hosts(normalised)
+
+        if raw.startswith("SHA256:"):
+            host_lines = scan_host_keys(config.proxy_host, config.proxy_port)
+            matched_line = match_known_host_line(
+                scanned_lines=host_lines,
+                expected_fingerprint=raw,
+            )
+            return write_temp_known_hosts(matched_line)
+
+        raise TunnelClientError(
+            f"host_key_fingerprint has unrecognised format: {raw[:32]!r}"
         )
-        return write_temp_known_hosts(matched_line)
 
     @staticmethod
     def _terminate_process(process: subprocess.Popen[str]) -> None:
@@ -281,6 +308,32 @@ def derive_fingerprint(key_text: str) -> str:
     digest = hashlib.sha256(key_blob).digest()
     b64 = base64.b64encode(digest).rstrip(b"=").decode("ascii")
     return f"SHA256:{b64}"
+
+
+def _looks_like_known_hosts_entry(raw: str) -> bool:
+    parts = raw.split()
+    return len(parts) >= 3 and parts[1] in ALLOWED_HOST_KEY_TYPES
+
+
+def _normalise_known_hosts_entry(raw: str, host: str, port: int) -> str:
+    """Rewrite a known_hosts entry so the host token matches the connect address.
+
+    SSH matches the entry by the literal host string used to connect — so a
+    backend-provided entry of ``"some-other-name keytype keydata"`` would be
+    ignored. We canonicalise the leading host token to match what
+    :func:`SSHTunnel._build_ssh_command` connects to (and use ``[host]:port``
+    for non-default ports).
+    """
+    parts = raw.split()
+    if len(parts) < 3:
+        raise TunnelClientError("known_hosts entry must contain host, key type, and key data")
+    key_type = parts[1]
+    key_blob = parts[2]
+    if key_type not in ALLOWED_HOST_KEY_TYPES:
+        raise TunnelClientError(f"unsupported known_hosts key type: {key_type}")
+
+    host_token = host if port == 22 else f"[{host}]:{port}"
+    return f"{host_token} {key_type} {key_blob}"
 
 
 def write_temp_known_hosts(known_host_line: str) -> Path:

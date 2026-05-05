@@ -20,6 +20,7 @@ ALLOWED_HOST_KEY_TYPES = (
 
 
 class _TunnelApiResponse(TypedDict):
+    """Live response shape from ``/client/ssh/tunnel`` (POST register / GET fetch)."""
     proxy_host: str
     proxy_port: int
     proxy_user: str
@@ -29,6 +30,29 @@ class _TunnelApiResponse(TypedDict):
     expires_at: NotRequired[str | None]
     key_id: NotRequired[str | None]
     tunnel_id: NotRequired[str | None]
+
+
+class _TunnelCachePayload(TypedDict):
+    """On-disk cache shape written by :meth:`TunnelConfig.to_cache_payload`.
+
+    Mirrors :class:`_TunnelApiResponse` but is independently typed so future
+    cache-only fields don't leak into the API contract.
+    """
+    proxy_host: str
+    proxy_port: int
+    proxy_user: str
+    target_host: str
+    target_port: int
+    host_key_fingerprint: str
+    expires_at: NotRequired[str | None]
+    key_id: NotRequired[str | None]
+    tunnel_id: NotRequired[str | None]
+
+
+# Required keys are derived from the TypedDict at runtime via ``__required_keys__``;
+# kept as a module-level set so the dunder access is centralised and easy to swap
+# out if/when ``typing.get_type_hints``-based introspection becomes preferable.
+_TUNNEL_API_REQUIRED_KEYS: frozenset[str] = frozenset(_TunnelApiResponse.__required_keys__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,8 +68,8 @@ class TunnelConfig:
     tunnel_id: str | None = None
 
     @classmethod
-    def from_api_response(cls, response: "_TunnelApiResponse") -> "TunnelConfig":
-        missing = [k for k in _TunnelApiResponse.__required_keys__ if not response.get(k)]
+    def from_api_response(cls, response: "_TunnelApiResponse | _TunnelCachePayload") -> "TunnelConfig":
+        missing = [k for k in _TUNNEL_API_REQUIRED_KEYS if not response.get(k)]
         if missing:
             raise TunnelClientError(f"Missing required tunnel response fields: {', '.join(missing)}")
 

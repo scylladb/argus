@@ -88,7 +88,7 @@ def generate_keypair_if_needed(paths: TunnelStatePaths) -> None:
         raise TunnelClientError(f"ssh-keygen failed: {stderr or 'unknown error'}")
 
     paths.private_key.chmod(0o600)
-    paths.public_key.chmod(0o600)
+    paths.public_key.chmod(0o644)
 
 
 def _generate_keypair_with_cryptography(paths: TunnelStatePaths) -> bool:
@@ -112,7 +112,7 @@ def _generate_keypair_with_cryptography(paths: TunnelStatePaths) -> bool:
         paths.private_key.write_bytes(private_bytes)
         paths.public_key.write_bytes(public_bytes + b"\n")
         paths.private_key.chmod(0o600)
-        paths.public_key.chmod(0o600)
+        paths.public_key.chmod(0o644)
         return True
     except Exception as exc:  # noqa: BLE001
         LOGGER.warning("Falling back to ssh-keygen due to cryptography key generation failure: %s", exc)

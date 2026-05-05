@@ -39,14 +39,14 @@ def cli():
 def submit_run(api_key: str, base_url: str, use_tunnel: bool | None, id: str, build_id: str, build_url: str, started_by: str,
                sub_type: str = None, scylla_version: str = None, extra_headers: dict | None = None):
     LOGGER.info("Submitting %s (%s) to Argus...", build_id, id)
-    client = ArgusGenericClient(
+    with ArgusGenericClient(
         auth_token=api_key,
         base_url=base_url,
         extra_headers=extra_headers,
         use_tunnel=use_tunnel,
-    )
-    client.submit_generic_run(build_id=build_id, run_id=id, started_by=started_by,
-                              build_url=build_url, scylla_version=scylla_version, sub_type=sub_type)
+    ) as client:
+        client.submit_generic_run(build_id=build_id, run_id=id, started_by=started_by,
+                                  build_url=build_url, scylla_version=scylla_version, sub_type=sub_type)
     LOGGER.info("Done.")
 
 
@@ -60,14 +60,14 @@ def submit_run(api_key: str, base_url: str, use_tunnel: bool | None, id: str, bu
 @click.option("--extra-headers", default={}, type=click.UNPROCESSED, callback=validate_extra_headers, help="extra headers to pass to argus, should be in json format", envvar='ARGUS_EXTRA_HEADERS')
 def finish_run(api_key: str, base_url: str, use_tunnel: bool | None, id: str, status: str,
                scylla_version: str = None, extra_headers: dict | None = None):
-    client = ArgusGenericClient(
+    with ArgusGenericClient(
         auth_token=api_key,
         base_url=base_url,
         extra_headers=extra_headers,
         use_tunnel=use_tunnel,
-    )
-    status = TestStatus(status)
-    client.finalize_generic_run(run_id=id, status=status, scylla_version=scylla_version)
+    ) as client:
+        status = TestStatus(status)
+        client.finalize_generic_run(run_id=id, status=status, scylla_version=scylla_version)
 
 
 @click.command("trigger-jobs")
@@ -81,18 +81,18 @@ def finish_run(api_key: str, base_url: str, use_tunnel: bool | None, id: str, st
 @click.option("--extra-headers", default={}, type=click.UNPROCESSED, callback=validate_extra_headers, help="extra headers to pass to argus, should be in json format", envvar='ARGUS_EXTRA_HEADERS')
 def trigger_jobs(api_key: str, base_url: str, use_tunnel: bool | None, job_info_file: str, version: str,
                  plan_id: str, release: str, extra_headers: dict | None = None):
-    client = ArgusGenericClient(
-        auth_token=api_key,
-        base_url=base_url,
-        extra_headers=extra_headers,
-        use_tunnel=use_tunnel,
-    )
     path = Path(job_info_file)
     if not path.exists():
         LOGGER.error("File not found: %s", job_info_file)
         exit(128)
     payload = json.load(path.open("rt", encoding="utf-8"))
-    client.trigger_jobs({"release": release, "version": version, "plan_id": plan_id, **payload})
+    with ArgusGenericClient(
+        auth_token=api_key,
+        base_url=base_url,
+        extra_headers=extra_headers,
+        use_tunnel=use_tunnel,
+    ) as client:
+        client.trigger_jobs({"release": release, "version": version, "plan_id": plan_id, **payload})
 
 
 cli.add_command(submit_run)
