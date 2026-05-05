@@ -219,7 +219,6 @@ def test_argus_client_warns_and_falls_back_when_tunnel_setup_fails(requests_mock
     )
 
     monkeypatch.setattr("argus.client.session.resolve_tunnel_config_with_reason", lambda **kwargs: (None, "api unreachable"))
-    monkeypatch.setattr("argus.client.session.delete_cached_tunnel_state", lambda: None)
 
     client = ArgusClient(auth_token="token", base_url="https://argus.scylladb.com", use_tunnel=True)
     with caplog.at_level("WARNING"):
@@ -321,3 +320,157 @@ def test_request_level_recovery_reconnects_and_retries_once(requests_mock, monke
     assert response.status_code == 200
     assert ensure_state["calls"] == 2
     assert client.session._tunnel_port == 9292
+
+
+def test_request_level_recovery_falls_back_to_direct_when_retry_fails(requests_mock, monkeypatch):
+    direct_url = "https://argus.scylladb.com/api/v1/client/testrun/test-type/test-id/get"
+    tunnel_url = "http://127.0.0.1:9191/api/v1/client/testrun/test-type/test-id/get"
+
+    requests_mock.get(tunnel_url, exc=tunnel_api.requests.ConnectionError("tunnel is dead"))
+    requests_mock.get(direct_url, json={"status": "ok", "response": {}}, status_code=200)
+
+    client = ArgusClient(auth_token="token", base_url="https://argus.scylladb.com", use_tunnel=True)
+    client.session._tunnel_port = 9191
+
+    def _ensure_keeps_tunnel():
+        client.session._tunnel_port = 9191
+
+    backoff_calls = {"count": 0}
+
+    def _fake_backoff(reason):
+        backoff_calls["count"] += 1
+        client.session._tunnel_port = None
+
+    monkeypatch.setattr(client.session, "_ensure_tunnel", _ensure_keeps_tunnel)
+    monkeypatch.setattr(client.session, "_backoff", _fake_backoff)
+
+    response = client.get(
+        endpoint=ArgusClient.Routes.GET,
+        location_params={"type": "test-type", "id": "test-id"},
+    )
+
+    assert response.status_code == 200
+    assert backoff_calls["count"] == 1
+    assert client.session._tunnel_port is None
+
+
+def test_tunneled_session_starts_and_stops_monitor_thread():
+    session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com")
+    try:
+        assert session._monitor_thread.is_alive()
+    finally:
+        session.close()
+
+    session._monitor_thread.join(timeout=5)
+    assert not session._monitor_thread.is_alive()
+
+
+def test_tunneled_session_close_unregisters_atexit():
+    import atexit as _atexit
+
+    session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com")
+    callback = session._atexit_close
+    ref = session._atexit_ref
+    session.close()
+    # After close(), invoking the atexit callback must be a no-op (the session
+    # was unregistered, and even if called manually it should not blow up).
+    callback(ref)
+
+
+def test_argus_client_works_as_context_manager(requests_mock, monkeypatch):
+    requests_mock.get(
+        "https://argus.scylladb.com/api/v1/client/testrun/test-type/test-id/get",
+        json={"status": "ok", "response": {}},
+        status_code=200,
+    )
+    monkeypatch.setattr(
+        "argus.client.session.resolve_tunnel_config_with_reason",
+        lambda **kwargs: (None, "api unreachable"),
+    )
+
+    with ArgusClient(auth_token="token", base_url="https://argus.scylladb.com", use_tunnel=True) as client:
+        client.get(endpoint=ArgusClient.Routes.GET, location_params={"type": "test-type", "id": "test-id"})
+        session = client.session
+        assert session._monitor_thread.is_alive()
+
+    session._monitor_thread.join(timeout=5)
+    assert not session._monitor_thread.is_alive()
+
+
+def test_backoff_does_not_wipe_cached_tunnel_state(tunnel_state_dir, monkeypatch):
+    paths = tunnel_state.get_tunnel_state_paths()
+    paths.private_key.write_text("private-key", encoding="utf-8")
+    paths.public_key.write_text("public-key", encoding="utf-8")
+    paths.config_cache.write_text('{"placeholder": "value"}', encoding="utf-8")
+
+    monkeypatch.setattr(
+        "argus.client.session.resolve_tunnel_config_with_reason",
+        lambda **kwargs: (None, "transient failure"),
+    )
+
+    session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com")
+    try:
+        session._ensure_tunnel()
+        # Transient establish failure must NOT wipe the cached keypair —
+        # otherwise every cooldown forces a fresh registration round-trip.
+        assert paths.private_key.exists()
+        assert paths.public_key.exists()
+        assert paths.config_cache.exists()
+    finally:
+        session.close()
+
+
+def test_call_tunnel_api_rejects_non_dict_payload():
+    class _Response:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return ["unexpected", "list"]
+
+    mock_session = Mock(spec=tunnel_api.requests.Session)
+    mock_session.get.return_value = _Response()
+
+    with pytest.raises(tunnel_api.TunnelClientError, match="invalid format"):
+        tunnel_api._call_tunnel_api(
+            method="GET",
+            url="https://argus.example.com/api/v1/client/ssh/tunnel",
+            auth_token="token",
+            payload=None,
+            session=mock_session,
+        )
+
+
+def test_prepare_known_hosts_file_accepts_full_known_hosts_entry(tunnel_state_dir):
+    config = TunnelConfig(
+        proxy_host="proxy.example.com",
+        proxy_port=2222,
+        proxy_user="argus-proxy",
+        target_host="10.0.0.10",
+        target_port=8080,
+        host_key_fingerprint="some-other-name ssh-ed25519 AAAAdummybase64",
+    )
+
+    path = tunnel_ssh.SSHTunnel._prepare_known_hosts_file(config)
+    try:
+        contents = path.read_text(encoding="utf-8").strip()
+        # Host token must be rewritten to the connection target with the
+        # non-default port, not whatever the backend stored.
+        assert contents.startswith("[proxy.example.com]:2222 ")
+        assert "ssh-ed25519 AAAAdummybase64" in contents
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def test_prepare_known_hosts_file_rejects_unknown_format(tunnel_state_dir):
+    config = TunnelConfig(
+        proxy_host="proxy.example.com",
+        proxy_port=22,
+        proxy_user="argus-proxy",
+        target_host="10.0.0.10",
+        target_port=8080,
+        host_key_fingerprint="not-a-fingerprint",
+    )
+
+    with pytest.raises(tunnel_ssh.TunnelClientError, match="unrecognised format"):
+        tunnel_ssh.SSHTunnel._prepare_known_hosts_file(config)

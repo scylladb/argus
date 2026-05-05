@@ -172,6 +172,11 @@ def _call_tunnel_api(
         except ValueError as exc:
             raise TunnelClientError(f"Tunnel API response is not JSON ({method} {url})") from exc
 
+        if not isinstance(response_payload, dict):
+            raise TunnelClientError(
+                f"Tunnel API response payload has invalid format ({method} {url})"
+            )
+
         if response_payload.get("status") != "ok":
             response_error = response_payload.get("response")
             message = response_error.get("message") if isinstance(response_error, dict) else response_error

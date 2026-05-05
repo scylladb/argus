@@ -53,6 +53,12 @@ class ArgusClient:
     def close(self) -> None:
         self.session.close()
 
+    def __enter__(self) -> "ArgusClient":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
     @property
     def auth_token(self) -> str:
         return self._auth_token
@@ -105,10 +111,19 @@ class ArgusClient:
         }
 
     def get(self, endpoint: str, location_params: dict[str, str] = None, params: dict = None) -> requests.Response:
-        url = self.get_url_for_endpoint(endpoint=endpoint, location_params=location_params)
+        url = self.get_url_for_endpoint(
+            endpoint=endpoint,
+            location_params=location_params
+        )
         LOGGER.debug("GET Request: %s, params: %s", url, params)
-        response = self.session.get(url=url, params=params, headers=self.request_headers, timeout=self._timeout)
+        response = self.session.get(
+            url=url,
+            params=params,
+            headers=self.request_headers,
+            timeout=self._timeout
+        )
         LOGGER.debug("GET Response: %s %s", response.status_code, response.url)
+
         return response
 
     def post(
@@ -118,10 +133,20 @@ class ArgusClient:
         params: dict = None,
         body: dict = None,
     ) -> requests.Response:
-        url = self.get_url_for_endpoint(endpoint=endpoint, location_params=location_params)
+        url = self.get_url_for_endpoint(
+            endpoint=endpoint,
+            location_params=location_params
+        )
         LOGGER.debug("POST Request: %s, params: %s, body: %s", url, params, body)
-        response = self.session.post(url=url, params=params, json=body, headers=self.request_headers, timeout=self._timeout)
+        response = self.session.post(
+            url=url,
+            params=params,
+            json=body,
+            headers=self.request_headers,
+            timeout=self._timeout
+        )
         LOGGER.debug("POST Response: %s %s", response.status_code, response.url)
+
         return response
 
     def submit_run(self, run_type: str, run_body: dict) -> requests.Response:

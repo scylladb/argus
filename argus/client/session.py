@@ -1,7 +1,9 @@
+import atexit
 import logging
 import os
 import threading
 import time
+import weakref
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -10,7 +12,6 @@ from urllib3.util.retry import Retry
 from argus.client.tunnel import (
     SSHTunnel,
     TunnelConfig,
-    delete_cached_tunnel_state,
     resolve_tunnel_config_with_reason,
 )
 
@@ -43,8 +44,7 @@ def _resolve_monitor_interval() -> float:
         return _DEFAULT_MONITOR_INTERVAL
 
 
-def _build_retry_session(max_retries: int) -> requests.Session:
-    session = requests.Session()
+def _build_retry_adapter(max_retries: int) -> HTTPAdapter:
     retry_strategy = Retry(
         total=max_retries,
         connect=max_retries,
@@ -54,16 +54,31 @@ def _build_retry_session(max_retries: int) -> requests.Session:
         status_forcelist=(),
         allowed_methods=["GET", "POST"],
     )
-    adapter = HTTPAdapter(max_retries=retry_strategy)
+    return HTTPAdapter(max_retries=retry_strategy)
+
+
+def _build_retry_session(max_retries: int) -> requests.Session:
+    session = requests.Session()
+    adapter = _build_retry_adapter(max_retries)
     session.mount("http://", adapter)
     session.mount("https://", adapter)
     return session
 
 
-class TunneledSession:
-    """requests.Session-compatible wrapper that transparently routes traffic through an SSH tunnel."""
+class TunneledSession(requests.Session):
+    """``requests.Session`` that transparently routes traffic through an SSH tunnel.
+
+    All HTTP verbs work out of the box because we subclass ``requests.Session``
+    and only override :meth:`request` to inject URL rewriting plus single-shot
+    reconnect-and-retry on connection errors.
+    """
 
     def __init__(self, auth_token: str, original_base_url: str, max_retries: int = 3) -> None:
+        super().__init__()
+        adapter = _build_retry_adapter(max_retries)
+        self.mount("http://", adapter)
+        self.mount("https://", adapter)
+
         self._auth_token = auth_token
         self._original_base_url = original_base_url
 
@@ -72,9 +87,11 @@ class TunneledSession:
         self._tunnel_port: int | None = None
         self._tunnel_warning_emitted = False
         self._tunnel_disabled_until = 0.0
+        # RLock is held while reconnecting; this can stall a request thread for
+        # up to ~100s during the SSH retry budget. Acceptable: concurrent
+        # request callers should observe a single coherent tunnel state and not
+        # race multiple SSH spawns.
         self._lock = threading.RLock()
-
-        self._session = _build_retry_session(max_retries)
 
         monitor_interval = _resolve_monitor_interval()
         self._monitor_stop = threading.Event()
@@ -86,12 +103,20 @@ class TunneledSession:
         )
         self._monitor_thread.start()
 
-    @property
-    def headers(self):
-        return self._session.headers
+        # Ensure the monitor thread is stopped at interpreter exit even if a
+        # caller forgets to invoke ``close()``. The atexit registration uses a
+        # weak reference so the session can be garbage collected normally.
+        self._atexit_ref = weakref.ref(self)
+        atexit.register(self._atexit_close, self._atexit_ref)
 
-    def mount(self, prefix: str, adapter) -> None:
-        self._session.mount(prefix, adapter)
+    @staticmethod
+    def _atexit_close(session_ref: weakref.ref) -> None:
+        session = session_ref()
+        if session is not None:
+            try:
+                session.close()
+            except Exception:  # noqa: BLE001
+                LOGGER.debug("SSH tunnel atexit close failed", exc_info=True)
 
     def _active_tunnel_url(self) -> str | None:
         if self._tunnel_port is not None:
@@ -127,10 +152,9 @@ class TunneledSession:
                 auth_token=self._auth_token,
                 base_url=self._original_base_url,
                 force_refresh=force_refresh,
-                session=self._session,
+                session=self,
             )
             if config is None:
-                delete_cached_tunnel_state()
                 self._backoff(config_reason or "failed to resolve tunnel configuration")
                 return
 
@@ -142,7 +166,7 @@ class TunneledSession:
                     auth_token=self._auth_token,
                     base_url=self._original_base_url,
                     force_refresh=True,
-                    session=self._session,
+                    session=self,
                 )
                 if config is not None:
                     local_port, establish_reason = tunnel.establish(config)
@@ -150,7 +174,6 @@ class TunneledSession:
                     establish_reason = config_reason
 
             if local_port is None:
-                delete_cached_tunnel_state()
                 self._backoff(establish_reason or "failed to establish tunnel")
                 return
 
@@ -161,6 +184,12 @@ class TunneledSession:
             self._tunnel_disabled_until = 0.0
 
     def _backoff(self, reason: str) -> None:
+        # We deliberately do NOT delete the cached keypair here. The keypair
+        # remains valid even when the proxy host is briefly unreachable, and
+        # regenerating it on every 30s cooldown would force an unnecessary
+        # re-registration round-trip. ``resolve_tunnel_config_with_reason``
+        # already issues ``force_refresh=True`` after the first failure, which
+        # re-fetches the live config without dropping the keypair.
         if not self._tunnel_warning_emitted:
             LOGGER.warning(
                 "SSH tunnel unavailable (%s); falling back to direct connection: %s",
@@ -191,39 +220,22 @@ class TunneledSession:
         LOGGER.warning("SSH tunnel monitor detected dead tunnel; reconnecting")
         self._ensure_tunnel()
 
-    def get(self, url: str, **kwargs) -> requests.Response:
+    def request(self, method: str, url: str, *args, **kwargs) -> requests.Response:
         self._ensure_tunnel()
         rewritten = self._rewrite_url(url)
         try:
-            return self._session.get(rewritten, **kwargs)
+            return super().request(method, rewritten, *args, **kwargs)
         except requests.ConnectionError:
             if rewritten == url:
                 raise
-            LOGGER.warning("GET through SSH tunnel failed; reconnecting and retrying")
+            LOGGER.warning("%s through SSH tunnel failed; reconnecting and retrying", method)
             self._ensure_tunnel()
             rewritten = self._rewrite_url(url)
             try:
-                return self._session.get(rewritten, **kwargs)
+                return super().request(method, rewritten, *args, **kwargs)
             except requests.ConnectionError as exc:
                 self._backoff(f"request retry failed: {exc}")
-                return self._session.get(self._rewrite_url(url), **kwargs)
-
-    def post(self, url: str, **kwargs) -> requests.Response:
-        self._ensure_tunnel()
-        rewritten = self._rewrite_url(url)
-        try:
-            return self._session.post(rewritten, **kwargs)
-        except requests.ConnectionError:
-            if rewritten == url:
-                raise
-            LOGGER.warning("POST through SSH tunnel failed; reconnecting and retrying")
-            self._ensure_tunnel()
-            rewritten = self._rewrite_url(url)
-            try:
-                return self._session.post(rewritten, **kwargs)
-            except requests.ConnectionError as exc:
-                self._backoff(f"request retry failed: {exc}")
-                return self._session.post(self._rewrite_url(url), **kwargs)
+                return super().request(method, self._rewrite_url(url), *args, **kwargs)
 
     def close(self) -> None:
         self._monitor_stop.set()
@@ -233,7 +245,11 @@ class TunneledSession:
                 self._tunnel = None
                 self._tunnel_config = None
                 self._tunnel_port = None
-        self._session.close()
+        try:
+            atexit.unregister(self._atexit_close)
+        except Exception:  # noqa: BLE001
+            pass
+        super().close()
 
 
 def create_session(
@@ -241,7 +257,7 @@ def create_session(
     base_url: str,
     use_tunnel: bool | None,
     max_retries: int = 3,
-) -> "requests.Session | TunneledSession":
+) -> requests.Session:
     if _resolve_use_tunnel(use_tunnel):
         return TunneledSession(auth_token=auth_token, original_base_url=base_url, max_retries=max_retries)
     return _build_retry_session(max_retries)
