@@ -416,7 +416,14 @@ class TunnelService:
         return [self._to_proxy_tunnel_config_dto(row) for row in rows]
 
     def delete_proxy_tunnel_config(self, tunnel_id: UUID | str) -> None:
-        """Permanently delete a proxy tunnel config and its associated service user."""
+        """
+        Permanently delete a proxy tunnel config.
+
+        The associated service user is *not* deleted — instead its API token is
+        invalidated and the SSH tunnel role is revoked. This avoids destroying
+        a user that may have been re-purposed or manually associated elsewhere,
+        while still neutralising its ability to act as a tunnel proxy.
+        """
         if not isinstance(tunnel_id, UUID):
             tunnel_id = UUID(str(tunnel_id))
         try:
@@ -426,10 +433,17 @@ class TunnelService:
 
         if config.service_user_id:
             try:
-                from argus.backend.models.web import ArgusUser  # noqa: PLC0415
-                ArgusUser.get(id=config.service_user_id).delete()
-            except Exception:  # noqa: BLE001
-                pass  # service user already gone — proceed with config deletion
+                service_user = User.get(id=config.service_user_id)
+            except User.DoesNotExist:
+                service_user = None
+            if service_user is not None:
+                service_user.api_token = ""
+                if UserRoles.SSHTunnelServer.value in service_user.roles:
+                    service_user.roles = [
+                        role for role in service_user.roles
+                        if role != UserRoles.SSHTunnelServer.value
+                    ]
+                service_user.save()
 
         config.delete()
 
