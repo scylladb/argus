@@ -78,6 +78,7 @@
         end_time: string,
         build_job_url: string,
         subtest_name: string,
+        events: any[],
         status: string,
         test_id: string,
         release_id: string,
@@ -339,9 +340,14 @@
                     <button class="argus-tab" class:active={activeTab === "results"} type="button" role="tab" onclick={() => setActiveTab("results")}>
                         <Fa icon={faTable} /> Results
                     </button>
-                    <button class="argus-tab" class:active={activeTab === "events"} type="button" role="tab" onclick={() => setActiveTab("events")}>
+                    <button class="argus-tab" class:active={activeTab === "sct-events"} type="button" role="tab" onclick={() => setActiveTab("sct-events")}>
                         <Fa icon={faRssSquare} /> Events
                     </button>
+                    {#if testRun.events.length > 0}
+                      <button class="argus-tab" class:active={activeTab === "events"} type="button" role="tab" onclick={() => setActiveTab("events")}>
+                          <Fa icon={faRssSquare} /> Events (Legacy)
+                      </button>
+                    {/if}
                     <button class="argus-tab" class:active={activeTab === "nemesis"} type="button" role="tab" onclick={() => setActiveTab("nemesis")}>
                         <Fa icon={faSpider} /> Nemesis
                     </button>
@@ -356,9 +362,6 @@
                     </button>
                     <button class="argus-tab" class:active={activeTab === "activity"} type="button" role="tab" onclick={() => setActiveTab("activity")}>
                         <Fa icon={faExclamationTriangle} /> Activity
-                    </button>
-                    <button class="argus-tab" class:active={activeTab === "sct-events"} type="button" role="tab" onclick={() => setActiveTab("sct-events")}>
-                        <Fa icon={faRssSquare} /> Events (Experimental)
                     </button>
                 </div>
                 <div class="argus-tab-select">
