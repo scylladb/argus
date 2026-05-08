@@ -515,12 +515,29 @@ var resultsCmd = &cobra.Command{
 
 		testID, _ := cmd.Flags().GetString("test-id")
 		runID, _ := cmd.Flags().GetString("run-id")
+
+		// Auto-resolve test-id from the run when not provided.
+		if testID == "" {
+			log.Debug().Str("run_id", runID).Msg("resolving test-id from run")
+			fetcher := newRunFetcher()
+			resolved, err := services.ResolveTestID(ctx, client, c, fetcher, runID, "")
+			if err != nil {
+				log.Error().Err(err).Str("run_id", runID).Msg("failed to resolve test-id")
+				return fmt.Errorf("resolving test-id: %w", err)
+			}
+			testID = resolved
+			log.Debug().Str("run_id", runID).Str("test_id", testID).Msg("test-id resolved from run")
+		}
+
 		log.Debug().Str("test_id", testID).Str("run_id", runID).Msg("fetching run results")
 
 		cacheKey := cache.ResultsKey(testID, runID)
 
 		if cached, _, err := cache.Get[models.FetchResultsResponse](c, cacheKey); isCacheable(err) {
 			log.Debug().Str("run_id", runID).Msg("results served from cache")
+			showURLs, _ := cmd.Flags().GetBool("show-urls")
+			cached.ShowURLs = showURLs
+			cached.NoColor = noColor
 			return out.Write(cached)
 		}
 
@@ -558,11 +575,14 @@ var resultsCmd = &cobra.Command{
 			return err
 		}
 
-		result := models.FetchResultsResponse{Tables: envelope.Tables}
+		result := models.FetchResultsResponse{ResultTables: envelope.Tables}
+		showURLs, _ := cmd.Flags().GetBool("show-urls")
+		result.ShowURLs = showURLs
+		result.NoColor = noColor
 		if cacheErr := cache.Set(c, cacheKey, result, route, cache.TTLResults); cacheErr != nil {
 			log.Warn().Err(cacheErr).Str("run_id", runID).Msg("failed to cache results")
 		}
-		log.Info().Str("test_id", testID).Str("run_id", runID).Int("table_count", len(result.Tables)).Msg("results fetched successfully")
+		log.Info().Str("test_id", testID).Str("run_id", runID).Int("table_count", len(result.ResultTables)).Msg("results fetched successfully")
 		return out.Write(result)
 	},
 }
@@ -742,9 +762,9 @@ func init() {
 	_ = activityCmd.MarkFlagRequired("run-id")
 
 	// run results
-	resultsCmd.Flags().String("test-id", "", "Test UUID (required)")
+	resultsCmd.Flags().String("test-id", "", "Test UUID (optional, auto-resolved from run-id if omitted)")
 	resultsCmd.Flags().String("run-id", "", "Run UUID (required)")
-	_ = resultsCmd.MarkFlagRequired("test-id")
+	resultsCmd.Flags().Bool("show-urls", false, "Display full URLs in cell values instead of 'link'")
 	_ = resultsCmd.MarkFlagRequired("run-id")
 
 	// run comments

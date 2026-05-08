@@ -50,6 +50,7 @@ var (
 	cacheTTL       string
 	nonInteractive bool
 	verbosity      int
+	noColor        bool
 )
 
 func init() {
@@ -63,6 +64,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cacheTTL, "cache-ttl", "", "override the default cache TTL (e.g. 10m, 1h); ignored when --no-cache is set")
 	rootCmd.PersistentFlags().BoolVar(&nonInteractive, "non-interactive", false, "disable interactive prompts; return an error instead of triggering re-authentication")
 	rootCmd.PersistentFlags().CountVarP(&verbosity, "verbose", "v", "increase log verbosity: -v/-vv mirrors info logs to stderr, -vvv mirrors debug logs to stdout")
+	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "disable colored output; use bracket status indicators instead (e.g. (OK), (FAIL))")
 }
 
 var rootCmd = &cobra.Command{

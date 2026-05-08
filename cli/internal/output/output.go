@@ -18,6 +18,20 @@ type Tabular interface {
 	Rows() [][]string
 }
 
+// NamedTable pairs a human-readable name with a [Tabular] value so that
+// multi-table outputs can label each table independently.
+type NamedTable struct {
+	Name string
+	Tab  Tabular
+}
+
+// MultiTabular is implemented by values that contain several independent
+// tables.  The text renderer prints each table separately with a header line;
+// the JSON renderer ignores this and marshals the value directly.
+type MultiTabular interface {
+	Tables() []NamedTable
+}
+
 // Outputter writes a value to the configured destination in the
 // implementation-specific format.
 //
