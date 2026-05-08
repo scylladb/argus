@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/scylladb/argus/cli/internal/output"
 )
 
 // ---------------------------------------------------------------------------
@@ -491,12 +493,16 @@ func (a ActivityResponse) Rows() [][]string {
 type ResultCell struct {
 	Value  any    `json:"value"`
 	Status string `json:"status"`
+	Type   string `json:"type,omitempty"`
 }
 
 // ResultColumnMeta describes one column in a ResultTable.
 type ResultColumnMeta struct {
-	Name   string `json:"name"`
-	Status string `json:"status"`
+	Name           string `json:"name"`
+	Unit           string `json:"unit,omitempty"`
+	Type           string `json:"type,omitempty"`
+	HigherIsBetter *bool  `json:"higher_is_better,omitempty"`
+	Visible        *bool  `json:"visible,omitempty"`
 }
 
 // ResultTable is one performance/result table returned by the fetch_results
@@ -505,26 +511,170 @@ type ResultTable struct {
 	Description string                           `json:"description"`
 	TableData   map[string]map[string]ResultCell `json:"table_data"`
 	Columns     []ResultColumnMeta               `json:"columns"`
-	Rows        []string                         `json:"rows"`
+	RowNames    []string                         `json:"rows"`
 	TableStatus string                           `json:"table_status"`
+	ShowURLs    bool                             `json:"-"`
+	NoColor     bool                             `json:"-"`
 }
 
 // Headers implements output.Tabular for ResultTable.  The first column is the
 // row name; subsequent columns come from the table's Columns metadata.
+// When a column has a unit defined, it is appended in brackets (e.g. "latency [ms]").
 func (rt ResultTable) Headers() []string {
 	h := make([]string, 0, 1+len(rt.Columns))
 	h = append(h, "Row")
 	for _, c := range rt.Columns {
-		h = append(h, c.Name)
+		if c.Unit != "" {
+			h = append(h, fmt.Sprintf("%s [%s]", c.Name, strings.ReplaceAll(c.Unit, " ", "")))
+		} else {
+			h = append(h, c.Name)
+		}
 	}
 	return h
 }
 
+// ANSI escape sequences for cell status highlighting.
+const (
+	ansiReset  = "\033[0m"
+	ansiGreen  = "\033[32m"
+	ansiRed    = "\033[31m"
+	ansiYellow = "\033[33m"
+)
+
+// colorByStatus wraps s with ANSI color codes matching the cell status,
+// mirroring the frontend ResultCellStatusStyleMap.  When noColor is true,
+// a bracket status indicator is appended instead (e.g. "(OK)", "(FAIL)").
+func colorByStatus(s, status string, noColor bool) string {
+	if noColor {
+		switch status {
+		case "PASS":
+			return s + " (OK)"
+		case "ERROR":
+			return s + " (FAIL)"
+		case "WARNING":
+			return s + " (WARN)"
+		default:
+			return s
+		}
+	}
+	switch status {
+	case "PASS":
+		return ansiGreen + s + ansiReset
+	case "ERROR":
+		return ansiRed + s + ansiReset
+	case "WARNING":
+		return ansiYellow + s + ansiReset
+	default:
+		return s
+	}
+}
+
+// formatCellValue formats a cell's value according to its type, mirroring the
+// frontend Cell.svelte formatting logic.
+//
+//   - FLOAT   → 2 decimal places (e.g. "3.14")
+//   - INTEGER → locale-style thousands separators (e.g. "1,234,567")
+//   - DURATION → HH:MM:SS
+//   - URLs    → "link" (since terminals can't click)
+//   - nil     → "N/A"
+//   - default → fmt.Sprint
+func formatCellValue(cell ResultCell, showURLs bool) string {
+	if cell.Value == nil {
+		return "N/A"
+	}
+
+	// String values: detect URLs / images like the frontend does.
+	if s, ok := cell.Value.(string); ok {
+		if isURL(s) && !showURLs {
+			return "link"
+		}
+		return s
+	}
+
+	// Numeric values: format based on the column type stored in the cell.
+	num, ok := toFloat64(cell.Value)
+	if !ok {
+		return fmt.Sprint(cell.Value)
+	}
+
+	switch cell.Type {
+	case "FLOAT":
+		return strconv.FormatFloat(num, 'f', 2, 64)
+	case "INTEGER":
+		return formatInteger(int64(num))
+	case "DURATION":
+		return formatDuration(num)
+	default:
+		return fmt.Sprint(cell.Value)
+	}
+}
+
+// isURL checks whether s looks like an HTTP(S) URL.
+func isURL(s string) bool {
+	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
+}
+
+// toFloat64 converts a JSON-decoded numeric value (float64 or json.Number) to float64.
+func toFloat64(v any) (float64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return n, true
+	case json.Number:
+		f, err := n.Float64()
+		return f, err == nil
+	case int:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	default:
+		return 0, false
+	}
+}
+
+// formatInteger formats an integer with comma-separated thousands groups
+// (e.g. 1234567 → "1,234,567"), matching Number.toLocaleString() in JS.
+func formatInteger(n int64) string {
+	s := strconv.FormatInt(n, 10)
+	if n < 0 {
+		return "-" + insertCommas(s[1:])
+	}
+	return insertCommas(s)
+}
+
+func insertCommas(s string) string {
+	if len(s) <= 3 {
+		return s
+	}
+	remainder := len(s) % 3
+	var b strings.Builder
+	if remainder > 0 {
+		b.WriteString(s[:remainder])
+		b.WriteByte(',')
+	}
+	for i := remainder; i < len(s); i += 3 {
+		if i > remainder {
+			b.WriteByte(',')
+		}
+		b.WriteString(s[i : i+3])
+	}
+	return b.String()
+}
+
+// formatDuration converts seconds to HH:MM:SS, matching the frontend
+// durationToStr helper.
+func formatDuration(seconds float64) string {
+	total := int(seconds)
+	h := total / 3600
+	m := (total % 3600) / 60
+	s := total % 60
+	return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
+}
+
 // Rows implements output.Tabular for ResultTable.  Row order follows
-// rt.Rows; column order follows rt.Columns.
-func (rt ResultTable) TableRows() [][]string {
-	out := make([][]string, 0, len(rt.Rows))
-	for _, rowName := range rt.Rows {
+// rt.RowNames; column order follows rt.Columns.
+func (rt ResultTable) Rows() [][]string {
+	out := make([][]string, 0, len(rt.RowNames))
+	for _, rowName := range rt.RowNames {
 		row := make([]string, 0, 1+len(rt.Columns))
 		row = append(row, rowName)
 		colData := rt.TableData[rowName]
@@ -533,7 +683,7 @@ func (rt ResultTable) TableRows() [][]string {
 			if !ok {
 				row = append(row, "")
 			} else {
-				row = append(row, fmt.Sprint(cell.Value))
+				row = append(row, colorByStatus(formatCellValue(cell, rt.ShowURLs), cell.Status, rt.NoColor))
 			}
 		}
 		out = append(out, row)
@@ -543,43 +693,96 @@ func (rt ResultTable) TableRows() [][]string {
 
 // FetchResultsEnvelope is the non-standard envelope returned by the
 // fetch_results endpoint.  Unlike other endpoints the payload key is "tables"
-// rather than "response".
+// rather than "response".  Each element is a single-key map from the table
+// name to its data.
 type FetchResultsEnvelope struct {
-	Status string        `json:"status"`
-	Tables []ResultTable `json:"tables"`
+	Status string                   `json:"status"`
+	Tables []map[string]ResultTable `json:"tables"`
 }
 
-// FetchResultsResponse wraps []ResultTable to implement output.Tabular by
-// rendering all tables sequentially.
+// FetchResultsResponse wraps the result tables for output.  In JSON mode a
+// compact representation is produced via MarshalJSON; in text mode each table
+// is rendered separately via the MultiTabular interface.
 type FetchResultsResponse struct {
-	Tables []ResultTable
+	ResultTables []map[string]ResultTable `json:"tables"`
+	ShowURLs     bool                     `json:"-"`
+	NoColor      bool                     `json:"-"`
 }
 
-// Headers implements output.Tabular.  Uses the first table's headers or
-// returns a single "Table" column when empty.
-func (f FetchResultsResponse) Headers() []string {
-	if len(f.Tables) == 0 {
-		return []string{"Table"}
-	}
-	// Prefix with "Table" column to distinguish between tables.
-	h := []string{"Table"}
-	h = append(h, f.Tables[0].Headers()...)
-	return h
+// jsonCell is the compact JSON representation of a single result cell.
+type jsonCell struct {
+	Value  any    `json:"value"`
+	Status string `json:"status"`
 }
 
-// Rows implements output.Tabular.  Each result table's rows are emitted with
-// the table description prepended as the first column.
-func (f FetchResultsResponse) Rows() [][]string {
-	var rows [][]string
-	for _, tbl := range f.Tables {
-		for _, r := range tbl.TableRows() {
-			row := make([]string, 0, 1+len(r))
-			row = append(row, tbl.Description)
-			row = append(row, r...)
-			rows = append(rows, row)
+// jsonRow is the compact JSON representation of a single result row.
+type jsonRow struct {
+	Name  string              `json:"name"`
+	Cells map[string]jsonCell `json:"cells"`
+}
+
+// jsonTable is the compact JSON representation of a single result table.
+type jsonTable struct {
+	Name        string    `json:"name"`
+	Description string    `json:"description,omitempty"`
+	Status      string    `json:"status"`
+	Rows        []jsonRow `json:"rows"`
+}
+
+// MarshalJSON produces a compact JSON array of tables with inlined row data,
+// suitable for consumption by tools like jq.
+func (f FetchResultsResponse) MarshalJSON() ([]byte, error) {
+	tables := make([]jsonTable, 0, len(f.ResultTables))
+	for _, entry := range f.ResultTables {
+		for name, tbl := range entry {
+			jt := jsonTable{
+				Name:        name,
+				Description: tbl.Description,
+				Status:      tbl.TableStatus,
+				Rows:        make([]jsonRow, 0, len(tbl.RowNames)),
+			}
+			for _, rowName := range tbl.RowNames {
+				jr := jsonRow{
+					Name:  rowName,
+					Cells: make(map[string]jsonCell, len(tbl.Columns)),
+				}
+				colData := tbl.TableData[rowName]
+				for _, col := range tbl.Columns {
+					if cell, ok := colData[col.Name]; ok {
+						jr.Cells[col.Name] = jsonCell{
+							Value:  cell.Value,
+							Status: cell.Status,
+						}
+					}
+				}
+				jt.Rows = append(jt.Rows, jr)
+			}
+			tables = append(tables, jt)
 		}
 	}
-	return rows
+	return json.Marshal(tables)
+}
+
+// Tables implements output.MultiTabular.  Each result table is returned as a
+// NamedTable whose name is the table's description (falling back to the map
+// key when no description is set).
+func (f FetchResultsResponse) Tables() []output.NamedTable {
+	out := make([]output.NamedTable, 0, len(f.ResultTables))
+	for _, entry := range f.ResultTables {
+		for name, tbl := range entry {
+			tbl.ShowURLs = f.ShowURLs
+			tbl.NoColor = f.NoColor
+			title := name
+			if tbl.Description != "" && tbl.Description != name {
+				title = fmt.Sprintf("%s\n%s", name, tbl.Description)
+			}
+			out = append(out, output.NamedTable{
+				Name: title,
+				Tab:  tbl,
+			})
+		}
+	}
+	return out
 }
 
 // ---------------------------------------------------------------------------

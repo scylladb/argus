@@ -46,6 +46,11 @@ func newText(w io.Writer) Outputter {
 // Write renders v as a text table.  v should implement [Tabular] for
 // meaningful column output; non-Tabular values fall back to a raw JSON row.
 func (t *textOutputter) Write(v any) error {
+	// Multi-table values get one table per entry with a header line.
+	if mt, ok := v.(MultiTabular); ok {
+		return t.writeMulti(mt)
+	}
+
 	tab, ok := v.(Tabular)
 	if !ok {
 		switch v := v.(type) {
@@ -104,6 +109,44 @@ func (t *textOutputter) writeRawJSON(v any) error {
 		return fmt.Errorf("%w: %w", ErrTextOutputJSONFallbackRender, err)
 	}
 
+	return nil
+}
+
+// writeMulti renders a [MultiTabular] as a sequence of labelled tables.
+func (t *textOutputter) writeMulti(mt MultiTabular) error {
+	for i, nt := range mt.Tables() {
+		if i > 0 {
+			if _, err := fmt.Fprintln(t.w); err != nil {
+				return fmt.Errorf("%w: %w", ErrTextOutputRow, err)
+			}
+		}
+		if _, err := fmt.Fprintf(t.w, "\n## %s\n\n", nt.Name); err != nil {
+			return fmt.Errorf("%w: %w", ErrTextOutputRow, err)
+		}
+
+		table := tablewriter.NewTable(t.w)
+		configureTableWidths(table)
+
+		if headers := nt.Tab.Headers(); len(headers) > 0 {
+			table.Header(headers)
+		}
+
+		for _, row := range nt.Tab.Rows() {
+			if err := table.Append(row); err != nil {
+				_ = table.Close()
+				return fmt.Errorf("%w: %w", ErrTextOutputRow, err)
+			}
+		}
+
+		if err := table.Render(); err != nil {
+			_ = table.Close()
+			return fmt.Errorf("%w: %w", ErrTextOutputRender, err)
+		}
+
+		if err := table.Close(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
