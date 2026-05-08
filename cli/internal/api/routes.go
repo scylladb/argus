@@ -25,6 +25,10 @@ const (
 	TestRunCommentUpdate = "/api/v1/test/%s/run/%s/comment/%s/update" // POST – update a comment (test_id, run_id, comment_id)
 	TestRunCommentDelete = "/api/v1/test/%s/run/%s/comment/%s/delete" // POST – delete a comment (test_id, run_id, comment_id)
 
+	// Issue routes
+	TestRunIssueSubmit = "/api/v1/test/%s/run/%s/issues/submit" // POST – submit an issue (test_id, run_id)
+	IssuesGet          = "/api/v1/issues/get"                   // GET  – list issues (filterKey, id query params)
+
 	// Pytest result routes
 	TestRunPytestResults = "/api/v1/run/%s/pytest/results" // GET  – pytest results for a run (run_id)
 
@@ -44,11 +48,11 @@ const (
 	SSHTunnel   = "/api/v1/client/ssh/tunnel" // POST – register public key and receive proxy config
 
 	// SSH tunnel routes – admin (requires Admin role)
-	AdminProxyTunnelConfig    = "/admin/api/v1/proxy-tunnel/config"            // GET  – one active config (tunnel_id query param optional); POST – create
-	AdminProxyTunnelConfigs   = "/admin/api/v1/proxy-tunnel/configs"           // GET  – all configs (active_only query param optional)
+	AdminProxyTunnelConfig    = "/admin/api/v1/proxy-tunnel/config"           // GET  – one active config (tunnel_id query param optional); POST – create
+	AdminProxyTunnelConfigs   = "/admin/api/v1/proxy-tunnel/configs"          // GET  – all configs (active_only query param optional)
 	AdminProxyTunnelSetActive = "/admin/api/v1/proxy-tunnel/config/%s/active" // POST   – enable/disable a config (tunnel_id)
 	AdminProxyTunnelDelete    = "/admin/api/v1/proxy-tunnel/config/%s"        // DELETE – permanently remove a config (tunnel_id)
-	AdminSSHKeys              = "/admin/api/v1/ssh/keys"                       // GET  – list all registered keys with metadata
+	AdminSSHKeys              = "/admin/api/v1/ssh/keys"                      // GET  – list all registered keys with metadata
 	AdminSSHKeyDelete         = "/admin/api/v1/ssh/keys/%s"                   // DELETE – revoke a key (key_id)
 
 )
