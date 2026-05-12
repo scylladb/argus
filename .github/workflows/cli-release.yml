@@ -129,14 +129,6 @@ jobs:
                   name: cli-changelog
                   path: ${{ runner.temp }}
 
-            # GoReleaser uses the tag as-is for the version.
-            # cli/v1.2.0 → strip the "cli/" prefix so archives are named v1.2.0.
-            - name: Extract semver from tag
-              id: semver
-              run: |
-                  VERSION=$(cli/scripts/extract-semver.sh)
-                  echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-
             - name: Run GoReleaser
               uses: goreleaser/goreleaser-action@v6
               with:
@@ -152,6 +144,8 @@ jobs:
                       --skip=validate
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                  # Tell GoReleaser to treat the stripped semver as the current tag so
-                  # it doesn't choke on the "cli/" prefix.
-                  GORELEASER_CURRENT_TAG: ${{ steps.semver.outputs.version }}
+                  # Use the full cli/vX.Y.Z tag so GoReleaser targets the existing
+                  # git tag rather than creating a bare vX.Y.Z tag.
+                  # The monorepo.tag_prefix in .goreleaser.yml strips "cli/" for
+                  # version templating (archives, ldflags, etc.).
+                  GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
