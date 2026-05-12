@@ -129,6 +129,14 @@ jobs:
                   name: cli-changelog
                   path: ${{ runner.temp }}
 
+            - name: Resolve bare version
+              id: version
+              shell: bash
+              run: |
+                  # Strip "cli/v" to get bare semver (e.g. cli/v1.2.3 → 1.2.3).
+                  # Used as VERSION in GoReleaser templates for archive names and ldflags.
+                  echo "value=${GITHUB_REF_NAME#cli/v}" >> "$GITHUB_OUTPUT"
+
             - name: Run GoReleaser
               uses: goreleaser/goreleaser-action@v6
               with:
@@ -144,8 +152,8 @@ jobs:
                       --skip=validate
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                  # Use the full cli/vX.Y.Z tag so GoReleaser targets the existing
-                  # git tag rather than creating a bare vX.Y.Z tag.
-                  # The monorepo.tag_prefix in .goreleaser.yml strips "cli/" for
-                  # version templating (archives, ldflags, etc.).
+                  # Full cli/vX.Y.Z tag → GoReleaser publishes the GitHub Release under this tag.
                   GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
+                  # Bare version (e.g. 1.2.3) → referenced as {{ .Env.VERSION }} in
+                  # .goreleaser.yml for archive names, ldflags, and checksum filenames.
+                  VERSION: ${{ steps.version.outputs.value }}
