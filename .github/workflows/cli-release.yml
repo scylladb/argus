@@ -39,42 +39,13 @@ jobs:
 
             - name: Verify tag is on master/main
               shell: bash
-              run: |
-                  # Abort if the tagged commit is not an ancestor of master (or main).
-                  # This prevents a cli/v* tag pushed on a feature branch from
-                  # accidentally publishing a release.
-                  TAG_SHA=$(git rev-list -n1 "${GITHUB_REF_NAME}")
-                  for branch in master main; do
-                    if git show-ref --verify --quiet "refs/remotes/origin/${branch}"; then
-                      if git merge-base --is-ancestor "${TAG_SHA}" "origin/${branch}"; then
-                        echo "Tag ${GITHUB_REF_NAME} (${TAG_SHA}) is on ${branch}. Proceeding."
-                        exit 0
-                      fi
-                    fi
-                  done
-                  echo "ERROR: Tag ${GITHUB_REF_NAME} is not reachable from master/main. Aborting release." >&2
-                  exit 1
+              run: cli/scripts/verify-tag-on-main.sh
 
             - name: Resolve previous CLI tag
               id: prev_tag
               shell: bash
               run: |
-                  CURRENT_TAG="${GITHUB_REF_NAME}"   # e.g. cli/v1.2.0
-
-                  # List cli/v[0-9]* tags reachable from HEAD, sorted ascending by
-                  # git's own version comparator (version:refname).  This correctly
-                  # orders pre-releases: cli/v1.0.0-rc1 < cli/v1.0.0, unlike sort -V
-                  # which can produce the wrong result for pre-release suffixes.
-                  # Exclude the current tag then take the last entry = immediate predecessor.
-                  PREV=$(git tag --merged HEAD --list 'cli/v[0-9]*' --sort=version:refname \
-                           | grep -v "^${CURRENT_TAG}$" \
-                           | tail -1)
-
-                  if [[ -z "$PREV" ]]; then
-                    echo "No previous CLI tag found – treating this as the first release."
-                    PREV="FIRST"
-                  fi
-
+                  PREV=$(cli/scripts/resolve-prev-tag.sh)
                   echo "Previous tag: ${PREV}"
                   echo "tag=${PREV}" >> "$GITHUB_OUTPUT"
 
@@ -163,8 +134,7 @@ jobs:
             - name: Extract semver from tag
               id: semver
               run: |
-                  TAG="${GITHUB_REF_NAME}"    # cli/v1.2.0
-                  VERSION="${TAG#cli/}"       # v1.2.0
+                  VERSION=$(cli/scripts/extract-semver.sh)
                   echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
             - name: Run GoReleaser
