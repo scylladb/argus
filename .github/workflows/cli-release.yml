@@ -149,6 +149,7 @@ jobs:
                       --config cli/.goreleaser.yml
                       --release-notes "${{ runner.temp }}/cli-changelog.md"
                       --clean
+                      --skip=validate
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   # Tell GoReleaser to treat the stripped semver as the current tag so
