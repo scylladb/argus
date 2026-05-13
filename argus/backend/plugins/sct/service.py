@@ -547,21 +547,8 @@ class SCTService:
 
     @staticmethod
     def submit_events(run_id: str, events: list[dict]) -> str:
-        wrapped_events = [EventSubmissionRequest(**ev) for ev in events]
-        try:
-            run: SCTTestRun = SCTTestRun.get(id=run_id)
-            for event in wrapped_events:
-                wrapper = EventsBySeverity(severity=event.severity,
-                                           event_amount=event.total_events, last_events=event.messages)
-                run.get_events_legacy().append(wrapper)
-            coredumps = SCTService.locate_coredumps(
-                run, run.get_events_legacy())
-            run.submit_logs(coredumps)
-            run.save()
-        except SCTTestRun.DoesNotExist as exception:
-            LOGGER.error("Run %s not found for SCTTestRun", run_id)
-            raise SCTServiceException("Run not found", run_id) from exception
-
+        # NOTE: Dummied out – EventsBySeverity column is being dropped.
+        # Kept for API compatibility with old clients.
         return "added"
 
     @classmethod
