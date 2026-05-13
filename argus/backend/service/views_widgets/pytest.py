@@ -27,6 +27,7 @@ class PytestResult(TypedDict):
     barChart: dict
     pieChart: dict
 
+
 class PytestViewService:
     def __init__(self) -> None:
         self.cluster = ScyllaCluster.get()
@@ -40,8 +41,9 @@ class PytestViewService:
             raise exc
 
     def get_user_fields_for_result(self, name: str, id: str):
-        field_rows = PytestUserField.filter(name=name,  id=datetime.fromisoformat(id)).all()
-        result = { row["field_name"]: row["field_value"] for row in field_rows }
+        field_rows = PytestUserField.filter(
+            name=name,  id=datetime.fromisoformat(id)).all()
+        result = {row["field_name"]: row["field_value"] for row in field_rows}
 
         return result
 
@@ -49,7 +51,7 @@ class PytestViewService:
     def do_user_field_filter(field: str, value: str, negated: bool, result: dict) -> bool:
 
         if not (field_value := (result["user_fields"] or {}).get(field)):
-            return field not in (result["user_fields"] or {}) if negated else field in (result["user_fields"]or {})
+            return field not in (result["user_fields"] or {}) if negated else field in (result["user_fields"] or {})
 
         res = field_value == value
 
@@ -86,7 +88,8 @@ class PytestViewService:
             end_date = date.fromtimestamp(before.timestamp())
 
         bucket_days = (end_date - start_date).days
-        buckets = {date.today() - timedelta(days=d): defaultdict(lambda: 0) for d in range(bucket_days)}
+        buckets = {date.today() - timedelta(days=d): defaultdict(lambda: 0)
+                   for d in range(bucket_days)}
         for hit in hits:
             if hit["session_timestamp"]:
                 key = date.fromtimestamp(hit["session_timestamp"].timestamp())
@@ -94,8 +97,8 @@ class PytestViewService:
                 bucket[hit["status"]] += 1
                 buckets[key] = bucket
 
-
-        buckets = { k.strftime("%Y-%m-%d"): v for k, v in reversed(buckets.items())}
+        buckets = {k.strftime("%Y-%m-%d"): v for k,
+                   v in reversed(buckets.items())}
         datasets = []
         for status in PytestStatus:
             datasets.append({
@@ -113,13 +116,15 @@ class PytestViewService:
         test = request.args.get("test")
 
         unique_tests: list[str] = []
-        unique_tests.extend((row["name"] for row in db.session.execute(f"SELECT DISTINCT name FROM pytest_v2", timeout=60.0).all()))
+        unique_tests.extend((row["name"] for row in db.session.execute(
+            f"SELECT DISTINCT name FROM pytest_v2", timeout=60.0).all()))
 
         if test:
             LOGGER.warning(test)
-            unique_tests = [t for t in unique_tests if re.search(re.escape(test), t)]
+            unique_tests = [
+                t for t in unique_tests if re.search(re.escape(test), t)]
 
-        limit = request.args.get("limit", 500)
+        limit = int(request.args.get("limit", 500))
         before = request.args.get("before")
         after = request.args.get("after")
         enabled_statuses = request.args.getlist("status[]")
@@ -149,38 +154,50 @@ class PytestViewService:
             for partition_chunk in chunk(sequential_batch, 100):
                 parallel_filter = [*query_filters]
                 parallel_query = db_query
-                partition_filter = [("name IN ?", partition_chunk), *parallel_filter]
+                partition_filter = [
+                    ("name IN ?", partition_chunk), *parallel_filter]
                 parallel_query += " WHERE "
-                parallel_query += " AND ".join([f for f, _ in partition_filter])
+                parallel_query += " AND ".join([f for f,
+                                               _ in partition_filter])
                 prepared = db.prepare(parallel_query)
-                future = db.session.execute_async(prepared, parameters=[p for _, p in partition_filter], timeout=60.0, execution_profile="read_fast_named_tuple")
+                future = db.session.execute_async(prepared, parameters=[
+                                                  p for _, p in partition_filter], timeout=60.0, execution_profile="read_fast_named_tuple")
                 futures.append(future)
-            results.extend([row for future in futures for row in future.result()])
+            results.extend(
+                [row for future in futures for row in future.result()])
 
         if markers:
             for marker in markers:
-                results = [result for result in results if marker in (result.markers or [])]
+                results = [result for result in results if marker in (
+                    result.markers or [])]
         if query:
             pattern = re.compile(query.lower())
-            results = [result for result in results if re.search(pattern, self.stringify_result(result))]
+            results = [result for result in results if re.search(
+                pattern, self.stringify_result(result))]
         user_fields = {}
 
         if filters:
-            base_filter_query = db.prepare("SELECT * FROM pytest_user_field WHERE name IN ? AND id IN ?")
+            base_filter_query = db.prepare(
+                "SELECT * FROM pytest_user_field WHERE name IN ? AND id IN ?")
             futures = []
             for batch in chunk((r.name,  r.id) for r in results):
-                future = db.session.execute_async(base_filter_query, parameters=[[b[0] for b in batch], [b[1] for b in batch]], timeout=60.0, execution_profile="read_fast")
+                future = db.session.execute_async(base_filter_query, parameters=[[b[0] for b in batch], [
+                                                  b[1] for b in batch]], timeout=60.0, execution_profile="read_fast")
                 futures.append(future)
-            filter_rows = [row for future in futures for row in future.result()]
+            filter_rows = [
+                row for future in futures for row in future.result()]
             for row in filter_rows:
                 key = (row["name"], row["id"])
                 val = user_fields.get(key, {})
                 val[row["field_name"]] = row["field_value"]
                 user_fields[key] = val
-            results = [{**result._asdict(), "user_fields": user_fields.get((result.name, result.id), {})} for result in results]
-            filters = [(f[0] == "!", f.lstrip("!").split("=", 1)[0], f.lstrip("!").split("=", 1)[1]) for f in filters]
+            results = [{**result._asdict(), "user_fields": user_fields.get(
+                (result.name, result.id), {})} for result in results]
+            filters = [(f[0] == "!", f.lstrip("!").split("=", 1)[0],
+                        f.lstrip("!").split("=", 1)[1]) for f in filters]
             for negated, field, value in filters:
-                results = [result for result in results if self.do_user_field_filter(field, value, negated, result)]
+                results = [result for result in results if self.do_user_field_filter(
+                    field, value, negated, result)]
         else:
             results = [result._asdict() for result in results]
 

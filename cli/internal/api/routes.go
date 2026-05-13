@@ -30,7 +30,8 @@ const (
 	IssuesGet          = "/api/v1/issues/get"                   // GET  – list issues (filterKey, id query params)
 
 	// Pytest result routes
-	TestRunPytestResults = "/api/v1/run/%s/pytest/results" // GET  – pytest results for a run (run_id)
+	TestRunPytestResults = "/api/v1/run/%s/pytest/results"        // GET  – pytest results for a run (run_id)
+	PytestFilterResults  = "/api/v1/views/widgets/pytest/results" // GET  – filtered pytest results (query params: test, limit, before, after, status[], query, filters[], markers[])
 
 	// Log file routes
 	TestRunLogDownload = "/api/v1/tests/%s/%s/log/%s/download" // GET  – download log file, 302 to S3 (plugin_name, run_id, log_name)
