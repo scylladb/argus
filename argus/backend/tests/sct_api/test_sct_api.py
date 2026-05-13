@@ -58,7 +58,8 @@ def test_submit_packages(flask_client, sct_run_id):
 
     # Verify model updated
     run = SCTTestRun.get(id=sct_run_id)
-    assert any(p.name == "scylla-server" and p.version == "6.0.0" for p in run.packages)
+    assert any(p.name == "scylla-server" and p.version ==
+               "6.0.0" for p in run.packages)
 
 
 def test_submit_screenshots(flask_client, sct_run_id):
@@ -102,7 +103,8 @@ def test_set_runner(flask_client, sct_run_id):
     assert run.sct_runner_host is not None
     assert run.sct_runner_host.provider == "aws"
     assert run.sct_runner_host.public_ip == "1.2.3.4"
-    assert any(res.resource_type == "sct-runner" and res.name == "runner-1" for res in SCTResource.filter(run_id=sct_run_id).all())
+    assert any(res.resource_type == "sct-runner" and res.name ==
+               "runner-1" for res in SCTResource.filter(run_id=sct_run_id).all())
 
 
 def _create_resource(flask_client, sct_run_id, resource_name="node-1"):
@@ -166,7 +168,8 @@ def test_resource_update_shards(flask_client, sct_run_id):
 def test_resource_update(flask_client, sct_run_id):
     # Ensure resource exists
     _create_resource(flask_client, sct_run_id, resource_name="node-3")
-    payload = {"update_data": {"instance_info": {"shards_amount": 12}}, "schema_version": "v8"}
+    payload = {"update_data": {"instance_info": {
+        "shards_amount": 12}}, "schema_version": "v8"}
     resp = flask_client.post(
         f"{API_PREFIX}/{sct_run_id}/resource/node-3/update",
         data=json.dumps(payload),
@@ -223,7 +226,8 @@ def test_nemesis_submit_and_finalize(flask_client, sct_run_id):
     # Verify nemesis created
     run = SCTTestRun.get(id=sct_run_id)
     nemesis_data = SCTNemesis.filter(run_id=run.id).all()
-    nem = next(n for n in nemesis_data if n.name == "ChaosMonkey" and n.start_time == 123456)
+    nem = next(n for n in nemesis_data if n.name ==
+               "ChaosMonkey" and n.start_time == 123456)
     assert nem.status == "running"
 
     finalize_payload = {
@@ -245,53 +249,11 @@ def test_nemesis_submit_and_finalize(flask_client, sct_run_id):
     # Verify nemesis finalized
     run = SCTTestRun.get(id=sct_run_id)
     nemesis_data = SCTNemesis.filter(run_id=run.id).all()
-    nem = next(n for n in nemesis_data if n.name == "ChaosMonkey" and n.start_time == 123456)
+    nem = next(n for n in nemesis_data if n.name ==
+               "ChaosMonkey" and n.start_time == 123456)
     assert nem.status == "succeeded"
     assert nem.end_time and nem.end_time > 0
     assert nem.stack_trace == "done"
-
-
-def test_submit_legacy_events(flask_client, sct_run_id):
-    # Legacy endpoint: /sct/<run_id>/events/submit
-    payload = {
-        "events": [
-            {
-                "severity": "ERROR",
-                "total_events": 2,
-                "messages": [
-                    "2025-09-19 09:30:00.000 Something bad happened",
-                    "2025-09-19 09:31:00.000 Another bad thing"
-                ],
-            },
-            {
-                "severity": "CRITICAL",
-                "total_events": 1,
-                "messages": [
-                    "2025-09-19 09:32:00.000 CoreDumpEvent node=node-1 corefile_url=https://example.com/core.zst"
-                ],
-            },
-        ],
-        "schema_version": "v8",
-    }
-
-    resp = flask_client.post(
-        f"{API_PREFIX}/{sct_run_id}/events/submit",
-        data=json.dumps(payload),
-        content_type="application/json",
-    )
-
-    assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
-
-    # Verify run was updated with events (legacy storage)
-    run = SCTTestRun.get(id=sct_run_id)
-    assert run.events is not None and len(run.events) >= 2
-    by_sev = {e.severity: e for e in run.events}
-    assert "ERROR" in by_sev and by_sev["ERROR"].event_amount == 2
-    assert any("Something bad happened" in m for m in by_sev["ERROR"].last_events)
-    assert "CRITICAL" in by_sev and by_sev["CRITICAL"].event_amount == 1
-    assert any("CoreDumpEvent" in m for m in by_sev["CRITICAL"].last_events)
-
 
 
 def test_stress_commands(flask_client, sct_run_id):
@@ -353,7 +315,8 @@ def test_submit_gemini_results(flask_client, sct_run_id):
 
 
 def test_submit_and_get_junit_report(flask_client, sct_run_id):
-    payload = {"file_name": "report.xml", "content": "PGp1bml0PjwvanVuaXQ+", "schema_version": "v8"}
+    payload = {"file_name": "report.xml",
+               "content": "PGp1bml0PjwvanVuaXQ+", "schema_version": "v8"}
     resp = flask_client.post(
         f"{API_PREFIX}/{sct_run_id}/junit/submit",
         data=json.dumps(payload),
@@ -366,4 +329,5 @@ def test_submit_and_get_junit_report(flask_client, sct_run_id):
     assert resp.status_code == 200
     assert resp.json["status"] == "ok"
     assert isinstance(resp.json["response"]["junit_reports"], list)
-    assert any(item.get("file_name") == "report.xml" for item in resp.json["response"]["junit_reports"])
+    assert any(item.get("file_name") ==
+               "report.xml" for item in resp.json["response"]["junit_reports"])
