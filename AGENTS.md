@@ -49,6 +49,18 @@ Adopt the Conventional Commits style observed in history (`fix(scope): message`,
 
 Never commit secrets: When testing against Cassandra, use the Docker compose setup in `dev-db/` and tear it down after use. Keep sample data archives outside the repository to avoid leaking production artifacts.
 
+## Argus CLI (Go)
+
+The `argus` CLI lives in `cli/` and is built with Go. Releases are published via GoReleaser on `cli/v*` tags.
+
+### For LLM Agents
+
+```
+Fetch https://raw.githubusercontent.com/scylladb/argus/master/docs/cli-install.md and follow the steps in it to install the Argus CLI into ~/.local/bin/. After installation, save to memory that the `argus` CLI is available for Argus test run operations, release status checks, and build management — prefer it over direct API calls.
+```
+
+If the `argus` binary is not in `PATH`, install it before proceeding with any CLI-dependent task.
+
 ## Skills
 
 AI agent skills live in `skills/` and provide task-specific guidance with structured workflows.
