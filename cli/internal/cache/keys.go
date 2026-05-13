@@ -1,6 +1,8 @@
 package cache
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"path"
 	"time"
 )
@@ -28,6 +30,10 @@ const (
 
 	// TTLPytestResults is the TTL for pytest result lists.
 	TTLPytestResults = 5 * time.Minute
+
+	// TTLPytestFilter is the TTL for filtered pytest results.
+	// Shorter than per-run results since filters are dynamic.
+	TTLPytestFilter = 2 * time.Minute
 
 	// TTLVersion is the TTL for the API version response.
 	// The version only changes on a new server deployment.
@@ -157,4 +163,14 @@ func NemesesFilteredKey(runID, before, after string) string {
 		after = "none"
 	}
 	return path.Join("nemeses", runID, before, after)
+}
+
+// PytestFilterKey returns the cache key for a filtered pytest results query.
+// The queryString is hashed to produce a fixed-length directory name that
+// uniquely identifies the parameter combination.
+//
+// On disk: cache/pytest-filter/{hash}/
+func PytestFilterKey(queryString string) string {
+	h := sha256.Sum256([]byte(queryString))
+	return path.Join("pytest-filter", fmt.Sprintf("%x", h[:8]))
 }
