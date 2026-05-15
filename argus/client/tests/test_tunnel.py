@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from io import StringIO
 from unittest.mock import Mock
+import os
 
 import pytest
 
@@ -10,6 +11,16 @@ from argus.client import tunnel_ssh
 from argus.client import tunnel_state
 from argus.client.session import TunneledSession
 from argus.client.tunnel import TunnelConfig
+
+
+def _write_text(path: str, text: str) -> None:
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(text)
+
+
+def _read_text(path: str) -> str:
+    with open(path, encoding="utf-8") as fh:
+        return fh.read()
 
 
 class _DummyProcess:
@@ -33,7 +44,7 @@ class _DummyProcess:
 @pytest.fixture
 def tunnel_state_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("ARGUS_TUNNEL_STATE_DIR", str(tmp_path))
-    return tmp_path
+    return str(tmp_path)
 
 
 def test_resolve_tunnel_config_registers_and_caches(tunnel_state_dir, monkeypatch):
@@ -51,8 +62,8 @@ def test_resolve_tunnel_config_registers_and_caches(tunnel_state_dir, monkeypatc
     )
 
     def _fake_generate(paths):
-        paths.private_key.write_text("private", encoding="utf-8")
-        paths.public_key.write_text("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey", encoding="utf-8")
+        _write_text(paths.private_key, "private")
+        _write_text(paths.public_key, "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey")
 
     monkeypatch.setattr(tunnel_api, "generate_keypair_if_needed", _fake_generate)
     monkeypatch.setattr(tunnel_api, "_register_tunnel", lambda **kwargs: config)
@@ -62,8 +73,8 @@ def test_resolve_tunnel_config_registers_and_caches(tunnel_state_dir, monkeypatc
     assert resolved.proxy_host == "proxy.example.com"
 
     paths = tunnel_state.get_tunnel_state_paths()
-    assert paths.config_cache.exists()
-    assert paths.key_meta.exists()
+    assert os.path.exists(paths.config_cache)
+    assert os.path.exists(paths.key_meta)
 
     monkeypatch.setattr(
         tunnel_api,
@@ -122,7 +133,7 @@ def test_tunnel_api_succeeds_with_valid_response():
 
 def test_establish_uses_strict_host_options_and_temp_known_hosts(tunnel_state_dir, monkeypatch):
     paths = tunnel_state.get_tunnel_state_paths()
-    paths.private_key.write_text("private", encoding="utf-8")
+    _write_text(paths.private_key, "private")
 
     host_blob = "AQIDBA=="
     expected_fingerprint = tunnel_ssh.derive_fingerprint(f"ssh-ed25519 {host_blob}")
@@ -166,15 +177,15 @@ def test_establish_uses_strict_host_options_and_temp_known_hosts(tunnel_state_di
 
     known_hosts_path = ssh_tunnel._known_hosts_path
     assert known_hosts_path is not None
-    assert known_hosts_path.exists()
+    assert os.path.exists(known_hosts_path)
 
     ssh_tunnel.shutdown()
-    assert not known_hosts_path.exists()
+    assert not os.path.exists(known_hosts_path)
 
 
 def test_establish_retries_on_local_bind_conflict(tunnel_state_dir, monkeypatch):
     paths = tunnel_state.get_tunnel_state_paths()
-    paths.private_key.write_text("private", encoding="utf-8")
+    _write_text(paths.private_key, "private")
 
     config = TunnelConfig(
         proxy_host="proxy.example.com",
@@ -399,9 +410,9 @@ def test_argus_client_works_as_context_manager(requests_mock, monkeypatch):
 
 def test_backoff_does_not_wipe_cached_tunnel_state(tunnel_state_dir, monkeypatch):
     paths = tunnel_state.get_tunnel_state_paths()
-    paths.private_key.write_text("private-key", encoding="utf-8")
-    paths.public_key.write_text("public-key", encoding="utf-8")
-    paths.config_cache.write_text('{"placeholder": "value"}', encoding="utf-8")
+    _write_text(paths.private_key, "private-key")
+    _write_text(paths.public_key, "public-key")
+    _write_text(paths.config_cache, '{"placeholder": "value"}')
 
     monkeypatch.setattr(
         "argus.client.session.resolve_tunnel_config_with_reason",
@@ -413,9 +424,9 @@ def test_backoff_does_not_wipe_cached_tunnel_state(tunnel_state_dir, monkeypatch
         session._ensure_tunnel()
         # Transient establish failure must NOT wipe the cached keypair —
         # otherwise every cooldown forces a fresh registration round-trip.
-        assert paths.private_key.exists()
-        assert paths.public_key.exists()
-        assert paths.config_cache.exists()
+        assert os.path.exists(paths.private_key)
+        assert os.path.exists(paths.public_key)
+        assert os.path.exists(paths.config_cache)
     finally:
         session.close()
 
@@ -453,13 +464,13 @@ def test_prepare_known_hosts_file_accepts_full_known_hosts_entry(tunnel_state_di
 
     path = tunnel_ssh.SSHTunnel._prepare_known_hosts_file(config)
     try:
-        contents = path.read_text(encoding="utf-8").strip()
+        contents = _read_text(path).strip()
         # Host token must be rewritten to the connection target with the
         # non-default port, not whatever the backend stored.
         assert contents.startswith("[proxy.example.com]:2222 ")
         assert "ssh-ed25519 AAAAdummybase64" in contents
     finally:
-        path.unlink(missing_ok=True)
+        tunnel_ssh._unlink(path)
 
 
 def test_prepare_known_hosts_file_rejects_unknown_format(tunnel_state_dir):

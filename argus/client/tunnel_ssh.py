@@ -8,7 +8,6 @@ import socket
 import subprocess
 import tempfile
 import time
-from pathlib import Path
 
 from argus.client.tunnel_models import (
     ALLOWED_HOST_KEY_TYPES,
@@ -25,12 +24,12 @@ LOGGER = logging.getLogger(__name__)
 
 
 class SSHTunnel:
-    def __init__(self, key_path: Path | None = None) -> None:
+    def __init__(self, key_path: str | None = None) -> None:
         state_paths = get_tunnel_state_paths()
         self._key_path = key_path or state_paths.private_key
         self._process: subprocess.Popen[str] | None = None
         self._local_port: int | None = None
-        self._known_hosts_path: Path | None = None
+        self._known_hosts_path: str | None = None
         self._atexit_registered = False
 
     @property
@@ -47,7 +46,7 @@ class SSHTunnel:
             reason = "ssh-keyscan binary was not found on PATH"
             LOGGER.warning(reason)
             return None, reason
-        if not self._key_path.exists():
+        if not os.path.exists(self._key_path):
             reason = f"SSH private key does not exist: {self._key_path}"
             LOGGER.warning(reason)
             return None, reason
@@ -80,7 +79,7 @@ class SSHTunnel:
             except OSError as exc:
                 reason = f"failed to spawn ssh process: {exc}"
                 LOGGER.warning(reason)
-                known_hosts_path.unlink(missing_ok=True)
+                _unlink(known_hosts_path)
                 return None, reason
 
             ready, error_text = self._wait_for_port_ready(process=process, local_port=local_port)
@@ -103,12 +102,12 @@ class SSHTunnel:
 
             reason = f"establish attempt {attempt} failed: {error_text or 'unknown error'}"
             LOGGER.warning("SSH tunnel %s", reason)
-            known_hosts_path.unlink(missing_ok=True)
+            _unlink(known_hosts_path)
             return None, reason
 
         reason = f"establish failed after {MAX_PORT_BIND_ATTEMPTS} attempts"
         LOGGER.warning("SSH tunnel %s", reason)
-        known_hosts_path.unlink(missing_ok=True)
+        _unlink(known_hosts_path)
         return None, reason
 
     def is_alive(self) -> bool:
@@ -137,7 +136,7 @@ class SSHTunnel:
         self._local_port = None
 
         if self._known_hosts_path is not None:
-            self._known_hosts_path.unlink(missing_ok=True)
+            _unlink(self._known_hosts_path)
             self._known_hosts_path = None
 
     def _register_atexit(self) -> None:
@@ -146,7 +145,7 @@ class SSHTunnel:
         atexit.register(self.shutdown)
         self._atexit_registered = True
 
-    def _build_ssh_command(self, config: TunnelConfig, local_port: int, known_hosts_path: Path, ssh_bin: str = "ssh") -> list[str]:
+    def _build_ssh_command(self, config: TunnelConfig, local_port: int, known_hosts_path: str, ssh_bin: str = "ssh") -> list[str]:
         return [
             ssh_bin,
             "-N",
@@ -206,7 +205,7 @@ class SSHTunnel:
         return False, "Timed out waiting for local SSH tunnel port to become reachable"
 
     @staticmethod
-    def _prepare_known_hosts_file(config: TunnelConfig) -> Path:
+    def _prepare_known_hosts_file(config: TunnelConfig) -> str:
         """Build a temporary known_hosts file covering ``config.proxy_host``.
 
         Two input shapes are supported, both validated strictly:
@@ -336,13 +335,21 @@ def _normalise_known_hosts_entry(raw: str, host: str, port: int) -> str:
     return f"{host_token} {key_type} {key_blob}"
 
 
-def write_temp_known_hosts(known_host_line: str) -> Path:
+def write_temp_known_hosts(known_host_line: str) -> str:
     fd, temp_path = tempfile.mkstemp(prefix="argus-known-hosts-")
     os.close(fd)
-    path = Path(temp_path)
-    path.write_text(f"{known_host_line}\n", encoding="utf-8")
-    path.chmod(0o600)
-    return path
+    with open(temp_path, "w", encoding="utf-8") as fh:
+        fh.write(f"{known_host_line}\n")
+    os.chmod(temp_path, 0o600)
+    return temp_path
+
+
+def _unlink(path: str) -> None:
+    """Remove a file; silently ignore if it does not exist."""
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        pass
 
 
 def read_process_stderr(process: subprocess.Popen[str]) -> str:

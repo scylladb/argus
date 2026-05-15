@@ -1,6 +1,6 @@
 import json
+import os
 from json.decoder import JSONDecodeError
-from pathlib import Path
 import click
 import logging
 
@@ -81,11 +81,11 @@ def finish_run(api_key: str, base_url: str, use_tunnel: bool | None, id: str, st
 @click.option("--extra-headers", default={}, type=click.UNPROCESSED, callback=validate_extra_headers, help="extra headers to pass to argus, should be in json format", envvar='ARGUS_EXTRA_HEADERS')
 def trigger_jobs(api_key: str, base_url: str, use_tunnel: bool | None, job_info_file: str, version: str,
                  plan_id: str, release: str, extra_headers: dict | None = None):
-    path = Path(job_info_file)
-    if not path.exists():
+    if not os.path.exists(job_info_file):
         LOGGER.error("File not found: %s", job_info_file)
         exit(128)
-    payload = json.load(path.open("rt", encoding="utf-8"))
+    with open(job_info_file, "rt", encoding="utf-8") as fh:
+        payload = json.load(fh)
     with ArgusGenericClient(
         auth_token=api_key,
         base_url=base_url,
