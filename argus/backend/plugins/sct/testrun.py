@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 from cassandra.cqlengine import columns
 from cassandra.cqlengine.models import _DoesNotExist, Model
 from argus.backend.db import ScyllaCluster
-from argus.backend.models.web import ArgusRelease, ArgusTest
+from argus.backend.models.web import ArgusRelease, ArgusTest, ReleaseDistinctVersions, ReleaseDistinctImages
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.sct.resource_setup import ResourceSetup
 from argus.backend.plugins.sct.udt import (
@@ -152,7 +152,6 @@ class SCTTestRun(PluginModelBase):
     config_files = columns.List(value_type=columns.Text())
     packages = columns.List(
         value_type=columns.UserDefinedType(user_type=PackageVersion))
-    scylla_version = columns.Text()
     version_source = columns.Text()
     yaml_test_duration = columns.Integer()
 
@@ -215,18 +214,21 @@ class SCTTestRun(PluginModelBase):
     @classmethod
     def submit_run(cls, request_data: dict) -> 'SCTTestRun':
         req = SCTTestRunSubmissionRequest(**request_data)
-        return cls.from_sct_config(req=req)
+        run = cls.from_sct_config(req=req)
+        run.invalidate_release_snapshot()
+        run.index_image(run)
+        return run
 
     @classmethod
     def get_distinct_product_versions(cls, release: ArgusRelease) -> list[str]:
+        rows = list(ReleaseDistinctVersions.filter(release_id=release.id).all())
+        if rows:
+            return sorted([r.version for r in rows], reverse=True)
+        # Fallback: index not yet populated — scan GSI directly
         cluster = ScyllaCluster.get()
-        statement = cluster.prepare(f"SELECT scylla_version FROM {
-                                    cls.table_name()} WHERE release_id = ?")
-        rows = cluster.session.execute(
-            query=statement, parameters=(release.id,))
-        unique_versions = {r["scylla_version"]
-                           for r in rows if r["scylla_version"]}
-
+        statement = cluster.prepare(f"SELECT scylla_version FROM {cls.table_name()} WHERE release_id = ?")
+        result = cluster.session.execute(query=statement, parameters=(release.id,))
+        unique_versions = {r["scylla_version"] for r in result if r["scylla_version"]}
         return sorted(list(unique_versions), reverse=True)
 
     @classmethod
@@ -246,13 +248,14 @@ class SCTTestRun(PluginModelBase):
 
     @classmethod
     def get_distinct_cloud_images_for_release(cls, release: ArgusRelease):
+        rows = list(ReleaseDistinctImages.filter(release_id=release.id).all())
+        if rows:
+            return sorted([r.image_id for r in rows], reverse=True)
+        # Fallback: index not yet populated — scan GSI + deserialize UDTs directly
         cluster = ScyllaCluster.get()
-        statement = cluster.prepare(f"SELECT cloud_setup FROM {
-                                    cls.table_name()} WHERE release_id = ?")
-        rows = cluster.session.execute(
-            query=statement, parameters=(release.id,))
-        unique_images = {cls.get_image(r) for r in rows if cls.get_image(r)}
-
+        statement = cluster.prepare(f"SELECT cloud_setup FROM {cls.table_name()} WHERE release_id = ?")
+        result = cluster.session.execute(query=statement, parameters=(release.id,))
+        unique_images = {cls.get_image(r) for r in result if cls.get_image(r)}
         return sorted(list(unique_images), reverse=True)
 
     @classmethod
@@ -411,9 +414,13 @@ class SCTTestRun(PluginModelBase):
             new_assignee = None
         if new_assignee:
             self.assignee = new_assignee
+        self.index_version()
 
     def finish_run(self, payload: dict = None):
         self.end_time = datetime.utcnow()
+        self.invalidate_release_snapshot()
+        self.index_version()
+        self.index_image(self)
 
     def submit_logs(self, logs: list[dict]):
         for log in logs:
@@ -486,6 +493,18 @@ class SCTTestRun(PluginModelBase):
         response["allocated_resources"] = list(
             SCTResource.filter(run_id=run_id).all())
         return response
+
+    @staticmethod
+    def index_image(run: 'SCTTestRun') -> None:
+        if not run.release_id:
+            return
+        try:
+            image_id = run.cloud_setup and run.cloud_setup.db_node and run.cloud_setup.db_node.image_id
+            if not image_id:
+                return
+            ReleaseDistinctImages.create(release_id=run.release_id, image_id=image_id)
+        except Exception:
+            LOGGER.warning("Failed to index image for release %s", run.release_id, exc_info=True)
 
 
 class SCTJunitReports(Model):

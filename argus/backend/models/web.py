@@ -396,6 +396,32 @@ class WebFileStorage(Model):
     filename = columns.Text(min_length=1)
 
 
+class ReleaseStatsSnapshot(Model):
+    __table_name__ = "argus_release_stats_snapshot"
+    release_id = columns.UUID(partition_key=True)
+    filter_key = columns.Text(primary_key=True)
+    payload = columns.Text()
+    generated_at = columns.DateTime()
+
+
+class ReleaseDistinctVersions(Model):
+    """Denormalized index: distinct scylla_version values seen for a release.
+    Replaces the expensive GSI scan in get_distinct_product_versions.
+    Keyed by release_id (partition) + version (clustering) for O(1) reads.
+    """
+    release_id = columns.UUID(partition_key=True)
+    version = columns.Text(primary_key=True)
+
+
+class ReleaseDistinctImages(Model):
+    """Denormalized index: distinct cloud image IDs seen for a release.
+    Replaces the expensive GSI scan + UDT deserialization in get_distinct_cloud_images_for_release.
+    Keyed by release_id (partition) + image_id (clustering) for O(1) reads.
+    """
+    release_id = columns.UUID(partition_key=True)
+    image_id = columns.Text(primary_key=True)
+
+
 USED_MODELS: list[Model] = [
     RuntimeStore,
     User,
@@ -419,6 +445,8 @@ USED_MODELS: list[Model] = [
     ArgusBestResultData,
     ArgusReleasePlan,
     WidgetHighlights,
+    ReleaseDistinctVersions,
+    ReleaseDistinctImages,
     WidgetComment,
     ArgusGraphView,
     ErrorEventEmbeddings,  # to be deprecated
@@ -435,6 +463,7 @@ USED_MODELS: list[Model] = [
     RunConfigParam,
     SSHTunnelKey,
     ProxyTunnelConfig,
+    ReleaseStatsSnapshot,
 ]
 
 USED_TYPES: list[UserType] = [
