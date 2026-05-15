@@ -48,10 +48,16 @@ class _TunnelCachePayload(TypedDict):
     tunnel_id: NotRequired[str | None]
 
 
-# Required keys are derived from the TypedDict at runtime via ``__required_keys__``;
-# kept as a module-level set so the dunder access is centralised and easy to swap
-# out if/when ``typing.get_type_hints``-based introspection becomes preferable.
-_TUNNEL_API_REQUIRED_KEYS: frozenset[str] = frozenset(_TunnelApiResponse.__required_keys__)
+# Required keys listed explicitly to avoid relying on TypedDict.__required_keys__
+# runtime behaviour, which changed in Python 3.14.
+_TUNNEL_API_REQUIRED_KEYS: tuple[str, ...] = (
+    "proxy_host",
+    "proxy_port",
+    "proxy_user",
+    "target_host",
+    "target_port",
+    "host_key_fingerprint",
+)
 
 
 @dataclass(frozen=True, slots=True)
