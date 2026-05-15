@@ -83,7 +83,8 @@ def resolve_tunnel_config_with_reason(
 
     try:
         generate_keypair_if_needed(paths)
-        public_key = paths.public_key.read_text(encoding="utf-8").strip()
+        with open(paths.public_key, encoding="utf-8") as fh:
+            public_key = fh.read().strip()
         config = _register_tunnel(
             auth_token=auth_token,
             base_url=base_url,

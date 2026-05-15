@@ -1,6 +1,5 @@
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any, NotRequired, TypedDict
 
 
@@ -95,11 +94,11 @@ class TunnelConfig:
 
 @dataclass(frozen=True, slots=True)
 class TunnelStatePaths:
-    state_dir: Path
-    private_key: Path
-    public_key: Path
-    key_meta: Path
-    config_cache: Path
+    state_dir: str
+    private_key: str
+    public_key: str
+    key_meta: str
+    config_cache: str
 
 
 def parse_datetime(value: str) -> datetime:
