@@ -4,6 +4,7 @@ import os
 import threading
 import time
 import weakref
+from datetime import UTC, datetime
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -85,6 +86,7 @@ class TunneledSession(requests.Session):
         self._tunnel: SSHTunnel | None = None
         self._tunnel_config: TunnelConfig | None = None
         self._tunnel_port: int | None = None
+        self._tunnel_established_at: str | None = None
         self._tunnel_warning_emitted = False
         self._tunnel_disabled_until = 0.0
         # RLock is held while reconnecting; this can stall a request thread for
@@ -181,11 +183,21 @@ class TunneledSession(requests.Session):
                 self._backoff(establish_reason or "failed to establish tunnel")
                 return
 
+            assert config is not None  # guaranteed: local_port is set only when config is valid
             self._tunnel = tunnel
             self._tunnel_config = config
             self._tunnel_port = local_port
+            self._tunnel_established_at = datetime.now(UTC).isoformat()
             self._tunnel_warning_emitted = False
             self._tunnel_disabled_until = 0.0
+            LOGGER.info(
+                "SSH tunnel established: proxy=%s:%d, user=%s, key_id=%s, local_port=%d",
+                config.proxy_host,
+                config.proxy_port,
+                config.proxy_user,
+                config.key_id or "unknown",
+                local_port,
+            )
 
     def _backoff(self, reason: str) -> None:
         # We deliberately do NOT delete the cached keypair here. The keypair
@@ -208,6 +220,7 @@ class TunneledSession(requests.Session):
         self._tunnel = None
         self._tunnel_config = None
         self._tunnel_port = None
+        self._tunnel_established_at = None
         self._tunnel_disabled_until = time.monotonic() + TUNNEL_COOLDOWN_SECONDS
 
     def _monitor_loop(self, interval: float) -> None:
@@ -224,9 +237,27 @@ class TunneledSession(requests.Session):
         LOGGER.warning("SSH tunnel monitor detected dead tunnel; reconnecting")
         self._ensure_tunnel()
 
+    def _tunnel_headers(self) -> dict[str, str]:
+        """Return headers to attach when traffic flows through the SSH tunnel."""
+        if self._tunnel_port is None or self._tunnel_config is None:
+            return {}
+        headers = {
+            "User-Agent": "argus-client-ssh-tunnel",
+            "X-SSH-Tunnel-Origin": self._tunnel_config.proxy_host,
+            "X-Tunnel-Established-At": self._tunnel_established_at or "",
+        }
+        if self._tunnel_config.key_id:
+            headers["X-Forwarded-Key-ID"] = self._tunnel_config.key_id
+        return headers
+
     def request(self, method: str, url: str, *args, **kwargs) -> requests.Response:
         self._ensure_tunnel()
         rewritten = self._rewrite_url(url)
+        if rewritten != url:
+            # Traffic is going through the tunnel — inject tunnel headers
+            headers = kwargs.get("headers") or {}
+            headers.update(self._tunnel_headers())
+            kwargs["headers"] = headers
         try:
             return super().request(method, rewritten, *args, **kwargs)
         except requests.ConnectionError:
@@ -235,6 +266,10 @@ class TunneledSession(requests.Session):
             LOGGER.warning("%s through SSH tunnel failed; reconnecting and retrying", method)
             self._ensure_tunnel()
             rewritten = self._rewrite_url(url)
+            if rewritten != url:
+                headers = kwargs.get("headers") or {}
+                headers.update(self._tunnel_headers())
+                kwargs["headers"] = headers
             try:
                 return super().request(method, rewritten, *args, **kwargs)
             except requests.ConnectionError as exc:
