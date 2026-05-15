@@ -148,11 +148,15 @@ class TunneledSession(requests.Session):
                     LOGGER.warning("SSH tunnel reconnect failed: %s", reconnect_reason)
 
             force_refresh = self._tunnel is not None
+            # Use None (creates a plain requests.Session inside tunnel_api) to
+            # avoid infinite recursion: passing `self` would trigger
+            # _ensure_tunnel() again when the tunnel API call invokes
+            # session.post().
             config, config_reason = resolve_tunnel_config_with_reason(
                 auth_token=self._auth_token,
                 base_url=self._original_base_url,
                 force_refresh=force_refresh,
-                session=self,
+                session=None,
             )
             if config is None:
                 self._backoff(config_reason or "failed to resolve tunnel configuration")
@@ -166,7 +170,7 @@ class TunneledSession(requests.Session):
                     auth_token=self._auth_token,
                     base_url=self._original_base_url,
                     force_refresh=True,
-                    session=self,
+                    session=None,
                 )
                 if config is not None:
                     local_port, establish_reason = tunnel.establish(config)
