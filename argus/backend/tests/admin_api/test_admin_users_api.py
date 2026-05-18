@@ -19,17 +19,10 @@ import pytest
 from flask import g
 
 from argus.backend.models.web import User, UserRoles
+from argus.backend.tests.util import client_post
 
 
 ADMIN_PREFIX = "/admin/api/v1"
-
-
-def _post(flask_client, path: str, payload: dict | None = None):
-    return flask_client.post(
-        path,
-        data=json.dumps(payload or {}),
-        content_type="application/json",
-    )
 
 
 def _get_admin_user(flask_client, user_id: str) -> dict | None:
@@ -44,7 +37,8 @@ def _get_admin_user(flask_client, user_id: str) -> dict | None:
 def saved_g_user():
     """Persist ``g.user`` so admin self-protection paths can compare ids."""
     g.user.password = "test_password"
-    g.user.roles = [r.value if hasattr(r, "value") else r for r in g.user.roles]
+    g.user.roles = [r.value if hasattr(
+        r, "value") else r for r in g.user.roles]
     g.user.save()
     return g.user
 
@@ -87,7 +81,7 @@ def test_admin_users_returns_dict_without_password(flask_client, regular_user):
 
 def test_admin_user_change_email(flask_client, regular_user):
     new_email = f"new_{uuid.uuid4().hex[:8]}@scylladb.com"
-    resp = _post(
+    resp = client_post(
         flask_client,
         f"{ADMIN_PREFIX}/user/{regular_user.id}/email/set",
         {"newEmail": new_email},
@@ -103,7 +97,7 @@ def test_admin_user_change_email(flask_client, regular_user):
 
 
 def test_admin_user_change_email_invalid_format_errors(flask_client, regular_user):
-    resp = _post(
+    resp = client_post(
         flask_client,
         f"{ADMIN_PREFIX}/user/{regular_user.id}/email/set",
         {"newEmail": "not-a-valid-email"},
@@ -113,7 +107,7 @@ def test_admin_user_change_email_invalid_format_errors(flask_client, regular_use
 
 
 def test_admin_user_change_email_duplicate_errors(flask_client, regular_user, saved_g_user):
-    resp = _post(
+    resp = client_post(
         flask_client,
         f"{ADMIN_PREFIX}/user/{regular_user.id}/email/set",
         {"newEmail": saved_g_user.email},
@@ -127,7 +121,7 @@ def test_admin_user_change_email_duplicate_errors(flask_client, regular_user, sa
 # ---------------------------------------------------------------------------
 
 def test_admin_user_change_password(flask_client, regular_user):
-    resp = _post(
+    resp = client_post(
         flask_client,
         f"{ADMIN_PREFIX}/user/{regular_user.id}/password/set",
         {"newPassword": "newSecret123"},
@@ -139,7 +133,7 @@ def test_admin_user_change_password(flask_client, regular_user):
 
 
 def test_admin_user_change_password_too_short_errors(flask_client, regular_user):
-    resp = _post(
+    resp = client_post(
         flask_client,
         f"{ADMIN_PREFIX}/user/{regular_user.id}/password/set",
         {"newPassword": "abc"},
@@ -149,7 +143,7 @@ def test_admin_user_change_password_too_short_errors(flask_client, regular_user)
 
 
 def test_admin_user_change_password_empty_errors(flask_client, regular_user):
-    resp = _post(
+    resp = client_post(
         flask_client,
         f"{ADMIN_PREFIX}/user/{regular_user.id}/password/set",
         {"newPassword": ""},
@@ -163,19 +157,24 @@ def test_admin_user_change_password_empty_errors(flask_client, regular_user):
 # ---------------------------------------------------------------------------
 
 def test_admin_toggle_admin_grants_then_revokes(flask_client, regular_user):
-    resp = _post(flask_client, f"{ADMIN_PREFIX}/user/{regular_user.id}/admin/toggle")
+    resp = client_post(flask_client, f"{
+        ADMIN_PREFIX}/user/{regular_user.id}/admin/toggle")
     assert resp.status_code == 200, resp.data
     assert resp.json["status"] == "ok"
-    assert UserRoles.Admin.value in _get_admin_user(flask_client, str(regular_user.id))["roles"]
+    assert UserRoles.Admin.value in _get_admin_user(
+        flask_client, str(regular_user.id))["roles"]
 
-    resp = _post(flask_client, f"{ADMIN_PREFIX}/user/{regular_user.id}/admin/toggle")
+    resp = client_post(flask_client, f"{
+        ADMIN_PREFIX}/user/{regular_user.id}/admin/toggle")
     assert resp.status_code == 200, resp.data
     assert resp.json["status"] == "ok"
-    assert UserRoles.Admin.value not in _get_admin_user(flask_client, str(regular_user.id))["roles"]
+    assert UserRoles.Admin.value not in _get_admin_user(
+        flask_client, str(regular_user.id))["roles"]
 
 
 def test_admin_toggle_admin_self_forbidden(flask_client, saved_g_user):
-    resp = _post(flask_client, f"{ADMIN_PREFIX}/user/{saved_g_user.id}/admin/toggle")
+    resp = client_post(flask_client, f"{
+        ADMIN_PREFIX}/user/{saved_g_user.id}/admin/toggle")
     assert resp.status_code == 200
     assert resp.json["status"] == "error"
 
@@ -185,7 +184,8 @@ def test_admin_toggle_admin_self_forbidden(flask_client, saved_g_user):
 # ---------------------------------------------------------------------------
 
 def test_admin_delete_user(flask_client, regular_user):
-    resp = _post(flask_client, f"{ADMIN_PREFIX}/user/{regular_user.id}/delete")
+    resp = client_post(
+        flask_client, f"{ADMIN_PREFIX}/user/{regular_user.id}/delete")
     assert resp.status_code == 200, resp.data
     body = resp.json
     assert body["status"] == "ok"
@@ -194,20 +194,24 @@ def test_admin_delete_user(flask_client, regular_user):
 
 
 def test_admin_delete_user_self_forbidden(flask_client, saved_g_user):
-    resp = _post(flask_client, f"{ADMIN_PREFIX}/user/{saved_g_user.id}/delete")
+    resp = client_post(
+        flask_client, f"{ADMIN_PREFIX}/user/{saved_g_user.id}/delete")
     assert resp.status_code == 200
     assert resp.json["status"] == "error"
 
 
 def test_admin_delete_admin_user_forbidden(flask_client, regular_user):
     # Promote, then try to delete — must error per service rule.
-    _post(flask_client, f"{ADMIN_PREFIX}/user/{regular_user.id}/admin/toggle")
-    resp = _post(flask_client, f"{ADMIN_PREFIX}/user/{regular_user.id}/delete")
+    client_post(flask_client, f"{
+                ADMIN_PREFIX}/user/{regular_user.id}/admin/toggle")
+    resp = client_post(
+        flask_client, f"{ADMIN_PREFIX}/user/{regular_user.id}/delete")
     assert resp.status_code == 200
     assert resp.json["status"] == "error"
 
 
 def test_admin_delete_user_unknown_id_errors(flask_client):
-    resp = _post(flask_client, f"{ADMIN_PREFIX}/user/{uuid.uuid4()}/delete")
+    resp = client_post(
+        flask_client, f"{ADMIN_PREFIX}/user/{uuid.uuid4()}/delete")
     assert resp.status_code == 200
     assert resp.json["status"] == "error"

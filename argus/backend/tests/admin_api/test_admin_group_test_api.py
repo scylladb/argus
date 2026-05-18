@@ -18,19 +18,15 @@ Scope (iteration 9 of the controller coverage matrix):
 - ``POST /admin/api/v1/release/test/state/toggle``
 """
 
-import json
 import time
 import uuid
 
 import pytest
 
+from argus.backend.tests.util import client_post
 
 ADMIN_PREFIX = "/admin/api/v1"
 API_PREFIX = "/api/v1"
-
-
-def _post(flask_client, path: str, payload: dict):
-    return flask_client.post(path, data=json.dumps(payload), content_type="application/json")
 
 
 def _group_details(flask_client, group_id: str) -> dict:
@@ -69,7 +65,7 @@ def admin_group_via_api(flask_client, admin_release):
         "build_system_id": f"bsid_{time.time_ns()}",
         "release_id": str(admin_release.id),
     }
-    resp = _post(flask_client, f"{ADMIN_PREFIX}/group/create", payload)
+    resp = client_post(flask_client, f"{ADMIN_PREFIX}/group/create", payload)
     assert resp.status_code == 200, resp.data
     body = resp.json
     assert body["status"] == "ok"
@@ -88,7 +84,7 @@ def admin_test_via_api(flask_client, admin_release, admin_group_via_api):
         "release_id": str(admin_release.id),
         "plugin_name": "scylla-cluster-tests",
     }
-    resp = _post(flask_client, f"{ADMIN_PREFIX}/test/create", payload)
+    resp = client_post(flask_client, f"{ADMIN_PREFIX}/test/create", payload)
     assert resp.status_code == 200, resp.data
     body = resp.json
     assert body["status"] == "ok"
@@ -134,7 +130,7 @@ def test_admin_update_group(flask_client, admin_group_via_api):
         "enabled": False,
         "build_system_id": "updated-bsid",
     }
-    resp = _post(flask_client, f"{ADMIN_PREFIX}/group/update", payload)
+    resp = client_post(flask_client, f"{ADMIN_PREFIX}/group/update", payload)
     assert resp.status_code == 200, resp.data
     assert resp.json["status"] == "ok"
 
@@ -150,10 +146,12 @@ def test_admin_update_group(flask_client, admin_group_via_api):
 
 def test_admin_toggle_group_enabled(flask_client, admin_group_via_api):
     payload = {"entityId": admin_group_via_api["id"], "state": False}
-    resp = _post(flask_client, f"{ADMIN_PREFIX}/release/group/state/toggle", payload)
+    resp = client_post(flask_client, f"{
+        ADMIN_PREFIX}/release/group/state/toggle", payload)
     assert resp.status_code == 200, resp.data
     assert resp.json["status"] == "ok"
-    assert _group_details(flask_client, admin_group_via_api["id"])["enabled"] is False
+    assert _group_details(flask_client, admin_group_via_api["id"])[
+        "enabled"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -199,7 +197,7 @@ def test_admin_update_test(flask_client, admin_group_via_api, admin_test_via_api
         "build_system_url": "http://example.com/job/2",
         "group_id": admin_group_via_api["id"],
     }
-    resp = _post(flask_client, f"{ADMIN_PREFIX}/test/update", payload)
+    resp = client_post(flask_client, f"{ADMIN_PREFIX}/test/update", payload)
     assert resp.status_code == 200, resp.data
     assert resp.json["status"] == "ok"
 
@@ -216,10 +214,12 @@ def test_admin_update_test(flask_client, admin_group_via_api, admin_test_via_api
 
 def test_admin_toggle_test_enabled(flask_client, admin_test_via_api):
     payload = {"entityId": admin_test_via_api["id"], "state": False}
-    resp = _post(flask_client, f"{ADMIN_PREFIX}/release/test/state/toggle", payload)
+    resp = client_post(flask_client, f"{
+        ADMIN_PREFIX}/release/test/state/toggle", payload)
     assert resp.status_code == 200, resp.data
     assert resp.json["status"] == "ok"
-    assert _test_details(flask_client, admin_test_via_api["id"])["enabled"] is False
+    assert _test_details(flask_client, admin_test_via_api["id"])[
+        "enabled"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -227,10 +227,10 @@ def test_admin_toggle_test_enabled(flask_client, admin_test_via_api):
 # ---------------------------------------------------------------------------
 
 def test_admin_batch_move_tests(flask_client, admin_release, admin_group_via_api,
-                                  admin_test_via_api):
+                                admin_test_via_api):
     # Create a second group and move the test into it.
     second_group_name = f"adm9_grp2_{time.time_ns()}"
-    create_resp = _post(
+    create_resp = client_post(
         flask_client,
         f"{ADMIN_PREFIX}/group/create",
         {
@@ -243,8 +243,10 @@ def test_admin_batch_move_tests(flask_client, admin_release, admin_group_via_api
     assert create_resp.status_code == 200, create_resp.data
     second_group = create_resp.json["response"]["new_group"]
 
-    payload = {"new_group_id": second_group["id"], "tests": [admin_test_via_api["id"]]}
-    resp = _post(flask_client, f"{ADMIN_PREFIX}/test/batch_move", payload)
+    payload = {"new_group_id": second_group["id"], "tests": [
+        admin_test_via_api["id"]]}
+    resp = client_post(
+        flask_client, f"{ADMIN_PREFIX}/test/batch_move", payload)
     assert resp.status_code == 200, resp.data
     body = resp.json
     assert body["status"] == "ok"
@@ -259,39 +261,43 @@ def test_admin_batch_move_tests(flask_client, admin_release, admin_group_via_api
 # ---------------------------------------------------------------------------
 
 def test_admin_delete_test(flask_client, admin_test_via_api):
-    resp = _post(
-        flask_client, f"{ADMIN_PREFIX}/test/delete", {"test_id": admin_test_via_api["id"]}
+    resp = client_post(
+        flask_client, f"{
+            ADMIN_PREFIX}/test/delete", {"test_id": admin_test_via_api["id"]}
     )
     assert resp.status_code == 200, resp.data
     body = resp.json
     assert body["status"] == "ok"
     assert body["response"]["deleted"] is True
 
-    miss = flask_client.get(f"{API_PREFIX}/test/{admin_test_via_api['id']}/details")
+    miss = flask_client.get(
+        f"{API_PREFIX}/test/{admin_test_via_api['id']}/details")
     assert miss.status_code == 200
     assert miss.json["status"] == "error"
 
 
 def test_admin_delete_group_cascades_tests(flask_client, admin_group_via_api,
-                                            admin_test_via_api):
+                                           admin_test_via_api):
     payload = {"group_id": admin_group_via_api["id"], "delete_tests": True}
-    resp = _post(flask_client, f"{ADMIN_PREFIX}/group/delete", payload)
+    resp = client_post(flask_client, f"{ADMIN_PREFIX}/group/delete", payload)
     assert resp.status_code == 200, resp.data
     body = resp.json
     assert body["status"] == "ok"
     assert body["response"]["deleted"] is True
 
-    miss_group = flask_client.get(f"{API_PREFIX}/group/{admin_group_via_api['id']}/details")
+    miss_group = flask_client.get(
+        f"{API_PREFIX}/group/{admin_group_via_api['id']}/details")
     assert miss_group.json["status"] == "error"
-    miss_test = flask_client.get(f"{API_PREFIX}/test/{admin_test_via_api['id']}/details")
+    miss_test = flask_client.get(
+        f"{API_PREFIX}/test/{admin_test_via_api['id']}/details")
     assert miss_test.json["status"] == "error"
 
 
 def test_admin_delete_group_relocates_tests(flask_client, admin_release, admin_group_via_api,
-                                              admin_test_via_api):
+                                            admin_test_via_api):
     # Create a target group, then delete the source group with delete_tests=False.
     target_name = f"adm9_target_{time.time_ns()}"
-    create_resp = _post(
+    create_resp = client_post(
         flask_client,
         f"{ADMIN_PREFIX}/group/create",
         {
@@ -308,7 +314,7 @@ def test_admin_delete_group_relocates_tests(flask_client, admin_release, admin_g
         "delete_tests": False,
         "new_group_id": target["id"],
     }
-    resp = _post(flask_client, f"{ADMIN_PREFIX}/group/delete", payload)
+    resp = client_post(flask_client, f"{ADMIN_PREFIX}/group/delete", payload)
     assert resp.status_code == 200, resp.data
     assert resp.json["status"] == "ok"
 
@@ -321,8 +327,9 @@ def test_admin_delete_group_relocates_tests(flask_client, admin_release, admin_g
 # ---------------------------------------------------------------------------
 
 def test_admin_delete_test_unknown_id_errors(flask_client):
-    resp = _post(
-        flask_client, f"{ADMIN_PREFIX}/test/delete", {"test_id": str(uuid.uuid4())}
+    resp = client_post(
+        flask_client, f"{
+            ADMIN_PREFIX}/test/delete", {"test_id": str(uuid.uuid4())}
     )
     assert resp.status_code == 200
     assert resp.json["status"] == "error"
