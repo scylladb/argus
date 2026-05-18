@@ -1,14 +1,28 @@
+from cassandra.cluster import Cluster
+import logging
+from argus.backend.service.results_service import ResultsService
+from argus.backend.service.release_manager import ReleaseManagerService
+from argus.backend.service.client_service import ClientService
+from argus.backend.plugins.sct.testrun import SCTTestRunSubmissionRequest
+from argus.backend.models.web import ArgusTest, ArgusGroup, ArgusRelease, User, UserRoles
+from argus.backend.db import ScyllaCluster
+from argus.backend.cli import sync_models
+from docker.errors import NotFound
+from _pytest.fixtures import fixture
+from cassandra.cqlengine.management import sync_type
 import os
 from pathlib import Path
 import time
 import uuid
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import patch, MagicMock
 
 from cassandra.auth import PlainTextAuthProvider
 from docker import DockerClient
 from docker.models.containers import Container
 from flask import g, Flask
 from flask.testing import FlaskClient
+import pytest
 
 from argus.backend.models.argus_ai import Vector
 from argus.backend.plugins.loader import all_plugin_models, all_plugin_types
@@ -18,21 +32,8 @@ from argus.backend.service.testrun import TestRunService
 from argus.backend.service.views_widgets.pytest import PytestViewService
 from argus.backend.util.config import Config
 
+
 os.environ['DOCKER_HOST'] = ""
-
-from cassandra.cqlengine.management import sync_type
-from _pytest.fixtures import fixture
-from docker.errors import NotFound
-from argus.backend.cli import sync_models
-from argus.backend.db import ScyllaCluster
-from argus.backend.models.web import ArgusTest, ArgusGroup, ArgusRelease, User, UserRoles
-from argus.backend.plugins.sct.testrun import SCTTestRunSubmissionRequest
-from argus.backend.service.client_service import ClientService
-from argus.backend.service.release_manager import ReleaseManagerService
-from argus.backend.service.results_service import ResultsService
-import logging
-from cassandra.cluster import Cluster
-
 logging.getLogger().setLevel(logging.INFO)
 os.environ['CQLENG_ALLOW_SCHEMA_MANAGEMENT'] = '1'
 logging.getLogger('cassandra').setLevel(logging.WARNING)
@@ -41,6 +42,7 @@ logging.getLogger('cassandra.pool').setLevel(logging.WARNING)
 logging.getLogger('cassandra.cluster').setLevel(logging.WARNING)
 
 LOGGER = logging.getLogger(__name__)
+
 
 @fixture(scope='session')
 def argus_db():
@@ -104,17 +106,21 @@ def argus_db():
             print("'init - serving' message found.")
             break
         if "FATAL state" in log_line:
-            raise Exception("ScyllaDB exited unexpectedly. Check container logs for more information.")
+            raise Exception(
+                "ScyllaDB exited unexpectedly. Check container logs for more information.")
         if time.time() - start_time > log_wait_timeout:
-            raise Exception("ScyllaDB did not log 'init - serving' within the timeout period.")
+            raise Exception(
+                "ScyllaDB did not log 'init - serving' within the timeout period.")
 
     containers["database"].reload()
     container_ip = "localhost"
     print(f"Container IP: {container_ip}")
 
     if need_sync_models:
-        auth_provider = PlainTextAuthProvider(username='cassandra', password='cassandra')
-        cluster = Cluster([container_ip], port=9042, auth_provider=auth_provider)  # Use container IP
+        auth_provider = PlainTextAuthProvider(
+            username='cassandra', password='cassandra')
+        cluster = Cluster([container_ip], port=9042,
+                          auth_provider=auth_provider)  # Use container IP
         session = cluster.connect()
         session.execute("""
              CREATE KEYSPACE IF NOT EXISTS test_argus
@@ -127,8 +133,34 @@ def argus_db():
     config = {"SCYLLA_KEYSPACE_NAME": "test_argus", "SCYLLA_CONTACT_POINTS": [container_ip],
               "SCYLLA_USERNAME": "cassandra", "SCYLLA_PASSWORD": "cassandra", "APP_LOG_LEVEL": "INFO",
               "EMAIL_ENABLED": False,
-              "JIRA_SERVER": "https://zxqtesting.atlassian.net"}
-    Config.CONFIG = config  # patch config for whole test to avoid using Config.load_yaml_config() required by app context
+              "JIRA_SERVER": "https://zxqtesting.atlassian.net",
+              "EMAIL_SENDER": "unit tester", "EMAIL_SENDER_PASS": "pass", "EMAIL_SENDER_USER": "qa",
+              "EMAIL_SERVER": "fake", "EMAIL_SERVER_PORT": 25,
+              "GITHUB_ACCESS_TOKEN": "test_token",
+              # External-service config keys: set so service constructors don't crash
+              # in tests. Real network calls are blocked by per-test mocks (see
+              # argus/backend/tests/_helpers/external_mocks.py).
+              "LOGIN_METHODS": ["password", "gh", "cf"],
+              "GITHUB_CLIENT_ID": "test_gh_client_id",
+              "GITHUB_CLIENT_SECRET": "test_gh_client_secret",
+              "JIRA_EMAIL": "tester@scylladb.com",
+              "JIRA_TOKEN": "test_jira_token",
+              "JENKINS_URL": "http://jenkins.test",
+              "JENKINS_USER": "tester",
+              "JENKINS_API_TOKEN": "test_jenkins_token",
+              "AWS_CLIENT_ID": "test_aws_id",
+              "AWS_CLIENT_SECRET": "test_aws_secret",
+              "S3_ALLOWED_BUCKETS": ["test-bucket"],
+              "S3_ALLOWED_MIME": ["image/png", "image/jpeg", "text/plain"],
+              "CLOUDFLARE_ACCESS_TEAM_DOMAIN": "scylladb.cloudflareaccess.com",
+              "CLOUDFLARE_ACCESS_AUD": "test-aud",
+              # Stub PyJWKClient so _get_cf_access_payload doesn't fetch JWKS over HTTP.
+              "CLOUDFLARE_ACCESS_JWK_CLIENT": SimpleNamespace(
+                  get_signing_key_from_jwt=lambda token: SimpleNamespace(
+                      key="test-key")
+    )}
+    # patch config for whole test to avoid using Config.load_yaml_config() required by app context
+    Config.CONFIG = config
     database = ScyllaCluster.get(config)
     if need_sync_models:
         for user_type in all_plugin_types():
@@ -137,7 +169,8 @@ def argus_db():
     # Wait a little to let CDC Reader and full scan of Vector Store indices to complete.
     LOGGER.info("Waiting on Vector Store to be ready...")
     ks_name = "argus_tablets"
-    vs_indices = [r["name"] for r in database.session.execute(f"DESCRIBE {ks_name}").all() if r["type"] == "index" and "vector_index" in r["create_statement"]]
+    vs_indices = [r["name"] for r in database.session.execute(f"DESCRIBE {ks_name}").all(
+    ) if r["type"] == "index" and "vector_index" in r["create_statement"]]
     for index_name in vs_indices:
         for log in containers["vs"].logs(stream=True):
             log_line = log.decode('utf-8')
@@ -157,7 +190,8 @@ def argus_db():
 @fixture(scope='session')
 def argus_app():
     with patch('argus.backend.service.user.load_logged_in_user') as mock_load:
-        mock_load.return_value = None  # Make the function do nothing so test can override user
+        # Make the function do nothing so test can override user
+        mock_load.return_value = None
         from argus_backend import argus_app
         yield argus_app
 
@@ -256,3 +290,128 @@ def fake_test(release_manager_service, group: ArgusGroup, release: ArgusRelease)
     name = f"test_{time.time_ns()}"
     return release_manager_service.create_test(name, name, name, name,
                                                group_id=str(group.id), release_id=str(release.id), plugin_name='scylla-cluster-tests')
+
+
+# ---------------------------------------------------------------------------
+# IssueService (covers PyGithub + Jira together)
+# ---------------------------------------------------------------------------
+# Patched at the controller import site so the underlying GithubService and
+# JiraService constructors (and their HTTP clients) never run.
+
+
+@pytest.fixture
+def mock_issue_service():
+    """Replace ``IssueService`` in controller modules with a MagicMock.
+
+    Yields the patched class mock. ``mock.return_value`` is the per-call
+    instance used by the controller; configure ``submit``/``get``/``delete``
+    on ``mock.return_value`` as needed.
+    """
+    instance = MagicMock(name="IssueServiceInstance")
+    # Sensible defaults so tests that don't customize still get JSON-serializable
+    # responses.
+    instance.submit.return_value = {
+        "id": "00000000-0000-0000-0000-000000000000"}
+    instance.submit_for_sct_event.return_value = {
+        "id": "00000000-0000-0000-0000-000000000000"}
+    instance.get.return_value = []
+    instance.delete.return_value = True
+
+    with patch("argus.backend.controller.testrun_api.IssueService", return_value=instance) as m:
+        yield m
+
+
+# ---------------------------------------------------------------------------
+# UserService.github_callback  (OAuth login)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mock_github_callback():
+    """Patch ``UserService.github_callback`` to return canned ``first_run_info``.
+
+    Default return is ``None`` (existing user, no first-run banner). Override
+    via ``mock_github_callback.return_value = {...}``.
+    """
+    with patch("argus.backend.service.user.UserService.github_callback") as m:
+        m.return_value = None
+        yield m
+
+
+# ---------------------------------------------------------------------------
+# JenkinsService (testrun_api Jenkins routes + planner trigger)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mock_jenkins_service():
+    """Replace ``JenkinsService`` at every import site with a MagicMock.
+
+    Default return values mirror the typical happy-path responses so tests can
+    customize only the bits they care about.
+    """
+    instance = MagicMock(name="JenkinsServiceInstance")
+    instance.retrieve_job_parameters.return_value = []
+    instance.build_job.return_value = 12345  # queue item id
+    instance.get_queue_info.return_value = {
+        "why": None, "url": "http://jenkins.test/job/1/"}
+    instance.latest_build.return_value = {"number": 1}
+    instance.get_advanced_settings.return_value = {}
+    instance.clone_job.return_value = "cloned/job/path"
+    instance.verify_job_settings.return_value = True
+    instance.get_clone_targets.return_value = []
+    instance.get_clone_groups.return_value = []
+    instance.change_advanced_settings.return_value = True
+
+    with (
+        patch("argus.backend.controller.testrun_api.JenkinsService", return_value=instance) as m,
+        patch("argus.backend.service.planner_service.JenkinsService", return_value=instance),
+    ):
+        yield m
+
+
+# ---------------------------------------------------------------------------
+# TestRunService S3 methods (log/screenshot proxies)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mock_s3():
+    """Patch ``TestRunService`` S3-touching methods to avoid real AWS calls.
+
+    Returns a ``SimpleNamespace`` with attributes for each patched method so
+    tests can inspect call arguments / customize return values.
+    """
+    with (
+        patch("argus.backend.service.testrun.TestRunService.get_log") as get_log,
+        patch("argus.backend.service.testrun.TestRunService.proxy_stored_s3_image") as proxy_img,
+        patch("argus.backend.service.testrun.TestRunService.resolve_artifact_size") as resolve_size,
+        patch("argus.backend.service.testrun.TestRunService.proxy_s3_file") as proxy_file,
+    ):
+        get_log.return_value = "https://test-bucket.s3.amazonaws.com/log/example.log?signed"
+        proxy_img.return_value = "https://test-bucket.s3.amazonaws.com/screenshots/example.png?signed"
+        resolve_size.return_value = 1024
+        proxy_file.return_value = b"fake-s3-content"
+        yield SimpleNamespace(
+            get_log=get_log,
+            proxy_stored_s3_image=proxy_img,
+            resolve_artifact_size=resolve_size,
+            proxy_s3_file=proxy_file,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Cloudflare Access JWT
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mock_cf_access_payload():
+    """Patch ``_get_cf_access_payload`` to return a fabricated JWT payload.
+
+    Default email is ``"tester@scylladb.com"`` (passes the @scylladb.com gate).
+    Override via ``mock_cf_access_payload.return_value = {"email": "..."}``.
+    """
+    with patch("argus.backend.service.user._get_cf_access_payload") as m:
+        m.return_value = {"email": "tester@scylladb.com"}
+        yield m
