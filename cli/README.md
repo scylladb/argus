@@ -4,6 +4,24 @@ Command-line interface for [Argus](https://argus.scylladb.com) — a test tracki
 
 ---
 
+## Installation
+
+Download the latest release from the [releases page](https://github.com/scylladb/argus/releases) and place the binary somewhere on your `$PATH`.
+
+For a one-liner install, see [AGENTS.md](../AGENTS.md).
+
+### From source
+
+Requires Go 1.25+.
+
+```bash
+git clone https://github.com/scylladb/argus
+cd argus/cli
+go build -o argus .
+```
+
+---
+
 ## Authentication
 
 **This is where most people get stuck.** Read this section before running any command.
@@ -100,7 +118,7 @@ Several mechanisms disable Cloudflare integration. Use whichever fits your workf
 | Mechanism | Scope | When to use |
 |---|---|---|
 | Loopback URL (`localhost`, `127.*`, `::1`) | automatic | Local dev — no action needed |
-| `ARGUS_DISABLE_CLOUDFLARE=true` | env var, process-wide | CI/CD, scripts, one-off commands |
+| `ARGUS_DISABLE_CLOUDFLARE=true` | env var, process-wide | CI/CD, scripts, one-off commands (also settable via `argus config set use_cloudflare false`) |
 | `--disable-cloudflare` flag | single command | Ad-hoc overrides |
 | `argus config set use_cloudflare false` | config file, persistent | When you always connect without CF |
 
@@ -136,24 +154,6 @@ argus auth logout
 ```
 
 Removes all stored credentials (PAT, session, CF service-account bundle) from the system keychain.
-
----
-
-## Installation
-
-### Pre-built binaries
-
-Download the latest release from the [releases page](https://github.com/scylladb/argus/releases) and place the binary somewhere on your `$PATH`.
-
-### From source
-
-Requires Go 1.25+.
-
-```bash
-git clone https://github.com/scylladb/argus
-cd argus/cli
-go build -o argus .
-```
 
 ---
 
