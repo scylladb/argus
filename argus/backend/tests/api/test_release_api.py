@@ -36,7 +36,7 @@ unique IDs/names so tests stay isolated.
 import json
 import time
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -86,7 +86,8 @@ def isolated_release(release_manager_service):
 def isolated_group(release_manager_service, isolated_release):
     name = f"release_api_iso_group_{time.time_ns()}"
     return release_manager_service.create_group(
-        name, name, build_system_id=isolated_release.name, release_id=str(isolated_release.id)
+        name, name, build_system_id=isolated_release.name, release_id=str(
+            isolated_release.id)
     )
 
 
@@ -103,7 +104,7 @@ def isolated_test(release_manager_service, isolated_release, isolated_group):
 def _submit_schedule(flask_client, *, release, tests, assignees, comments=None,
                      group_ids=None, groups=None, tag="ci"):
     """Hit POST /release/schedules/submit and return the resulting schedule dict."""
-    now = datetime.utcnow()
+    now = datetime.now(tz=UTC)
     payload = {
         "releaseId": str(release.id),
         "start": now.isoformat(),
@@ -115,7 +116,8 @@ def _submit_schedule(flask_client, *, release, tests, assignees, comments=None,
         "comments": comments,
         "groupIds": group_ids,
     }
-    resp = _api_post(flask_client, f"{API_PREFIX}/release/schedules/submit", payload)
+    resp = _api_post(flask_client, f"{
+                     API_PREFIX}/release/schedules/submit", payload)
     assert resp.status_code == 200, resp.data
     body = resp.json
     assert body["status"] == "ok", body
@@ -185,7 +187,8 @@ def test_release_images_returns_list(flask_client, release):
 
 
 def test_release_pytest_results_returns_list(flask_client, release):
-    resp = flask_client.get(f"{API_PREFIX}/release/{release.id}/pytest/results")
+    resp = flask_client.get(
+        f"{API_PREFIX}/release/{release.id}/pytest/results")
     assert resp.status_code == 200, resp.data
     body = resp.json
     assert body["status"] == "ok"
@@ -193,7 +196,8 @@ def test_release_pytest_results_returns_list(flask_client, release):
 
 
 def test_release_activity(flask_client, release):
-    resp = _api_get(flask_client, f"{API_PREFIX}/release/activity", releaseName=release.name)
+    resp = _api_get(flask_client, f"{
+                    API_PREFIX}/release/activity", releaseName=release.name)
     assert resp.status_code == 200, resp.data
     body = resp.json
     assert body["status"] == "ok"
@@ -213,7 +217,8 @@ def test_release_activity_missing_name(flask_client):
 # ---------------------------------------------------------------------------
 
 def test_release_planner_data(flask_client, release, group, fake_test):
-    resp = _api_get(flask_client, f"{API_PREFIX}/release/planner/data", releaseId=str(release.id))
+    resp = _api_get(flask_client, f"{
+                    API_PREFIX}/release/planner/data", releaseId=str(release.id))
     assert resp.status_code == 200, resp.data
     body = resp.json
     assert body["status"] == "ok"
@@ -285,7 +290,7 @@ def test_release_schedule_submit_and_round_trip(flask_client, isolated_release, 
 
 
 def test_release_schedule_submit_with_comments(flask_client, isolated_release, isolated_group,
-                                                isolated_test, saved_user):
+                                               isolated_test, saved_user):
     test_id = str(isolated_test.id)
     submitted = _submit_schedule(
         flask_client,
@@ -308,14 +313,15 @@ def test_release_schedule_submit_with_comments(flask_client, isolated_release, i
 def test_release_schedule_submit_requires_assignees(flask_client, isolated_release, isolated_test):
     payload = {
         "releaseId": str(isolated_release.id),
-        "start": datetime.utcnow().isoformat(),
-        "end": (datetime.utcnow() + timedelta(days=1)).isoformat(),
+        "start": datetime.now(tz=UTC).isoformat(),
+        "end": (datetime.now(tz=UTC) + timedelta(days=1)).isoformat(),
         "tests": [str(isolated_test.id)],
         "groups": [],
         "assignees": [],
         "tag": "ci",
     }
-    resp = _api_post(flask_client, f"{API_PREFIX}/release/schedules/submit", payload)
+    resp = _api_post(flask_client, f"{
+                     API_PREFIX}/release/schedules/submit", payload)
     assert resp.status_code == 200
     assert resp.json["status"] == "error"
 
@@ -323,14 +329,15 @@ def test_release_schedule_submit_requires_assignees(flask_client, isolated_relea
 def test_release_schedule_submit_requires_objects(flask_client, isolated_release, saved_user):
     payload = {
         "releaseId": str(isolated_release.id),
-        "start": datetime.utcnow().isoformat(),
-        "end": (datetime.utcnow() + timedelta(days=1)).isoformat(),
+        "start": datetime.now(tz=UTC).isoformat(),
+        "end": (datetime.now(tz=UTC) + timedelta(days=1)).isoformat(),
         "tests": [],
         "groups": [],
         "assignees": [str(saved_user.id)],
         "tag": "ci",
     }
-    resp = _api_post(flask_client, f"{API_PREFIX}/release/schedules/submit", payload)
+    resp = _api_post(flask_client, f"{
+                     API_PREFIX}/release/schedules/submit", payload)
     assert resp.status_code == 200
     assert resp.json["status"] == "error"
 
@@ -343,7 +350,8 @@ def test_release_schedule_comment_update(flask_client, isolated_release, isolate
         "testId": test_id,
         "newComment": "manually-set",
     }
-    resp = _api_post(flask_client, f"{API_PREFIX}/release/schedules/comment/update", payload)
+    resp = _api_post(flask_client, f"{
+                     API_PREFIX}/release/schedules/comment/update", payload)
     assert resp.status_code == 200, resp.data
     assert resp.json["status"] == "ok"
     assert resp.json["response"]["newComment"] == "manually-set"
@@ -357,7 +365,7 @@ def test_release_schedule_comment_update(flask_client, isolated_release, isolate
 
 
 def test_release_schedule_assignee_update(flask_client, isolated_release, isolated_test, saved_user,
-                                           release_manager_service):
+                                          release_manager_service):
     submitted = _submit_schedule(
         flask_client,
         release=isolated_release,
@@ -381,7 +389,8 @@ def test_release_schedule_assignee_update(flask_client, isolated_release, isolat
         "scheduleId": schedule_id,
         "newAssignees": [str(new_user.id)],
     }
-    resp = _api_post(flask_client, f"{API_PREFIX}/release/schedules/assignee/update", payload)
+    resp = _api_post(flask_client, f"{
+                     API_PREFIX}/release/schedules/assignee/update", payload)
     assert resp.status_code == 200, resp.data
     assert resp.json["status"] == "ok"
     assert resp.json["response"]["newAssignees"] == [str(new_user.id)]
@@ -409,7 +418,8 @@ def test_release_schedule_delete(flask_client, isolated_release, isolated_test, 
         "scheduleId": schedule_id,
         "deleteComments": False,
     }
-    resp = _api_post(flask_client, f"{API_PREFIX}/release/schedules/delete", payload)
+    resp = _api_post(flask_client, f"{
+                     API_PREFIX}/release/schedules/delete", payload)
     assert resp.status_code == 200, resp.data
     body = resp.json
     assert body["status"] == "ok"
@@ -423,7 +433,7 @@ def test_release_schedule_delete(flask_client, isolated_release, isolated_test, 
 
 
 def test_release_schedule_update(flask_client, isolated_release, isolated_test, saved_user,
-                                  release_manager_service, isolated_group):
+                                 release_manager_service, isolated_group):
     submitted = _submit_schedule(
         flask_client,
         release=isolated_release,
@@ -450,7 +460,8 @@ def test_release_schedule_update(flask_client, isolated_release, isolated_test, 
         "new_tests": [str(second_test.id)],
         "comments": {},
     }
-    resp = _api_post(flask_client, f"{API_PREFIX}/release/schedules/update", payload)
+    resp = _api_post(flask_client, f"{
+                     API_PREFIX}/release/schedules/update", payload)
     assert resp.status_code == 200, resp.data
     assert resp.json["status"] == "ok"
     assert resp.json["response"] is True
@@ -458,13 +469,14 @@ def test_release_schedule_update(flask_client, isolated_release, isolated_test, 
     get_resp = _api_get(
         flask_client, f"{API_PREFIX}/release/schedules", releaseId=str(isolated_release.id)
     )
-    sched = next(s for s in get_resp.json["response"]["schedules"] if s["id"] == schedule_id)
+    sched = next(
+        s for s in get_resp.json["response"]["schedules"] if s["id"] == schedule_id)
     assert str(second_test.id) in [str(t) for t in sched["tests"]]
     assert str(isolated_test.id) not in [str(t) for t in sched["tests"]]
 
 
 def test_release_assignees_groups_returns_dict(flask_client, isolated_release, isolated_group,
-                                                 isolated_test, saved_user):
+                                               isolated_test, saved_user):
     _submit_schedule(
         flask_client,
         release=isolated_release,
@@ -492,7 +504,7 @@ def test_release_assignees_groups_missing_release(flask_client):
 
 
 def test_release_assignees_tests_returns_dict(flask_client, isolated_release, isolated_group,
-                                                isolated_test, saved_user):
+                                              isolated_test, saved_user):
     _submit_schedule(
         flask_client,
         release=isolated_release,
@@ -579,7 +591,8 @@ def test_release_create_duplicate_returns_error_per_release(flask_client, releas
 # ---------------------------------------------------------------------------
 
 def test_list_groups_for_release(flask_client, release, group):
-    resp = _api_get(flask_client, f"{API_PREFIX}/groups", releaseId=str(release.id))
+    resp = _api_get(flask_client, f"{
+                    API_PREFIX}/groups", releaseId=str(release.id))
     assert resp.status_code == 200, resp.data
     body = resp.json
     assert body["status"] == "ok"
@@ -631,7 +644,8 @@ def test_test_details(flask_client, fake_test):
 # ---------------------------------------------------------------------------
 
 def test_test_info(flask_client, release, group, fake_test):
-    resp = _api_get(flask_client, f"{API_PREFIX}/test-info", testId=str(fake_test.id))
+    resp = _api_get(flask_client, f"{
+                    API_PREFIX}/test-info", testId=str(fake_test.id))
     assert resp.status_code == 200, resp.data
     body = resp.json
     assert body["status"] == "ok"
@@ -648,11 +662,13 @@ def test_test_info_missing_id(flask_client):
 
 def test_set_test_plugin_round_trip(flask_client, isolated_test):
     payload = {"plugin_name": "driver-matrix-tests"}
-    resp = _api_post(flask_client, f"{API_PREFIX}/test/{isolated_test.id}/set_plugin", payload)
+    resp = _api_post(flask_client, f"{
+                     API_PREFIX}/test/{isolated_test.id}/set_plugin", payload)
     assert resp.status_code == 200, resp.data
     body = resp.json
     assert body["status"] == "ok"
     assert body["response"]["plugin_name"] == "driver-matrix-tests"
 
-    get_resp = flask_client.get(f"{API_PREFIX}/test/{isolated_test.id}/details")
+    get_resp = flask_client.get(
+        f"{API_PREFIX}/test/{isolated_test.id}/details")
     assert get_resp.json["response"]["plugin_name"] == "driver-matrix-tests"
