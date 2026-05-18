@@ -295,12 +295,8 @@ def fake_test(release_manager_service, group: ArgusGroup, release: ArgusRelease)
 # ---------------------------------------------------------------------------
 # IssueService (covers PyGithub + Jira together)
 # ---------------------------------------------------------------------------
-# Patched at every controller import site so the underlying GithubService and
+# Patched at the controller import site so the underlying GithubService and
 # JiraService constructors (and their HTTP clients) never run.
-
-_ISSUE_SERVICE_PATCH_TARGETS = (
-    "argus.backend.controller.testrun_api.IssueService",
-)
 
 
 @pytest.fixture
@@ -321,16 +317,8 @@ def mock_issue_service():
     instance.get.return_value = []
     instance.delete.return_value = True
 
-    patchers = [patch(target, return_value=instance)
-                for target in _ISSUE_SERVICE_PATCH_TARGETS]
-    mocks = [p.start() for p in patchers]
-    try:
-        # Return the first mock; ``.return_value`` is shared across all targets
-        # because we passed the same instance.
-        yield mocks[0]
-    finally:
-        for p in patchers:
-            p.stop()
+    with patch("argus.backend.controller.testrun_api.IssueService", return_value=instance) as m:
+        yield m
 
 
 # ---------------------------------------------------------------------------
@@ -354,11 +342,6 @@ def mock_github_callback():
 # JenkinsService (testrun_api Jenkins routes + planner trigger)
 # ---------------------------------------------------------------------------
 
-_JENKINS_PATCH_TARGETS = (
-    "argus.backend.controller.testrun_api.JenkinsService",
-    "argus.backend.service.planner_service.JenkinsService",
-)
-
 
 @pytest.fixture
 def mock_jenkins_service():
@@ -380,14 +363,11 @@ def mock_jenkins_service():
     instance.get_clone_groups.return_value = []
     instance.change_advanced_settings.return_value = True
 
-    patchers = [patch(target, return_value=instance)
-                for target in _JENKINS_PATCH_TARGETS]
-    mocks = [p.start() for p in patchers]
-    try:
-        yield mocks[0]
-    finally:
-        for p in patchers:
-            p.stop()
+    with (
+        patch("argus.backend.controller.testrun_api.JenkinsService", return_value=instance) as m,
+        patch("argus.backend.service.planner_service.JenkinsService", return_value=instance),
+    ):
+        yield m
 
 
 # ---------------------------------------------------------------------------
