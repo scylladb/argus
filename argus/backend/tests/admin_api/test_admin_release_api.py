@@ -26,14 +26,6 @@ ADMIN_PREFIX = "/admin/api/v1"
 API_PREFIX = "/api/v1"
 
 
-def _get_release_details(flask_client, release_id: str) -> dict:
-    resp = flask_client.get(f"{API_PREFIX}/release/{release_id}/details")
-    assert resp.status_code == 200, resp.data
-    body = resp.json
-    assert body["status"] == "ok", body
-    return body["response"]
-
-
 @pytest.fixture
 def admin_release(flask_client):
     name = f"admin_iter8_{time.time_ns()}"
@@ -62,9 +54,12 @@ def test_admin_create_release_round_trip(flask_client):
     assert new_release["pretty_name"] == "Pretty Name"
     assert new_release["perpetual"] is True
 
-    details = _get_release_details(flask_client, new_release["id"])
-    assert details["name"] == name
-    assert details["perpetual"] is True
+    resp = flask_client.get(f"{API_PREFIX}/release/{new_release['id']}/details")
+    assert resp.status_code == 200
+    body = resp.json
+    assert body["status"] == "ok"
+    assert body["response"]["name"] == name
+    assert body["response"]["perpetual"] is True
 
 
 def test_admin_create_release_duplicate_errors(flask_client, admin_release):
@@ -84,12 +79,14 @@ def test_admin_create_release_duplicate_errors(flask_client, admin_release):
 
 def test_admin_set_release_perpetual(flask_client, admin_release):
     payload = {"release_id": admin_release["id"], "perpetual": True}
-    resp = client_post(flask_client, f"{
-        ADMIN_PREFIX}/release/set_perpetual", payload)
+    resp = client_post(flask_client, f"{ADMIN_PREFIX}/release/set_perpetual", payload)
     assert resp.status_code == 200, resp.data
     assert resp.json["status"] == "ok"
-    assert _get_release_details(flask_client, admin_release["id"])[
-        "perpetual"] is True
+
+    resp = flask_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details")
+    assert resp.status_code == 200
+    assert resp.json["status"] == "ok"
+    assert resp.json["response"]["perpetual"] is True
 
     resp = client_post(
         flask_client,
@@ -97,28 +94,35 @@ def test_admin_set_release_perpetual(flask_client, admin_release):
         {"release_id": admin_release["id"], "perpetual": False},
     )
     assert resp.json["status"] == "ok"
-    assert _get_release_details(flask_client, admin_release["id"])[
-        "perpetual"] is False
+
+    resp = flask_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details")
+    assert resp.status_code == 200
+    assert resp.json["status"] == "ok"
+    assert resp.json["response"]["perpetual"] is False
 
 
 def test_admin_set_release_state(flask_client, admin_release):
     payload = {"release_id": admin_release["id"], "state": False}
-    resp = client_post(
-        flask_client, f"{ADMIN_PREFIX}/release/set_state", payload)
+    resp = client_post(flask_client, f"{ADMIN_PREFIX}/release/set_state", payload)
     assert resp.status_code == 200, resp.data
     assert resp.json["status"] == "ok"
-    assert _get_release_details(flask_client, admin_release["id"])[
-        "enabled"] is False
+
+    resp = flask_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details")
+    assert resp.status_code == 200
+    assert resp.json["status"] == "ok"
+    assert resp.json["response"]["enabled"] is False
 
 
 def test_admin_set_release_dormant(flask_client, admin_release):
     payload = {"release_id": admin_release["id"], "dormant": True}
-    resp = client_post(
-        flask_client, f"{ADMIN_PREFIX}/release/set_dormant", payload)
+    resp = client_post(flask_client, f"{ADMIN_PREFIX}/release/set_dormant", payload)
     assert resp.status_code == 200, resp.data
     assert resp.json["status"] == "ok"
-    assert _get_release_details(flask_client, admin_release["id"])[
-        "dormant"] is True
+
+    resp = flask_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details")
+    assert resp.status_code == 200
+    assert resp.json["status"] == "ok"
+    assert resp.json["response"]["dormant"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -141,13 +145,16 @@ def test_admin_edit_release(flask_client, admin_release):
     assert body["status"] == "ok"
     assert body["response"]["updated"] is True
 
-    details = _get_release_details(flask_client, admin_release["id"])
-    assert details["pretty_name"] == "edited-pretty"
-    assert details["description"] == "edited-desc"
-    assert details["valid_version_regex"] == r"^\d+\.\d+$"
-    assert details["enabled"] is False
-    assert details["perpetual"] is True
-    assert details["dormant"] is True
+    resp = flask_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details")
+    assert resp.status_code == 200
+    body = resp.json
+    assert body["status"] == "ok"
+    assert body["response"]["pretty_name"] == "edited-pretty"
+    assert body["response"]["description"] == "edited-desc"
+    assert body["response"]["valid_version_regex"] == r"^\d+\.\d+$"
+    assert body["response"]["enabled"] is False
+    assert body["response"]["perpetual"] is True
+    assert body["response"]["dormant"] is True
 
 
 def test_admin_edit_release_unknown_id_errors(flask_client):
@@ -174,8 +181,7 @@ def test_admin_delete_release(flask_client, admin_release):
     assert body["response"]["deleted"] is True
 
     # Verify gone via details endpoint (raises DoesNotExist → error envelope)
-    miss = flask_client.get(
-        f"{API_PREFIX}/release/{admin_release['id']}/details")
+    miss = flask_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details")
     assert miss.status_code == 200
     assert miss.json["status"] == "error"
 
@@ -197,8 +203,10 @@ def test_admin_get_releases_includes_created(flask_client, admin_release):
     body = resp.json
     assert body["status"] == "ok"
     assert isinstance(body["response"], list)
-    names = {r["name"] for r in body["response"]}
-    assert admin_release["name"] in names
+    assert any(
+        r["name"] == admin_release["name"] and r["id"] == admin_release["id"]
+        for r in body["response"]
+    )
 
 
 # ---------------------------------------------------------------------------
