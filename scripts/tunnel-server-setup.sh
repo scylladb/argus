@@ -90,21 +90,30 @@ ChallengeResponseAuthentication no
 KbdInteractiveAuthentication no
 PermitRootLogin no
 PubkeyAuthentication yes
+ClientAliveInterval 60
+ClientAliveCountMax 3
+TCPKeepAlive yes
+UsePAM yes
+
+MaxAuthTries 3
+MaxSessions 32
+MaxStartups 50:30:200
+LoginGraceTime 30
+StrictModes yes
 
 Match User ${PROXY_USER}
     AllowTcpForwarding local
+    PermitTunnel yes
+    AllowStreamLocalForwarding yes
     PermitOpen ${TARGET_HOST}:${TARGET_PORT}
     GatewayPorts no
     X11Forwarding no
     AllowAgentForwarding no
     PermitTTY no
-    ForceCommand /bin/false
+    ForceCommand /usr/sbin/nologin
     AuthorizedKeysFile none
     AuthorizedKeysCommand /usr/local/bin/argus-authorized-keys
     AuthorizedKeysCommandUser nobody
-    ClientAliveInterval 600
-    ClientAliveCountMax 1
-    MaxSessions 5
 SSHDEOF
 
 chown root:root /etc/ssh/sshd_config.d/99-argus-proxy.conf
