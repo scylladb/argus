@@ -22,6 +22,7 @@
     let participants = $state([]);
     let items = $state([]);
     let views = $state([]);
+    let originalSnapshot = $state(null);
     const dispatch = createEventDispatcher();
 
     const TYPE_MARKER = {
@@ -154,17 +155,66 @@
         }
     };
 
+    const computeDiff = function(currentPlan, currentItems, currentParticipants) {
+        const snapshot = originalSnapshot;
+        const diff: Record<string, any> = { id: currentPlan.id };
+
+        // Scalar fields - only include if changed
+        if (currentPlan.name !== snapshot.name) diff.name = currentPlan.name;
+        if (currentPlan.description !== snapshot.description) diff.description = currentPlan.description;
+        if (currentPlan.owner !== snapshot.owner) diff.owner = currentPlan.owner;
+        if (currentPlan.target_version !== snapshot.target_version) diff.target_version = currentPlan.target_version;
+        if (currentPlan.view_id !== snapshot.view_id) diff.view_id = currentPlan.view_id;
+
+        // List diffs: tests
+        const currentTests = new Set(currentItems.filter(v => v.type == "test").map(v => v.id));
+        const originalTests = new Set(snapshot.tests);
+        diff.tests_add = [...currentTests].filter(id => !originalTests.has(id));
+        diff.tests_remove = [...originalTests].filter(id => !currentTests.has(id));
+
+        // List diffs: groups
+        const currentGroups = new Set(currentItems.filter(v => v.type == "group").map(v => v.id));
+        const originalGroups = new Set(snapshot.groups);
+        diff.groups_add = [...currentGroups].filter(id => !originalGroups.has(id));
+        diff.groups_remove = [...originalGroups].filter(id => !currentGroups.has(id));
+
+        // List diffs: participants
+        const currentParticipantIds = new Set(currentParticipants ? currentParticipants.map(v => v.id) : []);
+        const originalParticipantIds = new Set(snapshot.participants);
+        diff.participants_add = [...currentParticipantIds].filter(id => !originalParticipantIds.has(id));
+        diff.participants_remove = [...originalParticipantIds].filter(id => !currentParticipantIds.has(id));
+
+        // Dict diff: assignee_mapping
+        const currentAssignments = currentPlan.assignments || {};
+        const originalAssignments = snapshot.assignments || {};
+        diff.assignee_mapping_set = {};
+        diff.assignee_mapping_remove = [];
+
+        // Find removed keys
+        for (const key of Object.keys(originalAssignments)) {
+            if (!(key in currentAssignments)) {
+                diff.assignee_mapping_remove.push(key);
+            }
+        }
+        // Find added/changed keys
+        for (const [key, value] of Object.entries(currentAssignments)) {
+            if (originalAssignments[key] !== value) {
+                diff.assignee_mapping_set[key] = value;
+            }
+        }
+
+        return diff;
+    };
+
     const updatePlan = async function () {
-        const oldAssignmentState = Object.assign({}, plan.assignments);
         try {
-            plan.assignee_mapping = plan.assignments;
-            delete plan.assignments;
+            const diff = computeDiff(plan, items, participants);
             const response = await fetch("/api/v1/planning/plan/update", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify(plan),
+                body: JSON.stringify(diff),
             });
 
             const json = await response.json();
@@ -172,9 +222,10 @@
                 throw json;
             }
 
+            // Update snapshot to current state after successful save
+            takeSnapshot();
             dispatch("planUpdated");
         } catch (error) {
-            plan.assignments = Object.assign({}, oldAssignmentState);
             if (error?.status === "error") {
                 sendMessage(
                     "error",
@@ -191,9 +242,21 @@
                 );
                 console.log(error);
             }
-        } finally {
-            // empty
         }
+    };
+
+    const takeSnapshot = function() {
+        originalSnapshot = {
+            name: plan.name,
+            description: plan.description,
+            owner: plan.owner,
+            target_version: plan.target_version,
+            view_id: plan.view_id,
+            tests: items.filter(v => v.type == "test").map(v => v.id),
+            groups: items.filter(v => v.type == "group").map(v => v.id),
+            participants: participants ? participants.map(v => v.id) : [],
+            assignments: Object.assign({}, plan.assignments),
+        };
     };
 
     const handleCreatePlan = function() {
@@ -413,6 +476,9 @@
             plan.assignments = plan.assignee_mapping;
             participants = users.filter(u => plan.participants.includes(u.id));
             items = await resolvePlan(plan);
+            if (mode == "edit") {
+                takeSnapshot();
+            }
         }
         if (mode == "createFrom" && !plan.created_from) {
             plan.created_from = plan.id;
