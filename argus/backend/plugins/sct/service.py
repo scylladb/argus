@@ -819,6 +819,8 @@ class SCTService:
                             "state": issue.state,
                             "title": issue.title,
                             "url": issue.url,
+                            "owner": issue.owner,
+                            "repo": issue.repo,
                         } if isinstance(issue, GithubIssue) else {
                             "subtype": "jira",
                             "key": issue.key,
