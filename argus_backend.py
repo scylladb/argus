@@ -19,6 +19,22 @@ from argus.backend.service.user import cache_ssh_tunnel_server_allowed_endpoints
 LOGGER = logging.getLogger(__name__)
 
 
+def _categorize_user_agent(ua: str) -> str:  # noqa: PLR0911
+    if not ua:
+        return "unknown"
+    if "argus-client-ssh-tunnel" in ua:
+        return "argus-client-tunnel"
+    if ua.startswith(("python-requests", "python-urllib")):
+        return "argus-client"
+    if ua.startswith("Go-http-client"):
+        return "argus-cli-go"
+    if "Mozilla" in ua:
+        return "browser"
+    if "curl" in ua:
+        return "curl"
+    return "other"
+
+
 def register_metrics():
     METRICS.export_defaults(group_by="endpoint", prefix=NO_PREFIX)
     METRICS.register_default(
@@ -29,6 +45,37 @@ def register_metrics():
                 "endpoint": lambda: request.endpoint,
                 "method": lambda: request.method,
                 "status": lambda response: response.status,
+            },
+        )
+    )
+    METRICS.register_default(
+        METRICS.counter(
+            "http_request_by_ip_total",
+            "Total requests by source IP",
+            labels={
+                "ip": lambda: request.remote_addr,
+                "endpoint": lambda: request.endpoint,
+            },
+        )
+    )
+    METRICS.register_default(
+        METRICS.counter(
+            "http_request_ssh_tunnel_total",
+            "Total requests by SSH tunnel presence",
+            labels={
+                "ssh_tunnel": lambda: "yes" if request.headers.get("X-SSH-Tunnel-Origin") else "no",
+                "tunnel_established": lambda: "yes" if request.headers.get("X-Tunnel-Established-At") else "no",
+                "endpoint": lambda: request.endpoint,
+            },
+        )
+    )
+    METRICS.register_default(
+        METRICS.counter(
+            "http_request_by_user_agent_total",
+            "Total requests by user agent category",
+            labels={
+                "user_agent_category": lambda: _categorize_user_agent(request.headers.get("User-Agent", "")),
+                "endpoint": lambda: request.endpoint,
             },
         )
     )
