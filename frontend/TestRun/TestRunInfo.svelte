@@ -154,6 +154,17 @@
                 <li>
                     <span class="fw-bold">SCT commit sha:</span>
                     {test_run.scm_revision_id ?? "Unknown"}
+                    {#if test_run.scm_revision_id && navigator.clipboard}
+                        <button
+                            class="btn btn-sm btn-outline-secondary ms-1 py-0 px-1"
+                            title="Copy SCM revision to clipboard"
+                            onclick={() => {
+                                navigator.clipboard.writeText(test_run.scm_revision_id);
+                                sendMessage("success", `SCM revision \`${test_run.scm_revision_id}\` copied to clipboard`);
+                            }}>
+                            <Fa icon={faCopy} />
+                        </button>
+                    {/if}
                 </li>
                 <li>
                     <span class="fw-bold">SCT repository:</span>
