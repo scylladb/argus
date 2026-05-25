@@ -181,6 +181,13 @@ var promStartCmd = &cobra.Command{
 			return fmt.Errorf("extracting prometheus data: %w", err)
 		}
 
+		// Prometheus snapshots nest TSDB blocks inside a timestamped directory
+		// (e.g. 20260426T074320Z-xxxx/). Prometheus expects blocks directly
+		// under --storage.tsdb.path, so flatten the snapshot wrapper.
+		if err := flattenSnapshotDir(dataDir); err != nil {
+			return fmt.Errorf("flattening snapshot directory: %w", err)
+		}
+
 		// Make data dir writable by the prometheus container user (uid 65534)
 		_ = chmodRecursive(dataDir, 0777)
 
@@ -478,6 +485,61 @@ func findPromDataArchive(dir string) (string, error) {
 		return "", fmt.Errorf("no prometheus_data_*.tar.zst found in extracted logs")
 	}
 	return found, nil
+}
+
+// flattenSnapshotDir detects if TSDB blocks are nested inside a snapshot
+// subdirectory and moves them up to the data directory root. Prometheus
+// snapshots wrap blocks in a timestamped directory (e.g. 20260426T074320Z-...)
+// but Prometheus expects blocks directly under its --storage.tsdb.path.
+func flattenSnapshotDir(dataDir string) error {
+	entries, err := os.ReadDir(dataDir)
+	if err != nil {
+		return fmt.Errorf("reading data dir: %w", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		candidateDir := filepath.Join(dataDir, entry.Name())
+
+		// Check if this directory contains TSDB blocks (subdirs with meta.json)
+		subEntries, err := os.ReadDir(candidateDir)
+		if err != nil {
+			continue
+		}
+
+		hasBlocks := false
+		for _, sub := range subEntries {
+			if sub.IsDir() {
+				metaPath := filepath.Join(candidateDir, sub.Name(), "meta.json")
+				if _, err := os.Stat(metaPath); err == nil {
+					hasBlocks = true
+					break
+				}
+			}
+		}
+
+		if !hasBlocks {
+			continue
+		}
+
+		// Move all entries from the snapshot directory up to dataDir
+		for _, sub := range subEntries {
+			src := filepath.Join(candidateDir, sub.Name())
+			dst := filepath.Join(dataDir, sub.Name())
+			if err := os.Rename(src, dst); err != nil {
+				return fmt.Errorf("moving %s to %s: %w", src, dst, err)
+			}
+		}
+
+		// Remove the now-empty snapshot directory
+		_ = os.Remove(candidateDir)
+		return nil // only one snapshot directory expected
+	}
+
+	return nil
 }
 
 func chmodRecursive(dir string, mode os.FileMode) error {
