@@ -40,6 +40,7 @@ def resolve_tunnel_config(
     force_refresh: bool = False,
     ttl_seconds: int | None = None,
     session: requests.Session | None = None,
+    extra_headers: dict[str, str] | None = None,
 ) -> TunnelConfig | None:
     config, _reason = resolve_tunnel_config_with_reason(
         auth_token=auth_token,
@@ -47,6 +48,7 @@ def resolve_tunnel_config(
         force_refresh=force_refresh,
         ttl_seconds=ttl_seconds,
         session=session,
+        extra_headers=extra_headers,
     )
     return config
 
@@ -57,6 +59,7 @@ def resolve_tunnel_config_with_reason(
     force_refresh: bool = False,
     ttl_seconds: int | None = None,
     session: requests.Session | None = None,
+    extra_headers: dict[str, str] | None = None,
 ) -> tuple[TunnelConfig | None, str | None]:
     """
     Resolve tunnel configuration while keeping Cloudflare bootstrap calls minimal.
@@ -75,7 +78,8 @@ def resolve_tunnel_config_with_reason(
 
     if is_key_valid(paths):
         try:
-            config = _get_tunnel_connection(auth_token=auth_token, base_url=base_url, session=session)
+            config = _get_tunnel_connection(auth_token=auth_token, base_url=base_url, session=session,
+                                           extra_headers=extra_headers)
             write_tunnel_cache(paths, config)
             return config, None
         except TunnelClientError as exc:
@@ -91,6 +95,7 @@ def resolve_tunnel_config_with_reason(
             public_key=public_key,
             ttl_seconds=ttl_seconds,
             session=session,
+            extra_headers=extra_headers,
         )
         write_key_meta(paths, config.expires_at)
         write_tunnel_cache(paths, config)
@@ -106,6 +111,7 @@ def _register_tunnel(
     public_key: str,
     ttl_seconds: int | None = None,
     session: requests.Session | None = None,
+    extra_headers: dict[str, str] | None = None,
 ) -> TunnelConfig:
     payload: dict[str, Any] = {"public_key": public_key}
     if ttl_seconds is not None:
@@ -116,6 +122,7 @@ def _register_tunnel(
         auth_token=auth_token,
         payload=payload,
         session=session,
+        extra_headers=extra_headers,
     )
     return TunnelConfig.from_api_response(response)
 
@@ -124,6 +131,7 @@ def _get_tunnel_connection(
     auth_token: str,
     base_url: str,
     session: requests.Session | None = None,
+    extra_headers: dict[str, str] | None = None,
 ) -> TunnelConfig:
     response = _call_tunnel_api(
         method="GET",
@@ -131,6 +139,7 @@ def _get_tunnel_connection(
         auth_token=auth_token,
         payload=None,
         session=session,
+        extra_headers=extra_headers,
     )
     return TunnelConfig.from_api_response(response)
 
@@ -141,12 +150,15 @@ def _call_tunnel_api(
     auth_token: str,
     payload: dict[str, Any] | None,
     session: requests.Session | None = None,
+    extra_headers: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     headers = {
         "Authorization": f"token {auth_token}",
         "Accept": "application/json",
         "Content-Type": "application/json",
     }
+    if extra_headers:
+        headers.update(extra_headers)
 
     own_session = session is None
     if own_session:
@@ -171,7 +183,17 @@ def _call_tunnel_api(
         try:
             response_payload = response.json()
         except ValueError as exc:
-            raise TunnelClientError(f"Tunnel API response is not JSON ({method} {url})") from exc
+            content_type = response.headers.get("Content-Type", "<missing>")
+            body_preview = response.text[:500] if response.text else "<empty>"
+            LOGGER.debug(
+                "Tunnel API JSON parse failure: Content-Type=%s, body=%s",
+                content_type,
+                body_preview,
+            )
+            raise TunnelClientError(
+                f"Tunnel API response is not JSON ({method} {url}): "
+                f"Content-Type={content_type}, body_preview={body_preview!r}"
+            ) from exc
 
         if not isinstance(response_payload, dict):
             raise TunnelClientError(
