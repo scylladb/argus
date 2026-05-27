@@ -43,49 +43,49 @@
                         class="btn h-100 w-100"
                         onclick={(e) => handleRouteClick("index", e)}
                     >
-                        Home
-                    </button>
-                </li>
-                <li class="list-group-item">
-                    <button
-                        class:btn-primary={currentRoute == "users"}
-                        class:btn-outline-primary={currentRoute != "users"}
-                        class="btn h-100 w-100"
-                        onclick={(e) => handleRouteClick("users", e)}
-                    >
-                        Users
-                    </button>
-                </li>
-                <li class="list-group-item">
-                    <button
-                        class:btn-primary={currentRoute == "releases"}
-                        class:btn-outline-primary={currentRoute != "releases"}
-                        class="btn h-100 w-100"
-                        onclick={(e) => handleRouteClick("releases", e)}
-                    >
-                        Releases
-                    </button>
-                </li>
-                <li class="list-group-item">
-                    <button
-                        class:btn-primary={currentRoute == "views"}
-                        class:btn-outline-primary={currentRoute != "views"}
-                        class="btn h-100 w-100"
-                        onclick={(e) => handleRouteClick("views", e)}
-                    >
-                        Views
-                    </button>
-                </li>
-                <li class="list-group-item">
-                    <button
-                        class:btn-primary={currentRoute == "ssh-tunnel"}
-                        class:btn-outline-primary={currentRoute != "ssh-tunnel"}
-                        class="btn h-100 w-100"
-                        onclick={(e) => handleRouteClick("ssh-tunnel", e)}
-                    >
-                        SSH Tunnel
-                    </button>
-                </li>
+                        {routeTitle("index")}
+                     </button>
+                 </li>
+                 <li class="list-group-item">
+                     <button
+                         class:btn-primary={currentRoute == "users"}
+                         class:btn-outline-primary={currentRoute != "users"}
+                         class="btn h-100 w-100"
+                         onclick={(e) => handleRouteClick("users", e)}
+                     >
+                         {routeTitle("users")}
+                     </button>
+                 </li>
+                 <li class="list-group-item">
+                     <button
+                         class:btn-primary={currentRoute == "releases"}
+                         class:btn-outline-primary={currentRoute != "releases"}
+                         class="btn h-100 w-100"
+                         onclick={(e) => handleRouteClick("releases", e)}
+                     >
+                         {routeTitle("releases")}
+                     </button>
+                 </li>
+                 <li class="list-group-item">
+                     <button
+                         class:btn-primary={currentRoute == "views"}
+                         class:btn-outline-primary={currentRoute != "views"}
+                         class="btn h-100 w-100"
+                         onclick={(e) => handleRouteClick("views", e)}
+                     >
+                         {routeTitle("views")}
+                     </button>
+                 </li>
+                 <li class="list-group-item">
+                     <button
+                         class:btn-primary={currentRoute == "ssh-tunnel"}
+                         class:btn-outline-primary={currentRoute != "ssh-tunnel"}
+                         class="btn h-100 w-100"
+                         onclick={(e) => handleRouteClick("ssh-tunnel", e)}
+                     >
+                         {routeTitle("ssh-tunnel")}
+                     </button>
+                 </li>
             </ul>
         </div>
         <div class="col-9 min-vh-100">

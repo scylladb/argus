@@ -1,13 +1,45 @@
-<script>
+<script lang="ts">
     import Fa from "svelte-fa";
     import { faTimes, faCopy } from "@fortawesome/free-solid-svg-icons";
     import ModalWindow from "../Common/ModalWindow.svelte";
     import { timestampToISODate } from "../Common/DateUtils";
+    import { fetchJson, truncate, knownHostSummary, copyToClipboard } from "../Common/ProxyUtils";
     import { sendMessage } from "../Stores/AlertStore";
 
     const ADMIN_API = "/admin/api/v1";
 
-    const emptyForm = () => ({
+    interface TunnelConfig {
+        id: string;
+        host: string;
+        port: number;
+        proxy_user: string;
+        target_host: string;
+        target_port: number;
+        is_active: boolean;
+        host_key_fingerprint?: string;
+        service_user_id?: string;
+        api_token?: string;
+    }
+
+    interface SshKey {
+        key_id: string;
+        fingerprint: string;
+        tunnel_id: string;
+        user_id: string;
+        created_at: string;
+        expires_at: string;
+    }
+
+    interface CreateForm {
+        host: string;
+        port: number;
+        proxy_user: string;
+        target_host: string;
+        target_port: number;
+        is_active: boolean;
+    }
+
+    const emptyForm = (): CreateForm => ({
         host: "",
         port: 22,
         proxy_user: "argus-proxy",
@@ -19,44 +51,30 @@
     let working = $state(false);
 
     let showCreateForm = $state(false);
-    let createForm = $state(emptyForm());
-    let createdConfig = $state(null);
+    let createForm = $state<CreateForm>(emptyForm());
+    let createdConfig = $state<TunnelConfig | null>(null);
 
     let confirmDeleteKey = $state(false);
-    let selectedKey = $state(null);
+    let selectedKey = $state<SshKey | null>(null);
 
     let confirmToggleActive = $state(false);
-    let toggleTarget = $state(null);
+    let toggleTarget = $state<TunnelConfig | null>(null);
 
     let confirmDeleteConfig = $state(false);
-    let deleteTarget = $state(null);
+    let deleteTarget = $state<TunnelConfig | null>(null);
     let deleteServiceUser = $state(false);
 
     let activeFilter = $state("all");
 
-    const fetchJson = async (url, init) => {
-        const response = await fetch(url, init);
-        const data = await response.json().catch(() => null);
-        if (!data) {
-            throw new Error(`HTTP ${response.status} on ${url}`);
-        }
-        if (data.status !== "ok") {
-            const message =
-                data.message ?? data.response?.arguments?.[0] ?? data.response?.message ?? `HTTP ${response.status}`;
-            throw new Error(message);
-        }
-        return data.response;
-    };
-
-    const loadConfigs = async () => {
+    const loadConfigs = async (): Promise<TunnelConfig[]> => {
         const params = new URLSearchParams();
         if (activeFilter === "active") params.set("active_only", "true");
         if (activeFilter === "inactive") params.set("active_only", "false");
         const qs = params.toString();
-        return await fetchJson(`${ADMIN_API}/proxy-tunnel/configs${qs ? `?${qs}` : ""}`);
+        return await fetchJson<TunnelConfig[]>(`${ADMIN_API}/proxy-tunnel/configs${qs ? `?${qs}` : ""}`);
     };
 
-    const loadKeys = async () => await fetchJson(`${ADMIN_API}/ssh/keys`);
+    const loadKeys = async (): Promise<SshKey[]> => await fetchJson<SshKey[]>(`${ADMIN_API}/ssh/keys`);
 
     let configsPromise = $state(loadConfigs());
     let keysPromise = $state(loadKeys());
@@ -81,7 +99,7 @@
                 port: Number(createForm.port),
                 target_port: Number(createForm.target_port),
             };
-            const config = await fetchJson(`${ADMIN_API}/proxy-tunnel/config`, {
+            const config = await fetchJson<TunnelConfig>(`${ADMIN_API}/proxy-tunnel/config`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),
@@ -91,7 +109,7 @@
             createdConfig = config;
             sendMessage("success", `Proxy tunnel ${config.host}:${config.port} provisioned.`, "ProxyTunnelManager::submitCreate");
             refreshConfigs();
-        } catch (error) {
+        } catch (error: any) {
             console.error("ProxyTunnelManager::submitCreate", error);
             sendMessage("error", error.message, "ProxyTunnelManager::submitCreate");
         } finally {
@@ -109,7 +127,7 @@
                 body: JSON.stringify({ is_active: !toggleTarget.is_active }),
             });
             refreshConfigs();
-        } catch (error) {
+        } catch (error: any) {
             console.error("ProxyTunnelManager::submitToggleActive", error);
             sendMessage("error", error.message, "ProxyTunnelManager::submitToggleActive");
         } finally {
@@ -129,7 +147,7 @@
             sendMessage("success", `Proxy tunnel ${deleteTarget.host}:${deleteTarget.port}${userMsg} deleted.`, "ProxyTunnelManager::submitDeleteConfig");
             refreshConfigs();
             refreshKeys();
-        } catch (error) {
+        } catch (error: any) {
             console.error("ProxyTunnelManager::submitDeleteConfig", error);
             sendMessage("error", error.message, "ProxyTunnelManager::submitDeleteConfig");
         } finally {
@@ -147,7 +165,7 @@
             await fetchJson(`${ADMIN_API}/ssh/keys/${selectedKey.key_id}`, { method: "DELETE" });
             sendMessage("success", "SSH key revoked.", "ProxyTunnelManager::submitDeleteKey");
             refreshKeys();
-        } catch (error) {
+        } catch (error: any) {
             console.error("ProxyTunnelManager::submitDeleteKey", error);
             sendMessage("error", error.message, "ProxyTunnelManager::submitDeleteKey");
         } finally {
@@ -157,35 +175,11 @@
         }
     };
 
-    const copyToClipboard = async (value, label) => {
-        try {
-            await navigator.clipboard.writeText(value);
-            sendMessage("success", `${label} copied to clipboard.`, "ProxyTunnelManager::copyToClipboard");
-        } catch (error) {
-            console.error("ProxyTunnelManager::copyToClipboard", error);
-            sendMessage("error", `Could not copy ${label.toLowerCase()}: ${error.message}`, "ProxyTunnelManager::copyToClipboard");
-        }
-    };
-
-    const formatDate = (raw) => {
+    const formatDate = (raw: string | null | undefined): string => {
         if (!raw) return "—";
         const ts = Date.parse(raw);
         if (Number.isNaN(ts)) return raw;
         return timestampToISODate(ts, true);
-    };
-
-    const truncate = (value, head = 14, tail = 8) => {
-        if (!value) return "—";
-        const trimmed = String(value).trim();
-        if (trimmed.length <= head + tail + 1) return trimmed;
-        return `${trimmed.slice(0, head)}…${trimmed.slice(-tail)}`;
-    };
-
-    const knownHostSummary = (entry) => {
-        if (!entry) return { type: "—", short: "—" };
-        const parts = String(entry).trim().split(/\s+/);
-        if (parts.length < 3) return { type: "?", short: truncate(entry) };
-        return { type: parts[1], short: truncate(parts[2], 10, 6) };
     };
 
     const formIsValid = $derived(
@@ -337,7 +331,7 @@
                 <code class="text-break flex-grow-1">{createdConfig.api_token}</code>
                 <button
                     class="btn btn-sm btn-outline-primary ms-2"
-                    onclick={() => copyToClipboard(createdConfig.api_token, "API token")}
+                    onclick={() => copyToClipboard(createdConfig!.api_token!, "API token", "ProxyTunnelManager::copyToClipboard")}
                 >
                     <Fa icon={faCopy} /> Copy
                 </button>
@@ -352,6 +346,7 @@
         </div>
     {/if}
 
+    <!-- Proxy Tunnels -->
     <div class="bg-white rounded mb-3">
         <div class="d-flex align-items-center p-2 border-bottom">
             <h5 class="m-0">Proxy Tunnels</h5>
@@ -382,82 +377,80 @@
             {#if !configs || configs.length === 0}
                 <div class="p-3 text-center text-muted">No proxy tunnel configs.</div>
             {:else}
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-0">
-                        <thead>
-                            <tr>
-                                <th>Host</th>
-                                <th>Proxy User</th>
-                                <th>Target</th>
-                                <th>Host Key</th>
-                                <th>Service User</th>
-                                <th>Status</th>
-                                <th class="text-end">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {#each configs as config (config.id)}
-                                {@const knownHost = knownHostSummary(config.host_key_fingerprint)}
-                                <tr>
-                                    <td class="font-monospace">{config.host}:{config.port}</td>
-                                    <td class="font-monospace">{config.proxy_user}</td>
-                                    <td class="font-monospace">{config.target_host}:{config.target_port}</td>
-                                    <td class="font-monospace small" title={config.host_key_fingerprint}>
-                                        <span class="badge bg-light text-dark border me-1">{knownHost.type}</span>{knownHost.short}
-                                        <button
-                                            class="btn btn-link btn-sm p-0 ms-1 align-baseline"
-                                            title="Copy known_hosts entry"
-                                            aria-label="Copy known_hosts entry"
-                                            onclick={() => copyToClipboard(config.host_key_fingerprint, "known_hosts entry")}
-                                        >
-                                            <Fa icon={faCopy} />
-                                        </button>
-                                    </td>
-                                    <td class="font-monospace small text-muted" title={config.service_user_id ?? ""}>
-                                        {config.service_user_id ? truncate(config.service_user_id, 8, 4) : "—"}
-                                    </td>
-                                    <td>
-                                        {#if config.is_active}
-                                            <span class="badge bg-success">Active</span>
-                                        {:else}
-                                            <span class="badge bg-secondary">Inactive</span>
-                                        {/if}
-                                    </td>
-                                    <td class="text-end">
-                                        <div class="btn-group btn-group-sm">
-                                            <button
-                                                class="btn {config.is_active ? 'btn-outline-warning' : 'btn-outline-success'}"
-                                                disabled={working}
-                                                onclick={() => {
-                                                    toggleTarget = config;
-                                                    confirmToggleActive = true;
-                                                }}
-                                            >
-                                                {config.is_active ? "Disable" : "Enable"}
-                                            </button>
-                                            <button
-                                                class="btn btn-outline-danger"
-                                                disabled={working}
-                                                onclick={() => {
-                                                    deleteTarget = config;
-                                                    confirmDeleteConfig = true;
-                                                }}
-                                            >
-                                                Delete
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            {/each}
-                        </tbody>
-                    </table>
+                <!-- Header row -->
+                <div class="d-flex align-items-center px-3 py-1 border-bottom text-muted small fw-semibold config-row">
+                    <div class="col-host font-monospace">Host</div>
+                    <div class="col-user">Proxy User</div>
+                    <div class="col-target font-monospace">Target</div>
+                    <div class="col-hostkey">Host Key</div>
+                    <div class="col-svcuser">Service User</div>
+                    <div class="col-status">Status</div>
+                    <div class="col-actions ms-auto text-end">Actions</div>
                 </div>
+                <ul class="list-group list-group-flush rounded">
+                    {#each configs as config (config.id)}
+                        {@const kh = knownHostSummary(config.host_key_fingerprint)}
+                        <li class="list-group-item">
+                            <div class="d-flex align-items-center config-row">
+                                <div class="col-host font-monospace">{config.host}:{config.port}</div>
+                                <div class="col-user font-monospace small">{config.proxy_user}</div>
+                                <div class="col-target font-monospace small">{config.target_host}:{config.target_port}</div>
+                                <div class="col-hostkey font-monospace small" title={config.host_key_fingerprint}>
+                                    <span class="badge bg-light text-dark border me-1">{kh.type}</span>{kh.short}
+                                    <button
+                                        class="btn btn-link btn-sm p-0 ms-1 align-baseline"
+                                        title="Copy known_hosts entry"
+                                        aria-label="Copy known_hosts entry"
+                                        onclick={() => copyToClipboard(config.host_key_fingerprint ?? "", "known_hosts entry", "ProxyTunnelManager::copyToClipboard")}
+                                    >
+                                        <Fa icon={faCopy} />
+                                    </button>
+                                </div>
+                                <div class="col-svcuser font-monospace small text-muted" title={config.service_user_id ?? ""}>
+                                    {config.service_user_id ? truncate(config.service_user_id, 8, 4) : "—"}
+                                </div>
+                                <div class="col-status">
+                                    {#if config.is_active}
+                                        <span class="badge bg-success">Active</span>
+                                    {:else}
+                                        <span class="badge bg-secondary">Inactive</span>
+                                    {/if}
+                                </div>
+                                <div class="col-actions ms-auto text-end">
+                                    <div class="btn-group btn-group-sm">
+                                        <button
+                                            class="btn {config.is_active ? 'btn-outline-warning' : 'btn-outline-success'}"
+                                            disabled={working}
+                                            onclick={() => {
+                                                toggleTarget = config;
+                                                confirmToggleActive = true;
+                                            }}
+                                        >
+                                            {config.is_active ? "Disable" : "Enable"}
+                                        </button>
+                                        <button
+                                            class="btn btn-outline-danger"
+                                            disabled={working}
+                                            onclick={() => {
+                                                deleteTarget = config;
+                                                confirmDeleteConfig = true;
+                                            }}
+                                        >
+                                            Delete
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </li>
+                    {/each}
+                </ul>
             {/if}
         {:catch error}
             <div class="alert alert-danger m-2">{error.message}</div>
         {/await}
     </div>
 
+    <!-- Registered SSH Keys -->
     <div class="bg-white rounded">
         <div class="d-flex align-items-center p-2 border-bottom">
             <h5 class="m-0">Registered SSH Keys</h5>
@@ -473,43 +466,40 @@
             {#if !keys || keys.length === 0}
                 <div class="p-3 text-center text-muted">No active SSH keys registered.</div>
             {:else}
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-0">
-                        <thead>
-                            <tr>
-                                <th>Fingerprint</th>
-                                <th>Tunnel</th>
-                                <th>User</th>
-                                <th>Created</th>
-                                <th>Expires</th>
-                                <th class="text-end">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {#each keys as key (key.key_id)}
-                                <tr>
-                                    <td class="font-monospace small" title={key.fingerprint}>{truncate(key.fingerprint)}</td>
-                                    <td class="font-monospace small text-muted" title={key.tunnel_id}>{truncate(key.tunnel_id, 8, 4)}</td>
-                                    <td class="font-monospace small text-muted" title={key.user_id}>{truncate(key.user_id, 8, 4)}</td>
-                                    <td class="small">{formatDate(key.created_at)}</td>
-                                    <td class="small">{formatDate(key.expires_at)}</td>
-                                    <td class="text-end">
-                                        <button
-                                            class="btn btn-sm btn-outline-danger"
-                                            disabled={working}
-                                            onclick={() => {
-                                                selectedKey = key;
-                                                confirmDeleteKey = true;
-                                            }}
-                                        >
-                                            Revoke
-                                        </button>
-                                    </td>
-                                </tr>
-                            {/each}
-                        </tbody>
-                    </table>
+                <!-- Header row -->
+                <div class="d-flex align-items-center px-3 py-1 border-bottom text-muted small fw-semibold key-row">
+                    <div class="col-fp font-monospace">Fingerprint</div>
+                    <div class="col-tunnel">Tunnel</div>
+                    <div class="col-keyuser">User</div>
+                    <div class="col-created">Created</div>
+                    <div class="col-expires">Expires</div>
+                    <div class="col-keyactions ms-auto text-end">Actions</div>
                 </div>
+                <ul class="list-group list-group-flush rounded">
+                    {#each keys as key (key.key_id)}
+                        <li class="list-group-item">
+                            <div class="d-flex align-items-center key-row">
+                                <div class="col-fp font-monospace small" title={key.fingerprint}>{truncate(key.fingerprint)}</div>
+                                <div class="col-tunnel font-monospace small text-muted" title={key.tunnel_id}>{truncate(key.tunnel_id, 8, 4)}</div>
+                                <div class="col-keyuser font-monospace small text-muted" title={key.user_id}>{truncate(key.user_id, 8, 4)}</div>
+                                <div class="col-created small">{formatDate(key.created_at)}</div>
+                                <div class="col-expires small">{formatDate(key.expires_at)}</div>
+                                <div class="col-keyactions ms-auto text-end">
+                                    <button
+                                        class="btn btn-sm btn-outline-danger"
+                                        disabled={working}
+                                        onclick={() => {
+                                            selectedKey = key;
+                                            confirmDeleteKey = true;
+                                        }}
+                                    >
+                                        Revoke
+                                    </button>
+                                </div>
+                            </div>
+                        </li>
+                    {/each}
+                </ul>
             {/if}
         {:catch error}
             <div class="alert alert-danger m-2">{error.message}</div>
@@ -521,4 +511,21 @@
     .text-break {
         word-break: break-all;
     }
+
+    /* Config table columns */
+    .config-row .col-host    { flex: 0 0 18%; min-width: 0; }
+    .config-row .col-user    { flex: 0 0 12%; min-width: 0; }
+    .config-row .col-target  { flex: 0 0 16%; min-width: 0; }
+    .config-row .col-hostkey { flex: 0 0 18%; min-width: 0; }
+    .config-row .col-svcuser { flex: 0 0 12%; min-width: 0; }
+    .config-row .col-status  { flex: 0 0 8%;  min-width: 0; }
+    .config-row .col-actions { flex: 0 0 16%; min-width: 0; }
+
+    /* Key table columns */
+    .key-row .col-fp         { flex: 0 0 28%; min-width: 0; }
+    .key-row .col-tunnel     { flex: 0 0 16%; min-width: 0; }
+    .key-row .col-keyuser    { flex: 0 0 16%; min-width: 0; }
+    .key-row .col-created    { flex: 0 0 14%; min-width: 0; }
+    .key-row .col-expires    { flex: 0 0 14%; min-width: 0; }
+    .key-row .col-keyactions { flex: 0 0 12%; min-width: 0; }
 </style>
