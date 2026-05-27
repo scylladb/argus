@@ -1,6 +1,5 @@
 <script>
     import { onMount } from "svelte";
-    import { titleCase } from "../Common/TextUtils";
     import AdminPanelWelcome from "./AdminPanelWelcome.svelte";
     import UserManager from "./UserManager.svelte";
     import ReleaseManager from "./ReleaseManager.svelte";
@@ -10,27 +9,27 @@
     let { currentRoute = $bindable() } = $props();
 
     const routes = {
-        index: AdminPanelWelcome,
-        users: UserManager,
-        releases: ReleaseManager,
-        views: ViewsManager,
-        "ssh-tunnel": ProxyTunnelManager,
+        index: { component: AdminPanelWelcome, title: "Home" },
+        users: { component: UserManager, title: "Users" },
+        releases: { component: ReleaseManager, title: "Releases" },
+        views: { component: ViewsManager, title: "Views" },
+        "ssh-tunnel": { component: ProxyTunnelManager, title: "SSH Tunnel" },
     };
 
-    const routeLabel = (route) => (route === "ssh-tunnel" ? "SSH Tunnel" : titleCase(route));
+    const routeTitle = (route) => routes[route]?.title ?? route;
 
     const handleRouteClick = function (route, event) {
         history.pushState({}, "", `/admin/${route}`);
         let prevRoute = currentRoute;
         currentRoute = route;
-        document.title = document.title.replace(routeLabel(prevRoute), routeLabel(route));
+        document.title = document.title.replace(routeTitle(prevRoute), routeTitle(route));
     };
 
     onMount(() => {
-        document.title = document.title.replace("%ROUTE", routeLabel(currentRoute));
+        document.title = document.title.replace("%ROUTE", routeTitle(currentRoute));
     });
 
-    const SvelteComponent = $derived(routes[currentRoute] ?? routes["index"]);
+    const SvelteComponent = $derived(routes[currentRoute]?.component ?? routes["index"].component);
 </script>
 
 <div class="container-fluid">
