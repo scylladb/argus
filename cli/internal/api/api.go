@@ -284,6 +284,29 @@ func DoJSON[T any](c *Client, req *http.Request) (T, error) {
 	if err != nil {
 		return zero, err
 	}
+	return DecodeResponse[T](resp)
+}
+
+// DecodeResponse drains resp, checks the HTTP status and content type, and
+// decodes the body as an [models.APIResponse] envelope of T.
+//
+// It is the shared response-handling tail used by both [DoJSON] (which
+// fetches via [Client.Do]) and the streaming upload paths (which fetch via
+// [Client.DoStream] because they need to disable the default timeout). The
+// caller's only responsibility is to obtain the *http.Response; this
+// function takes ownership of the body and closes it before returning.
+//
+// Error mapping:
+//   - 401/403, or a non-JSON content type on a 2xx response, return
+//     [ErrUnauthorized] (so the auth-retry layer in cmd can transparently
+//     re-authenticate).
+//   - Any other non-2xx status returns a generic "server returned %d" error.
+//   - A successful 2xx response carrying the standard “{"status":"error"}“
+//     envelope returns an [*APIError] wrapping the decoded body so callers
+//     can inspect “exception“ / “message“ / “arguments“ via
+//     “errors.As“.
+func DecodeResponse[T any](resp *http.Response) (T, error) {
+	var zero T
 	defer func() {
 		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()

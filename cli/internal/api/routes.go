@@ -56,4 +56,7 @@ const (
 	AdminSSHKeys              = "/admin/api/v1/ssh/keys"                      // GET  – list all registered keys with metadata
 	AdminSSHKeyDelete         = "/admin/api/v1/ssh/keys/%s"                   // DELETE – revoke a key (key_id)
 
+	// Replay-log ingest – uploads a tar.zst bundle of JSONL replay logs.
+	// POST – body is application/x-tar-zstd; query: dry_run=true|false.
+	ReplayIngest = "/api/v1/client/replay/ingest"
 )
