@@ -3,6 +3,7 @@
     import { faTimes, faCopy } from "@fortawesome/free-solid-svg-icons";
     import ModalWindow from "../Common/ModalWindow.svelte";
     import { timestampToISODate } from "../Common/DateUtils";
+    import { sendMessage } from "../Stores/AlertStore";
 
     const ADMIN_API = "/admin/api/v1";
 
@@ -15,8 +16,6 @@
         is_active: true,
     });
 
-    let lastError = $state("");
-    let lastNotice = $state("");
     let working = $state(false);
 
     let showCreateForm = $state(false);
@@ -31,6 +30,7 @@
 
     let confirmDeleteConfig = $state(false);
     let deleteTarget = $state(null);
+    let deleteServiceUser = $state(false);
 
     let activeFilter = $state("all");
 
@@ -86,12 +86,14 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),
             });
+            showCreateForm = false;
+            createForm = emptyForm();
             createdConfig = config;
-            lastNotice = `Proxy tunnel ${config.host}:${config.port} provisioned.`;
-            resetForm();
+            sendMessage("success", `Proxy tunnel ${config.host}:${config.port} provisioned.`, "ProxyTunnelManager::submitCreate");
             refreshConfigs();
         } catch (error) {
-            lastError = error.message;
+            console.error("ProxyTunnelManager::submitCreate", error);
+            sendMessage("error", error.message, "ProxyTunnelManager::submitCreate");
         } finally {
             working = false;
         }
@@ -108,7 +110,8 @@
             });
             refreshConfigs();
         } catch (error) {
-            lastError = error.message;
+            console.error("ProxyTunnelManager::submitToggleActive", error);
+            sendMessage("error", error.message, "ProxyTunnelManager::submitToggleActive");
         } finally {
             working = false;
             confirmToggleActive = false;
@@ -120,16 +123,20 @@
         if (!deleteTarget) return;
         try {
             working = true;
-            await fetchJson(`${ADMIN_API}/proxy-tunnel/config/${deleteTarget.id}`, { method: "DELETE" });
-            lastNotice = `Proxy tunnel ${deleteTarget.host}:${deleteTarget.port} deleted.`;
+            const params = deleteServiceUser ? "?delete_user=true" : "";
+            await fetchJson(`${ADMIN_API}/proxy-tunnel/config/${deleteTarget.id}${params}`, { method: "DELETE" });
+            const userMsg = deleteServiceUser ? " and service user" : "";
+            sendMessage("success", `Proxy tunnel ${deleteTarget.host}:${deleteTarget.port}${userMsg} deleted.`, "ProxyTunnelManager::submitDeleteConfig");
             refreshConfigs();
             refreshKeys();
         } catch (error) {
-            lastError = error.message;
+            console.error("ProxyTunnelManager::submitDeleteConfig", error);
+            sendMessage("error", error.message, "ProxyTunnelManager::submitDeleteConfig");
         } finally {
             working = false;
             confirmDeleteConfig = false;
             deleteTarget = null;
+            deleteServiceUser = false;
         }
     };
 
@@ -138,9 +145,11 @@
         try {
             working = true;
             await fetchJson(`${ADMIN_API}/ssh/keys/${selectedKey.key_id}`, { method: "DELETE" });
+            sendMessage("success", "SSH key revoked.", "ProxyTunnelManager::submitDeleteKey");
             refreshKeys();
         } catch (error) {
-            lastError = error.message;
+            console.error("ProxyTunnelManager::submitDeleteKey", error);
+            sendMessage("error", error.message, "ProxyTunnelManager::submitDeleteKey");
         } finally {
             working = false;
             confirmDeleteKey = false;
@@ -151,9 +160,10 @@
     const copyToClipboard = async (value, label) => {
         try {
             await navigator.clipboard.writeText(value);
-            lastNotice = `${label} copied to clipboard.`;
+            sendMessage("success", `${label} copied to clipboard.`, "ProxyTunnelManager::copyToClipboard");
         } catch (error) {
-            lastError = `Could not copy ${label.toLowerCase()}: ${error.message}`;
+            console.error("ProxyTunnelManager::copyToClipboard", error);
+            sendMessage("error", `Could not copy ${label.toLowerCase()}: ${error.message}`, "ProxyTunnelManager::copyToClipboard");
         }
     };
 
@@ -263,19 +273,36 @@
 {/if}
 
 {#if confirmDeleteConfig && deleteTarget}
-    <ModalWindow on:modalClose={() => (confirmDeleteConfig = false)}>
+    <ModalWindow on:modalClose={() => { confirmDeleteConfig = false; deleteServiceUser = false; }}>
         {#snippet title()}<div>Delete proxy tunnel</div>{/snippet}
         {#snippet body()}
             <div>
                 <div>
-                    Permanently delete <span class="fw-bold">{deleteTarget.host}:{deleteTarget.port}</span> and its service user?
+                    Permanently delete <span class="fw-bold">{deleteTarget.host}:{deleteTarget.port}</span>?
                 </div>
                 <div class="text-muted small mt-2">
                     The associated API token is invalidated. The proxy host will refuse new connections after its <code>argus-cli</code> token stops working.
                 </div>
+                <div class="form-check form-switch mt-3">
+                    <input
+                        id="deleteServiceUser"
+                        class="form-check-input"
+                        type="checkbox"
+                        role="switch"
+                        bind:checked={deleteServiceUser}
+                    />
+                    <label class="form-check-label" for="deleteServiceUser">
+                        Also delete the service user
+                    </label>
+                </div>
+                {#if deleteServiceUser}
+                    <div class="alert alert-warning py-2 mt-2 small mb-0">
+                        The service user <code>proxy-tunnel-{deleteTarget.host}</code> will be permanently removed.
+                    </div>
+                {/if}
                 <div class="d-flex align-items-center my-3">
                     <button class="btn btn-danger w-75 me-2" disabled={working} onclick={submitDeleteConfig}>Delete</button>
-                    <button class="btn btn-secondary w-25" disabled={working} onclick={() => (confirmDeleteConfig = false)}>Cancel</button>
+                    <button class="btn btn-secondary w-25" disabled={working} onclick={() => { confirmDeleteConfig = false; deleteServiceUser = false; }}>Cancel</button>
                 </div>
             </div>
         {/snippet}
@@ -303,23 +330,6 @@
 {/if}
 
 <div class="p-2">
-    {#if lastError}
-        <div class="alert alert-danger d-flex align-items-center">
-            <div>{lastError}</div>
-            <div class="ms-auto">
-                <button class="btn btn-sm" aria-label="Dismiss error" onclick={() => (lastError = "")}><Fa icon={faTimes} /></button>
-            </div>
-        </div>
-    {/if}
-    {#if lastNotice}
-        <div class="alert alert-success d-flex align-items-center">
-            <div>{lastNotice}</div>
-            <div class="ms-auto">
-                <button class="btn btn-sm" aria-label="Dismiss notice" onclick={() => (lastNotice = "")}><Fa icon={faTimes} /></button>
-            </div>
-        </div>
-    {/if}
-
     {#if createdConfig?.api_token}
         <div class="alert alert-info">
             <div class="fw-bold mb-1">Service user API token (shown once)</div>
