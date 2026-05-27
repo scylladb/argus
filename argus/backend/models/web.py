@@ -116,6 +116,7 @@ class User(Model):
             "id": str(self.id),
             "username": self.username,
             "full_name": self.full_name,
+            "email": self.email,
             "picture_id": self.picture_id
         }
 
