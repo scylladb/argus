@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/scylladb/argus/cli/internal/api"
+	"github.com/scylladb/argus/cli/internal/cache"
 	"github.com/scylladb/argus/cli/internal/logging"
 	"github.com/scylladb/argus/cli/internal/models"
 	"github.com/spf13/cobra"
@@ -115,48 +117,86 @@ var promStartCmd = &cobra.Command{
 			return out.Write(models.NewTabularSlice(entries))
 		}
 
-		// 1. List logs and find the monitor-set archive
-		log.Debug().Str("run_id", runID).Msg("listing logs to find monitor-set archive")
-		monitorLog, err := findMonitorSetLog(ctx, client, runID)
+		// 1. Check cache for previously downloaded archive
+		appCache := CacheFrom(ctx)
+		cacheKey := cache.PrometheusLogKey(runID)
+		dataDir, err := promDataDir(runID)
 		if err != nil {
-			return fmt.Errorf("finding monitor-set log: %w", err)
+			return fmt.Errorf("creating data directory: %w", err)
 		}
-		log.Info().Str("log_name", monitorLog).Msg("found monitor-set archive")
 
-		// 2. Download and extract the outer archive to a temp dir
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Downloading %s...\n", monitorLog)
+		cachedLogName, _, cacheErr := cache.Get[string](appCache, cacheKey)
+		cachedArchive := filepath.Join(dataDir, cachedLogName)
+		haveCached := cacheErr == nil && cachedLogName != "" && fileExists(cachedArchive)
+
+		if haveCached {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Using cached archive %s\n", cachedLogName)
+		} else {
+			// 2. List logs and find the monitor-set archive
+			log.Debug().Str("run_id", runID).Msg("listing logs to find monitor-set archive")
+			monitorLog, err := findMonitorSetLog(ctx, client, runID)
+			if err != nil {
+				return fmt.Errorf("finding monitor-set log: %w", err)
+			}
+			log.Info().Str("log_name", monitorLog).Msg("found monitor-set archive")
+			cachedLogName = monitorLog
+			cachedArchive = filepath.Join(dataDir, monitorLog)
+
+			// 3. Download the archive
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Downloading %s...\n", monitorLog)
+
+			pluginName, err := ResolveRunType(ctx, client, runID)
+			if err != nil {
+				return fmt.Errorf("resolving run type: %w", err)
+			}
+
+			route := fmt.Sprintf(api.TestRunLogDownload, pluginName, runID, monitorLog)
+			req, err := client.NewRequest(ctx, "GET", route, nil)
+			if err != nil {
+				return fmt.Errorf("building download request: %w", err)
+			}
+
+			resp, err := client.DoStream(req)
+			if err != nil {
+				return fmt.Errorf("downloading log: %w", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+				return fmt.Errorf("server returned %d: %s", resp.StatusCode, http.StatusText(resp.StatusCode))
+			}
+
+			// Save archive to data dir for future reuse
+			archiveFile, err := os.Create(cachedArchive)
+			if err != nil {
+				return fmt.Errorf("creating archive file: %w", err)
+			}
+			if _, err := io.Copy(archiveFile, resp.Body); err != nil {
+				_ = archiveFile.Close()
+				return fmt.Errorf("saving archive: %w", err)
+			}
+			_ = archiveFile.Close()
+		}
+
+		// 4. Extract outer archive to temp dir
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Extracting monitor-set archive...")
 		tempDir, err := os.MkdirTemp("", "argus-prom-download-*")
 		if err != nil {
 			return fmt.Errorf("creating temp dir: %w", err)
 		}
 		defer func() { _ = os.RemoveAll(tempDir) }()
 
-		pluginName, err := ResolveRunType(ctx, client, runID)
+		archiveReader, err := os.Open(cachedArchive)
 		if err != nil {
-			return fmt.Errorf("resolving run type: %w", err)
+			return fmt.Errorf("opening cached archive: %w", err)
 		}
+		defer func() { _ = archiveReader.Close() }()
 
-		route := fmt.Sprintf(api.TestRunLogDownload, pluginName, runID, monitorLog)
-		req, err := client.NewRequest(ctx, "GET", route, nil)
-		if err != nil {
-			return fmt.Errorf("building download request: %w", err)
-		}
-
-		resp, err := client.DoStream(req)
-		if err != nil {
-			return fmt.Errorf("downloading log: %w", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return fmt.Errorf("server returned %d: %s", resp.StatusCode, http.StatusText(resp.StatusCode))
-		}
-
-		if err := extractTarZst(resp.Body, tempDir); err != nil {
+		if err := extractTarZst(archiveReader, tempDir); err != nil {
 			return fmt.Errorf("extracting outer archive: %w", err)
 		}
 
-		// 3. Find prometheus_data_*.tar.zst in extracted content
+		// 5. Find prometheus_data_*.tar.zst in extracted content
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Looking for Prometheus data archive...")
 		promArchive, err := findPromDataArchive(tempDir)
 		if err != nil {
@@ -164,12 +204,7 @@ var promStartCmd = &cobra.Command{
 		}
 		log.Info().Str("path", promArchive).Msg("found prometheus data archive")
 
-		// 4. Extract TSDB data to persistent directory
-		dataDir, err := promDataDir(runID)
-		if err != nil {
-			return fmt.Errorf("creating data directory: %w", err)
-		}
-
+		// 6. Extract TSDB data to persistent directory
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Extracting Prometheus TSDB data to %s...\n", dataDir)
 		promFile, err := os.Open(promArchive)
 		if err != nil {
@@ -191,7 +226,7 @@ var promStartCmd = &cobra.Command{
 		// Make data dir writable by the prometheus container user (uid 65534)
 		_ = chmodRecursive(dataDir, 0777)
 
-		// 5. Write minimal prometheus.yml
+		// 7. Write minimal prometheus.yml
 		configPath := filepath.Join(dataDir, "prometheus.yml")
 		promConfig := `global:
   scrape_interval: 15s
@@ -201,7 +236,7 @@ var promStartCmd = &cobra.Command{
 			return fmt.Errorf("writing prometheus config: %w", err)
 		}
 
-		// 6. Start Docker container
+		// 8. Start Docker container
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Starting Prometheus container...")
 		dockerArgs := []string{
 			"run", "-d",
@@ -230,6 +265,9 @@ var promStartCmd = &cobra.Command{
 
 		// Store run ID metadata for list command
 		writeRunIDFile(runID)
+
+		// Write cache entry now that everything succeeded
+		_ = cache.Set(appCache, cacheKey, cachedLogName, "", cache.TTLPrometheusLog)
 
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Prometheus running at http://localhost:%s\n", port)
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Container: %s\n", containerName)
@@ -270,9 +308,9 @@ var promStopCmd = &cobra.Command{
 		}
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Stopped and removed %s\n", containerName)
 
-		// Clean up data directory
+		// Clean up extracted data but preserve the cached archive
 		if dir, err := promDataDir(runID); err == nil {
-			_ = os.RemoveAll(dir)
+			cleanDataDir(dir)
 		}
 		return nil
 	},
@@ -287,6 +325,26 @@ type PromContainerEntry struct {
 	Container string `json:"container"`
 	RunID     string `json:"run_id"`
 	Port      string `json:"port"`
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// cleanDataDir removes all contents of dir except .tar.zst archive files and the run_id marker.
+func cleanDataDir(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if strings.HasSuffix(name, ".tar.zst") || name == "run_id" {
+			continue
+		}
+		_ = os.RemoveAll(filepath.Join(dir, name))
+	}
 }
 
 func checkDocker() error {
