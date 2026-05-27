@@ -72,4 +72,8 @@ const (
 	// Name-resolution routes
 	Releases = "/api/v1/releases" // GET – enabled releases (id/name); query param all=1 for every release
 	Users    = "/api/v1/users"    // GET – users keyed by id with username/full_name/email
+
+	// Replay-log ingest – uploads a tar.zst bundle of JSONL replay logs.
+	// POST – body is application/x-tar-zstd; query: dry_run=true|false.
+	ReplayIngest = "/api/v1/client/replay/ingest"
 )
