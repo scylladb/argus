@@ -55,6 +55,7 @@ web-backend = [
     "boto3 ~= 1.38.9",
     "jira>=3.10.5",
     "prometheus-flask-exporter>=0.23.2",
+    "zstandard >= 0.22.0",
 ]
 docker-image = [
     "supervisor ~= 4.2.4",
