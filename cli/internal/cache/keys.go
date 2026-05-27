@@ -39,6 +39,10 @@ const (
 	// The version only changes on a new server deployment.
 	TTLVersion = time.Hour
 
+	// TTLPrometheusLog is the TTL for cached prometheus log archives.
+	// Logs are immutable once uploaded, so a long TTL is safe.
+	TTLPrometheusLog = 7 * 24 * time.Hour
+
 	// TTLSCTEvents is the TTL for SCT event pages fetched from the server.
 	// Events are append-only once a run finishes, so a longer TTL is fine.
 	// During a live run we keep it short so new events appear quickly.
@@ -173,4 +177,12 @@ func NemesesFilteredKey(runID, before, after string) string {
 func PytestFilterKey(queryString string) string {
 	h := sha256.Sum256([]byte(queryString))
 	return path.Join("pytest-filter", fmt.Sprintf("%x", h[:8]))
+}
+
+// PrometheusLogKey returns the cache key for a downloaded monitor-set archive.
+// Logs are immutable once uploaded, so this acts as a long-lived marker.
+//
+// On disk: cache/prometheus-logs/{runID}/
+func PrometheusLogKey(runID string) string {
+	return path.Join("prometheus-logs", runID)
 }
