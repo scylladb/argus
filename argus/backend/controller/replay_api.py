@@ -2,14 +2,17 @@
 
 POST /api/v1/client/replay/ingest
 
-Accepts a ``tar.zst`` archive of JSONL replay logs and re-applies the
-recorded requests against the running Flask app (via an in-process proxy
-through ``current_app.test_client()``). See ``docs/plans/request_replay.md``
-for the full design.
+Accepts an archive of JSONL replay logs and re-applies the recorded
+requests against the running Flask app (via an in-process proxy through
+``current_app.test_client()``). See ``docs/plans/request_replay.md`` for
+the full design.
+
+Supported archive formats: ``tar.zst`` (the canonical CLI output),
+``tar.gz``/``tgz``, plain ``tar``, and ``zip``. Format is detected from
+magic bytes in the request body; the ``Content-Type`` header is only
+used to reject obvious mismatches at the door.
 """
 from __future__ import annotations
-
-import logging
 
 from flask import Blueprint, request
 
@@ -17,15 +20,27 @@ from argus.backend.error_handlers import APIException, handle_api_exception
 from argus.backend.service.replay_service import ReplayService
 from argus.backend.service.user import api_login_required
 
-LOGGER = logging.getLogger(__name__)
-
 bp = Blueprint("replay_api", __name__, url_prefix="/replay")
 bp.register_error_handler(Exception, handle_api_exception)
 
 
 ACCEPTED_CONTENT_TYPES = frozenset({
+    # tar.zst -- canonical CLI output
     "application/x-tar-zstd",
     "application/zstd",
+    # tar.gz / .tgz / raw .gz
+    "application/gzip",
+    "application/x-gzip",
+    "application/x-tar-gzip",
+    "application/x-tgz",
+    # plain tar
+    "application/x-tar",
+    "application/tar",
+    # zip
+    "application/zip",
+    "application/x-zip-compressed",
+    "application/x-zip",
+    # generic binary upload (curl default)
     "application/octet-stream",
 })
 
@@ -68,10 +83,4 @@ def replay_ingest():
         create_missing_tests=create_missing_tests,
     ).ingest(archive, dry_run=dry_run)
 
-    LOGGER.info(
-        "Replay ingest complete: total=%d processed=%d ok=%d failed=%d skipped=%d "
-        "(dry_run=%s, create_missing_tests=%s)",
-        summary.total, summary.processed, summary.succeeded,
-        summary.failed, summary.skipped_no_replay, dry_run, create_missing_tests,
-    )
     return {"status": "ok", "response": summary.as_dict()}

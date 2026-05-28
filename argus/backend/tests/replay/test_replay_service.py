@@ -7,9 +7,11 @@ pre-step. Dispatch itself is verified by mocking the Flask app's
 """
 from __future__ import annotations
 
+import gzip
 import io
 import json
 import tarfile
+import zipfile
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -30,6 +32,10 @@ from argus.backend.service.replay_service import (
 
 def _make_archive(files: dict[str, list[dict]]) -> bytes:
     """Build an in-memory ``tar.zst`` mirroring the on-disk layout."""
+    return zstd.ZstdCompressor().compress(_make_tar(files))
+
+
+def _make_tar(files: dict[str, list[dict]]) -> bytes:
     tar_buf = io.BytesIO()
     with tarfile.open(fileobj=tar_buf, mode="w") as tar:
         for name, records in files.items():
@@ -37,7 +43,20 @@ def _make_archive(files: dict[str, list[dict]]) -> bytes:
             info = tarfile.TarInfo(name=name)
             info.size = len(payload)
             tar.addfile(info, io.BytesIO(payload))
-    return zstd.ZstdCompressor().compress(tar_buf.getvalue())
+    return tar_buf.getvalue()
+
+
+def _make_targz(files: dict[str, list[dict]]) -> bytes:
+    return gzip.compress(_make_tar(files))
+
+
+def _make_zip(files: dict[str, list[dict]]) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for name, records in files.items():
+            payload = "\n".join(json.dumps(r) for r in records).encode("utf-8")
+            zf.writestr(name, payload)
+    return buf.getvalue()
 
 
 def _rec(endpoint: str, *, ts: int, location_params: dict | None = None,
@@ -113,6 +132,28 @@ def test_ingest_empty_archive_yields_empty_summary():
 def test_ingest_rejects_corrupt_archive():
     with pytest.raises(ReplayServiceError):
         _make_service().ingest(b"not a tar.zst archive")
+
+
+@pytest.mark.parametrize("packer", [_make_tar, _make_targz, _make_zip, _make_archive])
+def test_ingest_accepts_each_supported_format(packer):
+    archive = packer({
+        "argus_replay_log_r_1.jsonl": [
+            _rec("/testrun/$type/submit", ts=1,
+                 location_params={"type": "generic"}, body={"run_id": "x"}),
+        ],
+    })
+    client = MagicMock()
+    client.open.return_value = _Response(200, b'{"status":"ok"}')
+    summary = _make_service(client).ingest(archive)
+    assert summary.total == 1
+    assert summary.succeeded == 1
+    assert client.open.call_count == 1
+
+
+def test_ingest_rejects_unknown_format():
+    # Long enough to clear all magic-byte checks but recognised by none.
+    with pytest.raises(ReplayServiceError, match="unrecognised format"):
+        _make_service().ingest(b"hello world" * 60)
 
 
 def test_ingest_skips_non_jsonl_members():
