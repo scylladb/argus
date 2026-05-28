@@ -13,6 +13,35 @@ from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, UserOa
 LOGGER = logging.getLogger(__name__)
 GITHUB_REPO_RE = r"(?P<http>^https?:\/\/(www\.)?github\.com\/(?P<user>[\w\d\-]+)\/(?P<repo>[\w\d\-]+)(\.git)?$)|(?P<ssh>git@github\.com:(?P<ssh_user>[\w\d\-]+)\/(?P<ssh_repo>[\w\d\-]+)(\.git)?)"
 
+_METADATA_RE = re.compile(
+    r"<b>Metadata:</b>\s*"
+    r"tier=(?P<tier>[^\s|]+)\s*\|\s*"
+    r"type=(?P<test_type>[^\s|]+)\s*\|\s*"
+    r"duration=(?P<duration_class>[^\s|]+)\s*\|\s*"
+    r"backends=(?P<supported_backends>[^<]+)",
+)
+
+
+def parse_test_metadata_from_description(description: str | None) -> dict[str, Any] | None:
+    """Parse test_metadata fields from a Jenkins build description HTML.
+
+    Returns a dict with keys (tier, test_type, duration_class, supported_backends)
+    or None if the metadata block is not present.
+    """
+    if not description:
+        return None
+    match = _METADATA_RE.search(description)
+    if not match:
+        return None
+    backends_raw = match.group("supported_backends").strip()
+    backends = [b.strip().strip("[]'\"") for b in backends_raw.split(",") if b.strip()]
+    return {
+        "tier": match.group("tier").strip(),
+        "test_type": match.group("test_type").strip(),
+        "duration_class": match.group("duration_class").strip(),
+        "supported_backends": backends,
+    }
+
 
 class Parameter(TypedDict):
     _class: str
@@ -86,6 +115,22 @@ class JenkinsService:
             params[idx]["description"] = descriptions.get(param["name"], "")
 
         return params
+
+    def get_build_test_metadata(self, build_id: str, build_number: int | None = None) -> dict[str, Any] | None:
+        """Retrieve test_metadata from the latest (or specified) build's description.
+
+        Returns parsed metadata dict or None if not present.
+        """
+        try:
+            if not build_number:
+                build_number = self.latest_build(build_id)
+                if build_number < 0:
+                    return None
+            build_info = self._jenkins.get_build_info(name=build_id, number=build_number)
+            return parse_test_metadata_from_description(build_info.get("description"))
+        except jenkins.JenkinsException:
+            LOGGER.debug("Could not fetch build info for %s#%s", build_id, build_number)
+            return None
 
     def latest_build(self, build_id: str) -> int:
         try:
