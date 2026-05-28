@@ -1,8 +1,16 @@
 """Server-side replay-log ingest.
 
-Receives a ``tar.zst`` archive of JSONL replay-log records (produced by the
-Argus Python client) and re-applies each recorded request against the running
-Flask app.
+Receives an archive of JSONL replay-log records (produced by the Argus
+Python client, or hand-packed by a user) and re-applies each recorded
+request against the running Flask app.
+
+Supported archive formats (detected from magic bytes, not the
+``Content-Type`` header):
+
+* ``tar.zst`` / ``tar.zstd`` -- canonical CLI output.
+* ``tar.gz`` / ``.tgz``.
+* plain ``tar``.
+* ``zip`` -- entries are walked in archive order.
 
 Design: we deliberately do **not** reimplement the controller logic
 endpoint-by-endpoint. Each record carries enough information --
@@ -19,9 +27,8 @@ Two side concerns remain server-side:
   terminal ``set_status`` runs last so ``end_time`` is back-filled, and
   heartbeats collapse to the most recent record (per run).
 * **Skip-list** -- endpoints with side effects outside Argus
-  (``/testrun/report/email``, ``/planning/plan/trigger``) and the legacy
-  batch ``/sct/$id/events/submit`` are skipped: replaying them would send
-  emails, trigger jobs, or duplicate event rows.
+  (``/testrun/report/email``, ``/planning/plan/trigger``) are skipped so
+  replay doesn't send emails or trigger CI jobs.
 
 When ``create_missing_tests`` is set, ``submit_run`` records get a pre-step
 that ensures the ``ArgusRelease/Group/Test`` triple exists for the run's
@@ -29,11 +36,13 @@ build_id, so that the controller's ``assign_categories`` can populate
 ``test_id`` on the row. This is opt-in because curated instances already have
 the hierarchy populated and don't want orphan auto-creates.
 """
+import gzip
 import io
 import json
 import logging
 import re
 import tarfile
+import zipfile
 from dataclasses import dataclass, field
 from typing import Iterable
 
@@ -45,15 +54,11 @@ from argus.backend.error_handlers import APIException
 LOGGER = logging.getLogger(__name__)
 
 # Endpoint templates whose dispatch we never want to perform during replay.
-# These either touch systems outside Argus (email, CI) or are superseded
-# by other endpoints in the same log (the legacy bulk events submit).
+# These touch systems outside Argus -- replaying them would send actual
+# mail or re-trigger CI jobs.
 SKIP_ENDPOINTS: frozenset[str] = frozenset({
     "/testrun/report/email",       # would send actual mail
     "/planning/plan/trigger",      # would re-trigger CI jobs
-    # Legacy bulk submit -- the individual ``/sct/$id/event/submit`` records
-    # in the same log already carry the same data and replaying both would
-    # duplicate rows.
-    "/sct/$id/events/submit",
     # ``finalize`` is folded into terminal ``set_status`` by the new client
     # flow; older logs that still emit it are no-ops.
     "/testrun/$type/$id/finalize",
@@ -109,7 +114,10 @@ class ReplayServiceError(APIException):
 
 
 class ReplayService:
-    """Replay one ``tar.zst`` archive against the current Flask app."""
+    """Replay one replay-log archive against the current Flask app.
+
+    See the module docstring for the list of supported archive formats.
+    """
 
     # The Werkzeug test client returns wrapped responses; the body is
     # available via ``get_data(as_text=True)``. We cap the body slice we
@@ -135,12 +143,18 @@ class ReplayService:
         records = self._apply_ordering(records)
 
         summary = ReplaySummary(total=len(records))
-        if not records:
-            return summary
+        if records:
+            client = self._test_client()
+            for rec in records:
+                self._process_one(client, rec, summary, dry_run=dry_run)
 
-        client = self._test_client()
-        for rec in records:
-            self._process_one(client, rec, summary, dry_run=dry_run)
+        LOGGER.info(
+            "Replay ingest complete: total=%d processed=%d ok=%d failed=%d skipped=%d "
+            "(dry_run=%s, create_missing_tests=%s)",
+            summary.total, summary.processed, summary.succeeded,
+            summary.failed, summary.skipped_no_replay,
+            dry_run, self._create_missing_tests,
+        )
         return summary
 
     def _test_client(self):
@@ -156,38 +170,98 @@ class ReplayService:
     # ------------------------------------------------------------------
     # Archive handling
     # ------------------------------------------------------------------
-    @staticmethod
-    def _extract_records(archive_bytes: bytes) -> Iterable[dict]:
+    # Magic-byte prefixes used to detect the archive format. We sniff the
+    # raw bytes rather than trust the ``Content-Type`` header because curl
+    # users routinely upload as ``application/octet-stream``.
+    _ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
+    _GZIP_MAGIC = b"\x1f\x8b"
+    _ZIP_MAGIC = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+    # ``ustar`` lives at offset 257 in a POSIX tar header.
+    _TAR_USTAR_OFFSET = 257
+    _TAR_USTAR_MAGIC = b"ustar"
+
+    @classmethod
+    def _extract_records(cls, archive_bytes: bytes) -> Iterable[dict]:
         """Yield records from every JSONL file in the archive.
 
-        Streams the decompressed bytes through ``tarfile`` so we never
-        materialize the full uncompressed archive at once. Skips non-JSONL
-        members and bad lines (with a warning) rather than aborting -- a
-        single corrupt line should not invalidate the whole replay.
+        Streams the decompressed bytes through the relevant archive reader
+        so we never materialize the full uncompressed archive at once.
+        Skips non-JSONL members and bad lines (with a warning) rather than
+        aborting -- a single corrupt line should not invalidate the whole
+        replay.
         """
-        decompressor = zstd.ZstdDecompressor()
         try:
-            with decompressor.stream_reader(io.BytesIO(archive_bytes)) as stream:
-                with tarfile.open(fileobj=stream, mode="r|") as tar:
-                    for member in tar:
-                        if not member.isfile() or not member.name.endswith(".jsonl"):
-                            continue
-                        fobj = tar.extractfile(member)
-                        if fobj is None:
-                            continue
-                        for line_no, raw in enumerate(fobj, 1):
-                            line = raw.strip()
-                            if not line:
-                                continue
-                            try:
-                                yield json.loads(line)
-                            except json.JSONDecodeError as exc:
-                                LOGGER.warning(
-                                    "Skipping malformed line in %s:%d (%s)",
-                                    member.name, line_no, exc,
-                                )
-        except (zstd.ZstdError, tarfile.TarError) as exc:
+            yield from cls._dispatch_archive(archive_bytes)
+        except ReplayServiceError:
+            raise
+        except (zstd.ZstdError, tarfile.TarError, zipfile.BadZipFile,
+                gzip.BadGzipFile, OSError, EOFError) as exc:
             raise ReplayServiceError(f"Failed to decode archive: {exc}") from exc
+
+    @classmethod
+    def _dispatch_archive(cls, archive_bytes: bytes) -> Iterable[dict]:
+        if archive_bytes.startswith(cls._ZSTD_MAGIC):
+            decompressor = zstd.ZstdDecompressor()
+            with decompressor.stream_reader(io.BytesIO(archive_bytes)) as stream:
+                yield from cls._iter_tar(stream, mode="r|")
+            return
+
+        if archive_bytes.startswith(cls._GZIP_MAGIC):
+            # tarfile handles the gunzip internally in streaming mode.
+            yield from cls._iter_tar(io.BytesIO(archive_bytes), mode="r|gz")
+            return
+
+        if archive_bytes.startswith(cls._ZIP_MAGIC):
+            yield from cls._iter_zip(archive_bytes)
+            return
+
+        if cls._looks_like_tar(archive_bytes):
+            yield from cls._iter_tar(io.BytesIO(archive_bytes), mode="r:")
+            return
+
+        raise ReplayServiceError(
+            "Failed to decode archive: unrecognised format "
+            "(expected tar.zst, tar.gz, tar, or zip)"
+        )
+
+    @classmethod
+    def _looks_like_tar(cls, head: bytes) -> bool:
+        end = cls._TAR_USTAR_OFFSET + len(cls._TAR_USTAR_MAGIC)
+        return len(head) >= end and head[cls._TAR_USTAR_OFFSET:end] == cls._TAR_USTAR_MAGIC
+
+    @classmethod
+    def _iter_tar(cls, fileobj, *, mode: str) -> Iterable[dict]:
+        with tarfile.open(fileobj=fileobj, mode=mode) as tar:
+            for member in tar:
+                if not member.isfile() or not member.name.endswith(".jsonl"):
+                    continue
+                fobj = tar.extractfile(member)
+                if fobj is None:
+                    continue
+                yield from cls._iter_jsonl_stream(fobj, member.name)
+
+    @classmethod
+    def _iter_zip(cls, archive_bytes: bytes) -> Iterable[dict]:
+        with zipfile.ZipFile(io.BytesIO(archive_bytes)) as zf:
+            for info in zf.infolist():
+                if info.is_dir() or not info.filename.endswith(".jsonl"):
+                    continue
+                with zf.open(info, "r") as fobj:
+                    yield from cls._iter_jsonl_stream(fobj, info.filename)
+
+    @staticmethod
+    def _iter_jsonl_stream(fobj, source_name: str) -> Iterable[dict]:
+        for line_no, raw in enumerate(fobj, 1):
+            line = raw.strip()
+            if not line:
+                continue
+            try:
+                yield json.loads(line)
+            except json.JSONDecodeError as exc:
+                LOGGER.warning(
+                    "Skipping malformed line in %s:%d (%s)",
+                    source_name, line_no, exc,
+                )
 
     # ------------------------------------------------------------------
     # Endpoint normalisation
