@@ -21,15 +21,39 @@ _METADATA_RE = re.compile(
     r"backends=(?P<supported_backends>[^<]+)",
 )
 
+_JOB_METADATA_RE = re.compile(
+    r"###\s*TestMetadata\s*\n"
+    r"tier:\s*(?P<tier>.+)\n"
+    r"test_type:\s*(?P<test_type>.+)\n"
+    r"duration_class:\s*(?P<duration_class>.+)\n"
+    r"supported_backends:\s*(?P<supported_backends>.+)",
+)
+
 
 def parse_test_metadata_from_description(description: str | None) -> dict[str, Any] | None:
-    """Parse test_metadata fields from a Jenkins build description HTML.
+    """Parse test_metadata fields from a Jenkins job or build description.
+
+    Supports two formats:
+    - Job description (markdown): ### TestMetadata block with key: value lines
+    - Build description (HTML): <b>Metadata:</b> tier=X | type=Y | ...
 
     Returns a dict with keys (tier, test_type, duration_class, supported_backends)
-    or None if the metadata block is not present.
+    or None if no metadata block is found.
     """
     if not description:
         return None
+
+    match = _JOB_METADATA_RE.search(description)
+    if match:
+        backends_raw = match.group("supported_backends").strip()
+        backends = [b.strip().strip("[]'\"") for b in backends_raw.split(",") if b.strip()]
+        return {
+            "tier": match.group("tier").strip(),
+            "test_type": match.group("test_type").strip(),
+            "duration_class": match.group("duration_class").strip(),
+            "supported_backends": backends,
+        }
+
     match = _METADATA_RE.search(description)
     if not match:
         return None

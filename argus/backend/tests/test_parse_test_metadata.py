@@ -3,7 +3,30 @@ import pytest
 from argus.backend.service.jenkins_service import parse_test_metadata_from_description
 
 
-def test_parse_metadata_from_valid_description():
+REAL_JOB_DESCRIPTION = """\
+test: longevity_test.LongevityTest.test_custom_time | backend: aws | region: eu-west-1 | config: test-cases/longevity/longevity-10gb-3h.yaml
+
+Basic longevity test running cassandra-stress write workload at QUORUM consistency for ~4 hours on a 6-node single-DC cluster with SisyphusMonkey nemesis. Validates cluster stability under moderate write load with continuous chaos operations.
+
+### TestMetadata
+tier: tier1
+test_type: longevity
+duration_class: short
+supported_backends: ['aws', 'gce', 'azure']
+"""
+
+
+def test_parse_metadata_from_job_description_real_example():
+    result = parse_test_metadata_from_description(REAL_JOB_DESCRIPTION)
+    assert result == {
+        "tier": "tier1",
+        "test_type": "longevity",
+        "duration_class": "short",
+        "supported_backends": ["aws", "gce", "azure"],
+    }
+
+
+def test_parse_metadata_from_valid_build_description():
     description = """
         <div style="margin: 12px 4px;">
             <a href='https://argus.scylladb.com/tests/scylla-cluster-tests/abc123'>
@@ -48,3 +71,14 @@ def test_parse_metadata_n_a_values():
     result = parse_test_metadata_from_description(description)
     assert result["tier"] == "n/a"
     assert result["supported_backends"] == ["n/a"]
+
+
+def test_parse_metadata_job_description_minimal():
+    description = "### TestMetadata\ntier: tier2\ntest_type: performance\nduration_class: medium\nsupported_backends: ['aws']"
+    result = parse_test_metadata_from_description(description)
+    assert result == {
+        "tier": "tier2",
+        "test_type": "performance",
+        "duration_class": "medium",
+        "supported_backends": ["aws"],
+    }
