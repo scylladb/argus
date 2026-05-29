@@ -1,10 +1,12 @@
 <script lang="ts">
     import Fa from "svelte-fa";
     import { faTimes, faCopy } from "@fortawesome/free-solid-svg-icons";
+    import queryString from "query-string";
     import ModalWindow from "../Common/ModalWindow.svelte";
     import { timestampToISODate } from "../Common/DateUtils";
-    import { fetchJson, truncate, knownHostSummary, copyToClipboard } from "../Common/ProxyUtils";
+    import { fetchJson } from "../Common/ApiUtils";
     import { sendMessage } from "../Stores/AlertStore";
+    import ProxyTunnelCreateForm from "./ProxyTunnelCreateForm.svelte";
 
     const ADMIN_API = "/admin/api/v1";
 
@@ -39,19 +41,9 @@
         is_active: boolean;
     }
 
-    const emptyForm = (): CreateForm => ({
-        host: "",
-        port: 22,
-        proxy_user: "argus-proxy",
-        target_host: "",
-        target_port: 8080,
-        is_active: true,
-    });
-
     let working = $state(false);
 
     let showCreateForm = $state(false);
-    let createForm = $state<CreateForm>(emptyForm());
     let createdConfig = $state<TunnelConfig | null>(null);
 
     let confirmDeleteKey = $state(false);
@@ -67,10 +59,10 @@
     let activeFilter = $state("all");
 
     const loadConfigs = async (): Promise<TunnelConfig[]> => {
-        const params = new URLSearchParams();
-        if (activeFilter === "active") params.set("active_only", "true");
-        if (activeFilter === "inactive") params.set("active_only", "false");
-        const qs = params.toString();
+        const params: Record<string, string> = {};
+        if (activeFilter === "active") params.active_only = "true";
+        if (activeFilter === "inactive") params.active_only = "false";
+        const qs = queryString.stringify(params);
         return await fetchJson<TunnelConfig[]>(`${ADMIN_API}/proxy-tunnel/configs${qs ? `?${qs}` : ""}`);
     };
 
@@ -86,28 +78,25 @@
         keysPromise = loadKeys();
     };
 
-    const resetForm = () => {
-        createForm = emptyForm();
-        showCreateForm = false;
+    const copy = (value: string) => navigator.clipboard.writeText(value);
+
+    const knownHost = (entry: string | null | undefined): { type: string; key: string } => {
+        if (!entry) return { type: "—", key: "—" };
+        const parts = entry.trim().split(/\s+/);
+        if (parts.length < 3) return { type: "?", key: entry };
+        return { type: parts[1], key: parts[2] };
     };
 
-    const submitCreate = async () => {
+    const submitCreate = async (form: CreateForm) => {
         try {
             working = true;
-            const payload = {
-                ...createForm,
-                port: Number(createForm.port),
-                target_port: Number(createForm.target_port),
-            };
             const config = await fetchJson<TunnelConfig>(`${ADMIN_API}/proxy-tunnel/config`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
+                body: JSON.stringify(form),
             });
             showCreateForm = false;
-            createForm = emptyForm();
             createdConfig = config;
-            sendMessage("success", `Proxy tunnel ${config.host}:${config.port} provisioned.`, "ProxyTunnelManager::submitCreate");
             refreshConfigs();
         } catch (error: any) {
             console.error("ProxyTunnelManager::submitCreate", error);
@@ -141,10 +130,11 @@
         if (!deleteTarget) return;
         try {
             working = true;
-            const params = deleteServiceUser ? "?delete_user=true" : "";
-            await fetchJson(`${ADMIN_API}/proxy-tunnel/config/${deleteTarget.id}${params}`, { method: "DELETE" });
-            const userMsg = deleteServiceUser ? " and service user" : "";
-            sendMessage("success", `Proxy tunnel ${deleteTarget.host}:${deleteTarget.port}${userMsg} deleted.`, "ProxyTunnelManager::submitDeleteConfig");
+            await fetchJson(`${ADMIN_API}/proxy-tunnel/config/${deleteTarget.id}`, {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ delete_user: deleteServiceUser }),
+            });
             refreshConfigs();
             refreshKeys();
         } catch (error: any) {
@@ -163,7 +153,6 @@
         try {
             working = true;
             await fetchJson(`${ADMIN_API}/ssh/keys/${selectedKey.key_id}`, { method: "DELETE" });
-            sendMessage("success", "SSH key revoked.", "ProxyTunnelManager::submitDeleteKey");
             refreshKeys();
         } catch (error: any) {
             console.error("ProxyTunnelManager::submitDeleteKey", error);
@@ -175,72 +164,22 @@
         }
     };
 
-    const formatDate = (raw: string | null | undefined): string => {
-        if (!raw) return "—";
-        const ts = Date.parse(raw);
-        if (Number.isNaN(ts)) return raw;
-        return timestampToISODate(ts, true);
-    };
-
-    const formIsValid = $derived(
-        Boolean(createForm.host && createForm.target_host && createForm.proxy_user && createForm.port && createForm.target_port),
-    );
 </script>
 
+{#snippet copyCell(value: string)}
+    <span class="text-truncate" title={value}>{value}</span>
+    <button
+        class="btn btn-link btn-sm p-0 ms-1 align-baseline"
+        title="Copy to clipboard"
+        aria-label="Copy to clipboard"
+        onclick={() => copy(value)}
+    >
+        <Fa icon={faCopy} />
+    </button>
+{/snippet}
+
 {#if showCreateForm}
-    <ModalWindow on:modalClose={resetForm}>
-        {#snippet title()}<div>Add Proxy Tunnel</div>{/snippet}
-        {#snippet body()}
-            <div>
-                <div class="row g-2">
-                    <div class="col-md-8">
-                        <label class="form-label" for="proxyHost">Host</label>
-                        <input id="proxyHost" type="text" class="form-control" bind:value={createForm.host} placeholder="proxy.example.com" />
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label" for="proxyPort">Port</label>
-                        <input id="proxyPort" type="number" min="1" max="65535" class="form-control" bind:value={createForm.port} />
-                    </div>
-                    <div class="col-md-12">
-                        <label class="form-label" for="proxyUser">Proxy User</label>
-                        <input id="proxyUser" type="text" class="form-control" bind:value={createForm.proxy_user} />
-                    </div>
-                    <div class="col-md-8">
-                        <label class="form-label" for="targetHost">Target Host (Argus private IP)</label>
-                        <input id="targetHost" type="text" class="form-control" bind:value={createForm.target_host} placeholder="10.0.0.42" />
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label" for="targetPort">Target Port</label>
-                        <input id="targetPort" type="number" min="1" max="65535" class="form-control" bind:value={createForm.target_port} />
-                    </div>
-                    <div class="col-md-12">
-                        <div class="alert alert-secondary py-2 mb-0 small">
-                            The host key is discovered automatically via <code>ssh-keyscan</code> and stored as a full
-                            <code>known_hosts</code> entry. A dedicated service user with a fresh API token is created for
-                            this proxy host.
-                        </div>
-                    </div>
-                    <div class="col-md-12">
-                        <div class="form-check form-switch">
-                            <input id="proxyActive" class="form-check-input" type="checkbox" role="switch" bind:checked={createForm.is_active} />
-                            <label class="form-check-label" for="proxyActive">Active immediately</label>
-                        </div>
-                    </div>
-                </div>
-                <div class="d-flex align-items-center my-3">
-                    <button
-                        class="btn btn-primary w-75 me-2"
-                        disabled={working || !formIsValid}
-                        onclick={submitCreate}
-                    >
-                        {#if working}<span class="spinner-border spinner-border-sm me-2"></span>{/if}
-                        Save & Provision
-                    </button>
-                    <button class="btn btn-secondary w-25" disabled={working} onclick={resetForm}>Cancel</button>
-                </div>
-            </div>
-        {/snippet}
-    </ModalWindow>
+    <ProxyTunnelCreateForm {working} onsubmit={submitCreate} oncancel={() => (showCreateForm = false)} />
 {/if}
 
 {#if confirmToggleActive && toggleTarget}
@@ -291,7 +230,7 @@
                 </div>
                 {#if deleteServiceUser}
                     <div class="alert alert-warning py-2 mt-2 small mb-0">
-                        The service user <code>proxy-tunnel-{deleteTarget.host}</code> will be permanently removed.
+                        The service user <code>{deleteTarget.proxy_user}</code> will be permanently removed.
                     </div>
                 {/if}
                 <div class="d-flex align-items-center my-3">
@@ -309,7 +248,7 @@
         {#snippet body()}
             <div>
                 <div>
-                    Revoke key <span class="font-monospace">{truncate(selectedKey.fingerprint)}</span>?
+                    Revoke key <span class="font-monospace text-break">{selectedKey.fingerprint}</span>?
                 </div>
                 <div class="text-muted small mt-2">
                     Effective on next SSH connection — does not kill an established tunnel.
@@ -331,7 +270,7 @@
                 <code class="text-break flex-grow-1">{createdConfig.api_token}</code>
                 <button
                     class="btn btn-sm btn-outline-primary ms-2"
-                    onclick={() => copyToClipboard(createdConfig!.api_token!, "API token", "ProxyTunnelManager::copyToClipboard")}
+                    onclick={() => copy(createdConfig!.api_token!)}
                 >
                     <Fa icon={faCopy} /> Copy
                 </button>
@@ -359,10 +298,7 @@
                 <button class="btn btn-sm btn-outline-secondary me-2" onclick={refreshConfigs}>Refresh</button>
                 <button
                     class="btn btn-sm btn-primary"
-                    onclick={() => {
-                        createForm = emptyForm();
-                        showCreateForm = true;
-                    }}
+                    onclick={() => (showCreateForm = true)}
                 >
                     Add Proxy
                 </button>
@@ -377,73 +313,94 @@
             {#if !configs || configs.length === 0}
                 <div class="p-3 text-center text-muted">No proxy tunnel configs.</div>
             {:else}
-                <!-- Header row -->
-                <div class="d-flex align-items-center px-3 py-1 border-bottom text-muted small fw-semibold config-row">
-                    <div class="col-host font-monospace">Host</div>
-                    <div class="col-user">Proxy User</div>
-                    <div class="col-target font-monospace">Target</div>
-                    <div class="col-hostkey">Host Key</div>
-                    <div class="col-svcuser">Service User</div>
-                    <div class="col-status">Status</div>
-                    <div class="col-actions ms-auto text-end">Actions</div>
-                </div>
-                <ul class="list-group list-group-flush rounded">
-                    {#each configs as config (config.id)}
-                        {@const kh = knownHostSummary(config.host_key_fingerprint)}
-                        <li class="list-group-item">
-                            <div class="d-flex align-items-center config-row">
-                                <div class="col-host font-monospace">{config.host}:{config.port}</div>
-                                <div class="col-user font-monospace small">{config.proxy_user}</div>
-                                <div class="col-target font-monospace small">{config.target_host}:{config.target_port}</div>
-                                <div class="col-hostkey font-monospace small" title={config.host_key_fingerprint}>
-                                    <span class="badge bg-light text-dark border me-1">{kh.type}</span>{kh.short}
+                {#each configs as config (config.id)}
+                    {@const kh = knownHost(config.host_key_fingerprint)}
+                    <div class="px-3 py-2 border-bottom">
+                        <div class="d-flex flex-wrap align-items-center">
+                            <span class="font-monospace fw-semibold">{config.host}:{config.port}</span>
+                            <button
+                                class="btn btn-link btn-sm p-0 ms-1 align-baseline"
+                                title="Copy host"
+                                aria-label="Copy host"
+                                onclick={() => copy(`${config.host}:${config.port}`)}
+                            >
+                                <Fa icon={faCopy} />
+                            </button>
+                            <span class="badge bg-light text-dark border ms-2 font-monospace fw-normal">
+                                → {config.target_host}:{config.target_port}
+                            </span>
+                            <div class="ms-auto d-flex align-items-center">
+                                {#if config.is_active}
+                                    <span class="badge bg-success me-2">Active</span>
+                                {:else}
+                                    <span class="badge bg-secondary me-2">Inactive</span>
+                                {/if}
+                                <div class="btn-group btn-group-sm">
                                     <button
-                                        class="btn btn-link btn-sm p-0 ms-1 align-baseline"
-                                        title="Copy known_hosts entry"
-                                        aria-label="Copy known_hosts entry"
-                                        onclick={() => copyToClipboard(config.host_key_fingerprint ?? "", "known_hosts entry", "ProxyTunnelManager::copyToClipboard")}
+                                        class="btn {config.is_active ? 'btn-outline-warning' : 'btn-outline-success'}"
+                                        disabled={working}
+                                        onclick={() => {
+                                            toggleTarget = config;
+                                            confirmToggleActive = true;
+                                        }}
                                     >
-                                        <Fa icon={faCopy} />
+                                        {config.is_active ? "Disable" : "Enable"}
+                                    </button>
+                                    <button
+                                        class="btn btn-outline-danger"
+                                        disabled={working}
+                                        onclick={() => {
+                                            deleteTarget = config;
+                                            confirmDeleteConfig = true;
+                                        }}
+                                    >
+                                        Delete
                                     </button>
                                 </div>
-                                <div class="col-svcuser font-monospace small text-muted" title={config.service_user_id ?? ""}>
-                                    {config.service_user_id ? truncate(config.service_user_id, 8, 4) : "—"}
-                                </div>
-                                <div class="col-status">
-                                    {#if config.is_active}
-                                        <span class="badge bg-success">Active</span>
-                                    {:else}
-                                        <span class="badge bg-secondary">Inactive</span>
-                                    {/if}
-                                </div>
-                                <div class="col-actions ms-auto text-end">
-                                    <div class="btn-group btn-group-sm">
-                                        <button
-                                            class="btn {config.is_active ? 'btn-outline-warning' : 'btn-outline-success'}"
-                                            disabled={working}
-                                            onclick={() => {
-                                                toggleTarget = config;
-                                                confirmToggleActive = true;
-                                            }}
-                                        >
-                                            {config.is_active ? "Disable" : "Enable"}
-                                        </button>
-                                        <button
-                                            class="btn btn-outline-danger"
-                                            disabled={working}
-                                            onclick={() => {
-                                                deleteTarget = config;
-                                                confirmDeleteConfig = true;
-                                            }}
-                                        >
-                                            Delete
-                                        </button>
-                                    </div>
-                                </div>
                             </div>
-                        </li>
-                    {/each}
-                </ul>
+                        </div>
+                        <div class="d-flex flex-wrap align-items-center mt-1 small text-muted">
+                            <span class="me-1">Proxy user:</span>
+                            <span class="font-monospace text-dark me-1">{config.proxy_user}</span>
+                            <button
+                                class="btn btn-link btn-sm p-0 me-3 align-baseline"
+                                title="Copy proxy user"
+                                aria-label="Copy proxy user"
+                                onclick={() => copy(config.proxy_user)}
+                            >
+                                <Fa icon={faCopy} />
+                            </button>
+                            <span class="me-1">Service user:</span>
+                            {#if config.service_user_id}
+                                {@const svcUser = config.service_user_id}
+                                <span class="font-monospace text-dark me-1">{svcUser}</span>
+                                <button
+                                    class="btn btn-link btn-sm p-0 me-3 align-baseline"
+                                    title="Copy service user"
+                                    aria-label="Copy service user"
+                                    onclick={() => copy(svcUser)}
+                                >
+                                    <Fa icon={faCopy} />
+                                </button>
+                            {:else}
+                                <span class="me-3">—</span>
+                            {/if}
+                            <span class="me-1">Host key:</span>
+                            <span class="badge bg-light text-dark border me-1">{kh.type}</span>
+                            <span class="font-monospace text-dark text-truncate me-1 host-key-fp" title={config.host_key_fingerprint}>
+                                {kh.key}
+                            </span>
+                            <button
+                                class="btn btn-link btn-sm p-0 align-baseline"
+                                title="Copy known_hosts entry"
+                                aria-label="Copy known_hosts entry"
+                                onclick={() => copy(config.host_key_fingerprint ?? "")}
+                            >
+                                <Fa icon={faCopy} />
+                            </button>
+                        </div>
+                    </div>
+                {/each}
             {/if}
         {:catch error}
             <div class="alert alert-danger m-2">{error.message}</div>
@@ -466,40 +423,35 @@
             {#if !keys || keys.length === 0}
                 <div class="p-3 text-center text-muted">No active SSH keys registered.</div>
             {:else}
-                <!-- Header row -->
-                <div class="d-flex align-items-center px-3 py-1 border-bottom text-muted small fw-semibold key-row">
-                    <div class="col-fp font-monospace">Fingerprint</div>
-                    <div class="col-tunnel">Tunnel</div>
-                    <div class="col-keyuser">User</div>
-                    <div class="col-created">Created</div>
-                    <div class="col-expires">Expires</div>
-                    <div class="col-keyactions ms-auto text-end">Actions</div>
+                <div class="row g-0 align-items-center px-3 py-1 border-bottom text-muted small fw-semibold">
+                    <div class="col-3">Fingerprint</div>
+                    <div class="col-2">Tunnel</div>
+                    <div class="col-2">User</div>
+                    <div class="col-2">Created</div>
+                    <div class="col-2">Expires</div>
+                    <div class="col-1 text-end">Actions</div>
                 </div>
-                <ul class="list-group list-group-flush rounded">
-                    {#each keys as key (key.key_id)}
-                        <li class="list-group-item">
-                            <div class="d-flex align-items-center key-row">
-                                <div class="col-fp font-monospace small" title={key.fingerprint}>{truncate(key.fingerprint)}</div>
-                                <div class="col-tunnel font-monospace small text-muted" title={key.tunnel_id}>{truncate(key.tunnel_id, 8, 4)}</div>
-                                <div class="col-keyuser font-monospace small text-muted" title={key.user_id}>{truncate(key.user_id, 8, 4)}</div>
-                                <div class="col-created small">{formatDate(key.created_at)}</div>
-                                <div class="col-expires small">{formatDate(key.expires_at)}</div>
-                                <div class="col-keyactions ms-auto text-end">
-                                    <button
-                                        class="btn btn-sm btn-outline-danger"
-                                        disabled={working}
-                                        onclick={() => {
-                                            selectedKey = key;
-                                            confirmDeleteKey = true;
-                                        }}
-                                    >
-                                        Revoke
-                                    </button>
-                                </div>
-                            </div>
-                        </li>
-                    {/each}
-                </ul>
+                {#each keys as key (key.key_id)}
+                    <div class="row g-0 align-items-center px-3 py-2 border-bottom">
+                        <div class="col-3 font-monospace small d-flex align-items-center">{@render copyCell(key.fingerprint)}</div>
+                        <div class="col-2 font-monospace small text-muted d-flex align-items-center">{@render copyCell(key.tunnel_id)}</div>
+                        <div class="col-2 font-monospace small text-muted d-flex align-items-center">{@render copyCell(key.user_id)}</div>
+                        <div class="col-2 small">{timestampToISODate(key.created_at, true)}</div>
+                        <div class="col-2 small">{timestampToISODate(key.expires_at, true)}</div>
+                        <div class="col-1 text-end">
+                            <button
+                                class="btn btn-sm btn-outline-danger"
+                                disabled={working}
+                                onclick={() => {
+                                    selectedKey = key;
+                                    confirmDeleteKey = true;
+                                }}
+                            >
+                                Revoke
+                            </button>
+                        </div>
+                    </div>
+                {/each}
             {/if}
         {:catch error}
             <div class="alert alert-danger m-2">{error.message}</div>
@@ -508,24 +460,7 @@
 </div>
 
 <style>
-    .text-break {
-        word-break: break-all;
+    .host-key-fp {
+        max-width: 220px;
     }
-
-    /* Config table columns */
-    .config-row .col-host    { flex: 0 0 18%; min-width: 0; }
-    .config-row .col-user    { flex: 0 0 12%; min-width: 0; }
-    .config-row .col-target  { flex: 0 0 16%; min-width: 0; }
-    .config-row .col-hostkey { flex: 0 0 18%; min-width: 0; }
-    .config-row .col-svcuser { flex: 0 0 12%; min-width: 0; }
-    .config-row .col-status  { flex: 0 0 8%;  min-width: 0; }
-    .config-row .col-actions { flex: 0 0 16%; min-width: 0; }
-
-    /* Key table columns */
-    .key-row .col-fp         { flex: 0 0 28%; min-width: 0; }
-    .key-row .col-tunnel     { flex: 0 0 16%; min-width: 0; }
-    .key-row .col-keyuser    { flex: 0 0 16%; min-width: 0; }
-    .key-row .col-created    { flex: 0 0 14%; min-width: 0; }
-    .key-row .col-expires    { flex: 0 0 14%; min-width: 0; }
-    .key-row .col-keyactions { flex: 0 0 12%; min-width: 0; }
 </style>
