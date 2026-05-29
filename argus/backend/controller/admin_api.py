@@ -422,7 +422,8 @@ def save_proxy_tunnel_config():
 @check_roles(UserRoles.Admin)
 @api_login_required
 def delete_proxy_tunnel_config(tunnel_id: str):
-    delete_user = request.args.get("delete_user", "").lower() == "true"
+    payload = request.get_json(silent=True) or {}
+    delete_user = bool(payload.get("delete_user", False))
     TunnelService().delete_proxy_tunnel_config(UUID(tunnel_id), delete_user=delete_user)
     return {"status": "ok", "response": {"deleted": True, "user_deleted": delete_user}}
 
