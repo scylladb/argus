@@ -1,6 +1,6 @@
 import pytest
 
-from argus.backend.service.jenkins_service import parse_test_metadata_from_description
+from argus.backend.service.jenkins_service import parse_test_metadata_from_description, parse_test_metadata_from_config_xml
 
 
 REAL_JOB_DESCRIPTION = """\
@@ -82,3 +82,45 @@ def test_parse_metadata_job_description_minimal():
         "duration_class": "medium",
         "supported_backends": ["aws"],
     }
+
+
+CONFIG_XML_WITH_METADATA = """\
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@2.32">
+  <description>Some job description</description>
+  <testMetadata>
+    <tier>tier1</tier>
+    <test_type>longevity</test_type>
+    <duration_class>short</duration_class>
+    <supported_backends>
+      <backend>aws</backend>
+      <backend>gce</backend>
+      <backend>azure</backend>
+    </supported_backends>
+  </testMetadata>
+  <properties/>
+</flow-definition>
+"""
+
+
+def test_parse_metadata_from_config_xml():
+    result = parse_test_metadata_from_config_xml(CONFIG_XML_WITH_METADATA)
+    assert result == {
+        "tier": "tier1",
+        "test_type": "longevity",
+        "duration_class": "short",
+        "supported_backends": ["aws", "gce", "azure"],
+    }
+
+
+def test_parse_metadata_from_config_xml_no_element():
+    xml = "<flow-definition><description>no metadata</description></flow-definition>"
+    assert parse_test_metadata_from_config_xml(xml) is None
+
+
+def test_parse_metadata_from_config_xml_none():
+    assert parse_test_metadata_from_config_xml(None) is None
+
+
+def test_parse_metadata_from_config_xml_invalid():
+    assert parse_test_metadata_from_config_xml("not xml at all") is None

@@ -67,6 +67,38 @@ def parse_test_metadata_from_description(description: str | None) -> dict[str, A
     }
 
 
+def parse_test_metadata_from_config_xml(config_xml: str | None) -> dict[str, Any] | None:
+    """Parse test_metadata from the <testMetadata> element in a Jenkins job config.xml.
+
+    This is the primary source of truth for test metadata — set at job creation
+    time and not editable via the Jenkins UI.
+    """
+    if not config_xml:
+        return None
+    try:
+        root = ET.fromstring(config_xml)
+    except ET.ParseError:
+        return None
+    meta_elem = root.find("testMetadata")
+    if meta_elem is None:
+        return None
+    tier = meta_elem.findtext("tier")
+    test_type = meta_elem.findtext("test_type")
+    duration_class = meta_elem.findtext("duration_class")
+    if not any([tier, test_type, duration_class]):
+        return None
+    backends_elem = meta_elem.find("supported_backends")
+    backends = []
+    if backends_elem is not None:
+        backends = [b.text for b in backends_elem.findall("backend") if b.text]
+    return {
+        "tier": tier or "n/a",
+        "test_type": test_type or "n/a",
+        "duration_class": duration_class or "n/a",
+        "supported_backends": backends,
+    }
+
+
 class Parameter(TypedDict):
     _class: str
     name: str
