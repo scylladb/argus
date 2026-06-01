@@ -18,5 +18,15 @@
         "created": "2026-04-08",
         "phases_total": null,
         "phases_done": 0
+    },
+    {
+        "id": "cli-planner-command",
+        "title": "Release Planning Management in the Argus Go CLI",
+        "file": "docs/plans/cli-planner-command.md",
+        "domain": "client",
+        "status": "draft",
+        "created": "2026-06-01",
+        "phases_total": 7,
+        "phases_done": 0
     }
 ]
