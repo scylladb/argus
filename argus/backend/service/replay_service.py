@@ -339,6 +339,79 @@ class ReplayService:
         return CLIENT_ROUTE_PREFIX + url
 
     # ------------------------------------------------------------------
+    # Hierarchy pre-check (default path: create_missing_tests=False)
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _extract_build_id(record: dict) -> str | None:
+        body = record.get("body") or {}
+        return body.get("job_name") or body.get("build_id") or body.get("buildId")
+
+    @staticmethod
+    def _diagnose_missing_hierarchy(record: dict) -> str | None:
+        """Pre-check for ``submit_run`` records on the default
+        ``create_missing_tests=False`` path.
+
+        Returns ``None`` when the ``ArgusTest`` row referenced by the record's
+        ``build_id`` already exists -- the dispatch is safe to proceed and
+        ``assign_categories`` will populate ``test_id``.
+
+        Returns a human-readable diagnosis string when the test entity is
+        missing. The caller surfaces this as a per-record failure so the user
+        sees exactly which release/group/test would be needed and which level
+        is absent -- otherwise the dispatch would silently insert a run row
+        with empty categorical fields, breaking every subsequent
+        ``submit_results`` call (which partitions on ``test_id``).
+        """
+        build_id = ReplayService._extract_build_id(record)
+        if not build_id:
+            # Mirror _ensure_hierarchy_for_submit_run: without a build_id
+            # there's nothing to look up. The controller will produce its
+            # own error (or proceed against an existing test_id on the body).
+            return None
+
+        # Lazy imports: mirror _ensure_hierarchy_for_submit_run and keep
+        # model imports off the module's import-time critical path.
+        from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest
+        from argus.backend.service.test_hierarchy import parse_build_id
+
+        try:
+            ArgusTest.get(build_system_id=build_id)
+            return None
+        except ArgusTest.DoesNotExist:
+            pass
+
+        release_name, group_name, test_name = parse_build_id(build_id)
+
+        parts = [p for p in build_id.strip("/").split("/") if p]
+        group_build_id = "/".join(parts[:-1]) if len(parts) >= 2 else release_name
+
+        missing: list[str] = []
+        try:
+            release = ArgusRelease.get(name=release_name)
+        except ArgusRelease.DoesNotExist:
+            release = None
+            missing.append("release")
+
+        group_found = False
+        if release is not None:
+            for g in ArgusGroup.filter(release_id=release.id).all():
+                if g.build_system_id == group_build_id:
+                    group_found = True
+                    break
+        if not group_found:
+            missing.append("group")
+        # Unconditional: we only reach this point after the ArgusTest miss above.
+        missing.append("test")
+
+        return (
+            f"test entity missing for build_id={build_id!r}: would create "
+            f"release={release_name!r}, group={group_name!r}, test={test_name!r}; "
+            f"currently missing: {', '.join(missing)}. "
+            f"Re-run with --create-missing-tests to auto-create the hierarchy, "
+            f"or register the test in Argus first."
+        )
+
+    # ------------------------------------------------------------------
     # Hierarchy auto-create (pre-step for submit_run)
     # ------------------------------------------------------------------
     @staticmethod
@@ -357,7 +430,7 @@ class ReplayService:
         location = record.get("location_params") or {}
         run_type = location.get("type", "")
 
-        build_id = body.get("job_name") or body.get("build_id") or body.get("buildId")
+        build_id = ReplayService._extract_build_id(record)
         if not build_id:
             LOGGER.debug(
                 "No build_id in submit_run body for run_type=%s; skipping hierarchy auto-create",
@@ -422,6 +495,31 @@ class ReplayService:
         if endpoint in SKIP_ENDPOINTS:
             summary.skipped_no_replay += 1
             return
+
+        # Pre-check (default path): when create_missing_tests is NOT set,
+        # refuse to dispatch a submit_run whose ArgusTest entity does not
+        # exist. Without it, assign_categories silently leaves test_id empty
+        # and every downstream submit_results call (partitioned on test_id)
+        # breaks. Surface a per-record failure naming the would-be
+        # release/group/test and which level is absent. Runs in dry_run too
+        # so the user can preview which records would fail.
+        if not self._create_missing_tests and endpoint == "/testrun/$type/submit":
+            try:
+                diagnosis = self._diagnose_missing_hierarchy(record)
+            except Exception:  # noqa: BLE001
+                LOGGER.exception(
+                    "Hierarchy pre-check failed for ts=%s; allowing dispatch to proceed", ts,
+                )
+                diagnosis = None
+            if diagnosis is not None:
+                summary.processed += 1
+                summary.failed += 1
+                summary.errors.append({
+                    "ts": ts,
+                    "endpoint": endpoint,
+                    "error": diagnosis,
+                })
+                return
 
         if dry_run:
             summary.processed += 1
