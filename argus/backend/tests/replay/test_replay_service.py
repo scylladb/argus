@@ -480,9 +480,83 @@ def test_create_missing_tests_disabled_by_default():
     client = MagicMock()
     client.open.return_value = _Response(200)
     svc = _make_service(client, create_missing_tests=False)
-    with patch("argus.backend.service.test_hierarchy.ensure_test_hierarchy") as ensure:
-        svc.ingest(archive)
+    # Patch the diagnosis to None (i.e. the test entity already exists) so
+    # the dispatch path runs unchanged -- this test is about the auto-create
+    # branch staying off, not about the pre-check.
+    with patch.object(ReplayService, "_diagnose_missing_hierarchy", return_value=None), \
+         patch("argus.backend.service.test_hierarchy.ensure_test_hierarchy") as ensure:
+        summary = svc.ingest(archive)
     ensure.assert_not_called()
+    assert client.open.call_count == 1
+    assert summary.succeeded == 1
+
+
+def test_missing_hierarchy_pre_check_fails_record_with_diagnosis():
+    archive = _make_archive({
+        "argus_replay_log_r_1.jsonl": [
+            _rec("/testrun/$type/submit", ts=1,
+                 location_params={"type": "scylla-cluster-tests"},
+                 body={"run_id": "abc",
+                       "job_name": "scylla-staging/dusan/longevity-test"}),
+        ],
+    })
+    client = MagicMock()
+    client.open.return_value = _Response(200)
+    svc = _make_service(client, create_missing_tests=False)
+    diagnosis = (
+        "test entity missing for build_id='scylla-staging/dusan/longevity-test': "
+        "would create release='scylla-staging', group='dusan', test='longevity-test'; "
+        "currently missing: release, group, test. ..."
+    )
+    with patch.object(ReplayService, "_diagnose_missing_hierarchy", return_value=diagnosis):
+        summary = svc.ingest(archive)
+    assert client.open.call_count == 0  # dispatch was blocked
+    assert summary.failed == 1
+    assert summary.succeeded == 0
+    assert len(summary.errors) == 1
+    assert summary.errors[0]["endpoint"] == "/testrun/$type/submit"
+    assert summary.errors[0]["error"] == diagnosis
+
+
+def test_missing_hierarchy_pre_check_runs_in_dry_run():
+    """dry_run still surfaces the diagnosis so users can preview what would
+    fail without uploading -- the whole point of dry_run."""
+    archive = _make_archive({
+        "argus_replay_log_r_1.jsonl": [
+            _rec("/testrun/$type/submit", ts=1,
+                 location_params={"type": "generic"},
+                 body={"run_id": "x", "job_name": "some/job"}),
+        ],
+    })
+    client = MagicMock()
+    svc = _make_service(client, create_missing_tests=False)
+    with patch.object(ReplayService, "_diagnose_missing_hierarchy", return_value="diag"):
+        summary = svc.ingest(archive, dry_run=True)
+    assert client.open.call_count == 0
+    assert summary.failed == 1
+    assert summary.errors[0]["error"] == "diag"
+
+
+def test_pre_check_exception_does_not_block_dispatch():
+    """If the pre-check itself raises (e.g. transient DB error), the dispatch
+    still runs -- pre-check failures must never harden into outages."""
+    archive = _make_archive({
+        "argus_replay_log_r_1.jsonl": [
+            _rec("/testrun/$type/submit", ts=1,
+                 location_params={"type": "generic"},
+                 body={"run_id": "x", "job_name": "some/job"}),
+        ],
+    })
+    client = MagicMock()
+    client.open.return_value = _Response(200)
+    svc = _make_service(client, create_missing_tests=False)
+    with patch.object(
+        ReplayService, "_diagnose_missing_hierarchy",
+        side_effect=RuntimeError("db down"),
+    ):
+        summary = svc.ingest(archive)
+    assert client.open.call_count == 1
+    assert summary.succeeded == 1
 
 
 def test_create_missing_tests_failure_does_not_abort_dispatch():
@@ -520,3 +594,126 @@ def test_create_missing_tests_skips_when_no_build_id_in_body():
     with patch("argus.backend.service.test_hierarchy.ensure_test_hierarchy") as ensure:
         svc.ingest(archive)
     ensure.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# _diagnose_missing_hierarchy (direct unit tests for the diagnosis logic)
+# ---------------------------------------------------------------------------
+
+def _patch_hierarchy_models(*, test_exists: bool,
+                            release_exists: bool = True,
+                            group_exists: bool = True):
+    """Patch ArgusRelease/ArgusGroup/ArgusTest at their replay_service import
+    sites to simulate which entities exist in the database."""
+    import argus.backend.models.web as web
+
+    class _DNE(Exception):
+        pass
+
+    test_mock = MagicMock()
+    test_mock.DoesNotExist = web.ArgusTest.DoesNotExist
+    if test_exists:
+        test_mock.get.return_value = MagicMock()
+    else:
+        test_mock.get.side_effect = web.ArgusTest.DoesNotExist
+
+    release_mock = MagicMock()
+    release_mock.DoesNotExist = web.ArgusRelease.DoesNotExist
+    if release_exists:
+        rel = MagicMock(id="rel-id")
+        release_mock.get.return_value = rel
+    else:
+        release_mock.get.side_effect = web.ArgusRelease.DoesNotExist
+
+    group_mock = MagicMock()
+    if release_exists and group_exists:
+        g = MagicMock(build_system_id="scylla-staging/dusan")
+        group_mock.filter.return_value.all.return_value = [g]
+    else:
+        group_mock.filter.return_value.all.return_value = []
+
+    return patch.multiple(
+        "argus.backend.models.web",
+        ArgusRelease=release_mock,
+        ArgusGroup=group_mock,
+        ArgusTest=test_mock,
+    ), _DNE
+
+
+def _submit_record(build_id: str) -> dict:
+    return _rec("/testrun/$type/submit", ts=1,
+                location_params={"type": "scylla-cluster-tests"},
+                body={"run_id": "abc", "job_name": build_id})
+
+
+def test_diagnose_returns_none_when_test_exists():
+    patcher, _ = _patch_hierarchy_models(test_exists=True)
+    with patcher:
+        result = ReplayService._diagnose_missing_hierarchy(
+            _submit_record("scylla-staging/dusan/longevity-test")
+        )
+    assert result is None
+
+
+def test_diagnose_returns_none_when_no_build_id():
+    # No DB lookup should be attempted; safe to call without patching models.
+    assert ReplayService._diagnose_missing_hierarchy(
+        _rec("/testrun/$type/submit", ts=1,
+             location_params={"type": "generic"},
+             body={"run_id": "abc"})
+    ) is None
+
+
+def test_diagnose_reports_all_three_missing_when_release_absent():
+    patcher, _ = _patch_hierarchy_models(test_exists=False, release_exists=False)
+    with patcher:
+        result = ReplayService._diagnose_missing_hierarchy(
+            _submit_record("scylla-staging/dusan/longevity-test")
+        )
+    assert result is not None
+    assert "release='scylla-staging'" in result
+    assert "group='dusan'" in result
+    assert "test='longevity-test'" in result
+    assert "currently missing: release, group, test" in result
+    assert "--create-missing-tests" in result
+
+
+def test_diagnose_reports_group_and_test_missing_when_only_release_exists():
+    patcher, _ = _patch_hierarchy_models(
+        test_exists=False, release_exists=True, group_exists=False,
+    )
+    with patcher:
+        result = ReplayService._diagnose_missing_hierarchy(
+            _submit_record("scylla-staging/dusan/longevity-test")
+        )
+    assert result is not None
+    assert "currently missing: group, test" in result
+
+
+def test_diagnose_reports_only_test_missing_when_release_and_group_exist():
+    patcher, _ = _patch_hierarchy_models(
+        test_exists=False, release_exists=True, group_exists=True,
+    )
+    with patcher:
+        result = ReplayService._diagnose_missing_hierarchy(
+            _submit_record("scylla-staging/dusan/longevity-test")
+        )
+    assert result is not None
+    assert "currently missing: test" in result
+    # Make sure we didn't accidentally mark release or group as missing too.
+    assert "release," not in result.split("currently missing:")[1]
+    assert "group," not in result.split("currently missing:")[1]
+
+
+def test_diagnose_parses_two_segment_build_id():
+    """``release/test`` form: group becomes ``<release>-root`` per
+    parse_build_id; group's build_system_id is the release name."""
+    patcher, _ = _patch_hierarchy_models(test_exists=False, release_exists=False)
+    with patcher:
+        result = ReplayService._diagnose_missing_hierarchy(
+            _submit_record("scylla-master/perf")
+        )
+    assert result is not None
+    assert "release='scylla-master'" in result
+    assert "group='scylla-master-root'" in result
+    assert "test='perf'" in result

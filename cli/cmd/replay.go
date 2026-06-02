@@ -333,7 +333,10 @@ func init() {
 	replayCmd.Flags().Bool("dry-run", false, "Have the server validate without executing")
 	replayCmd.Flags().Bool("create-missing-tests", false,
 		"Ask the server to auto-create ArgusRelease/Group/Test rows for build_ids "+
-			"that have no curated test entity yet (parsed from build_id as release/group/test)")
+			"that have no curated test entity yet (parsed from build_id as release/group/test). "+
+			"When false (default), submit_run records whose test entity does not yet exist "+
+			"are reported as failures naming the would-be release/group/test and which level "+
+			"is missing -- rather than silently inserting a broken run with empty test_id.")
 	replayCmd.Flags().String("target-url", "", "Override the base URL (replay against a different Argus instance)")
 	replayCmd.Flags().String("report", "text", `Output format: "text" or "json"`)
 
