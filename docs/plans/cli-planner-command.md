@@ -300,14 +300,17 @@ contract being final). Until then, mark as `blocked` and gate on the backend PR.
   `--remove-test` style flags (final shape per Phase 4 decision), populate the list
   diffs directly without a full re-send.
 - Assignment edits map to `assignee_mapping_set` (entity→user) and
-  `assignee_mapping_remove` (entity ids).
+  `assignee_mapping_remove` (entity ids). **Both sides accept names or UUIDs:** the
+  entity key resolves via `ResolveEntityID` (UUID / `build_system_id` / group-qualified
+  / unique bare name) and the user value via `ResolveUserID` before the map is built.
 - **DoD:**
   - [ ] `argus planner update --plan-id <id> --name "new"` sends only the `name`
         scalar (unit test asserts the request body has no list/map keys).
   - [ ] Adding/removing a test produces `tests_add`/`tests_remove` and leaves other
         fields untouched (manual: `get` before/after; unit test on diff builder).
   - [ ] Assignment set/remove maps to `assignee_mapping_set`/`assignee_mapping_remove`
-        (unit test).
+        (unit test). Both the entity key (name/`build_system_id`/UUID) and user value
+        (name/UUID) resolve to UUIDs before the map is sent (unit test).
   - [ ] `--add-test` given a name/`build_system_id` resolves to a UUID before building
         the diff; an ambiguous bare name aborts the update with a candidate list
         (unit test).
@@ -332,8 +335,8 @@ argus planner update \
   --remove-group 9a1c...44 \
   --add-participant alice \                        # plain username → resolved to UUID
   --remove-participant bob \
-  --assign 2f9b...e1=alice \                       # entity_id=user → assignee_mapping_set
-  --unassign 9a1c...44                             # entity_id → assignee_mapping_remove
+  --assign sct-2024-2-longevity-100gb=alice \      # build_system_id=username → assignee_mapping_set
+  --unassign "tier1/longevity-200gb"               # group-qualified name → assignee_mapping_remove
 ```
 
 The three `--add-test` forms show the supported reference styles: a raw UUID (passed
@@ -343,24 +346,28 @@ whose bare name repeats across groups. A bare `--add-test longevity-100gb` is ac
 only when it resolves to exactly one test; otherwise the CLI aborts with a candidate
 list. All forms resolve to the same UUID before the diff is built.
 
-The CLI GETs the current plan, computes deltas, and POSTs only what changed:
+The CLI GETs the current plan, resolves every name/`build_system_id` to a UUID,
+computes deltas, and POSTs only what changed:
 
 ```json
 {
   "id": "7f3c1e90-...",
   "name": "2024.2 Longevity",
   "target_version": "2024.2.1",
-  "tests_add": ["2f9b...e1", "c4d0...7a"],
+  "tests_add": ["2f9b...e1", "c4d0...7a", "b7e2...09"],
   "groups_remove": ["9a1c...44"],
   "participants_add": ["<alice-uuid>"],
   "participants_remove": ["<bob-uuid>"],
-  "assignee_mapping_set": {"2f9b...e1": "<alice-uuid>"},
-  "assignee_mapping_remove": ["9a1c...44"]
+  "assignee_mapping_set": {"c4d0...7a": "<alice-uuid>"},
+  "assignee_mapping_remove": ["b7e2...09"]
 }
 ```
 
-Note that `description`, `owner`, `completed`, `view_id`, and untouched list members
-are absent — last-edit-wins per field, and unchanged scalars are never sent.
+Note how `sct-2024-2-longevity-100gb` (→ `c4d0...7a`), `tier1/longevity-200gb`
+(→ `b7e2...09`), and `alice` (→ `<alice-uuid>`) are all resolved to UUIDs in the map
+keys and values. Fields like `description`, `owner`, `completed`, `view_id`, and
+untouched list members are absent — last-edit-wins per field, and unchanged scalars
+are never sent.
 
 **JSON file (`--file` / stdin):** the file describes a diff directly (same schema as
 the payload above), so it is explicit about intent and ideal for CI:
@@ -494,7 +501,8 @@ equivalent. The input ergonomics are **left open** per stakeholder request. Prop
   UUIDs directly, or `build_system_id`/name resolved at plan-build time from the
   release gridview (Phase 2). Bare test names are rejected when ambiguous; use
   `build_system_id` or `group/test` to disambiguate. Assignments via repeatable
-  `--assign <entity>=<user>`. Maps cleanly onto the diff payload.
+  `--assign <entity>=<user>`, where both `<entity>` (UUID/`build_system_id`/`group/test`)
+  and `<user>` (UUID/username) accept names. Maps cleanly onto the diff payload.
 - **C. Two-step `search`→`create`.** Users run `planner search` (Phase 3) to discover
   `build_system_id`s/UUIDs, then pass them via A or B. No extra implementation beyond
   A/B.
