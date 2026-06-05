@@ -6,9 +6,9 @@ import os
 import pytest
 
 from argus.client.base import ArgusClient
-from argus.client import tunnel_api
-from argus.client import tunnel_ssh
-from argus.client import tunnel_state
+from argus.client.tunnel import api as tunnel_api
+from argus.client.tunnel import ssh as tunnel_ssh
+from argus.client.tunnel import state as tunnel_state
 from argus.client.session import TunneledSession
 from argus.client.tunnel import TunnelConfig
 
