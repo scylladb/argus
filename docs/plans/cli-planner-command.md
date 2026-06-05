@@ -326,14 +326,22 @@ argus planner update \
   --plan-id 7f3c1e90-... \
   --name "2024.2 Longevity" \
   --target-version 2024.2.1 \
-  --add-test 2f9b...e1 \
-  --add-test sct-2024-2-longevity-100gb \   # build_system_id, resolved via search
+  --add-test 2f9b...e1 \                          # raw UUID, passthrough
+  --add-test sct-2024-2-longevity-100gb \         # build_system_id (canonical), unique
+  --add-test "tier1/longevity-200gb" \            # group-qualified name → scoped lookup
   --remove-group 9a1c...44 \
-  --add-participant alice \
+  --add-participant alice \                        # plain username → resolved to UUID
   --remove-participant bob \
-  --assign 2f9b...e1=alice \                 # entity_id=user → assignee_mapping_set
-  --unassign 9a1c...44                       # entity_id → assignee_mapping_remove
+  --assign 2f9b...e1=alice \                       # entity_id=user → assignee_mapping_set
+  --unassign 9a1c...44                             # entity_id → assignee_mapping_remove
 ```
+
+The three `--add-test` forms show the supported reference styles: a raw UUID (passed
+through), a **canonical `build_system_id`** (globally unique — the recommended way to
+name a test unambiguously), and a **group-qualified name** that disambiguates a test
+whose bare name repeats across groups. A bare `--add-test longevity-100gb` is accepted
+only when it resolves to exactly one test; otherwise the CLI aborts with a candidate
+list. All forms resolve to the same UUID before the diff is built.
 
 The CLI GETs the current plan, computes deltas, and POSTs only what changed:
 
