@@ -123,9 +123,14 @@ There is **no existing `planner`, `release`, or `view` command** — this is net
    (`TestLookup.test_lookup`) so users can discover test/group UUIDs, with facet
    support (`type:`, `group:`, `release:`) matching backend behavior
    (`test_lookup.py:114`).
-3. Accept **both** UUIDs and human names for `--release`, `--owner`, `--participant`,
-   and assignee references, resolving names client-side via `/api/v1/releases` and
-   `/api/v1/users`; error clearly on ambiguous/zero matches.
+3. Accept **both** UUIDs and human names everywhere an entity is referenced
+   (`--release`, `--owner`/`--participant`, tests/groups, assignees). Names resolve to
+   UUIDs at plan-build time via `/api/v1/releases`, `/api/v1/users`, and the
+   release-structure endpoint `/api/v1/planning/release/<id>/gridview`.
+   **`build_system_id` is the canonical, recommended test reference** (globally unique,
+   `web.py:216`). Group names are unique within a release (`web.py:175`); release/user
+   names resolve by exact case-insensitive match. Ambiguous bare test names are
+   **rejected with a candidate list**, never silently guessed.
 4. `update` speaks the diff-based `PlanDiffPayload` contract from
    `backend/release-planner-multi-edit-safety`: it computes add/remove deltas for
    lists/maps and only sends changed scalar fields.
@@ -151,7 +156,8 @@ There is **no existing `planner`, `release`, or `view` command** — this is net
 **Importance: Critical**
 
 - Add planner route constants to `cli/internal/api/routes.go` (the 10 endpoints in
-  Current State plus `/api/v1/releases`, `/api/v1/users` if not already present).
+  Current State plus `/api/v1/releases`, `/api/v1/users`, and the release-structure
+  endpoint `Gridview = "/api/v1/planning/release/%s/gridview"` if not already present).
 - Add `cli/internal/models/planner.go`:
   - `ReleasePlan` struct (fields mirror `ArgusReleasePlan`, `json:` tags in snake_case
     matching the API: `id`, `name`, `description`, `owner`, `participants`,
@@ -166,6 +172,10 @@ There is **no existing `planner`, `release`, or `view` command** — this is net
   - `CopyPlanRequest` (`plan`, `keepParticipants`, `replacements`, `targetReleaseId`,
     `targetReleaseName`) and `CopyCheckResponse` (`status`, `targetRelease`,
     `originalRelease`, `missing.tests`, `missing.groups`).
+  - `GridView` response (`tests` map[id]GridEntity, `groups` map[id]GridEntity,
+    `testByGroup`); `GridEntity` carries `id`, `name`, `pretty_name`,
+    `build_system_id`, `group_id`, decorated `group`/`release` names — the source for
+    name resolution (Phase 2).
   - `SearchHit` (`id`, `name`, `pretty_name`, `type`, `release`, `group`, `enabled`,
     `build_system_id`).
   - Hand-rolled `Headers()/Rows()` for `ReleasePlan` (list view: id, name, version,
@@ -178,7 +188,7 @@ There is **no existing `planner`, `release`, or `view` command** — this is net
         pointer fields) — unit test asserts an unchanged field is absent.
   - [ ] No command wiring yet (pure types/constants).
 
-### Phase 2 — PlannerService + read commands (`list`, `get`) + release resolution
+### Phase 2 — PlannerService + read commands (`list`, `get`) + name resolution
 **Importance: Critical**
 
 - Add `cli/internal/services/planner.go` with `PlannerService{client, cache}` and
@@ -188,6 +198,29 @@ There is **no existing `planner`, `release`, or `view` command** — this is net
   if `ref` parses as UUID use it; else GET `/api/v1/releases`, match by `name`
   (exact, case-insensitive), error on 0/ambiguous. Cache the release list with a
   short TTL (add `TTLReleases` + `ReleasesKey()` to `internal/cache/keys.go`).
+
+#### Entity name resolution (foundational; used by list/create/update/copy)
+
+All name→UUID resolution happens client-side at plan-build time. Add to
+`PlannerService`:
+
+- `GetReleaseStructure(ctx, releaseID)` → GET `/planning/release/<id>/gridview`,
+  returning the full enabled tests+groups set in **one** call. Cache client-side
+  (`TTLGridview` + `GridviewKey(releaseID)` in `internal/cache/keys.go`).
+- `ResolveUserID(ctx, ref)`: UUID passthrough, else `/api/v1/users` username match
+  (exact, case-insensitive); 0/>1 → error listing candidates.
+- `ResolveEntityID(ctx, ref, releaseID, kind)` for tests/groups, built from a single
+  gridview fetch:
+  - UUID → passthrough.
+  - **Group:** match name within the release (unique per `web.py:175`) → single hit;
+    0 → error.
+  - **Test**, in priority order: (1) exact `build_system_id` (globally unique
+    `web.py:216`, never ambiguous — the canonical reference); (2) group-qualified
+    `group-name/test-name`, scoped to that group; (3) bare name → **1 hit resolves,
+    >1 rejected** with each candidate's `build_system_id`, group, and UUID.
+  - Errors are actionable, e.g.
+    `ambiguous test 'longevity-100gb' (3 matches): use build_system_id or group/name`.
+
 - Create `cli/cmd/planner/root.go` with `Register(parent *cobra.Command)`, plus
   `list.go` and `get.go`. Wire `plannerCmd` parent in a new `cli/cmd/planner.go`
   (`init()` → `planner.Register(plannerCmd)` → `rootCmd.AddCommand(plannerCmd)`),
@@ -196,13 +229,23 @@ There is **no existing `planner`, `release`, or `view` command** — this is net
 - **DoD:**
   - [ ] `argus planner list --release <name>` returns plans (manual against staging).
   - [ ] `argus planner get --plan-id <id>` shows a single plan.
-  - [ ] Name resolution unit-tested with an `httptest` server (UUID passthrough, name
-        hit, ambiguous error, no-match error).
+  - [ ] Release/user name resolution unit-tested with an `httptest` server (UUID
+        passthrough, name hit, ambiguous error, no-match error).
+  - [ ] Test by `build_system_id` resolves to one UUID; group by name resolves within
+        release (unit tests).
+  - [ ] Ambiguous bare test name aborts with a candidate list incl.
+        `build_system_id`+group+UUID; group-qualified `group/test` resolves an
+        otherwise-ambiguous name (unit tests).
+  - [ ] Resolution uses a single cached gridview fetch per release (unit test asserts
+        one GET).
   - [ ] `--text` and JSON modes both render.
 
 ### Phase 3 — Discovery: `search` (+ `explode-group`)
 **Importance: Critical** (create/update depend on discoverable IDs)
 
+- `planner search`/`explode-group` are interactive **discovery** aids (printing
+  `build_system_id`s users can copy as canonical references); they are **not** the
+  resolution path — name resolution uses the gridview endpoint (Phase 2).
 - `PlannerService.Search(ctx, query, releaseRef)` → GET `/planning/search`
   (resolve release ref first; releaseId optional). Returns `[]SearchHit`, filtering
   out the synthetic `Add all...` special row (id `db6f33b2-…`, `test_lookup.py:170`).
@@ -225,13 +268,12 @@ There is **no existing `planner`, `release`, or `view` command** — this is net
   JSON spec (and stdin) matching `CreatePlanRequest`.
 - `PlannerService.CreatePlan(ctx, CreatePlanRequest)` → POST `/planning/plan/create`,
   invalidate the release's plan-list cache.
-- User resolution helper `ResolveUserID(ctx, ref)` (UUID passthrough or `/api/v1/users`
-  username match; cache user list). Used for `--owner`, `--participant` (repeatable),
-  and assignment values.
 - `planner create` flags: `--release`, `--name`, `--description`, `--owner`,
   `--participant` (repeatable), `--target-version`, `--view-id`, plus
-  tests/groups/assignments per the chosen mechanism, and `--file`. Merge precedence:
-  flags override file fields.
+  tests/groups/assignments per the chosen mechanism, and `--file`. Owner/participant/
+  assignee and test/group references accept names or UUIDs, resolved via the Phase 2
+  helpers (`ResolveUserID`, `ResolveEntityID`). Merge precedence: flags override file
+  fields.
 - `PlannerService.DeletePlan(ctx, planID, deleteView)` → DELETE
   `/planning/plan/<id>/delete?deleteView=`. `planner delete --plan-id <id>
   [--delete-view] [--yes]` (confirmation prompt unless `--yes`, reading stdin like
@@ -239,6 +281,8 @@ There is **no existing `planner`, `release`, or `view` command** — this is net
 - **DoD:**
   - [ ] `argus planner create --file plan.json` creates a plan; `get` shows it.
   - [ ] Owner/participant names resolve to UUIDs (unit test).
+  - [ ] Tests/groups given by name or `build_system_id` resolve to UUIDs; an ambiguous
+        bare test name aborts create with a candidate list (unit tests).
   - [ ] `argus planner delete --plan-id <id> --yes` removes it; `--delete-view`
         toggles the query param (unit test asserts URL).
   - [ ] Uniqueness-collision API error is surfaced with the backend message.
@@ -263,6 +307,9 @@ contract being final). Until then, mark as `blocked` and gate on the backend PR.
   - [ ] Adding/removing a test produces `tests_add`/`tests_remove` and leaves other
         fields untouched (manual: `get` before/after; unit test on diff builder).
   - [ ] Assignment set/remove maps to `assignee_mapping_set`/`assignee_mapping_remove`
+        (unit test).
+  - [ ] `--add-test` given a name/`build_system_id` resolves to a UUID before building
+        the diff; an ambiguous bare name aborts the update with a candidate list
         (unit test).
 
 #### Example invocations (illustrative — final flag names confirmed in Phase 4)
@@ -380,7 +427,10 @@ are resolved the same way as flag values.
   (scalar-only, list add/remove, assignee set/remove), delete (query-param URL),
   copy, eligibility check, search (special-row filtering, facet query passthrough),
   release/user name resolution (UUID passthrough, exact match, ambiguous error,
-  no-match error), and backend-error surfacing (`ErrorAs *api.APIError`).
+  no-match error), test/group resolution from a single gridview fetch
+  (`build_system_id` hit, group-name hit, group-qualified `group/test` hit, bare-name
+  unique hit, bare-name ambiguous rejection, one-GET caching), and backend-error
+  surfacing (`ErrorAs *api.APIError`).
 - **Command** (`cmd/planner/planner_test.go`): flag parsing/required-flag enforcement,
   confirmation-prompt bypass with `--yes`, `--file`/stdin parsing, flag-over-file
   precedence (pattern from `cmd/discussions/discussions_test.go`).
@@ -416,6 +466,7 @@ The plan is complete when all phase DoD items are satisfied, plus:
 | Diff-update backend (`backend/release-planner-multi-edit-safety`) not yet merged when Phase 5 starts | High | Medium | Gate Phase 5 on the backend PR; keep Phases 1–4 & 6 independent of it. Model `PlanDiffRequest` from the branch now so types are ready. |
 | CLI diff builder miscomputes deltas and silently drops tests/groups | Medium | High | Build the diff from an authoritative GET of the current plan; unit-test scalar-only, add, remove, and assignee cases. Never send full list replacements. |
 | Name resolution ambiguity (duplicate release/user names) selects the wrong entity | Medium | High | Require exact case-insensitive match; on >1 match, error and list candidate UUIDs instead of guessing. Always allow raw UUID to bypass. |
+| Ambiguous bare test names resolve to the wrong test (names unique only per group, `web.py:212`) | Medium | High | Reject on >1 match with a candidate list (`build_system_id`+group+UUID); document `build_system_id` as canonical; accept UUID and `group/test` qualified form. |
 | Test/group flag ergonomics (open decision) prove awkward | Medium | Medium | Ship `--file` JSON as the always-available robust path first; treat flag conveniences as additive. Record the decision before Phase 4 coding. |
 | `copy` build_system_id remap semantics differ from user expectation (silent drops) | Medium | Medium | Surface the eligibility check output prominently and require `--force` to drop; support `--replacements`. |
 | Large `/api/v1/users` or `/api/v1/releases` payloads slow every resolving command | Low | Low | Cache both lists with a short TTL (`internal/cache`); resolve locally. |
@@ -432,11 +483,13 @@ equivalent. The input ergonomics are **left open** per stakeholder request. Prop
   CI-generated specs.
 - **B. Repeatable `--test` / `--group` flags (create) and
   `--add-test`/`--remove-test`/`--add-group`/`--remove-group` (update).** Accept
-  UUIDs directly, or `build_system_id`/name resolved via `/planning/search`
-  (release-scoped). Assignments via repeatable `--assign <entity>=<user>`. Maps
-  cleanly onto the diff payload.
-- **C. Two-step `search`→`create`.** Users run `planner search` (Phase 3) to collect
-  UUIDs, then pass them via A or B. No extra implementation beyond A/B.
+  UUIDs directly, or `build_system_id`/name resolved at plan-build time from the
+  release gridview (Phase 2). Bare test names are rejected when ambiguous; use
+  `build_system_id` or `group/test` to disambiguate. Assignments via repeatable
+  `--assign <entity>=<user>`. Maps cleanly onto the diff payload.
+- **C. Two-step `search`→`create`.** Users run `planner search` (Phase 3) to discover
+  `build_system_id`s/UUIDs, then pass them via A or B. No extra implementation beyond
+  A/B.
 
 When the decision is made, update Phase 4/5 flag specs and this appendix accordingly.
 
