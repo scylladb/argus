@@ -50,4 +50,6 @@ _No plans in this domain yet._
 
 ## Infrastructure
 
-_No plans in this domain yet._
+| Plan                | Status  | File                                             | Owner    |
+| ------------------- | ------- | ------------------------------------------------ | -------- |
+| Event Summarization | `draft` | [event-summarization.md](event-summarization.md) | CodeLieutenant |

@@ -26,7 +26,17 @@
         "domain": "client",
         "status": "in_progress",
         "created": "2026-06-01",
-        "phases_total": 7,
+        "phases_total": 8,
         "phases_done": 6
+    },
+    {
+        "id": "event-summarization",
+        "title": "Event Summarization",
+        "file": "docs/plans/event-summarization.md",
+        "domain": "infrastructure",
+        "status": "draft",
+        "created": "2026-06-08",
+        "phases_total": 5,
+        "phases_done": 0
     }
 ]
