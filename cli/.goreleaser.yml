@@ -31,6 +31,7 @@ builds:
       - darwin
     goarch:
       - amd64
+      - arm64
     # Remove the entry below if you want to ship Windows arm64 in the future.
     ignore:
       - goos: windows
