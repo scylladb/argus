@@ -49,7 +49,9 @@ The `ArgusReleasePlan` model (`argus/backend/models/plan.py:8`) has fields: `id`
 (TimeUUID), `name`, `completed`, `description`, `owner` (UUID), `participants`
 (list[UUID]), `target_version` (Ascii), `assignee_mapping` (map[UUID,UUID]),
 `release_id` (UUID), `tests` (list[UUID]), `groups` (list[UUID]), `view_id`,
-`created_from`, `creation_time`, `last_updated`, `ends_at`.
+`created_from`, `creation_time`, `last_updated`, `ends_at`. **Phase 0 adds a `key`
+(Text) field — a human-friendly `releaseName#planNumber` handle (e.g. `scylla-6.2#3`)
+that plan operations accept in place of a UUID.**
 
 **Payload nuances to respect (verified in `planner_service.py`):**
 - `create_plan` reads `assignments` (entity_id→user_id) and converts to
@@ -134,7 +136,9 @@ There is **no existing `planner`, `release`, or `view` command** — this is net
    Group names are unique within a release (`web.py:175`); release/user names resolve by
    exact case-insensitive match. Ambiguous bare test names are **rejected with a
    candidate list**, never silently guessed. The only raw UUIDs accepted from the user
-   are `--plan-id` and `--view-id` (a plan/view has no clean unique name).
+   are `--plan-id` and `--view-id` (a view has no clean unique name). A plan may instead
+   be addressed by its human-friendly `releaseName#planNumber` key (Phase 0); when both a
+   key and `--plan-id` are given, `--plan-id` wins.
 4. **Groups are always expanded client-side to their enabled tests.** On `create` and
    on `update --add-group`, every group reference is exploded (via the gridview's
    enabled `tests` map — *not* `explode_group`/`testByGroup`, which include disabled
@@ -166,6 +170,53 @@ There is **no existing `planner`, `release`, or `view` command** — this is net
 > Each phase is one PR (≤200 LOC of changed code) with separate commits for logically
 > distinct changes. Order is dependency-driven: types → reads → discovery → writes.
 
+### Phase 0 — Backend prerequisite: human-friendly plan key
+**Importance: Critical** (CLI commands reference plans by this key)
+
+Adds a stable, human-friendly key to `ArgusReleasePlan` so plan operations can be
+addressed without bulky UUIDs. The key is a Text column of the form
+`releaseName#planNumber` (e.g. `scylla-6.2#3`), where `releaseName` is resolved from the
+plan's `release_id` → `ArgusRelease.name` and `planNumber` starts at 1 per release. The
+number simply increments until the key is unique; reuse and gaps are not tracked.
+
+- **Model** (`argus/backend/models/plan.py`): add `key = columns.Text()` to
+  `ArgusReleasePlan`. Not indexed — there are few enough plans that a linear
+  `filter(key=...).allow_filtering()` lookup is fine. Auto-synced via `USED_MODELS`
+  (`web.py:400`) and auto-serialized into plan JSON by `ArgusJSONEncoder`
+  (`encoders.py:22`), so it surfaces in `get_plan`/`get_plans_for_release` responses with
+  no serializer change.
+- **Key generation** (`planner_service.py`): a `_generate_plan_key(release_id)` helper
+  resolves the release name, then loops `number = 1, 2, 3, …`, building
+  `f"{release_name}#{number}"` and checking
+  `ArgusReleasePlan.filter(key=candidate).allow_filtering().get()` in a
+  `try/except ArgusReleasePlan.DoesNotExist` (mirrors the existing
+  `(name, target_version)` uniqueness guard at `planner_service.py:145-152`). The first
+  candidate with no existing match wins.
+- **Set at both creation sites**: assign `plan.key` just before `plan.save()` in
+  `create_plan` (`planner_service.py:174`) and before `new_plan.save()` in `copy_plan`
+  (`planner_service.py:455`, using `target_release.id`).
+- **Key-accepting operations** (resolution model): a `_resolve_plan(ref)` helper returns
+  the plan by UUID id, falling back to `filter(key=ref).allow_filtering().get()` when the
+  ref is not a UUID (or no plan has that id). It replaces the bare
+  `ArgusReleasePlan.get(id=plan_id)` calls in `get_plan`, `delete_plan`, `resolve_plan`,
+  `change_plan_owner`, `check_plan_copy_eligibility`, and `update_plan` (which resolves
+  via the payload `id` and uses the resolved `plan.id` for its self-collision check). No
+  new resolver endpoint is added; **`plan_id` takes precedence over the key when both are
+  supplied** — the CLI decides which single ref to send.
+- **Backfill migration** (`scripts/migration/`): a new dated script iterates existing
+  plans grouped by `release_id`, ordered by `id` (TimeUUID ≈ creation order), and assigns
+  `releaseName#1, #2, …`. Follows the `ScyllaCluster.get()` + `migrate()` pattern of
+  `scripts/migration/migration_2026-05-08.py`.
+- **DoD:**
+  - [ ] `ArgusReleasePlan.key` column added and synced.
+  - [ ] `create_plan` and `copy_plan` assign a unique `releaseName#planNumber` key
+        (unit test: collision increments the number).
+  - [ ] `_resolve_plan` resolves both a UUID id and a key, with id taking precedence
+        (unit test).
+  - [ ] Plan JSON responses include `key` (no serializer change needed).
+  - [ ] Backfill migration assigns keys to all existing plans, per-release numbering
+        ordered by creation time.
+
 ### Phase 1 — Foundation: routes + models
 **Importance: Critical**
 
@@ -174,7 +225,7 @@ There is **no existing `planner`, `release`, or `view` command** — this is net
   endpoint `Gridview = "/api/v1/planning/release/%s/gridview"` if not already present).
 - Add `cli/internal/models/planner.go`:
   - `ReleasePlan` struct (fields mirror `ArgusReleasePlan`, `json:` tags in snake_case
-    matching the API: `id`, `name`, `description`, `owner`, `participants`,
+    matching the API: `id`, `key`, `name`, `description`, `owner`, `participants`,
     `target_version`, `assignee_mapping`, `release_id`, `tests`, `groups`, `view_id`,
     `created_from`, `completed`, `creation_time`, `last_updated`, `ends_at`).
   - `type ReleasePlanList = []ReleasePlan`.
@@ -195,7 +246,7 @@ There is **no existing `planner`, `release`, or `view` command** — this is net
     keyed by `group/test`. Reused as the `create --file` input schema.
   - `SearchHit` (`id`, `name`, `pretty_name`, `type`, `release`, `group`, `enabled`,
     `build_system_id`).
-  - Hand-rolled `Headers()/Rows()` for `ReleasePlan` (list view: id, name, version,
+  - Hand-rolled `Headers()/Rows()` for `ReleasePlan` (list view: key, name, version,
     owner, #tests, #groups, completed) and `SearchHit`.
 - **DoD:**
   - [ ] `go build ./...` passes.
@@ -249,6 +300,9 @@ exceptions are `--plan-id` and `--view-id`). Add to `PlannerService`:
   (`init()` → `planner.Register(plannerCmd)` → `rootCmd.AddCommand(plannerCmd)`),
   mirroring how `cmd/testrun.go` wires `discussions.Register`.
 - `list --release <name>` → `NewTabularSlice`. `get --plan-id <id>` → `NewKVTabular`.
+  `--plan-id` also accepts a plan key (`releaseName#planNumber`); it is passed through
+  verbatim and the backend resolves it (Phase 0). The same applies to `--plan-id` on
+  `update`/`delete`/`copy`.
 - **DoD:**
   - [ ] `argus planner list --release <name>` returns plans (manual against staging).
   - [ ] `argus planner get --plan-id <id>` shows a single plan.
@@ -590,6 +644,6 @@ When the decision is made, update Phase 4/5 flag specs and this appendix accordi
 ## Tracking
 - Registered under **Client** in `docs/plans/MASTER.md`.
 - `progress.json` entry: id `cli-planner-command`, domain `client`, status `draft`,
-  `phases_total: 7`, `phases_done: 0`.
+  `phases_total: 8`, `phases_done: 0`.
 </content>
 </invoke>
