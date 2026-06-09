@@ -61,12 +61,13 @@ The `ArgusReleasePlan` model (`argus/backend/models/plan.py:8`) has fields: `id`
   substring-replacing the source release name with the target release name; entities
   with no match are dropped unless present in `payload.replacements`.
 
-#### Upcoming update mechanism — diff-based (ref `backend/release-planner-multi-edit-safety`)
-The branch `backend/release-planner-multi-edit-safety` (commit
-`fix(service/planner): Diff-based plan updates`) replaces the full-object
+#### Update mechanism — diff-based (merged to master, `planner_service.py:62`)
+The diff-based plan update (commit `e1fa19db`, `fix(service/planner): Diff-based plan
+updates`) is **merged to master and present on this branch**. It replaces the full-object
 `TempPlanPayload` update with a **diff payload** for multi-editor safety
-(last-edit-wins per field, remove-wins for list concurrency). The new
-`PlanDiffPayload` shape is:
+(last-edit-wins per field, remove-wins for list concurrency). The `PlanDiffPayload`
+shape (`planner_service.py:62`, consumed by `update_plan` at `planner_service.py:178`)
+is:
 
 - `id` (required).
 - Scalar fields, **only sent if changed**: `name`, `description`, `owner`,
@@ -78,9 +79,9 @@ The branch `backend/release-planner-multi-edit-safety` (commit
   (list of entity ids).
 
 The server applies removes before adds, dedupes, and prunes `assignee_mapping`
-entries whose entity is no longer in `tests`+`groups`. **This plan targets the
-diff-based contract for `planner update` (Phase 5)** so the CLI lands aligned with the
-new backend rather than the legacy full-object replacement.
+entries whose entity is no longer in `tests`+`groups`. **`planner update` (Phase 5)
+targets this diff-based contract** so the CLI lands aligned with the backend rather than
+the legacy full-object replacement.
 
 ### Name-resolution endpoints (verified)
 - `GET /api/v1/releases` → enabled releases with `id`/`name` (`api.py:51`).
@@ -144,9 +145,9 @@ There is **no existing `planner`, `release`, or `view` command** — this is net
    `create --file` resolves it against the **target release's gridview**, warning about
    (and omitting) tests not present in the new release while still creating the plan.
    This is entirely client-side — no new backend endpoint.
-6. `update` speaks the diff-based `PlanDiffPayload` contract from
-   `backend/release-planner-multi-edit-safety`: it computes add/remove deltas for
-   lists/maps and only sends changed scalar fields.
+6. `update` speaks the diff-based `PlanDiffPayload` contract (merged to master,
+   `planner_service.py:62`): it computes add/remove deltas for lists/maps and only
+   sends changed scalar fields.
 7. `copy` runs the (existing) backend eligibility check, prints dropped entities as a
    warning, drops them by default, and honors an optional `--replacements` JSON file.
 8. Output respects the global `--text`/JSON modes and `--no-color`; every command
@@ -181,7 +182,7 @@ There is **no existing `planner`, `release`, or `view` command** — this is net
   - `PlanDiffRequest` (diff-based update: `id`, optional scalars, `tests_add`,
     `tests_remove`, `groups_add`, `groups_remove`, `participants_add`,
     `participants_remove`, `assignee_mapping_set`, `assignee_mapping_remove`) —
-    mirrors `PlanDiffPayload` from `backend/release-planner-multi-edit-safety`.
+    mirrors `PlanDiffPayload` (`planner_service.py:62`, on master).
   - `CopyPlanRequest` (`plan`, `keepParticipants`, `replacements`, `targetReleaseId`,
     `targetReleaseName`) and `CopyCheckResponse` (`status`, `targetRelease`,
     `originalRelease`, `missing.tests`, `missing.groups`).
@@ -341,8 +342,6 @@ exceptions are `--plan-id` and `--view-id`). Add to `PlannerService`:
 
 ### Phase 5 — Write: `update` (diff-based)
 **Importance: Important**
-**Depends on:** `backend/release-planner-multi-edit-safety` being merged (or the diff
-contract being final). Until then, mark as `blocked` and gate on the backend PR.
 
 - `PlannerService.UpdatePlan(ctx, PlanDiffRequest)` → POST `/planning/plan/update`
   with the diff payload; invalidate plan + plan-list caches.
@@ -556,7 +555,6 @@ The plan is complete when all phase DoD items are satisfied, plus:
 
 | Risk | Likelihood | Impact | Mitigation |
 | --- | --- | --- | --- |
-| Diff-update backend (`backend/release-planner-multi-edit-safety`) not yet merged when Phase 5 starts | High | Medium | Gate Phase 5 on the backend PR; keep Phases 1–4 & 6 independent of it. Model `PlanDiffRequest` from the branch now so types are ready. |
 | CLI diff builder miscomputes deltas and silently drops tests/groups | Medium | High | Build the diff from an authoritative GET of the current plan; unit-test scalar-only, add, remove, and assignee cases. Never send full list replacements. |
 | Name resolution ambiguity (duplicate release/user names) selects the wrong entity | Medium | High | Require exact case-insensitive match; on >1 match, error and list candidates instead of guessing. (No raw-UUID escape hatch by design — see next row.) |
 | Ambiguous bare test names resolve to the wrong test (names unique only per group, `web.py:212`) | Medium | High | Reject on >1 match with a candidate list (`build_system_id`+group+UUID); document `build_system_id` as the canonical reference and accept `group/test` qualified form. With UUIDs dropped from input, these two forms are the disambiguators. |
