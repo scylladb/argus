@@ -1,6 +1,6 @@
 import re
 import requests
-from typing import Any, TypedDict
+from typing import Any, NotRequired, TypedDict
 from uuid import UUID
 import xml.etree.ElementTree as ET
 import jenkins
@@ -19,6 +19,7 @@ class Parameter(TypedDict):
     name: str
     description: str
     value: Any
+    choices: NotRequired[list[str]]
 
 
 class JenkinsServiceError(Exception):
@@ -51,6 +52,22 @@ class JenkinsService:
                                         username=current_app.config["JENKINS_USER"],
                                         password=current_app.config["JENKINS_API_TOKEN"])
 
+    @staticmethod
+    def _extract_choice_parameters(config: ET.Element) -> dict[str, list[str]]:
+        """Map each ChoiceParameterDefinition name to its list of choices.
+
+        Handles both the nested ArrayList form
+        (<choices class="..."><a><string>..) and the flat form
+        (<choices><string>..).
+        """
+        choices: dict[str, list[str]] = {}
+        for define in config.iterfind(".//hudson.model.ChoiceParameterDefinition"):
+            name = define.findtext("name")
+            if not name:
+                continue
+            choices[name] = [s.text for s in define.findall("choices//string") if s.text is not None]
+        return choices
+
     def retrieve_job_parameters(self, build_id: str, build_number: int | None) -> list[Parameter]:
         job_info = self._jenkins.get_job_info(name=build_id)
         if not build_number:
@@ -73,6 +90,7 @@ class JenkinsService:
             }
         else:
             descriptions = {}
+        choices = self._extract_choice_parameters(config)
         params = next((a for a in build_info["actions"] if a.get(
             "_class", "#NONE") == "hudson.model.ParametersAction"), None)
         if params:
@@ -84,6 +102,11 @@ class JenkinsService:
                 "value", "")} for param in default_params if param["name"] != self.RESERVED_PARAMETER_NAME]
         for idx, param in enumerate(params):
             params[idx]["description"] = descriptions.get(param["name"], "")
+            if param["name"] in choices:
+                param_choices = choices[param["name"]]
+                params[idx]["choices"] = param_choices
+                if param_choices and param.get("value") not in param_choices:
+                    params[idx]["value"] = param_choices[0]
 
         return params
 

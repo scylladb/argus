@@ -76,7 +76,13 @@
                 {#if param.value || paramTab == 2}
                     <div class="mb-1">
                         <label class="form-label fw-bold" for={param.name}>{param.name}</label>
-                         {#if (param._class || "").includes("TextParameter")}
+                         {#if param.choices?.length}
+                            <select class="form-select" id={param.name} bind:value={buildParams[param.name]}>
+                                {#each param.choices as choice}
+                                    <option value={choice}>{choice}</option>
+                                {/each}
+                            </select>
+                        {:else if (param._class || "").includes("TextParameter")}
                             <textarea class="form-control" id={param.name} bind:value={buildParams[param.name]} rows="4"></textarea>
                         {:else}
                             <input class="form-control" id={param.name} type="text" bind:value={buildParams[param.name]}>

@@ -186,6 +186,17 @@
                     values: ["spot", "on_demand", "spot_fleet"],
                     labels: ["Spot", "On Demand", "Spot Fleet"]
                 },
+                billingProject: {
+                    name: "Billing Project",
+                    description: "Billing project to charge the run to. Choices come from the Jenkins job.",
+                    type: SelectParam,
+                    internalName: "billing_project",
+                    condition: (params, defs) => true,
+                    onChange: function (e, params) {
+                        //empty
+                    },
+                    values: rawParams.find(p => p.name === "billing_project")?.choices ?? [],
+                },
             }
         },
         scyllaVersion: {
