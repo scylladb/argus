@@ -162,8 +162,177 @@ There is **no existing `planner`, `release`, or `view` command** — this is net
 > **Open / Needs Investigation:** the exact CLI ergonomics for specifying which tests
 > and groups belong to a plan during `create`/`update` are intentionally left open in
 > this plan. The proposals are captured in the Appendix and must be decided before
-> Phase 4 begins. The plan provides `search`/`explode-group` discovery and a `--file`
+> Phase 4 begins. The plan provides `search` discovery and a `--file`
 > JSON path as a baseline regardless of the final flag design.
+
+## Command Reference (final design)
+
+> Showcases the intended end-state CLI surface. Entity references are **names or
+> `build_system_id` only** (no raw UUIDs); a plan is addressed by `--plan-id` (UUID) or
+> its `releaseName#planNumber` key. `--plan-id` wins if both are given. All commands honor
+> the global `--text` (table) / JSON-default output and `--no-color`.
+
+### `argus planner list`
+```text
+List release plans for a release.
+
+Usage:
+  argus planner list --release <name> [flags]
+
+Flags:
+  -r, --release string   Release name (required)
+  -h, --help             help for list
+
+Examples:
+  argus planner list --release scylla-6.2
+  argus planner list --release scylla-6.2 --text
+```
+
+### `argus planner get`
+```text
+Show a single plan, or emit an editable create-spec template.
+
+Usage:
+  argus planner get (--plan-id <id|key>) [--template] [flags]
+
+Flags:
+  -p, --plan-id string   Plan UUID or key (e.g. "scylla-6.2#3")
+      --template         Emit an editable create spec (group/test names + usernames)
+                         instead of the raw plan
+  -h, --help             help for get
+
+Examples:
+  argus planner get --plan-id scylla-6.2#3
+  argus planner get --plan-id 7f3c1e90-... --template > plan.json
+```
+
+### `argus planner create`
+```text
+Create a new release plan. Groups are always expanded to their enabled tests.
+
+Usage:
+  argus planner create --release <name> --name <title> [flags]
+
+Flags:
+  -r, --release string          Release name (required)
+  -n, --name string             Plan name (required)
+      --description string      Plan description
+      --owner string            Owner username (defaults to the calling user)
+      --participant strings     Participant username (repeatable)
+      --target-version string   Target version (e.g. 2024.2.1)
+      --test strings            Test by build_system_id or group/test (repeatable)
+      --group strings           Group by name; expanded to enabled tests (repeatable)
+      --assign strings          <entity>=<username> assignment (repeatable)
+      --view-id string          Existing view UUID (a view is auto-created if omitted)
+  -f, --file string             JSON plan spec (get --template schema); '-' for stdin
+  -h, --help                    help for create
+
+Examples:
+  argus planner create --release scylla-6.2 --name "6.2 Longevity" \
+    --target-version 6.2.1 \
+    --test sct-6-2-longevity-100gb \
+    --group tier1 \
+    --owner alice --participant bob \
+    --assign sct-6-2-longevity-100gb=alice
+
+  argus planner create --release scylla-6.2 --file plan.json
+  cat plan.json | argus planner create --release scylla-6.2 --file -
+```
+
+### `argus planner update`
+```text
+Update a plan via a computed diff (only changed fields are sent). --add-group
+expands to the group's enabled tests; group assignments fan out to each test.
+
+Usage:
+  argus planner update (--plan-id <id|key>) [flags]
+
+Flags:
+  -p, --plan-id string             Plan UUID or key (required)
+  -n, --name string                New plan name
+      --description string         New description
+      --owner string               New owner username
+      --target-version string      New target version
+      --completed                  Mark the plan completed
+      --add-test strings           Add test by build_system_id or group/test (repeatable)
+      --remove-test strings        Remove test by build_system_id or group/test (repeatable)
+      --add-group strings          Add group (expanded to enabled tests) (repeatable)
+      --remove-group strings       Remove a pre-existing group (repeatable)
+      --add-participant strings    Add participant username (repeatable)
+      --remove-participant strings Remove participant username (repeatable)
+      --assign strings             <entity>=<username> assignment (repeatable)
+      --unassign strings           Remove assignment for <entity> (repeatable)
+  -f, --file string                JSON diff spec; '-' for stdin
+  -h, --help                       help for update
+
+Examples:
+  argus planner update --plan-id scylla-6.2#3 --name "6.2 Longevity (GA)"
+  argus planner update --plan-id scylla-6.2#3 \
+    --add-test sct-6-2-longevity-200gb \
+    --remove-group tier2 \
+    --assign sct-6-2-longevity-200gb=bob
+  argus planner update --plan-id scylla-6.2#3 --file edit.json
+```
+
+### `argus planner delete`
+```text
+Delete a plan (and optionally its view).
+
+Usage:
+  argus planner delete (--plan-id <id|key>) [flags]
+
+Flags:
+  -p, --plan-id string   Plan UUID or key (required)
+      --delete-view      Also delete the plan's associated view
+  -y, --yes              Skip the confirmation prompt
+  -h, --help             help for delete
+
+Examples:
+  argus planner delete --plan-id scylla-6.2#3 --yes
+  argus planner delete --plan-id 7f3c1e90-... --delete-view --yes
+```
+
+### `argus planner copy`
+```text
+Copy a plan to a target release, remapping entities by build_system_id.
+
+Usage:
+  argus planner copy (--plan-id <id|key>) --target-release <name> [flags]
+
+Flags:
+  -p, --plan-id string          Plan UUID or key (required)
+      --target-release string   Target release name (required)
+  -n, --name string             Name for the copied plan
+      --target-version string   Target version for the copy
+      --owner string            Owner username for the copy
+      --keep-participants       Carry over participants and assignments
+      --replacements string     JSON map of missing-entity -> substitute
+      --force                   Proceed even if entities are dropped
+  -h, --help                    help for copy
+
+Examples:
+  argus planner copy --plan-id scylla-6.1#2 --target-release scylla-6.2
+  argus planner copy --plan-id scylla-6.1#2 --target-release scylla-6.2 \
+    --keep-participants --replacements repl.json --force
+```
+
+### `argus planner search`
+```text
+Discover tests/groups and their build_system_ids. Supports facets:
+type:test|group, group:<name>, release:<name>.
+
+Usage:
+  argus planner search --query <text> [--release <name>] [flags]
+
+Flags:
+  -q, --query string     Search text (facets allowed) (required)
+  -r, --release string   Restrict to a release by name
+  -h, --help             help for search
+
+Examples:
+  argus planner search --query longevity --release scylla-6.2
+  argus planner search --query "type:group tier" --release scylla-6.2
+```
 
 ## 4. Implementation Phases
 
@@ -320,19 +489,15 @@ exceptions are `--plan-id` and `--view-id`). Add to `PlannerService`:
         one GET).
   - [ ] `--text` and JSON modes both render.
 
-### Phase 3 — Discovery: `search` (+ `explode-group`)
+### Phase 3 — Discovery: `search`
 **Importance: Critical** (create/update depend on discoverable IDs)
 
-- `planner search`/`explode-group` are interactive **discovery** aids (printing
-  `build_system_id`s users can copy as canonical references); they are **not** the
+- `planner search` is an interactive **discovery** aid (printing
+  `build_system_id`s users can copy as canonical references); it is **not** the
   resolution path — name resolution uses the gridview endpoint (Phase 2).
 - `PlannerService.Search(ctx, query, releaseRef)` → GET `/planning/search`
   (resolve release ref first; releaseId optional). Returns `[]SearchHit`, filtering
   out the synthetic `Add all...` special row (id `db6f33b2-…`, `test_lookup.py:170`).
-- `PlannerService.ExplodeGroup(ctx, groupID)` + `planner explode-group --group-id`
-  → list member tests for **discovery**. Note: this mirrors the backend
-  `/group/<id>/explode` (includes disabled tests); the actual create/update group
-  expansion uses the enabled-only gridview path (`ExpandGroup`, Phase 2), not this.
 - `planner search --query "..." [--release <name>]` → table with columns
   type/name/build_system_id/group/release (no UUIDs surfaced as the suggested
   reference). Document facet syntax (`type:test`, `group:foo`, `release:2024.1`) in
@@ -591,7 +756,7 @@ values — the file never contains raw UUIDs.
 ## 6. Success Criteria
 
 The plan is complete when all phase DoD items are satisfied, plus:
-- All six management commands + `search` + `explode-group` are reachable under
+- All six management commands + `search` are reachable under
   `argus planner` and documented (Goals 1–2, Phase 7 DoD).
 - Every entity is referenced by name/`build_system_id` (no raw UUIDs except
   `--plan-id`/`--view-id`) and resolved client-side to UUIDs (Goal 3; Phase 2 & 4 DoD).
@@ -614,7 +779,7 @@ The plan is complete when all phase DoD items are satisfied, plus:
 | Ambiguous bare test names resolve to the wrong test (names unique only per group, `web.py:212`) | Medium | High | Reject on >1 match with a candidate list (`build_system_id`+group+UUID); document `build_system_id` as the canonical reference and accept `group/test` qualified form. With UUIDs dropped from input, these two forms are the disambiguators. |
 | Create-from-JSON silently drops tests missing in the target release | Medium | Medium | Warn per-missing-entity (by `build_system_id`/`group/test`) before creating; document that the plan is created without them. Users re-check with `get`. |
 | Test/group flag ergonomics (open decision) prove awkward | Medium | Medium | Ship `--file` JSON (the `get --template` schema) as the always-available robust path first; treat flag conveniences as additive. Record the decision before Phase 4 coding. |
-| Always-expanding groups balloons the test list or surprises users by excluding disabled tests | Low | Medium | Document enabled-only expansion explicitly; `explode-group` discovery shows membership; assignment fan-out is deterministic and unit-tested. |
+| Always-expanding groups balloons the test list or surprises users by excluding disabled tests | Low | Medium | Document enabled-only expansion explicitly; `search` discovery shows membership; assignment fan-out is deterministic and unit-tested. |
 | `copy` build_system_id remap semantics differ from user expectation (silent drops) | Medium | Medium | Surface the eligibility check output prominently and require `--force` to drop; support `--replacements`. Offer the no-remap JSON round-trip as an alternative. |
 | Large `/api/v1/users` or `/api/v1/releases` payloads slow every resolving command | Low | Low | Cache both lists with a short TTL (`internal/cache`); resolve locally. |
 
