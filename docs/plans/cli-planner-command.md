@@ -50,7 +50,7 @@ The `ArgusReleasePlan` model (`argus/backend/models/plan.py:8`) has fields: `id`
 (list[UUID]), `target_version` (Ascii), `assignee_mapping` (map[UUID,UUID]),
 `release_id` (UUID), `tests` (list[UUID]), `groups` (list[UUID]), `view_id`,
 `created_from`, `creation_time`, `last_updated`, `ends_at`. **Phase 0 adds a `key`
-(Text) field — a human-friendly `releaseName#planNumber` handle (e.g. `scylla-6.2#3`)
+(Text) field — a human-friendly `releaseName#planNumber` handle (e.g. `scylla-2026.2#3`)
 that plan operations accept in place of a UUID.**
 
 **Payload nuances to respect (verified in `planner_service.py`):**
@@ -122,10 +122,10 @@ There is **no existing `planner`, `release`, or `view` command** — this is net
 1. Ship a new `argus planner` parent command exposing **six** operations: `list`,
    `get`, `create`, `update`, `delete`, `copy` — all functional against a live Argus
    backend.
-2. Ship a `argus planner search` command that exposes `/planning/search`
-   (`TestLookup.test_lookup`) so users can discover test/group `build_system_id`s, with facet
-   support (`type:`, `group:`, `release:`) matching backend behavior
-   (`test_lookup.py:114`).
+2. Ship a **top-level** `argus search` command that exposes `/planning/search`
+   (`TestLookup.test_lookup`) so users can discover test/group `build_system_id`s. It
+   supports the backend query language — free-text substring plus `type:`, `group:`,
+   `release:` facets — matching backend behavior (`test_lookup.py:114`).
 3. Reference every entity by **human name or `build_system_id` only — never a raw
    UUID**. Release, `--owner`/`--participant`, test, group, and assignee references are
    resolved to UUIDs client-side at plan-build time via `/api/v1/releases`,
@@ -184,8 +184,8 @@ Flags:
   -h, --help             help for list
 
 Examples:
-  argus planner list --release scylla-6.2
-  argus planner list --release scylla-6.2 --text
+  argus planner list --release scylla-2026.2
+  argus planner list --release scylla-2026.2 --text
 ```
 
 ### `argus planner get`
@@ -196,13 +196,13 @@ Usage:
   argus planner get (--plan-id <id|key>) [--template] [flags]
 
 Flags:
-  -p, --plan-id string   Plan UUID or key (e.g. "scylla-6.2#3")
+  -p, --plan-id string   Plan UUID or key (e.g. "scylla-2026.2#3")
       --template         Emit an editable create spec (group/test names + usernames)
                          instead of the raw plan
   -h, --help             help for get
 
 Examples:
-  argus planner get --plan-id scylla-6.2#3
+  argus planner get --plan-id scylla-2026.2#3
   argus planner get --plan-id 7f3c1e90-... --template > plan.json
 ```
 
@@ -219,7 +219,7 @@ Flags:
       --description string      Plan description
       --owner string            Owner username (defaults to the calling user)
       --participant strings     Participant username (repeatable)
-      --target-version string   Target version (e.g. 2024.2.1)
+      --target-version string   Target version (e.g. 2026.2.0~rc3)
       --test strings            Test by build_system_id or group/test (repeatable)
       --group strings           Group by name; expanded to enabled tests (repeatable)
       --assign strings          <entity>=<username> assignment (repeatable)
@@ -228,15 +228,15 @@ Flags:
   -h, --help                    help for create
 
 Examples:
-  argus planner create --release scylla-6.2 --name "6.2 Longevity" \
-    --target-version 6.2.1 \
-    --test sct-6-2-longevity-100gb \
+  argus planner create --release scylla-2026.2 --name "2026.2 Longevity" \
+    --target-version 2026.2.0~rc3 \
+    --test scylla-2026.2/longevity/longevity-100gb \
     --group tier1 \
     --owner alice --participant bob \
-    --assign sct-6-2-longevity-100gb=alice
+    --assign scylla-2026.2/longevity/longevity-100gb=alice
 
-  argus planner create --release scylla-6.2 --file plan.json
-  cat plan.json | argus planner create --release scylla-6.2 --file -
+  argus planner create --release scylla-2026.2 --file plan.json
+  cat plan.json | argus planner create --release scylla-2026.2 --file -
 ```
 
 ### `argus planner update`
@@ -266,12 +266,12 @@ Flags:
   -h, --help                       help for update
 
 Examples:
-  argus planner update --plan-id scylla-6.2#3 --name "6.2 Longevity (GA)"
-  argus planner update --plan-id scylla-6.2#3 \
-    --add-test sct-6-2-longevity-200gb \
+  argus planner update --plan-id scylla-2026.2#3 --name "2026.2 Longevity (GA)"
+  argus planner update --plan-id scylla-2026.2#3 \
+    --add-test scylla-2026.2/longevity/longevity-200gb \
     --remove-group tier2 \
-    --assign sct-6-2-longevity-200gb=bob
-  argus planner update --plan-id scylla-6.2#3 --file edit.json
+    --assign scylla-2026.2/longevity/longevity-200gb=bob
+  argus planner update --plan-id scylla-2026.2#3 --file edit.json
 ```
 
 ### `argus planner delete`
@@ -288,7 +288,7 @@ Flags:
   -h, --help             help for delete
 
 Examples:
-  argus planner delete --plan-id scylla-6.2#3 --yes
+  argus planner delete --plan-id scylla-2026.2#3 --yes
   argus planner delete --plan-id 7f3c1e90-... --delete-view --yes
 ```
 
@@ -311,27 +311,48 @@ Flags:
   -h, --help                    help for copy
 
 Examples:
-  argus planner copy --plan-id scylla-6.1#2 --target-release scylla-6.2
-  argus planner copy --plan-id scylla-6.1#2 --target-release scylla-6.2 \
+  argus planner copy --plan-id scylla-2026.1#2 --target-release scylla-2026.2
+  argus planner copy --plan-id scylla-2026.1#2 --target-release scylla-2026.2 \
     --keep-participants --replacements repl.json --force
 ```
 
-### `argus planner search`
+### `argus search`
 ```text
-Discover tests/groups and their build_system_ids. Supports facets:
-type:test|group, group:<name>, release:<name>.
+Search tests, groups, and releases to discover their build_system_ids. Top-level
+command (not under `planner`).
 
 Usage:
-  argus planner search --query <text> [--release <name>] [flags]
+  argus search <query> [--release <name>] [flags]
 
 Flags:
-  -q, --query string     Search text (facets allowed) (required)
-  -r, --release string   Restrict to a release by name
+  -r, --release string   Restrict results to a release by name
   -h, --help             help for search
 
+Query language:
+  A query is free text plus optional facets, combined with AND. The free text is
+  matched as a case-insensitive substring against an entity's own name. Facets
+  (anywhere in the query) further constrain results:
+    release:<substr>   entity's release name contains <substr> (case-insensitive)
+    group:<substr>     entity's group name contains <substr> (case-insensitive)
+    type:<test|group|release>   exact entity type
+  Facet values may be quoted to include spaces (e.g. group:"long running"). A query
+  that is a bare UUID instead looks up that single run/entity directly.
+
 Examples:
-  argus planner search --query longevity --release scylla-6.2
-  argus planner search --query "type:group tier" --release scylla-6.2
+  # Tests whose name contains "longevity" in the 2026.2 release
+  argus search "release:2026.2 longevity"
+
+  # All tests in the "longevity" group (type-constrained, group substring)
+  argus search "type:test group:longevity"
+
+  # Just the groups of a release (handy to discover group names)
+  argus search "type:group release:2026.2"
+
+  # Free-text only, scoped via the flag instead of a release: facet
+  argus search "100gb" --release scylla-2026.2
+
+  # Quoted facet value with a space
+  argus search 'group:"long running" upgrade'
 ```
 
 ## 4. Implementation Phases
@@ -344,7 +365,7 @@ Examples:
 
 Adds a stable, human-friendly key to `ArgusReleasePlan` so plan operations can be
 addressed without bulky UUIDs. The key is a Text column of the form
-`releaseName#planNumber` (e.g. `scylla-6.2#3`), where `releaseName` is resolved from the
+`releaseName#planNumber` (e.g. `scylla-2026.2#3`), where `releaseName` is resolved from the
 plan's `release_id` → `ArgusRelease.name` and `planNumber` starts at 1 per release. The
 number simply increments until the key is unique; reuse and gaps are not tracked.
 
@@ -489,24 +510,38 @@ exceptions are `--plan-id` and `--view-id`). Add to `PlannerService`:
         one GET).
   - [ ] `--text` and JSON modes both render.
 
-### Phase 3 — Discovery: `search`
+### Phase 3 — Discovery: top-level `argus search`
 **Importance: Critical** (create/update depend on discoverable IDs)
 
-- `planner search` is an interactive **discovery** aid (printing
-  `build_system_id`s users can copy as canonical references); it is **not** the
-  resolution path — name resolution uses the gridview endpoint (Phase 2).
-- `PlannerService.Search(ctx, query, releaseRef)` → GET `/planning/search`
-  (resolve release ref first; releaseId optional). Returns `[]SearchHit`, filtering
-  out the synthetic `Add all...` special row (id `db6f33b2-…`, `test_lookup.py:170`).
-- `planner search --query "..." [--release <name>]` → table with columns
+- `argus search` is a **top-level** command (registered on `rootCmd`, not under
+  `planner`) — an interactive **discovery** aid (printing `build_system_id`s users can
+  copy as canonical references); it is **not** the resolution path — name resolution
+  uses the gridview endpoint (Phase 2).
+- Add `cli/cmd/search/` with `Register(parent *cobra.Command)` wired from a new
+  `cli/cmd/search.go` (`init()` → `search.Register(rootCmd)`), mirroring how other
+  top-level commands are registered. It reuses `PlannerService.Search` (or a small
+  dedicated `SearchService`) for the HTTP call.
+- `Search(ctx, query, releaseRef)` → GET `/planning/search` (resolve release ref
+  first; releaseId optional). Returns `[]SearchHit`, filtering out the synthetic
+  `Add all...` special row (id `db6f33b2-…`, `test_lookup.py:170`).
+- `argus search <query> [--release <name>]` → table with columns
   type/name/build_system_id/group/release (no UUIDs surfaced as the suggested
-  reference). Document facet syntax (`type:test`, `group:foo`, `release:2024.1`) in
-  `--help`.
+  reference). The `query` is a positional argument passed verbatim to the backend.
+- **Query language** (mirrors `TestLookup.test_lookup`, `test_lookup.py:114-149`):
+  free text is a case-insensitive substring match on the entity's own name; optional
+  facets `release:<substr>`, `group:<substr>` (substring match on the related entity's
+  name) and `type:<test|group|release>` (exact type) combine with AND. Facet values may
+  be quoted to allow spaces. A bare-UUID query short-circuits to a single
+  run/entity lookup. Document this in `--help` with examples (incl.
+  `argus search "release:2026.2 longevity"`).
 - **DoD:**
-  - [ ] `argus planner search --query foo --release X` lists matching tests/groups
-        with their `build_system_id`s (manual).
+  - [ ] `argus search "release:2026.2 longevity"` lists matching tests with their
+        `build_system_id`s (manual).
+  - [ ] `argus search "type:group release:2026.2"` lists groups; `--release` flag and
+        the `release:` facet both scope results (unit test).
   - [ ] Special `Add all...` row is excluded (unit test on the filter helper).
-  - [ ] Facet query passed through verbatim (unit test asserts query-string build).
+  - [ ] Query (free text + facets, quoted values) passed through verbatim (unit test
+        asserts query-string build).
 
 ### Phase 4 — Write: `create` + `delete`
 **Importance: Critical**
@@ -602,14 +637,14 @@ client-side; raw UUIDs are not accepted as entity references.
 # Rename, retarget the version, add one test, drop a group, and (re)assign an entity.
 argus planner update \
   --plan-id 7f3c1e90-... \
-  --name "2024.2 Longevity" \
-  --target-version 2024.2.1 \
-  --add-test sct-2024-2-longevity-100gb \         # build_system_id (canonical), unique
+  --name "2026.2 Longevity" \
+  --target-version 2026.2.0~rc3 \
+  --add-test scylla-2026.2/longevity/longevity-100gb \         # build_system_id (canonical), unique
   --add-test "tier1/longevity-200gb" \            # group-qualified name → scoped lookup
   --remove-group "tier2" \                         # group name → groups_remove (pre-existing group)
   --add-participant alice \                        # plain username → resolved to UUID
   --remove-participant bob \
-  --assign sct-2024-2-longevity-100gb=alice \      # build_system_id=username → assignee_mapping_set
+  --assign scylla-2026.2/longevity/longevity-100gb=alice \      # build_system_id=username → assignee_mapping_set
   --unassign "tier1/longevity-200gb"               # group-qualified name → assignee_mapping_remove
 ```
 
@@ -628,8 +663,8 @@ computes deltas, and POSTs only what changed:
 ```json
 {
   "id": "7f3c1e90-...",
-  "name": "2024.2 Longevity",
-  "target_version": "2024.2.1",
+  "name": "2026.2 Longevity",
+  "target_version": "2026.2.0~rc3",
   "tests_add": ["c4d0...7a", "b7e2...09"],
   "groups_remove": ["9a1c...44"],
   "participants_add": ["<alice-uuid>"],
@@ -639,7 +674,7 @@ computes deltas, and POSTs only what changed:
 }
 ```
 
-Note how `sct-2024-2-longevity-100gb` (→ `c4d0...7a`), `tier1/longevity-200gb`
+Note how `scylla-2026.2/longevity/longevity-100gb` (→ `c4d0...7a`), `tier1/longevity-200gb`
 (→ `b7e2...09`), `tier2` (→ `9a1c...44`), and `alice` (→ `<alice-uuid>`) are all
 resolved to UUIDs in the lists and map keys/values. Fields like `description`,
 `owner`, `completed`, `view_id`, and untouched list members are absent — last-edit-wins
@@ -657,13 +692,13 @@ cat edit.json | argus planner update --plan-id 7f3c1e90-... --file -
 ```json
 // edit.json
 {
-  "name": "2024.2 Longevity",
-  "target_version": "2024.2.1",
-  "tests_add": ["sct-2024-2-longevity-100gb", "tier1/longevity-200gb"],
+  "name": "2026.2 Longevity",
+  "target_version": "2026.2.0~rc3",
+  "tests_add": ["scylla-2026.2/longevity/longevity-100gb", "tier1/longevity-200gb"],
   "groups_remove": ["tier2"],
   "participants_add": ["alice"],
   "participants_remove": ["bob"],
-  "assignee_mapping_set": {"sct-2024-2-longevity-100gb": "alice"},
+  "assignee_mapping_set": {"scylla-2026.2/longevity/longevity-100gb": "alice"},
   "assignee_mapping_remove": ["tier1/longevity-200gb"]
 }
 ```
@@ -708,8 +743,10 @@ values — the file never contains raw UUIDs.
 **Importance: Important**
 
 - Update `cli/README.md` with a `planner` section (all commands + examples, the
-  `--file` JSON schema, facet search syntax, diff-update behavior).
-- Update the root `AGENTS.md` "Argus CLI (Go)" section to mention planner operations.
+  `--file` JSON schema, diff-update behavior) and a top-level `search` section
+  documenting the query language (free text + `type:`/`group:`/`release:` facets).
+- Update the root `AGENTS.md` "Argus CLI (Go)" section to mention planner operations
+  and the `search` command.
 - Add any missing `_test.go` coverage; run full lint/test/build.
 - **DoD:**
   - [ ] `cli/README.md` documents all `planner` subcommands with copy-pasteable
@@ -756,8 +793,8 @@ values — the file never contains raw UUIDs.
 ## 6. Success Criteria
 
 The plan is complete when all phase DoD items are satisfied, plus:
-- All six management commands + `search` are reachable under
-  `argus planner` and documented (Goals 1–2, Phase 7 DoD).
+- All six management commands are reachable under `argus planner`, plus the top-level
+  `argus search`, and documented (Goals 1–2, Phase 7 DoD).
 - Every entity is referenced by name/`build_system_id` (no raw UUIDs except
   `--plan-id`/`--view-id`) and resolved client-side to UUIDs (Goal 3; Phase 2 & 4 DoD).
 - Groups are always expanded to their enabled tests on create/update, with group
@@ -801,7 +838,7 @@ equivalent. The input ergonomics are **left open** per stakeholder request. Prop
   enabled tests. Assignments via repeatable `--assign <entity>=<user>`, where
   `<entity>` (`build_system_id`/`group/test`) and `<user>` (username) are both names.
   Maps cleanly onto the diff payload.
-- **C. Two-step `search`→`create`.** Users run `planner search` (Phase 3) to discover
+- **C. Two-step `search`→`create`.** Users run `argus search` (Phase 3) to discover
   `build_system_id`s, then pass them via A or B. No extra implementation beyond A/B.
 
 When the decision is made, update Phase 4/5 flag specs and this appendix accordingly.
