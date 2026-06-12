@@ -9,30 +9,33 @@ from argus.client.driver_matrix_tests.client import ArgusDriverMatrixClient
 from argus.client.sirenada.client import ArgusSirenadaClient
 
 
-def test_argus_client_default_timeout():
+def test_argus_client_default_timeout(tmp_path):
     """Test that ArgusClient uses default timeout of 60 seconds."""
     client = ArgusClient(
         auth_token="test_token",
-        base_url="https://test.example.com"
+        base_url="https://test.example.com",
+        log_dir=tmp_path,
     )
     assert client._timeout == 60
 
 
-def test_argus_client_custom_timeout():
+def test_argus_client_custom_timeout(tmp_path):
     """Test that ArgusClient accepts custom timeout."""
     client = ArgusClient(
         auth_token="test_token",
         base_url="https://test.example.com",
+        log_dir=tmp_path,
         timeout=120
     )
     assert client._timeout == 120
 
 
-def test_argus_client_session_has_retry_adapter():
+def test_argus_client_session_has_retry_adapter(tmp_path):
     """Test that ArgusClient session is configured with retry adapter."""
     client = ArgusClient(
         auth_token="test_token",
         base_url="https://test.example.com",
+        log_dir=tmp_path,
         max_retries=5
     )
 
@@ -48,7 +51,7 @@ def test_argus_client_session_has_retry_adapter():
     assert adapter.max_retries.status_forcelist == set()
 
 
-def test_get_request_uses_timeout(requests_mock):
+def test_get_request_uses_timeout(requests_mock, tmp_path):
     """Test that GET requests include timeout parameter."""
     requests_mock.get(
         "https://test.example.com/api/v1/client/testrun/test-type/test-id/get",
@@ -59,6 +62,7 @@ def test_get_request_uses_timeout(requests_mock):
     client = ArgusClient(
         auth_token="test_token",
         base_url="https://test.example.com",
+        log_dir=tmp_path,
         timeout=30
     )
 
@@ -78,7 +82,7 @@ def test_get_request_uses_timeout(requests_mock):
         assert call_kwargs['timeout'] == 30
 
 
-def test_post_request_uses_timeout(requests_mock):
+def test_post_request_uses_timeout(requests_mock, tmp_path):
     """Test that POST requests include timeout parameter."""
     requests_mock.post(
         "https://test.example.com/api/v1/client/testrun/test-type/submit",
@@ -89,6 +93,7 @@ def test_post_request_uses_timeout(requests_mock):
     client = ArgusClient(
         auth_token="test_token",
         base_url="https://test.example.com",
+        log_dir=tmp_path,
         timeout=45
     )
 
@@ -109,11 +114,12 @@ def test_post_request_uses_timeout(requests_mock):
         assert call_kwargs['timeout'] == 45
 
 
-def test_retry_configuration_is_correct():
+def test_retry_configuration_is_correct(tmp_path):
     """Test that the retry adapter is correctly configured."""
     client = ArgusClient(
         auth_token="test_token",
         base_url="https://test.example.com",
+        log_dir=tmp_path,
         max_retries=5
     )
 
@@ -129,13 +135,14 @@ def test_retry_configuration_is_correct():
     assert "POST" in adapter.max_retries.allowed_methods
 
 
-def test_sct_client_passes_timeout_and_retries():
+def test_sct_client_passes_timeout_and_retries(tmp_path):
     """Test that ArgusSCTClient passes timeout and retry parameters to parent."""
     run_id = uuid4()
     client = ArgusSCTClient(
         run_id=run_id,
         auth_token="test_token",
         base_url="https://test.example.com",
+        log_dir=tmp_path,
         timeout=90,
         max_retries=5
     )
@@ -145,11 +152,12 @@ def test_sct_client_passes_timeout_and_retries():
     assert adapter.max_retries.total == 5
 
 
-def test_generic_client_passes_timeout_and_retries():
+def test_generic_client_passes_timeout_and_retries(tmp_path):
     """Test that ArgusGenericClient passes timeout and retry parameters to parent."""
     client = ArgusGenericClient(
         auth_token="test_token",
         base_url="https://test.example.com",
+        log_dir=tmp_path,
         timeout=75,
         max_retries=4
     )
@@ -159,13 +167,14 @@ def test_generic_client_passes_timeout_and_retries():
     assert adapter.max_retries.total == 4
 
 
-def test_driver_matrix_client_passes_timeout_and_retries():
+def test_driver_matrix_client_passes_timeout_and_retries(tmp_path):
     """Test that ArgusDriverMatrixClient passes timeout and retry parameters to parent."""
     run_id = uuid4()
     client = ArgusDriverMatrixClient(
         run_id=run_id,
         auth_token="test_token",
         base_url="https://test.example.com",
+        log_dir=tmp_path,
         timeout=100,
         max_retries=2
     )
@@ -175,11 +184,12 @@ def test_driver_matrix_client_passes_timeout_and_retries():
     assert adapter.max_retries.total == 2
 
 
-def test_sirenada_client_passes_timeout_and_retries():
+def test_sirenada_client_passes_timeout_and_retries(tmp_path):
     """Test that ArgusSirenadaClient passes timeout and retry parameters to parent."""
     client = ArgusSirenadaClient(
         auth_token="test_token",
         base_url="https://test.example.com",
+        log_dir=tmp_path,
         timeout=80,
         max_retries=6
     )
@@ -189,13 +199,14 @@ def test_sirenada_client_passes_timeout_and_retries():
     assert adapter.max_retries.total == 6
 
 
-def test_client_uses_default_values_when_not_specified():
+def test_client_uses_default_values_when_not_specified(tmp_path):
     """Test that client uses defaults when timeout and retries not specified."""
     run_id = uuid4()
     client = ArgusSCTClient(
         run_id=run_id,
         auth_token="test_token",
-        base_url="https://test.example.com"
+        base_url="https://test.example.com",
+        log_dir=tmp_path,
     )
 
     # Should use default timeout of 60 and default retries of 3
