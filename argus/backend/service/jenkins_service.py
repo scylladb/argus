@@ -172,11 +172,34 @@ class JenkinsService:
 
         return params
 
-    def get_build_test_metadata(self, build_id: str, build_number: int | None = None) -> dict[str, Any] | None:
-        """Retrieve test_metadata from the latest (or specified) build's description.
+    def get_job_test_metadata(self, build_id: str) -> dict[str, Any] | None:
+        """Retrieve test_metadata from the <testMetadata> XML element in job config.xml.
+
+        This is the primary source of truth — written at job creation time by
+        create_test_release_jobs.py and not editable via the Jenkins UI.
 
         Returns parsed metadata dict or None if not present.
         """
+        try:
+            config_xml = self._jenkins.get_job_config(name=build_id)
+            return parse_test_metadata_from_config_xml(config_xml)
+        except jenkins.JenkinsException:
+            LOGGER.debug("Could not fetch job config for %s", build_id)
+            return None
+
+    def get_build_test_metadata(self, build_id: str, build_number: int | None = None) -> dict[str, Any] | None:
+        """Retrieve test_metadata for a job, trying sources in priority order:
+
+        1. Job config.xml <testMetadata> element (primary, set at job creation)
+        2. Build description HTML (legacy fallback)
+
+        Returns parsed metadata dict or None if not present.
+        """
+        # Primary: XML element in job config
+        result = self.get_job_test_metadata(build_id)
+        if result:
+            return result
+        # Fallback: parse from build description
         try:
             if not build_number:
                 build_number = self.latest_build(build_id)
