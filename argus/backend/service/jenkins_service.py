@@ -28,6 +28,9 @@ class JenkinsServiceError(Exception):
 
 class JenkinsService:
     RESERVED_PARAMETER_NAME = "requested_by_user"
+    # Choice parameters that must default to an explicit "unset" (empty) value
+    # instead of silently selecting the first option from the Jenkins job.
+    OPTIONAL_CHOICE_PARAMETERS = frozenset({"billing_project"})
 
     SETTINGS_CONFIG_MAP = {
         "scylla-cluster-tests": {
@@ -98,17 +101,39 @@ class JenkinsService:
         else:
             default_params = next((prop for prop in job_info["property"] if prop.get(
                 "_class", "") == "hudson.model.ParametersDefinitionProperty"), {}).get("parameterDefinitions", {})
-            params = [{"name": param["name"], "value": param.get("defaultParameterValue", {}).get(
-                "value", "")} for param in default_params if param["name"] != self.RESERVED_PARAMETER_NAME]
+            params = [{"name": param["name"],
+                       "value": "" if param["name"] in self.OPTIONAL_CHOICE_PARAMETERS
+                       else param.get("defaultParameterValue", {}).get("value", "")}
+                      for param in default_params if param["name"] != self.RESERVED_PARAMETER_NAME]
+        self._apply_choice_defaults(params, choices, descriptions)
+
+        return params
+
+    @classmethod
+    def _apply_choice_defaults(cls, params: list[Parameter], choices: dict[str, list[str]],
+                               descriptions: dict[str, str]) -> None:
+        """Attach descriptions/choices to params and resolve each default value.
+
+        Regular choice parameters fall back to the first choice when their value
+        is unknown. Optional choice parameters (e.g. billing_project) instead get
+        an explicit empty option and default to it, so a run is never silently
+        charged to the first project in the list.
+        """
         for idx, param in enumerate(params):
             params[idx]["description"] = descriptions.get(param["name"], "")
-            if param["name"] in choices:
-                param_choices = choices[param["name"]]
+            if param["name"] not in choices:
+                continue
+            param_choices = choices[param["name"]]
+            if param["name"] in cls.OPTIONAL_CHOICE_PARAMETERS:
+                if "" not in param_choices:
+                    param_choices = ["", *param_choices]
+                params[idx]["choices"] = param_choices
+                if param.get("value") not in param_choices:
+                    params[idx]["value"] = ""
+            else:
                 params[idx]["choices"] = param_choices
                 if param_choices and param.get("value") not in param_choices:
                     params[idx]["value"] = param_choices[0]
-
-        return params
 
     def latest_build(self, build_id: str) -> int:
         try:
