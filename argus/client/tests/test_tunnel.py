@@ -388,6 +388,66 @@ def test_tunneled_session_close_unregisters_atexit():
     callback(ref)
 
 
+def _prime_tunnel_state(session):
+    """Force a session into the 'tunnel active' state so _tunnel_headers() emits."""
+    from types import SimpleNamespace
+
+    session._tunnel_port = 12345
+    session._tunnel_established_at = "2026-06-16T00:00:00+00:00"
+    session._tunnel_config = SimpleNamespace(proxy_host="proxy.example.com", key_id="key-uuid")
+
+
+def test_tunnel_headers_compose_job_name_and_build_number(monkeypatch):
+    monkeypatch.setenv("JOB_NAME", "scylla-master/longevity/longevity-100gb")
+    monkeypatch.setenv("BUILD_NUMBER", "42")
+    monkeypatch.setenv("BUILD_URL", "https://jenkins.scylladb.com/job/scylla-master/job/longevity/42/")
+    session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com")
+    try:
+        _prime_tunnel_state(session)
+        headers = session._tunnel_headers()
+        assert headers["X-Argus-Build-Id"] == "scylla-master/longevity/longevity-100gb#42"
+        assert headers["X-Argus-Build-Url"] == "https://jenkins.scylladb.com/job/scylla-master/job/longevity/42/"
+        assert headers["X-SSH-Tunnel-Origin"] == "proxy.example.com"
+    finally:
+        session.close()
+
+
+def test_tunnel_headers_build_id_job_name_without_build_number(monkeypatch):
+    monkeypatch.delenv("BUILD_NUMBER", raising=False)
+    monkeypatch.setenv("JOB_NAME", "jenkins-job-name")
+    session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com")
+    try:
+        _prime_tunnel_state(session)
+        assert session._tunnel_headers()["X-Argus-Build-Id"] == "jenkins-job-name"
+    finally:
+        session.close()
+
+
+def test_tunnel_headers_reject_overlong_build_id(monkeypatch):
+    monkeypatch.setenv("JOB_NAME", "a" * 300)
+    monkeypatch.delenv("BUILD_NUMBER", raising=False)
+    session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com")
+    try:
+        _prime_tunnel_state(session)
+        # Rejected rather than truncated — header omitted entirely.
+        assert "X-Argus-Build-Id" not in session._tunnel_headers()
+    finally:
+        session.close()
+
+
+def test_tunnel_headers_omit_build_id_and_url_when_unset(monkeypatch):
+    for var in ("JOB_NAME", "BUILD_NUMBER", "BUILD_URL"):
+        monkeypatch.delenv(var, raising=False)
+    session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com")
+    try:
+        _prime_tunnel_state(session)
+        headers = session._tunnel_headers()
+        assert "X-Argus-Build-Id" not in headers
+        assert "X-Argus-Build-Url" not in headers
+    finally:
+        session.close()
+
+
 def test_argus_client_works_as_context_manager(requests_mock, monkeypatch, tmp_path):
     requests_mock.get(
         "https://argus.scylladb.com/api/v1/client/testrun/test-type/test-id/get",

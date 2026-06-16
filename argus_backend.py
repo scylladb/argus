@@ -79,6 +79,16 @@ def register_metrics():
             },
         )
     )
+    METRICS.register_default(
+        METRICS.counter(
+            "http_request_tunnel_build_total",
+            "Tunneled requests by Jenkins build/job id (X-Argus-Build-Id)",
+            labels={
+                "build_id": lambda: request.headers.get("X-Argus-Build-Id") or "unknown",
+                "build_url": lambda: request.headers.get("X-Argus-Build-Url") or "",
+            },
+        )
+    )
 
 
 def start_server(config=None) -> Flask:
