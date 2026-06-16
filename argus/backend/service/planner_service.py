@@ -139,6 +139,23 @@ class PlanningService:
     def version(self):
         return "v1"
 
+    def _generate_plan_key(self, release_id: UUID | str) -> str:
+        release: ArgusRelease = ArgusRelease.get(id=release_id)
+        candidate = f"{release.name}#1"
+        release_plans = list(ArgusReleasePlan.filter(release_id=release.id).allow_filtering().all())
+        if len(release_plans) == 0:
+            return candidate
+        existing_keys = [int(p.key.split("#")[1]) for p in release_plans]
+        previous_number = max(existing_keys)
+
+        return f"{release.name}#{previous_number+1}"
+
+    def _resolve_plan(self, ref: str | UUID) -> ArgusReleasePlan:
+        try:
+            return ArgusReleasePlan.get(id=UUID(str(ref)))
+        except (ValueError, ArgusReleasePlan.DoesNotExist):
+            return ArgusReleasePlan.filter(key=str(ref)).allow_filtering().get()
+
     def create_plan(self, payload: dict[str, Any]) -> ArgusReleasePlan:
         plan_request = CreatePlanPayload(**payload)
 
@@ -171,6 +188,7 @@ class PlanningService:
             plan.view_id = plan_request.view_id
             view = self.update_view_for_plan(plan, existing=True)
 
+        plan.key = self._generate_plan_key(plan.release_id)
         plan.save()
         invalidate_release_snapshots(plan.release_id)
         return plan
@@ -178,7 +196,7 @@ class PlanningService:
     def update_plan(self, payload: dict[str, Any]) -> bool:
         plan_request = PlanDiffPayload(**payload)
 
-        plan: ArgusReleasePlan = ArgusReleasePlan.get(id=plan_request.id)
+        plan: ArgusReleasePlan = self._resolve_plan(plan_request.id)
 
         if plan_request.name is not None:
             plan.name = plan_request.name
@@ -196,7 +214,7 @@ class PlanningService:
         try:
             existing = ArgusReleasePlan.filter(
                 name=plan.name, target_version=plan.target_version).allow_filtering().get()
-            if existing and existing.id != UUID(plan_request.id):
+            if existing and existing.id != plan.id:
                 raise PlannerServiceException(
                     f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing, plan_request)
         except ArgusReleasePlan.DoesNotExist:
@@ -339,7 +357,7 @@ class PlanningService:
 
     def change_plan_owner(self, plan_id: UUID | str, new_owner: UUID | str) -> bool:
         user: User = User.get(id=new_owner)
-        plan: ArgusReleasePlan = ArgusReleasePlan.get(id=plan_id)
+        plan: ArgusReleasePlan = self._resolve_plan(plan_id)
 
         plan.owner = user.id
         plan.last_updated = datetime.datetime.now(tz=datetime.UTC)
@@ -348,7 +366,7 @@ class PlanningService:
         return True
 
     def get_plan(self, plan_id: str | UUID) -> ArgusReleasePlan:
-        return ArgusReleasePlan.get(id=plan_id)
+        return self._resolve_plan(plan_id)
 
     def get_gridview_for_release(self, release_id: str | UUID) -> dict[str, dict]:
         release = ArgusRelease.get(id=release_id)
@@ -391,8 +409,7 @@ class PlanningService:
         except ArgusReleasePlan.DoesNotExist:
             pass
 
-        original_plan: ArgusReleasePlan = ArgusReleasePlan.get(
-            id=payload.plan.id)
+        original_plan: ArgusReleasePlan = self._resolve_plan(payload.plan.id)
         target_release: ArgusRelease = ArgusRelease.get(
             id=payload.targetReleaseId)
         original_release: ArgusRelease = ArgusRelease.get(
@@ -452,13 +469,14 @@ class PlanningService:
         view = self.create_view_for_plan(new_plan)
         new_plan.view_id = view.id
 
+        new_plan.key = self._generate_plan_key(target_release.id)
         new_plan.save()
         invalidate_release_snapshots(new_plan.release_id)
         return new_plan
 
     def check_plan_copy_eligibility(self, plan_id: str | UUID, target_release_id: str | UUID) -> dict:
         target_release: ArgusRelease = ArgusRelease.get(id=target_release_id)
-        plan: ArgusReleasePlan = ArgusReleasePlan.get(id=plan_id)
+        plan: ArgusReleasePlan = self._resolve_plan(plan_id)
         original_release: ArgusRelease = ArgusRelease.get(id=plan.release_id)
 
         original_tests: list[ArgusTest] = ArgusTest.filter(
@@ -522,7 +540,7 @@ class PlanningService:
         return list(ArgusReleasePlan.filter(release_id=release_id).all())
 
     def delete_plan(self, plan_id: str | UUID, delete_view: bool = True):
-        plan: ArgusReleasePlan = ArgusReleasePlan.get(id=plan_id)
+        plan: ArgusReleasePlan = self._resolve_plan(plan_id)
         if plan.view_id:
             view: ArgusUserView = ArgusUserView.get(id=plan.view_id)
             if delete_view:
@@ -607,7 +625,7 @@ class PlanningService:
         return plan.completed
 
     def resolve_plan(self, plan_id: str | UUID) -> list[dict[str, Any]]:
-        plan: ArgusReleasePlan = ArgusReleasePlan.get(id=plan_id)
+        plan: ArgusReleasePlan = self._resolve_plan(plan_id)
 
         release: ArgusRelease = ArgusRelease.get(id=plan.release_id)
         tests: list[ArgusTest] = []

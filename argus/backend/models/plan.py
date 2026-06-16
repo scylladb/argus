@@ -22,6 +22,7 @@ class ArgusReleasePlan(Model):
     creation_time = columns.DateTime(default=lambda: datetime.datetime.now(tz=datetime.UTC))
     last_updated = columns.DateTime(default=lambda: datetime.datetime.now(tz=datetime.UTC))
     ends_at = columns.DateTime()
+    key = columns.Text()
 
     def __eq__(self, other):
         if isinstance(other, ArgusReleasePlan):
