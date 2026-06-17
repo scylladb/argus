@@ -1,0 +1,262 @@
+package models
+
+import "strconv"
+
+// ---------------------------------------------------------------------------
+// ReleasePlan – mirrors argus.backend.models.plan.ArgusReleasePlan
+// ---------------------------------------------------------------------------
+
+// ReleasePlan is a single release plan as returned by the planner endpoints.
+//
+// All UUID columns are serialised as strings by ArgusJSONEncoder; datetime
+// columns are ISO-8601 strings. AssigneeMapping maps an entity UUID (test or
+// group) to a user UUID.
+//
+// Key is the human-friendly "releaseName#planNumber" handle (e.g.
+// "scylla-2026.2#3") added by the backend plan-keying change; plan operations
+// accept it in place of a UUID.
+type ReleasePlan struct {
+	ID              string            `json:"id"`
+	Key             string            `json:"key"`
+	Name            string            `json:"name"`
+	Description     string            `json:"description"`
+	Owner           string            `json:"owner"`
+	Participants    []string          `json:"participants"`
+	TargetVersion   string            `json:"target_version"`
+	AssigneeMapping map[string]string `json:"assignee_mapping"`
+	ReleaseID       string            `json:"release_id"`
+	Tests           []string          `json:"tests"`
+	Groups          []string          `json:"groups"`
+	ViewID          string            `json:"view_id"`
+	CreatedFrom     string            `json:"created_from"`
+	Completed       bool              `json:"completed"`
+	CreationTime    string            `json:"creation_time"`
+	LastUpdated     string            `json:"last_updated"`
+	EndsAt          string            `json:"ends_at"`
+}
+
+// ReleasePlanList is the response payload for the plans-for-release endpoint.
+type ReleasePlanList = []ReleasePlan
+
+// Headers implements output.Tabular for ReleasePlan.
+func (ReleasePlan) Headers() []string {
+	return []string{"Key", "Name", "Target Version", "Owner", "Tests", "Groups", "Completed"}
+}
+
+// Rows implements output.Tabular for ReleasePlan.
+func (p ReleasePlan) Rows() [][]string {
+	return [][]string{{
+		p.Key,
+		p.Name,
+		p.TargetVersion,
+		p.Owner,
+		strconv.Itoa(len(p.Tests)),
+		strconv.Itoa(len(p.Groups)),
+		strconv.FormatBool(p.Completed),
+	}}
+}
+
+// ---------------------------------------------------------------------------
+// Write request payloads
+// ---------------------------------------------------------------------------
+
+// CreatePlanRequest is the JSON body for POST /planning/plan/create.
+//
+// It mirrors CreatePlanPayload (planner_service.py): Assignments maps an
+// entity UUID to a user UUID and is converted server-side into the plan's
+// assignee_mapping. ViewID is optional — a view is auto-created when absent.
+type CreatePlanRequest struct {
+	Name          string            `json:"name"`
+	Description   string            `json:"description"`
+	Owner         string            `json:"owner"`
+	Participants  []string          `json:"participants"`
+	TargetVersion string            `json:"target_version"`
+	ReleaseID     string            `json:"release_id"`
+	Tests         []string          `json:"tests"`
+	Groups        []string          `json:"groups"`
+	Assignments   map[string]string `json:"assignments"`
+	ViewID        string            `json:"view_id,omitempty"`
+	CreatedFrom   string            `json:"created_from,omitempty"`
+}
+
+// PlanDiffRequest is the JSON body for POST /planning/plan/update.
+//
+// It mirrors PlanDiffPayload (planner_service.py): only changed scalar fields
+// are sent (pointer fields, omitted when nil), and list/map mutations are
+// expressed as add/remove deltas. The server applies removes before adds.
+type PlanDiffRequest struct {
+	ID string `json:"id"`
+
+	// Scalar fields – only sent when changed (nil = no change).
+	Name          *string `json:"name,omitempty"`
+	Description   *string `json:"description,omitempty"`
+	Owner         *string `json:"owner,omitempty"`
+	TargetVersion *string `json:"target_version,omitempty"`
+	Completed     *bool   `json:"completed,omitempty"`
+	EndsAt        *string `json:"ends_at,omitempty"`
+	ViewID        *string `json:"view_id,omitempty"`
+
+	// List diffs.
+	TestsAdd           []string `json:"tests_add,omitempty"`
+	TestsRemove        []string `json:"tests_remove,omitempty"`
+	GroupsAdd          []string `json:"groups_add,omitempty"`
+	GroupsRemove       []string `json:"groups_remove,omitempty"`
+	ParticipantsAdd    []string `json:"participants_add,omitempty"`
+	ParticipantsRemove []string `json:"participants_remove,omitempty"`
+
+	// Map diff for assignee_mapping.
+	AssigneeMappingSet    map[string]string `json:"assignee_mapping_set,omitempty"`
+	AssigneeMappingRemove []string          `json:"assignee_mapping_remove,omitempty"`
+}
+
+// CopyPlanRequest is the JSON body for POST /planning/plan/copy.
+//
+// It mirrors CopyPlanPayload (planner_service.py): Plan is the source plan
+// (with name/version/description/owner overrides applied), Replacements maps a
+// missing source-entity UUID to a substitute target-entity UUID.
+type CopyPlanRequest struct {
+	Plan              ReleasePlan       `json:"plan"`
+	KeepParticipants  bool              `json:"keepParticipants"`
+	Replacements      map[string]string `json:"replacements"`
+	TargetReleaseID   string            `json:"targetReleaseId"`
+	TargetReleaseName string            `json:"targetReleaseName"`
+}
+
+// ---------------------------------------------------------------------------
+// Copy eligibility check response
+// ---------------------------------------------------------------------------
+
+// CopyCheckResponse is the payload of GET /planning/plan/<id>/copy/check.
+//
+// Status is "passed" or "failed"; Missing lists entities that have no
+// equivalent in the target release (by build_system_id remap).
+type CopyCheckResponse struct {
+	Status          string          `json:"status"`
+	TargetRelease   Release         `json:"targetRelease"`
+	OriginalRelease Release         `json:"originalRelease"`
+	Missing         MissingEntities `json:"missing"`
+}
+
+// MissingEntities groups the missing tests and groups of a copy eligibility check.
+type MissingEntities struct {
+	Tests  []GridEntity `json:"tests"`
+	Groups []GridEntity `json:"groups"`
+}
+
+// ---------------------------------------------------------------------------
+// Release / Gridview – name resolution and group expansion sources
+// ---------------------------------------------------------------------------
+
+// Release mirrors the subset of ArgusRelease returned by /api/v1/releases and
+// the copy-check endpoint.
+type Release struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	PrettyName string `json:"pretty_name"`
+	Enabled    bool   `json:"enabled"`
+}
+
+// ReleaseList is the response payload for GET /api/v1/releases.
+type ReleaseList = []Release
+
+// GridEntity is a single test or group in a release's gridview (and the shape
+// of index-mapped entities in copy-check "missing" lists).
+//
+// Group and Release are decorated *names* (strings) in the gridview, unlike
+// the search endpoint where they are nested objects (see SearchHit).
+type GridEntity struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	PrettyName    string `json:"pretty_name"`
+	BuildSystemID string `json:"build_system_id"`
+	GroupID       string `json:"group_id"`
+	ReleaseID     string `json:"release_id"`
+	Enabled       bool   `json:"enabled"`
+	Type          string `json:"type"`
+	Group         string `json:"group"`
+	Release       string `json:"release"`
+}
+
+// GridView is the response payload for GET /planning/release/<id>/gridview.
+//
+// Tests and Groups are keyed by entity UUID and contain only enabled entities;
+// TestByGroup maps a group UUID to its tests (including disabled ones) and is
+// deliberately not used for enabled-only expansion.
+type GridView struct {
+	Tests       map[string]GridEntity   `json:"tests"`
+	Groups      map[string]GridEntity   `json:"groups"`
+	TestByGroup map[string][]GridEntity `json:"testByGroup"`
+}
+
+// ---------------------------------------------------------------------------
+// PlanTemplate – editable create-spec (get --template / create --file schema)
+// ---------------------------------------------------------------------------
+
+// PlanTemplate is the release-independent, human-readable plan spec emitted by
+// `planner get --template` and consumed by `planner create --file`.
+//
+// Tests are group-qualified "group/test" strings, Owner/Participants are
+// usernames, and Assignments are keyed by "group/test".
+type PlanTemplate struct {
+	Name          string            `json:"name"`
+	Description   string            `json:"description,omitempty"`
+	Release       string            `json:"release"`
+	TargetVersion string            `json:"target_version,omitempty"`
+	Owner         string            `json:"owner,omitempty"`
+	Participants  []string          `json:"participants,omitempty"`
+	Tests         []string          `json:"tests"`
+	Assignments   map[string]string `json:"assignments,omitempty"`
+}
+
+// ---------------------------------------------------------------------------
+// SearchHit – /planning/search result
+// ---------------------------------------------------------------------------
+
+// SearchRef is the nested group/release object attached to a search hit.
+// Unlike the gridview, the search endpoint returns these as objects, not
+// decorated name strings.
+type SearchRef struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	PrettyName string `json:"pretty_name"`
+	Enabled    bool   `json:"enabled"`
+}
+
+// SearchHit is a single result of GET /planning/search. Type is one of
+// "test", "group", "release", or "special" (the synthetic "Add all..." row,
+// which is filtered out before display).
+type SearchHit struct {
+	ID            string     `json:"id"`
+	Name          string     `json:"name"`
+	PrettyName    string     `json:"pretty_name"`
+	Type          string     `json:"type"`
+	BuildSystemID string     `json:"build_system_id"`
+	Enabled       bool       `json:"enabled"`
+	Group         *SearchRef `json:"group"`
+	Release       *SearchRef `json:"release"`
+}
+
+// SearchHitList is the response payload for GET /planning/search.
+type SearchHitList = []SearchHit
+
+// Headers implements output.Tabular for SearchHit.
+func (SearchHit) Headers() []string {
+	return []string{"Type", "Name", "Build System Id", "Group", "Release"}
+}
+
+// Rows implements output.Tabular for SearchHit.
+func (h SearchHit) Rows() [][]string {
+	name := h.PrettyName
+	if name == "" {
+		name = h.Name
+	}
+	group := ""
+	if h.Group != nil {
+		group = h.Group.Name
+	}
+	release := ""
+	if h.Release != nil {
+		release = h.Release.Name
+	}
+	return [][]string{{h.Type, name, h.BuildSystemID, group, release}}
+}
