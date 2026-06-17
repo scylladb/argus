@@ -99,6 +99,30 @@ def pytest_addoption(parser):
     )
 
     group.addoption(
+        "--argus-log-dir",
+        action="store",
+        dest="log_dir",
+        default=os.environ.get("ARGUS_LOG_DIR", "."),
+        help="Directory for the argus_replay_log JSONL file",
+    )
+
+    group.addoption(
+        "--argus-use-tunnel",
+        action="store_true",
+        dest="use_tunnel",
+        default=None,
+        help="Route API calls through the Argus SSH tunnel",
+    )
+
+    group.addoption(
+        "--argus-no-use-tunnel",
+        action="store_false",
+        dest="use_tunnel",
+        default=None,
+        help="Don't route API calls through the Argus SSH tunnel",
+    )
+
+    group.addoption(
         "--argus-slices",
         action="store_true",
         dest="slices",
@@ -164,6 +188,8 @@ class ArgusReporter(object):  # pylint: disable=too-many-instance-attributes
         self.base_url = config.getoption("base_url")
         self.api_key = config.getoption("api_key")
         self.extra_headers = config.getoption("extra_headers")
+        self.log_dir = config.getoption("log_dir")
+        self.use_tunnel = config.getoption("use_tunnel")
         self.max_splice_time = config.getoption("max_splice_time")
         self.default_test_time = config.getoption("default_test_time")
         if self.post_reports:
@@ -186,6 +212,8 @@ class ArgusReporter(object):  # pylint: disable=too-many-instance-attributes
         return ArgusGenericClient(
             auth_token=self.api_key,
             base_url=self.base_url,
+            log_dir=self.log_dir,
+            use_tunnel=self.use_tunnel,
             extra_headers=self.extra_headers,
         )
 
