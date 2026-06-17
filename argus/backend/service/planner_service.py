@@ -44,6 +44,7 @@ class TempPlanPayload:
     completed: bool
     description: str
     owner: str
+    key: str
     participants: list[str]
     target_version: str
     assignee_mapping: dict[str, str]
