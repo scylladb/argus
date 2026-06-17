@@ -3,11 +3,14 @@ import nox
 nox.options.default_venv_backend = "uv"
 
 
-@nox.session(python=["3.10", "3.11", "3.12", "3.13", "3.14"])
+@nox.session(python=["3.12", "3.13", "3.14"])
 def tests(session):
     """Run the test suite with coverage."""
 
-    session.install(".[dev]")
+    # Install the in-repo argus client (editable) so the reporter is tested
+    # against this repo's argus-alm rather than a cached/published wheel that
+    # may lag behind the client API the reporter targets.
+    session.install("-e", "..", ".[dev]")
     session.run(
         "pytest",
         "-p",
@@ -20,7 +23,7 @@ def tests(session):
     )
 
 
-@nox.session(python=["3.10", "3.11", "3.12", "3.13", "3.14"])
+@nox.session(python=["3.12", "3.13", "3.14"])
 def pre_commit(session):
     """Run pre-commit checks."""
     session.install(".[dev]")
