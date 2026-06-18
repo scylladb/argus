@@ -17,7 +17,9 @@ Central tracking for all Argus implementation plans. Each plan is listed under i
 
 ## Backend
 
-_No plans in this domain yet._
+| Plan                                | Status  | File                                                           | Owner |
+| ----------------------------------- | ------- | -------------------------------------------------------------- | ----- |
+| Release Dashboard / Views Unification | `draft` | [dashboard-view-unification.md](dashboard-view-unification.md) | null  |
 
 ## Frontend
 
