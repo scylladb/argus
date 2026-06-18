@@ -59,7 +59,6 @@ def releases():
         "response": [dict(d.items()) for d in all_releases if d.enabled or force_all]
     })
 
-    response.cache_control.max_age = 60
     return response
 
 
@@ -304,12 +303,10 @@ def argus_groups():
     groups = service.get_groups(UUID(release_id))
     result_groups = [dict(g.items()) for g in groups if g.enabled or force_all]
 
-    response = jsonify({
+    return jsonify({
         "status": "ok",
         "response": result_groups
     })
-    response.cache_control.max_age = 60
-    return response
 
 
 @bp.route("/tests", methods=["GET"])
@@ -323,48 +320,40 @@ def argus_tests():
     tests = service.get_tests(group_id=group_id)
     result_tests = [dict(t.items()) for t in tests if t.enabled or force_all]
 
-    response = jsonify({
+    return jsonify({
         "status": "ok",
         "response": result_tests
     })
-    response.cache_control.max_age = 60
-    return response
 
 
 @bp.route("/release/<string:release_id>/details", methods=["GET"])
 @api_login_required
 def get_release_details(release_id: str):
     release = ArgusRelease.get(id=UUID(release_id))
-    response = jsonify({
+    return jsonify({
         "status": "ok",
         "response": release,
     })
-    response.cache_control.max_age = 60
-    return response
 
 
 @bp.route("/group/<string:group_id>/details", methods=["GET"])
 @api_login_required
 def get_group_details(group_id: str):
     group = ArgusGroup.get(id=UUID(group_id))
-    response = jsonify({
+    return jsonify({
         "status": "ok",
         "response": group,
     })
-    response.cache_control.max_age = 60
-    return response
 
 
 @bp.route("/test/<string:test_id>/details", methods=["GET"])
 @api_login_required
 def get_test_details(test_id: str):
     test = ArgusTest.get(id=UUID(test_id))
-    response = jsonify({
+    return jsonify({
         "status": "ok",
         "response": test
     })
-    response.cache_control.max_age = 60
-    return response
 
 
 @bp.route("/test/<string:test_id>/set_plugin", methods=["POST"])
