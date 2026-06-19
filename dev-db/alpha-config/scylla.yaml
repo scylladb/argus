@@ -13,7 +13,9 @@ saslauthd_socket_path: /run/saslauthd/mux
 developer_mode: true
 consistent_cluster_management: true
 force_schema_commit_log: true
+rf_rack_valid_keyspaces: true
 experimental_features:
   - alternator-streams
   - udf
+  - views-with-tablets
 vector_store_primary_uri: http://172.18.0.3:6080
