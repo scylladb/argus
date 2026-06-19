@@ -4,6 +4,7 @@ from uuid import UUID
 from argus.backend.db import ScyllaCluster
 from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, ReleaseDistinctVersions, ReleaseDistinctImages, ReleaseStatsSnapshot, invalidate_release_snapshots
+>>>>>>> 3b77d2c (refactor(backend): combine version/image filters and build_id grouping into single loop in run_fanout)
 
 LOGGER = logging.getLogger(__name__)
 

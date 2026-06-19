@@ -68,7 +68,7 @@ def plugin_run_stub(release_id, version: str | None) -> SimpleNamespace:
     SimpleNamespace that carries only the attributes the methods read.
     """
     from argus.backend.plugins.core import PluginModelBase
-    obj = SimpleNamespace(release_id=release_id, scylla_version=version)
+    obj = SimpleNamespace(release_id=release_id, scylla_version=version, test_id=uuid.uuid4())
     obj.invalidate_release_snapshot = types.MethodType(
         PluginModelBase.invalidate_release_snapshot, obj
     )
@@ -130,7 +130,8 @@ def test_invalidate_release_snapshot_deletes_matching_version_and_aggregate(argu
         make_mock_snapshot("v=::img=::nov=1::lim=0"),       # all-versions aggregate
         make_mock_snapshot("v=5.7.0::img=::nov=1::lim=0"),  # unrelated version
     ]
-    with patch("argus.backend.models.web.ReleaseStatsSnapshot.filter") as mock_filter:
+    with patch("argus.backend.models.web.ReleaseStatsSnapshot.filter") as mock_filter, \
+         patch("argus.backend.service.stats_snapshot.affected_view_ids", return_value=set()):
         mock_filter.return_value.all.return_value = snapshots
         plugin_run_stub(uuid.uuid4(), "5.6.1").invalidate_release_snapshot()
 
@@ -147,7 +148,8 @@ def test_invalidate_release_snapshot_versionless_run_only_wipes_aggregate(argus_
         make_mock_snapshot("v=::img=::nov=1::lim=0"),
         make_mock_snapshot("v=5.7.0::img=::nov=1::lim=0"),
     ]
-    with patch("argus.backend.models.web.ReleaseStatsSnapshot.filter") as mock_filter:
+    with patch("argus.backend.models.web.ReleaseStatsSnapshot.filter") as mock_filter, \
+         patch("argus.backend.service.stats_snapshot.affected_view_ids", return_value=set()):
         mock_filter.return_value.all.return_value = snapshots
         plugin_run_stub(uuid.uuid4(), None).invalidate_release_snapshot()
 
@@ -160,13 +162,15 @@ def test_invalidate_release_snapshot_versionless_run_only_wipes_aggregate(argus_
     (None,        "5.6.1"),  # no release_id — nothing to invalidate
 ])
 def test_invalidate_release_snapshot_skips_without_release_id(argus_db, release_id, version):
-    with patch("argus.backend.models.web.ReleaseStatsSnapshot.filter") as mock_filter:
+    with patch("argus.backend.models.web.ReleaseStatsSnapshot.filter") as mock_filter, \
+         patch("argus.backend.service.stats_snapshot.affected_view_ids", return_value=set()):
         plugin_run_stub(release_id, version).invalidate_release_snapshot()
         mock_filter.assert_not_called()
 
 
 def test_invalidate_release_snapshot_swallows_db_exception(argus_db):
-    with patch("argus.backend.models.web.ReleaseStatsSnapshot.filter", side_effect=Exception("db error")):
+    with patch("argus.backend.models.web.ReleaseStatsSnapshot.filter", side_effect=Exception("db error")), \
+         patch("argus.backend.service.stats_snapshot.affected_view_ids", return_value=set()):
         plugin_run_stub(uuid.uuid4(), "5.6.1").invalidate_release_snapshot()  # must not raise
 
 

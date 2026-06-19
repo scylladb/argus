@@ -22,6 +22,11 @@ from argus.backend.models.web import (
     ReleaseStatsSnapshot,
     ReleaseDistinctVersions,
 )
+from argus.backend.service.stats_snapshot import (
+    SCOPE_VIEW,
+    affected_view_ids,
+    invalidate_version_scoped,
+)
 from argus.backend.util.common import chunk
 from argus.common.enums import TestInvestigationStatus, TestStatus
 
@@ -291,6 +296,16 @@ class PluginModelBase(Model):
                     snapshot.delete()
         except Exception:
             LOGGER.warning("Failed to invalidate stats snapshot for release %s", self.release_id, exc_info=True)
+
+        # Invalidate view snapshots for views containing this test (version-scoped)
+        try:
+            for view_id in affected_view_ids({self.test_id}):
+                invalidate_version_scoped(SCOPE_VIEW, view_id, self.scylla_version)
+        except Exception:
+            LOGGER.warning(
+                "Failed to invalidate view snapshots for test %s / release %s",
+                self.test_id, self.release_id, exc_info=True,
+            )
 
     def index_version(self) -> None:
         if not self.release_id or not self.scylla_version:
