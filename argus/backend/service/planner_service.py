@@ -12,7 +12,8 @@ from flask import g
 from slugify import slugify
 
 from argus.backend.models.plan import ArgusReleasePlan
-from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, ArgusUserView, User, invalidate_release_snapshots
+from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, ArgusUserView, User
+from argus.backend.service.stats_snapshot import invalidate_release_snapshots
 from argus.backend.service.jenkins_service import JenkinsService
 from argus.backend.service.test_lookup import TestLookup
 from argus.backend.service.views import UserViewService

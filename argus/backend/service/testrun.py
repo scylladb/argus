@@ -29,8 +29,9 @@ from argus.backend.models.web import (
     ArgusTest,
     ArgusTestRunComment,
     User,
-    invalidate_release_snapshots,
 )
+
+from argus.backend.service.stats_snapshot import invalidate_release_snapshots
 
 from argus.backend.plugins.core import PluginInfoBase, PluginModelBase
 
