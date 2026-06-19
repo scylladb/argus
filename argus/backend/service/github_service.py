@@ -9,7 +9,8 @@ from flask import current_app, g
 from github import Github, Auth
 
 from argus.backend.models.runtime_store import RuntimeStore
-from argus.backend.models.web import ArgusEventTypes, ArgusTest, ArgusUserView, invalidate_release_snapshots
+from argus.backend.models.web import ArgusEventTypes, ArgusTest, ArgusUserView
+from argus.backend.service.stats_snapshot import invalidate_release_snapshots
 from argus.backend.models.github_issue import GithubIssue, IssueAssignee, IssueLink, IssueLabel
 from argus.backend.plugins.core import PluginInfoBase
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS

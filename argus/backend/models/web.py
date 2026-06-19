@@ -1,4 +1,3 @@
-import logging
 from typing import Optional
 from uuid import UUID, uuid1, uuid4
 from datetime import datetime
@@ -398,10 +397,20 @@ class WebFileStorage(Model):
     filename = columns.Text(min_length=1)
 
 
-class ReleaseStatsSnapshot(Model):
-    __table_name__ = "argus_release_stats_snapshot"
-    release_id = columns.UUID(partition_key=True)
+class StatsSnapshot(Model):
+    """Generic stats snapshot store shared by release and view scopes.
+
+    Partition key: (scope_type, scope_id) — e.g. ("release", <release_uuid>) or ("view", <view_uuid>).
+    Clustering keys: filter_key (version/image/nov/lim combination) + variant_key (widget variant or "").
+
+    filter_key format:  v=<version>::img=<image_id>::nov=<0|1>::lim=<0|1>
+    variant_key format: "" (whole-scope stats) | "widget:<position>"
+    """
+    __table_name__ = "argus_stats_snapshot"
+    scope_type = columns.Text(partition_key=True)
+    scope_id = columns.UUID(partition_key=True)
     filter_key = columns.Text(primary_key=True)
+    variant_key = columns.Text(primary_key=True, default="")
     payload = columns.Text()
     generated_at = columns.DateTime()
 
@@ -422,25 +431,6 @@ class ReleaseDistinctImages(Model):
     """
     release_id = columns.UUID(partition_key=True)
     image_id = columns.Text(primary_key=True)
-
-
-_SNAPSHOT_LOGGER = logging.getLogger(__name__)
-
-
-def invalidate_release_snapshots(release_id: UUID) -> None:
-    """Full-partition delete of all ReleaseStatsSnapshot rows for a release.
-
-    Use this for structural or metadata changes that affect all filter
-    combinations (admin edits, group/test toggles, issue/comment/plan
-    mutations). The next stats request will regenerate the snapshots.
-    Version-scoped invalidation in PluginModelBase.invalidate_release_snapshot()
-    is used only for run lifecycle events (submit/finish).
-    """
-    try:
-        for snapshot in ReleaseStatsSnapshot.filter(release_id=release_id).all():
-            snapshot.delete()
-    except Exception:  # pylint: disable=broad-except
-        _SNAPSHOT_LOGGER.warning("Failed to invalidate release snapshots for %s", release_id, exc_info=True)
 
 
 USED_MODELS: list[Model] = [
@@ -484,7 +474,7 @@ USED_MODELS: list[Model] = [
     RunConfigParam,
     SSHTunnelKey,
     ProxyTunnelConfig,
-    ReleaseStatsSnapshot,
+    StatsSnapshot,
 ]
 
 USED_TYPES: list[UserType] = [

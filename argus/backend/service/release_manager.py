@@ -2,8 +2,8 @@ import logging
 from typing import TypedDict
 from uuid import UUID
 from argus.backend.db import ScyllaCluster
-from argus.backend.plugins.sct.testrun import SCTTestRun
-from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, ReleaseDistinctVersions, ReleaseDistinctImages, ReleaseStatsSnapshot, invalidate_release_snapshots
+from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, ReleaseDistinctVersions, ReleaseDistinctImages
+from argus.backend.service.stats_snapshot import invalidate_release, invalidate_release_snapshots
 
 LOGGER = logging.getLogger(__name__)
 
@@ -212,8 +212,7 @@ class ReleaseManagerService:
             row.delete()
         for row in ReleaseDistinctImages.filter(release_id=release.id).all():
             row.delete()
-        for row in ReleaseStatsSnapshot.filter(release_id=release.id).all():
-            row.delete()
+        invalidate_release(release.id)
 
         release.delete()
         return True

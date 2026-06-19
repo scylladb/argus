@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from typing import Any, TypedDict
 from uuid import UUID
 
-from flask import current_app
 from cassandra.cqlengine.models import Model
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.jira import JiraIssue
@@ -16,8 +15,9 @@ from argus.backend.plugins.loader import all_plugin_models
 from argus.backend.util.common import chunk, get_build_number, check_version
 from argus.common.enums import TestStatus, TestInvestigationStatus
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusScheduleTest, ArgusTest, \
-    ArgusTestRunComment, ArgusUserView, ReleaseStatsSnapshot
+    ArgusTestRunComment, ArgusUserView
 from argus.backend.db import ScyllaCluster
+from argus.backend.service.stats_snapshot import SnapshotScope, get_snapshot, put_snapshot
 
 LOGGER = logging.getLogger(__name__)
 
@@ -529,6 +529,63 @@ class TestStats:
         self.tracked_run_number = target_run.get("build_number", get_build_number(target_run.get("build_job_url")))
 
 
+class ScopedStatsCollector:
+    """Shared fan-out pipeline used by both ReleaseStatsCollector and ViewStatsCollector.
+
+    Accepts a list of ArgusTest objects and executes the batched async query fan-out
+    across all plugin models, then applies version and image filters.  Returns a
+    (rows, build_id_dict) pair ready to feed into ReleaseStats/ViewStats.collect().
+    """
+
+    @staticmethod
+    def run_fanout(
+        tests: list[ArgusTest],
+        scope,  # ArgusRelease | ArgusUserView — passed through to get_stats_for_release
+        version_filter: str | None,
+        image_id: str | None,
+        include_no_version: bool,
+    ) -> tuple[list[dict], dict[str, list[dict]]]:
+        """Execute the plugin fan-out for *tests* and return filtered (rows, dict_by_build_id)."""
+        build_ids = reduce(
+            lambda acc, test: acc[test.plugin_name or "unknown"].append(test.build_system_id) or acc,
+            tests,
+            defaultdict(list),
+        )
+        futures = [
+            future
+            for plugin in all_plugin_models()
+            for future in plugin.get_stats_for_release(
+                release=scope, build_ids=build_ids.get(plugin._plugin_name, [])
+            )
+        ]
+
+        # Build version predicate once, outside the loop
+        if version_filter:
+            if include_no_version:
+                version_ok = lambda v: check_version(version_filter, v) or not v
+            elif version_filter == "!noVersion":
+                version_ok = lambda v: not v
+            else:
+                version_ok = lambda v: check_version(version_filter, v)
+        else:
+            version_ok = lambda v: True if include_no_version else bool(v)
+
+        rows: list[dict] = []
+        rows_by_build_id: dict[str, list[dict]] = {}
+
+        for row in (row for future in futures for row in future.result()):
+            if not version_ok(row["scylla_version"]):
+                continue
+            if image_id and _get_image(row) != image_id:
+                continue
+            rows.append(row)
+            bucket = rows_by_build_id.get(row["build_id"], [])
+            bucket.append(row)
+            rows_by_build_id[row["build_id"]] = bucket
+
+        return rows, rows_by_build_id
+
+
 class ReleaseStatsCollector:
     def __init__(self, release_name: str, release_version: str | None = None) -> None:
         self.database = ScyllaCluster.get()
@@ -542,71 +599,31 @@ class ReleaseStatsCollector:
     def collect(self, limited=False, force=False, include_no_version=False, image_id: str = None) -> dict:
         self.release: ArgusRelease = ArgusRelease.get(name=self.release_name)
 
+        filter_key = snapshot_filter_key(self.release_version, image_id, include_no_version, limited)
         if not force:
-            filter_key = snapshot_filter_key(self.release_version, image_id, include_no_version, limited)
-            try:
-                snapshot = ReleaseStatsSnapshot.get(release_id=self.release.id, filter_key=filter_key)
-                return json.loads(snapshot.payload)
-            except ReleaseStatsSnapshot.DoesNotExist:
-                pass
+            cached = get_snapshot(SnapshotScope.RELEASE, self.release.id, filter_key)
+            if cached is not None:
+                return cached
 
         all_tests: list[ArgusTest] = list(ArgusTest.filter(release_id=self.release.id).all())
-        build_ids = reduce(lambda acc, test: acc[test.plugin_name or "unknown"].append(
-            test.build_system_id) or acc, all_tests, defaultdict(list))
-        self.release_rows = [futures for plugin in all_plugin_models()
-                             for futures in plugin.get_stats_for_release(release=self.release, build_ids=build_ids.get(plugin._plugin_name, []))]
-        self.release_rows = [row for future in self.release_rows for row in future.result()]
+
+        self.release_rows, self.release_dict = ScopedStatsCollector.run_fanout(
+            tests=all_tests,
+            scope=self.release,
+            version_filter=self.release_version,
+            image_id=image_id,
+            include_no_version=include_no_version,
+        )
+
         if self.release.dormant and not force:
-            return {
-                "dormant": True
-            }
-        if self.release_version:
-            if include_no_version:
-                expr = lambda row: check_version(self.release_version, row["scylla_version"]) or not row["scylla_version"]
-            elif self.release_version == "!noVersion":
-                expr = lambda row: not row["scylla_version"]
-            else:
-                expr = lambda row: check_version(self.release_version, row["scylla_version"])
-        else:
-            if include_no_version:
-                expr = lambda row: row
-            else:
-                expr = lambda row: row["scylla_version"]
-        self.release_rows = list(filter(expr, self.release_rows))
-        if image_id:
-            def filter_for_image(row: dict):
-                setup = row.get("cloud_setup")
-                if not setup:
-                    return False
-                db_node = setup.db_node
-                if not db_node:
-                    return False
-                image = db_node.image_id
-
-                return image == image_id
-
-            self.release_rows = list(filter(filter_for_image, self.release_rows))
-        self.release_dict = {}
-        for row in self.release_rows:
-            runs = self.release_dict.get(row["build_id"], [])
-            runs.append(row)
-            self.release_dict[row["build_id"]] = runs
+            return {"dormant": True}
 
         self.release_stats = ReleaseStats(release=self.release)
         self.release_stats.collect(rows=self.release_rows, limited=limited, force=force,
                                    dict=self.release_dict, tests=all_tests, version_filter=self.release_version)
         result = self.release_stats.to_dict()
 
-        filter_key = snapshot_filter_key(self.release_version, image_id, include_no_version, limited)
-        try:
-            ReleaseStatsSnapshot.create(
-                release_id=self.release.id,
-                filter_key=filter_key,
-                payload=current_app.json.dumps(result),
-                generated_at=datetime.now(UTC),
-            )
-        except Exception:
-            LOGGER.warning("Failed to write stats snapshot for release %s", self.release.id, exc_info=True)
+        put_snapshot(SnapshotScope.RELEASE, self.release.id, filter_key, result)
 
         return result
 
@@ -622,44 +639,43 @@ class ViewStatsCollector:
         self.view_id = view_id
         self.filter = filter
 
-    def collect(self, limited=False, force=False, include_no_version = False, widget_id: int = None, image_id: str = None) -> dict:
+    def collect(self, limited=False, force=False, include_no_version=False, widget_id: int = None, image_id: str = None) -> dict:
         self.view: ArgusUserView = ArgusUserView.get(id=self.view_id)
         widget: dict[str, Any] | None = None
         if isinstance(widget_id, int):
             settings = json.loads(self.view.widget_settings)
-            widget = next((widget for widget in settings if widget["position"] == widget_id), None)
+            widget = next((w for w in settings if w["position"] == widget_id), None)
+
         all_tests: list[ArgusTest] = []
-        for slice in chunk(self.view.tests):
-            all_tests.extend(ArgusTest.filter(id__in=slice).all())
+        for sl in chunk(self.view.tests):
+            all_tests.extend(ArgusTest.filter(id__in=sl).all())
 
         if widget and widget.get("filter"):
-            all_tests = [test for test in all_tests if any(str(test[key]) in widget["filter"] for key in ["id", "group_id", "release_id"])]
-        build_ids = reduce(lambda acc, test: acc[test.plugin_name or "unknown"].append(test.build_system_id) or acc, all_tests, defaultdict(list))
-        self.view_rows = [futures for plugin in all_plugin_models()
-                          for futures in plugin.get_stats_for_release(release=self.view, build_ids=build_ids.get(plugin._plugin_name, []))]
-        self.view_rows = [row for future in self.view_rows for row in future.result()]
+            all_tests = [test for test in all_tests if any(
+                str(test[key]) in widget["filter"] for key in ["id", "group_id", "release_id"])]
 
-        if self.filter:
-            if include_no_version:
-                expr = lambda row: check_version(self.filter, row["scylla_version"]) or not row["scylla_version"]
-            elif self.filter == "!noVersion":
-                expr = lambda row: not row["scylla_version"]
-            else:
-                expr = lambda row: check_version(self.filter, row["scylla_version"])
-        else:
-            if include_no_version:
-                expr = lambda row: row
-            else:
-                expr = lambda row: row["scylla_version"]
-        self.view_rows = list(filter(expr, self.view_rows))
-        if image_id:
-            self.view_rows = list(filter(lambda row: _get_image(row) == image_id, self.view_rows))
-        for row in self.view_rows:
-            runs = self.runs_by_build_id.get(row["build_id"], [])
-            runs.append(row)
-            self.runs_by_build_id[row["build_id"]] = runs
+        # A3: snapshot cache read (skip on force)
+        variant_key = f"widget:{widget_id}" if isinstance(widget_id, int) else ""
+        filter_key = snapshot_filter_key(self.filter, image_id, include_no_version, limited)
+        if not force:
+            cached = get_snapshot(SnapshotScope.VIEW, self.view.id, filter_key, variant_key)
+            if cached is not None:
+                return cached
+
+        # A2: delegate fan-out to shared pipeline
+        self.view_rows, self.runs_by_build_id = ScopedStatsCollector.run_fanout(
+            tests=all_tests,
+            scope=self.view,
+            version_filter=self.filter,
+            image_id=image_id,
+            include_no_version=include_no_version,
+        )
 
         self.view_stats = ViewStats(release=self.view)
         self.view_stats.collect(rows=self.view_rows, limited=limited, force=force,
                                 dict=self.runs_by_build_id, tests=all_tests, version_filter=self.filter)
-        return self.view_stats.to_dict()
+        result = self.view_stats.to_dict()
+
+        put_snapshot(SnapshotScope.VIEW, self.view.id, filter_key, result, variant_key)
+
+        return result

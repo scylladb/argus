@@ -28,5 +28,15 @@
         "created": "2026-06-01",
         "phases_total": 8,
         "phases_done": 0
+    },
+    {
+        "id": "dashboard-view-unification",
+        "title": "Release Dashboard / Views Unification",
+        "file": "docs/plans/dashboard-view-unification.md",
+        "domain": "backend",
+        "status": "draft",
+        "created": "2026-06-18",
+        "phases_total": 13,
+        "phases_done": 0
     }
 ]

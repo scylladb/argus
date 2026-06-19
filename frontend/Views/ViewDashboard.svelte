@@ -37,38 +37,48 @@
         }
     };
 
+    let resolveViewTestsPromise = null;
     const resolveViewTests = async function() {
         if (resolvedTests.length > 0) {
             return resolvedTests;
         }
-        try {
-            let response = await fetch(`/api/v1/views/${view.id}/resolve/tests`);
-            if (response.status !== 200) {
-                throw new Error("Non-200 status code returned from API.");
-            }
-            let json = await response.json();
-            if (json.status === "ok") {
-                resolvedTests = json.response;
-                return resolvedTests;
-            } else {
-                throw json;
-            }
-        } catch (error) {
-            if (error?.status === "error") {
-                sendMessage(
-                    "error",
-                    `API Error resolving view tests.\nMessage: ${error.response.arguments[0]}`,
-                    "ViewDashboard::resolveViewTests"
-                );
-            } else {
-                sendMessage(
-                    "error",
-                    "A backend error occurred during view test resolution.",
-                    "ViewDashboard::resolveViewTests"
-                );
-                console.log(error);
-            }
+        // Dedupe concurrent in-flight requests: share the single promise across all callers
+        if (resolveViewTestsPromise) {
+            return resolveViewTestsPromise;
         }
+        resolveViewTestsPromise = (async () => {
+            try {
+                let response = await fetch(`/api/v1/views/${view.id}/resolve/tests`);
+                if (response.status !== 200) {
+                    throw new Error("Non-200 status code returned from API.");
+                }
+                let json = await response.json();
+                if (json.status === "ok") {
+                    resolvedTests = json.response;
+                    return resolvedTests;
+                } else {
+                    throw json;
+                }
+            } catch (error) {
+                if (error?.status === "error") {
+                    sendMessage(
+                        "error",
+                        `API Error resolving view tests.\nMessage: ${error.response.arguments[0]}`,
+                        "ViewDashboard::resolveViewTests"
+                    );
+                } else {
+                    sendMessage(
+                        "error",
+                        "A backend error occurred during view test resolution.",
+                        "ViewDashboard::resolveViewTests"
+                    );
+                    console.log(error);
+                }
+            } finally {
+                resolveViewTestsPromise = null;
+            }
+        })();
+        return resolveViewTestsPromise;
     };
 
     const handleDeleteRequest = function(e) {
