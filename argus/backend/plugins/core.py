@@ -19,13 +19,13 @@ from argus.backend.models.web import (
     ArgusSchedule,
     ArgusScheduleTest,
     ArgusScheduleAssignee,
-    ReleaseStatsSnapshot,
     ReleaseDistinctVersions,
 )
 from argus.backend.service.stats_snapshot import (
-    SCOPE_VIEW,
+    SnapshotScope,
     affected_view_ids,
-    invalidate_version_scoped,
+    invalidate_release_version,
+    invalidate_view_version,
 )
 from argus.backend.util.common import chunk
 from argus.common.enums import TestInvestigationStatus, TestStatus
@@ -287,20 +287,16 @@ class PluginModelBase(Model):
     def invalidate_release_snapshot(self) -> None:
         if not self.release_id:
             return
+        # Invalidate release-scoped snapshot (version-scoped)
         try:
-            version = self.scylla_version or ""
-            version_prefix = f"v={version}::"
-            all_versions_prefix = "v=::"
-            for snapshot in ReleaseStatsSnapshot.filter(release_id=self.release_id).all():
-                if snapshot.filter_key.startswith(version_prefix) or snapshot.filter_key.startswith(all_versions_prefix):
-                    snapshot.delete()
+            invalidate_release_version(self.release_id, self.scylla_version)
         except Exception:
             LOGGER.warning("Failed to invalidate stats snapshot for release %s", self.release_id, exc_info=True)
 
         # Invalidate view snapshots for views containing this test (version-scoped)
         try:
             for view_id in affected_view_ids({self.test_id}):
-                invalidate_version_scoped(SCOPE_VIEW, view_id, self.scylla_version)
+                invalidate_view_version(view_id, self.scylla_version)
         except Exception:
             LOGGER.warning(
                 "Failed to invalidate view snapshots for test %s / release %s",

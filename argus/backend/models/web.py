@@ -1,4 +1,3 @@
-import logging
 from typing import Optional
 from uuid import UUID, uuid1, uuid4
 from datetime import datetime
@@ -398,14 +397,6 @@ class WebFileStorage(Model):
     filename = columns.Text(min_length=1)
 
 
-class ReleaseStatsSnapshot(Model):
-    __table_name__ = "argus_release_stats_snapshot"
-    release_id = columns.UUID(partition_key=True)
-    filter_key = columns.Text(primary_key=True)
-    payload = columns.Text()
-    generated_at = columns.DateTime()
-
-
 class StatsSnapshot(Model):
     """Generic stats snapshot store shared by release and view scopes.
 
@@ -440,18 +431,6 @@ class ReleaseDistinctImages(Model):
     """
     release_id = columns.UUID(partition_key=True)
     image_id = columns.Text(primary_key=True)
-
-
-_SNAPSHOT_LOGGER = logging.getLogger(__name__)
-
-
-# Re-exported here for backward compatibility with all existing call sites.
-# The implementation lives in argus.backend.service.stats_snapshot to avoid
-# the circular import that would arise from importing stats_snapshot at
-# module level in this file (web.py is itself imported by stats_snapshot).
-def invalidate_release_snapshots(release_id: UUID) -> None:
-    from argus.backend.service.stats_snapshot import invalidate_release_snapshots as _impl
-    _impl(release_id)
 
 
 USED_MODELS: list[Model] = [
@@ -495,7 +474,6 @@ USED_MODELS: list[Model] = [
     RunConfigParam,
     SSHTunnelKey,
     ProxyTunnelConfig,
-    ReleaseStatsSnapshot,
     StatsSnapshot,
 ]
 

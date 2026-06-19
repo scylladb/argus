@@ -7,8 +7,12 @@ from uuid import UUID
 from cassandra.cqlengine.models import Model
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.pytest import PytestResultTable
-from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, ArgusUserView, User
+from argus.backend.models.web import (
+    ArgusGroup, ArgusRelease, ArgusTest, ArgusUserView, ReleaseDistinctImages,
+    ReleaseDistinctVersions, User,
+)
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS, all_plugin_models
+from argus.backend.service.stats_snapshot import invalidate_view
 from argus.backend.service.test_lookup import TestLookup
 from argus.backend.util.common import chunk, current_user
 
@@ -99,6 +103,11 @@ class UserViewService:
                     view.tests.append(entity_id)
         view.last_updated = datetime.datetime.utcnow()
         view.save()
+        # Drop all cached stats snapshots — test set changed
+        try:
+            invalidate_view(view.id)
+        except Exception:
+            LOGGER.warning("Failed to invalidate view snapshot on update for view %s", view_id, exc_info=True)
         return True
 
     def delete_view(self, view_id: str | UUID) -> bool:
@@ -159,6 +168,11 @@ class UserViewService:
         view.tests = list(all_tests)
         view.last_updated = datetime.datetime.utcnow()
         view.save()
+        # Drop all cached stats snapshots — test set may have changed
+        try:
+            invalidate_view(view.id)
+        except Exception:
+            LOGGER.warning("Failed to invalidate view snapshot on refresh for view %s", view.id, exc_info=True)
 
         return view
 
@@ -191,18 +205,81 @@ class UserViewService:
 
         return results
 
-    def get_versions_for_view(self, view_id: str | UUID) -> list[str]:
-        tests = self.resolve_view_tests(view_id)
-        unique_versions = {ver for plugin in all_plugin_models()
-                           for ver in plugin.get_distinct_versions_for_view(tests=tests)}
+    def _release_ids_for_view(self, view: ArgusUserView) -> set[UUID]:
+        """Compute the full set of release ids covered by a view.
 
-        return sorted(list(unique_versions), reverse=True)
+        Unions: explicit release_ids + releases derived from group_ids + releases
+        from the individual test list (view.tests).
+        """
+        release_ids: set[UUID] = set(view.release_ids or [])
+        for batch in chunk(view.group_ids or []):
+            for group in ArgusGroup.filter(id__in=batch).all():
+                release_ids.add(group.release_id)
+        for batch in chunk(view.tests or []):
+            for test in ArgusTest.filter(id__in=batch).all():
+                release_ids.add(test.release_id)
+        return release_ids
+
+    def get_versions_for_view(self, view_id: str | UUID) -> list[str]:
+        """Return distinct scylla_version values for all tests in the view.
+
+        Fast path: union ReleaseDistinctVersions partitions for every release
+        covered by the view — O(distinct versions per release), typically <10ms.
+        Fallback: if the index is empty for every release (pre-backfill),
+        falls back to the old scan path.
+        """
+        view = ArgusUserView.get(id=view_id)
+        release_ids = self._release_ids_for_view(view)
+
+        all_versions: set[str] = set()
+        empty_releases: list[UUID] = []
+
+        for release_id in release_ids:
+            rows = list(ReleaseDistinctVersions.filter(release_id=release_id).all())
+            if rows:
+                all_versions.update(r.version for r in rows)
+            else:
+                empty_releases.append(release_id)
+
+        # Fallback for releases not yet in the index
+        if empty_releases:
+            tests = self.resolve_view_tests(view_id)
+            tests_for_empty = [t for t in tests if t.release_id in set(empty_releases)]
+            for plugin in all_plugin_models():
+                all_versions.update(plugin.get_distinct_versions_for_view(tests=tests_for_empty))
+
+        return sorted(all_versions, reverse=True)
 
     def get_images_for_view(self, view_id: str | UUID) -> list[str]:
-        tests = self.resolve_view_tests(view_id)
-        images = AVAILABLE_PLUGINS["scylla-cluster-tests"].model.get_distinct_cloud_images_for_view(tests)
+        """Return distinct cloud image ids for all tests in the view.
 
-        return images
+        Fast path: union ReleaseDistinctImages partitions for every release
+        covered by the view — O(distinct images per release), typically <10ms.
+        Fallback: if the index is empty, falls back to the old per-build_id scan.
+        """
+        view = ArgusUserView.get(id=view_id)
+        release_ids = self._release_ids_for_view(view)
+
+        all_images: set[str] = set()
+        empty_releases: list[UUID] = []
+
+        for release_id in release_ids:
+            rows = list(ReleaseDistinctImages.filter(release_id=release_id).all())
+            if rows:
+                all_images.update(r.image_id for r in rows)
+            else:
+                empty_releases.append(release_id)
+
+        # Fallback for releases not yet in the index
+        if empty_releases:
+            tests = self.resolve_view_tests(view_id)
+            tests_for_empty = [t for t in tests if t.release_id in set(empty_releases)]
+            fallback_images = AVAILABLE_PLUGINS["scylla-cluster-tests"].model.get_distinct_cloud_images_for_view(
+                tests_for_empty
+            )
+            all_images.update(fallback_images)
+
+        return sorted(all_images, reverse=True)
 
     def resolve_view_for_edit(self, view_id: str | UUID) -> dict:
         view: ArgusUserView = ArgusUserView.get(id=view_id)

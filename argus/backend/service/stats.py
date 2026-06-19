@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from typing import Any, TypedDict
 from uuid import UUID
 
-from flask import current_app
 from cassandra.cqlengine.models import Model
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.jira import JiraIssue
@@ -16,9 +15,9 @@ from argus.backend.plugins.loader import all_plugin_models
 from argus.backend.util.common import chunk, get_build_number, check_version
 from argus.common.enums import TestStatus, TestInvestigationStatus
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusScheduleTest, ArgusTest, \
-    ArgusTestRunComment, ArgusUserView, ReleaseStatsSnapshot
+    ArgusTestRunComment, ArgusUserView
 from argus.backend.db import ScyllaCluster
-from argus.backend.service import stats_snapshot as snapshot_store
+from argus.backend.service.stats_snapshot import SnapshotScope, get_snapshot, put_snapshot
 
 LOGGER = logging.getLogger(__name__)
 
@@ -600,13 +599,11 @@ class ReleaseStatsCollector:
     def collect(self, limited=False, force=False, include_no_version=False, image_id: str = None) -> dict:
         self.release: ArgusRelease = ArgusRelease.get(name=self.release_name)
 
+        filter_key = snapshot_filter_key(self.release_version, image_id, include_no_version, limited)
         if not force:
-            filter_key = snapshot_filter_key(self.release_version, image_id, include_no_version, limited)
-            try:
-                snapshot = ReleaseStatsSnapshot.get(release_id=self.release.id, filter_key=filter_key)
-                return json.loads(snapshot.payload)
-            except ReleaseStatsSnapshot.DoesNotExist:
-                pass
+            cached = get_snapshot(SnapshotScope.RELEASE, self.release.id, filter_key)
+            if cached is not None:
+                return cached
 
         all_tests: list[ArgusTest] = list(ArgusTest.filter(release_id=self.release.id).all())
 
@@ -626,16 +623,7 @@ class ReleaseStatsCollector:
                                    dict=self.release_dict, tests=all_tests, version_filter=self.release_version)
         result = self.release_stats.to_dict()
 
-        filter_key = snapshot_filter_key(self.release_version, image_id, include_no_version, limited)
-        try:
-            ReleaseStatsSnapshot.create(
-                release_id=self.release.id,
-                filter_key=filter_key,
-                payload=current_app.json.dumps(result),
-                generated_at=datetime.now(UTC),
-            )
-        except Exception:
-            LOGGER.warning("Failed to write stats snapshot for release %s", self.release.id, exc_info=True)
+        put_snapshot(SnapshotScope.RELEASE, self.release.id, filter_key, result)
 
         return result
 
@@ -670,12 +658,7 @@ class ViewStatsCollector:
         variant_key = f"widget:{widget_id}" if isinstance(widget_id, int) else ""
         filter_key = snapshot_filter_key(self.filter, image_id, include_no_version, limited)
         if not force:
-            cached = snapshot_store.get_snapshot(
-                scope_type=snapshot_store.SCOPE_VIEW,
-                scope_id=self.view.id,
-                filter_key=filter_key,
-                variant_key=variant_key,
-            )
+            cached = get_snapshot(SnapshotScope.VIEW, self.view.id, filter_key, variant_key)
             if cached is not None:
                 return cached
 
@@ -693,13 +676,6 @@ class ViewStatsCollector:
                                 dict=self.runs_by_build_id, tests=all_tests, version_filter=self.filter)
         result = self.view_stats.to_dict()
 
-        # A3: snapshot cache write
-        snapshot_store.put_snapshot(
-            scope_type=snapshot_store.SCOPE_VIEW,
-            scope_id=self.view.id,
-            filter_key=filter_key,
-            result=result,
-            variant_key=variant_key,
-        )
+        put_snapshot(SnapshotScope.VIEW, self.view.id, filter_key, result, variant_key)
 
         return result
