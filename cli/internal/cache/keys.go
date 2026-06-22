@@ -47,6 +47,17 @@ const (
 	// Events are append-only once a run finishes, so a longer TTL is fine.
 	// During a live run we keep it short so new events appear quickly.
 	TTLSCTEvents = 5 * time.Minute
+
+	// TTLReleases is the TTL for the releases list used by name resolution.
+	// The set of releases changes rarely, so a short TTL is plenty.
+	TTLReleases = 5 * time.Minute
+
+	// TTLUsers is the TTL for the users list used by username resolution.
+	TTLUsers = 5 * time.Minute
+
+	// TTLGridview is the TTL for a release's gridview (enabled tests + groups),
+	// the source for client-side test/group name resolution and group expansion.
+	TTLGridview = 5 * time.Minute
 )
 
 // RunKey returns the cache key for a specific test run.
@@ -177,6 +188,27 @@ func NemesesFilteredKey(runID, before, after string) string {
 func PytestFilterKey(queryString string) string {
 	h := sha256.Sum256([]byte(queryString))
 	return path.Join("pytest-filter", fmt.Sprintf("%x", h[:8]))
+}
+
+// ReleasesKey returns the cache key for the releases list.
+//
+// On disk: cache/releases/
+func ReleasesKey() string {
+	return "releases"
+}
+
+// UsersKey returns the cache key for the users list.
+//
+// On disk: cache/users/
+func UsersKey() string {
+	return "users"
+}
+
+// GridviewKey returns the cache key for a release's gridview structure.
+//
+// On disk: cache/gridview/{releaseID}/
+func GridviewKey(releaseID string) string {
+	return path.Join("gridview", releaseID)
 }
 
 // PrometheusLogKey returns the cache key for a downloaded monitor-set archive.
