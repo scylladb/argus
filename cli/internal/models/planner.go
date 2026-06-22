@@ -159,6 +159,19 @@ type Release struct {
 // ReleaseList is the response payload for GET /api/v1/releases.
 type ReleaseList = []Release
 
+// User mirrors the subset of User returned by GET /api/v1/users (User.to_json).
+type User struct {
+	ID        string `json:"id"`
+	Username  string `json:"username"`
+	FullName  string `json:"full_name"`
+	Email     string `json:"email"`
+	PictureID string `json:"picture_id"`
+}
+
+// UsersMap is the response payload for GET /api/v1/users: a map keyed by the
+// user's UUID string with the user object as the value.
+type UsersMap = map[string]User
+
 // GridEntity is a single test or group in a release's gridview (and the shape
 // of index-mapped entities in copy-check "missing" lists).
 //

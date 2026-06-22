@@ -1,8 +1,8 @@
 ---
-status: draft
+status: in_progress
 domain: client
 created: 2026-06-01
-last_updated: 2026-06-01
+last_updated: 2026-06-22
 owner: null
 ---
 
@@ -496,19 +496,20 @@ exceptions are `--plan-id` and `--view-id`). Add to `PlannerService`:
 - **DoD:**
   - [ ] `argus planner list --release <name>` returns plans (manual against staging).
   - [ ] `argus planner get --plan-id <id>` shows a single plan.
-  - [ ] Release/user name resolution unit-tested with an `httptest` server (name hit,
+  - [x] Release/user name resolution unit-tested with an `httptest` server (name hit,
         ambiguous error, no-match error); a raw UUID passed as a name errors (not
         silently accepted).
-  - [ ] Test by `build_system_id` resolves to one UUID; group by name resolves within
+  - [x] Test by `build_system_id` resolves to one UUID; group by name resolves within
         release (unit tests).
-  - [ ] Ambiguous bare test name aborts with a candidate list incl.
+  - [x] Ambiguous bare test name aborts with a candidate list incl.
         `build_system_id`+group+UUID; group-qualified `group/test` resolves an
         otherwise-ambiguous name (unit tests).
-  - [ ] `ExpandGroup` returns only the group's **enabled** test UUIDs (a disabled
+  - [x] `ExpandGroup` returns only the group's **enabled** test UUIDs (a disabled
         member is excluded), using the single cached gridview fetch (unit test).
-  - [ ] Resolution uses a single cached gridview fetch per release (unit test asserts
+  - [x] Resolution uses a single cached gridview fetch per release (unit test asserts
         one GET).
-  - [ ] `--text` and JSON modes both render.
+  - [x] `--text` and JSON modes both render (covered by `TestReleasePlan_TabularShape`
+        + `TestReleasePlan_JSONRoundTrip` and the tested output package).
 
 ### Phase 3 — Discovery: top-level `argus search`
 **Importance: Critical** (create/update depend on discoverable IDs)

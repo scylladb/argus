@@ -38,7 +38,7 @@ _No plans in this domain yet._
 | Plan                       | Status  | File                                             | Owner |
 | -------------------------- | ------- | ------------------------------------------------ | ----- |
 | SSH Tunnel Support         | `draft` | [ssh-tunnel-design.md](ssh-tunnel-design.md)     | null  |
-| CLI Release Plan Management | `draft` | [cli-planner-command.md](cli-planner-command.md) | null  |
+| CLI Release Plan Management | `in_progress` | [cli-planner-command.md](cli-planner-command.md) | null  |
 
 ## Testing
 
