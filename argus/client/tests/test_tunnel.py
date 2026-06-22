@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from io import StringIO
 from unittest.mock import Mock
 import os
@@ -11,6 +11,7 @@ from argus.client.tunnel import ssh as tunnel_ssh
 from argus.client.tunnel import state as tunnel_state
 from argus.client.session import TunneledSession
 from argus.client.tunnel import TunnelConfig
+from argus.client.tunnel.models import parse_datetime
 
 
 def _write_text(path: str, text: str) -> None:
@@ -48,7 +49,7 @@ def tunnel_state_dir(tmp_path, monkeypatch):
 
 
 def test_resolve_tunnel_config_registers_and_caches(tunnel_state_dir, monkeypatch):
-    expires_at = datetime.now(tz=UTC) + timedelta(hours=6)
+    expires_at = datetime.now(tz=timezone.utc) + timedelta(hours=6)
     config = TunnelConfig(
         proxy_host="proxy.example.com",
         proxy_port=22,
@@ -129,6 +130,38 @@ def test_tunnel_api_succeeds_with_valid_response():
         session=mock_session,
     )
     assert data["proxy_host"] == "proxy.example.com"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "2026-04-16T12:00:00Z",          # Zulu suffix as emitted by the tunnel API
+        "2026-04-16T12:00:00+00:00",     # explicit offset
+        "2026-04-16T12:00:00",           # naive -> assumed UTC
+    ],
+)
+def test_parse_datetime_normalizes_to_utc(value):
+    # Regression: Python 3.10's fromisoformat rejects the trailing "Z"; parse_datetime
+    # must accept it (and any of these forms) and return a UTC-aware datetime.
+    parsed = parse_datetime(value)
+    assert parsed.tzinfo is not None
+    assert parsed.utcoffset() == timedelta(0)
+    assert (parsed.year, parsed.month, parsed.day, parsed.hour) == (2026, 4, 16, 12)
+
+
+def test_from_api_response_accepts_zulu_expires_at():
+    config = TunnelConfig.from_api_response(
+        {
+            "proxy_host": "proxy.example.com",
+            "proxy_port": 22,
+            "proxy_user": "argus-proxy",
+            "target_host": "10.0.0.10",
+            "target_port": 8080,
+            "host_key_fingerprint": "SHA256:test",
+            "expires_at": "2026-04-16T12:00:00Z",
+        }
+    )
+    assert config.expires_at == datetime(2026, 4, 16, 12, 0, 0, tzinfo=timezone.utc)
 
 
 def test_establish_uses_strict_host_options_and_temp_known_hosts(tunnel_state_dir, monkeypatch):
