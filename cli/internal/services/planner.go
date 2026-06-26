@@ -660,3 +660,102 @@ func (s *PlannerService) releaseNameByID(ctx context.Context, releaseID string) 
 	}
 	return "", fmt.Errorf("release id %q not found", releaseID)
 }
+
+// ---------------------------------------------------------------------------
+// Resolved plan view (default get/list output)
+// ---------------------------------------------------------------------------
+
+// BuildResolvedPlan turns a stored plan (UUID-based) into a human-readable
+// [models.ResolvedPlan]: release/owner/participant names, tests and assignment
+// targets as group-qualified "group/test" strings, and groups as names, while
+// keeping the plan's identity and status fields.
+//
+// It is the data behind the default `planner get`/`list` output. Unlike
+// [PlannerService.BuildTemplate] it is lossless: any reference that cannot be
+// resolved (a user not in the users list, or a test/group not in the release
+// gridview) falls back to its raw UUID rather than being dropped, and an
+// unknown release id is shown verbatim rather than failing the command.
+func (s *PlannerService) BuildResolvedPlan(ctx context.Context, plan models.ReleasePlan) (models.ResolvedPlan, error) {
+	users, err := s.getUsers(ctx)
+	if err != nil {
+		return models.ResolvedPlan{}, err
+	}
+	grid, err := s.GetReleaseStructure(ctx, plan.ReleaseID)
+	if err != nil {
+		return models.ResolvedPlan{}, err
+	}
+	// A missing release name is non-fatal for a display command — fall back to
+	// the raw id so the rest of the plan still renders.
+	releaseName, err := s.releaseNameByID(ctx, plan.ReleaseID)
+	if err != nil {
+		releaseName = plan.ReleaseID
+	}
+
+	username := func(id string) string {
+		if u, ok := users[id]; ok {
+			return u.Username
+		}
+		return id
+	}
+	entityName := func(id string) string {
+		if name, ok := entityQualifiedName(grid, id); ok {
+			return name
+		}
+		return id
+	}
+
+	participants := make([]string, 0, len(plan.Participants))
+	for _, p := range plan.Participants {
+		participants = append(participants, username(p))
+	}
+	tests := make([]string, 0, len(plan.Tests))
+	for _, t := range plan.Tests {
+		tests = append(tests, entityName(t))
+	}
+	groups := make([]string, 0, len(plan.Groups))
+	for _, g := range plan.Groups {
+		groups = append(groups, entityName(g))
+	}
+	var assignments map[string]string
+	for entityID, userID := range plan.AssigneeMapping {
+		if assignments == nil {
+			assignments = map[string]string{}
+		}
+		assignments[entityName(entityID)] = username(userID)
+	}
+
+	return models.ResolvedPlan{
+		ID:            plan.ID,
+		Key:           plan.Key,
+		Name:          plan.Name,
+		Description:   plan.Description,
+		Release:       releaseName,
+		TargetVersion: plan.TargetVersion,
+		Owner:         username(plan.Owner),
+		Participants:  participants,
+		Tests:         tests,
+		Groups:        groups,
+		Assignments:   assignments,
+		Completed:     plan.Completed,
+		ViewID:        plan.ViewID,
+		CreatedFrom:   plan.CreatedFrom,
+		CreationTime:  plan.CreationTime,
+		LastUpdated:   plan.LastUpdated,
+		EndsAt:        plan.EndsAt,
+	}, nil
+}
+
+// BuildResolvedPlans resolves a slice of plans into their human-readable form.
+// Plans of the same release share the memoised gridview and users list, so a
+// whole release's plan list resolves with at most one fetch of each.
+func (s *PlannerService) BuildResolvedPlans(ctx context.Context, plans models.ReleasePlanList) ([]models.ResolvedPlan, error) {
+	resolved := make([]models.ResolvedPlan, 0, len(plans))
+	for _, p := range plans {
+		rp, err := s.BuildResolvedPlan(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		resolved = append(resolved, rp)
+	}
+	return resolved, nil
+}

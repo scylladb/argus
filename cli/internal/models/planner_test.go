@@ -235,3 +235,72 @@ func TestCreatePlanRequest_OmitsOptionalEmptyFields(t *testing.T) {
 	assert.NotContains(t, s, `"view_id"`, "empty optional view_id must be omitted")
 	assert.NotContains(t, s, `"created_from"`, "empty optional created_from must be omitted")
 }
+
+func sampleResolvedPlan() models.ResolvedPlan {
+	return models.ResolvedPlan{
+		ID:            "p1",
+		Key:           "scylla-2026.2#3",
+		Name:          "2026.2 Longevity",
+		Description:   "Longevity suite",
+		Release:       "scylla-2026.2",
+		TargetVersion: "2026.2.0~rc3",
+		Owner:         "alice",
+		Participants:  []string{"bob"},
+		Tests:         []string{"Tier 1/longevity-100gb"},
+		Groups:        []string{"tier1"},
+		Assignments:   map[string]string{"Tier 1/longevity-200gb": "bob"},
+		Completed:     true,
+		LastUpdated:   "2026-06-02T11:00:00.000000",
+	}
+}
+
+func TestResolvedPlan_TabularShowsCuratedColumns(t *testing.T) {
+	t.Parallel()
+
+	plan := sampleResolvedPlan()
+	headers := plan.Headers()
+	assert.Equal(t, []string{
+		"Key", "Name", "Description", "Release", "Target Version", "Owner", "Last Updated",
+	}, headers)
+
+	rows := plan.Rows()
+	require.Len(t, rows, 1)
+	assert.Len(t, rows[0], len(headers), "row width must match header count")
+	assert.Equal(t, []string{
+		"scylla-2026.2#3", "2026.2 Longevity", "Longevity suite",
+		"scylla-2026.2", "2026.2.0~rc3", "alice", "2026-06-02T11:00:00.000000",
+	}, rows[0])
+}
+
+func TestResolvedPlan_JSONKeepsFullDetail(t *testing.T) {
+	t.Parallel()
+
+	// Text output is curated, but JSON marshalling still carries every field —
+	// including tests, groups, participants, and assignments.
+	raw, err := json.Marshal(sampleResolvedPlan())
+	require.NoError(t, err)
+	s := string(raw)
+
+	assert.Contains(t, s, `"tests":["Tier 1/longevity-100gb"]`)
+	assert.Contains(t, s, `"groups":["tier1"]`)
+	assert.Contains(t, s, `"participants":["bob"]`)
+	assert.Contains(t, s, `"assignments":{"Tier 1/longevity-200gb":"bob"}`)
+	assert.Contains(t, s, `"id":"p1"`)
+}
+
+func TestResolvedPlans_TabularRowPerPlan(t *testing.T) {
+	t.Parallel()
+
+	plans := models.ResolvedPlans{
+		{Key: "scylla-2026.2#1", Name: "A", Owner: "alice"},
+		{Key: "scylla-2026.2#2", Name: "B", Owner: "bob"},
+	}
+	assert.Equal(t, models.ResolvedPlan{}.Headers(), plans.Headers())
+
+	rows := plans.Rows()
+	require.Len(t, rows, 2)
+	assert.Equal(t, "scylla-2026.2#1", rows[0][0])
+	assert.Equal(t, "alice", rows[0][5])
+	assert.Equal(t, "scylla-2026.2#2", rows[1][0])
+	assert.Equal(t, "bob", rows[1][5])
+}

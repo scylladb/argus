@@ -44,6 +44,27 @@ func TestGet_TemplateFlagRegistered(t *testing.T) {
 	assert.NotNil(t, cmd.Flags().Lookup("template"))
 }
 
+func TestGet_RawFlagRegistered(t *testing.T) {
+	t.Parallel()
+	cmd := newSubCmd(t, "get")
+	assert.NotNil(t, cmd.Flags().Lookup("raw"))
+}
+
+func TestGet_TemplateAndRawAreMutuallyExclusive(t *testing.T) {
+	t.Parallel()
+	cmd := newSubCmd(t, "get")
+	require.NoError(t, cmd.ParseFlags([]string{"--template", "--raw"}))
+	err := cmd.ValidateFlagGroups()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "none of the others can be")
+}
+
+func TestList_RawFlagRegistered(t *testing.T) {
+	t.Parallel()
+	cmd := newSubCmd(t, "list")
+	assert.NotNil(t, cmd.Flags().Lookup("raw"))
+}
+
 func TestDelete_FlagsRegistered(t *testing.T) {
 	t.Parallel()
 	cmd := newSubCmd(t, "delete")
