@@ -759,3 +759,193 @@ func (s *PlannerService) BuildResolvedPlans(ctx context.Context, plans models.Re
 	}
 	return resolved, nil
 }
+
+// ---------------------------------------------------------------------------
+// Plan update (diff-based)
+// ---------------------------------------------------------------------------
+
+// UpdatePlan applies a fully-resolved diff (all references already converted to
+// UUIDs by [PlannerService.BuildUpdateRequest]) to a plan via
+// POST /planning/plan/update. The backend returns a boolean acknowledgement;
+// the caller refetches the plan to display the new state.
+func (s *PlannerService) UpdatePlan(ctx context.Context, req models.PlanDiffRequest) error {
+	r, err := s.client.NewRequest(ctx, "POST", api.PlanUpdate, req)
+	if err != nil {
+		return err
+	}
+	_, err = api.DoJSON[bool](s.client, r)
+	return err
+}
+
+// BuildUpdateRequest turns a name-based [models.PlanUpdateSpec] into the
+// UUID-based [models.PlanDiffRequest] the backend expects, resolving every
+// reference against the plan's own release. Only changed scalars and non-empty
+// deltas are populated, so an unchanged field is never sent.
+//
+// Resolution rules mirror create:
+//   - Scalar owner is a username resolved to a UUID; other scalars pass through.
+//   - Tests in TestsAdd/TestsRemove resolve by build_system_id / "group/test" /
+//     unique bare name. A reference matching nothing is reported as a warning
+//     and omitted; an ambiguous reference aborts so the user can disambiguate.
+//   - GroupsAdd is always expanded to the group's enabled tests (merged into
+//     tests_add); no groups_add is ever sent. GroupsRemove resolves to a group
+//     UUID and is sent as groups_remove (for groups still stored on the plan).
+//   - Participants resolve by username.
+//   - AssigneeMappingSet resolves the username value and the entity key (a test,
+//     or a group fanned out to each enabled test); AssigneeMappingRemove resolves
+//     each entity reference (group references fan out) to the UUIDs to drop.
+func (s *PlannerService) BuildUpdateRequest(ctx context.Context, plan models.ReleasePlan, spec models.PlanUpdateSpec) (models.PlanDiffRequest, []string, error) {
+	releaseID := plan.ReleaseID
+	diff := models.PlanDiffRequest{ID: plan.ID}
+	var warnings []string
+
+	// Scalars — pass through, resolving owner username to a UUID.
+	diff.Name = spec.Name
+	diff.Description = spec.Description
+	diff.TargetVersion = spec.TargetVersion
+	diff.Completed = spec.Completed
+	if spec.Owner != nil {
+		ownerID, err := s.ResolveUserID(ctx, *spec.Owner)
+		if err != nil {
+			return models.PlanDiffRequest{}, nil, fmt.Errorf("owner %q: %w", *spec.Owner, err)
+		}
+		diff.Owner = &ownerID
+	}
+
+	// Test add/remove deltas. Missing → warn-and-omit; ambiguous → abort.
+	addTests := newOrderedSet()
+	for _, ref := range spec.TestsAdd {
+		id, warn, err := s.resolveTestForDiff(ctx, ref, releaseID, "add")
+		if err != nil {
+			return models.PlanDiffRequest{}, nil, err
+		}
+		if warn != "" {
+			warnings = append(warnings, warn)
+			continue
+		}
+		addTests.add(id)
+	}
+	// Groups added are always expanded to their enabled tests (no groups_add).
+	for _, g := range spec.GroupsAdd {
+		ids, err := s.ExpandGroup(ctx, releaseID, g)
+		if err != nil {
+			return models.PlanDiffRequest{}, nil, err
+		}
+		for _, id := range ids {
+			addTests.add(id)
+		}
+	}
+	if len(addTests.items) > 0 {
+		diff.TestsAdd = addTests.items
+	}
+
+	removeTests := newOrderedSet()
+	for _, ref := range spec.TestsRemove {
+		id, warn, err := s.resolveTestForDiff(ctx, ref, releaseID, "remove")
+		if err != nil {
+			return models.PlanDiffRequest{}, nil, err
+		}
+		if warn != "" {
+			warnings = append(warnings, warn)
+			continue
+		}
+		removeTests.add(id)
+	}
+	if len(removeTests.items) > 0 {
+		diff.TestsRemove = removeTests.items
+	}
+
+	// Group removals target groups still stored on the plan (e.g. web-created).
+	removeGroups := newOrderedSet()
+	for _, g := range spec.GroupsRemove {
+		id, err := s.ResolveEntityID(ctx, g, releaseID, KindGroup)
+		if err != nil {
+			return models.PlanDiffRequest{}, nil, err
+		}
+		removeGroups.add(id)
+	}
+	if len(removeGroups.items) > 0 {
+		diff.GroupsRemove = removeGroups.items
+	}
+
+	// Participants resolve by username.
+	addParticipants, err := s.resolveUsers(ctx, spec.ParticipantsAdd)
+	if err != nil {
+		return models.PlanDiffRequest{}, nil, err
+	}
+	diff.ParticipantsAdd = addParticipants
+	removeParticipants, err := s.resolveUsers(ctx, spec.ParticipantsRemove)
+	if err != nil {
+		return models.PlanDiffRequest{}, nil, err
+	}
+	diff.ParticipantsRemove = removeParticipants
+
+	// Assignment set: resolve user, then entity (group fans out to its tests).
+	var assignSet map[string]string
+	for entityRef, userRef := range spec.AssigneeMappingSet {
+		userID, err := s.ResolveUserID(ctx, userRef)
+		if err != nil {
+			return models.PlanDiffRequest{}, nil, fmt.Errorf("assignee %q: %w", userRef, err)
+		}
+		ids, err := s.resolveAssignmentTargets(ctx, entityRef, releaseID)
+		if err != nil {
+			return models.PlanDiffRequest{}, nil, err
+		}
+		for _, id := range ids {
+			if assignSet == nil {
+				assignSet = map[string]string{}
+			}
+			assignSet[id] = userID
+		}
+	}
+	diff.AssigneeMappingSet = assignSet
+
+	// Assignment removal: resolve each entity (group fans out) to its UUIDs.
+	assignRemove := newOrderedSet()
+	for _, entityRef := range spec.AssigneeMappingRemove {
+		ids, err := s.resolveAssignmentTargets(ctx, entityRef, releaseID)
+		if err != nil {
+			return models.PlanDiffRequest{}, nil, err
+		}
+		for _, id := range ids {
+			assignRemove.add(id)
+		}
+	}
+	if len(assignRemove.items) > 0 {
+		diff.AssigneeMappingRemove = assignRemove.items
+	}
+
+	return diff, warnings, nil
+}
+
+// resolveTestForDiff resolves a single test reference for an add/remove delta.
+// A reference matching nothing yields a warning (so the diff still applies the
+// rest); an ambiguous reference returns an error so the user disambiguates.
+// verb ("add"/"remove") is used only in the warning text.
+func (s *PlannerService) resolveTestForDiff(ctx context.Context, ref, releaseID, verb string) (id, warn string, err error) {
+	id, err = s.ResolveEntityID(ctx, ref, releaseID, KindTest)
+	if err == nil {
+		return id, "", nil
+	}
+	if errors.Is(err, ErrEntityNotFound) {
+		return "", fmt.Sprintf("test %q to %s is not in this release — skipped", ref, verb), nil
+	}
+	return "", "", err
+}
+
+// resolveUsers resolves a list of usernames to UUIDs, returning nil for an
+// empty input so the corresponding diff field is omitted.
+func (s *PlannerService) resolveUsers(ctx context.Context, refs []string) ([]string, error) {
+	if len(refs) == 0 {
+		return nil, nil
+	}
+	ids := make([]string, 0, len(refs))
+	for _, r := range refs {
+		id, err := s.ResolveUserID(ctx, r)
+		if err != nil {
+			return nil, fmt.Errorf("participant %q: %w", r, err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}

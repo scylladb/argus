@@ -220,6 +220,35 @@ type PlanTemplate struct {
 	Assignments   map[string]string `json:"assignments,omitempty"`
 }
 
+// PlanUpdateSpec is the name-based diff consumed by `planner update`. It is the
+// schema for the `update --file` input and the intermediate that the `update`
+// flags are overlaid onto; [services.PlannerService.BuildUpdateRequest]
+// resolves it into the UUID-based [PlanDiffRequest] sent to the backend.
+//
+// Scalar pointer fields are sent only when set (nil = no change). List/map
+// fields use the same add/remove delta shape as the wire payload, but every
+// value is a human reference: tests as build_system_id or "group/test", groups
+// and participants/owner by name/username, and AssigneeMappingSet keyed by a
+// test/group reference with a username value. Groups in GroupsAdd are expanded
+// to their enabled tests at resolve time (never sent as groups_add).
+type PlanUpdateSpec struct {
+	Name          *string `json:"name,omitempty"`
+	Description   *string `json:"description,omitempty"`
+	Owner         *string `json:"owner,omitempty"`
+	TargetVersion *string `json:"target_version,omitempty"`
+	Completed     *bool   `json:"completed,omitempty"`
+
+	TestsAdd           []string `json:"tests_add,omitempty"`
+	TestsRemove        []string `json:"tests_remove,omitempty"`
+	GroupsAdd          []string `json:"groups_add,omitempty"`
+	GroupsRemove       []string `json:"groups_remove,omitempty"`
+	ParticipantsAdd    []string `json:"participants_add,omitempty"`
+	ParticipantsRemove []string `json:"participants_remove,omitempty"`
+
+	AssigneeMappingSet    map[string]string `json:"assignee_mapping_set,omitempty"`
+	AssigneeMappingRemove []string          `json:"assignee_mapping_remove,omitempty"`
+}
+
 // ResolvedPlan is a human-readable view of a [ReleasePlan] with every UUID
 // reference back-resolved to a name: release/owner/participant names, tests and
 // assignment targets as group-qualified "group/test" strings, and groups as

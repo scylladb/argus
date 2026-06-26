@@ -128,6 +128,61 @@ func TestPlanDiffRequest_ListAndMapDeltas(t *testing.T) {
 	assert.False(t, strings.Contains(s, `"tests_remove"`), "empty tests_remove must be omitted")
 }
 
+func TestPlanUpdateSpec_FileSchemaParses(t *testing.T) {
+	t.Parallel()
+
+	// The --file diff schema uses the wire field names but name-based values.
+	const raw = `{
+		"name": "2026.2 Longevity",
+		"target_version": "2026.2.0~rc3",
+		"tests_add": ["scylla-2026.2/longevity/longevity-100gb", "tier1/longevity-200gb"],
+		"groups_remove": ["tier2"],
+		"participants_add": ["alice"],
+		"participants_remove": ["bob"],
+		"assignee_mapping_set": {"scylla-2026.2/longevity/longevity-100gb": "alice"},
+		"assignee_mapping_remove": ["tier1/longevity-200gb"]
+	}`
+
+	var spec models.PlanUpdateSpec
+	require.NoError(t, json.Unmarshal([]byte(raw), &spec))
+
+	require.NotNil(t, spec.Name)
+	assert.Equal(t, "2026.2 Longevity", *spec.Name)
+	require.NotNil(t, spec.TargetVersion)
+	assert.Equal(t, "2026.2.0~rc3", *spec.TargetVersion)
+	// Unset scalars stay nil so they are never sent as "changes".
+	assert.Nil(t, spec.Description)
+	assert.Nil(t, spec.Owner)
+	assert.Nil(t, spec.Completed)
+
+	assert.Equal(t, []string{"scylla-2026.2/longevity/longevity-100gb", "tier1/longevity-200gb"}, spec.TestsAdd)
+	assert.Equal(t, []string{"tier2"}, spec.GroupsRemove)
+	assert.Equal(t, []string{"alice"}, spec.ParticipantsAdd)
+	assert.Equal(t, []string{"bob"}, spec.ParticipantsRemove)
+	assert.Equal(t, map[string]string{"scylla-2026.2/longevity/longevity-100gb": "alice"}, spec.AssigneeMappingSet)
+	assert.Equal(t, []string{"tier1/longevity-200gb"}, spec.AssigneeMappingRemove)
+}
+
+func TestPlanUpdateSpec_OmitsUnsetFields(t *testing.T) {
+	t.Parallel()
+
+	name := "renamed"
+	spec := models.PlanUpdateSpec{Name: &name}
+	raw, err := json.Marshal(spec)
+	require.NoError(t, err)
+	s := string(raw)
+
+	assert.Contains(t, s, `"name":"renamed"`)
+	for _, key := range []string{
+		"description", "owner", "target_version", "completed",
+		"tests_add", "tests_remove", "groups_add", "groups_remove",
+		"participants_add", "participants_remove",
+		"assignee_mapping_set", "assignee_mapping_remove",
+	} {
+		assert.NotContainsf(t, s, `"`+key+`"`, "unset field %q must be omitted", key)
+	}
+}
+
 func TestCopyCheckResponse_JSONRoundTrip(t *testing.T) {
 	t.Parallel()
 
