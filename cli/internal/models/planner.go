@@ -249,8 +249,17 @@ type SearchHit struct {
 	Release       *SearchRef `json:"release"`
 }
 
-// SearchHitList is the response payload for GET /planning/search.
+// SearchHitList is a slice of search hits (the displayed result set after the
+// synthetic "Add all..." row is filtered out).
 type SearchHitList = []SearchHit
+
+// SearchResponse is the response payload for GET /planning/search. The backend
+// wraps the hits in {hits, total}; Total counts the synthetic "Add all..." row
+// too, so it is not used directly for display counts.
+type SearchResponse struct {
+	Hits  []SearchHit `json:"hits"`
+	Total int         `json:"total"`
+}
 
 // Headers implements output.Tabular for SearchHit.
 func (SearchHit) Headers() []string {

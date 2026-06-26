@@ -77,6 +77,48 @@ func (s *PlannerService) GetPlan(ctx context.Context, planRef string) (models.Re
 }
 
 // ---------------------------------------------------------------------------
+// Search (discovery)
+// ---------------------------------------------------------------------------
+
+// Search queries the planning search endpoint for tests/groups/releases
+// matching query, optionally scoped to a release (by name). The query string is
+// passed through verbatim — see the search command help for the facet syntax.
+//
+// The synthetic "Add all..." special row the backend always prepends
+// (type "special") is filtered out before returning. When releaseRef is empty
+// the search spans all releases.
+func (s *PlannerService) Search(ctx context.Context, query, releaseRef string) (models.SearchHitList, error) {
+	params := url.Values{}
+	params.Set("query", query)
+	if releaseRef != "" {
+		releaseID, err := s.ResolveReleaseID(ctx, releaseRef)
+		if err != nil {
+			return nil, err
+		}
+		params.Set("releaseId", releaseID)
+	}
+
+	route := api.PlanningSearch + "?" + params.Encode()
+	req, err := s.client.NewRequest(ctx, "GET", route, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := api.DoJSON[models.SearchResponse](s.client, req)
+	if err != nil {
+		return nil, err
+	}
+
+	hits := make(models.SearchHitList, 0, len(resp.Hits))
+	for _, h := range resp.Hits {
+		if h.Type == "special" {
+			continue
+		}
+		hits = append(hits, h)
+	}
+	return hits, nil
+}
+
+// ---------------------------------------------------------------------------
 // Release resolution
 // ---------------------------------------------------------------------------
 

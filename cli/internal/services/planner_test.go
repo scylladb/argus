@@ -287,3 +287,100 @@ func TestPlannerService_Resolution_SingleGridviewFetch(t *testing.T) {
 
 	assert.Equal(t, int32(1), atomic.LoadInt32(&calls), "gridview should be fetched once")
 }
+
+// --------------------------------------------------------------------------
+// Search
+// --------------------------------------------------------------------------
+
+// searchFixture is a search response with the synthetic "Add all..." special
+// row first (as the backend always prepends it), followed by real hits.
+func searchFixture() models.SearchResponse {
+	return models.SearchResponse{
+		Total: 3,
+		Hits: []models.SearchHit{
+			{ID: "db6f33b2-660b-4639-ba7f-79725ef96616", Name: "Add all...", Type: "special"},
+			{ID: "t1", Name: "longevity-100gb", Type: "test",
+				BuildSystemID: "scylla-2026.2/tier1/longevity-100gb", Enabled: true,
+				Group: &models.SearchRef{ID: "g1", Name: "tier1"}},
+			{ID: "g1", Name: "tier1", Type: "group", BuildSystemID: "scylla-2026.2/tier1"},
+		},
+	}
+}
+
+func TestPlannerService_Search_FiltersSpecialRow(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/planning/search", func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "GET", r.Method)
+		jsonOK(t, w, searchFixture())
+	})
+	svc := newPlannerSvc(t, mux)
+
+	hits, err := svc.Search(context.Background(), "longevity", "")
+	require.NoError(t, err)
+	// The "special" Add-all row is dropped; only the real test and group remain.
+	require.Len(t, hits, 2)
+	for _, h := range hits {
+		assert.NotEqual(t, "special", h.Type)
+	}
+	assert.Equal(t, "t1", hits[0].ID)
+	assert.Equal(t, "g1", hits[1].ID)
+}
+
+func TestPlannerService_Search_QueryPassthroughNoRelease(t *testing.T) {
+	t.Parallel()
+	var gotQuery string
+	var hasReleaseID bool
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/planning/search", func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query().Get("query")
+		_, hasReleaseID = r.URL.Query()["releaseId"]
+		jsonOK(t, w, searchFixture())
+	})
+	svc := newPlannerSvc(t, mux)
+
+	// Free text + facets are passed through verbatim; no releaseId when unscoped.
+	_, err := svc.Search(context.Background(), "type:group release:2026.2", "")
+	require.NoError(t, err)
+	assert.Equal(t, "type:group release:2026.2", gotQuery)
+	assert.False(t, hasReleaseID, "releaseId must be absent when no release is given")
+}
+
+func TestPlannerService_Search_ScopesByRelease(t *testing.T) {
+	t.Parallel()
+	var gotReleaseID string
+	mux := releasesMux(t, nil)
+	mux.HandleFunc("/api/v1/planning/search", func(w http.ResponseWriter, r *http.Request) {
+		gotReleaseID = r.URL.Query().Get("releaseId")
+		jsonOK(t, w, searchFixture())
+	})
+	svc := newPlannerSvc(t, mux)
+
+	// The --release name resolves to its UUID and is sent as releaseId.
+	_, err := svc.Search(context.Background(), "longevity", "scylla-2026.2")
+	require.NoError(t, err)
+	assert.Equal(t, "rel-1", gotReleaseID)
+}
+
+func TestPlannerService_Search_UnknownReleaseErrors(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, releasesMux(t, nil))
+
+	_, err := svc.Search(context.Background(), "longevity", "scylla-9999")
+	require.Error(t, err)
+}
+
+func TestPlannerService_Search_BackendError(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/planning/search", func(w http.ResponseWriter, r *http.Request) {
+		jsonErr(t, w, "search failed")
+	})
+	svc := newPlannerSvc(t, mux)
+
+	_, err := svc.Search(context.Background(), "longevity", "")
+	require.Error(t, err)
+	var apiErr *api.APIError
+	require.True(t, errors.As(err, &apiErr))
+	assert.Equal(t, "search failed", apiErr.Body.Message)
+}
