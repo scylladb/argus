@@ -2,7 +2,7 @@
 status: in_progress
 domain: client
 created: 2026-06-01
-last_updated: 2026-06-22
+last_updated: 2026-06-26
 owner: null
 ---
 
@@ -531,17 +531,19 @@ exceptions are `--plan-id` and `--view-id`). Add to `PlannerService`:
 - **Query language** (mirrors `TestLookup.test_lookup`, `test_lookup.py:114-149`):
   free text is a case-insensitive substring match on the entity's own name; optional
   facets `release:<substr>`, `group:<substr>` (substring match on the related entity's
-  name) and `type:<test|group|release>` (exact type) combine with AND. Facet values may
-  be quoted to allow spaces. A bare-UUID query short-circuits to a single
-  run/entity lookup. Document this in `--help` with examples (incl.
-  `argus search "release:2026.2 longevity"`).
+  name) and `type:<test|group|release>` (exact type) combine with AND. **Facet values
+  must NOT be quoted and cannot contain spaces** — the backend facet regex
+  (`test_lookup.py:115`, char class `[\w\d\.\-]*`) captures quote characters into the
+  value and excludes spaces, so quoting/spaces break the match. A bare-UUID query
+  short-circuits to a single run/entity lookup. Document this in `--help` with examples
+  (incl. `argus search "release:2026.2 longevity"`).
 - **DoD:**
   - [ ] `argus search "release:2026.2 longevity"` lists matching tests with their
         `build_system_id`s (manual).
-  - [ ] `argus search "type:group release:2026.2"` lists groups; `--release` flag and
+  - [x] `argus search "type:group release:2026.2"` lists groups; `--release` flag and
         the `release:` facet both scope results (unit test).
-  - [ ] Special `Add all...` row is excluded (unit test on the filter helper).
-  - [ ] Query (free text + facets, quoted values) passed through verbatim (unit test
+  - [x] Special `Add all...` row is excluded (unit test on the filter helper).
+  - [x] Query (free text + facets, quoted values) passed through verbatim (unit test
         asserts query-string build).
 
 ### Phase 4 — Write: `create` + `delete`
