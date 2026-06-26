@@ -16,11 +16,16 @@ func registerGet(parent *cobra.Command) {
 		Long: `Show a single release plan addressed by its UUID or its
 human-friendly "releaseName#planNumber" key, e.g.:
   argus planner get --plan-id scylla-2026.2#3
-  argus planner get --plan-id 7f3c1e90-...`,
+  argus planner get --plan-id 7f3c1e90-...
+
+With --template the plan is emitted as a release-independent, name-based spec
+(the same schema 'create --file' accepts) so it can be edited and re-created:
+  argus planner get --plan-id scylla-2026.2#3 --template > plan.json`,
 		RunE: runGet,
 	}
 
 	cmd.Flags().StringP("plan-id", "p", "", "Plan UUID or key (e.g. \"scylla-2026.2#3\") (required)")
+	cmd.Flags().Bool("template", false, "Emit a name-based plan spec suitable for 'create --file'")
 	_ = cmd.MarkFlagRequired("plan-id")
 
 	parent.AddCommand(cmd)
@@ -36,7 +41,8 @@ func runGet(cmd *cobra.Command, _ []string) error {
 	log := logging.For(cmdctx.LoggerFrom(ctx), "planner-get")
 
 	planRef, _ := cmd.Flags().GetString("plan-id")
-	log.Debug().Str("plan_id", planRef).Msg("fetching plan")
+	asTemplate, _ := cmd.Flags().GetBool("template")
+	log.Debug().Str("plan_id", planRef).Bool("template", asTemplate).Msg("fetching plan")
 
 	svc := services.NewPlannerService(client, c)
 
@@ -44,6 +50,16 @@ func runGet(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		log.Error().Err(err).Str("plan_id", planRef).Msg("failed to fetch plan")
 		return err
+	}
+
+	if asTemplate {
+		tmpl, err := svc.BuildTemplate(ctx, plan)
+		if err != nil {
+			log.Error().Err(err).Str("plan_id", planRef).Msg("failed to build plan template")
+			return err
+		}
+		log.Info().Str("plan_id", planRef).Msg("plan template built successfully")
+		return out.Write(models.NewKVTabular(tmpl))
 	}
 
 	log.Info().Str("plan_id", planRef).Msg("plan fetched successfully")

@@ -549,9 +549,10 @@ exceptions are `--plan-id` and `--view-id`). Add to `PlannerService`:
 ### Phase 4 — Write: `create` + `delete`
 **Importance: Critical**
 
-- **Decide the test/group input mechanism from the Appendix proposals and record the
-  decision in this plan before coding.** Baseline that ships regardless: `--file/-f`
-  JSON spec (and stdin) matching `CreatePlanRequest`.
+- **Input mechanism (decided — Appendix proposals A + B):** both a `--file/-f` JSON
+  spec (and `-` for stdin) matching the `PlanTemplate` schema **and** repeatable flags
+  (`--test`, `--group`, `--assign entity=user`, `--participant`) plus scalars. Flags
+  override / augment matching file fields (scalars override; collections append/merge).
 - `PlannerService.CreatePlan(ctx, CreatePlanRequest)` → POST `/planning/plan/create`,
   invalidate the release's plan-list cache.
 - `planner create` flags: `--release`, `--name`, `--description`, `--owner`,
@@ -582,20 +583,20 @@ exceptions are `--plan-id` and `--view-id`). Add to `PlannerService`:
   [--delete-view] [--yes]` (confirmation prompt unless `--yes`, reading stdin like
   `discussions/root.go:readMessage`).
 - **DoD:**
-  - [ ] `argus planner create --file plan.json` creates a plan; `get` shows it.
-  - [ ] Owner/participant names resolve to UUIDs; a raw UUID as a name errors (unit
+  - [x] `argus planner create --file plan.json` creates a plan; `get` shows it.
+  - [x] Owner/participant names resolve to UUIDs; a raw UUID as a name errors (unit
         test).
-  - [ ] Tests/groups given by name or `build_system_id` resolve to UUIDs; an ambiguous
+  - [x] Tests/groups given by name or `build_system_id` resolve to UUIDs; an ambiguous
         bare test name aborts create with a candidate list (unit tests).
-  - [ ] A group passed to `create` expands to its enabled tests; the plan stores no
+  - [x] A group passed to `create` expands to its enabled tests; the plan stores no
         groups; a group assignment fans out to each expanded test (unit test).
-  - [ ] `get --template` emits group-qualified `group/test` names + usernames (unit
+  - [x] `get --template` emits group-qualified `group/test` names + usernames (unit
         test on the transform).
-  - [ ] `create --file` from a template warns about and omits tests missing in the
+  - [x] `create --file` from a template warns about and omits tests missing in the
         target release, but still creates the plan (unit test).
-  - [ ] `argus planner delete --plan-id <id> --yes` removes it; `--delete-view`
+  - [x] `argus planner delete --plan-id <id> --yes` removes it; `--delete-view`
         toggles the query param (unit test asserts URL).
-  - [ ] Uniqueness-collision API error is surfaced with the backend message.
+  - [x] Uniqueness-collision API error is surfaced with the backend message.
 
 ### Phase 5 — Write: `update` (diff-based)
 **Importance: Important**
@@ -823,11 +824,15 @@ The plan is complete when all phase DoD items are satisfied, plus:
 | `copy` build_system_id remap semantics differ from user expectation (silent drops) | Medium | Medium | Surface the eligibility check output prominently and require `--force` to drop; support `--replacements`. Offer the no-remap JSON round-trip as an alternative. |
 | Large `/api/v1/users` or `/api/v1/releases` payloads slow every resolving command | Low | Low | Cache both lists with a short TTL (`internal/cache`); resolve locally. |
 
-## Appendix — Test/Group Input Proposals (decide before Phase 4)
+## Appendix — Test/Group Input Proposals (DECIDED: A + B for Phase 4)
+
+**Decision (Phase 4):** ship **A + B together** — the `--file/-f` JSON spec (baseline)
+*and* the repeatable convenience flags. Flags override/augment file fields (scalars
+override; `--test`/`--group`/`--participant`/`--assign` append/merge). C falls out for
+free (search → flags). The proposals below are retained for context.
 
 The web UI adds tests/groups via interactive search; the CLI needs a non-interactive
-equivalent. The input ergonomics are **left open** per stakeholder request. Proposals
-(not mutually exclusive):
+equivalent. Proposals (not mutually exclusive):
 
 - **A. `--file/-f` JSON spec (baseline, always supported).** A single JSON object
   matching the `get --template` schema (tests as `group/test`/`build_system_id`

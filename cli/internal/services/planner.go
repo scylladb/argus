@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"sort"
@@ -21,6 +22,18 @@ const (
 	KindTest EntityKind = "test"
 	// KindGroup selects group resolution (group name within the release).
 	KindGroup EntityKind = "group"
+)
+
+// Resolution sentinel errors. They let callers distinguish a reference that
+// matched nothing (safe to warn-and-omit on create) from one that matched
+// several candidates (must abort so the user disambiguates).
+var (
+	// ErrEntityNotFound is returned (wrapped) when a test/group reference
+	// matches no entity in the release.
+	ErrEntityNotFound = errors.New("entity not found in release")
+	// ErrAmbiguousEntity is returned (wrapped) when a reference matches more
+	// than one entity and cannot be resolved safely.
+	ErrAmbiguousEntity = errors.New("ambiguous entity reference")
 )
 
 // PlannerService encapsulates release-plan reads and the client-side name
@@ -116,6 +129,43 @@ func (s *PlannerService) Search(ctx context.Context, query, releaseRef string) (
 		hits = append(hits, h)
 	}
 	return hits, nil
+}
+
+// ---------------------------------------------------------------------------
+// Plan writes
+// ---------------------------------------------------------------------------
+
+// CreatePlan creates a release plan from a fully-resolved request (all
+// references already converted to UUIDs by [PlannerService.BuildCreateRequest])
+// and returns the created plan, including its server-assigned id and key.
+func (s *PlannerService) CreatePlan(ctx context.Context, req models.CreatePlanRequest) (models.ReleasePlan, error) {
+	r, err := s.client.NewRequest(ctx, "POST", api.PlanCreate, req)
+	if err != nil {
+		return models.ReleasePlan{}, err
+	}
+	return api.DoJSON[models.ReleasePlan](s.client, r)
+}
+
+// DeletePlan deletes the plan addressed by UUID id or "releaseName#planNumber"
+// key. When deleteView is true the plan's associated view is deleted too;
+// otherwise the view is detached and kept.
+func (s *PlannerService) DeletePlan(ctx context.Context, planRef string, deleteView bool) error {
+	// Plan keys contain '#'; escape so the ref survives URL parsing.
+	route := fmt.Sprintf(api.PlanDelete, url.PathEscape(planRef))
+	params := url.Values{}
+	if deleteView {
+		params.Set("deleteView", "1")
+	} else {
+		params.Set("deleteView", "0")
+	}
+	route += "?" + params.Encode()
+
+	req, err := s.client.NewRequest(ctx, "DELETE", route, nil)
+	if err != nil {
+		return err
+	}
+	_, err = api.DoJSON[bool](s.client, req)
+	return err
 }
 
 // ---------------------------------------------------------------------------
@@ -313,9 +363,9 @@ func findGroup(grid models.GridView, ref string) (models.GridEntity, error) {
 	case 1:
 		return matches[0], nil
 	case 0:
-		return models.GridEntity{}, fmt.Errorf("no group named %q in this release", ref)
+		return models.GridEntity{}, fmt.Errorf("%w: no group named %q in this release", ErrEntityNotFound, ref)
 	default:
-		return models.GridEntity{}, fmt.Errorf("ambiguous group name %q (%d matches)", ref, len(matches))
+		return models.GridEntity{}, fmt.Errorf("%w: ambiguous group name %q (%d matches)", ErrAmbiguousEntity, ref, len(matches))
 	}
 }
 
@@ -343,9 +393,9 @@ func resolveTest(grid models.GridView, ref string) (string, error) {
 				return matches[0], nil
 			}
 			if len(matches) > 1 {
-				return "", fmt.Errorf("ambiguous test %q within group %q (%d matches)", testName, groupPart, len(matches))
+				return "", fmt.Errorf("%w: ambiguous test %q within group %q (%d matches)", ErrAmbiguousEntity, testName, groupPart, len(matches))
 			}
-			return "", fmt.Errorf("no test %q in group %q", testName, groupPart)
+			return "", fmt.Errorf("%w: no test %q in group %q", ErrEntityNotFound, testName, groupPart)
 		}
 	}
 
@@ -360,10 +410,10 @@ func resolveTest(grid models.GridView, ref string) (string, error) {
 	case 1:
 		return matches[0].ID, nil
 	case 0:
-		return "", fmt.Errorf("no test %q in this release (use build_system_id or group/test)", ref)
+		return "", fmt.Errorf("%w: no test %q in this release (use build_system_id or group/test)", ErrEntityNotFound, ref)
 	default:
-		return "", fmt.Errorf("ambiguous test %q (%d matches): use build_system_id or group/test\n%s",
-			ref, len(matches), formatTestCandidates(matches))
+		return "", fmt.Errorf("%w: ambiguous test %q (%d matches): use build_system_id or group/test\n%s",
+			ErrAmbiguousEntity, ref, len(matches), formatTestCandidates(matches))
 	}
 }
 
@@ -376,4 +426,237 @@ func formatTestCandidates(matches []models.GridEntity) string {
 		fmt.Fprintf(&b, "  - %s (group: %s, id: %s)\n", t.BuildSystemID, t.Group, t.ID)
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// ---------------------------------------------------------------------------
+// Create-from-template (BuildCreateRequest) and the get --template transform
+// ---------------------------------------------------------------------------
+
+// orderedSet collects strings preserving first-insertion order while skipping
+// duplicates — used to merge tests from multiple sources (explicit tests,
+// expanded groups, assignment fan-out) deterministically.
+type orderedSet struct {
+	seen  map[string]struct{}
+	items []string
+}
+
+func newOrderedSet() *orderedSet { return &orderedSet{seen: map[string]struct{}{}} }
+
+func (o *orderedSet) add(v string) {
+	if _, ok := o.seen[v]; ok {
+		return
+	}
+	o.seen[v] = struct{}{}
+	o.items = append(o.items, v)
+}
+
+// BuildCreateRequest turns a name-based [models.PlanTemplate] (plus any extra
+// group references from --group) into a fully UUID-resolved
+// [models.CreatePlanRequest]. Every name is resolved client-side against the
+// target release; only UUIDs are placed in the request.
+//
+// Groups are always expanded to their enabled member tests and merged into the
+// tests list (the request's groups field is left empty). An assignment whose
+// key is a group fans out to each of that group's enabled tests. Tests that do
+// not exist in the target release are returned as warnings and omitted; an
+// ambiguous reference instead aborts with an error so the user can disambiguate.
+func (s *PlannerService) BuildCreateRequest(ctx context.Context, tmpl models.PlanTemplate, groupRefs []string) (models.CreatePlanRequest, []string, error) {
+	var warnings []string
+
+	if tmpl.Release == "" {
+		return models.CreatePlanRequest{}, nil, fmt.Errorf("a release is required (set 'release' in the file or pass --release)")
+	}
+	releaseID, err := s.ResolveReleaseID(ctx, tmpl.Release)
+	if err != nil {
+		return models.CreatePlanRequest{}, nil, err
+	}
+
+	if tmpl.Owner == "" {
+		return models.CreatePlanRequest{}, nil, fmt.Errorf("an owner is required (set 'owner' in the file or pass --owner)")
+	}
+	ownerID, err := s.ResolveUserID(ctx, tmpl.Owner)
+	if err != nil {
+		return models.CreatePlanRequest{}, nil, err
+	}
+
+	participants := make([]string, 0, len(tmpl.Participants))
+	for _, p := range tmpl.Participants {
+		id, err := s.ResolveUserID(ctx, p)
+		if err != nil {
+			return models.CreatePlanRequest{}, nil, fmt.Errorf("participant %q: %w", p, err)
+		}
+		participants = append(participants, id)
+	}
+
+	tests := newOrderedSet()
+
+	// Explicit tests: missing in the target release → warn and omit; ambiguous
+	// → abort.
+	for _, ref := range tmpl.Tests {
+		id, err := s.ResolveEntityID(ctx, ref, releaseID, KindTest)
+		if err != nil {
+			if errors.Is(err, ErrEntityNotFound) {
+				warnings = append(warnings, fmt.Sprintf("test %q is not in release %q — omitted", ref, tmpl.Release))
+				continue
+			}
+			return models.CreatePlanRequest{}, nil, err
+		}
+		tests.add(id)
+	}
+
+	// Extra groups (--group): always expanded to enabled tests.
+	for _, g := range groupRefs {
+		ids, err := s.ExpandGroup(ctx, releaseID, g)
+		if err != nil {
+			return models.CreatePlanRequest{}, nil, err
+		}
+		for _, id := range ids {
+			tests.add(id)
+		}
+	}
+
+	// Assignments: resolve the user, then the entity (test, else group → fan
+	// out to each enabled test). Entities also join the tests list.
+	assignments := map[string]string{}
+	for entityRef, userRef := range tmpl.Assignments {
+		userID, err := s.ResolveUserID(ctx, userRef)
+		if err != nil {
+			return models.CreatePlanRequest{}, nil, fmt.Errorf("assignee %q: %w", userRef, err)
+		}
+		ids, err := s.resolveAssignmentTargets(ctx, entityRef, releaseID)
+		if err != nil {
+			return models.CreatePlanRequest{}, nil, err
+		}
+		for _, id := range ids {
+			assignments[id] = userID
+			tests.add(id)
+		}
+	}
+
+	return models.CreatePlanRequest{
+		Name:          tmpl.Name,
+		Description:   tmpl.Description,
+		Owner:         ownerID,
+		Participants:  participants,
+		TargetVersion: tmpl.TargetVersion,
+		ReleaseID:     releaseID,
+		Tests:         tests.items,
+		Groups:        []string{},
+		Assignments:   assignments,
+	}, warnings, nil
+}
+
+// resolveAssignmentTargets resolves an assignment entity reference to the test
+// UUIDs it applies to: a test reference yields itself; a group reference fans
+// out to its enabled tests.
+func (s *PlannerService) resolveAssignmentTargets(ctx context.Context, entityRef, releaseID string) ([]string, error) {
+	id, err := s.ResolveEntityID(ctx, entityRef, releaseID, KindTest)
+	if err == nil {
+		return []string{id}, nil
+	}
+	if !errors.Is(err, ErrEntityNotFound) {
+		return nil, err
+	}
+	// Not a test — try a group and fan out to its enabled tests.
+	ids, gerr := s.ExpandGroup(ctx, releaseID, entityRef)
+	if gerr != nil {
+		return nil, fmt.Errorf("assignment target %q is not a test or group in release", entityRef)
+	}
+	return ids, nil
+}
+
+// BuildTemplate converts a stored plan (UUID-based) into a release-independent,
+// human-readable [models.PlanTemplate]: release/owner/participant names, tests
+// as group-qualified "group/test" strings, and assignments keyed by the same.
+// It is the data behind `planner get --template`.
+//
+// Names are back-resolved from the plan's own release gridview and the users
+// list. Tests no longer present in that gridview (e.g. since disabled) cannot
+// be named and are skipped.
+func (s *PlannerService) BuildTemplate(ctx context.Context, plan models.ReleasePlan) (models.PlanTemplate, error) {
+	releaseName, err := s.releaseNameByID(ctx, plan.ReleaseID)
+	if err != nil {
+		return models.PlanTemplate{}, err
+	}
+	users, err := s.getUsers(ctx)
+	if err != nil {
+		return models.PlanTemplate{}, err
+	}
+	grid, err := s.GetReleaseStructure(ctx, plan.ReleaseID)
+	if err != nil {
+		return models.PlanTemplate{}, err
+	}
+
+	participants := make([]string, 0, len(plan.Participants))
+	for _, p := range plan.Participants {
+		if u, ok := users[p]; ok {
+			participants = append(participants, u.Username)
+		}
+	}
+
+	tests := make([]string, 0, len(plan.Tests))
+	for _, t := range plan.Tests {
+		if name, ok := entityQualifiedName(grid, t); ok {
+			tests = append(tests, name)
+		}
+	}
+
+	var assignments map[string]string
+	for entityID, userID := range plan.AssigneeMapping {
+		name, ok := entityQualifiedName(grid, entityID)
+		if !ok {
+			continue
+		}
+		u, ok := users[userID]
+		if !ok {
+			continue
+		}
+		if assignments == nil {
+			assignments = map[string]string{}
+		}
+		assignments[name] = u.Username
+	}
+
+	tmpl := models.PlanTemplate{
+		Name:          plan.Name,
+		Description:   plan.Description,
+		Release:       releaseName,
+		TargetVersion: plan.TargetVersion,
+		Tests:         tests,
+		Assignments:   assignments,
+	}
+	if u, ok := users[plan.Owner]; ok {
+		tmpl.Owner = u.Username
+	}
+	if len(participants) > 0 {
+		tmpl.Participants = participants
+	}
+	return tmpl, nil
+}
+
+// entityQualifiedName returns the "group/test" name for a test UUID, or the
+// group name for a group UUID, found in the gridview. ok is false when the id
+// is in neither map.
+func entityQualifiedName(grid models.GridView, id string) (string, bool) {
+	if t, ok := grid.Tests[id]; ok {
+		return t.Group + "/" + t.Name, true
+	}
+	if g, ok := grid.Groups[id]; ok {
+		return g.Name, true
+	}
+	return "", false
+}
+
+// releaseNameByID returns the name of the release with the given UUID.
+func (s *PlannerService) releaseNameByID(ctx context.Context, releaseID string) (string, error) {
+	releases, err := s.getReleases(ctx)
+	if err != nil {
+		return "", err
+	}
+	for _, r := range releases {
+		if r.ID == releaseID {
+			return r.Name, nil
+		}
+	}
+	return "", fmt.Errorf("release id %q not found", releaseID)
 }
