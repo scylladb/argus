@@ -384,3 +384,282 @@ func TestPlannerService_Search_BackendError(t *testing.T) {
 	require.True(t, errors.As(err, &apiErr))
 	assert.Equal(t, "search failed", apiErr.Body.Message)
 }
+
+// --------------------------------------------------------------------------
+// Create / Delete (Phase 4)
+// --------------------------------------------------------------------------
+
+// resolveMux serves the releases, users, and gridview endpoints so name-based
+// references in a template resolve to UUIDs.
+func resolveMux(t *testing.T) *http.ServeMux {
+	t.Helper()
+	mux := releasesMux(t, nil)
+	mux.HandleFunc("/api/v1/users", func(w http.ResponseWriter, r *http.Request) {
+		jsonOK(t, w, models.UsersMap{
+			"u1": {ID: "u1", Username: "alice"},
+			"u2": {ID: "u2", Username: "bob"},
+		})
+	})
+	mux.HandleFunc("/api/v1/planning/release/rel-1/gridview", func(w http.ResponseWriter, r *http.Request) {
+		jsonOK(t, w, gridviewFixture())
+	})
+	return mux
+}
+
+func TestPlannerService_BuildCreateRequest_ResolvesAndExpands(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	tmpl := models.PlanTemplate{
+		Name:          "2026.2 Longevity",
+		Release:       "scylla-2026.2",
+		Owner:         "alice",
+		Participants:  []string{"bob"},
+		TargetVersion: "2026.2.0",
+		Tests:         []string{"tier1/longevity-200gb"},
+		Assignments:   map[string]string{"tier2/longevity-100gb": "bob"},
+	}
+
+	req, warnings, err := svc.BuildCreateRequest(context.Background(), tmpl, []string{"tier1"})
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+
+	assert.Equal(t, "rel-1", req.ReleaseID)
+	assert.Equal(t, "u1", req.Owner)
+	assert.Equal(t, []string{"u2"}, req.Participants)
+	// Explicit t2, then group tier1 expands to t1+t2 (t2 deduped), then the
+	// assignment target t3 — first-insertion order preserved.
+	assert.Equal(t, []string{"t2", "t1", "t3"}, req.Tests)
+	assert.Equal(t, map[string]string{"t3": "u2"}, req.Assignments)
+	// Collections must serialise as [] / {}, never null (backend requires keys).
+	assert.NotNil(t, req.Groups)
+	assert.Empty(t, req.Groups)
+}
+
+func TestPlannerService_BuildCreateRequest_GroupAssignmentFansOut(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	tmpl := models.PlanTemplate{
+		Name:        "fanout",
+		Release:     "scylla-2026.2",
+		Owner:       "alice",
+		Tests:       []string{},
+		Assignments: map[string]string{"tier1": "bob"},
+	}
+
+	req, warnings, err := svc.BuildCreateRequest(context.Background(), tmpl, nil)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+	// A group assignment fans out to each enabled member test (t1, t2).
+	assert.Equal(t, map[string]string{"t1": "u2", "t2": "u2"}, req.Assignments)
+	assert.ElementsMatch(t, []string{"t1", "t2"}, req.Tests)
+}
+
+func TestPlannerService_BuildCreateRequest_MissingTestWarnsAndOmits(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	tmpl := models.PlanTemplate{
+		Name:    "p",
+		Release: "scylla-2026.2",
+		Owner:   "alice",
+		Tests:   []string{"tier1/longevity-200gb", "tier1/does-not-exist"},
+	}
+
+	req, warnings, err := svc.BuildCreateRequest(context.Background(), tmpl, nil)
+	require.NoError(t, err)
+	// Missing test is omitted (plan still created) and reported as a warning.
+	assert.Equal(t, []string{"t2"}, req.Tests)
+	require.Len(t, warnings, 1)
+	assert.Contains(t, warnings[0], "does-not-exist")
+}
+
+func TestPlannerService_BuildCreateRequest_AmbiguousAborts(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	tmpl := models.PlanTemplate{
+		Name:    "p",
+		Release: "scylla-2026.2",
+		Owner:   "alice",
+		Tests:   []string{"longevity-100gb"}, // present in both tier1 and tier2
+	}
+
+	_, _, err := svc.BuildCreateRequest(context.Background(), tmpl, nil)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, services.ErrAmbiguousEntity))
+}
+
+func TestPlannerService_BuildCreateRequest_RequiresReleaseAndOwner(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	_, _, err := svc.BuildCreateRequest(context.Background(),
+		models.PlanTemplate{Name: "p", Owner: "alice"}, nil)
+	require.Error(t, err)
+
+	_, _, err = svc.BuildCreateRequest(context.Background(),
+		models.PlanTemplate{Name: "p", Release: "scylla-2026.2"}, nil)
+	require.Error(t, err)
+}
+
+func TestPlannerService_CreatePlan_PostsAndReturns(t *testing.T) {
+	t.Parallel()
+	var gotBody models.CreatePlanRequest
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/planning/plan/create", func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "POST", r.Method)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&gotBody))
+		jsonOK(t, w, models.ReleasePlan{ID: "p9", Key: "scylla-2026.2#9", Name: gotBody.Name})
+	})
+	svc := newPlannerSvc(t, mux)
+
+	plan, err := svc.CreatePlan(context.Background(), models.CreatePlanRequest{
+		Name: "GA", ReleaseID: "rel-1", Owner: "u1",
+		Tests: []string{"t1"}, Groups: []string{}, Assignments: map[string]string{},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "p9", plan.ID)
+	assert.Equal(t, "GA", gotBody.Name)
+}
+
+func TestPlannerService_CreatePlan_DuplicateError(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/planning/plan/create", func(w http.ResponseWriter, r *http.Request) {
+		jsonErr(t, w, "Plan with this name and version already exists")
+	})
+	svc := newPlannerSvc(t, mux)
+
+	_, err := svc.CreatePlan(context.Background(), models.CreatePlanRequest{Name: "dup"})
+	require.Error(t, err)
+	var apiErr *api.APIError
+	require.True(t, errors.As(err, &apiErr))
+	assert.Contains(t, apiErr.Body.Message, "already exists")
+}
+
+func TestPlannerService_DeletePlan_EscapesKeyAndSendsDeleteView(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		deleteView bool
+		want       string
+	}{
+		{"keep view", false, "0"},
+		{"delete view", true, "1"},
+	}
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var gotEscaped, gotDeleteView, gotMethod string
+			mux := http.NewServeMux()
+			mux.HandleFunc("/api/v1/planning/plan/scylla-2026.2#3/delete", func(w http.ResponseWriter, r *http.Request) {
+				gotMethod = r.Method
+				gotEscaped = r.URL.EscapedPath()
+				gotDeleteView = r.URL.Query().Get("deleteView")
+				jsonOK(t, w, true)
+			})
+			svc := newPlannerSvc(t, mux)
+
+			err := svc.DeletePlan(context.Background(), "scylla-2026.2#3", tc.deleteView)
+			require.NoError(t, err)
+			assert.Equal(t, "DELETE", gotMethod)
+			// The '#' in the key is percent-escaped so it is not parsed as a fragment.
+			assert.Contains(t, gotEscaped, "%23")
+			assert.Equal(t, tc.want, gotDeleteView)
+		})
+	}
+}
+
+// --------------------------------------------------------------------------
+// BuildTemplate (get --template)
+// --------------------------------------------------------------------------
+
+func TestPlannerService_BuildTemplate_BackResolvesNames(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	plan := models.ReleasePlan{
+		Name:            "2026.2 Longevity",
+		Description:     "ga plan",
+		ReleaseID:       "rel-1",
+		Owner:           "u1",
+		Participants:    []string{"u2"},
+		TargetVersion:   "2026.2.0",
+		Tests:           []string{"t1", "t2"},
+		AssigneeMapping: map[string]string{"t3": "u2"},
+	}
+
+	tmpl, err := svc.BuildTemplate(context.Background(), plan)
+	require.NoError(t, err)
+
+	assert.Equal(t, "scylla-2026.2", tmpl.Release)
+	assert.Equal(t, "alice", tmpl.Owner)
+	assert.Equal(t, []string{"bob"}, tmpl.Participants)
+	assert.Equal(t, []string{"Tier 1/longevity-100gb", "Tier 1/longevity-200gb"}, tmpl.Tests)
+	assert.Equal(t, map[string]string{"Tier 2/longevity-100gb": "bob"}, tmpl.Assignments)
+}
+
+func TestPlannerService_BuildTemplate_SkipsUnknownTests(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	plan := models.ReleasePlan{
+		Name:      "p",
+		ReleaseID: "rel-1",
+		Owner:     "u1",
+		Tests:     []string{"t1", "gone"}, // "gone" is not in the gridview
+	}
+
+	tmpl, err := svc.BuildTemplate(context.Background(), plan)
+	require.NoError(t, err)
+	// Tests no longer present in the gridview cannot be named and are skipped.
+	assert.Equal(t, []string{"Tier 1/longevity-100gb"}, tmpl.Tests)
+}
+
+// TestPlannerService_TemplateRoundTrip locks the get --template -> create path:
+// BuildTemplate emits the group portion as the *display* (pretty) name, so
+// BuildCreateRequest must map that display name back to the same group ID (and
+// thus the same test UUIDs) when it builds the create payload.
+func TestPlannerService_TemplateRoundTrip_DisplayNameMapsToGroupID(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+	ctx := context.Background()
+
+	plan := models.ReleasePlan{
+		Name:            "GA",
+		ReleaseID:       "rel-1",
+		Owner:           "u1",
+		Tests:           []string{"t1", "t2"},          // tier1 (pretty "Tier 1")
+		AssigneeMapping: map[string]string{"t3": "u2"}, // tier2 (pretty "Tier 2")
+	}
+
+	tmpl, err := svc.BuildTemplate(ctx, plan)
+	require.NoError(t, err)
+	// Sanity: the emitted refs use the group's display name, not its raw name.
+	assert.Equal(t, []string{"Tier 1/longevity-100gb", "Tier 1/longevity-200gb"}, tmpl.Tests)
+	require.Contains(t, tmpl.Assignments, "Tier 2/longevity-100gb")
+
+	// Feeding the template straight back must resolve the display names to the
+	// original group/test UUIDs.
+	req, warnings, err := svc.BuildCreateRequest(ctx, tmpl, nil)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+	assert.ElementsMatch(t, []string{"t1", "t2", "t3"}, req.Tests)
+	assert.Equal(t, map[string]string{"t3": "u2"}, req.Assignments)
+	// Group names are never sent to the backend; they expand to test UUIDs.
+	assert.Empty(t, req.Groups)
+}
+
+func TestPlannerService_ExpandGroup_ByDisplayName(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, gridviewMux(t, nil))
+
+	// The group's display (pretty) name resolves to the same enabled tests as
+	// its raw name.
+	ids, err := svc.ExpandGroup(context.Background(), "rel-1", "Tier 1")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"t1", "t2"}, ids)
+}
