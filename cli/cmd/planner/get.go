@@ -26,6 +26,8 @@ With --template the plan is emitted as a release-independent, name-based spec
 
 	cmd.Flags().StringP("plan-id", "p", "", "Plan UUID or key (e.g. \"scylla-2026.2#3\") (required)")
 	cmd.Flags().Bool("template", false, "Emit a name-based plan spec suitable for 'create --file'")
+	cmd.Flags().Bool("raw", false, "Emit the raw plan as returned by the API (UUIDs, unresolved)")
+	cmd.MarkFlagsMutuallyExclusive("template", "raw")
 	_ = cmd.MarkFlagRequired("plan-id")
 
 	parent.AddCommand(cmd)
@@ -42,7 +44,8 @@ func runGet(cmd *cobra.Command, _ []string) error {
 
 	planRef, _ := cmd.Flags().GetString("plan-id")
 	asTemplate, _ := cmd.Flags().GetBool("template")
-	log.Debug().Str("plan_id", planRef).Bool("template", asTemplate).Msg("fetching plan")
+	raw, _ := cmd.Flags().GetBool("raw")
+	log.Debug().Str("plan_id", planRef).Bool("template", asTemplate).Bool("raw", raw).Msg("fetching plan")
 
 	svc := services.NewPlannerService(client, c)
 
@@ -62,6 +65,16 @@ func runGet(cmd *cobra.Command, _ []string) error {
 		return out.Write(models.NewKVTabular(tmpl))
 	}
 
+	if raw {
+		log.Info().Str("plan_id", planRef).Msg("plan fetched successfully (raw)")
+		return out.Write(models.NewKVTabular(plan))
+	}
+
 	log.Info().Str("plan_id", planRef).Msg("plan fetched successfully")
-	return out.Write(models.NewKVTabular(plan))
+	resolved, err := svc.BuildResolvedPlan(ctx, plan)
+	if err != nil {
+		log.Error().Err(err).Str("plan_id", planRef).Msg("failed to resolve plan references")
+		return err
+	}
+	return out.Write(resolved)
 }

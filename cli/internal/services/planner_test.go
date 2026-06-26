@@ -663,3 +663,101 @@ func TestPlannerService_ExpandGroup_ByDisplayName(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"t1", "t2"}, ids)
 }
+
+// --------------------------------------------------------------------------
+// Resolved plan view (default get / list output)
+// --------------------------------------------------------------------------
+
+func TestPlannerService_BuildResolvedPlan_ResolvesNames(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	plan := models.ReleasePlan{
+		ID:              "p1",
+		Key:             "scylla-2026.2#1",
+		Name:            "GA",
+		Description:     "ga plan",
+		ReleaseID:       "rel-1",
+		Owner:           "u1",
+		Participants:    []string{"u2"},
+		TargetVersion:   "2026.2.0",
+		Tests:           []string{"t1", "t3"},
+		Groups:          []string{"g1"},
+		AssigneeMapping: map[string]string{"t2": "u2"},
+		Completed:       true,
+	}
+
+	rp, err := svc.BuildResolvedPlan(context.Background(), plan)
+	require.NoError(t, err)
+
+	assert.Equal(t, "scylla-2026.2#1", rp.Key)
+	assert.Equal(t, "scylla-2026.2", rp.Release)
+	assert.Equal(t, "alice", rp.Owner)
+	assert.Equal(t, []string{"bob"}, rp.Participants)
+	assert.Equal(t, []string{"Tier 1/longevity-100gb", "Tier 2/longevity-100gb"}, rp.Tests)
+	assert.Equal(t, []string{"tier1"}, rp.Groups)
+	assert.Equal(t, map[string]string{"Tier 1/longevity-200gb": "bob"}, rp.Assignments)
+	// Identity/status fields are retained (unlike a template).
+	assert.Equal(t, "p1", rp.ID)
+	assert.True(t, rp.Completed)
+}
+
+func TestPlannerService_BuildResolvedPlan_UnknownRefsFallBackToUUID(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	plan := models.ReleasePlan{
+		ID:              "p2",
+		ReleaseID:       "rel-1",
+		Owner:           "u-missing",            // not in users
+		Tests:           []string{"t1", "gone"}, // "gone" not in gridview
+		AssigneeMapping: map[string]string{"gone": "u-missing"},
+	}
+
+	rp, err := svc.BuildResolvedPlan(context.Background(), plan)
+	require.NoError(t, err)
+	// Unknown references are kept verbatim (lossless), not dropped.
+	assert.Equal(t, "u-missing", rp.Owner)
+	assert.Equal(t, []string{"Tier 1/longevity-100gb", "gone"}, rp.Tests)
+	assert.Equal(t, map[string]string{"gone": "u-missing"}, rp.Assignments)
+}
+
+func TestPlannerService_BuildResolvedPlan_UnknownReleaseFallsBack(t *testing.T) {
+	t.Parallel()
+	// gridview for the plan's release is served, but the releases list does not
+	// contain it — the release name falls back to the raw id without failing.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/releases", func(w http.ResponseWriter, r *http.Request) {
+		jsonOK(t, w, []models.Release{{ID: "other", Name: "scylla-2026.1"}})
+	})
+	mux.HandleFunc("/api/v1/users", func(w http.ResponseWriter, r *http.Request) {
+		jsonOK(t, w, models.UsersMap{"u1": {ID: "u1", Username: "alice"}})
+	})
+	mux.HandleFunc("/api/v1/planning/release/rel-1/gridview", func(w http.ResponseWriter, r *http.Request) {
+		jsonOK(t, w, gridviewFixture())
+	})
+	svc := newPlannerSvc(t, mux)
+
+	rp, err := svc.BuildResolvedPlan(context.Background(),
+		models.ReleasePlan{ReleaseID: "rel-1", Owner: "u1"})
+	require.NoError(t, err)
+	assert.Equal(t, "rel-1", rp.Release)
+	assert.Equal(t, "alice", rp.Owner)
+}
+
+func TestPlannerService_BuildResolvedPlans_List(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	plans := models.ReleasePlanList{
+		{Key: "scylla-2026.2#1", ReleaseID: "rel-1", Owner: "u1", Tests: []string{"t1"}},
+		{Key: "scylla-2026.2#2", ReleaseID: "rel-1", Owner: "u2", Tests: []string{"t2"}},
+	}
+
+	resolved, err := svc.BuildResolvedPlans(context.Background(), plans)
+	require.NoError(t, err)
+	require.Len(t, resolved, 2)
+	assert.Equal(t, "alice", resolved[0].Owner)
+	assert.Equal(t, "bob", resolved[1].Owner)
+	assert.Equal(t, []string{"Tier 1/longevity-100gb"}, resolved[0].Tests)
+}

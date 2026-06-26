@@ -204,7 +204,6 @@ type GridView struct {
 // ---------------------------------------------------------------------------
 // PlanTemplate – editable create-spec (get --template / create --file schema)
 // ---------------------------------------------------------------------------
-
 // PlanTemplate is the release-independent, human-readable plan spec emitted by
 // `planner get --template` and consumed by `planner create --file`.
 //
@@ -219,6 +218,72 @@ type PlanTemplate struct {
 	Participants  []string          `json:"participants,omitempty"`
 	Tests         []string          `json:"tests"`
 	Assignments   map[string]string `json:"assignments,omitempty"`
+}
+
+// ResolvedPlan is a human-readable view of a [ReleasePlan] with every UUID
+// reference back-resolved to a name: release/owner/participant names, tests and
+// assignment targets as group-qualified "group/test" strings, and groups as
+// names. It is the default (non-`--template`) output of `planner get`/`list`.
+//
+// Unlike [PlanTemplate] it retains the plan's identity and status (id, key,
+// completed, timestamps) and never drops entities — a reference that cannot be
+// resolved against the release gridview/users list falls back to its raw UUID
+// rather than being omitted, so the output is lossless.
+type ResolvedPlan struct {
+	ID            string            `json:"id"`
+	Key           string            `json:"key"`
+	Name          string            `json:"name"`
+	Description   string            `json:"description,omitempty"`
+	Release       string            `json:"release"`
+	TargetVersion string            `json:"target_version,omitempty"`
+	Owner         string            `json:"owner"`
+	Participants  []string          `json:"participants,omitempty"`
+	Tests         []string          `json:"tests"`
+	Groups        []string          `json:"groups,omitempty"`
+	Assignments   map[string]string `json:"assignments,omitempty"`
+	Completed     bool              `json:"completed"`
+	ViewID        string            `json:"view_id,omitempty"`
+	CreatedFrom   string            `json:"created_from,omitempty"`
+	CreationTime  string            `json:"creation_time,omitempty"`
+	LastUpdated   string            `json:"last_updated,omitempty"`
+	EndsAt        string            `json:"ends_at,omitempty"`
+}
+
+// Headers implements output.Tabular for ResolvedPlan. Text output is a curated
+// subset of fields; JSON output (via direct marshalling) still carries the full
+// resolved plan.
+func (ResolvedPlan) Headers() []string {
+	return []string{"Key", "Name", "Description", "Release", "Target Version", "Owner", "Last Updated"}
+}
+
+// Rows implements output.Tabular for ResolvedPlan.
+func (p ResolvedPlan) Rows() [][]string {
+	return [][]string{{
+		p.Key,
+		p.Name,
+		p.Description,
+		p.Release,
+		p.TargetVersion,
+		p.Owner,
+		p.LastUpdated,
+	}}
+}
+
+// ResolvedPlans is a slice of resolved plans rendered as one row per plan in
+// text output, while JSON marshalling emits the full slice. It backs the
+// default `planner list` output.
+type ResolvedPlans []ResolvedPlan
+
+// Headers implements output.Tabular for ResolvedPlans.
+func (ResolvedPlans) Headers() []string { return ResolvedPlan{}.Headers() }
+
+// Rows implements output.Tabular for ResolvedPlans.
+func (ps ResolvedPlans) Rows() [][]string {
+	rows := make([][]string, 0, len(ps))
+	for _, p := range ps {
+		rows = append(rows, p.Rows()[0])
+	}
+	return rows
 }
 
 // ---------------------------------------------------------------------------
