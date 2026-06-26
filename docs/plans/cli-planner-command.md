@@ -616,16 +616,16 @@ exceptions are `--plan-id` and `--view-id`). Add to `PlannerService`:
   are emitted as `tests_add`, no `groups_add` is sent, and any assignment on the group
   fans out to each expanded test in `assignee_mapping_set`.
 - **DoD:**
-  - [ ] `argus planner update --plan-id <id> --name "new"` sends only the `name`
+  - [x] `argus planner update --plan-id <id> --name "new"` sends only the `name`
         scalar (unit test asserts the request body has no list/map keys).
-  - [ ] Adding/removing a test produces `tests_add`/`tests_remove` and leaves other
+  - [x] Adding/removing a test produces `tests_add`/`tests_remove` and leaves other
         fields untouched (manual: `get` before/after; unit test on diff builder).
-  - [ ] `--add-group` expands to the group's enabled tests in `tests_add` (no
+  - [x] `--add-group` expands to the group's enabled tests in `tests_add` (no
         `groups_add`); a group assignment fans out to each test (unit test).
-  - [ ] Assignment set/remove maps to `assignee_mapping_set`/`assignee_mapping_remove`
+  - [x] Assignment set/remove maps to `assignee_mapping_set`/`assignee_mapping_remove`
         (unit test). Both the entity key (name/`build_system_id`) and user value
         (username) resolve to UUIDs before the map is sent (unit test).
-  - [ ] `--add-test` given a name/`build_system_id` resolves to a UUID before building
+  - [x] `--add-test` given a name/`build_system_id` resolves to a UUID before building
         the diff; an ambiguous bare name aborts the update with a candidate list
         (unit test).
 

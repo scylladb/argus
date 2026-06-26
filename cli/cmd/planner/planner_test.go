@@ -33,7 +33,7 @@ func TestRegister_WiresAllSubCommands(t *testing.T) {
 	for _, c := range parent.Commands() {
 		names[c.Name()] = true
 	}
-	for _, want := range []string{"list", "get", "create", "delete"} {
+	for _, want := range []string{"list", "get", "create", "update", "delete"} {
 		assert.Truef(t, names[want], "expected %q sub-command", want)
 	}
 }
@@ -140,3 +140,74 @@ func TestOverlayFlags_UnsetScalarsKeepFileValues(t *testing.T) {
 	assert.Equal(t, "FileName", tmpl.Name)
 	assert.Equal(t, "alice", tmpl.Owner)
 }
+
+func TestUpdate_FlagsRegistered(t *testing.T) {
+	t.Parallel()
+	cmd := newSubCmd(t, "update")
+	for _, name := range []string{
+		"name", "description", "owner", "target-version", "completed",
+		"add-test", "remove-test", "add-group", "remove-group",
+		"add-participant", "remove-participant", "assign", "unassign", "file",
+	} {
+		assert.NotNilf(t, cmd.Flags().Lookup(name), "expected --%s flag", name)
+	}
+	planID := cmd.Flags().Lookup("plan-id")
+	require.NotNil(t, planID)
+	assert.Equal(t, "p", planID.Shorthand)
+}
+
+func TestOverlayUpdateFlags_OnlySetScalarsAndAugmentedCollections(t *testing.T) {
+	t.Parallel()
+	cmd := newSubCmd(t, "update")
+	require.NoError(t, cmd.Flags().Set("name", "FlagName"))
+	require.NoError(t, cmd.Flags().Set("completed", "true"))
+	require.NoError(t, cmd.Flags().Set("add-test", "tier1/b"))
+	require.NoError(t, cmd.Flags().Set("remove-group", "tier2"))
+	require.NoError(t, cmd.Flags().Set("add-participant", "bob"))
+	require.NoError(t, cmd.Flags().Set("unassign", "tier1/c"))
+	require.NoError(t, cmd.Flags().Set("assign", "x=u2"))
+
+	// Pre-populate from a file: name is overridden, description is preserved,
+	// and collections are augmented.
+	desc := "from file"
+	spec := models.PlanUpdateSpec{
+		Name:               strPtrT("FileName"),
+		Description:        &desc,
+		TestsAdd:           []string{"tier1/a"},
+		AssigneeMappingSet: map[string]string{"x": "u1"},
+	}
+
+	require.NoError(t, overlayUpdateFlags(cmd, &spec))
+
+	// Scalar flag overrides the file value.
+	require.NotNil(t, spec.Name)
+	assert.Equal(t, "FlagName", *spec.Name)
+	// Unset scalar keeps the file value; untouched scalars stay nil.
+	require.NotNil(t, spec.Description)
+	assert.Equal(t, "from file", *spec.Description)
+	assert.Nil(t, spec.Owner)
+	require.NotNil(t, spec.Completed)
+	assert.True(t, *spec.Completed)
+	// Collections augment the file collections.
+	assert.Equal(t, []string{"tier1/a", "tier1/b"}, spec.TestsAdd)
+	assert.Equal(t, []string{"tier2"}, spec.GroupsRemove)
+	assert.Equal(t, []string{"bob"}, spec.ParticipantsAdd)
+	assert.Equal(t, []string{"tier1/c"}, spec.AssigneeMappingRemove)
+	// Assignment x overridden onto the file's map.
+	assert.Equal(t, map[string]string{"x": "u2"}, spec.AssigneeMappingSet)
+}
+
+func TestOverlayUpdateFlags_NoFlagsLeavesSpecEmpty(t *testing.T) {
+	t.Parallel()
+	cmd := newSubCmd(t, "update")
+
+	var spec models.PlanUpdateSpec
+	require.NoError(t, overlayUpdateFlags(cmd, &spec))
+	assert.Nil(t, spec.Name)
+	assert.Nil(t, spec.Completed)
+	assert.Empty(t, spec.TestsAdd)
+	assert.Empty(t, spec.AssigneeMappingSet)
+}
+
+// strPtrT is a string-pointer helper for table data in this test file.
+func strPtrT(s string) *string { return &s }

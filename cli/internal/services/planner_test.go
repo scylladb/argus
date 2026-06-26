@@ -761,3 +761,201 @@ func TestPlannerService_BuildResolvedPlans_List(t *testing.T) {
 	assert.Equal(t, "bob", resolved[1].Owner)
 	assert.Equal(t, []string{"Tier 1/longevity-100gb"}, resolved[0].Tests)
 }
+
+// --------------------------------------------------------------------------
+// Update (diff-based, Phase 5)
+// --------------------------------------------------------------------------
+
+func strPtr(s string) *string { return &s }
+
+func TestPlannerService_BuildUpdateRequest_ScalarOnly(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1"}
+	diff, warnings, err := svc.BuildUpdateRequest(context.Background(), plan,
+		models.PlanUpdateSpec{Name: strPtr("renamed")})
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+
+	assert.Equal(t, "p1", diff.ID)
+	require.NotNil(t, diff.Name)
+	assert.Equal(t, "renamed", *diff.Name)
+	// A scalar-only edit must not produce any list/map deltas.
+	assert.Nil(t, diff.TestsAdd)
+	assert.Nil(t, diff.TestsRemove)
+	assert.Nil(t, diff.GroupsAdd)
+	assert.Nil(t, diff.GroupsRemove)
+	assert.Nil(t, diff.ParticipantsAdd)
+	assert.Nil(t, diff.AssigneeMappingSet)
+	assert.Nil(t, diff.AssigneeMappingRemove)
+
+	// The marshalled body carries only id + name.
+	raw, err := json.Marshal(diff)
+	require.NoError(t, err)
+	s := string(raw)
+	assert.Contains(t, s, `"name":"renamed"`)
+	assert.NotContains(t, s, "tests_add")
+	assert.NotContains(t, s, "assignee_mapping")
+}
+
+func TestPlannerService_BuildUpdateRequest_ResolvesOwner(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1"}
+	diff, _, err := svc.BuildUpdateRequest(context.Background(), plan,
+		models.PlanUpdateSpec{Owner: strPtr("alice")})
+	require.NoError(t, err)
+	require.NotNil(t, diff.Owner)
+	assert.Equal(t, "u1", *diff.Owner)
+}
+
+func TestPlannerService_BuildUpdateRequest_TestAddRemove(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1"}
+	diff, warnings, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		TestsAdd:    []string{"tier1/longevity-200gb"},
+		TestsRemove: []string{"scylla-2026.2/tier2/longevity-100gb"},
+	})
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+	assert.Equal(t, []string{"t2"}, diff.TestsAdd)
+	assert.Equal(t, []string{"t3"}, diff.TestsRemove)
+	// Unrelated fields stay empty.
+	assert.Nil(t, diff.GroupsRemove)
+	assert.Nil(t, diff.ParticipantsAdd)
+}
+
+func TestPlannerService_BuildUpdateRequest_MissingTestWarns(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1"}
+	diff, warnings, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		TestsAdd: []string{"tier1/longevity-200gb", "tier1/does-not-exist"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"t2"}, diff.TestsAdd)
+	require.Len(t, warnings, 1)
+	assert.Contains(t, warnings[0], "does-not-exist")
+}
+
+func TestPlannerService_BuildUpdateRequest_AmbiguousTestAborts(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1"}
+	_, _, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		TestsAdd: []string{"longevity-100gb"}, // present in tier1 and tier2
+	})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, services.ErrAmbiguousEntity))
+}
+
+func TestPlannerService_BuildUpdateRequest_AddGroupExpands(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1"}
+	diff, _, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		GroupsAdd: []string{"tier1"},
+	})
+	require.NoError(t, err)
+	// tier1 expands to its enabled tests; no groups_add is ever sent.
+	assert.Equal(t, []string{"t1", "t2"}, diff.TestsAdd)
+	assert.Nil(t, diff.GroupsAdd)
+}
+
+func TestPlannerService_BuildUpdateRequest_RemoveGroup(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1"}
+	diff, _, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		GroupsRemove: []string{"tier2"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"g2"}, diff.GroupsRemove)
+	assert.Nil(t, diff.TestsAdd)
+}
+
+func TestPlannerService_BuildUpdateRequest_ParticipantsResolve(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1"}
+	diff, _, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		ParticipantsAdd:    []string{"alice"},
+		ParticipantsRemove: []string{"bob"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"u1"}, diff.ParticipantsAdd)
+	assert.Equal(t, []string{"u2"}, diff.ParticipantsRemove)
+}
+
+func TestPlannerService_BuildUpdateRequest_AssignSetAndRemove(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1"}
+	diff, _, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		AssigneeMappingSet:    map[string]string{"tier1/longevity-200gb": "alice"},
+		AssigneeMappingRemove: []string{"scylla-2026.2/tier2/longevity-100gb"},
+	})
+	require.NoError(t, err)
+	// Entity key and user value are both resolved to UUIDs.
+	assert.Equal(t, map[string]string{"t2": "u1"}, diff.AssigneeMappingSet)
+	assert.Equal(t, []string{"t3"}, diff.AssigneeMappingRemove)
+}
+
+func TestPlannerService_BuildUpdateRequest_GroupAssignmentFansOut(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1"}
+	diff, _, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		AssigneeMappingSet: map[string]string{"tier1": "bob"},
+	})
+	require.NoError(t, err)
+	// A group assignment fans out to each enabled member test.
+	assert.Equal(t, map[string]string{"t1": "u2", "t2": "u2"}, diff.AssigneeMappingSet)
+}
+
+func TestPlannerService_UpdatePlan_PostsDiff(t *testing.T) {
+	t.Parallel()
+	var gotBody models.PlanDiffRequest
+	var gotMethod string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/planning/plan/update", func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&gotBody))
+		jsonOK(t, w, true)
+	})
+	svc := newPlannerSvc(t, mux)
+
+	name := "renamed"
+	err := svc.UpdatePlan(context.Background(), models.PlanDiffRequest{ID: "p1", Name: &name})
+	require.NoError(t, err)
+	assert.Equal(t, "POST", gotMethod)
+	assert.Equal(t, "p1", gotBody.ID)
+	require.NotNil(t, gotBody.Name)
+	assert.Equal(t, "renamed", *gotBody.Name)
+}
+
+func TestPlannerService_UpdatePlan_BackendError(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/planning/plan/update", func(w http.ResponseWriter, r *http.Request) {
+		jsonErr(t, w, "name and version already exist")
+	})
+	svc := newPlannerSvc(t, mux)
+
+	err := svc.UpdatePlan(context.Background(), models.PlanDiffRequest{ID: "p1"})
+	require.Error(t, err)
+	var apiErr *api.APIError
+	require.True(t, errors.As(err, &apiErr))
+	assert.Contains(t, apiErr.Body.Message, "already exist")
+}
