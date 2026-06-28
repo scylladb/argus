@@ -437,8 +437,7 @@ def invalidate_release_snapshots(release_id: UUID) -> None:
     is used only for run lifecycle events (submit/finish).
     """
     try:
-        for snapshot in ReleaseStatsSnapshot.filter(release_id=release_id).all():
-            snapshot.delete()
+        ReleaseStatsSnapshot.filter(release_id=release_id).delete()
     except Exception:  # pylint: disable=broad-except
         _SNAPSHOT_LOGGER.warning("Failed to invalidate release snapshots for %s", release_id, exc_info=True)
 
