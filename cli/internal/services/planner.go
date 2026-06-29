@@ -305,6 +305,21 @@ func (s *PlannerService) GetReleaseStructure(ctx context.Context, releaseID stri
 	return gv, nil
 }
 
+// GetReleaseOverview fetches the release gridview and returns a
+// [models.ReleaseGrid] mapping each enabled test's group-qualified "group/test"
+// reference to its build_system_id, for an at-a-glance overview of a release.
+func (s *PlannerService) GetReleaseOverview(ctx context.Context, releaseID string) (models.ReleaseGrid, error) {
+	grid, err := s.GetReleaseStructure(ctx, releaseID)
+	if err != nil {
+		return nil, err
+	}
+	overview := make(models.ReleaseGrid, len(grid.Tests))
+	for _, t := range grid.Tests {
+		overview[t.Group+"/"+t.Name] = t.BuildSystemID
+	}
+	return overview, nil
+}
+
 // ResolveEntityID resolves a test or group reference (by name or
 // build_system_id) to its UUID within a release, using a single gridview fetch.
 //

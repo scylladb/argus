@@ -33,7 +33,7 @@ func TestRegister_WiresAllSubCommands(t *testing.T) {
 	for _, c := range parent.Commands() {
 		names[c.Name()] = true
 	}
-	for _, want := range []string{"list", "get", "create", "update", "delete"} {
+	for _, want := range []string{"list", "get", "create", "update", "delete", "overview"} {
 		assert.Truef(t, names[want], "expected %q sub-command", want)
 	}
 }
@@ -63,6 +63,14 @@ func TestList_RawFlagRegistered(t *testing.T) {
 	t.Parallel()
 	cmd := newSubCmd(t, "list")
 	assert.NotNil(t, cmd.Flags().Lookup("raw"))
+}
+
+func TestOverview_FlagsRegistered(t *testing.T) {
+	t.Parallel()
+	cmd := newSubCmd(t, "overview")
+	release := cmd.Flags().Lookup("release")
+	require.NotNil(t, release)
+	assert.Equal(t, "r", release.Shorthand)
 }
 
 func TestDelete_FlagsRegistered(t *testing.T) {
