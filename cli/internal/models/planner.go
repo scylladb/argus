@@ -109,46 +109,11 @@ type PlanDiffRequest struct {
 	AssigneeMappingRemove []string          `json:"assignee_mapping_remove,omitempty"`
 }
 
-// CopyPlanRequest is the JSON body for POST /planning/plan/copy.
-//
-// It mirrors CopyPlanPayload (planner_service.py): Plan is the source plan
-// (with name/version/description/owner overrides applied), Replacements maps a
-// missing source-entity UUID to a substitute target-entity UUID.
-type CopyPlanRequest struct {
-	Plan              ReleasePlan       `json:"plan"`
-	KeepParticipants  bool              `json:"keepParticipants"`
-	Replacements      map[string]string `json:"replacements"`
-	TargetReleaseID   string            `json:"targetReleaseId"`
-	TargetReleaseName string            `json:"targetReleaseName"`
-}
-
-// ---------------------------------------------------------------------------
-// Copy eligibility check response
-// ---------------------------------------------------------------------------
-
-// CopyCheckResponse is the payload of GET /planning/plan/<id>/copy/check.
-//
-// Status is "passed" or "failed"; Missing lists entities that have no
-// equivalent in the target release (by build_system_id remap).
-type CopyCheckResponse struct {
-	Status          string          `json:"status"`
-	TargetRelease   Release         `json:"targetRelease"`
-	OriginalRelease Release         `json:"originalRelease"`
-	Missing         MissingEntities `json:"missing"`
-}
-
-// MissingEntities groups the missing tests and groups of a copy eligibility check.
-type MissingEntities struct {
-	Tests  []GridEntity `json:"tests"`
-	Groups []GridEntity `json:"groups"`
-}
-
 // ---------------------------------------------------------------------------
 // Release / Gridview – name resolution and group expansion sources
 // ---------------------------------------------------------------------------
 
-// Release mirrors the subset of ArgusRelease returned by /api/v1/releases and
-// the copy-check endpoint.
+// Release mirrors the subset of ArgusRelease returned by /api/v1/releases.
 type Release struct {
 	ID         string `json:"id"`
 	Name       string `json:"name"`
