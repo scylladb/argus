@@ -137,8 +137,6 @@ func TestPlanUpdateSpec_FileSchemaParses(t *testing.T) {
 		"target_version": "2026.2.0~rc3",
 		"tests_add": ["scylla-2026.2/longevity/longevity-100gb", "tier1/longevity-200gb"],
 		"groups_remove": ["tier2"],
-		"participants_add": ["alice"],
-		"participants_remove": ["bob"],
 		"assignee_mapping_set": {"scylla-2026.2/longevity/longevity-100gb": "alice"},
 		"assignee_mapping_remove": ["tier1/longevity-200gb"]
 	}`
@@ -157,8 +155,6 @@ func TestPlanUpdateSpec_FileSchemaParses(t *testing.T) {
 
 	assert.Equal(t, []string{"scylla-2026.2/longevity/longevity-100gb", "tier1/longevity-200gb"}, spec.TestsAdd)
 	assert.Equal(t, []string{"tier2"}, spec.GroupsRemove)
-	assert.Equal(t, []string{"alice"}, spec.ParticipantsAdd)
-	assert.Equal(t, []string{"bob"}, spec.ParticipantsRemove)
 	assert.Equal(t, map[string]string{"scylla-2026.2/longevity/longevity-100gb": "alice"}, spec.AssigneeMappingSet)
 	assert.Equal(t, []string{"tier1/longevity-200gb"}, spec.AssigneeMappingRemove)
 }
