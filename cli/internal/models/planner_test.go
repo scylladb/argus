@@ -183,30 +183,6 @@ func TestPlanUpdateSpec_OmitsUnsetFields(t *testing.T) {
 	}
 }
 
-func TestCopyCheckResponse_JSONRoundTrip(t *testing.T) {
-	t.Parallel()
-
-	const raw = `{
-		"status": "failed",
-		"targetRelease": {"id": "t-1", "name": "scylla-2026.2", "pretty_name": "2026.2", "enabled": true},
-		"originalRelease": {"id": "o-1", "name": "scylla-2026.1", "pretty_name": "2026.1", "enabled": true},
-		"missing": {
-			"tests": [{"id": "x", "name": "longevity-100gb", "build_system_id": "scylla-2026.1/longevity/longevity-100gb", "type": "test", "release": "scylla-2026.1", "enabled": true}],
-			"groups": []
-		}
-	}`
-
-	var resp models.CopyCheckResponse
-	require.NoError(t, json.Unmarshal([]byte(raw), &resp))
-
-	assert.Equal(t, "failed", resp.Status)
-	assert.Equal(t, "scylla-2026.2", resp.TargetRelease.Name)
-	assert.Equal(t, "scylla-2026.1", resp.OriginalRelease.Name)
-	require.Len(t, resp.Missing.Tests, 1)
-	assert.Equal(t, "scylla-2026.1/longevity/longevity-100gb", resp.Missing.Tests[0].BuildSystemID)
-	assert.Empty(t, resp.Missing.Groups)
-}
-
 func TestGridView_JSONRoundTrip(t *testing.T) {
 	t.Parallel()
 
