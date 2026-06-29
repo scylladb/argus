@@ -414,22 +414,23 @@ func TestPlannerService_BuildCreateRequest_ResolvesAndExpands(t *testing.T) {
 		Name:          "2026.2 Longevity",
 		Release:       "scylla-2026.2",
 		Owner:         "alice",
-		Participants:  []string{"bob"},
 		TargetVersion: "2026.2.0",
-		Tests:         []string{"tier1/longevity-200gb"},
-		Assignments:   map[string]string{"tier2/longevity-100gb": "bob"},
+		Assignments: map[string]string{
+			"tier1/longevity-200gb": "$owner",
+			"tier2/longevity-100gb": "bob",
+		},
 	}
 
-	req, warnings, err := svc.BuildCreateRequest(context.Background(), tmpl, []string{"tier1"})
+	req, warnings, err := svc.BuildCreateRequest(context.Background(), tmpl)
 	require.NoError(t, err)
 	assert.Empty(t, warnings)
 
 	assert.Equal(t, "rel-1", req.ReleaseID)
 	assert.Equal(t, "u1", req.Owner)
+	// bob is assigned; owner-marked tests do not add a participant.
 	assert.Equal(t, []string{"u2"}, req.Participants)
-	// Explicit t2, then group tier1 expands to t1+t2 (t2 deduped), then the
-	// assignment target t3 — first-insertion order preserved.
-	assert.Equal(t, []string{"t2", "t1", "t3"}, req.Tests)
+	// Both entities join tests; only the specific assignee enters the mapping.
+	assert.ElementsMatch(t, []string{"t2", "t3"}, req.Tests)
 	assert.Equal(t, map[string]string{"t3": "u2"}, req.Assignments)
 	// Collections must serialise as [] / {}, never null (backend requires keys).
 	assert.NotNil(t, req.Groups)
@@ -444,16 +445,35 @@ func TestPlannerService_BuildCreateRequest_GroupAssignmentFansOut(t *testing.T) 
 		Name:        "fanout",
 		Release:     "scylla-2026.2",
 		Owner:       "alice",
-		Tests:       []string{},
 		Assignments: map[string]string{"tier1": "bob"},
 	}
 
-	req, warnings, err := svc.BuildCreateRequest(context.Background(), tmpl, nil)
+	req, warnings, err := svc.BuildCreateRequest(context.Background(), tmpl)
 	require.NoError(t, err)
 	assert.Empty(t, warnings)
 	// A group assignment fans out to each enabled member test (t1, t2).
 	assert.Equal(t, map[string]string{"t1": "u2", "t2": "u2"}, req.Assignments)
 	assert.ElementsMatch(t, []string{"t1", "t2"}, req.Tests)
+}
+
+func TestPlannerService_BuildCreateRequest_OwnerMarkerLeavesUnassigned(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	tmpl := models.PlanTemplate{
+		Name:        "p",
+		Release:     "scylla-2026.2",
+		Owner:       "alice",
+		Assignments: map[string]string{"tier1/longevity-100gb": "$owner"},
+	}
+
+	req, warnings, err := svc.BuildCreateRequest(context.Background(), tmpl)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+	// $owner test is in tests but absent from assignments; no participant.
+	assert.Equal(t, []string{"t1"}, req.Tests)
+	assert.Empty(t, req.Assignments)
+	assert.Empty(t, req.Participants)
 }
 
 func TestPlannerService_BuildCreateRequest_MissingTestWarnsAndOmits(t *testing.T) {
@@ -464,10 +484,13 @@ func TestPlannerService_BuildCreateRequest_MissingTestWarnsAndOmits(t *testing.T
 		Name:    "p",
 		Release: "scylla-2026.2",
 		Owner:   "alice",
-		Tests:   []string{"tier1/longevity-200gb", "tier1/does-not-exist"},
+		Assignments: map[string]string{
+			"tier1/longevity-200gb": "$owner",
+			"tier1/does-not-exist":  "$owner",
+		},
 	}
 
-	req, warnings, err := svc.BuildCreateRequest(context.Background(), tmpl, nil)
+	req, warnings, err := svc.BuildCreateRequest(context.Background(), tmpl)
 	require.NoError(t, err)
 	// Missing test is omitted (plan still created) and reported as a warning.
 	assert.Equal(t, []string{"t2"}, req.Tests)
@@ -480,15 +503,47 @@ func TestPlannerService_BuildCreateRequest_AmbiguousAborts(t *testing.T) {
 	svc := newPlannerSvc(t, resolveMux(t))
 
 	tmpl := models.PlanTemplate{
-		Name:    "p",
-		Release: "scylla-2026.2",
-		Owner:   "alice",
-		Tests:   []string{"longevity-100gb"}, // present in both tier1 and tier2
+		Name:        "p",
+		Release:     "scylla-2026.2",
+		Owner:       "alice",
+		Assignments: map[string]string{"longevity-100gb": "$owner"}, // in tier1 and tier2
 	}
 
-	_, _, err := svc.BuildCreateRequest(context.Background(), tmpl, nil)
+	_, _, err := svc.BuildCreateRequest(context.Background(), tmpl)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, services.ErrAmbiguousEntity))
+}
+
+func TestPlannerService_BuildCreateRequest_AllMissingTestsRejected(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	// Every entity is absent from the release gridview, so all are omitted and
+	// the plan would have no tests — reject and list the missing entities
+	// instead of sending an empty (null) tests list the backend can't iterate.
+	tmpl := models.PlanTemplate{
+		Name:        "p",
+		Release:     "scylla-2026.2",
+		Owner:       "alice",
+		Assignments: map[string]string{"tier1/gone-a": "$owner", "tier1/gone-b": "$owner"},
+	}
+
+	_, warnings, err := svc.BuildCreateRequest(context.Background(), tmpl)
+	require.Error(t, err)
+	assert.Len(t, warnings, 2)
+	assert.Contains(t, err.Error(), "no tests resolved")
+	assert.Contains(t, err.Error(), "tier1/gone-a")
+	assert.Contains(t, err.Error(), "tier1/gone-b")
+}
+
+func TestPlannerService_BuildCreateRequest_EmptyAssignmentsRejected(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	_, _, err := svc.BuildCreateRequest(context.Background(),
+		models.PlanTemplate{Name: "p", Release: "scylla-2026.2", Owner: "alice"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "at least one test")
 }
 
 func TestPlannerService_BuildCreateRequest_RequiresReleaseAndOwner(t *testing.T) {
@@ -496,11 +551,11 @@ func TestPlannerService_BuildCreateRequest_RequiresReleaseAndOwner(t *testing.T)
 	svc := newPlannerSvc(t, resolveMux(t))
 
 	_, _, err := svc.BuildCreateRequest(context.Background(),
-		models.PlanTemplate{Name: "p", Owner: "alice"}, nil)
+		models.PlanTemplate{Name: "p", Owner: "alice"})
 	require.Error(t, err)
 
 	_, _, err = svc.BuildCreateRequest(context.Background(),
-		models.PlanTemplate{Name: "p", Release: "scylla-2026.2"}, nil)
+		models.PlanTemplate{Name: "p", Release: "scylla-2026.2"})
 	require.Error(t, err)
 }
 
@@ -597,9 +652,12 @@ func TestPlannerService_BuildTemplate_BackResolvesNames(t *testing.T) {
 
 	assert.Equal(t, "scylla-2026.2", tmpl.Release)
 	assert.Equal(t, "alice", tmpl.Owner)
-	assert.Equal(t, []string{"bob"}, tmpl.Participants)
-	assert.Equal(t, []string{"Tier 1/longevity-100gb", "Tier 1/longevity-200gb"}, tmpl.Tests)
-	assert.Equal(t, map[string]string{"Tier 2/longevity-100gb": "bob"}, tmpl.Assignments)
+	// Unassigned tests are marked $owner; the assigned one keeps its assignee.
+	assert.Equal(t, map[string]string{
+		"Tier 1/longevity-100gb": "$owner",
+		"Tier 1/longevity-200gb": "$owner",
+		"Tier 2/longevity-100gb": "bob",
+	}, tmpl.Assignments)
 }
 
 func TestPlannerService_BuildTemplate_SkipsUnknownTests(t *testing.T) {
@@ -616,7 +674,7 @@ func TestPlannerService_BuildTemplate_SkipsUnknownTests(t *testing.T) {
 	tmpl, err := svc.BuildTemplate(context.Background(), plan)
 	require.NoError(t, err)
 	// Tests no longer present in the gridview cannot be named and are skipped.
-	assert.Equal(t, []string{"Tier 1/longevity-100gb"}, tmpl.Tests)
+	assert.Equal(t, map[string]string{"Tier 1/longevity-100gb": "$owner"}, tmpl.Assignments)
 }
 
 // TestPlannerService_TemplateRoundTrip locks the get --template -> create path:
@@ -639,12 +697,12 @@ func TestPlannerService_TemplateRoundTrip_DisplayNameMapsToGroupID(t *testing.T)
 	tmpl, err := svc.BuildTemplate(ctx, plan)
 	require.NoError(t, err)
 	// Sanity: the emitted refs use the group's display name, not its raw name.
-	assert.Equal(t, []string{"Tier 1/longevity-100gb", "Tier 1/longevity-200gb"}, tmpl.Tests)
+	assert.Equal(t, "$owner", tmpl.Assignments["Tier 1/longevity-100gb"])
 	require.Contains(t, tmpl.Assignments, "Tier 2/longevity-100gb")
 
 	// Feeding the template straight back must resolve the display names to the
 	// original group/test UUIDs.
-	req, warnings, err := svc.BuildCreateRequest(ctx, tmpl, nil)
+	req, warnings, err := svc.BuildCreateRequest(ctx, tmpl)
 	require.NoError(t, err)
 	assert.Empty(t, warnings)
 	assert.ElementsMatch(t, []string{"t1", "t2", "t3"}, req.Tests)
@@ -760,6 +818,28 @@ func TestPlannerService_BuildResolvedPlans_List(t *testing.T) {
 	assert.Equal(t, "alice", resolved[0].Owner)
 	assert.Equal(t, "bob", resolved[1].Owner)
 	assert.Equal(t, []string{"Tier 1/longevity-100gb"}, resolved[0].Tests)
+}
+
+func TestPlannerService_BuildPlanSummaries_CountsAndNames(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	plans := models.ReleasePlanList{
+		{Key: "scylla-2026.2#1", ReleaseID: "rel-1", Owner: "u1",
+			Tests: []string{"t1", "t2"}, Groups: []string{"g1"}, Participants: []string{"u2"}},
+		{Key: "scylla-2026.2#2", ReleaseID: "rel-1", Owner: "u2"},
+	}
+
+	summaries, err := svc.BuildPlanSummaries(context.Background(), plans)
+	require.NoError(t, err)
+	require.Len(t, summaries, 2)
+	assert.Equal(t, "alice", summaries[0].Owner)
+	assert.Equal(t, "scylla-2026.2", summaries[0].Release)
+	assert.Equal(t, 2, summaries[0].Tests)
+	assert.Equal(t, 1, summaries[0].Groups)
+	assert.Equal(t, 1, summaries[0].Participants)
+	assert.Equal(t, "bob", summaries[1].Owner)
+	assert.Equal(t, 0, summaries[1].Tests)
 }
 
 // --------------------------------------------------------------------------

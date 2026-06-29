@@ -68,7 +68,7 @@ func TestList_RawFlagRegistered(t *testing.T) {
 func TestDelete_FlagsRegistered(t *testing.T) {
 	t.Parallel()
 	cmd := newSubCmd(t, "delete")
-	assert.NotNil(t, cmd.Flags().Lookup("delete-view"))
+	assert.NotNil(t, cmd.Flags().Lookup("no-delete-view"))
 	assert.NotNil(t, cmd.Flags().Lookup("yes"))
 	planID := cmd.Flags().Lookup("plan-id")
 	require.NotNil(t, planID)
@@ -105,17 +105,13 @@ func TestOverlayFlags_FlagOverFilePrecedence(t *testing.T) {
 	t.Parallel()
 	cmd := newSubCmd(t, "create")
 	require.NoError(t, cmd.Flags().Set("name", "FlagName"))
-	require.NoError(t, cmd.Flags().Set("test", "tier1/b"))
-	require.NoError(t, cmd.Flags().Set("participant", "bob"))
 	require.NoError(t, cmd.Flags().Set("assign", "x=u2"))
 	require.NoError(t, cmd.Flags().Set("assign", "y=u3"))
 
 	tmpl := models.PlanTemplate{
-		Name:         "FileName",
-		Release:      "scylla-2026.2",
-		Tests:        []string{"tier1/a"},
-		Participants: []string{"alice"},
-		Assignments:  map[string]string{"x": "u1"},
+		Name:        "FileName",
+		Release:     "scylla-2026.2",
+		Assignments: map[string]string{"x": "u1"},
 	}
 
 	require.NoError(t, overlayFlags(cmd, &tmpl))
@@ -124,9 +120,6 @@ func TestOverlayFlags_FlagOverFilePrecedence(t *testing.T) {
 	assert.Equal(t, "FlagName", tmpl.Name)
 	// Release is untouched (flag not set).
 	assert.Equal(t, "scylla-2026.2", tmpl.Release)
-	// Collections augment the file collections.
-	assert.Equal(t, []string{"tier1/a", "tier1/b"}, tmpl.Tests)
-	assert.Equal(t, []string{"alice", "bob"}, tmpl.Participants)
 	// Assignment x overridden, y added.
 	assert.Equal(t, map[string]string{"x": "u2", "y": "u3"}, tmpl.Assignments)
 }

@@ -32,12 +32,13 @@ automatically — raw UUIDs are not accepted.
 
   # From flags:
   argus planner create --release scylla-2026.2 --name "2026.2 Longevity" \
-    --owner alice --test scylla-2026.2/tier1/longevity-100gb \
-    --group tier2 --assign tier1/longevity-200gb=bob
+    --owner alice --assign tier1/longevity-200gb=bob \
+    --assign tier2/longevity-100gb=$owner
 
-Groups (from a file or --group) are always expanded to their enabled tests; an
-assignment on a group fans out to each of those tests. Tests that do not exist
-in the target release are reported and omitted, and the plan is created anyway.`,
+Plan membership comes entirely from assignments: each entity is a test or group
+(groups fan out to their enabled tests); use $owner to add a test without
+assigning it to a specific participant. Tests not present in the target release
+are reported and omitted, and the plan is created anyway.`,
 		RunE: runCreate,
 	}
 
@@ -46,12 +47,9 @@ in the target release are reported and omitted, and the plan is created anyway.`
 	cmd.Flags().String("name", "", "Plan name")
 	cmd.Flags().String("description", "", "Plan description")
 	cmd.Flags().String("owner", "", "Owner username")
-	cmd.Flags().StringArray("participant", nil, "Participant username (repeatable)")
 	cmd.Flags().String("target-version", "", "Target version")
 	cmd.Flags().String("view-id", "", "Existing view UUID to attach (optional)")
-	cmd.Flags().StringArray("test", nil, "Test by build_system_id or group/test (repeatable)")
-	cmd.Flags().StringArray("group", nil, "Group name to expand into its enabled tests (repeatable)")
-	cmd.Flags().StringArray("assign", nil, "Assignment as entity=username (repeatable)")
+	cmd.Flags().StringArray("assign", nil, "Assignment as entity=username (use $owner to leave unassigned, repeatable)")
 
 	parent.AddCommand(cmd)
 }
@@ -72,20 +70,19 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	if err := overlayFlags(cmd, &tmpl); err != nil {
 		return err
 	}
-	groups, _ := cmd.Flags().GetStringArray("group")
 	viewID, _ := cmd.Flags().GetString("view-id")
 
 	svc := services.NewPlannerService(client, c)
 
-	req, warnings, err := svc.BuildCreateRequest(ctx, tmpl, groups)
+	req, warnings, err := svc.BuildCreateRequest(ctx, tmpl)
+	for _, w := range warnings {
+		log.Warn().Msg(w)
+	}
 	if err != nil {
 		log.Error().Err(err).Msg("failed to build create request")
 		return err
 	}
 	req.ViewID = viewID
-	for _, w := range warnings {
-		log.Warn().Msg(w)
-	}
 
 	plan, err := svc.CreatePlan(ctx, req)
 	if err != nil {
@@ -123,8 +120,7 @@ func loadTemplate(cmd *cobra.Command) (models.PlanTemplate, error) {
 }
 
 // overlayFlags applies command-line flags onto tmpl. Scalar flags override the
-// file value only when explicitly set; --test/--participant/--assign augment
-// the corresponding file collections.
+// file value only when explicitly set; --assign augments the file assignments.
 func overlayFlags(cmd *cobra.Command, tmpl *models.PlanTemplate) error {
 	if cmd.Flags().Changed("release") {
 		tmpl.Release, _ = cmd.Flags().GetString("release")
@@ -140,14 +136,6 @@ func overlayFlags(cmd *cobra.Command, tmpl *models.PlanTemplate) error {
 	}
 	if cmd.Flags().Changed("target-version") {
 		tmpl.TargetVersion, _ = cmd.Flags().GetString("target-version")
-	}
-	if cmd.Flags().Changed("participant") {
-		ps, _ := cmd.Flags().GetStringArray("participant")
-		tmpl.Participants = append(tmpl.Participants, ps...)
-	}
-	if cmd.Flags().Changed("test") {
-		ts, _ := cmd.Flags().GetStringArray("test")
-		tmpl.Tests = append(tmpl.Tests, ts...)
 	}
 	if cmd.Flags().Changed("assign") {
 		assigns, _ := cmd.Flags().GetStringArray("assign")

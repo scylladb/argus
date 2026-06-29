@@ -172,18 +172,24 @@ type GridView struct {
 // PlanTemplate is the release-independent, human-readable plan spec emitted by
 // `planner get --template` and consumed by `planner create --file`.
 //
-// Tests are group-qualified "group/test" strings, Owner/Participants are
-// usernames, and Assignments are keyed by "group/test".
+// Assignments is the single source of plan membership: it is keyed by a
+// group-qualified "group/test" reference (or a group name, which fans out to
+// its enabled tests) and valued by a username. The literal [OwnerMarker]
+// ("$owner") denotes a test that belongs to the plan but is not assigned to a
+// specific participant — it is placed in the plan's tests but left out of the
+// assignee mapping. Owner is a username.
 type PlanTemplate struct {
 	Name          string            `json:"name"`
 	Description   string            `json:"description,omitempty"`
 	Release       string            `json:"release"`
 	TargetVersion string            `json:"target_version,omitempty"`
 	Owner         string            `json:"owner,omitempty"`
-	Participants  []string          `json:"participants,omitempty"`
-	Tests         []string          `json:"tests"`
 	Assignments   map[string]string `json:"assignments,omitempty"`
 }
+
+// OwnerMarker is the sentinel assignment value meaning "include this test in
+// the plan but leave it unassigned (it implicitly belongs to the owner)".
+const OwnerMarker = "$owner"
 
 // PlanUpdateSpec is the name-based diff consumed by `planner update`. It is the
 // schema for the `update --file` input and the intermediate that the `update`
@@ -263,16 +269,53 @@ func (p ResolvedPlan) Rows() [][]string {
 	}}
 }
 
-// ResolvedPlans is a slice of resolved plans rendered as one row per plan in
+// PlanSummary is the per-plan list view. Its JSON fields mirror the text-table
+// columns exactly (test/group/participant references are reported as integer
+// counts), so the `planner list` JSON and `--text` output carry the same data.
+type PlanSummary struct {
+	Key           string `json:"key"`
+	Name          string `json:"name"`
+	Description   string `json:"description"`
+	Release       string `json:"release"`
+	TargetVersion string `json:"target_version"`
+	Owner         string `json:"owner"`
+	Tests         int    `json:"tests"`
+	Groups        int    `json:"groups"`
+	Participants  int    `json:"participants"`
+	LastUpdated   string `json:"last_updated"`
+}
+
+// Headers implements output.Tabular for PlanSummary.
+func (PlanSummary) Headers() []string {
+	return []string{"Key", "Name", "Description", "Release", "Target Version", "Owner", "Tests", "Groups", "Participants", "Last Updated"}
+}
+
+// Rows implements output.Tabular for PlanSummary.
+func (p PlanSummary) Rows() [][]string {
+	return [][]string{{
+		p.Key,
+		p.Name,
+		p.Description,
+		p.Release,
+		p.TargetVersion,
+		p.Owner,
+		strconv.Itoa(p.Tests),
+		strconv.Itoa(p.Groups),
+		strconv.Itoa(p.Participants),
+		p.LastUpdated,
+	}}
+}
+
+// PlanSummaries is a slice of plan summaries rendered as one row per plan in
 // text output, while JSON marshalling emits the full slice. It backs the
 // default `planner list` output.
-type ResolvedPlans []ResolvedPlan
+type PlanSummaries []PlanSummary
 
-// Headers implements output.Tabular for ResolvedPlans.
-func (ResolvedPlans) Headers() []string { return ResolvedPlan{}.Headers() }
+// Headers implements output.Tabular for PlanSummaries.
+func (PlanSummaries) Headers() []string { return PlanSummary{}.Headers() }
 
-// Rows implements output.Tabular for ResolvedPlans.
-func (ps ResolvedPlans) Rows() [][]string {
+// Rows implements output.Tabular for PlanSummaries.
+func (ps PlanSummaries) Rows() [][]string {
 	rows := make([][]string, 0, len(ps))
 	for _, p := range ps {
 		rows = append(rows, p.Rows()[0])

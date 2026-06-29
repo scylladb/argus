@@ -450,6 +450,16 @@ func (o *orderedSet) add(v string) {
 	o.items = append(o.items, v)
 }
 
+// nonNilSlice returns an empty (non-nil) slice when s is nil, so JSON encodes
+// it as [] rather than null. The backend iterates these lists and rejects a
+// null (TypeError: 'NoneType' object is not iterable).
+func nonNilSlice(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
 // BuildCreateRequest turns a name-based [models.PlanTemplate] (plus any extra
 // group references from --group) into a fully UUID-resolved
 // [models.CreatePlanRequest]. Every name is resolved client-side against the
@@ -460,7 +470,7 @@ func (o *orderedSet) add(v string) {
 // key is a group fans out to each of that group's enabled tests. Tests that do
 // not exist in the target release are returned as warnings and omitted; an
 // ambiguous reference instead aborts with an error so the user can disambiguate.
-func (s *PlannerService) BuildCreateRequest(ctx context.Context, tmpl models.PlanTemplate, groupRefs []string) (models.CreatePlanRequest, []string, error) {
+func (s *PlannerService) BuildCreateRequest(ctx context.Context, tmpl models.PlanTemplate) (models.CreatePlanRequest, []string, error) {
 	var warnings []string
 
 	if tmpl.Release == "" {
@@ -479,68 +489,66 @@ func (s *PlannerService) BuildCreateRequest(ctx context.Context, tmpl models.Pla
 		return models.CreatePlanRequest{}, nil, err
 	}
 
-	participants := make([]string, 0, len(tmpl.Participants))
-	for _, p := range tmpl.Participants {
-		id, err := s.ResolveUserID(ctx, p)
-		if err != nil {
-			return models.CreatePlanRequest{}, nil, fmt.Errorf("participant %q: %w", p, err)
-		}
-		participants = append(participants, id)
-	}
-
-	tests := newOrderedSet()
-
-	// Explicit tests: missing in the target release → warn and omit; ambiguous
+	// Assignments are the single source of plan membership. Each entry's
+	// targets join the tests list; a specific assignee also enters the
+	// assignee mapping and becomes a participant. "$owner" leaves the test
+	// unassigned (in tests only). Missing entity → warn and omit; bad user
 	// → abort.
-	for _, ref := range tmpl.Tests {
-		id, err := s.ResolveEntityID(ctx, ref, releaseID, KindTest)
+	tests := newOrderedSet()
+	assignments := map[string]string{}
+	participants := newOrderedSet()
+	var missing []string
+	for entityRef, userRef := range tmpl.Assignments {
+		ids, err := s.resolveAssignmentTargets(ctx, entityRef, releaseID)
 		if err != nil {
 			if errors.Is(err, ErrEntityNotFound) {
-				warnings = append(warnings, fmt.Sprintf("test %q is not in release %q — omitted", ref, tmpl.Release))
+				missing = append(missing, entityRef)
+				warnings = append(warnings, fmt.Sprintf("test %q is not in release %q — omitted", entityRef, tmpl.Release))
 				continue
 			}
 			return models.CreatePlanRequest{}, nil, err
 		}
-		tests.add(id)
-	}
 
-	// Extra groups (--group): always expanded to enabled tests.
-	for _, g := range groupRefs {
-		ids, err := s.ExpandGroup(ctx, releaseID, g)
-		if err != nil {
-			return models.CreatePlanRequest{}, nil, err
+		if userRef == models.OwnerMarker {
+			for _, id := range ids {
+				tests.add(id)
+			}
+			continue
 		}
-		for _, id := range ids {
-			tests.add(id)
-		}
-	}
 
-	// Assignments: resolve the user, then the entity (test, else group → fan
-	// out to each enabled test). Entities also join the tests list.
-	assignments := map[string]string{}
-	for entityRef, userRef := range tmpl.Assignments {
 		userID, err := s.ResolveUserID(ctx, userRef)
 		if err != nil {
 			return models.CreatePlanRequest{}, nil, fmt.Errorf("assignee %q: %w", userRef, err)
 		}
-		ids, err := s.resolveAssignmentTargets(ctx, entityRef, releaseID)
-		if err != nil {
-			return models.CreatePlanRequest{}, nil, err
-		}
 		for _, id := range ids {
-			assignments[id] = userID
 			tests.add(id)
+			assignments[id] = userID
 		}
+		if userID != ownerID {
+			participants.add(userID)
+		}
+	}
+
+	// A plan must contain at least one test/group; refuse to create an empty
+	// plan and list what could not be resolved.
+	if len(tests.items) == 0 {
+		sort.Strings(missing)
+		if len(missing) > 0 {
+			return models.CreatePlanRequest{}, warnings, fmt.Errorf(
+				"no tests resolved in release %q; none of the assigned entities exist there: %s",
+				tmpl.Release, strings.Join(missing, ", "))
+		}
+		return models.CreatePlanRequest{}, warnings, fmt.Errorf("a plan must include at least one test or group")
 	}
 
 	return models.CreatePlanRequest{
 		Name:          tmpl.Name,
 		Description:   tmpl.Description,
 		Owner:         ownerID,
-		Participants:  participants,
+		Participants:  nonNilSlice(participants.items),
 		TargetVersion: tmpl.TargetVersion,
 		ReleaseID:     releaseID,
-		Tests:         tests.items,
+		Tests:         nonNilSlice(tests.items),
 		Groups:        []string{},
 		Assignments:   assignments,
 	}, warnings, nil
@@ -560,15 +568,17 @@ func (s *PlannerService) resolveAssignmentTargets(ctx context.Context, entityRef
 	// Not a test — try a group and fan out to its enabled tests.
 	ids, gerr := s.ExpandGroup(ctx, releaseID, entityRef)
 	if gerr != nil {
-		return nil, fmt.Errorf("assignment target %q is not a test or group in release", entityRef)
+		return nil, fmt.Errorf("%q is not a test or group in release: %w", entityRef, ErrEntityNotFound)
 	}
 	return ids, nil
 }
 
 // BuildTemplate converts a stored plan (UUID-based) into a release-independent,
-// human-readable [models.PlanTemplate]: release/owner/participant names, tests
-// as group-qualified "group/test" strings, and assignments keyed by the same.
-// It is the data behind `planner get --template`.
+// human-readable [models.PlanTemplate]. Assignments is the single membership
+// source: every test is keyed by its group-qualified "group/test" name and
+// valued by the assignee username, or by [models.OwnerMarker] ("$owner") when
+// the test is in the plan but has no specific assignee. It is the data behind
+// `planner get --template`.
 //
 // Names are back-resolved from the plan's own release gridview and the users
 // list. Tests no longer present in that gridview (e.g. since disabled) cannot
@@ -587,21 +597,9 @@ func (s *PlannerService) BuildTemplate(ctx context.Context, plan models.ReleaseP
 		return models.PlanTemplate{}, err
 	}
 
-	participants := make([]string, 0, len(plan.Participants))
-	for _, p := range plan.Participants {
-		if u, ok := users[p]; ok {
-			participants = append(participants, u.Username)
-		}
-	}
+	assignments := map[string]string{}
 
-	tests := make([]string, 0, len(plan.Tests))
-	for _, t := range plan.Tests {
-		if name, ok := entityQualifiedName(grid, t); ok {
-			tests = append(tests, name)
-		}
-	}
-
-	var assignments map[string]string
+	// Assigned tests carry their assignee username.
 	for entityID, userID := range plan.AssigneeMapping {
 		name, ok := entityQualifiedName(grid, entityID)
 		if !ok {
@@ -611,10 +609,18 @@ func (s *PlannerService) BuildTemplate(ctx context.Context, plan models.ReleaseP
 		if !ok {
 			continue
 		}
-		if assignments == nil {
-			assignments = map[string]string{}
-		}
 		assignments[name] = u.Username
+	}
+
+	// Remaining plan tests are unassigned: mark them "$owner".
+	for _, t := range plan.Tests {
+		name, ok := entityQualifiedName(grid, t)
+		if !ok {
+			continue
+		}
+		if _, exists := assignments[name]; !exists {
+			assignments[name] = models.OwnerMarker
+		}
 	}
 
 	tmpl := models.PlanTemplate{
@@ -622,14 +628,10 @@ func (s *PlannerService) BuildTemplate(ctx context.Context, plan models.ReleaseP
 		Description:   plan.Description,
 		Release:       releaseName,
 		TargetVersion: plan.TargetVersion,
-		Tests:         tests,
 		Assignments:   assignments,
 	}
 	if u, ok := users[plan.Owner]; ok {
 		tmpl.Owner = u.Username
-	}
-	if len(participants) > 0 {
-		tmpl.Participants = participants
 	}
 	return tmpl, nil
 }
@@ -758,6 +760,33 @@ func (s *PlannerService) BuildResolvedPlans(ctx context.Context, plans models.Re
 		resolved = append(resolved, rp)
 	}
 	return resolved, nil
+}
+
+// BuildPlanSummaries resolves a slice of plans into the per-plan list view
+// ([models.PlanSummary]): release/owner names come from the resolved plan,
+// while tests/groups/participants are reported as counts taken from the source
+// plan. Shares the same single-fetch resolution as [BuildResolvedPlans].
+func (s *PlannerService) BuildPlanSummaries(ctx context.Context, plans models.ReleasePlanList) ([]models.PlanSummary, error) {
+	summaries := make([]models.PlanSummary, 0, len(plans))
+	for _, p := range plans {
+		rp, err := s.BuildResolvedPlan(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		summaries = append(summaries, models.PlanSummary{
+			Key:           rp.Key,
+			Name:          rp.Name,
+			Description:   rp.Description,
+			Release:       rp.Release,
+			TargetVersion: rp.TargetVersion,
+			Owner:         rp.Owner,
+			Tests:         len(p.Tests),
+			Groups:        len(p.Groups),
+			Participants:  len(p.Participants),
+			LastUpdated:   rp.LastUpdated,
+		})
+	}
+	return summaries, nil
 }
 
 // ---------------------------------------------------------------------------
