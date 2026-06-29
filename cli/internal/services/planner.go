@@ -418,12 +418,22 @@ func resolveTest(grid models.GridView, ref string) (string, error) {
 }
 
 // formatTestCandidates renders ambiguous test matches as an indented list of
-// build_system_id, group, and UUID so the user can pick an unambiguous ref.
+// build_system_id and group so the user can pick an unambiguous reference.
 func formatTestCandidates(matches []models.GridEntity) string {
 	sort.Slice(matches, func(i, j int) bool { return matches[i].BuildSystemID < matches[j].BuildSystemID })
 	var b strings.Builder
 	for _, t := range matches {
-		fmt.Fprintf(&b, "  - %s (group: %s, id: %s)\n", t.BuildSystemID, t.Group, t.ID)
+		fmt.Fprintf(&b, "  - %s (group: %s)\n", t.BuildSystemID, t.Group)
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// formatBullets renders refs as an indented one-per-line bullet list for
+// multi-entity error messages.
+func formatBullets(refs []string) string {
+	var b strings.Builder
+	for _, r := range refs {
+		fmt.Fprintf(&b, "  - %s\n", r)
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
@@ -530,13 +540,13 @@ func (s *PlannerService) BuildCreateRequest(ctx context.Context, tmpl models.Pla
 	}
 
 	// A plan must contain at least one test/group; refuse to create an empty
-	// plan and list what could not be resolved.
+	// plan and list what could not be resolved (one per line).
 	if len(tests.items) == 0 {
 		sort.Strings(missing)
 		if len(missing) > 0 {
 			return models.CreatePlanRequest{}, warnings, fmt.Errorf(
-				"no tests resolved in release %q; none of the assigned entities exist there: %s",
-				tmpl.Release, strings.Join(missing, ", "))
+				"no tests resolved in release %q; none of the assigned entities exist there:\n%s",
+				tmpl.Release, formatBullets(missing))
 		}
 		return models.CreatePlanRequest{}, warnings, fmt.Errorf("a plan must include at least one test or group")
 	}
