@@ -58,10 +58,10 @@ func runList(cmd *cobra.Command, _ []string) error {
 	if raw {
 		return out.Write(models.NewTabularSlice(plans))
 	}
-	resolved, err := svc.BuildResolvedPlans(ctx, plans)
+	resolved, err := svc.BuildPlanSummaries(ctx, plans)
 	if err != nil {
 		log.Error().Err(err).Str("release", releaseRef).Msg("failed to resolve plan references")
 		return err
 	}
-	return out.Write(models.ResolvedPlans(resolved))
+	return out.Write(models.PlanSummaries(resolved))
 }

@@ -319,19 +319,46 @@ func TestResolvedPlan_JSONKeepsFullDetail(t *testing.T) {
 	assert.Contains(t, s, `"id":"p1"`)
 }
 
-func TestResolvedPlans_TabularRowPerPlan(t *testing.T) {
+func TestPlanSummaries_TabularRowPerPlan(t *testing.T) {
 	t.Parallel()
 
-	plans := models.ResolvedPlans{
-		{Key: "scylla-2026.2#1", Name: "A", Owner: "alice"},
+	plans := models.PlanSummaries{
+		{Key: "scylla-2026.2#1", Name: "A", Owner: "alice", Tests: 3, Groups: 1, Participants: 2},
 		{Key: "scylla-2026.2#2", Name: "B", Owner: "bob"},
 	}
-	assert.Equal(t, models.ResolvedPlan{}.Headers(), plans.Headers())
+	assert.Equal(t, models.PlanSummary{}.Headers(), plans.Headers())
 
 	rows := plans.Rows()
 	require.Len(t, rows, 2)
+	assert.Len(t, rows[0], len(plans.Headers()), "row width must match header count")
 	assert.Equal(t, "scylla-2026.2#1", rows[0][0])
 	assert.Equal(t, "alice", rows[0][5])
+	assert.Equal(t, []string{"3", "1", "2"}, rows[0][6:9], "counts rendered as integers")
 	assert.Equal(t, "scylla-2026.2#2", rows[1][0])
 	assert.Equal(t, "bob", rows[1][5])
+}
+
+func TestPlanSummary_JSONMatchesColumns(t *testing.T) {
+	t.Parallel()
+
+	// JSON output must carry exactly the text-table columns, counts as integers.
+	raw, err := json.Marshal(models.PlanSummary{
+		Key: "scylla-2026.2#1", Name: "A", Release: "scylla-2026.2", Owner: "alice",
+		Tests: 3, Groups: 1, Participants: 2,
+	})
+	require.NoError(t, err)
+
+	var fields map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(raw, &fields))
+	keys := make([]string, 0, len(fields))
+	for k := range fields {
+		keys = append(keys, k)
+	}
+	assert.ElementsMatch(t, []string{
+		"key", "name", "description", "release", "target_version",
+		"owner", "tests", "groups", "participants", "last_updated",
+	}, keys)
+	assert.JSONEq(t, `3`, string(fields["tests"]))
+	assert.JSONEq(t, `1`, string(fields["groups"]))
+	assert.JSONEq(t, `2`, string(fields["participants"]))
 }

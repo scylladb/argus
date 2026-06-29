@@ -19,16 +19,16 @@ func registerDelete(parent *cobra.Command) {
 		Short: "Delete a release plan",
 		Long: `Delete a release plan addressed by its UUID or "releaseName#planNumber" key.
 
-By default the plan's associated view is detached and kept; pass --delete-view
-to delete the view as well. A confirmation prompt is shown unless --yes is given.
+By default the plan's associated view is deleted as well; pass --no-delete-view
+to detach and keep it. A confirmation prompt is shown unless --yes is given.
 
   argus planner delete --plan-id scylla-2026.2#3 --yes
-  argus planner delete --plan-id 7f3c1e90-... --delete-view --yes`,
+  argus planner delete --plan-id 7f3c1e90-... --no-delete-view --yes`,
 		RunE: runDelete,
 	}
 
 	cmd.Flags().StringP("plan-id", "p", "", "Plan UUID or key (required)")
-	cmd.Flags().Bool("delete-view", false, "Also delete the plan's associated view")
+	cmd.Flags().Bool("no-delete-view", false, "Keep the plan's associated view (default is to delete it)")
 	cmd.Flags().Bool("yes", false, "Skip the confirmation prompt")
 	_ = cmd.MarkFlagRequired("plan-id")
 
@@ -45,7 +45,8 @@ func runDelete(cmd *cobra.Command, _ []string) error {
 	log := logging.For(cmdctx.LoggerFrom(ctx), "planner-delete")
 
 	planRef, _ := cmd.Flags().GetString("plan-id")
-	deleteView, _ := cmd.Flags().GetBool("delete-view")
+	noDeleteView, _ := cmd.Flags().GetBool("no-delete-view")
+	deleteView := !noDeleteView
 	yes, _ := cmd.Flags().GetBool("yes")
 
 	if !yes {
