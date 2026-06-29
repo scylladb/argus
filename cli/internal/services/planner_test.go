@@ -962,25 +962,77 @@ func TestPlannerService_BuildUpdateRequest_RemoveGroup(t *testing.T) {
 	assert.Nil(t, diff.TestsAdd)
 }
 
-func TestPlannerService_BuildUpdateRequest_ParticipantsResolve(t *testing.T) {
+func TestPlannerService_BuildUpdateRequest_AssignAddsParticipant(t *testing.T) {
 	t.Parallel()
 	svc := newPlannerSvc(t, resolveMux(t))
 
-	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1"}
+	// alice owns the plan; assigning bob to a test makes him a participant.
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1", Owner: "u1", Tests: []string{"t1"}}
 	diff, _, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
-		ParticipantsAdd:    []string{"alice"},
-		ParticipantsRemove: []string{"bob"},
+		AssigneeMappingSet: map[string]string{"tier1/longevity-200gb": "bob"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, []string{"u1"}, diff.ParticipantsAdd)
+	assert.Equal(t, map[string]string{"t2": "u2"}, diff.AssigneeMappingSet)
+	assert.Equal(t, []string{"u2"}, diff.ParticipantsAdd)
+	assert.Empty(t, diff.ParticipantsRemove)
+}
+
+func TestPlannerService_BuildUpdateRequest_UnassignDropsParticipant(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	// bob's only assignment (t2) cleared via $owner → dropped from participants.
+	plan := models.ReleasePlan{
+		ID: "p1", ReleaseID: "rel-1", Owner: "u1",
+		Tests: []string{"t2"}, Participants: []string{"u2"},
+		AssigneeMapping: map[string]string{"t2": "u2"},
+	}
+	diff, _, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		AssigneeMappingSet: map[string]string{"tier1/longevity-200gb": "$owner"},
+	})
+	require.NoError(t, err)
+	// $owner clears the assignee (test stays) and removes bob as participant.
+	assert.Nil(t, diff.AssigneeMappingSet)
+	assert.Equal(t, []string{"t2"}, diff.AssigneeMappingRemove)
+	assert.Empty(t, diff.ParticipantsAdd)
 	assert.Equal(t, []string{"u2"}, diff.ParticipantsRemove)
+}
+
+func TestPlannerService_BuildUpdateRequest_RemoveLastTestDropsParticipant(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	// bob keeps another assigned test, so removing one keeps him a participant.
+	plan := models.ReleasePlan{
+		ID: "p1", ReleaseID: "rel-1", Owner: "u1",
+		Tests: []string{"t1", "t2"}, Participants: []string{"u2"},
+		AssigneeMapping: map[string]string{"t1": "u2", "t2": "u2"},
+	}
+	diff, _, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		TestsRemove: []string{"tier1/longevity-200gb"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"t2"}, diff.TestsRemove)
+	assert.Empty(t, diff.ParticipantsRemove)
+}
+
+func TestPlannerService_BuildUpdateRequest_RejectsEmptyPlan(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1", Tests: []string{"t2"}}
+	_, _, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		TestsRemove: []string{"tier1/longevity-200gb"},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "at least one test")
 }
 
 func TestPlannerService_BuildUpdateRequest_AssignSetAndRemove(t *testing.T) {
 	t.Parallel()
 	svc := newPlannerSvc(t, resolveMux(t))
 
-	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1"}
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1", Tests: []string{"t2", "t3"}}
 	diff, _, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
 		AssigneeMappingSet:    map[string]string{"tier1/longevity-200gb": "alice"},
 		AssigneeMappingRemove: []string{"scylla-2026.2/tier2/longevity-100gb"},
@@ -995,7 +1047,7 @@ func TestPlannerService_BuildUpdateRequest_GroupAssignmentFansOut(t *testing.T) 
 	t.Parallel()
 	svc := newPlannerSvc(t, resolveMux(t))
 
-	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1"}
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1", Tests: []string{"t1", "t2"}}
 	diff, _, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
 		AssigneeMappingSet: map[string]string{"tier1": "bob"},
 	})

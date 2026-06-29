@@ -140,10 +140,13 @@ func TestUpdate_FlagsRegistered(t *testing.T) {
 	for _, name := range []string{
 		"name", "description", "owner", "target-version", "completed",
 		"add-test", "remove-test", "add-group", "remove-group",
-		"add-participant", "remove-participant", "assign", "unassign", "file",
+		"assign", "unassign", "file",
 	} {
 		assert.NotNilf(t, cmd.Flags().Lookup(name), "expected --%s flag", name)
 	}
+	// Participants are derived from assignments — no manual participant flags.
+	assert.Nil(t, cmd.Flags().Lookup("add-participant"))
+	assert.Nil(t, cmd.Flags().Lookup("remove-participant"))
 	planID := cmd.Flags().Lookup("plan-id")
 	require.NotNil(t, planID)
 	assert.Equal(t, "p", planID.Shorthand)
@@ -156,7 +159,6 @@ func TestOverlayUpdateFlags_OnlySetScalarsAndAugmentedCollections(t *testing.T) 
 	require.NoError(t, cmd.Flags().Set("completed", "true"))
 	require.NoError(t, cmd.Flags().Set("add-test", "tier1/b"))
 	require.NoError(t, cmd.Flags().Set("remove-group", "tier2"))
-	require.NoError(t, cmd.Flags().Set("add-participant", "bob"))
 	require.NoError(t, cmd.Flags().Set("unassign", "tier1/c"))
 	require.NoError(t, cmd.Flags().Set("assign", "x=u2"))
 
@@ -184,7 +186,6 @@ func TestOverlayUpdateFlags_OnlySetScalarsAndAugmentedCollections(t *testing.T) 
 	// Collections augment the file collections.
 	assert.Equal(t, []string{"tier1/a", "tier1/b"}, spec.TestsAdd)
 	assert.Equal(t, []string{"tier2"}, spec.GroupsRemove)
-	assert.Equal(t, []string{"bob"}, spec.ParticipantsAdd)
 	assert.Equal(t, []string{"tier1/c"}, spec.AssigneeMappingRemove)
 	// Assignment x overridden onto the file's map.
 	assert.Equal(t, map[string]string{"x": "u2"}, spec.AssigneeMappingSet)

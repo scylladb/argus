@@ -897,28 +897,25 @@ func (s *PlannerService) BuildUpdateRequest(ctx context.Context, plan models.Rel
 		diff.GroupsRemove = removeGroups.items
 	}
 
-	// Participants resolve by username.
-	addParticipants, err := s.resolveUsers(ctx, spec.ParticipantsAdd)
-	if err != nil {
-		return models.PlanDiffRequest{}, nil, err
-	}
-	diff.ParticipantsAdd = addParticipants
-	removeParticipants, err := s.resolveUsers(ctx, spec.ParticipantsRemove)
-	if err != nil {
-		return models.PlanDiffRequest{}, nil, err
-	}
-	diff.ParticipantsRemove = removeParticipants
-
 	// Assignment set: resolve user, then entity (group fans out to its tests).
+	// A "$owner" value clears the assignee (test stays) by routing the targets
+	// to the removal set instead of the mapping.
 	var assignSet map[string]string
+	assignRemove := newOrderedSet()
 	for entityRef, userRef := range spec.AssigneeMappingSet {
-		userID, err := s.ResolveUserID(ctx, userRef)
-		if err != nil {
-			return models.PlanDiffRequest{}, nil, fmt.Errorf("assignee %q: %w", userRef, err)
-		}
 		ids, err := s.resolveAssignmentTargets(ctx, entityRef, releaseID)
 		if err != nil {
 			return models.PlanDiffRequest{}, nil, err
+		}
+		if userRef == models.OwnerMarker {
+			for _, id := range ids {
+				assignRemove.add(id)
+			}
+			continue
+		}
+		userID, err := s.ResolveUserID(ctx, userRef)
+		if err != nil {
+			return models.PlanDiffRequest{}, nil, fmt.Errorf("assignee %q: %w", userRef, err)
 		}
 		for _, id := range ids {
 			if assignSet == nil {
@@ -930,7 +927,6 @@ func (s *PlannerService) BuildUpdateRequest(ctx context.Context, plan models.Rel
 	diff.AssigneeMappingSet = assignSet
 
 	// Assignment removal: resolve each entity (group fans out) to its UUIDs.
-	assignRemove := newOrderedSet()
 	for _, entityRef := range spec.AssigneeMappingRemove {
 		ids, err := s.resolveAssignmentTargets(ctx, entityRef, releaseID)
 		if err != nil {
@@ -944,7 +940,98 @@ func (s *PlannerService) BuildUpdateRequest(ctx context.Context, plan models.Rel
 		diff.AssigneeMappingRemove = assignRemove.items
 	}
 
+	// Participants are derived from the resulting assignments: anyone assigned
+	// other than the (possibly new) owner is a participant. Compute the final
+	// state and emit only the deltas against the plan's current participants.
+	ownerID := plan.Owner
+	if diff.Owner != nil {
+		ownerID = *diff.Owner
+	}
+	diff.ParticipantsAdd, diff.ParticipantsRemove = participantDeltas(
+		plan, addTests, removeTests, removeGroups, assignSet, assignRemove, ownerID)
+
+	// A plan must keep at least one test; refuse an edit that would empty it.
+	if planLeftEmpty(plan, addTests, removeTests) {
+		return models.PlanDiffRequest{}, warnings, fmt.Errorf("update would remove the plan's last test; a plan must include at least one test")
+	}
+
 	return diff, warnings, nil
+}
+
+// participantDeltas computes participants_add/remove so the stored participants
+// equal the resulting assignees minus the owner. assignSet entries are added,
+// assignRemove entries are dropped, and entries on removed tests/groups are
+// dropped too (mirroring the backend's mapping cleanup).
+func participantDeltas(plan models.ReleasePlan, addTests, removeTests, removeGroups *orderedSet, assignSet map[string]string, assignRemove *orderedSet, ownerID string) (add, remove []string) {
+	removed := map[string]bool{}
+	for _, id := range removeTests.items {
+		removed[id] = true
+	}
+	for _, id := range removeGroups.items {
+		removed[id] = true
+	}
+	for _, id := range assignRemove.items {
+		removed[id] = true
+	}
+
+	final := map[string]string{}
+	for entity, user := range plan.AssigneeMapping {
+		if !removed[entity] {
+			final[entity] = user
+		}
+	}
+	for entity, user := range assignSet {
+		final[entity] = user
+	}
+
+	desired := map[string]bool{}
+	for _, user := range final {
+		if user != ownerID {
+			desired[user] = true
+		}
+	}
+	current := map[string]bool{}
+	for _, p := range plan.Participants {
+		current[p] = true
+	}
+
+	addSet := newOrderedSet()
+	for _, t := range addTests.items {
+		if user, ok := final[t]; ok && user != ownerID && !current[user] {
+			addSet.add(user)
+		}
+	}
+	for user := range desired {
+		if !current[user] {
+			addSet.add(user)
+		}
+	}
+	for _, p := range plan.Participants {
+		if !desired[p] && p != ownerID {
+			remove = append(remove, p)
+		}
+	}
+	return addSet.items, remove
+}
+
+// planLeftEmpty reports whether applying the test add/remove deltas would empty
+// a plan that currently has tests. A plan that started empty is left alone (it
+// is up to add deltas to populate it).
+func planLeftEmpty(plan models.ReleasePlan, addTests, removeTests *orderedSet) bool {
+	if len(plan.Tests) == 0 {
+		return false
+	}
+	remaining := map[string]bool{}
+	for _, t := range plan.Tests {
+		remaining[t] = true
+	}
+	for _, t := range removeTests.items {
+		delete(remaining, t)
+	}
+	for _, t := range addTests.items {
+		remaining[t] = true
+	}
+	return len(remaining) == 0
 }
 
 // resolveTestForDiff resolves a single test reference for an add/remove delta.
@@ -960,21 +1047,4 @@ func (s *PlannerService) resolveTestForDiff(ctx context.Context, ref, releaseID,
 		return "", fmt.Sprintf("test %q to %s is not in this release — skipped", ref, verb), nil
 	}
 	return "", "", err
-}
-
-// resolveUsers resolves a list of usernames to UUIDs, returning nil for an
-// empty input so the corresponding diff field is omitted.
-func (s *PlannerService) resolveUsers(ctx context.Context, refs []string) ([]string, error) {
-	if len(refs) == 0 {
-		return nil, nil
-	}
-	ids := make([]string, 0, len(refs))
-	for _, r := range refs {
-		id, err := s.ResolveUserID(ctx, r)
-		if err != nil {
-			return nil, fmt.Errorf("participant %q: %w", r, err)
-		}
-		ids = append(ids, id)
-	}
-	return ids, nil
 }
