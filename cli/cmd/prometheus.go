@@ -107,14 +107,9 @@ var promStartCmd = &cobra.Command{
 		// Check if container already exists for this run
 		containerName := promContainerName(runID)
 		if containerExists(ctx, containerName) {
-			out := OutputterFrom(ctx)
 			port, _ := getContainerPort(ctx, containerName)
-			entries := []PromContainerEntry{{
-				Container: containerName,
-				RunID:     runID,
-				Port:      port,
-			}}
-			return out.Write(models.NewTabularSlice(entries))
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Prometheus running at http://localhost:%s\n", port)
+			return nil
 		}
 
 		// 1. Check cache for previously downloaded archive
@@ -129,9 +124,7 @@ var promStartCmd = &cobra.Command{
 		cachedArchive := filepath.Join(dataDir, cachedLogName)
 		haveCached := cacheErr == nil && cachedLogName != "" && fileExists(cachedArchive)
 
-		if haveCached {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Using cached archive %s\n", cachedLogName)
-		} else {
+		if !haveCached {
 			// 2. List logs and find the monitor-set archive
 			log.Debug().Str("run_id", runID).Msg("listing logs to find monitor-set archive")
 			monitorLog, err := findMonitorSetLog(ctx, client, runID)
@@ -143,8 +136,6 @@ var promStartCmd = &cobra.Command{
 			cachedArchive = filepath.Join(dataDir, monitorLog)
 
 			// 3. Download the archive
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Downloading %s...\n", monitorLog)
-
 			pluginName, err := ResolveRunType(ctx, client, runID)
 			if err != nil {
 				return fmt.Errorf("resolving run type: %w", err)
@@ -179,7 +170,6 @@ var promStartCmd = &cobra.Command{
 		}
 
 		// 4. Extract outer archive to temp dir
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Extracting monitor-set archive...")
 		tempDir, err := os.MkdirTemp("", "argus-prom-download-*")
 		if err != nil {
 			return fmt.Errorf("creating temp dir: %w", err)
@@ -197,7 +187,6 @@ var promStartCmd = &cobra.Command{
 		}
 
 		// 5. Find prometheus_data_*.tar.zst in extracted content
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Looking for Prometheus data archive...")
 		promArchive, err := findPromDataArchive(tempDir)
 		if err != nil {
 			return err
@@ -205,7 +194,6 @@ var promStartCmd = &cobra.Command{
 		log.Info().Str("path", promArchive).Msg("found prometheus data archive")
 
 		// 6. Extract TSDB data to persistent directory
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Extracting Prometheus TSDB data to %s...\n", dataDir)
 		promFile, err := os.Open(promArchive)
 		if err != nil {
 			return fmt.Errorf("opening prometheus archive: %w", err)
@@ -237,7 +225,6 @@ var promStartCmd = &cobra.Command{
 		}
 
 		// 8. Start Docker container
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Starting Prometheus container...")
 		dockerArgs := []string{
 			"run", "-d",
 			"--name", containerName,
@@ -270,7 +257,6 @@ var promStartCmd = &cobra.Command{
 		_ = cache.Set(appCache, cacheKey, cachedLogName, "", cache.TTLPrometheusLog)
 
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Prometheus running at http://localhost:%s\n", port)
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Container: %s\n", containerName)
 		return nil
 	},
 }
