@@ -358,3 +358,20 @@ func TestPlanSummary_JSONMatchesColumns(t *testing.T) {
 	assert.JSONEq(t, `1`, string(fields["groups"]))
 	assert.JSONEq(t, `2`, string(fields["participants"]))
 }
+
+func TestReleaseGrid_StringSortedOnePerLine(t *testing.T) {
+	t.Parallel()
+	grid := models.ReleaseGrid{
+		"tier2/b": "bsid-b",
+		"tier1/a": "bsid-a",
+	}
+	assert.Equal(t, "tier1/a: bsid-a\ntier2/b: bsid-b", grid.String())
+}
+
+func TestReleaseGrid_MarshalsAsPlainMap(t *testing.T) {
+	t.Parallel()
+	grid := models.ReleaseGrid{"tier1/a": "bsid-a"}
+	raw, err := json.Marshal(grid)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"tier1/a":"bsid-a"}`, string(raw))
+}

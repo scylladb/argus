@@ -1,6 +1,10 @@
 package models
 
-import "strconv"
+import (
+	"sort"
+	"strconv"
+	"strings"
+)
 
 // ---------------------------------------------------------------------------
 // ReleasePlan – mirrors argus.backend.models.plan.ArgusReleasePlan
@@ -164,6 +168,30 @@ type GridView struct {
 	Tests       map[string]GridEntity   `json:"tests"`
 	Groups      map[string]GridEntity   `json:"groups"`
 	TestByGroup map[string][]GridEntity `json:"testByGroup"`
+}
+
+// ReleaseGrid is a release overview: every enabled test keyed by its
+// group-qualified "group/test" reference (the same form `--assign`/`get`/`list`
+// accept) and valued by its build_system_id. JSON output marshals the map
+// directly; text output renders one sorted entry per line as
+// `group/test: build_system_id` via String().
+type ReleaseGrid map[string]string
+
+// String renders the overview one entry per line, sorted by reference.
+func (g ReleaseGrid) String() string {
+	keys := make([]string, 0, len(g))
+	for k := range g {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for _, k := range keys {
+		b.WriteString(k)
+		b.WriteString(": ")
+		b.WriteString(g[k])
+		b.WriteByte('\n')
+	}
+	return strings.TrimRight(b.String(), "\n")
 }
 
 // ---------------------------------------------------------------------------

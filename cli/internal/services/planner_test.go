@@ -272,6 +272,21 @@ func TestPlannerService_ExpandGroup_EnabledOnly(t *testing.T) {
 	assert.Equal(t, []string{"t1", "t2"}, ids)
 }
 
+func TestPlannerService_GetReleaseOverview(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, gridviewMux(t, nil))
+
+	overview, err := svc.GetReleaseOverview(context.Background(), "rel-1")
+	require.NoError(t, err)
+	// Every test is keyed by group/test and valued by its build_system_id.
+	assert.Equal(t, models.ReleaseGrid{
+		"Tier 1/longevity-100gb":    "scylla-2026.2/tier1/longevity-100gb",
+		"Tier 1/longevity-200gb":    "scylla-2026.2/tier1/longevity-200gb",
+		"Tier 1/longevity-disabled": "scylla-2026.2/tier1/longevity-disabled",
+		"Tier 2/longevity-100gb":    "scylla-2026.2/tier2/longevity-100gb",
+	}, overview)
+}
+
 func TestPlannerService_Resolution_SingleGridviewFetch(t *testing.T) {
 	t.Parallel()
 	var calls int32
