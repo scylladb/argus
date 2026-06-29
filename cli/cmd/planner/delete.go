@@ -8,6 +8,7 @@ import (
 
 	"github.com/scylladb/argus/cli/internal/cmdctx"
 	"github.com/scylladb/argus/cli/internal/logging"
+	"github.com/scylladb/argus/cli/internal/models"
 	"github.com/scylladb/argus/cli/internal/services"
 	"github.com/spf13/cobra"
 )
@@ -49,6 +50,22 @@ func runDelete(cmd *cobra.Command, _ []string) error {
 	deleteView := !noDeleteView
 	yes, _ := cmd.Flags().GetBool("yes")
 
+	svc := services.NewPlannerService(client, c)
+
+	plan, err := svc.GetPlan(ctx, planRef)
+	if err != nil {
+		log.Error().Err(err).Str("plan_id", planRef).Msg("failed to fetch plan")
+		return err
+	}
+	summaries, err := svc.BuildPlanSummaries(ctx, models.ReleasePlanList{plan})
+	if err != nil {
+		log.Error().Err(err).Str("plan_id", planRef).Msg("failed to summarize plan")
+		return err
+	}
+	if err := out.Write(summaries[0]); err != nil {
+		return err
+	}
+
 	if !yes {
 		ok, err := confirm(cmd, fmt.Sprintf("Delete plan %q?", planRef))
 		if err != nil {
@@ -60,7 +77,6 @@ func runDelete(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	svc := services.NewPlannerService(client, c)
 	if err := svc.DeletePlan(ctx, planRef, deleteView); err != nil {
 		log.Error().Err(err).Str("plan_id", planRef).Msg("failed to delete plan")
 		return err
