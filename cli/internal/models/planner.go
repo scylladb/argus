@@ -195,10 +195,10 @@ func (g ReleaseGrid) String() string {
 }
 
 // ---------------------------------------------------------------------------
-// PlanTemplate – editable create-spec (get --template / create --file schema)
+// PlanTemplate – editable create-spec (default get / create --file schema)
 // ---------------------------------------------------------------------------
 // PlanTemplate is the release-independent, human-readable plan spec emitted by
-// `planner get --template` and consumed by `planner create --file`.
+// `planner get` (the default output) and consumed by `planner create --file`.
 //
 // Assignments is the single source of plan membership: it is keyed by a
 // group-qualified "group/test" reference (or a group name, which fans out to
@@ -252,7 +252,7 @@ type PlanUpdateSpec struct {
 // ResolvedPlan is a human-readable view of a [ReleasePlan] with every UUID
 // reference back-resolved to a name: release/owner/participant names, tests and
 // assignment targets as group-qualified "group/test" strings, and groups as
-// names. It is the default (non-`--template`) output of `planner get`/`list`.
+// names. It is the output of `planner get --resolved` and the default `list`.
 //
 // Unlike [PlanTemplate] it retains the plan's identity and status (id, key,
 // completed, timestamps) and never drops entities — a reference that cannot be
