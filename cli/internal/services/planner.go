@@ -454,7 +454,7 @@ func formatBullets(refs []string) string {
 }
 
 // ---------------------------------------------------------------------------
-// Create-from-template (BuildCreateRequest) and the get --template transform
+// Create-from-template (BuildCreateRequest) and the get template transform
 // ---------------------------------------------------------------------------
 
 // orderedSet collects strings preserving first-insertion order while skipping
@@ -603,7 +603,7 @@ func (s *PlannerService) resolveAssignmentTargets(ctx context.Context, entityRef
 // source: every test is keyed by its group-qualified "group/test" name and
 // valued by the assignee username, or by [models.OwnerMarker] ("$owner") when
 // the test is in the plan but has no specific assignee. It is the data behind
-// `planner get --template`.
+// the default `planner get` output.
 //
 // Names are back-resolved from the plan's own release gridview and the users
 // list. Tests no longer present in that gridview (e.g. since disabled) cannot
@@ -697,7 +697,8 @@ func (s *PlannerService) releaseNameByID(ctx context.Context, releaseID string) 
 // targets as group-qualified "group/test" strings, and groups as names, while
 // keeping the plan's identity and status fields.
 //
-// It is the data behind the default `planner get`/`list` output. Unlike
+// It is the data behind `planner get --resolved` and the default `list`
+// output. Unlike
 // [PlannerService.BuildTemplate] it is lossless: any reference that cannot be
 // resolved (a user not in the users list, or a test/group not in the release
 // gridview) falls back to its raw UUID rather than being dropped, and an

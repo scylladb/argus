@@ -22,7 +22,7 @@ func registerCreate(parent *cobra.Command) {
 		Short: "Create a release plan",
 		Long: `Create a release plan from a JSON file and/or flags.
 
-The plan can be described by a --file (the same schema 'get --template' emits)
+The plan can be described by a --file (the same schema 'get' emits by default)
 and/or built up with flags; flags override matching fields from the file. Every
 reference is by name (or, for tests, build_system_id) and resolved to a UUID
 automatically — raw UUIDs are not accepted.

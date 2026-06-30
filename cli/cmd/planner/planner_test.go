@@ -38,10 +38,10 @@ func TestRegister_WiresAllSubCommands(t *testing.T) {
 	}
 }
 
-func TestGet_TemplateFlagRegistered(t *testing.T) {
+func TestGet_ResolvedFlagRegistered(t *testing.T) {
 	t.Parallel()
 	cmd := newSubCmd(t, "get")
-	assert.NotNil(t, cmd.Flags().Lookup("template"))
+	assert.NotNil(t, cmd.Flags().Lookup("resolved"))
 }
 
 func TestGet_RawFlagRegistered(t *testing.T) {
@@ -50,10 +50,10 @@ func TestGet_RawFlagRegistered(t *testing.T) {
 	assert.NotNil(t, cmd.Flags().Lookup("raw"))
 }
 
-func TestGet_TemplateAndRawAreMutuallyExclusive(t *testing.T) {
+func TestGet_ResolvedAndRawAreMutuallyExclusive(t *testing.T) {
 	t.Parallel()
 	cmd := newSubCmd(t, "get")
-	require.NoError(t, cmd.ParseFlags([]string{"--template", "--raw"}))
+	require.NoError(t, cmd.ParseFlags([]string{"--resolved", "--raw"}))
 	err := cmd.ValidateFlagGroups()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "none of the others can be")
