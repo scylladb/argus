@@ -1,43 +1,43 @@
 """JSONL replay log for Argus client API calls.
 
-Every mutating (POST) request is recorded as a single JSONL line so that, when
-Argus is unavailable, the recorded calls can be replayed against the server
-once it recovers. See ``docs/plans/request_replay.md`` for the full design.
+Every mutating (POST) request is recorded as JSONL lines so that, when Argus
+is unavailable, the recorded calls can be replayed against the server once it
+recovers. See ``docs/plans/request_replay.md`` for the full design.
 
-Each request thread builds a :class:`ReplayRecord` in memory, runs the HTTP
-call inside the :meth:`ReplayLog.record` context manager, and the record is
-enqueued onto a :class:`queue.Queue` on exit. A single background writer
-thread drains the queue and writes to disk -- request threads never touch the
-file.
+Each request thread builds a :class:`ReplayRecord`, writes it to disk *before*
+making the HTTP call (so a crash mid-call still leaves a record to replay),
+runs the call, and writes the record again with the final outcome. The two
+writes are distinguished by a ``phase`` field (``"pending"``/``"final"``) so a
+replay/ingest tool can tell a not-yet-completed call from its outcome instead
+of relying on the shape of ``success``/``error``.
+
+Writes are synchronous, serialized by a single lock -- there is no background
+thread or queue, so a failing write can never grow unbounded memory and a slow
+disk just adds latency to the calling request instead of losing data silently.
+A write or shutdown failure is always logged and swallowed rather than raised:
+logging must never be the reason the real Argus API call doesn't happen, and
+never the reason a caller's cleanup path raises.
 """
 from __future__ import annotations
 
 import atexit
+import functools
 import itertools
 import json
 import logging
 import os
-import queue
 import re
 import threading
 import time
+import weakref
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import IO, Any, Iterator
 
-from argus.common.utils import durable_sync
-
 _instance_counter = itertools.count()
 
 LOGGER = logging.getLogger(__name__)
-
-
-class _CloseSentinel:
-    """Singleton signal placed on the queue to stop the writer thread."""
-
-
-_CLOSE = _CloseSentinel()
 
 # Allow only characters that are unambiguously safe inside a filename.
 _UNSAFE_FILENAME_CHARS = re.compile(r"[^A-Za-z0-9_-]")
@@ -56,7 +56,8 @@ def _now_ns() -> int:
 
 @dataclass
 class ReplayRecord:
-    """One Argus API call. Populated during the HTTP call, written on exit."""
+    """One Argus API call. Populated during the HTTP call, written to disk
+    both before the call starts (pre-flight) and after it completes/fails."""
 
     method: str
     endpoint: str
@@ -71,12 +72,12 @@ class ReplayRecord:
     def record(self, response: Any) -> None:
         """Populate ``success`` / ``error`` from a ``requests.Response``.
 
-        Mirrors :meth:`ArgusClient.check_response` discriminator: only a
-        2xx with a JSON body and ``status == "ok"`` counts as success.
-        A 2xx HTML page (auth proxy, gateway error) or
-        ``{"status": "error", ...}`` is a failure.
+        Only a response with ``response.ok`` true (status < 400) and a JSON
+        body with ``status == "ok"`` counts as success. A non-2xx/3xx status,
+        a non-JSON body (auth proxy, gateway error), or ``{"status":
+        "error", ...}`` is recorded as a failure.
         """
-        if not 199 < response.status_code < 300:
+        if not response.ok:
             self.error = f"HTTP {response.status_code}"
             return
         try:
@@ -105,6 +106,7 @@ class ReplayLogOnlyResponse:
     """
 
     status_code = 200
+    ok = True
 
     def __init__(self, endpoint: str) -> None:
         self.url = f"replay-log-only:{endpoint}"
@@ -122,11 +124,14 @@ class ReplayLogOnlyResponse:
 class ReplayLog:
     """Append-only JSONL journal of Argus API calls for one client instance.
 
-    The writer runs on a daemon background thread. On normal interpreter
-    shutdown, :meth:`close` is invoked via :mod:`atexit` to drain any pending
-    records. Each batch is fsynced (``F_FULLFSYNC`` on macOS, ``fdatasync``
-    on Linux) so already-written records survive SIGKILL and power loss; only
-    records still sitting in the in-memory queue are lost on a hard kill.
+    Writes are synchronous and serialized by a single lock -- the calling
+    thread pays for its own write, there is no background thread, queue, or
+    unbounded buffer that could grow if the disk is unwritable.
+
+    If the log file cannot be opened (bad ``log_dir``, permission error, full
+    disk), the instance still constructs successfully and simply drops every
+    record -- a broken replay log must never prevent the real Argus client
+    from being created or from making its real HTTP calls.
     """
 
     def __init__(
@@ -138,21 +143,32 @@ class ReplayLog:
     ) -> None:
         safe_run_id = _sanitize_for_filename(run_id or "unknown")
         log_dir_path = Path(log_dir)
-        log_dir_path.mkdir(parents=True, exist_ok=True)
         # Nanosecond clock + pid + process-wide counter guarantees uniqueness
         # across parallel processes and back-to-back instantiation, even when
         # the system clock has coarser-than-nanosecond resolution.
         suffix = f"{_now_ns()}_{os.getpid()}_{next(_instance_counter)}"
         self._path: Path = log_dir_path / f"argus_replay_log_{safe_run_id}_{suffix}.jsonl"
         self._test_type: str = test_type or "unknown"
-        self._queue: queue.Queue = queue.Queue()
-        self._closed = threading.Event()
-        self._enqueue_lock = threading.Lock()
-        self._writer_thread = threading.Thread(
-            target=self._writer_loop, daemon=True, name="argus-replay-log-writer",
-        )
-        self._writer_thread.start()
-        atexit.register(self.close)
+        self._cv = threading.Condition()
+        self._active = 0
+        self._closed = False
+        self._file: IO[str] | None = None
+        try:
+            log_dir_path.mkdir(parents=True, exist_ok=True)
+            self._file = open(self._path, "a", encoding="utf-8")
+        except OSError:
+            LOGGER.exception(
+                "argus replay log: could not open %s for writing; replay log disabled", self._path,
+            )
+        self._atexit_ref: weakref.ReferenceType[ReplayLog] = weakref.ref(self)
+        self._atexit_callback = functools.partial(self._atexit_close, self._atexit_ref)
+        atexit.register(self._atexit_callback)
+
+    @staticmethod
+    def _atexit_close(log_ref: "weakref.ReferenceType[ReplayLog]") -> None:
+        log = log_ref()
+        if log is not None:
+            log.close()
 
     @property
     def path(self) -> Path:
@@ -165,44 +181,50 @@ class ReplayLog:
         self.close()
 
     @staticmethod
-    def _write_line(f: IO[str], item: dict) -> None:
+    def _line(item: dict) -> str:
         # Compact separators (no spaces) -- ~10-15% smaller than the default.
-        f.write(json.dumps(item, default=str, separators=(",", ":"), ensure_ascii=False))
-        f.write("\n")
+        return json.dumps(item, default=str, separators=(",", ":"), ensure_ascii=False) + "\n"
 
-    def _writer_loop(self) -> None:
-        def _sync(f: IO[str]) -> None:
-            try:
-                durable_sync(f)
-            except OSError:
-                # Best-effort durability: keep the log running even if the
-                # underlying fs (e.g. some network mounts) rejects fsync.
-                LOGGER.exception("argus replay log: durable sync failed")
-
+    def _write(self, rec: ReplayRecord, *, phase: str) -> None:
         try:
-            with open(self._path, "a", encoding="utf-8") as f:
-                while True:
-                    item = self._queue.get()
-                    if item is _CLOSE:
-                        _sync(f)
-                        return
-                    self._write_line(f, item)
-                    # Drain whatever else is already waiting before syncing,
-                    # to amortize fsync cost across bursts of requests.
-                    for _ in range(63):
-                        try:
-                            item = self._queue.get_nowait()
-                        except queue.Empty:
-                            break
-                        if item is _CLOSE:
-                            _sync(f)
-                            return
-                        self._write_line(f, item)
-                    _sync(f)
+            # `rec.to_dict()` (dataclasses.asdict) walks the whole
+            # method/endpoint/params/body structure and can itself raise
+            # (e.g. RecursionError on a circular body) -- so it must be
+            # inside this same guard, not just the json.dumps() below.
+            item = rec.to_dict()
+            item["phase"] = phase
+            line = self._line(item)
         except Exception:
-            # The writer thread must never escape -- losing the replay log is
-            # bad, crashing the test run is worse.
-            LOGGER.exception("argus replay log writer crashed; replay log abandoned")
+            # Serialization must never take down the caller's request; drop
+            # this one record rather than raise out of record().
+            LOGGER.exception("argus replay log: failed to serialize record; record dropped")
+            return
+        with self._cv:
+            if self._file is None:
+                # Already logged loudly once, in __init__, when the file
+                # failed to open -- avoid re-warning on every record.
+                LOGGER.debug(
+                    "argus replay log: log unavailable; dropping %s record for %s %s",
+                    phase, item.get("method"), item.get("endpoint"),
+                )
+                return
+            if self._file.closed:
+                LOGGER.warning(
+                    "argus replay log: log already closed; dropping %s record for %s %s",
+                    phase, item.get("method"), item.get("endpoint"),
+                )
+                return
+            try:
+                # write + flush only: fsync/fdatasync was measured (100
+                # concurrent threads) to add no durability benefit here and
+                # cost real latency on every request -- see PR discussion.
+                self._file.write(line)
+                self._file.flush()
+            except Exception:
+                # A write failure must never propagate into the caller's
+                # request handling; the record for this one call is lost,
+                # but nothing here can leak memory since there is no queue.
+                LOGGER.exception("argus replay log: write failed; record dropped")
 
     @contextmanager
     def record(
@@ -215,35 +237,69 @@ class ReplayLog:
     ) -> Iterator[ReplayRecord]:
         """Yield a :class:`ReplayRecord` for the caller to populate.
 
-        The caller runs the HTTP call inside the ``with`` block and sets
-        ``rec.success`` based on the response. If the block raises, ``success``
-        stays ``False`` and ``error`` captures the exception message. The
-        record is enqueued on exit either way.
+        The record is written to disk immediately, before the caller's HTTP
+        call runs, so a crash/SIGKILL mid-call still leaves a (pending)
+        record to replay. The caller runs the HTTP call inside the ``with``
+        block and sets ``rec.success`` based on the response; if the block
+        raises, ``success`` stays ``False`` and ``error`` captures the
+        exception. The record is written again with the final outcome on
+        exit either way.
+
+        If the log has already been closed, the request is not recorded at
+        all -- but it still runs normally; a closed/broken replay log must
+        never block or fail the caller's real HTTP call.
         """
-        rec = ReplayRecord(
-            method=method,
-            endpoint=endpoint,
-            location_params=location_params,
-            params=params,
-            body=body,
-            test_type=self._test_type,
-        )
+        with self._cv:
+            active = not self._closed
+            if active:
+                self._active += 1
+
         try:
-            yield rec
-        except Exception as exc:
-            rec.success = False
-            rec.error = f"{type(exc).__name__}: {exc}"
-            raise
+            rec = ReplayRecord(
+                method=method,
+                endpoint=endpoint,
+                location_params=location_params,
+                params=params,
+                body=body,
+                test_type=self._test_type,
+            )
+            if active:
+                self._write(rec, phase="pending")
+            try:
+                yield rec
+            except Exception as exc:
+                rec.success = False
+                rec.error = f"{type(exc).__name__}: {exc}"
+                raise
+            finally:
+                if active:
+                    self._write(rec, phase="final")
         finally:
-            with self._enqueue_lock:
-                if not self._closed.is_set():
-                    self._queue.put(rec.to_dict())
+            # However the block above exits (including a failure before the
+            # first write ever happens), the in-flight count must drop so a
+            # concurrent close() does not wait forever.
+            if active:
+                with self._cv:
+                    self._active -= 1
+                    if self._active == 0:
+                        self._cv.notify_all()
 
     def close(self, timeout: float = 5.0) -> None:
-        with self._enqueue_lock:
-            if self._closed.is_set():
+        with self._cv:
+            if self._closed:
                 return
-            self._closed.set()
-            self._queue.put(_CLOSE)
-        self._writer_thread.join(timeout=timeout)
-        atexit.unregister(self.close)
+            self._closed = True
+            # Let any record() call that started before close() finish
+            # writing its final entry -- otherwise a request already
+            # in-flight would silently lose its log entry.
+            if not self._cv.wait_for(lambda: self._active == 0, timeout=timeout):
+                LOGGER.warning(
+                    "argus replay log: closing with %d in-flight record(s) still pending",
+                    self._active,
+                )
+            if self._file is not None:
+                try:
+                    self._file.close()
+                except OSError:
+                    LOGGER.exception("argus replay log: error closing %s", self._path)
+        atexit.unregister(self._atexit_callback)
