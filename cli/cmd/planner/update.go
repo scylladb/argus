@@ -39,6 +39,12 @@ raw UUIDs are not accepted.
   # From a JSON diff file (or stdin with '-'):
   argus planner update --plan-id scylla-2026.2#3 --file edit.json
 
+The --file spec accepts add/remove deltas (tests_add, assignee_mapping_set, …)
+and/or the template "assignments" map that 'get'/'create' emit. Template
+assignments are applied as a merge/patch: each listed test/group is added when
+missing and (re)assigned, "$owner" clears an assignee, and tests you do not list
+are left untouched.
+
 Groups passed to --add-group are expanded to their enabled tests (no group is
 stored); a group assignment fans out to each of those tests. Tests referenced
 for add/remove that do not exist in the release are reported and skipped.
@@ -112,18 +118,18 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 	}
 	log.Info().Str("plan_id", planRef).Msg("plan updated successfully")
 
-	// Re-fetch and show the resolved, updated plan.
+	// Re-fetch and show the updated plan in the same template format as 'get'.
 	updated, err := svc.GetPlan(ctx, planRef)
 	if err != nil {
 		log.Error().Err(err).Str("plan_id", planRef).Msg("failed to fetch updated plan")
 		return err
 	}
-	resolved, err := svc.BuildResolvedPlan(ctx, updated)
+	tmpl, err := svc.BuildTemplate(ctx, updated)
 	if err != nil {
-		log.Error().Err(err).Str("plan_id", planRef).Msg("failed to resolve updated plan")
+		log.Error().Err(err).Str("plan_id", planRef).Msg("failed to build plan template")
 		return err
 	}
-	return out.Write(resolved)
+	return out.Write(models.NewKVTabular(tmpl))
 }
 
 // loadUpdateSpec reads the --file diff spec (path or stdin) into a

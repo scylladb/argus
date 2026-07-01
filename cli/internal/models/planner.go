@@ -233,6 +233,14 @@ const OwnerMarker = "$owner"
 // assignments (assignees minus owner), so the CLI computes the participant
 // deltas. Groups in GroupsAdd are expanded to their enabled tests at resolve
 // time (never sent as groups_add).
+//
+// Assignments accepts the same "assignments" map that the [PlanTemplate] (the
+// default `get`/`create` output) uses, applied as a merge/patch: each keyed
+// test/group reference is ensured to be in the plan (added when missing) and
+// assigned to the given username, or unassigned when the value is "$owner";
+// tests not mentioned are left untouched. It is a convenience for round-tripping
+// an edited template through `update --file`, and is folded into the test-add
+// and assignee deltas at resolve time.
 type PlanUpdateSpec struct {
 	Name          *string `json:"name,omitempty"`
 	Description   *string `json:"description,omitempty"`
@@ -247,6 +255,10 @@ type PlanUpdateSpec struct {
 
 	AssigneeMappingSet    map[string]string `json:"assignee_mapping_set,omitempty"`
 	AssigneeMappingRemove []string          `json:"assignee_mapping_remove,omitempty"`
+
+	// Assignments is the template-style membership+assignment map, merged into
+	// the deltas above (see the type doc). "$owner" clears an assignee.
+	Assignments map[string]string `json:"assignments,omitempty"`
 }
 
 // ResolvedPlan is a human-readable view of a [ReleasePlan] with every UUID

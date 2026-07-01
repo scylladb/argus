@@ -818,23 +818,6 @@ func TestPlannerService_BuildResolvedPlan_UnknownReleaseFallsBack(t *testing.T) 
 	assert.Equal(t, "alice", rp.Owner)
 }
 
-func TestPlannerService_BuildResolvedPlans_List(t *testing.T) {
-	t.Parallel()
-	svc := newPlannerSvc(t, resolveMux(t))
-
-	plans := models.ReleasePlanList{
-		{Key: "scylla-2026.2#1", ReleaseID: "rel-1", Owner: "u1", Tests: []string{"t1"}},
-		{Key: "scylla-2026.2#2", ReleaseID: "rel-1", Owner: "u2", Tests: []string{"t2"}},
-	}
-
-	resolved, err := svc.BuildResolvedPlans(context.Background(), plans)
-	require.NoError(t, err)
-	require.Len(t, resolved, 2)
-	assert.Equal(t, "alice", resolved[0].Owner)
-	assert.Equal(t, "bob", resolved[1].Owner)
-	assert.Equal(t, []string{"Tier 1/longevity-100gb"}, resolved[0].Tests)
-}
-
 func TestPlannerService_BuildPlanSummaries_CountsAndNames(t *testing.T) {
 	t.Parallel()
 	svc := newPlannerSvc(t, resolveMux(t))
@@ -1069,6 +1052,129 @@ func TestPlannerService_BuildUpdateRequest_GroupAssignmentFansOut(t *testing.T) 
 	require.NoError(t, err)
 	// A group assignment fans out to each enabled member test.
 	assert.Equal(t, map[string]string{"t1": "u2", "t2": "u2"}, diff.AssigneeMappingSet)
+}
+
+func TestPlannerService_BuildUpdateRequest_AssignmentsMergeReassigns(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	// A template-style "assignments" file reassigns an existing test: t2 is
+	// ensured present (already in the plan) and assigned to bob, who becomes a
+	// participant. Tests not mentioned are left untouched.
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1", Owner: "u1", Tests: []string{"t2"}}
+	diff, warnings, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		Assignments: map[string]string{"tier1/longevity-200gb": "bob"},
+	})
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+	assert.Equal(t, map[string]string{"t2": "u2"}, diff.AssigneeMappingSet)
+	assert.Equal(t, []string{"t2"}, diff.TestsAdd)
+	assert.Equal(t, []string{"u2"}, diff.ParticipantsAdd)
+	assert.Empty(t, diff.ParticipantsRemove)
+}
+
+func TestPlannerService_BuildUpdateRequest_AssignmentsAddsNewTest(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	// A test named in "assignments" but not yet in the plan is added (membership
+	// follows assignment) and assigned.
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1", Owner: "u1", Tests: []string{"t1"}}
+	diff, _, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		Assignments: map[string]string{"tier2/longevity-100gb": "bob"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"t3"}, diff.TestsAdd)
+	assert.Equal(t, map[string]string{"t3": "u2"}, diff.AssigneeMappingSet)
+	assert.Equal(t, []string{"u2"}, diff.ParticipantsAdd)
+}
+
+func TestPlannerService_BuildUpdateRequest_AssignmentsOwnerMarkerClears(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	// $owner in a template "assignments" clears the assignee (test stays) and
+	// drops the now-unassigned user from participants.
+	plan := models.ReleasePlan{
+		ID: "p1", ReleaseID: "rel-1", Owner: "u1",
+		Tests: []string{"t2"}, Participants: []string{"u2"},
+		AssigneeMapping: map[string]string{"t2": "u2"},
+	}
+	diff, _, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		Assignments: map[string]string{"tier1/longevity-200gb": "$owner"},
+	})
+	require.NoError(t, err)
+	assert.Nil(t, diff.AssigneeMappingSet)
+	assert.Equal(t, []string{"t2"}, diff.AssigneeMappingRemove)
+	assert.Equal(t, []string{"u2"}, diff.ParticipantsRemove)
+}
+
+func TestPlannerService_BuildUpdateRequest_AssignmentsMissingWarns(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	// A reference matching nothing is reported and skipped, not fatal.
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1", Owner: "u1", Tests: []string{"t2"}}
+	diff, warnings, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		Assignments: map[string]string{"tier1/does-not-exist": "bob"},
+	})
+	require.NoError(t, err)
+	require.Len(t, warnings, 1)
+	assert.Contains(t, warnings[0], "not in this release")
+	assert.Empty(t, diff.AssigneeMappingSet)
+}
+
+// ambiguousGroupMux returns a resolve mux whose gridview has two groups sharing
+// the pretty-name "Tier", so a group-by-name assignment reference is ambiguous.
+func ambiguousGroupMux(t *testing.T) *http.ServeMux {
+	t.Helper()
+	mux := releasesMux(t, nil)
+	mux.HandleFunc("/api/v1/users", func(w http.ResponseWriter, r *http.Request) {
+		jsonOK(t, w, models.UsersMap{"u2": {ID: "u2", Username: "bob"}})
+	})
+	mux.HandleFunc("/api/v1/planning/release/rel-1/gridview", func(w http.ResponseWriter, r *http.Request) {
+		jsonOK(t, w, models.GridView{
+			Groups: map[string]models.GridEntity{
+				"g1": {ID: "g1", Name: "tier1", PrettyName: "Tier", Type: "group"},
+				"g2": {ID: "g2", Name: "tier2", PrettyName: "Tier", Type: "group"},
+			},
+			Tests: map[string]models.GridEntity{
+				"t1": {ID: "t1", Name: "longevity-a", GroupID: "g1", Group: "Tier",
+					BuildSystemID: "scylla-2026.2/tier1/longevity-a", Enabled: true},
+				"t2": {ID: "t2", Name: "longevity-b", GroupID: "g2", Group: "Tier",
+					BuildSystemID: "scylla-2026.2/tier2/longevity-b", Enabled: true},
+			},
+		})
+	})
+	return mux
+}
+
+func TestPlannerService_BuildUpdateRequest_AmbiguousGroupAssignmentAborts(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, ambiguousGroupMux(t))
+
+	// An assignment to a group name matching two groups must abort with a
+	// disambiguation error, not be silently dropped as "not in release".
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1", Owner: "u1", Tests: []string{"t1"}}
+	_, _, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		AssigneeMappingSet: map[string]string{"Tier": "bob"},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, services.ErrAmbiguousEntity)
+}
+
+func TestPlannerService_BuildCreateRequest_AmbiguousGroupAssignmentAborts(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, ambiguousGroupMux(t))
+
+	_, _, err := svc.BuildCreateRequest(context.Background(), models.PlanTemplate{
+		Name:        "p",
+		Release:     "scylla-2026.2",
+		Owner:       "bob",
+		Assignments: map[string]string{"Tier": "bob"},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, services.ErrAmbiguousEntity)
 }
 
 func TestPlannerService_UpdatePlan_PostsDiff(t *testing.T) {
