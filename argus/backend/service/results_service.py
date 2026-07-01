@@ -13,8 +13,13 @@ from argus.backend.db import ScyllaCluster
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ArgusBestResultData, ColumnMetadata, ArgusGraphView
 from argus.backend.plugins.sct.udt import PackageVersion
 from argus.backend.service.testrun import TestRunService
+from argus.backend.util.common import chunk, matches_substring
 
 LOGGER = logging.getLogger(__name__)
+
+# Number of (test_id, name) partitions to fan out to concurrently in
+# ResultsService.search_generic_results via execute_async.
+GENERIC_RESULTS_FANOUT_CHUNK_SIZE = 100
 
 type RunId = str
 type ReleasesMap = dict[str, list[RunId]]
@@ -428,12 +433,18 @@ class ResultsService:
         tables_meta = self.cluster.session.execute(query=query, parameters=(test_id,))
         return [ArgusGenericResultMetadata(**table) for table in tables_meta]
 
-    def _get_tables_data(self, test_id: UUID, table_name: str, ignored_runs: list[RunId],
-                         start_date: datetime | None = None, end_date: datetime | None = None) -> list[ArgusGenericResultData]:
+    @staticmethod
+    def _build_generic_result_data_query(test_id: UUID, table_name: str, start_date: datetime | None = None,
+                                          end_date: datetime | None = None) -> tuple[str, list]:
+        """Build the "cell dump" query/parameters for a single (test_id, name) partition.
+
+        Shared by [_get_tables_data] (single-test callers) and
+        [ResultsService.search_generic_results] (cross-test scatter-gather), so the
+        sut_timestamp range/ALLOW FILTERING logic lives in exactly one place.
+        """
         query_fields = ["run_id", "column", "row", "value", "status", "sut_timestamp"]
         raw_query = (f"SELECT {','.join(query_fields)}"
                      f" FROM generic_result_data_v1 WHERE test_id = ? AND name = ?")
-
         parameters = [test_id, table_name]
 
         if start_date:
@@ -445,9 +456,103 @@ class ResultsService:
 
         if start_date or end_date:
             raw_query += " ALLOW FILTERING"
+        return raw_query, parameters
+
+    def _get_tables_data(self, test_id: UUID, table_name: str, ignored_runs: list[RunId],
+                         start_date: datetime | None = None, end_date: datetime | None = None) -> list[ArgusGenericResultData]:
+        raw_query, parameters = self._build_generic_result_data_query(test_id, table_name, start_date, end_date)
         query = self.cluster.prepare(raw_query)
         data = self.cluster.session.execute(query=query, parameters=tuple(parameters))
         return [ArgusGenericResultData(**cell) for cell in data if cell["run_id"] not in ignored_runs]
+
+    def get_generic_result_catalog(self) -> list[dict]:
+        """Cross-test catalog of every generic result table name.
+
+        Scans the small generic_result_metadata_v1 table (partitioned by test_id
+        only) in full and groups rows by table name, since there is no other way
+        to discover "which tables exist across all tests" short of a name-keyed
+        index table (out of scope for v1 per the design doc).
+        """
+        raw_query = "SELECT test_id, name, columns_meta FROM generic_result_metadata_v1"
+        query = self.cluster.prepare(raw_query)
+        rows = self.cluster.session.execute(query=query)
+
+        catalog: dict[str, dict] = {}
+        for row in rows:
+            entry = catalog.setdefault(row["name"], {"test_ids": set(), "columns": {}})
+            entry["test_ids"].add(row["test_id"])
+            for col in (row["columns_meta"] or []):
+                entry["columns"].setdefault(col.name, {
+                    "name": col.name,
+                    "unit": col.unit,
+                    "type": col.type,
+                    "higher_is_better": col.higher_is_better,
+                })
+
+        return [
+            {
+                "name": name,
+                "test_count": len(entry["test_ids"]),
+                "columns": list(entry["columns"].values()),
+            }
+            for name, entry in sorted(catalog.items())
+        ]
+
+    def search_generic_results(self, name: str | None = None, statuses: list[str] | None = None,
+                                before: datetime | None = None, after: datetime | None = None,
+                                limit: int = 500) -> dict:
+        """Cross-test "cell dump" search over generic_result_data_v1.
+
+        Mirrors the scatter-gather pattern used by PytestViewService.result_filter:
+        enumerate partitions with a scan, then fan out chunked async queries per
+        partition, then merge/sort/limit app-side. generic_result_data_v1 has a
+        composite partition key (test_id, name), so the fan-out keys on
+        (test_id, name) pairs rather than on test_id alone.
+        """
+        raw_query = "SELECT test_id, name FROM generic_result_metadata_v1"
+        query = self.cluster.prepare(raw_query)
+        pairs = [(row["test_id"], row["name"]) for row in self.cluster.session.execute(query=query)]
+
+        if name:
+            pairs = [pair for pair in pairs if matches_substring(pair[1], name)]
+
+        cells: list[dict] = []
+        for partition_chunk in chunk(pairs, GENERIC_RESULTS_FANOUT_CHUNK_SIZE):
+            futures = []
+            for test_id, table_name in partition_chunk:
+                raw_data_query, parameters = self._build_generic_result_data_query(
+                    test_id, table_name, start_date=after, end_date=before)
+                prepared = self.cluster.prepare(raw_data_query)
+                futures.append((test_id, table_name, self.cluster.session.execute_async(
+                    prepared, parameters=tuple(parameters), execution_profile="read_fast")))
+
+            for test_id, table_name, future in futures:
+                try:
+                    ignored_runs = self._get_runs_details(test_id).ignored
+                except Exception:  # pylint: disable=broad-except
+                    # Orphaned/malformed test data shouldn't fail the whole
+                    # cross-test search; fall back to not filtering this pair.
+                    LOGGER.warning("Failed to resolve ignored runs for test_id=%s", test_id, exc_info=True)
+                    ignored_runs = []
+                for cell in future.result():
+                    if cell["run_id"] in ignored_runs:
+                        continue
+                    cells.append({
+                        "test_id": str(test_id),
+                        "table": table_name,
+                        "run_id": str(cell["run_id"]),
+                        "column": cell["column"],
+                        "row": cell["row"],
+                        "value": cell["value"],
+                        "status": cell["status"],
+                        "sut_timestamp": cell["sut_timestamp"],
+                    })
+
+        if statuses:
+            cells = [cell for cell in cells if cell["status"] in statuses]
+
+        cells.sort(key=lambda cell: cell["sut_timestamp"] or datetime.min, reverse=True)
+        return {"total": len(cells), "cells": cells[:limit]}
 
     def get_table_metadata(self, test_id: UUID, table_name: str) -> ArgusGenericResultMetadata:
         raw_query = ("SELECT * FROM generic_result_metadata_v1 WHERE test_id = ? AND name = ?")

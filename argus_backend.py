@@ -6,7 +6,7 @@ from prometheus_flask_exporter import NO_PREFIX
 from argus.backend.error_handlers import DBErrorHandler
 from argus.backend.metrics import METRICS
 from argus.backend.template_filters import export_filters
-from argus.backend.controller import admin, api, main
+from argus.backend.controller import admin, api, main, results_api
 from argus.backend.cli import cli_bp
 from argus.backend.util.logsetup import setup_application_logging
 from argus.backend.util.encoders import ArgusJSONProvider
@@ -121,6 +121,7 @@ def start_server(config=None) -> Flask:
     app.register_blueprint(auth.bp)
     app.register_blueprint(main.bp)
     app.register_blueprint(api.bp)
+    app.register_blueprint(results_api.bp)
     app.register_blueprint(admin.bp)
     app.register_blueprint(cli_bp)
     cache_ssh_tunnel_server_allowed_endpoints(app)

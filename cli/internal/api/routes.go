@@ -33,6 +33,10 @@ const (
 	TestRunPytestResults = "/api/v1/run/%s/pytest/results"        // GET  – pytest results for a run (run_id)
 	PytestFilterResults  = "/api/v1/views/widgets/pytest/results" // GET  – filtered pytest results (query params: test, limit, before, after, status[], query, filters[], markers[])
 
+	// Cross-test generic result routes (no /v1, see argus/backend/controller/results_api.py)
+	ResultsCatalog = "/api/results/catalog" // GET – all distinct result table names, with per-name test count and column metadata
+	ResultsSearch  = "/api/results/search"  // GET – flattened cross-test cell dump (query params: name, limit, before, after, status[])
+
 	// Log file routes
 	TestRunLogDownload = "/api/v1/tests/%s/%s/log/%s/download" // GET  – download log file, 302 to S3 (plugin_name, run_id, log_name)
 

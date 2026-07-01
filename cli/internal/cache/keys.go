@@ -35,6 +35,14 @@ const (
 	// Shorter than per-run results since filters are dynamic.
 	TTLPytestFilter = 2 * time.Minute
 
+	// TTLResultsCatalog is the TTL for the cross-test generic results catalog.
+	// It changes only as new result tables are introduced, so a longer TTL is fine.
+	TTLResultsCatalog = 10 * time.Minute
+
+	// TTLResultsSearch is the TTL for cross-test generic results search queries.
+	// Shorter than the catalog since filters are dynamic and data is actively written.
+	TTLResultsSearch = 2 * time.Minute
+
 	// TTLVersion is the TTL for the API version response.
 	// The version only changes on a new server deployment.
 	TTLVersion = time.Hour
@@ -177,6 +185,24 @@ func NemesesFilteredKey(runID, before, after string) string {
 func PytestFilterKey(queryString string) string {
 	h := sha256.Sum256([]byte(queryString))
 	return path.Join("pytest-filter", fmt.Sprintf("%x", h[:8]))
+}
+
+// ResultsCatalogKey returns the cache key for the cross-test generic results
+// catalog. The catalog takes no parameters, so this is a fixed key.
+//
+// On disk: cache/results-catalog/
+func ResultsCatalogKey() string {
+	return "results-catalog"
+}
+
+// ResultsSearchKey returns the cache key for a cross-test generic results
+// search query. The queryString is hashed to produce a fixed-length
+// directory name that uniquely identifies the parameter combination.
+//
+// On disk: cache/results-search/{hash}/
+func ResultsSearchKey(queryString string) string {
+	h := sha256.Sum256([]byte(queryString))
+	return path.Join("results-search", fmt.Sprintf("%x", h[:8]))
 }
 
 // PrometheusLogKey returns the cache key for a downloaded monitor-set archive.

@@ -1,4 +1,5 @@
 import base64
+import re
 from itertools import islice
 import logging
 import os
@@ -29,6 +30,11 @@ def first(iterable, value, key: Callable = None, predicate: Callable = None):
 def chunk(iterable: Iterable[T], slice_size=90) -> list[list[T]]:
     it = iter(iterable)
     return iter(lambda: list(islice(it, slice_size)), [])
+
+
+def matches_substring(text: str, term: str) -> bool:
+    """Case-sensitive substring match, treating term as literal text rather than a regex."""
+    return bool(re.search(re.escape(term), text))
 
 
 def check_scheduled_test(test, group, testname):

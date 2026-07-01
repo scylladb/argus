@@ -16,7 +16,7 @@ from argus.backend.db import ScyllaCluster
 from argus.backend.models.pytest import PytestResultTable, PytestUserField
 from argus.backend.models.web import ArgusTest, ArgusUserView
 from argus.backend.plugins.generic.plugin import PluginInfo as GenericPluginInfo
-from argus.backend.util.common import chunk
+from argus.backend.util.common import chunk, matches_substring
 from argus.common.enums import PytestStatus
 
 LOGGER = logging.getLogger(__name__)
@@ -121,8 +121,7 @@ class PytestViewService:
 
         if test:
             LOGGER.warning(test)
-            unique_tests = [
-                t for t in unique_tests if re.search(re.escape(test), t)]
+            unique_tests = [t for t in unique_tests if matches_substring(t, test)]
 
         limit = int(request.args.get("limit", 500))
         before = request.args.get("before")
