@@ -21,6 +21,7 @@ The release is referenced by its name (not a UUID), e.g.:
 	}
 
 	cmd.Flags().StringP("release", "r", "", "Release name (required)")
+	cmd.Flags().Bool("raw", false, "Emit raw plans as returned by the API (UUIDs, unresolved)")
 	_ = cmd.MarkFlagRequired("release")
 
 	parent.AddCommand(cmd)
@@ -36,7 +37,8 @@ func runList(cmd *cobra.Command, _ []string) error {
 	log := logging.For(cmdctx.LoggerFrom(ctx), "planner-list")
 
 	releaseRef, _ := cmd.Flags().GetString("release")
-	log.Debug().Str("release", releaseRef).Msg("listing plans for release")
+	raw, _ := cmd.Flags().GetBool("raw")
+	log.Debug().Str("release", releaseRef).Bool("raw", raw).Msg("listing plans for release")
 
 	svc := services.NewPlannerService(client, c)
 
@@ -53,5 +55,13 @@ func runList(cmd *cobra.Command, _ []string) error {
 	}
 
 	log.Info().Str("release", releaseRef).Int("count", len(plans)).Msg("plans listed successfully")
-	return out.Write(models.NewTabularSlice(plans))
+	if raw {
+		return out.Write(models.NewTabularSlice(plans))
+	}
+	resolved, err := svc.BuildPlanSummaries(ctx, plans)
+	if err != nil {
+		log.Error().Err(err).Str("release", releaseRef).Msg("failed to resolve plan references")
+		return err
+	}
+	return out.Write(models.PlanSummaries(resolved))
 }

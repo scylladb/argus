@@ -128,28 +128,55 @@ func TestPlanDiffRequest_ListAndMapDeltas(t *testing.T) {
 	assert.False(t, strings.Contains(s, `"tests_remove"`), "empty tests_remove must be omitted")
 }
 
-func TestCopyCheckResponse_JSONRoundTrip(t *testing.T) {
+func TestPlanUpdateSpec_FileSchemaParses(t *testing.T) {
 	t.Parallel()
 
+	// The --file diff schema uses the wire field names but name-based values.
 	const raw = `{
-		"status": "failed",
-		"targetRelease": {"id": "t-1", "name": "scylla-2026.2", "pretty_name": "2026.2", "enabled": true},
-		"originalRelease": {"id": "o-1", "name": "scylla-2026.1", "pretty_name": "2026.1", "enabled": true},
-		"missing": {
-			"tests": [{"id": "x", "name": "longevity-100gb", "build_system_id": "scylla-2026.1/longevity/longevity-100gb", "type": "test", "release": "scylla-2026.1", "enabled": true}],
-			"groups": []
-		}
+		"name": "2026.2 Longevity",
+		"target_version": "2026.2.0~rc3",
+		"tests_add": ["scylla-2026.2/longevity/longevity-100gb", "tier1/longevity-200gb"],
+		"groups_remove": ["tier2"],
+		"assignee_mapping_set": {"scylla-2026.2/longevity/longevity-100gb": "alice"},
+		"assignee_mapping_remove": ["tier1/longevity-200gb"]
 	}`
 
-	var resp models.CopyCheckResponse
-	require.NoError(t, json.Unmarshal([]byte(raw), &resp))
+	var spec models.PlanUpdateSpec
+	require.NoError(t, json.Unmarshal([]byte(raw), &spec))
 
-	assert.Equal(t, "failed", resp.Status)
-	assert.Equal(t, "scylla-2026.2", resp.TargetRelease.Name)
-	assert.Equal(t, "scylla-2026.1", resp.OriginalRelease.Name)
-	require.Len(t, resp.Missing.Tests, 1)
-	assert.Equal(t, "scylla-2026.1/longevity/longevity-100gb", resp.Missing.Tests[0].BuildSystemID)
-	assert.Empty(t, resp.Missing.Groups)
+	require.NotNil(t, spec.Name)
+	assert.Equal(t, "2026.2 Longevity", *spec.Name)
+	require.NotNil(t, spec.TargetVersion)
+	assert.Equal(t, "2026.2.0~rc3", *spec.TargetVersion)
+	// Unset scalars stay nil so they are never sent as "changes".
+	assert.Nil(t, spec.Description)
+	assert.Nil(t, spec.Owner)
+	assert.Nil(t, spec.Completed)
+
+	assert.Equal(t, []string{"scylla-2026.2/longevity/longevity-100gb", "tier1/longevity-200gb"}, spec.TestsAdd)
+	assert.Equal(t, []string{"tier2"}, spec.GroupsRemove)
+	assert.Equal(t, map[string]string{"scylla-2026.2/longevity/longevity-100gb": "alice"}, spec.AssigneeMappingSet)
+	assert.Equal(t, []string{"tier1/longevity-200gb"}, spec.AssigneeMappingRemove)
+}
+
+func TestPlanUpdateSpec_OmitsUnsetFields(t *testing.T) {
+	t.Parallel()
+
+	name := "renamed"
+	spec := models.PlanUpdateSpec{Name: &name}
+	raw, err := json.Marshal(spec)
+	require.NoError(t, err)
+	s := string(raw)
+
+	assert.Contains(t, s, `"name":"renamed"`)
+	for _, key := range []string{
+		"description", "owner", "target_version", "completed",
+		"tests_add", "tests_remove", "groups_add", "groups_remove",
+		"participants_add", "participants_remove",
+		"assignee_mapping_set", "assignee_mapping_remove",
+	} {
+		assert.NotContainsf(t, s, `"`+key+`"`, "unset field %q must be omitted", key)
+	}
 }
 
 func TestGridView_JSONRoundTrip(t *testing.T) {
@@ -234,4 +261,117 @@ func TestCreatePlanRequest_OmitsOptionalEmptyFields(t *testing.T) {
 
 	assert.NotContains(t, s, `"view_id"`, "empty optional view_id must be omitted")
 	assert.NotContains(t, s, `"created_from"`, "empty optional created_from must be omitted")
+}
+
+func sampleResolvedPlan() models.ResolvedPlan {
+	return models.ResolvedPlan{
+		ID:            "p1",
+		Key:           "scylla-2026.2#3",
+		Name:          "2026.2 Longevity",
+		Description:   "Longevity suite",
+		Release:       "scylla-2026.2",
+		TargetVersion: "2026.2.0~rc3",
+		Owner:         "alice",
+		Participants:  []string{"bob"},
+		Tests:         []string{"Tier 1/longevity-100gb"},
+		Groups:        []string{"tier1"},
+		Assignments:   map[string]string{"Tier 1/longevity-200gb": "bob"},
+		Completed:     true,
+		LastUpdated:   "2026-06-02T11:00:00.000000",
+	}
+}
+
+func TestResolvedPlan_TabularShowsCuratedColumns(t *testing.T) {
+	t.Parallel()
+
+	plan := sampleResolvedPlan()
+	headers := plan.Headers()
+	assert.Equal(t, []string{
+		"Key", "Name", "Description", "Release", "Target Version", "Owner", "Last Updated",
+	}, headers)
+
+	rows := plan.Rows()
+	require.Len(t, rows, 1)
+	assert.Len(t, rows[0], len(headers), "row width must match header count")
+	assert.Equal(t, []string{
+		"scylla-2026.2#3", "2026.2 Longevity", "Longevity suite",
+		"scylla-2026.2", "2026.2.0~rc3", "alice", "2026-06-02T11:00:00.000000",
+	}, rows[0])
+}
+
+func TestResolvedPlan_JSONKeepsFullDetail(t *testing.T) {
+	t.Parallel()
+
+	// Text output is curated, but JSON marshalling still carries every field —
+	// including tests, groups, participants, and assignments.
+	raw, err := json.Marshal(sampleResolvedPlan())
+	require.NoError(t, err)
+	s := string(raw)
+
+	assert.Contains(t, s, `"tests":["Tier 1/longevity-100gb"]`)
+	assert.Contains(t, s, `"groups":["tier1"]`)
+	assert.Contains(t, s, `"participants":["bob"]`)
+	assert.Contains(t, s, `"assignments":{"Tier 1/longevity-200gb":"bob"}`)
+	assert.Contains(t, s, `"id":"p1"`)
+}
+
+func TestPlanSummaries_TabularRowPerPlan(t *testing.T) {
+	t.Parallel()
+
+	plans := models.PlanSummaries{
+		{Key: "scylla-2026.2#1", Name: "A", Owner: "alice", Tests: 3, Groups: 1, Participants: 2},
+		{Key: "scylla-2026.2#2", Name: "B", Owner: "bob"},
+	}
+	assert.Equal(t, models.PlanSummary{}.Headers(), plans.Headers())
+
+	rows := plans.Rows()
+	require.Len(t, rows, 2)
+	assert.Len(t, rows[0], len(plans.Headers()), "row width must match header count")
+	assert.Equal(t, "scylla-2026.2#1", rows[0][0])
+	assert.Equal(t, "alice", rows[0][5])
+	assert.Equal(t, []string{"3", "1", "2"}, rows[0][6:9], "counts rendered as integers")
+	assert.Equal(t, "scylla-2026.2#2", rows[1][0])
+	assert.Equal(t, "bob", rows[1][5])
+}
+
+func TestPlanSummary_JSONMatchesColumns(t *testing.T) {
+	t.Parallel()
+
+	// JSON output must carry exactly the text-table columns, counts as integers.
+	raw, err := json.Marshal(models.PlanSummary{
+		Key: "scylla-2026.2#1", Name: "A", Release: "scylla-2026.2", Owner: "alice",
+		Tests: 3, Groups: 1, Participants: 2,
+	})
+	require.NoError(t, err)
+
+	var fields map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(raw, &fields))
+	keys := make([]string, 0, len(fields))
+	for k := range fields {
+		keys = append(keys, k)
+	}
+	assert.ElementsMatch(t, []string{
+		"key", "name", "description", "release", "target_version",
+		"owner", "tests", "groups", "participants", "last_updated",
+	}, keys)
+	assert.JSONEq(t, `3`, string(fields["tests"]))
+	assert.JSONEq(t, `1`, string(fields["groups"]))
+	assert.JSONEq(t, `2`, string(fields["participants"]))
+}
+
+func TestReleaseGrid_StringSortedOnePerLine(t *testing.T) {
+	t.Parallel()
+	grid := models.ReleaseGrid{
+		"tier2/b": "bsid-b",
+		"tier1/a": "bsid-a",
+	}
+	assert.Equal(t, "tier1/a: bsid-a\ntier2/b: bsid-b", grid.String())
+}
+
+func TestReleaseGrid_MarshalsAsPlainMap(t *testing.T) {
+	t.Parallel()
+	grid := models.ReleaseGrid{"tier1/a": "bsid-a"}
+	raw, err := json.Marshal(grid)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"tier1/a":"bsid-a"}`, string(raw))
 }

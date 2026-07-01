@@ -62,8 +62,6 @@ const (
 	PlanCreate      = "/api/v1/planning/plan/create"              // POST   – create a plan (CreatePlanRequest)
 	PlanUpdate      = "/api/v1/planning/plan/update"              // POST   – update a plan (PlanDiffRequest)
 	PlanDelete      = "/api/v1/planning/plan/%s/delete"           // DELETE – delete a plan (plan_id); query param deleteView=0|1
-	PlanCopy        = "/api/v1/planning/plan/copy"                // POST   – copy a plan (CopyPlanRequest)
-	PlanCopyCheck   = "/api/v1/planning/plan/%s/copy/check"       // GET    – copy eligibility (plan_id); query param releaseId
 	PlanResolve     = "/api/v1/planning/plan/%s/resolve_entities" // GET  – resolve plan entities (plan_id)
 	PlanningSearch  = "/api/v1/planning/search"                   // GET    – search tests/groups/releases; query params query, releaseId
 	GroupExplode    = "/api/v1/planning/group/%s/explode"         // GET    – explode a group into its tests (group_id)

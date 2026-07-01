@@ -2,7 +2,7 @@
 status: in_progress
 domain: client
 created: 2026-06-01
-last_updated: 2026-06-22
+last_updated: 2026-06-26
 owner: null
 ---
 
@@ -119,8 +119,8 @@ There is **no existing `planner`, `release`, or `view` command** — this is net
 
 ## 3. Goals
 
-1. Ship a new `argus planner` parent command exposing **six** operations: `list`,
-   `get`, `create`, `update`, `delete`, `copy` — all functional against a live Argus
+1. Ship a new `argus planner` parent command exposing **five** operations: `list`,
+   `get`, `create`, `update`, `delete` — all functional against a live Argus
    backend.
 2. Ship a **top-level** `argus search` command that exposes `/planning/search`
    (`TestLookup.test_lookup`) so users can discover test/group `build_system_id`s. It
@@ -152,11 +152,9 @@ There is **no existing `planner`, `release`, or `view` command** — this is net
 6. `update` speaks the diff-based `PlanDiffPayload` contract (merged to master,
    `planner_service.py:62`): it computes add/remove deltas for lists/maps and only
    sends changed scalar fields.
-7. `copy` runs the (existing) backend eligibility check, prints dropped entities as a
-   warning, drops them by default, and honors an optional `--replacements` JSON file.
-8. Output respects the global `--text`/JSON modes and `--no-color`; every command
+7. Output respects the global `--text`/JSON modes and `--no-color`; every command
    returns a non-zero exit on API error with the backend message surfaced.
-9. New code passes `go vet ./...`, `gofmt`, the repo linter, and unit tests; docs
+8. New code passes `go vet ./...`, `gofmt`, the repo linter, and unit tests; docs
    (`cli/README.md`, root `AGENTS.md` CLI section) describe the new commands.
 
 > **Open / Needs Investigation:** the exact CLI ergonomics for specifying which tests
@@ -292,30 +290,6 @@ Examples:
   argus planner delete --plan-id 7f3c1e90-... --delete-view --yes
 ```
 
-### `argus planner copy`
-```text
-Copy a plan to a target release, remapping entities by build_system_id.
-
-Usage:
-  argus planner copy (--plan-id <id|key>) --target-release <name> [flags]
-
-Flags:
-  -p, --plan-id string          Plan UUID or key (required)
-      --target-release string   Target release name (required)
-  -n, --name string             Name for the copied plan
-      --target-version string   Target version for the copy
-      --owner string            Owner username for the copy
-      --keep-participants       Carry over participants and assignments
-      --replacements string     JSON map of missing-entity -> substitute
-      --force                   Proceed even if entities are dropped
-  -h, --help                    help for copy
-
-Examples:
-  argus planner copy --plan-id scylla-2026.1#2 --target-release scylla-2026.2
-  argus planner copy --plan-id scylla-2026.1#2 --target-release scylla-2026.2 \
-    --keep-participants --replacements repl.json --force
-```
-
 ### `argus search`
 ```text
 Search tests, groups, and releases to discover their build_system_ids. Top-level
@@ -424,9 +398,6 @@ number simply increments until the key is unique; reuse and gaps are not tracked
     `tests_remove`, `groups_add`, `groups_remove`, `participants_add`,
     `participants_remove`, `assignee_mapping_set`, `assignee_mapping_remove`) —
     mirrors `PlanDiffPayload` (`planner_service.py:62`, on master).
-  - `CopyPlanRequest` (`plan`, `keepParticipants`, `replacements`, `targetReleaseId`,
-    `targetReleaseName`) and `CopyCheckResponse` (`status`, `targetRelease`,
-    `originalRelease`, `missing.tests`, `missing.groups`).
   - `GridView` response (`tests` map[id]GridEntity, `groups` map[id]GridEntity,
     `testByGroup`); `GridEntity` carries `id`, `name`, `pretty_name`,
     `build_system_id`, `group_id`, `enabled`, and decorated `group`/`release` names —
@@ -458,7 +429,7 @@ number simply increments until the key is unique; reuse and gaps are not tracked
   the release list with a short TTL (add `TTLReleases` + `ReleasesKey()` to
   `internal/cache/keys.go`).
 
-#### Entity name resolution (foundational; used by list/create/update/copy)
+#### Entity name resolution (foundational; used by list/create/update)
 
 All name→UUID resolution happens client-side at plan-build time, and **only UUIDs are
 sent to the backend**. Raw UUIDs are never accepted as entity input (the only
@@ -492,7 +463,7 @@ exceptions are `--plan-id` and `--view-id`). Add to `PlannerService`:
 - `list --release <name>` → `NewTabularSlice`. `get --plan-id <id>` → `NewKVTabular`.
   `--plan-id` also accepts a plan key (`releaseName#planNumber`); it is passed through
   verbatim and the backend resolves it (Phase 0). The same applies to `--plan-id` on
-  `update`/`delete`/`copy`.
+  `update`/`delete`.
 - **DoD:**
   - [ ] `argus planner list --release <name>` returns plans (manual against staging).
   - [ ] `argus planner get --plan-id <id>` shows a single plan.
@@ -531,25 +502,28 @@ exceptions are `--plan-id` and `--view-id`). Add to `PlannerService`:
 - **Query language** (mirrors `TestLookup.test_lookup`, `test_lookup.py:114-149`):
   free text is a case-insensitive substring match on the entity's own name; optional
   facets `release:<substr>`, `group:<substr>` (substring match on the related entity's
-  name) and `type:<test|group|release>` (exact type) combine with AND. Facet values may
-  be quoted to allow spaces. A bare-UUID query short-circuits to a single
-  run/entity lookup. Document this in `--help` with examples (incl.
-  `argus search "release:2026.2 longevity"`).
+  name) and `type:<test|group|release>` (exact type) combine with AND. **Facet values
+  must NOT be quoted and cannot contain spaces** — the backend facet regex
+  (`test_lookup.py:115`, char class `[\w\d\.\-]*`) captures quote characters into the
+  value and excludes spaces, so quoting/spaces break the match. A bare-UUID query
+  short-circuits to a single run/entity lookup. Document this in `--help` with examples
+  (incl. `argus search "release:2026.2 longevity"`).
 - **DoD:**
   - [ ] `argus search "release:2026.2 longevity"` lists matching tests with their
         `build_system_id`s (manual).
-  - [ ] `argus search "type:group release:2026.2"` lists groups; `--release` flag and
+  - [x] `argus search "type:group release:2026.2"` lists groups; `--release` flag and
         the `release:` facet both scope results (unit test).
-  - [ ] Special `Add all...` row is excluded (unit test on the filter helper).
-  - [ ] Query (free text + facets, quoted values) passed through verbatim (unit test
+  - [x] Special `Add all...` row is excluded (unit test on the filter helper).
+  - [x] Query (free text + facets, quoted values) passed through verbatim (unit test
         asserts query-string build).
 
 ### Phase 4 — Write: `create` + `delete`
 **Importance: Critical**
 
-- **Decide the test/group input mechanism from the Appendix proposals and record the
-  decision in this plan before coding.** Baseline that ships regardless: `--file/-f`
-  JSON spec (and stdin) matching `CreatePlanRequest`.
+- **Input mechanism (decided — Appendix proposals A + B):** both a `--file/-f` JSON
+  spec (and `-` for stdin) matching the `PlanTemplate` schema **and** repeatable flags
+  (`--test`, `--group`, `--assign entity=user`, `--participant`) plus scalars. Flags
+  override / augment matching file fields (scalars override; collections append/merge).
 - `PlannerService.CreatePlan(ctx, CreatePlanRequest)` → POST `/planning/plan/create`,
   invalidate the release's plan-list cache.
 - `planner create` flags: `--release`, `--name`, `--description`, `--owner`,
@@ -580,20 +554,20 @@ exceptions are `--plan-id` and `--view-id`). Add to `PlannerService`:
   [--delete-view] [--yes]` (confirmation prompt unless `--yes`, reading stdin like
   `discussions/root.go:readMessage`).
 - **DoD:**
-  - [ ] `argus planner create --file plan.json` creates a plan; `get` shows it.
-  - [ ] Owner/participant names resolve to UUIDs; a raw UUID as a name errors (unit
+  - [x] `argus planner create --file plan.json` creates a plan; `get` shows it.
+  - [x] Owner/participant names resolve to UUIDs; a raw UUID as a name errors (unit
         test).
-  - [ ] Tests/groups given by name or `build_system_id` resolve to UUIDs; an ambiguous
+  - [x] Tests/groups given by name or `build_system_id` resolve to UUIDs; an ambiguous
         bare test name aborts create with a candidate list (unit tests).
-  - [ ] A group passed to `create` expands to its enabled tests; the plan stores no
+  - [x] A group passed to `create` expands to its enabled tests; the plan stores no
         groups; a group assignment fans out to each expanded test (unit test).
-  - [ ] `get --template` emits group-qualified `group/test` names + usernames (unit
+  - [x] `get --template` emits group-qualified `group/test` names + usernames (unit
         test on the transform).
-  - [ ] `create --file` from a template warns about and omits tests missing in the
+  - [x] `create --file` from a template warns about and omits tests missing in the
         target release, but still creates the plan (unit test).
-  - [ ] `argus planner delete --plan-id <id> --yes` removes it; `--delete-view`
+  - [x] `argus planner delete --plan-id <id> --yes` removes it; `--delete-view`
         toggles the query param (unit test asserts URL).
-  - [ ] Uniqueness-collision API error is surfaced with the backend message.
+  - [x] Uniqueness-collision API error is surfaced with the backend message.
 
 ### Phase 5 — Write: `update` (diff-based)
 **Importance: Important**
@@ -613,16 +587,16 @@ exceptions are `--plan-id` and `--view-id`). Add to `PlannerService`:
   are emitted as `tests_add`, no `groups_add` is sent, and any assignment on the group
   fans out to each expanded test in `assignee_mapping_set`.
 - **DoD:**
-  - [ ] `argus planner update --plan-id <id> --name "new"` sends only the `name`
+  - [x] `argus planner update --plan-id <id> --name "new"` sends only the `name`
         scalar (unit test asserts the request body has no list/map keys).
-  - [ ] Adding/removing a test produces `tests_add`/`tests_remove` and leaves other
+  - [x] Adding/removing a test produces `tests_add`/`tests_remove` and leaves other
         fields untouched (manual: `get` before/after; unit test on diff builder).
-  - [ ] `--add-group` expands to the group's enabled tests in `tests_add` (no
+  - [x] `--add-group` expands to the group's enabled tests in `tests_add` (no
         `groups_add`); a group assignment fans out to each test (unit test).
-  - [ ] Assignment set/remove maps to `assignee_mapping_set`/`assignee_mapping_remove`
+  - [x] Assignment set/remove maps to `assignee_mapping_set`/`assignee_mapping_remove`
         (unit test). Both the entity key (name/`build_system_id`) and user value
         (username) resolve to UUIDs before the map is sent (unit test).
-  - [ ] `--add-test` given a name/`build_system_id` resolves to a UUID before building
+  - [x] `--add-test` given a name/`build_system_id` resolves to a UUID before building
         the diff; an ambiguous bare name aborts the update with a candidate list
         (unit test).
 
@@ -710,37 +684,7 @@ cat edit.json | argus planner update --plan-id 7f3c1e90-... --file -
 (`build_system_id`, `group/test`, usernames) is resolved to a UUID the same way as flag
 values — the file never contains raw UUIDs.
 
-### Phase 6 — Write: `copy` (with eligibility check)
-**Importance: Important**
-
-> `copy` is the server-side remap path: the backend rewrites each `build_system_id`'s
-> release-name segment to find equivalents in the target release
-> (`planner_service.py:379`). The Phase 4/5 create-from-JSON flow is the manual,
-> **no-remap** alternative (client-side existence check via gridview). Use `copy` for a
-> straight retarget, the JSON round-trip when you need to hand-edit the plan.
-
-- `PlannerService.CheckCopyEligibility(ctx, planID, targetReleaseRef)` → GET
-  `/planning/plan/<id>/copy/check`. `PlannerService.CopyPlan(ctx, CopyPlanRequest)`
-  → POST `/planning/plan/copy`.
-- `planner copy --plan-id <id> --target-release <name> [--name] [--target-version]
-  [--keep-participants] [--owner] [--replacements <file>] [--force]`:
-  1. Resolve target release (by name; no UUID).
-  2. Run eligibility check; if missing entities and no/partial `--replacements`,
-     print a warning listing dropped entities; abort unless `--force`.
-  3. Build `CopyPlanRequest` (the `plan` sub-object carries name/version/description/
-     owner overrides) and POST.
-  4. Print a note when target release differs from source (parity with
-     `ReleasePlanner.svelte:89` redirect message).
-- `--replacements` is a JSON map of missing-entity → substitute, keyed and valued by
-  `build_system_id`/`group/test` (resolved to UUIDs before POST), never raw UUIDs.
-- **DoD:**
-  - [ ] `argus planner copy --plan-id <id> --target-release <name>` copies within the
-        same release (manual).
-  - [ ] Missing-entity warning lists dropped tests/groups; `--force` proceeds.
-  - [ ] `--replacements` file (keyed by `build_system_id`/`group/test`) maps a missing
-        entity (unit test on request assembly).
-
-### Phase 7 — Documentation + hardening
+### Phase 6 — Documentation + hardening
 **Importance: Important**
 
 - Update `cli/README.md` with a `planner` section (all commands + examples, the
@@ -759,13 +703,13 @@ values — the file never contains raw UUIDs.
 
 ### Unit tests (Go, `cli/...`)
 - **Models** (`internal/models/planner_test.go`): JSON round-trip of `ReleasePlan`,
-  `CopyCheckResponse`, `SearchHit`; empty-slice→`[]`; `PlanDiffRequest` omits unset
+  `SearchHit`; empty-slice→`[]`; `PlanDiffRequest` omits unset
   optional scalars; `Headers()/Rows()` shape.
 - **Service** (`internal/services/planner_test.go`): `httptest.NewServer` emitting the
   standard envelope (pattern from `internal/api/api_test.go`), injected via
   `api.WithHTTPClient`. Cover: list, get, create, update-diff builder
   (scalar-only, list add/remove, assignee set/remove), delete (query-param URL),
-  copy, eligibility check, search (special-row filtering, facet query passthrough),
+  search (special-row filtering, facet query passthrough),
   release/user name resolution (exact match, ambiguous error, no-match error, raw UUID
   rejected), test/group resolution from a single gridview fetch (`build_system_id` hit,
   group-name hit, group-qualified `group/test` hit, bare-name unique hit, bare-name
@@ -784,8 +728,6 @@ values — the file never contains raw UUIDs.
 ### Manual testing (against staging)
 - For each command: run happy path + one error path (unknown name, name collision,
   missing release). Verify `--text` vs JSON output and non-zero exit codes on failure.
-- Copy across two releases and confirm the dropped-entity warning and target-release
-  note appear.
 - Round-trip: `get --template` a plan, edit `release`/`target_version`, `create --file`
   it; confirm tests missing in the new release are warned about and the plan still
   creates. Confirm a plan with groups expands to enabled tests only.
@@ -794,7 +736,7 @@ values — the file never contains raw UUIDs.
 ## 6. Success Criteria
 
 The plan is complete when all phase DoD items are satisfied, plus:
-- All six management commands are reachable under `argus planner`, plus the top-level
+- All five management commands are reachable under `argus planner`, plus the top-level
   `argus search`, and documented (Goals 1–2, Phase 7 DoD).
 - Every entity is referenced by name/`build_system_id` (no raw UUIDs except
   `--plan-id`/`--view-id`) and resolved client-side to UUIDs (Goal 3; Phase 2 & 4 DoD).
@@ -805,8 +747,7 @@ The plan is complete when all phase DoD items are satisfied, plus:
   (Goal 5; Phase 4 DoD).
 - `update` emits a correct `PlanDiffPayload` and never clobbers untouched fields
   (Goal 6; Phase 5 DoD).
-- `copy` eligibility/replacements behavior matches Goal 7 (Phase 6 DoD).
-- `go vet`, gofmt, linter, and `go test ./...` pass (Goal 9; Phase 7 DoD).
+- `go vet`, gofmt, linter, and `go test ./...` pass (Goal 8; Phase 6 DoD).
 
 ## 7. Risk Mitigation
 
@@ -818,14 +759,17 @@ The plan is complete when all phase DoD items are satisfied, plus:
 | Create-from-JSON silently drops tests missing in the target release | Medium | Medium | Warn per-missing-entity (by `build_system_id`/`group/test`) before creating; document that the plan is created without them. Users re-check with `get`. |
 | Test/group flag ergonomics (open decision) prove awkward | Medium | Medium | Ship `--file` JSON (the `get --template` schema) as the always-available robust path first; treat flag conveniences as additive. Record the decision before Phase 4 coding. |
 | Always-expanding groups balloons the test list or surprises users by excluding disabled tests | Low | Medium | Document enabled-only expansion explicitly; `search` discovery shows membership; assignment fan-out is deterministic and unit-tested. |
-| `copy` build_system_id remap semantics differ from user expectation (silent drops) | Medium | Medium | Surface the eligibility check output prominently and require `--force` to drop; support `--replacements`. Offer the no-remap JSON round-trip as an alternative. |
 | Large `/api/v1/users` or `/api/v1/releases` payloads slow every resolving command | Low | Low | Cache both lists with a short TTL (`internal/cache`); resolve locally. |
 
-## Appendix — Test/Group Input Proposals (decide before Phase 4)
+## Appendix — Test/Group Input Proposals (DECIDED: A + B for Phase 4)
+
+**Decision (Phase 4):** ship **A + B together** — the `--file/-f` JSON spec (baseline)
+*and* the repeatable convenience flags. Flags override/augment file fields (scalars
+override; `--test`/`--group`/`--participant`/`--assign` append/merge). C falls out for
+free (search → flags). The proposals below are retained for context.
 
 The web UI adds tests/groups via interactive search; the CLI needs a non-interactive
-equivalent. The input ergonomics are **left open** per stakeholder request. Proposals
-(not mutually exclusive):
+equivalent. Proposals (not mutually exclusive):
 
 - **A. `--file/-f` JSON spec (baseline, always supported).** A single JSON object
   matching the `get --template` schema (tests as `group/test`/`build_system_id`
