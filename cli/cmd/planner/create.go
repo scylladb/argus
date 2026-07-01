@@ -91,7 +91,12 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	}
 
 	log.Info().Str("plan_id", plan.ID).Str("key", plan.Key).Msg("plan created successfully")
-	return out.Write(models.NewKVTabular(plan))
+	created, err := svc.BuildTemplate(ctx, plan)
+	if err != nil {
+		log.Error().Err(err).Str("plan_id", plan.ID).Msg("failed to build plan template")
+		return err
+	}
+	return out.Write(models.NewKVTabular(created))
 }
 
 // loadTemplate reads the --file plan spec (path or stdin) into a PlanTemplate.

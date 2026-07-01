@@ -590,9 +590,14 @@ func (s *PlannerService) resolveAssignmentTargets(ctx context.Context, entityRef
 	if !errors.Is(err, ErrEntityNotFound) {
 		return nil, err
 	}
-	// Not a test — try a group and fan out to its enabled tests.
+	// Not a test — try a group and fan out to its enabled tests. An ambiguous
+	// group name must abort (so the user disambiguates); only a genuine miss is
+	// reported as "not a test or group".
 	ids, gerr := s.ExpandGroup(ctx, releaseID, entityRef)
 	if gerr != nil {
+		if errors.Is(gerr, ErrAmbiguousEntity) {
+			return nil, gerr
+		}
 		return nil, fmt.Errorf("%q is not a test or group in release: %w", entityRef, ErrEntityNotFound)
 	}
 	return ids, nil
@@ -773,25 +778,11 @@ func (s *PlannerService) BuildResolvedPlan(ctx context.Context, plan models.Rele
 	}, nil
 }
 
-// BuildResolvedPlans resolves a slice of plans into their human-readable form.
-// Plans of the same release share the memoised gridview and users list, so a
-// whole release's plan list resolves with at most one fetch of each.
-func (s *PlannerService) BuildResolvedPlans(ctx context.Context, plans models.ReleasePlanList) ([]models.ResolvedPlan, error) {
-	resolved := make([]models.ResolvedPlan, 0, len(plans))
-	for _, p := range plans {
-		rp, err := s.BuildResolvedPlan(ctx, p)
-		if err != nil {
-			return nil, err
-		}
-		resolved = append(resolved, rp)
-	}
-	return resolved, nil
-}
-
 // BuildPlanSummaries resolves a slice of plans into the per-plan list view
 // ([models.PlanSummary]): release/owner names come from the resolved plan,
 // while tests/groups/participants are reported as counts taken from the source
-// plan. Shares the same single-fetch resolution as [BuildResolvedPlans].
+// plan. Plans of the same release share the memoised gridview and users list,
+// so a whole release's plan list resolves with at most one fetch of each.
 func (s *PlannerService) BuildPlanSummaries(ctx context.Context, plans models.ReleasePlanList) ([]models.PlanSummary, error) {
 	summaries := make([]models.PlanSummary, 0, len(plans))
 	for _, p := range plans {
@@ -849,6 +840,10 @@ func (s *PlannerService) UpdatePlan(ctx context.Context, req models.PlanDiffRequ
 //   - AssigneeMappingSet resolves the username value and the entity key (a test,
 //     or a group fanned out to each enabled test); AssigneeMappingRemove resolves
 //     each entity reference (group references fan out) to the UUIDs to drop.
+//   - Assignments (the template-style map) is applied as a merge/patch: each
+//     keyed test/group is added to the plan when missing and (re)assigned, or
+//     unassigned when the value is "$owner". A reference matching nothing is
+//     reported and skipped; tests not mentioned are left untouched.
 func (s *PlannerService) BuildUpdateRequest(ctx context.Context, plan models.ReleasePlan, spec models.PlanUpdateSpec) (models.PlanDiffRequest, []string, error) {
 	releaseID := plan.ReleaseID
 	diff := models.PlanDiffRequest{ID: plan.ID}
@@ -889,9 +884,6 @@ func (s *PlannerService) BuildUpdateRequest(ctx context.Context, plan models.Rel
 		for _, id := range ids {
 			addTests.add(id)
 		}
-	}
-	if len(addTests.items) > 0 {
-		diff.TestsAdd = addTests.items
 	}
 
 	removeTests := newOrderedSet()
@@ -950,7 +942,6 @@ func (s *PlannerService) BuildUpdateRequest(ctx context.Context, plan models.Rel
 			assignSet[id] = userID
 		}
 	}
-	diff.AssigneeMappingSet = assignSet
 
 	// Assignment removal: resolve each entity (group fans out) to its UUIDs.
 	for _, entityRef := range spec.AssigneeMappingRemove {
@@ -961,6 +952,44 @@ func (s *PlannerService) BuildUpdateRequest(ctx context.Context, plan models.Rel
 		for _, id := range ids {
 			assignRemove.add(id)
 		}
+	}
+
+	// Template-style assignments (merge/patch): each keyed test/group is ensured
+	// to be in the plan and (re)assigned, or unassigned on "$owner". A reference
+	// matching nothing is reported and skipped; an ambiguous one aborts.
+	for entityRef, userRef := range spec.Assignments {
+		ids, err := s.resolveAssignmentTargets(ctx, entityRef, releaseID)
+		if err != nil {
+			if errors.Is(err, ErrEntityNotFound) {
+				warnings = append(warnings, fmt.Sprintf("assignment target %q is not in this release — skipped", entityRef))
+				continue
+			}
+			return models.PlanDiffRequest{}, nil, err
+		}
+		for _, id := range ids {
+			addTests.add(id) // membership follows assignment
+		}
+		if userRef == models.OwnerMarker {
+			for _, id := range ids {
+				assignRemove.add(id)
+			}
+			continue
+		}
+		userID, err := s.ResolveUserID(ctx, userRef)
+		if err != nil {
+			return models.PlanDiffRequest{}, nil, fmt.Errorf("assignee %q: %w", userRef, err)
+		}
+		for _, id := range ids {
+			if assignSet == nil {
+				assignSet = map[string]string{}
+			}
+			assignSet[id] = userID
+		}
+	}
+	diff.AssigneeMappingSet = assignSet
+
+	if len(addTests.items) > 0 {
+		diff.TestsAdd = addTests.items
 	}
 	if len(assignRemove.items) > 0 {
 		diff.AssigneeMappingRemove = assignRemove.items
@@ -974,7 +1003,7 @@ func (s *PlannerService) BuildUpdateRequest(ctx context.Context, plan models.Rel
 		ownerID = *diff.Owner
 	}
 	diff.ParticipantsAdd, diff.ParticipantsRemove = participantDeltas(
-		plan, addTests, removeTests, removeGroups, assignSet, assignRemove, ownerID)
+		plan, removeTests, removeGroups, assignSet, assignRemove, ownerID)
 
 	// A plan must keep at least one test; refuse an edit that would empty it.
 	if planLeftEmpty(plan, addTests, removeTests) {
@@ -988,7 +1017,7 @@ func (s *PlannerService) BuildUpdateRequest(ctx context.Context, plan models.Rel
 // equal the resulting assignees minus the owner. assignSet entries are added,
 // assignRemove entries are dropped, and entries on removed tests/groups are
 // dropped too (mirroring the backend's mapping cleanup).
-func participantDeltas(plan models.ReleasePlan, addTests, removeTests, removeGroups *orderedSet, assignSet map[string]string, assignRemove *orderedSet, ownerID string) (add, remove []string) {
+func participantDeltas(plan models.ReleasePlan, removeTests, removeGroups *orderedSet, assignSet map[string]string, assignRemove *orderedSet, ownerID string) (add, remove []string) {
 	removed := map[string]bool{}
 	for _, id := range removeTests.items {
 		removed[id] = true
@@ -1022,11 +1051,6 @@ func participantDeltas(plan models.ReleasePlan, addTests, removeTests, removeGro
 	}
 
 	addSet := newOrderedSet()
-	for _, t := range addTests.items {
-		if user, ok := final[t]; ok && user != ownerID && !current[user] {
-			addSet.add(user)
-		}
-	}
 	for user := range desired {
 		if !current[user] {
 			addSet.add(user)
