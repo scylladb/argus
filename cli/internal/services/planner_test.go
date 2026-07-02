@@ -51,8 +51,10 @@ func newPlannerSvc(t *testing.T, mux *http.ServeMux) *services.PlannerService {
 func gridviewFixture() models.GridView {
 	return models.GridView{
 		Groups: map[string]models.GridEntity{
-			"g1": {ID: "g1", Name: "tier1", PrettyName: "Tier 1", Type: "group"},
-			"g2": {ID: "g2", Name: "tier2", PrettyName: "Tier 2", Type: "group"},
+			"g1": {ID: "g1", Name: "tier1", PrettyName: "Tier 1", Type: "group",
+				BuildSystemID: "scylla-2026.2/tier1"},
+			"g2": {ID: "g2", Name: "tier2", PrettyName: "Tier 2", Type: "group",
+				BuildSystemID: "scylla-2026.2/tier2"},
 		},
 		Tests: map[string]models.GridEntity{
 			"t1": {ID: "t1", Name: "longevity-100gb", GroupID: "g1", Group: "Tier 1",
@@ -262,6 +264,17 @@ func TestPlannerService_ResolveEntityID_Group(t *testing.T) {
 	assert.Equal(t, "g1", id)
 }
 
+func TestPlannerService_ResolveEntityID_GroupByBuildSystemID(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, gridviewMux(t, nil))
+
+	// A group's fully-qualified build_system_id ("release/group") resolves too.
+	id, err := svc.ResolveEntityID(context.Background(),
+		"scylla-2026.2/tier1", "rel-1", services.KindGroup)
+	require.NoError(t, err)
+	assert.Equal(t, "g1", id)
+}
+
 func TestPlannerService_ExpandGroup_EnabledOnly(t *testing.T) {
 	t.Parallel()
 	svc := newPlannerSvc(t, gridviewMux(t, nil))
@@ -269,6 +282,16 @@ func TestPlannerService_ExpandGroup_EnabledOnly(t *testing.T) {
 	ids, err := svc.ExpandGroup(context.Background(), "rel-1", "tier1")
 	require.NoError(t, err)
 	// t1 + t2 are enabled in tier1; t4 is disabled and must be excluded.
+	assert.Equal(t, []string{"t1", "t2"}, ids)
+}
+
+func TestPlannerService_ExpandGroup_ByBuildSystemID(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, gridviewMux(t, nil))
+
+	// A group referenced by build_system_id fans out to its enabled tests.
+	ids, err := svc.ExpandGroup(context.Background(), "rel-1", "scylla-2026.2/tier1")
+	require.NoError(t, err)
 	assert.Equal(t, []string{"t1", "t2"}, ids)
 }
 
@@ -469,6 +492,76 @@ func TestPlannerService_BuildCreateRequest_GroupAssignmentFansOut(t *testing.T) 
 	// A group assignment fans out to each enabled member test (t1, t2).
 	assert.Equal(t, map[string]string{"t1": "u2", "t2": "u2"}, req.Assignments)
 	assert.ElementsMatch(t, []string{"t1", "t2"}, req.Tests)
+}
+
+func TestPlannerService_BuildCreateRequest_GroupByBuildSystemID(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	// Referencing a group by its fully-qualified build_system_id must resolve
+	// and fan out, not fail with "group not found".
+	tmpl := models.PlanTemplate{
+		Name:        "fanout-bsid",
+		Release:     "scylla-2026.2",
+		Owner:       "alice",
+		Assignments: map[string]string{"scylla-2026.2/tier1": "bob"},
+	}
+
+	req, warnings, err := svc.BuildCreateRequest(context.Background(), tmpl)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+	assert.Equal(t, map[string]string{"t1": "u2", "t2": "u2"}, req.Assignments)
+	assert.ElementsMatch(t, []string{"t1", "t2"}, req.Tests)
+}
+
+// TestPlannerService_BuildCreateRequest_NoPhantomParticipants guards against a
+// race loser being left as a participant. When a group entry and a specific
+// test entry both claim the same test, only one assignee wins the mapping (map
+// iteration order is randomised). Participants must be derived from the settled
+// assignment map, so the loser — who holds no assignment — never appears.
+func TestPlannerService_BuildCreateRequest_NoPhantomParticipants(t *testing.T) {
+	t.Parallel()
+	// Three users so the owner (carol) is distinct from both contenders.
+	mux := releasesMux(t, nil)
+	mux.HandleFunc("/api/v1/users", func(w http.ResponseWriter, r *http.Request) {
+		jsonOK(t, w, models.UsersMap{
+			"u1": {ID: "u1", Username: "alice"},
+			"u2": {ID: "u2", Username: "bob"},
+			"u3": {ID: "u3", Username: "carol"},
+		})
+	})
+	mux.HandleFunc("/api/v1/planning/release/rel-1/gridview", func(w http.ResponseWriter, r *http.Request) {
+		jsonOK(t, w, gridviewFixture())
+	})
+	svc := newPlannerSvc(t, mux)
+
+	tmpl := models.PlanTemplate{
+		Name:    "phantom",
+		Release: "scylla-2026.2",
+		Owner:   "carol",
+		Assignments: map[string]string{
+			"tier1":                 "bob",   // fans out to t1, t2
+			"tier1/longevity-200gb": "alice", // contends for t2
+		},
+	}
+
+	// Map iteration order is randomised per range, so repeat to exercise both
+	// orderings and catch a phantom regardless of which entry settles t2.
+	for i := 0; i < 50; i++ {
+		req, warnings, err := svc.BuildCreateRequest(context.Background(), tmpl)
+		require.NoError(t, err)
+		assert.Empty(t, warnings)
+
+		// Every participant must hold at least one assignment in the plan.
+		holders := map[string]bool{}
+		for _, userID := range req.Assignments {
+			holders[userID] = true
+		}
+		for _, p := range req.Participants {
+			assert.Contains(t, holders, p, "participant %q holds no assignment (phantom)", p)
+			assert.NotEqual(t, "u3", p, "owner must not be listed as a participant")
+		}
+	}
 }
 
 func TestPlannerService_BuildCreateRequest_OwnerMarkerLeavesUnassigned(t *testing.T) {
@@ -960,6 +1053,39 @@ func TestPlannerService_BuildUpdateRequest_RemoveGroup(t *testing.T) {
 	assert.Nil(t, diff.TestsAdd)
 }
 
+func TestPlannerService_BuildUpdateRequest_MissingGroupAddWarns(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	// A misspelled --add-group name warns and is skipped, so other deltas in the
+	// same update still apply (rather than aborting the whole call).
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1", Tests: []string{"t1"}}
+	diff, warnings, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		GroupsAdd: []string{"tierX"},
+		TestsAdd:  []string{"tier2/longevity-100gb"},
+	})
+	require.NoError(t, err)
+	require.Len(t, warnings, 1)
+	assert.Contains(t, warnings[0], "not in this release")
+	// The valid test add is preserved.
+	assert.Equal(t, []string{"t3"}, diff.TestsAdd)
+}
+
+func TestPlannerService_BuildUpdateRequest_MissingGroupRemoveWarns(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	// A misspelled --remove-group name warns and is skipped, not fatal.
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1", Tests: []string{"t1"}}
+	diff, warnings, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		GroupsRemove: []string{"tierX"},
+	})
+	require.NoError(t, err)
+	require.Len(t, warnings, 1)
+	assert.Contains(t, warnings[0], "not in this release")
+	assert.Nil(t, diff.GroupsRemove)
+}
+
 func TestPlannerService_BuildUpdateRequest_AssignAddsParticipant(t *testing.T) {
 	t.Parallel()
 	svc := newPlannerSvc(t, resolveMux(t))
@@ -971,6 +1097,9 @@ func TestPlannerService_BuildUpdateRequest_AssignAddsParticipant(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, map[string]string{"t2": "u2"}, diff.AssigneeMappingSet)
+	// The assigned test is not yet in the plan, so membership follows the
+	// assignment — without tests_add the backend would drop the mapping.
+	assert.Equal(t, []string{"t2"}, diff.TestsAdd)
 	assert.Equal(t, []string{"u2"}, diff.ParticipantsAdd)
 	assert.Empty(t, diff.ParticipantsRemove)
 }
@@ -1024,6 +1153,36 @@ func TestPlannerService_BuildUpdateRequest_RejectsEmptyPlan(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "at least one test")
+}
+
+func TestPlannerService_BuildUpdateRequest_RejectsEmptyPlanViaGroupRemoval(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	// A web-created plan can hold its membership as groups (no explicit tests).
+	// Removing its last group empties it and must be refused. (Group removal
+	// does not cascade to plan.tests server-side, so only a group-held plan can
+	// be emptied this way.)
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1", Groups: []string{"g1"}}
+	_, _, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		GroupsRemove: []string{"tier1"},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "at least one test")
+}
+
+func TestPlannerService_BuildUpdateRequest_RemoveLastTestKeepsGroup(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	// Removing the last explicit test is allowed while a group remains: the
+	// plan still has membership, so the guard must not fire.
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1", Tests: []string{"t2"}, Groups: []string{"g2"}}
+	diff, _, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		TestsRemove: []string{"tier1/longevity-200gb"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"t2"}, diff.TestsRemove)
 }
 
 func TestPlannerService_BuildUpdateRequest_AssignSetAndRemove(t *testing.T) {
@@ -1124,7 +1283,23 @@ func TestPlannerService_BuildUpdateRequest_AssignmentsMissingWarns(t *testing.T)
 	assert.Empty(t, diff.AssigneeMappingSet)
 }
 
-// ambiguousGroupMux returns a resolve mux whose gridview has two groups sharing
+func TestPlannerService_BuildUpdateRequest_AssignMissingWarns(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	// --assign (AssigneeMappingSet) to a name matching nothing in the release is
+	// reported and skipped, not fatal — mirroring template assignments.
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1", Owner: "u1", Tests: []string{"t2"}}
+	diff, warnings, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		AssigneeMappingSet: map[string]string{"tier1/does-not-exist": "bob"},
+	})
+	require.NoError(t, err)
+	require.Len(t, warnings, 1)
+	assert.Contains(t, warnings[0], "not in this release")
+	assert.Empty(t, diff.AssigneeMappingSet)
+	assert.Nil(t, diff.TestsAdd)
+}
+
 // the pretty-name "Tier", so a group-by-name assignment reference is ambiguous.
 func ambiguousGroupMux(t *testing.T) *http.ServeMux {
 	t.Helper()
@@ -1175,6 +1350,22 @@ func TestPlannerService_BuildCreateRequest_AmbiguousGroupAssignmentAborts(t *tes
 	})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, services.ErrAmbiguousEntity)
+}
+
+// TestPlannerService_ResolveEntityID_AmbiguousGroupPrefixSurfaces guards the
+// group-qualified resolution path: when the "group/" prefix of a group-qualified
+// test ref matches two groups, resolution must surface ErrAmbiguousEntity for
+// disambiguation rather than falling through to bare-name matching and
+// misreporting the test as simply not found.
+func TestPlannerService_ResolveEntityID_AmbiguousGroupPrefixSurfaces(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, ambiguousGroupMux(t))
+
+	_, err := svc.ResolveEntityID(context.Background(),
+		"Tier/longevity-a", "rel-1", services.KindTest)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, services.ErrAmbiguousEntity)
+	assert.NotErrorIs(t, err, services.ErrEntityNotFound)
 }
 
 func TestPlannerService_UpdatePlan_PostsDiff(t *testing.T) {
