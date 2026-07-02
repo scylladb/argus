@@ -323,9 +323,10 @@ func (s *PlannerService) GetReleaseOverview(ctx context.Context, releaseID strin
 // ResolveEntityID resolves a test or group reference (by name or
 // build_system_id) to its UUID within a release, using a single gridview fetch.
 //
-// Groups match by name (unique within a release). Tests resolve in priority
-// order: (1) exact build_system_id, (2) group-qualified "group/test",
-// (3) bare name (rejected when ambiguous, with a candidate list).
+// Groups match by name, pretty name, or build_system_id (unique within a
+// release). Tests resolve in priority order: (1) exact build_system_id,
+// (2) group-qualified "group/test", (3) bare name (rejected when ambiguous,
+// with a candidate list).
 func (s *PlannerService) ResolveEntityID(ctx context.Context, ref, releaseID string, kind EntityKind) (string, error) {
 	grid, err := s.GetReleaseStructure(ctx, releaseID)
 	if err != nil {
@@ -365,12 +366,14 @@ func (s *PlannerService) ExpandGroup(ctx context.Context, releaseID, groupRef st
 	return ids, nil
 }
 
-// findGroup locates a group in the gridview by name (then pretty name),
-// case-insensitively.
+// findGroup locates a group in the gridview by name, pretty name, or
+// build_system_id (its fully-qualified "release/group" path), case-insensitively.
 func findGroup(grid models.GridView, ref string) (models.GridEntity, error) {
 	var matches []models.GridEntity
 	for _, g := range grid.Groups {
-		if strings.EqualFold(g.Name, ref) || strings.EqualFold(g.PrettyName, ref) {
+		if strings.EqualFold(g.Name, ref) ||
+			strings.EqualFold(g.PrettyName, ref) ||
+			strings.EqualFold(g.BuildSystemID, ref) {
 			matches = append(matches, g)
 		}
 	}
@@ -397,7 +400,9 @@ func resolveTest(grid models.GridView, ref string) (string, error) {
 	// (2) group-qualified "group/test".
 	if idx := strings.LastIndex(ref, "/"); idx != -1 {
 		groupPart, testName := ref[:idx], ref[idx+1:]
-		if g, err := findGroup(grid, groupPart); err == nil {
+		g, err := findGroup(grid, groupPart)
+		switch {
+		case err == nil:
 			var matches []string
 			for id, t := range grid.Tests {
 				if t.GroupID == g.ID && strings.EqualFold(t.Name, testName) {
@@ -411,6 +416,13 @@ func resolveTest(grid models.GridView, ref string) (string, error) {
 				return "", fmt.Errorf("%w: ambiguous test %q within group %q (%d matches)", ErrAmbiguousEntity, testName, groupPart, len(matches))
 			}
 			return "", fmt.Errorf("%w: no test %q in group %q", ErrEntityNotFound, testName, groupPart)
+		case errors.Is(err, ErrEntityNotFound):
+			// The prefix isn't a known group; fall through to bare-name
+			// resolution (the ref may be a plain name that contains a slash).
+		default:
+			// Ambiguous group prefix (or other error): surface it so callers
+			// abort for disambiguation instead of misreporting "test not found".
+			return "", err
 		}
 	}
 
@@ -516,12 +528,10 @@ func (s *PlannerService) BuildCreateRequest(ctx context.Context, tmpl models.Pla
 
 	// Assignments are the single source of plan membership. Each entry's
 	// targets join the tests list; a specific assignee also enters the
-	// assignee mapping and becomes a participant. "$owner" leaves the test
-	// unassigned (in tests only). Missing entity → warn and omit; bad user
-	// → abort.
+	// assignee mapping. "$owner" leaves the test unassigned (in tests only).
+	// Missing entity → warn and omit; bad user → abort.
 	tests := newOrderedSet()
 	assignments := map[string]string{}
-	participants := newOrderedSet()
 	var missing []string
 	for entityRef, userRef := range tmpl.Assignments {
 		ids, err := s.resolveAssignmentTargets(ctx, entityRef, releaseID)
@@ -549,10 +559,24 @@ func (s *PlannerService) BuildCreateRequest(ctx context.Context, tmpl models.Pla
 			tests.add(id)
 			assignments[id] = userID
 		}
+	}
+
+	// Participants are derived from the settled assignment map (assignees minus
+	// the owner), not accumulated per-entry: when overlapping group/test entries
+	// contend for a test, only the user who actually holds an assignment counts,
+	// so a race loser is never left as a phantom participant. Sorted for a
+	// deterministic payload.
+	participantSet := map[string]bool{}
+	for _, userID := range assignments {
 		if userID != ownerID {
-			participants.add(userID)
+			participantSet[userID] = true
 		}
 	}
+	participants := make([]string, 0, len(participantSet))
+	for userID := range participantSet {
+		participants = append(participants, userID)
+	}
+	sort.Strings(participants)
 
 	// A plan must contain at least one test/group; refuse to create an empty
 	// plan and list what could not be resolved (one per line).
@@ -570,7 +594,7 @@ func (s *PlannerService) BuildCreateRequest(ctx context.Context, tmpl models.Pla
 		Name:          tmpl.Name,
 		Description:   tmpl.Description,
 		Owner:         ownerID,
-		Participants:  nonNilSlice(participants.items),
+		Participants:  nonNilSlice(participants),
 		TargetVersion: tmpl.TargetVersion,
 		ReleaseID:     releaseID,
 		Tests:         nonNilSlice(tests.items),
@@ -836,14 +860,17 @@ func (s *PlannerService) UpdatePlan(ctx context.Context, req models.PlanDiffRequ
 //   - GroupsAdd is always expanded to the group's enabled tests (merged into
 //     tests_add); no groups_add is ever sent. GroupsRemove resolves to a group
 //     UUID and is sent as groups_remove (for groups still stored on the plan).
+//     As with tests, a group name matching nothing warns and is skipped while an
+//     ambiguous name aborts.
 //   - Participants resolve by username.
-//   - AssigneeMappingSet resolves the username value and the entity key (a test,
-//     or a group fanned out to each enabled test); AssigneeMappingRemove resolves
-//     each entity reference (group references fan out) to the UUIDs to drop.
-//   - Assignments (the template-style map) is applied as a merge/patch: each
-//     keyed test/group is added to the plan when missing and (re)assigned, or
-//     unassigned when the value is "$owner". A reference matching nothing is
-//     reported and skipped; tests not mentioned are left untouched.
+//   - AssigneeMappingSet (from --assign) and Assignments (the template-style
+//     map) share merge/patch semantics: each keyed test/group is added to the
+//     plan when missing (membership follows assignment) and (re)assigned, or
+//     unassigned when the value is "$owner". A reference matching nothing in the
+//     release is reported and skipped; an ambiguous one aborts. Groups fan out
+//     to each enabled test. AssigneeMappingRemove (from --unassign) clears an
+//     assignee — resolving each entity reference (groups fan out) — without
+//     adding membership; tests not mentioned are left untouched.
 func (s *PlannerService) BuildUpdateRequest(ctx context.Context, plan models.ReleasePlan, spec models.PlanUpdateSpec) (models.PlanDiffRequest, []string, error) {
 	releaseID := plan.ReleaseID
 	diff := models.PlanDiffRequest{ID: plan.ID}
@@ -876,9 +903,14 @@ func (s *PlannerService) BuildUpdateRequest(ctx context.Context, plan models.Rel
 		addTests.add(id)
 	}
 	// Groups added are always expanded to their enabled tests (no groups_add).
+	// A missing group name warns and is skipped (like tests); ambiguous aborts.
 	for _, g := range spec.GroupsAdd {
 		ids, err := s.ExpandGroup(ctx, releaseID, g)
 		if err != nil {
+			if errors.Is(err, ErrEntityNotFound) {
+				warnings = append(warnings, fmt.Sprintf("group %q to add is not in this release — skipped", g))
+				continue
+			}
 			return models.PlanDiffRequest{}, nil, err
 		}
 		for _, id := range ids {
@@ -903,10 +935,15 @@ func (s *PlannerService) BuildUpdateRequest(ctx context.Context, plan models.Rel
 	}
 
 	// Group removals target groups still stored on the plan (e.g. web-created).
+	// A missing group name warns and is skipped (like tests); ambiguous aborts.
 	removeGroups := newOrderedSet()
 	for _, g := range spec.GroupsRemove {
 		id, err := s.ResolveEntityID(ctx, g, releaseID, KindGroup)
 		if err != nil {
+			if errors.Is(err, ErrEntityNotFound) {
+				warnings = append(warnings, fmt.Sprintf("group %q to remove is not in this release — skipped", g))
+				continue
+			}
 			return models.PlanDiffRequest{}, nil, err
 		}
 		removeGroups.add(id)
@@ -915,35 +952,55 @@ func (s *PlannerService) BuildUpdateRequest(ctx context.Context, plan models.Rel
 		diff.GroupsRemove = removeGroups.items
 	}
 
-	// Assignment set: resolve user, then entity (group fans out to its tests).
-	// A "$owner" value clears the assignee (test stays) by routing the targets
-	// to the removal set instead of the mapping.
+	// Assignment application. The raw --assign / assignee_mapping_set map and the
+	// template-style assignments map share identical merge/patch semantics: each
+	// keyed test/group joins the plan (membership follows assignment) and is
+	// (re)assigned, or is cleared — keeping the test — when the value is "$owner".
+	// Membership is ensured so the backend, which drops mapping entries for tests
+	// not in plan.tests, keeps the assignment instead of silently discarding it.
+	// A reference matching nothing in the release is reported and skipped; an
+	// ambiguous one aborts so the user can disambiguate.
 	var assignSet map[string]string
 	assignRemove := newOrderedSet()
-	for entityRef, userRef := range spec.AssigneeMappingSet {
-		ids, err := s.resolveAssignmentTargets(ctx, entityRef, releaseID)
-		if err != nil {
-			return models.PlanDiffRequest{}, nil, err
-		}
-		if userRef == models.OwnerMarker {
+	applyAssignments := func(m map[string]string) error {
+		for entityRef, userRef := range m {
+			ids, err := s.resolveAssignmentTargets(ctx, entityRef, releaseID)
+			if err != nil {
+				if errors.Is(err, ErrEntityNotFound) {
+					warnings = append(warnings, fmt.Sprintf("assignment target %q is not in this release — skipped", entityRef))
+					continue
+				}
+				return err
+			}
 			for _, id := range ids {
-				assignRemove.add(id)
+				addTests.add(id) // membership follows assignment
 			}
-			continue
-		}
-		userID, err := s.ResolveUserID(ctx, userRef)
-		if err != nil {
-			return models.PlanDiffRequest{}, nil, fmt.Errorf("assignee %q: %w", userRef, err)
-		}
-		for _, id := range ids {
-			if assignSet == nil {
-				assignSet = map[string]string{}
+			if userRef == models.OwnerMarker {
+				for _, id := range ids {
+					assignRemove.add(id)
+				}
+				continue
 			}
-			assignSet[id] = userID
+			userID, err := s.ResolveUserID(ctx, userRef)
+			if err != nil {
+				return fmt.Errorf("assignee %q: %w", userRef, err)
+			}
+			for _, id := range ids {
+				if assignSet == nil {
+					assignSet = map[string]string{}
+				}
+				assignSet[id] = userID
+			}
 		}
+		return nil
+	}
+	if err := applyAssignments(spec.AssigneeMappingSet); err != nil {
+		return models.PlanDiffRequest{}, nil, err
 	}
 
-	// Assignment removal: resolve each entity (group fans out) to its UUIDs.
+	// Assignment removal (--unassign): resolve each entity (group fans out) to
+	// its UUIDs and clear the assignee, keeping the test in the plan. Unlike
+	// --assign this never adds membership — it only clears an existing mapping.
 	for _, entityRef := range spec.AssigneeMappingRemove {
 		ids, err := s.resolveAssignmentTargets(ctx, entityRef, releaseID)
 		if err != nil {
@@ -954,37 +1011,8 @@ func (s *PlannerService) BuildUpdateRequest(ctx context.Context, plan models.Rel
 		}
 	}
 
-	// Template-style assignments (merge/patch): each keyed test/group is ensured
-	// to be in the plan and (re)assigned, or unassigned on "$owner". A reference
-	// matching nothing is reported and skipped; an ambiguous one aborts.
-	for entityRef, userRef := range spec.Assignments {
-		ids, err := s.resolveAssignmentTargets(ctx, entityRef, releaseID)
-		if err != nil {
-			if errors.Is(err, ErrEntityNotFound) {
-				warnings = append(warnings, fmt.Sprintf("assignment target %q is not in this release — skipped", entityRef))
-				continue
-			}
-			return models.PlanDiffRequest{}, nil, err
-		}
-		for _, id := range ids {
-			addTests.add(id) // membership follows assignment
-		}
-		if userRef == models.OwnerMarker {
-			for _, id := range ids {
-				assignRemove.add(id)
-			}
-			continue
-		}
-		userID, err := s.ResolveUserID(ctx, userRef)
-		if err != nil {
-			return models.PlanDiffRequest{}, nil, fmt.Errorf("assignee %q: %w", userRef, err)
-		}
-		for _, id := range ids {
-			if assignSet == nil {
-				assignSet = map[string]string{}
-			}
-			assignSet[id] = userID
-		}
+	if err := applyAssignments(spec.Assignments); err != nil {
+		return models.PlanDiffRequest{}, nil, err
 	}
 	diff.AssigneeMappingSet = assignSet
 
@@ -1005,9 +1033,9 @@ func (s *PlannerService) BuildUpdateRequest(ctx context.Context, plan models.Rel
 	diff.ParticipantsAdd, diff.ParticipantsRemove = participantDeltas(
 		plan, removeTests, removeGroups, assignSet, assignRemove, ownerID)
 
-	// A plan must keep at least one test; refuse an edit that would empty it.
-	if planLeftEmpty(plan, addTests, removeTests) {
-		return models.PlanDiffRequest{}, warnings, fmt.Errorf("update would remove the plan's last test; a plan must include at least one test")
+	// A plan must keep at least one test or group; refuse an edit that empties it.
+	if planLeftEmpty(plan, addTests, removeTests, removeGroups) {
+		return models.PlanDiffRequest{}, warnings, fmt.Errorf("update would remove the plan's last test or group; a plan must include at least one test")
 	}
 
 	return diff, warnings, nil
@@ -1064,11 +1092,14 @@ func participantDeltas(plan models.ReleasePlan, removeTests, removeGroups *order
 	return addSet.items, remove
 }
 
-// planLeftEmpty reports whether applying the test add/remove deltas would empty
-// a plan that currently has tests. A plan that started empty is left alone (it
-// is up to add deltas to populate it).
-func planLeftEmpty(plan models.ReleasePlan, addTests, removeTests *orderedSet) bool {
-	if len(plan.Tests) == 0 {
+// planLeftEmpty reports whether applying the deltas would leave a plan with no
+// membership at all. Membership is tests plus groups: tests shrink via
+// removeTests and grow via addTests, while groups only shrink via removeGroups
+// (the CLI always fans groups out to tests, so no groups are ever added). A
+// plan that started empty of both is left alone — it is up to the add deltas to
+// populate it.
+func planLeftEmpty(plan models.ReleasePlan, addTests, removeTests, removeGroups *orderedSet) bool {
+	if len(plan.Tests) == 0 && len(plan.Groups) == 0 {
 		return false
 	}
 	remaining := map[string]bool{}
@@ -1081,7 +1112,14 @@ func planLeftEmpty(plan models.ReleasePlan, addTests, removeTests *orderedSet) b
 	for _, t := range addTests.items {
 		remaining[t] = true
 	}
-	return len(remaining) == 0
+	groups := map[string]bool{}
+	for _, g := range plan.Groups {
+		groups[g] = true
+	}
+	for _, g := range removeGroups.items {
+		delete(groups, g)
+	}
+	return len(remaining) == 0 && len(groups) == 0
 }
 
 // resolveTestForDiff resolves a single test reference for an add/remove delta.

@@ -49,11 +49,16 @@ Groups passed to --add-group are expanded to their enabled tests (no group is
 stored); a group assignment fans out to each of those tests. Tests referenced
 for add/remove that do not exist in the release are reported and skipped.
 
+--assign adds the referenced test to the plan when it is not already present
+(membership follows the assignment), so you need not pair it with --add-test; a
+group reference fans out to its enabled tests. Assigning to $owner or using
+--unassign clears a test's assignee but keeps the test in the plan; --remove-test
+drops the test entirely. A reference matching nothing in the release is reported
+and skipped.
+
 Participants are not edited directly — they are derived from the assignments,
-so anyone assigned (other than the owner) is a participant. Assigning to $owner
-or using --unassign clears a test's assignee but keeps the test in the plan;
---remove-test drops the test entirely. A user dropped from their last assigned
-test is removed from participants automatically.`,
+so anyone assigned (other than the owner) is a participant. A user dropped from
+their last assigned test is removed from participants automatically.`,
 		RunE: runUpdate,
 	}
 
@@ -68,7 +73,7 @@ test is removed from participants automatically.`,
 	cmd.Flags().StringArray("remove-test", nil, "Remove test by build_system_id or group/test (repeatable)")
 	cmd.Flags().StringArray("add-group", nil, "Add group, expanded to its enabled tests (repeatable)")
 	cmd.Flags().StringArray("remove-group", nil, "Remove a stored group by name (repeatable)")
-	cmd.Flags().StringArray("assign", nil, "Assignment as entity=username (use $owner to clear) (repeatable)")
+	cmd.Flags().StringArray("assign", nil, "Assignment as entity=username, adding the test if missing (use $owner to clear) (repeatable)")
 	cmd.Flags().StringArray("unassign", nil, "Clear assignee for entity, keeping the test (repeatable)")
 	_ = cmd.MarkFlagRequired("plan-id")
 
