@@ -33,6 +33,7 @@ class CreatePlanPayload:
     tests: list[str]
     groups: list[str]
     assignments: dict[str, str]
+    options: dict[str, Any] = field(default_factory=dict)
     view_id: Optional[str] = None
     created_from: Optional[str] = None
 
@@ -56,6 +57,7 @@ class TempPlanPayload:
     last_updated: str
     ends_at: str
     created_from: Optional[str]
+    options: dict[str, Any] = None
     view_id: Optional[str] = None
 
 
@@ -80,6 +82,9 @@ class PlanDiffPayload:
     # Dict diff for assignee_mapping
     assignee_mapping_set: dict[str, str] = field(default_factory=dict)
     assignee_mapping_remove: list[str] = field(default_factory=list)
+    # Dict diff for per-entity options (keyed by test/group UUID)
+    options_set: dict[str, Any] = field(default_factory=dict)
+    options_remove: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, init=True, repr=True, kw_only=True)
@@ -180,6 +185,7 @@ class PlanningService:
                                  for entity_id, user_id in plan_request.assignments.items()}
         plan.groups = plan_request.groups
         plan.tests = plan_request.tests
+        plan.options = json.dumps(plan_request.options or {})
         if plan_request.created_from:
             plan.created_from = plan_request.created_from
         if not plan_request.view_id:
@@ -266,6 +272,15 @@ class PlanningService:
         all_entity_ids = set(str(eid) for eid in plan.tests + plan.groups)
         current_mapping = {k: v for k, v in current_mapping.items() if str(k) in all_entity_ids}
         plan.assignee_mapping = current_mapping
+
+        # Apply options diff (remove first, then set), then prune to current entities
+        current_options = json.loads(plan.options) if plan.options else {}
+        for key in plan_request.options_remove:
+            current_options.pop(key, None)
+        for key, value in plan_request.options_set.items():
+            current_options[key] = value
+        current_options = {k: v for k, v in current_options.items() if str(k) in all_entity_ids}
+        plan.options = json.dumps(current_options)
 
         plan.last_updated = datetime.datetime.now(tz=datetime.UTC)
 
@@ -431,6 +446,8 @@ class PlanningService:
         new_tests = []
         new_groups = []
         new_assignee_mapping = {}
+        original_options = json.loads(original_plan.options) if original_plan.options else {}
+        new_options = {}
 
         for test in original_tests:
             original_assignee = original_plan.assignee_mapping.get(test.id)
@@ -443,6 +460,9 @@ class PlanningService:
                 new_tests.append(new_test_id)
                 if original_assignee and payload.keepParticipants:
                     new_assignee_mapping[new_test_id] = original_assignee
+                test_options = original_options.get(str(test.id))
+                if test_options:
+                    new_options[str(new_test_id)] = test_options
 
         for group in original_groups:
             original_assignee = original_plan.assignee_mapping.get(group.id)
@@ -455,6 +475,9 @@ class PlanningService:
                 new_groups.append(new_group_id)
                 if original_assignee and payload.keepParticipants:
                     new_assignee_mapping[new_group_id] = original_assignee
+                group_options = original_options.get(str(group.id))
+                if group_options:
+                    new_options[str(new_group_id)] = group_options
 
         new_plan = ArgusReleasePlan()
         new_plan.release_id = target_release.id
@@ -466,6 +489,7 @@ class PlanningService:
         new_plan.assignee_mapping = new_assignee_mapping
         new_plan.tests = new_tests
         new_plan.groups = new_groups
+        new_plan.options = json.dumps(new_options)
         new_plan.target_version = payload.plan.target_version
         view = self.create_view_for_plan(new_plan)
         new_plan.view_id = view.id
