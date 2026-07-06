@@ -263,6 +263,77 @@ func TestCreatePlanRequest_OmitsOptionalEmptyFields(t *testing.T) {
 	assert.NotContains(t, s, `"created_from"`, "empty optional created_from must be omitted")
 }
 
+func TestAssignmentValue_UnmarshalAcceptsStringOrObject(t *testing.T) {
+	t.Parallel()
+
+	t.Run("bare string is the assignee (back-compat)", func(t *testing.T) {
+		t.Parallel()
+		var v models.AssignmentValue
+		require.NoError(t, json.Unmarshal([]byte(`"bob"`), &v))
+		assert.Equal(t, models.AssignmentValue{Assignee: "bob"}, v)
+		assert.Nil(t, v.Labels())
+	})
+
+	t.Run("object with assignee and labels", func(t *testing.T) {
+		t.Parallel()
+		var v models.AssignmentValue
+		require.NoError(t, json.Unmarshal([]byte(`{"assignee":"bob","options":{"labels":["a","b"]}}`), &v))
+		assert.Equal(t, "bob", v.Assignee)
+		assert.Equal(t, []string{"a", "b"}, v.Labels())
+	})
+
+	t.Run("object with labels only (unassigned)", func(t *testing.T) {
+		t.Parallel()
+		var v models.AssignmentValue
+		require.NoError(t, json.Unmarshal([]byte(`{"options":{"labels":["x"]}}`), &v))
+		assert.Empty(t, v.Assignee)
+		assert.Equal(t, []string{"x"}, v.Labels())
+	})
+
+	t.Run("always marshals as an object", func(t *testing.T) {
+		t.Parallel()
+		raw, err := json.Marshal(models.AssignmentValue{Assignee: "bob"})
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"assignee":"bob"}`, string(raw))
+	})
+
+	t.Run("round-trips a map keyed by reference", func(t *testing.T) {
+		t.Parallel()
+		var m map[string]models.AssignmentValue
+		require.NoError(t, json.Unmarshal([]byte(`{"g/t1":"bob","g/t2":{"assignee":"$owner","options":{"labels":["l"]}}}`), &m))
+		assert.Equal(t, "bob", m["g/t1"].Assignee)
+		assert.Equal(t, "$owner", m["g/t2"].Assignee)
+		assert.Equal(t, []string{"l"}, m["g/t2"].Labels())
+	})
+}
+
+func TestParsePlanOptions(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty string yields an empty map", func(t *testing.T) {
+		t.Parallel()
+		got, err := models.ParsePlanOptions("")
+		require.NoError(t, err)
+		assert.Empty(t, got)
+		assert.NotNil(t, got)
+	})
+
+	t.Run("parses entity-keyed options", func(t *testing.T) {
+		t.Parallel()
+		got, err := models.ParsePlanOptions(`{"uuid-1":{"labels":["a","b"]}}`)
+		require.NoError(t, err)
+		assert.Equal(t, map[string]models.EntityOptions{
+			"uuid-1": {Labels: []string{"a", "b"}},
+		}, got)
+	})
+
+	t.Run("errors on malformed JSON", func(t *testing.T) {
+		t.Parallel()
+		_, err := models.ParsePlanOptions(`{not json`)
+		require.Error(t, err)
+	})
+}
+
 func sampleResolvedPlan() models.ResolvedPlan {
 	return models.ResolvedPlan{
 		ID:            "p1",
@@ -275,7 +346,7 @@ func sampleResolvedPlan() models.ResolvedPlan {
 		Participants:  []string{"bob"},
 		Tests:         []string{"Tier 1/longevity-100gb"},
 		Groups:        []string{"tier1"},
-		Assignments:   map[string]string{"Tier 1/longevity-200gb": "bob"},
+		Assignments:   map[string]models.AssignmentValue{"Tier 1/longevity-200gb": {Assignee: "bob"}},
 		Completed:     true,
 		LastUpdated:   "2026-06-02T11:00:00.000000",
 	}
@@ -311,7 +382,7 @@ func TestResolvedPlan_JSONKeepsFullDetail(t *testing.T) {
 	assert.Contains(t, s, `"tests":["Tier 1/longevity-100gb"]`)
 	assert.Contains(t, s, `"groups":["tier1"]`)
 	assert.Contains(t, s, `"participants":["bob"]`)
-	assert.Contains(t, s, `"assignments":{"Tier 1/longevity-200gb":"bob"}`)
+	assert.Contains(t, s, `"assignments":{"Tier 1/longevity-200gb":{"assignee":"bob"}}`)
 	assert.Contains(t, s, `"id":"p1"`)
 }
 

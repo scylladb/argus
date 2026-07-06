@@ -444,6 +444,17 @@ func resolveMux(t *testing.T) *http.ServeMux {
 	return mux
 }
 
+// av wraps a reference→assignee string map into the assignments map that
+// PlanTemplate/PlanUpdateSpec now use (assignee only, no labels), keeping the
+// existing table data terse.
+func av(m map[string]string) map[string]models.AssignmentValue {
+	out := make(map[string]models.AssignmentValue, len(m))
+	for k, v := range m {
+		out[k] = models.AssignmentValue{Assignee: v}
+	}
+	return out
+}
+
 func TestPlannerService_BuildCreateRequest_ResolvesAndExpands(t *testing.T) {
 	t.Parallel()
 	svc := newPlannerSvc(t, resolveMux(t))
@@ -453,10 +464,10 @@ func TestPlannerService_BuildCreateRequest_ResolvesAndExpands(t *testing.T) {
 		Release:       "scylla-2026.2",
 		Owner:         "alice",
 		TargetVersion: "2026.2.0",
-		Assignments: map[string]string{
+		Assignments: av(map[string]string{
 			"tier1/longevity-200gb": "$owner",
 			"tier2/longevity-100gb": "bob",
-		},
+		}),
 	}
 
 	req, warnings, err := svc.BuildCreateRequest(context.Background(), tmpl)
@@ -483,7 +494,7 @@ func TestPlannerService_BuildCreateRequest_GroupAssignmentFansOut(t *testing.T) 
 		Name:        "fanout",
 		Release:     "scylla-2026.2",
 		Owner:       "alice",
-		Assignments: map[string]string{"tier1": "bob"},
+		Assignments: av(map[string]string{"tier1": "bob"}),
 	}
 
 	req, warnings, err := svc.BuildCreateRequest(context.Background(), tmpl)
@@ -504,7 +515,7 @@ func TestPlannerService_BuildCreateRequest_GroupByBuildSystemID(t *testing.T) {
 		Name:        "fanout-bsid",
 		Release:     "scylla-2026.2",
 		Owner:       "alice",
-		Assignments: map[string]string{"scylla-2026.2/tier1": "bob"},
+		Assignments: av(map[string]string{"scylla-2026.2/tier1": "bob"}),
 	}
 
 	req, warnings, err := svc.BuildCreateRequest(context.Background(), tmpl)
@@ -539,10 +550,10 @@ func TestPlannerService_BuildCreateRequest_NoPhantomParticipants(t *testing.T) {
 		Name:    "phantom",
 		Release: "scylla-2026.2",
 		Owner:   "carol",
-		Assignments: map[string]string{
+		Assignments: av(map[string]string{
 			"tier1":                 "bob",   // fans out to t1, t2
 			"tier1/longevity-200gb": "alice", // contends for t2
-		},
+		}),
 	}
 
 	// Map iteration order is randomised per range, so repeat to exercise both
@@ -572,7 +583,7 @@ func TestPlannerService_BuildCreateRequest_OwnerMarkerLeavesUnassigned(t *testin
 		Name:        "p",
 		Release:     "scylla-2026.2",
 		Owner:       "alice",
-		Assignments: map[string]string{"tier1/longevity-100gb": "$owner"},
+		Assignments: av(map[string]string{"tier1/longevity-100gb": "$owner"}),
 	}
 
 	req, warnings, err := svc.BuildCreateRequest(context.Background(), tmpl)
@@ -592,10 +603,10 @@ func TestPlannerService_BuildCreateRequest_MissingTestWarnsAndOmits(t *testing.T
 		Name:    "p",
 		Release: "scylla-2026.2",
 		Owner:   "alice",
-		Assignments: map[string]string{
+		Assignments: av(map[string]string{
 			"tier1/longevity-200gb": "$owner",
 			"tier1/does-not-exist":  "$owner",
-		},
+		}),
 	}
 
 	req, warnings, err := svc.BuildCreateRequest(context.Background(), tmpl)
@@ -614,7 +625,7 @@ func TestPlannerService_BuildCreateRequest_AmbiguousAborts(t *testing.T) {
 		Name:        "p",
 		Release:     "scylla-2026.2",
 		Owner:       "alice",
-		Assignments: map[string]string{"longevity-100gb": "$owner"}, // in tier1 and tier2
+		Assignments: av(map[string]string{"longevity-100gb": "$owner"}), // in tier1 and tier2
 	}
 
 	_, _, err := svc.BuildCreateRequest(context.Background(), tmpl)
@@ -633,7 +644,7 @@ func TestPlannerService_BuildCreateRequest_AllMissingTestsRejected(t *testing.T)
 		Name:        "p",
 		Release:     "scylla-2026.2",
 		Owner:       "alice",
-		Assignments: map[string]string{"tier1/gone-a": "$owner", "tier1/gone-b": "$owner"},
+		Assignments: av(map[string]string{"tier1/gone-a": "$owner", "tier1/gone-b": "$owner"}),
 	}
 
 	_, warnings, err := svc.BuildCreateRequest(context.Background(), tmpl)
@@ -761,11 +772,11 @@ func TestPlannerService_BuildTemplate_BackResolvesNames(t *testing.T) {
 	assert.Equal(t, "scylla-2026.2", tmpl.Release)
 	assert.Equal(t, "alice", tmpl.Owner)
 	// Unassigned tests are marked $owner; the assigned one keeps its assignee.
-	assert.Equal(t, map[string]string{
+	assert.Equal(t, av(map[string]string{
 		"Tier 1/longevity-100gb": "$owner",
 		"Tier 1/longevity-200gb": "$owner",
 		"Tier 2/longevity-100gb": "bob",
-	}, tmpl.Assignments)
+	}), tmpl.Assignments)
 }
 
 func TestPlannerService_BuildTemplate_SkipsUnknownTests(t *testing.T) {
@@ -782,7 +793,7 @@ func TestPlannerService_BuildTemplate_SkipsUnknownTests(t *testing.T) {
 	tmpl, err := svc.BuildTemplate(context.Background(), plan)
 	require.NoError(t, err)
 	// Tests no longer present in the gridview cannot be named and are skipped.
-	assert.Equal(t, map[string]string{"Tier 1/longevity-100gb": "$owner"}, tmpl.Assignments)
+	assert.Equal(t, av(map[string]string{"Tier 1/longevity-100gb": "$owner"}), tmpl.Assignments)
 }
 
 // TestPlannerService_TemplateRoundTrip locks the get --template -> create path:
@@ -805,7 +816,7 @@ func TestPlannerService_TemplateRoundTrip_DisplayNameMapsToGroupID(t *testing.T)
 	tmpl, err := svc.BuildTemplate(ctx, plan)
 	require.NoError(t, err)
 	// Sanity: the emitted refs use the group's display name, not its raw name.
-	assert.Equal(t, "$owner", tmpl.Assignments["Tier 1/longevity-100gb"])
+	assert.Equal(t, "$owner", tmpl.Assignments["Tier 1/longevity-100gb"].Assignee)
 	require.Contains(t, tmpl.Assignments, "Tier 2/longevity-100gb")
 
 	// Feeding the template straight back must resolve the display names to the
@@ -862,7 +873,7 @@ func TestPlannerService_BuildResolvedPlan_ResolvesNames(t *testing.T) {
 	assert.Equal(t, []string{"bob"}, rp.Participants)
 	assert.Equal(t, []string{"Tier 1/longevity-100gb", "Tier 2/longevity-100gb"}, rp.Tests)
 	assert.Equal(t, []string{"tier1"}, rp.Groups)
-	assert.Equal(t, map[string]string{"Tier 1/longevity-200gb": "bob"}, rp.Assignments)
+	assert.Equal(t, av(map[string]string{"Tier 1/longevity-200gb": "bob"}), rp.Assignments)
 	// Identity/status fields are retained (unlike a template).
 	assert.Equal(t, "p1", rp.ID)
 	assert.True(t, rp.Completed)
@@ -885,7 +896,7 @@ func TestPlannerService_BuildResolvedPlan_UnknownRefsFallBackToUUID(t *testing.T
 	// Unknown references are kept verbatim (lossless), not dropped.
 	assert.Equal(t, "u-missing", rp.Owner)
 	assert.Equal(t, []string{"Tier 1/longevity-100gb", "gone"}, rp.Tests)
-	assert.Equal(t, map[string]string{"gone": "u-missing"}, rp.Assignments)
+	assert.Equal(t, av(map[string]string{"gone": "u-missing"}), rp.Assignments)
 }
 
 func TestPlannerService_BuildResolvedPlan_UnknownReleaseFallsBack(t *testing.T) {
@@ -1222,7 +1233,7 @@ func TestPlannerService_BuildUpdateRequest_AssignmentsMergeReassigns(t *testing.
 	// participant. Tests not mentioned are left untouched.
 	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1", Owner: "u1", Tests: []string{"t2"}}
 	diff, warnings, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
-		Assignments: map[string]string{"tier1/longevity-200gb": "bob"},
+		Assignments: av(map[string]string{"tier1/longevity-200gb": "bob"}),
 	})
 	require.NoError(t, err)
 	assert.Empty(t, warnings)
@@ -1240,7 +1251,7 @@ func TestPlannerService_BuildUpdateRequest_AssignmentsAddsNewTest(t *testing.T) 
 	// follows assignment) and assigned.
 	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1", Owner: "u1", Tests: []string{"t1"}}
 	diff, _, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
-		Assignments: map[string]string{"tier2/longevity-100gb": "bob"},
+		Assignments: av(map[string]string{"tier2/longevity-100gb": "bob"}),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"t3"}, diff.TestsAdd)
@@ -1260,7 +1271,7 @@ func TestPlannerService_BuildUpdateRequest_AssignmentsOwnerMarkerClears(t *testi
 		AssigneeMapping: map[string]string{"t2": "u2"},
 	}
 	diff, _, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
-		Assignments: map[string]string{"tier1/longevity-200gb": "$owner"},
+		Assignments: av(map[string]string{"tier1/longevity-200gb": "$owner"}),
 	})
 	require.NoError(t, err)
 	assert.Nil(t, diff.AssigneeMappingSet)
@@ -1275,7 +1286,7 @@ func TestPlannerService_BuildUpdateRequest_AssignmentsMissingWarns(t *testing.T)
 	// A reference matching nothing is reported and skipped, not fatal.
 	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1", Owner: "u1", Tests: []string{"t2"}}
 	diff, warnings, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
-		Assignments: map[string]string{"tier1/does-not-exist": "bob"},
+		Assignments: av(map[string]string{"tier1/does-not-exist": "bob"}),
 	})
 	require.NoError(t, err)
 	require.Len(t, warnings, 1)
@@ -1346,7 +1357,7 @@ func TestPlannerService_BuildCreateRequest_AmbiguousGroupAssignmentAborts(t *tes
 		Name:        "p",
 		Release:     "scylla-2026.2",
 		Owner:       "bob",
-		Assignments: map[string]string{"Tier": "bob"},
+		Assignments: av(map[string]string{"Tier": "bob"}),
 	})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, services.ErrAmbiguousEntity)
@@ -1402,4 +1413,150 @@ func TestPlannerService_UpdatePlan_BackendError(t *testing.T) {
 	var apiErr *api.APIError
 	require.True(t, errors.As(err, &apiErr))
 	assert.Contains(t, apiErr.Body.Message, "already exist")
+}
+
+// --------------------------------------------------------------------------
+// Per-entity options (labels)
+// --------------------------------------------------------------------------
+
+func TestPlannerService_BuildCreateRequest_EmitsOptions(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	// Labels attach to the resolved entity UUID, including an unassigned test.
+	tmpl := models.PlanTemplate{
+		Name:    "labelled",
+		Release: "scylla-2026.2",
+		Owner:   "alice",
+		Assignments: map[string]models.AssignmentValue{
+			"tier1/longevity-200gb": {Assignee: "bob", Options: &models.EntityOptions{Labels: []string{"blocker"}}},
+			"tier2/longevity-100gb": {Assignee: "$owner", Options: &models.EntityOptions{Labels: []string{"needs-triage"}}},
+		},
+	}
+
+	req, warnings, err := svc.BuildCreateRequest(context.Background(), tmpl)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+	assert.Equal(t, map[string]models.EntityOptions{
+		"t2": {Labels: []string{"blocker"}},
+		"t3": {Labels: []string{"needs-triage"}},
+	}, req.Options)
+	// The $owner test still carries labels but no assignee.
+	assert.Equal(t, map[string]string{"t2": "u2"}, req.Assignments)
+}
+
+func TestPlannerService_BuildCreateRequest_GroupLabelFansOut(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	// A group entry's labels attach to each enabled member test (t1, t2).
+	tmpl := models.PlanTemplate{
+		Name:    "grouplabel",
+		Release: "scylla-2026.2",
+		Owner:   "alice",
+		Assignments: map[string]models.AssignmentValue{
+			"tier1": {Assignee: "bob", Options: &models.EntityOptions{Labels: []string{"smoke"}}},
+		},
+	}
+
+	req, _, err := svc.BuildCreateRequest(context.Background(), tmpl)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]models.EntityOptions{
+		"t1": {Labels: []string{"smoke"}},
+		"t2": {Labels: []string{"smoke"}},
+	}, req.Options)
+}
+
+func TestPlannerService_BuildTemplate_IncludesLabels(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	// The plan stores options as a JSON string keyed by entity UUID.
+	plan := models.ReleasePlan{
+		ID: "p1", ReleaseID: "rel-1", Owner: "u1",
+		Tests:           []string{"t1", "t2"},
+		AssigneeMapping: map[string]string{"t2": "u2"},
+		Options:         `{"t1":{"labels":["needs-triage"]},"t2":{"labels":["blocker","smoke"]}}`,
+	}
+
+	tmpl, err := svc.BuildTemplate(context.Background(), plan)
+	require.NoError(t, err)
+	// Assigned test carries its labels; unassigned test keeps labels under $owner.
+	assert.Equal(t, models.AssignmentValue{
+		Assignee: "bob",
+		Options:  &models.EntityOptions{Labels: []string{"blocker", "smoke"}},
+	}, tmpl.Assignments["Tier 1/longevity-200gb"])
+	assert.Equal(t, models.AssignmentValue{
+		Assignee: "$owner",
+		Options:  &models.EntityOptions{Labels: []string{"needs-triage"}},
+	}, tmpl.Assignments["Tier 1/longevity-100gb"])
+}
+
+func TestPlannerService_BuildUpdateRequest_LabelAddMergesWithCurrent(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	// t2 already has "blocker"; --label adds "smoke" → merged set is sent.
+	plan := models.ReleasePlan{
+		ID: "p1", ReleaseID: "rel-1", Owner: "u1",
+		Tests:   []string{"t2"},
+		Options: `{"t2":{"labels":["blocker"]}}`,
+	}
+	diff, warnings, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		LabelsAdd: map[string][]string{"tier1/longevity-200gb": {"smoke"}},
+	})
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+	assert.Equal(t, map[string]models.EntityOptions{
+		"t2": {Labels: []string{"blocker", "smoke"}},
+	}, diff.OptionsSet)
+	assert.Nil(t, diff.OptionsRemove)
+}
+
+func TestPlannerService_BuildUpdateRequest_LabelAddAddsMembership(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	// Labelling a test not yet in the plan adds it (membership follows labels).
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1", Owner: "u1", Tests: []string{"t1"}}
+	diff, _, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		LabelsAdd: map[string][]string{"tier2/longevity-100gb": {"smoke"}},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"t3"}, diff.TestsAdd)
+	assert.Equal(t, map[string]models.EntityOptions{"t3": {Labels: []string{"smoke"}}}, diff.OptionsSet)
+}
+
+func TestPlannerService_BuildUpdateRequest_UnlabelRemovesAllEmitsOptionsRemove(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	// Removing the only label clears the entity's option bag via options_remove.
+	plan := models.ReleasePlan{
+		ID: "p1", ReleaseID: "rel-1", Owner: "u1",
+		Tests:   []string{"t2"},
+		Options: `{"t2":{"labels":["blocker"]}}`,
+	}
+	diff, _, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		LabelsRemove: map[string][]string{"tier1/longevity-200gb": {"blocker"}},
+	})
+	require.NoError(t, err)
+	assert.Nil(t, diff.OptionsSet)
+	assert.Equal(t, []string{"t2"}, diff.OptionsRemove)
+}
+
+func TestPlannerService_BuildUpdateRequest_FileAssignmentsCarryLabels(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	// The template-style assignments map may carry labels (applied additively).
+	plan := models.ReleasePlan{ID: "p1", ReleaseID: "rel-1", Owner: "u1", Tests: []string{"t2"}}
+	diff, _, err := svc.BuildUpdateRequest(context.Background(), plan, models.PlanUpdateSpec{
+		Assignments: map[string]models.AssignmentValue{
+			"tier1/longevity-200gb": {Assignee: "bob", Options: &models.EntityOptions{Labels: []string{"smoke"}}},
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"t2": "u2"}, diff.AssigneeMappingSet)
+	assert.Equal(t, map[string]models.EntityOptions{"t2": {Labels: []string{"smoke"}}}, diff.OptionsSet)
 }

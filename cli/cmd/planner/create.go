@@ -50,6 +50,7 @@ are reported and omitted, and the plan is created anyway.`,
 	cmd.Flags().String("target-version", "", "Target version")
 	cmd.Flags().String("view-id", "", "Existing view UUID to attach (optional)")
 	cmd.Flags().StringArray("assign", nil, "Assignment as entity=username (use $owner to leave unassigned, repeatable)")
+	cmd.Flags().StringArray("label", nil, "Label as entity=label, added to the entity's options (repeatable)")
 
 	parent.AddCommand(cmd)
 }
@@ -150,24 +151,79 @@ func overlayFlags(cmd *cobra.Command, tmpl *models.PlanTemplate) error {
 		}
 		tmpl.Assignments = merged
 	}
+	if cmd.Flags().Changed("label") {
+		labels, _ := cmd.Flags().GetStringArray("label")
+		merged, err := parseLabels(labels, tmpl.Assignments)
+		if err != nil {
+			return err
+		}
+		tmpl.Assignments = merged
+	}
 	return nil
 }
 
-// parseAssignments parses repeatable "entity=username" flag values, merging
-// them onto base (which may be nil). The entity key may contain "/" but not
-// "=", so the first "=" separates entity from username.
-func parseAssignments(raw []string, base map[string]string) (map[string]string, error) {
-	out := map[string]string{}
-	for k, v := range base {
-		out[k] = v
-	}
+// parseAssignments parses repeatable "entity=username" flag values, merging the
+// assignee onto base (which may be nil), preserving any existing labels. The
+// entity key may contain "/" but not "=", so the first "=" separates entity
+// from username.
+func parseAssignments(raw []string, base map[string]models.AssignmentValue) (map[string]models.AssignmentValue, error) {
+	out := cloneAssignments(base)
 	for _, a := range raw {
 		entity, user, ok := strings.Cut(a, "=")
 		entity, user = strings.TrimSpace(entity), strings.TrimSpace(user)
 		if !ok || entity == "" || user == "" {
 			return nil, fmt.Errorf("invalid --assign %q: expected entity=username", a)
 		}
-		out[entity] = user
+		v := out[entity]
+		v.Assignee = user
+		out[entity] = v
 	}
 	return out, nil
+}
+
+// parseLabels parses repeatable "entity=label" flag values, appending each
+// label to the entity's options on base (which may be nil), preserving any
+// existing assignee. Duplicate labels for an entity are ignored.
+func parseLabels(raw []string, base map[string]models.AssignmentValue) (map[string]models.AssignmentValue, error) {
+	out := cloneAssignments(base)
+	for _, a := range raw {
+		entity, label, ok := strings.Cut(a, "=")
+		entity, label = strings.TrimSpace(entity), strings.TrimSpace(label)
+		if !ok || entity == "" || label == "" {
+			return nil, fmt.Errorf("invalid --label %q: expected entity=label", a)
+		}
+		v := out[entity]
+		if v.Options == nil {
+			v.Options = &models.EntityOptions{}
+		}
+		if !containsString(v.Options.Labels, label) {
+			v.Options.Labels = append(v.Options.Labels, label)
+		}
+		out[entity] = v
+	}
+	return out, nil
+}
+
+// cloneAssignments deep-copies an assignments map (including each entry's
+// options) so flag overlays never mutate the value loaded from --file.
+func cloneAssignments(base map[string]models.AssignmentValue) map[string]models.AssignmentValue {
+	out := make(map[string]models.AssignmentValue, len(base))
+	for k, v := range base {
+		nv := models.AssignmentValue{Assignee: v.Assignee}
+		if v.Options != nil {
+			nv.Options = &models.EntityOptions{Labels: append([]string(nil), v.Options.Labels...)}
+		}
+		out[k] = nv
+	}
+	return out
+}
+
+// containsString reports whether s contains v.
+func containsString(s []string, v string) bool {
+	for _, x := range s {
+		if x == v {
+			return true
+		}
+	}
+	return false
 }

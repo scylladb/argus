@@ -1,10 +1,76 @@
 package models
 
 import (
+	"encoding/json"
 	"sort"
 	"strconv"
 	"strings"
 )
+
+// ---------------------------------------------------------------------------
+// Per-entity options (labels) and assignment values
+// ---------------------------------------------------------------------------
+
+// EntityOptions is the per-entity option bag attached to a plan entry, keyed by
+// the entity (test or group) it applies to. It mirrors the object stored in the
+// backend plan's `options` column (serialised there as JSON). Currently it only
+// carries free-form labels.
+type EntityOptions struct {
+	Labels []string `json:"labels,omitempty"`
+}
+
+// AssignmentValue is the value of an entry in an assignments map: the assignee
+// username (or [OwnerMarker] for an entity that is in the plan but unassigned)
+// plus optional per-entity [EntityOptions] (labels).
+//
+// On input it accepts either a bare string — the assignee, for backward
+// compatibility with the original string-valued assignments map — or the full
+// object form. It always marshals as an object so emitted templates carry
+// labels; an entity may carry labels while unassigned (assignee "$owner").
+type AssignmentValue struct {
+	Assignee string         `json:"assignee,omitempty"`
+	Options  *EntityOptions `json:"options,omitempty"`
+}
+
+// UnmarshalJSON accepts either a bare assignee string (back-compat) or the full
+// object form.
+func (a *AssignmentValue) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err == nil {
+		a.Assignee = s
+		a.Options = nil
+		return nil
+	}
+	// Alias avoids recursing into this UnmarshalJSON for the object form.
+	type alias AssignmentValue
+	var v alias
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	*a = AssignmentValue(v)
+	return nil
+}
+
+// Labels returns the assignment's labels, or nil when no options are set.
+func (a AssignmentValue) Labels() []string {
+	if a.Options == nil {
+		return nil
+	}
+	return a.Options.Labels
+}
+
+// ParsePlanOptions parses a [ReleasePlan.Options] JSON string into a map keyed
+// by entity UUID. An empty string yields an empty (non-nil) map.
+func ParsePlanOptions(raw string) (map[string]EntityOptions, error) {
+	out := map[string]EntityOptions{}
+	if strings.TrimSpace(raw) == "" {
+		return out, nil
+	}
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
 
 // ---------------------------------------------------------------------------
 // ReleasePlan – mirrors argus.backend.models.plan.ArgusReleasePlan
@@ -28,15 +94,19 @@ type ReleasePlan struct {
 	Participants    []string          `json:"participants"`
 	TargetVersion   string            `json:"target_version"`
 	AssigneeMapping map[string]string `json:"assignee_mapping"`
-	ReleaseID       string            `json:"release_id"`
-	Tests           []string          `json:"tests"`
-	Groups          []string          `json:"groups"`
-	ViewID          string            `json:"view_id"`
-	CreatedFrom     string            `json:"created_from"`
-	Completed       bool              `json:"completed"`
-	CreationTime    string            `json:"creation_time"`
-	LastUpdated     string            `json:"last_updated"`
-	EndsAt          string            `json:"ends_at"`
+	// Options is the per-entity option bag (labels) keyed by entity UUID,
+	// serialised by the backend as a JSON string (ArgusReleasePlan.options is a
+	// Text column). Parse it with [ParsePlanOptions]; empty means no options.
+	Options      string   `json:"options"`
+	ReleaseID    string   `json:"release_id"`
+	Tests        []string `json:"tests"`
+	Groups       []string `json:"groups"`
+	ViewID       string   `json:"view_id"`
+	CreatedFrom  string   `json:"created_from"`
+	Completed    bool     `json:"completed"`
+	CreationTime string   `json:"creation_time"`
+	LastUpdated  string   `json:"last_updated"`
+	EndsAt       string   `json:"ends_at"`
 }
 
 // ReleasePlanList is the response payload for the plans-for-release endpoint.
@@ -79,8 +149,11 @@ type CreatePlanRequest struct {
 	Tests         []string          `json:"tests"`
 	Groups        []string          `json:"groups"`
 	Assignments   map[string]string `json:"assignments"`
-	ViewID        string            `json:"view_id,omitempty"`
-	CreatedFrom   string            `json:"created_from,omitempty"`
+	// Options maps an entity UUID to its per-entity options (labels); it is
+	// serialised server-side into the plan's options column.
+	Options     map[string]EntityOptions `json:"options,omitempty"`
+	ViewID      string                   `json:"view_id,omitempty"`
+	CreatedFrom string                   `json:"created_from,omitempty"`
 }
 
 // PlanDiffRequest is the JSON body for POST /planning/plan/update.
@@ -111,6 +184,13 @@ type PlanDiffRequest struct {
 	// Map diff for assignee_mapping.
 	AssigneeMappingSet    map[string]string `json:"assignee_mapping_set,omitempty"`
 	AssigneeMappingRemove []string          `json:"assignee_mapping_remove,omitempty"`
+
+	// Map diff for per-entity options (labels). The server applies removes
+	// before sets, then prunes to the plan's current entities. OptionsSet
+	// replaces an entity's whole option bag (the CLI merges current + label
+	// deltas before sending); OptionsRemove drops the entity's options entirely.
+	OptionsSet    map[string]EntityOptions `json:"options_set,omitempty"`
+	OptionsRemove []string                 `json:"options_remove,omitempty"`
 }
 
 // ---------------------------------------------------------------------------
@@ -202,17 +282,19 @@ func (g ReleaseGrid) String() string {
 //
 // Assignments is the single source of plan membership: it is keyed by a
 // group-qualified "group/test" reference (or a group name, which fans out to
-// its enabled tests) and valued by a username. The literal [OwnerMarker]
-// ("$owner") denotes a test that belongs to the plan but is not assigned to a
-// specific participant — it is placed in the plan's tests but left out of the
-// assignee mapping. Owner is a username.
+// its enabled tests) and valued by an [AssignmentValue] carrying the assignee
+// username plus optional labels. On input the value may also be a bare
+// username string. The literal [OwnerMarker] ("$owner") as the assignee denotes
+// a test that belongs to the plan but is not assigned to a specific participant
+// — it is placed in the plan's tests but left out of the assignee mapping (it
+// may still carry labels). Owner is a username.
 type PlanTemplate struct {
-	Name          string            `json:"name"`
-	Description   string            `json:"description,omitempty"`
-	Release       string            `json:"release"`
-	TargetVersion string            `json:"target_version,omitempty"`
-	Owner         string            `json:"owner,omitempty"`
-	Assignments   map[string]string `json:"assignments,omitempty"`
+	Name          string                     `json:"name"`
+	Description   string                     `json:"description,omitempty"`
+	Release       string                     `json:"release"`
+	TargetVersion string                     `json:"target_version,omitempty"`
+	Owner         string                     `json:"owner,omitempty"`
+	Assignments   map[string]AssignmentValue `json:"assignments,omitempty"`
 }
 
 // OwnerMarker is the sentinel assignment value meaning "include this test in
@@ -257,8 +339,19 @@ type PlanUpdateSpec struct {
 	AssigneeMappingRemove []string          `json:"assignee_mapping_remove,omitempty"`
 
 	// Assignments is the template-style membership+assignment map, merged into
-	// the deltas above (see the type doc). "$owner" clears an assignee.
-	Assignments map[string]string `json:"assignments,omitempty"`
+	// the deltas above (see the type doc). "$owner" clears an assignee. Its
+	// per-entity labels are applied as additive label deltas (merged with
+	// LabelsAdd) rather than replacing an entity's existing labels.
+	Assignments map[string]AssignmentValue `json:"assignments,omitempty"`
+
+	// LabelsAdd/LabelsRemove are additive per-entity label deltas keyed by a
+	// test/group reference (groups fan out to their enabled tests). They are
+	// merged with the entity's current labels client-side and sent to the
+	// backend as a full options_set/options_remove diff. Adding a label to an
+	// entity not yet in the plan also adds the entity (membership follows
+	// labels, like assignment).
+	LabelsAdd    map[string][]string `json:"labels_add,omitempty"`
+	LabelsRemove map[string][]string `json:"labels_remove,omitempty"`
 }
 
 // ResolvedPlan is a human-readable view of a [ReleasePlan] with every UUID
@@ -271,23 +364,23 @@ type PlanUpdateSpec struct {
 // resolved against the release gridview/users list falls back to its raw UUID
 // rather than being omitted, so the output is lossless.
 type ResolvedPlan struct {
-	ID            string            `json:"id"`
-	Key           string            `json:"key"`
-	Name          string            `json:"name"`
-	Description   string            `json:"description,omitempty"`
-	Release       string            `json:"release"`
-	TargetVersion string            `json:"target_version,omitempty"`
-	Owner         string            `json:"owner"`
-	Participants  []string          `json:"participants,omitempty"`
-	Tests         []string          `json:"tests"`
-	Groups        []string          `json:"groups,omitempty"`
-	Assignments   map[string]string `json:"assignments,omitempty"`
-	Completed     bool              `json:"completed"`
-	ViewID        string            `json:"view_id,omitempty"`
-	CreatedFrom   string            `json:"created_from,omitempty"`
-	CreationTime  string            `json:"creation_time,omitempty"`
-	LastUpdated   string            `json:"last_updated,omitempty"`
-	EndsAt        string            `json:"ends_at,omitempty"`
+	ID            string                     `json:"id"`
+	Key           string                     `json:"key"`
+	Name          string                     `json:"name"`
+	Description   string                     `json:"description,omitempty"`
+	Release       string                     `json:"release"`
+	TargetVersion string                     `json:"target_version,omitempty"`
+	Owner         string                     `json:"owner"`
+	Participants  []string                   `json:"participants,omitempty"`
+	Tests         []string                   `json:"tests"`
+	Groups        []string                   `json:"groups,omitempty"`
+	Assignments   map[string]AssignmentValue `json:"assignments,omitempty"`
+	Completed     bool                       `json:"completed"`
+	ViewID        string                     `json:"view_id,omitempty"`
+	CreatedFrom   string                     `json:"created_from,omitempty"`
+	CreationTime  string                     `json:"creation_time,omitempty"`
+	LastUpdated   string                     `json:"last_updated,omitempty"`
+	EndsAt        string                     `json:"ends_at,omitempty"`
 }
 
 // Headers implements output.Tabular for ResolvedPlan. Text output is a curated
