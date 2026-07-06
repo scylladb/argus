@@ -23,6 +23,9 @@ class ArgusReleasePlan(Model):
     last_updated = columns.DateTime(default=lambda: datetime.datetime.now(tz=datetime.UTC))
     ends_at = columns.DateTime()
     key = columns.Text()
+    # JSON-serialized per-entity options keyed by test/group UUID, e.g.
+    # {"<test-or-group-uuid>": {"labels": ["label-a", "label-b"]}}
+    options = columns.Text()
 
     def __eq__(self, other):
         if isinstance(other, ArgusReleasePlan):
