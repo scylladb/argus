@@ -7,14 +7,18 @@ This module processes SCT events by:
 3. Generating embeddings using BGE-Small-EN model
 4. Storing embeddings in separate tables (sct_error_event_embedding or sct_critical_event_embedding)
 5. Removing processed events from unprocessed queue
+
+Deduplication is scoped to a single run: an event's embedding is compared only
+against the embeddings already stored for the same ``run_id``. Because ``run_id``
+is the partition key of both embedding tables, this is a single-partition read,
+so exact cosine over the partition is cheap and correct regardless of the total
+table size.
 """
 
-from collections import namedtuple
 import logging
 import time
 from pathlib import Path
 from threading import Event
-from typing import Literal
 from uuid import UUID
 from datetime import datetime
 
@@ -31,9 +35,8 @@ from argusAI.utils.event_message_sanitizer import MessageSanitizer
 LOGGER = logging.getLogger(__name__)
 SLEEP_INTERVAL = 1  # Sleep for 1 second between processing cycles
 
-SimilarEvent = namedtuple("SimilarEvent", ["run_id", "ts", "embedding", "added_ts"])
-Severity = Literal["ERROR", "CRITICAL"]
-RunIdStr = str
+# Maximum cosine distance for two embeddings to be considered duplicates.
+DUPLICATE_DISTANCE_THRESHOLD = 0.05
 
 
 class BgeSmallEnEmbeddingModel(ONNXMiniLM_L6_V2):
@@ -71,8 +74,6 @@ class EventSimilarityProcessorV2:
         self.db = ScyllaConnection()
         self.processed_count = 0
         self.error_count = 0
-        self.cache_clear_timer = 3600
-        self.similar_event_cache: dict[tuple[RunIdStr, Severity], list[SimilarEvent]] = {}
         self.keyspace = (
             SCTCriticalEventEmbedding.__keyspace__
             or SCTErrorEventEmbedding.__keyspace__
@@ -80,83 +81,45 @@ class EventSimilarityProcessorV2:
         )
         LOGGER.info("EventSimilarityProcessorV2 initialized")
 
-    def _clear_stale_cache(self):
-        def cmp_ts(ts: datetime | float):
-            match ts:
-                case float():
-                    return ts + self.cache_clear_timer > time.time()
-                case datetime():
-                    return ts.timestamp() + self.cache_clear_timer > time.time()
-
-        for key in list(self.similar_event_cache.keys()):
-            full_cache = [event for event in self.similar_event_cache[key] if cmp_ts(getattr(event, "added_ts", 0.0))]
-            if len(full_cache) == 0:
-                self.similar_event_cache.pop(key)
-
-    @staticmethod
-    def is_stale(cache: SimilarEvent, rows: list[SimilarEvent]):
-        for row in rows:
-            if cache.run_id == row.run_id and cache.ts.timestamp() == row.ts.timestamp():
-                return True
-        return False
-
-    def _get_potential_duplicate_rows(self, embedding: list[float], table_name: str) -> list[SimilarEvent]:
-        query = f"""
-                SELECT run_id, ts, embedding
-                FROM {self.keyspace}.{table_name}
-                ORDER BY embedding ANN OF ?
-                LIMIT ?
-            """
+    def _get_potential_duplicate_rows(self, run_id: UUID, table_name: str) -> list:
+        """Read every embedding already stored for ``run_id`` (single-partition read)."""
+        query = f"SELECT ts, embedding FROM {self.keyspace}.{table_name} WHERE run_id = ?"
         bound_statement = self.db.session.prepare(query)
-        result_rows = list(self.db.session.execute(bound_statement, parameters=[embedding, 1000]))
+        return list(self.db.session.execute(bound_statement, parameters=[run_id]))
 
-        return result_rows
-
-    def _merge_cache(
-        self, run_id: str, severity: str, result_rows: list[SimilarEvent]
-    ) -> tuple[list[SimilarEvent], list[SimilarEvent]]:
-        # Remove stale entries from cache if they exist in VS set
-        cached_events = self.similar_event_cache.get((run_id, severity), [])
-        new_cache = [cached for cached in cached_events if not self.is_stale(cached, result_rows)]
-        self.similar_event_cache[(run_id, severity)] = new_cache
-        rows = [*new_cache, *result_rows]
-
-        return rows, new_cache
-
-    def _mark_event_is_duplicate(self, run_id: str, ts: datetime, severity: str, embedding: list[float]) -> bool:
+    def _mark_event_is_duplicate(self, run_id: UUID, ts: datetime, severity: str, embedding: list[float]) -> bool:
         try:
             table_name = (
                 SCTErrorEventEmbedding.__table_name__
                 if severity == "ERROR"
                 else SCTCriticalEventEmbedding.__table_name__
             )
-            rows, _ = self._merge_cache(run_id, severity, self._get_potential_duplicate_rows(embedding, table_name))
-            if len(rows) > 0:
-                dupe_embeddings = [
-                    (row, cosine(array(row.embedding, dtype=float), array(embedding, dtype=float)))
-                    for row in rows
-                    if row.run_id == run_id
-                ]
-                if len(dupe_embeddings) == 0:
-                    return False
-                dupe_embedding = next((row for row, distance in dupe_embeddings if -0.05 < distance < 0.05), None)
-                if not dupe_embedding:
-                    return False
-                q = f"SELECT event_id FROM {SCTEvent.__table_name__} WHERE run_id = ? AND severity = ? AND ts = ?"
-                bound_q = self.db.session.prepare(q)
-                dupe = self.db.session.execute(
-                    bound_q, parameters=(dupe_embedding.run_id, severity, dupe_embedding.ts)
-                ).one()
-                dupe_id = dupe.event_id
-                self._clear_unprocessed_event(SCTUnprocessedEvent.__table_name__, run_id, severity, ts)
-                update_query = f"UPDATE {SCTEvent.__table_name__} SET duplicate_id = ? WHERE run_id = ? AND severity = ? AND ts = ?"
-                self.db.execute(update_query, (dupe_id, run_id, severity, ts))
-                return True
+            query_vector = array(embedding, dtype=float)
+            dupe = next(
+                (
+                    row
+                    for row in self._get_potential_duplicate_rows(run_id, table_name)
+                    if row.ts != ts  # never match the event against its own stored embedding
+                    and cosine(array(row.embedding, dtype=float), query_vector) < DUPLICATE_DISTANCE_THRESHOLD
+                ),
+                None,
+            )
+            if not dupe:
+                return False
+            q = f"SELECT event_id FROM {SCTEvent.__table_name__} WHERE run_id = ? AND severity = ? AND ts = ?"
+            bound_q = self.db.session.prepare(q)
+            dupe_event = self.db.session.execute(bound_q, parameters=(run_id, severity, dupe.ts)).one()
+            if dupe_event is None:
+                return False
+            self._clear_unprocessed_event(SCTUnprocessedEvent.__table_name__, run_id, severity, ts)
+            update_query = (
+                f"UPDATE {SCTEvent.__table_name__} SET duplicate_id = ? WHERE run_id = ? AND severity = ? AND ts = ?"
+            )
+            self.db.execute(update_query, (dupe_event.event_id, run_id, severity, ts))
+            return True
         except Exception as e:
             LOGGER.error(f"Duplicate search error: {e}", exc_info=True)
             raise
-
-        return False
 
     def _clear_unprocessed_event(self, table_name: str, run_id: str, severity: str, ts: datetime):
         delete_query = f"DELETE FROM {table_name} WHERE run_id = ? AND severity = ? AND ts = ?"
@@ -167,13 +130,9 @@ class EventSimilarityProcessorV2:
         Main processing loop that continuously reads and processes unprocessed events.
         """
         LOGGER.info("Starting event processing loop")
-        next_clear_ts = time.time() + self.cache_clear_timer
         while not self.stop_event.is_set():
             try:
                 batch_processed = self._process_batch()
-                if time.time() > next_clear_ts:
-                    self._clear_stale_cache()
-                    next_clear_ts = time.time() + self.cache_clear_timer
                 if batch_processed == 0:
                     # No events to process, sleep before next iteration
                     time.sleep(SLEEP_INTERVAL)
@@ -227,7 +186,6 @@ class EventSimilarityProcessorV2:
                     f"DELETE FROM {SCTUnprocessedEvent.__table_name__} WHERE run_id = ? AND severity = ? AND ts = ?"
                 )
                 self.db.execute(delete_query, (event_row.run_id, event_row.severity, event_row.ts))
-        self._clear_stale_cache()
         return processed_in_batch
 
     def _process_single_event(self, run_id: UUID, severity: str, ts: datetime) -> None:
@@ -297,12 +255,6 @@ class EventSimilarityProcessorV2:
             insert_query = f"INSERT INTO {self.keyspace}.{table_name} (run_id, ts, embedding) VALUES (?, ?, ?)"
             self.db.execute(insert_query, (run_id, ts, embedding))
             LOGGER.debug(f"Stored embedding in {table_name} for event: run_id={run_id}, ts={ts}")
-            # cache event until it is visible in VS
-            cache = self.similar_event_cache.get((run_id, severity))
-            if not cache:
-                cache: list[SimilarEvent] = []
-            cache.append(SimilarEvent(run_id, ts, embedding, time.time()))
-            self.similar_event_cache[(run_id, severity)] = cache
         except Exception as e:
             LOGGER.error(f"Failed to store embedding for event (run_id={run_id}): {e}", exc_info=True)
             raise

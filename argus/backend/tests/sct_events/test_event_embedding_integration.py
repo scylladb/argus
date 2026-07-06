@@ -5,7 +5,7 @@ These tests verify the complete flow from event creation to embedding storage.
 """
 
 from dataclasses import asdict
-from datetime import datetime, UTC
+from datetime import datetime, timedelta, UTC
 from uuid import uuid4
 
 from argus.backend.models.argus_ai import SCTErrorEventEmbedding, SCTCriticalEventEmbedding
@@ -258,6 +258,82 @@ def test_event_to_embedding_flow_should_process_multiple_events_into_separate_ta
     # Step 7: Verify all unprocessed events were removed for THIS test run
     remaining_unprocessed = list(SCTUnprocessedEvent.filter(run_id=run_req.run_id).all())
     assert len(remaining_unprocessed) == 0, "All unprocessed events should be removed"
+
+
+def test_dedup_marks_same_run_twin_despite_large_other_run_population(
+    client_service: ClientService,
+    sct_service: SCTService,
+    testrun_service: TestRunService,
+    fake_test: ArgusTest,
+    embedding_processor: EventSimilarityProcessorV2,
+    monkeypatch,
+):
+    """Regression (ARGUS-171): a same-run near-identical ERROR event is marked as a duplicate even when
+    the embedding table holds a large population of unrelated other-run events.
+
+    The old candidate fetch used a global ``ORDER BY embedding ANN OF ? LIMIT 1000``; once the table
+    grew past 1000 rows the current run's own twin was crowded out of the top-1000 by other runs and
+    never matched. The fix reads the run's partition directly (``WHERE run_id = ?``), so the twin is
+    always found regardless of total table size. This test exercises the real partition read against a
+    real ScyllaDB with >1000 other-run embeddings present.
+    """
+    processor = embedding_processor
+
+    # Deterministic embedding so two identical messages collapse to the same 384-dim vector.
+    query_vector = [1.0] + [0.0] * 383
+    monkeypatch.setattr(processor, "embedding_model", lambda texts: [list(query_vector) for _ in texts])
+
+    # Seed a large population of OTHER-run embeddings (> the old ANN LIMIT of 1000) identical to the
+    # query vector — the exact condition that used to crowd out the same-run twin.
+    keyspace = SCTErrorEventEmbedding.__keyspace__
+    insert = processor.db.session.prepare(
+        f"INSERT INTO {keyspace}.{SCTErrorEventEmbedding.__table_name__} (run_id, ts, embedding) VALUES (?, ?, ?)"
+    )
+    base_ts = datetime.now(tz=UTC)
+    for i in range(1100):
+        processor.db.session.execute(insert, (uuid4(), base_ts + timedelta(microseconds=i), list(query_vector)))
+
+    # Create a run and submit two near-identical ERROR events (same message → same embedding).
+    run_type, run_req = get_fake_test_run(fake_test)
+    client_service.submit_run(run_type, asdict(run_req))
+    message = "NoHostAvailable Unable to complete the operation ConnectionShutdown Bad file descriptor"
+    first_ts = datetime.now(tz=UTC).timestamp()
+    for offset in (0, 1):
+        sct_service.submit_event(
+            str(run_req.run_id),
+            {
+                "message": message,
+                "run_id": run_req.run_id,
+                "severity": SCTEventSeverity.ERROR.value,
+                "ts": first_ts + offset,
+                "event_type": "DatabaseEvent",
+            },
+        )
+
+    # Process until this run's unprocessed events are drained.
+    max_attempts = 20
+    for _ in range(max_attempts):
+        processor._process_batch(batch_size=100)
+        remaining = list(
+            SCTUnprocessedEvent.filter(run_id=run_req.run_id, severity=SCTEventSeverity.ERROR.value).all()
+        )
+        if len(remaining) == 0:
+            break
+    else:
+        raise AssertionError(f"Failed to process this test's events after {max_attempts} attempts")
+
+    # Exactly one event is canonical; the other points to it via duplicate_id (order-independent).
+    events = list(SCTEvent.filter(run_id=run_req.run_id, severity=SCTEventSeverity.ERROR.value).all())
+    assert len(events) == 2, "Both ERROR events should exist in SCTEvent"
+    canonical = [e for e in events if e.duplicate_id is None]
+    duplicates = [e for e in events if e.duplicate_id is not None]
+    assert len(canonical) == 1, "Exactly one event should remain canonical"
+    assert len(duplicates) == 1, "The near-identical twin should be marked as a duplicate"
+    assert duplicates[0].duplicate_id == canonical[0].event_id, "duplicate_id must point at the canonical event"
+
+    # Only the canonical event is embedded for this run; the duplicate is not stored.
+    run_embeddings = list(SCTErrorEventEmbedding.filter(run_id=run_req.run_id).all())
+    assert len(run_embeddings) == 1, "Only one embedding should be stored for the run (duplicate skipped)"
 
 
 def test_event_to_embedding_flow_should_handle_processing_errors_gracefully(
