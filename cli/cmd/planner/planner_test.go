@@ -88,22 +88,72 @@ func TestParseAssignments(t *testing.T) {
 
 	t.Run("merges over base and supports / in entity", func(t *testing.T) {
 		t.Parallel()
-		base := map[string]string{"tier1/a": "alice", "keep": "carol"}
+		base := map[string]models.AssignmentValue{
+			"tier1/a": {Assignee: "alice"},
+			"keep":    {Assignee: "carol"},
+		}
 		got, err := parseAssignments([]string{"tier1/a=bob", "tier2/b=dave"}, base)
 		require.NoError(t, err)
-		assert.Equal(t, map[string]string{
-			"tier1/a": "bob",  // flag overrides base
-			"tier2/b": "dave", // new entry
-			"keep":    "carol",
+		assert.Equal(t, map[string]models.AssignmentValue{
+			"tier1/a": {Assignee: "bob"},  // flag overrides base
+			"tier2/b": {Assignee: "dave"}, // new entry
+			"keep":    {Assignee: "carol"},
 		}, got)
 		// Base is not mutated.
-		assert.Equal(t, "alice", base["tier1/a"])
+		assert.Equal(t, "alice", base["tier1/a"].Assignee)
+	})
+
+	t.Run("preserves existing labels when setting assignee", func(t *testing.T) {
+		t.Parallel()
+		base := map[string]models.AssignmentValue{
+			"tier1/a": {Options: &models.EntityOptions{Labels: []string{"smoke"}}},
+		}
+		got, err := parseAssignments([]string{"tier1/a=bob"}, base)
+		require.NoError(t, err)
+		assert.Equal(t, models.AssignmentValue{
+			Assignee: "bob",
+			Options:  &models.EntityOptions{Labels: []string{"smoke"}},
+		}, got["tier1/a"])
 	})
 
 	t.Run("rejects malformed values", func(t *testing.T) {
 		t.Parallel()
 		for _, bad := range []string{"noequals", "=bob", "entity=", "  =  "} {
 			_, err := parseAssignments([]string{bad}, nil)
+			require.Errorf(t, err, "expected error for %q", bad)
+		}
+	})
+}
+
+func TestParseLabels(t *testing.T) {
+	t.Parallel()
+
+	t.Run("appends labels preserving assignee and dedupes", func(t *testing.T) {
+		t.Parallel()
+		base := map[string]models.AssignmentValue{"tier1/a": {Assignee: "bob"}}
+		got, err := parseLabels([]string{"tier1/a=smoke", "tier1/a=smoke", "tier1/a=blocker"}, base)
+		require.NoError(t, err)
+		assert.Equal(t, models.AssignmentValue{
+			Assignee: "bob",
+			Options:  &models.EntityOptions{Labels: []string{"smoke", "blocker"}},
+		}, got["tier1/a"])
+		// Base is not mutated.
+		assert.Nil(t, base["tier1/a"].Options)
+	})
+
+	t.Run("labels an unassigned entity", func(t *testing.T) {
+		t.Parallel()
+		got, err := parseLabels([]string{"tier1/a=needs-triage"}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, models.AssignmentValue{
+			Options: &models.EntityOptions{Labels: []string{"needs-triage"}},
+		}, got["tier1/a"])
+	})
+
+	t.Run("rejects malformed values", func(t *testing.T) {
+		t.Parallel()
+		for _, bad := range []string{"noequals", "=lbl", "entity=", "  =  "} {
+			_, err := parseLabels([]string{bad}, nil)
 			require.Errorf(t, err, "expected error for %q", bad)
 		}
 	})
@@ -119,7 +169,7 @@ func TestOverlayFlags_FlagOverFilePrecedence(t *testing.T) {
 	tmpl := models.PlanTemplate{
 		Name:        "FileName",
 		Release:     "scylla-2026.2",
-		Assignments: map[string]string{"x": "u1"},
+		Assignments: map[string]models.AssignmentValue{"x": {Assignee: "u1"}},
 	}
 
 	require.NoError(t, overlayFlags(cmd, &tmpl))
@@ -129,7 +179,10 @@ func TestOverlayFlags_FlagOverFilePrecedence(t *testing.T) {
 	// Release is untouched (flag not set).
 	assert.Equal(t, "scylla-2026.2", tmpl.Release)
 	// Assignment x overridden, y added.
-	assert.Equal(t, map[string]string{"x": "u2", "y": "u3"}, tmpl.Assignments)
+	assert.Equal(t, map[string]models.AssignmentValue{
+		"x": {Assignee: "u2"},
+		"y": {Assignee: "u3"},
+	}, tmpl.Assignments)
 }
 
 func TestOverlayFlags_UnsetScalarsKeepFileValues(t *testing.T) {
@@ -148,7 +201,7 @@ func TestUpdate_FlagsRegistered(t *testing.T) {
 	for _, name := range []string{
 		"name", "description", "owner", "target-version", "completed",
 		"add-test", "remove-test", "add-group", "remove-group",
-		"assign", "unassign", "file",
+		"assign", "unassign", "label", "unlabel", "file",
 	} {
 		assert.NotNilf(t, cmd.Flags().Lookup(name), "expected --%s flag", name)
 	}
@@ -169,6 +222,8 @@ func TestOverlayUpdateFlags_OnlySetScalarsAndAugmentedCollections(t *testing.T) 
 	require.NoError(t, cmd.Flags().Set("remove-group", "tier2"))
 	require.NoError(t, cmd.Flags().Set("unassign", "tier1/c"))
 	require.NoError(t, cmd.Flags().Set("assign", "x=u2"))
+	require.NoError(t, cmd.Flags().Set("label", "tier1/a=smoke"))
+	require.NoError(t, cmd.Flags().Set("unlabel", "tier1/d=stale"))
 
 	// Pre-populate from a file: name is overridden, description is preserved,
 	// and collections are augmented.
@@ -178,6 +233,7 @@ func TestOverlayUpdateFlags_OnlySetScalarsAndAugmentedCollections(t *testing.T) 
 		Description:        &desc,
 		TestsAdd:           []string{"tier1/a"},
 		AssigneeMappingSet: map[string]string{"x": "u1"},
+		LabelsAdd:          map[string][]string{"tier1/a": {"blocker"}},
 	}
 
 	require.NoError(t, overlayUpdateFlags(cmd, &spec))
@@ -197,6 +253,9 @@ func TestOverlayUpdateFlags_OnlySetScalarsAndAugmentedCollections(t *testing.T) 
 	assert.Equal(t, []string{"tier1/c"}, spec.AssigneeMappingRemove)
 	// Assignment x overridden onto the file's map.
 	assert.Equal(t, map[string]string{"x": "u2"}, spec.AssigneeMappingSet)
+	// Label deltas augment the file's labels_add and populate labels_remove.
+	assert.Equal(t, map[string][]string{"tier1/a": {"blocker", "smoke"}}, spec.LabelsAdd)
+	assert.Equal(t, map[string][]string{"tier1/d": {"stale"}}, spec.LabelsRemove)
 }
 
 func TestOverlayUpdateFlags_NoFlagsLeavesSpecEmpty(t *testing.T) {

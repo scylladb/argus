@@ -529,11 +529,13 @@ func (s *PlannerService) BuildCreateRequest(ctx context.Context, tmpl models.Pla
 	// Assignments are the single source of plan membership. Each entry's
 	// targets join the tests list; a specific assignee also enters the
 	// assignee mapping. "$owner" leaves the test unassigned (in tests only).
+	// Labels attach to each resolved entity regardless of assignee.
 	// Missing entity → warn and omit; bad user → abort.
 	tests := newOrderedSet()
 	assignments := map[string]string{}
+	options := map[string]models.EntityOptions{}
 	var missing []string
-	for entityRef, userRef := range tmpl.Assignments {
+	for entityRef, value := range tmpl.Assignments {
 		ids, err := s.resolveAssignmentTargets(ctx, entityRef, releaseID)
 		if err != nil {
 			if errors.Is(err, ErrEntityNotFound) {
@@ -544,19 +546,23 @@ func (s *PlannerService) BuildCreateRequest(ctx context.Context, tmpl models.Pla
 			return models.CreatePlanRequest{}, nil, err
 		}
 
-		if userRef == models.OwnerMarker {
-			for _, id := range ids {
-				tests.add(id)
+		labels := value.Labels()
+		for _, id := range ids {
+			tests.add(id)
+			if len(labels) > 0 {
+				options[id] = models.EntityOptions{Labels: append([]string(nil), labels...)}
 			}
+		}
+
+		if value.Assignee == "" || value.Assignee == models.OwnerMarker {
 			continue
 		}
 
-		userID, err := s.ResolveUserID(ctx, userRef)
+		userID, err := s.ResolveUserID(ctx, value.Assignee)
 		if err != nil {
-			return models.CreatePlanRequest{}, nil, fmt.Errorf("assignee %q: %w", userRef, err)
+			return models.CreatePlanRequest{}, nil, fmt.Errorf("assignee %q: %w", value.Assignee, err)
 		}
 		for _, id := range ids {
-			tests.add(id)
 			assignments[id] = userID
 		}
 	}
@@ -600,6 +606,7 @@ func (s *PlannerService) BuildCreateRequest(ctx context.Context, tmpl models.Pla
 		Tests:         nonNilSlice(tests.items),
 		Groups:        []string{},
 		Assignments:   assignments,
+		Options:       options,
 	}, warnings, nil
 }
 
@@ -650,8 +657,12 @@ func (s *PlannerService) BuildTemplate(ctx context.Context, plan models.ReleaseP
 	if err != nil {
 		return models.PlanTemplate{}, err
 	}
+	planOptions, err := models.ParsePlanOptions(plan.Options)
+	if err != nil {
+		return models.PlanTemplate{}, fmt.Errorf("parsing plan options: %w", err)
+	}
 
-	assignments := map[string]string{}
+	assignments := map[string]models.AssignmentValue{}
 
 	// Assigned tests carry their assignee username.
 	for entityID, userID := range plan.AssigneeMapping {
@@ -663,17 +674,24 @@ func (s *PlannerService) BuildTemplate(ctx context.Context, plan models.ReleaseP
 		if !ok {
 			continue
 		}
-		assignments[name] = u.Username
+		assignments[name] = models.AssignmentValue{
+			Assignee: u.Username,
+			Options:  entityOptions(planOptions, entityID),
+		}
 	}
 
-	// Remaining plan tests are unassigned: mark them "$owner".
+	// Remaining plan tests are unassigned: mark them "$owner" (they may still
+	// carry labels).
 	for _, t := range plan.Tests {
 		name, ok := entityQualifiedName(grid, t)
 		if !ok {
 			continue
 		}
 		if _, exists := assignments[name]; !exists {
-			assignments[name] = models.OwnerMarker
+			assignments[name] = models.AssignmentValue{
+				Assignee: models.OwnerMarker,
+				Options:  entityOptions(planOptions, t),
+			}
 		}
 	}
 
@@ -701,6 +719,17 @@ func entityQualifiedName(grid models.GridView, id string) (string, bool) {
 		return g.Name, true
 	}
 	return "", false
+}
+
+// entityOptions returns a copy of the per-entity options for id, or nil when
+// the entity has no options (so an emitted [models.AssignmentValue] omits the
+// options object entirely).
+func entityOptions(options map[string]models.EntityOptions, id string) *models.EntityOptions {
+	opt, ok := options[id]
+	if !ok || len(opt.Labels) == 0 {
+		return nil
+	}
+	return &models.EntityOptions{Labels: append([]string(nil), opt.Labels...)}
 }
 
 // releaseNameByID returns the name of the release with the given UUID.
@@ -747,6 +776,8 @@ func (s *PlannerService) BuildResolvedPlan(ctx context.Context, plan models.Rele
 	if err != nil {
 		releaseName = plan.ReleaseID
 	}
+	// Options are non-fatal too: a malformed blob simply yields no labels.
+	planOptions, _ := models.ParsePlanOptions(plan.Options)
 
 	username := func(id string) string {
 		if u, ok := users[id]; ok {
@@ -773,12 +804,15 @@ func (s *PlannerService) BuildResolvedPlan(ctx context.Context, plan models.Rele
 	for _, g := range plan.Groups {
 		groups = append(groups, entityName(g))
 	}
-	var assignments map[string]string
+	var assignments map[string]models.AssignmentValue
 	for entityID, userID := range plan.AssigneeMapping {
 		if assignments == nil {
-			assignments = map[string]string{}
+			assignments = map[string]models.AssignmentValue{}
 		}
-		assignments[entityName(entityID)] = username(userID)
+		assignments[entityName(entityID)] = models.AssignmentValue{
+			Assignee: username(userID),
+			Options:  entityOptions(planOptions, entityID),
+		}
 	}
 
 	return models.ResolvedPlan{
@@ -955,15 +989,30 @@ func (s *PlannerService) BuildUpdateRequest(ctx context.Context, plan models.Rel
 	// Assignment application. The raw --assign / assignee_mapping_set map and the
 	// template-style assignments map share identical merge/patch semantics: each
 	// keyed test/group joins the plan (membership follows assignment) and is
-	// (re)assigned, or is cleared — keeping the test — when the value is "$owner".
-	// Membership is ensured so the backend, which drops mapping entries for tests
-	// not in plan.tests, keeps the assignment instead of silently discarding it.
-	// A reference matching nothing in the release is reported and skipped; an
-	// ambiguous one aborts so the user can disambiguate.
+	// (re)assigned, or is cleared — keeping the test — when the assignee is
+	// "$owner". A template assignment value may also carry labels, applied as
+	// additive label deltas (see below). Membership is ensured so the backend,
+	// which drops mapping entries for tests not in plan.tests, keeps the
+	// assignment instead of silently discarding it. A reference matching nothing
+	// in the release is reported and skipped; an ambiguous one aborts so the user
+	// can disambiguate.
 	var assignSet map[string]string
 	assignRemove := newOrderedSet()
-	applyAssignments := func(m map[string]string) error {
-		for entityRef, userRef := range m {
+	// Additive per-entity label deltas keyed by entity UUID, merged with the
+	// entity's current labels below into a full options_set/options_remove diff.
+	labelAdd := map[string]*orderedSet{}
+	labelRemove := map[string]*orderedSet{}
+	addLabel := func(store map[string]*orderedSet, id, label string) {
+		set, ok := store[id]
+		if !ok {
+			set = newOrderedSet()
+			store[id] = set
+		}
+		set.add(label)
+	}
+
+	applyAssignments := func(m map[string]models.AssignmentValue) error {
+		for entityRef, value := range m {
 			ids, err := s.resolveAssignmentTargets(ctx, entityRef, releaseID)
 			if err != nil {
 				if errors.Is(err, ErrEntityNotFound) {
@@ -973,29 +1022,46 @@ func (s *PlannerService) BuildUpdateRequest(ctx context.Context, plan models.Rel
 				return err
 			}
 			for _, id := range ids {
-				addTests.add(id) // membership follows assignment
+				addTests.add(id) // membership follows assignment/labels
 			}
-			if userRef == models.OwnerMarker {
+			for _, label := range value.Labels() {
+				for _, id := range ids {
+					addLabel(labelAdd, id, label)
+				}
+			}
+			switch value.Assignee {
+			case "":
+				// Labels-only entry: no assignee change.
+			case models.OwnerMarker:
 				for _, id := range ids {
 					assignRemove.add(id)
 				}
-				continue
-			}
-			userID, err := s.ResolveUserID(ctx, userRef)
-			if err != nil {
-				return fmt.Errorf("assignee %q: %w", userRef, err)
-			}
-			for _, id := range ids {
-				if assignSet == nil {
-					assignSet = map[string]string{}
+			default:
+				userID, err := s.ResolveUserID(ctx, value.Assignee)
+				if err != nil {
+					return fmt.Errorf("assignee %q: %w", value.Assignee, err)
 				}
-				assignSet[id] = userID
+				for _, id := range ids {
+					if assignSet == nil {
+						assignSet = map[string]string{}
+					}
+					assignSet[id] = userID
+				}
 			}
 		}
 		return nil
 	}
-	if err := applyAssignments(spec.AssigneeMappingSet); err != nil {
-		return models.PlanDiffRequest{}, nil, err
+
+	// --assign feeds the string-valued assignee_mapping_set (assignee only,
+	// unchanged behaviour): adapt it to the shared applier.
+	if len(spec.AssigneeMappingSet) > 0 {
+		converted := make(map[string]models.AssignmentValue, len(spec.AssigneeMappingSet))
+		for ref, user := range spec.AssigneeMappingSet {
+			converted[ref] = models.AssignmentValue{Assignee: user}
+		}
+		if err := applyAssignments(converted); err != nil {
+			return models.PlanDiffRequest{}, nil, err
+		}
 	}
 
 	// Assignment removal (--unassign): resolve each entity (group fans out) to
@@ -1014,7 +1080,51 @@ func (s *PlannerService) BuildUpdateRequest(ctx context.Context, plan models.Rel
 	if err := applyAssignments(spec.Assignments); err != nil {
 		return models.PlanDiffRequest{}, nil, err
 	}
+
+	// --label adds labels (membership follows labels, like --assign); --unlabel
+	// removes them without adding membership. Missing → warn/skip; ambiguous →
+	// abort.
+	for entityRef, labels := range spec.LabelsAdd {
+		ids, err := s.resolveAssignmentTargets(ctx, entityRef, releaseID)
+		if err != nil {
+			if errors.Is(err, ErrEntityNotFound) {
+				warnings = append(warnings, fmt.Sprintf("label target %q is not in this release — skipped", entityRef))
+				continue
+			}
+			return models.PlanDiffRequest{}, nil, err
+		}
+		for _, id := range ids {
+			addTests.add(id) // membership follows labels
+			for _, label := range labels {
+				addLabel(labelAdd, id, label)
+			}
+		}
+	}
+	for entityRef, labels := range spec.LabelsRemove {
+		ids, err := s.resolveAssignmentTargets(ctx, entityRef, releaseID)
+		if err != nil {
+			if errors.Is(err, ErrEntityNotFound) {
+				warnings = append(warnings, fmt.Sprintf("unlabel target %q is not in this release — skipped", entityRef))
+				continue
+			}
+			return models.PlanDiffRequest{}, nil, err
+		}
+		for _, id := range ids {
+			for _, label := range labels {
+				addLabel(labelRemove, id, label)
+			}
+		}
+	}
+
 	diff.AssigneeMappingSet = assignSet
+
+	// Merge label deltas with the plan's current labels into a full per-entity
+	// options diff. An entity whose label set becomes empty is dropped via
+	// options_remove; the backend applies removes before sets and prunes to the
+	// plan's surviving entities.
+	if err := s.applyOptionsDiff(&diff, plan, labelAdd, labelRemove); err != nil {
+		return models.PlanDiffRequest{}, nil, err
+	}
 
 	if len(addTests.items) > 0 {
 		diff.TestsAdd = addTests.items
@@ -1039,6 +1149,74 @@ func (s *PlannerService) BuildUpdateRequest(ctx context.Context, plan models.Rel
 	}
 
 	return diff, warnings, nil
+}
+
+// applyOptionsDiff merges the additive per-entity label deltas (labelAdd,
+// labelRemove, both keyed by entity UUID) with the plan's current labels and
+// populates diff.OptionsSet / diff.OptionsRemove. For each touched entity the
+// final label set is current ∪ adds − removes: a non-empty set is sent as a
+// full options_set (the backend replaces the entity's option bag), while a set
+// that becomes empty is sent as options_remove when the entity currently has
+// options (otherwise it is a no-op and omitted).
+func (s *PlannerService) applyOptionsDiff(diff *models.PlanDiffRequest, plan models.ReleasePlan, labelAdd, labelRemove map[string]*orderedSet) error {
+	if len(labelAdd) == 0 && len(labelRemove) == 0 {
+		return nil
+	}
+	current, err := models.ParsePlanOptions(plan.Options)
+	if err != nil {
+		return fmt.Errorf("parsing plan options: %w", err)
+	}
+
+	touched := map[string]struct{}{}
+	for id := range labelAdd {
+		touched[id] = struct{}{}
+	}
+	for id := range labelRemove {
+		touched[id] = struct{}{}
+	}
+
+	var optionsSet map[string]models.EntityOptions
+	var optionsRemove []string
+	for id := range touched {
+		removeSet := map[string]bool{}
+		if rem, ok := labelRemove[id]; ok {
+			for _, l := range rem.items {
+				removeSet[l] = true
+			}
+		}
+		final := newOrderedSet()
+		for _, l := range current[id].Labels {
+			if !removeSet[l] {
+				final.add(l)
+			}
+		}
+		if add, ok := labelAdd[id]; ok {
+			for _, l := range add.items {
+				if !removeSet[l] {
+					final.add(l)
+				}
+			}
+		}
+
+		if len(final.items) == 0 {
+			// Only emit a removal when the entity actually had options today.
+			if _, had := current[id]; had {
+				optionsRemove = append(optionsRemove, id)
+			}
+			continue
+		}
+		if optionsSet == nil {
+			optionsSet = map[string]models.EntityOptions{}
+		}
+		optionsSet[id] = models.EntityOptions{Labels: final.items}
+	}
+	sort.Strings(optionsRemove)
+
+	diff.OptionsSet = optionsSet
+	if len(optionsRemove) > 0 {
+		diff.OptionsRemove = optionsRemove
+	}
+	return nil
 }
 
 // participantDeltas computes participants_add/remove so the stored participants

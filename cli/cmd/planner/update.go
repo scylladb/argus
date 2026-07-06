@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/scylladb/argus/cli/internal/cmdctx"
 	"github.com/scylladb/argus/cli/internal/logging"
@@ -58,7 +59,13 @@ and skipped.
 
 Participants are not edited directly — they are derived from the assignments,
 so anyone assigned (other than the owner) is a participant. A user dropped from
-their last assigned test is removed from participants automatically.`,
+their last assigned test is removed from participants automatically.
+
+Labels are per-entity options: --label entity=label adds a label (adding the
+test to the plan if missing, like --assign), and --unlabel entity=label removes
+one. Label changes merge with the entity's current labels; the "assignments"
+map in --file may also carry per-entity "options": {"labels": [...]}, applied as
+additive label deltas. An entity may carry labels while unassigned.`,
 		RunE: runUpdate,
 	}
 
@@ -75,6 +82,8 @@ their last assigned test is removed from participants automatically.`,
 	cmd.Flags().StringArray("remove-group", nil, "Remove a stored group by name (repeatable)")
 	cmd.Flags().StringArray("assign", nil, "Assignment as entity=username, adding the test if missing (use $owner to clear) (repeatable)")
 	cmd.Flags().StringArray("unassign", nil, "Clear assignee for entity, keeping the test (repeatable)")
+	cmd.Flags().StringArray("label", nil, "Add label as entity=label, adding the test if missing (repeatable)")
+	cmd.Flags().StringArray("unlabel", nil, "Remove label as entity=label from the entity's options (repeatable)")
 	_ = cmd.MarkFlagRequired("plan-id")
 
 	parent.AddCommand(cmd)
@@ -193,11 +202,68 @@ func overlayUpdateFlags(cmd *cobra.Command, spec *models.PlanUpdateSpec) error {
 
 	if cmd.Flags().Changed("assign") {
 		assigns, _ := cmd.Flags().GetStringArray("assign")
-		merged, err := parseAssignments(assigns, spec.AssigneeMappingSet)
+		merged, err := parseAssignStrings(assigns, spec.AssigneeMappingSet)
 		if err != nil {
 			return err
 		}
 		spec.AssigneeMappingSet = merged
 	}
+	if cmd.Flags().Changed("label") {
+		labels, _ := cmd.Flags().GetStringArray("label")
+		merged, err := parseLabelDeltas(labels, spec.LabelsAdd, "--label")
+		if err != nil {
+			return err
+		}
+		spec.LabelsAdd = merged
+	}
+	if cmd.Flags().Changed("unlabel") {
+		labels, _ := cmd.Flags().GetStringArray("unlabel")
+		merged, err := parseLabelDeltas(labels, spec.LabelsRemove, "--unlabel")
+		if err != nil {
+			return err
+		}
+		spec.LabelsRemove = merged
+	}
 	return nil
+}
+
+// parseAssignStrings parses repeatable "entity=username" flag values into a
+// string-valued assignee map, merging onto base (which may be nil). It keeps
+// --assign's original behaviour: it feeds assignee_mapping_set (assignee only,
+// no labels). The first "=" separates entity from username.
+func parseAssignStrings(raw []string, base map[string]string) (map[string]string, error) {
+	out := map[string]string{}
+	for k, v := range base {
+		out[k] = v
+	}
+	for _, a := range raw {
+		entity, user, ok := strings.Cut(a, "=")
+		entity, user = strings.TrimSpace(entity), strings.TrimSpace(user)
+		if !ok || entity == "" || user == "" {
+			return nil, fmt.Errorf("invalid --assign %q: expected entity=username", a)
+		}
+		out[entity] = user
+	}
+	return out, nil
+}
+
+// parseLabelDeltas parses repeatable "entity=label" flag values into a
+// per-entity label list, merging onto base (which may be nil). flagName is used
+// in error text (e.g. "--label"). Duplicate labels for an entity are ignored.
+func parseLabelDeltas(raw []string, base map[string][]string, flagName string) (map[string][]string, error) {
+	out := map[string][]string{}
+	for k, v := range base {
+		out[k] = append([]string(nil), v...)
+	}
+	for _, a := range raw {
+		entity, label, ok := strings.Cut(a, "=")
+		entity, label = strings.TrimSpace(entity), strings.TrimSpace(label)
+		if !ok || entity == "" || label == "" {
+			return nil, fmt.Errorf("invalid %s %q: expected entity=label", flagName, a)
+		}
+		if !containsString(out[entity], label) {
+			out[entity] = append(out[entity], label)
+		}
+	}
+	return out, nil
 }
