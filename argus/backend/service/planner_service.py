@@ -22,6 +22,15 @@ from argus.backend.util.common import chunk
 LOGGER = logging.getLogger(__name__)
 
 
+class EntityOptions(TypedDict, total=False):
+    """Per-entity options attached to a plan, keyed by test/group UUID."""
+    labels: list[str]
+
+
+# Mapping of entity UUID (test or group) -> its options
+PlanOptions = dict[str, EntityOptions]
+
+
 @dataclass(frozen=True, init=True, repr=True, kw_only=True)
 class CreatePlanPayload:
     name: str
@@ -33,7 +42,7 @@ class CreatePlanPayload:
     tests: list[str]
     groups: list[str]
     assignments: dict[str, str]
-    options: dict[str, Any] = field(default_factory=dict)
+    options: PlanOptions = field(default_factory=dict)
     view_id: Optional[str] = None
     created_from: Optional[str] = None
 
@@ -57,7 +66,7 @@ class TempPlanPayload:
     last_updated: str
     ends_at: str
     created_from: Optional[str]
-    options: dict[str, Any] = None
+    options: PlanOptions = None
     view_id: Optional[str] = None
 
 
@@ -83,7 +92,7 @@ class PlanDiffPayload:
     assignee_mapping_set: dict[str, str] = field(default_factory=dict)
     assignee_mapping_remove: list[str] = field(default_factory=list)
     # Dict diff for per-entity options (keyed by test/group UUID)
-    options_set: dict[str, Any] = field(default_factory=dict)
+    options_set: PlanOptions = field(default_factory=dict)
     options_remove: list[str] = field(default_factory=list)
 
 
