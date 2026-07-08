@@ -258,7 +258,7 @@ class PlanningService:
         # Apply assignee_mapping diff (remove first, then set)
         current_mapping = dict(plan.assignee_mapping or {})
         for key in plan_request.assignee_mapping_remove:
-            current_mapping.pop(key, None)
+            current_mapping.pop(UUID(key), None)
         mapping = {UUID(k): UUID(v) for k, v in plan_request.assignee_mapping_set.items()}
         for key, value in mapping.items():
             current_mapping[key] = value
