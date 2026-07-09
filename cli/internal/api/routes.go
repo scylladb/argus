@@ -67,6 +67,11 @@ const (
 	GroupExplode    = "/api/v1/planning/group/%s/explode"         // GET    – explode a group into its tests (group_id)
 	Gridview        = "/api/v1/planning/release/%s/gridview"      // GET    – release structure (enabled tests + groups) (release_id)
 
+	// Jenkins test-execution routes (testrun_api blueprint)
+	JenkinsParams    = "/api/v1/jenkins/params"     // POST – fetch a job's params (body {buildId, buildNumber}); buildId is build_system_id
+	JenkinsBuild     = "/api/v1/jenkins/build"      // POST – trigger a build (body {buildId, parameters}); returns {queueItem}
+	JenkinsQueueInfo = "/api/v1/jenkins/queue_info" // GET  – queue/build info (query param queueItem)
+
 	// Name-resolution routes
 	Releases = "/api/v1/releases" // GET – enabled releases (id/name); query param all=1 for every release
 	Users    = "/api/v1/users"    // GET – users keyed by id with username/full_name/email
