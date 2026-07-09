@@ -275,6 +275,62 @@ func TestPlannerService_ResolveEntityID_GroupByBuildSystemID(t *testing.T) {
 	assert.Equal(t, "g1", id)
 }
 
+func TestPlannerService_ResolveTestBuildID_GroupQualified(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	bsid, err := svc.ResolveTestBuildID(context.Background(), "scylla-2026.2", "tier1/longevity-100gb")
+	require.NoError(t, err)
+	assert.Equal(t, "scylla-2026.2/tier1/longevity-100gb", bsid)
+}
+
+func TestPlannerService_ResolveTestBuildID_BareUnique(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	// longevity-200gb is unique across groups → resolves by bare name.
+	bsid, err := svc.ResolveTestBuildID(context.Background(), "scylla-2026.2", "longevity-200gb")
+	require.NoError(t, err)
+	assert.Equal(t, "scylla-2026.2/tier1/longevity-200gb", bsid)
+}
+
+func TestPlannerService_ResolveTestBuildID_UnknownRelease(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	_, err := svc.ResolveTestBuildID(context.Background(), "scylla-9999", "longevity-200gb")
+	require.Error(t, err)
+}
+
+func TestPlannerService_ResolveTestBuildID_UnknownTest(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	_, err := svc.ResolveTestBuildID(context.Background(), "scylla-2026.2", "does-not-exist")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, services.ErrEntityNotFound)
+}
+
+func TestPlannerService_ResolveTestBuildID_AmbiguousAborts(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	// longevity-100gb exists in two groups → ambiguous bare name must abort.
+	_, err := svc.ResolveTestBuildID(context.Background(), "scylla-2026.2", "longevity-100gb")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, services.ErrAmbiguousEntity)
+}
+
+func TestPlannerService_ResolveTestBuildID_GroupRejected(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, resolveMux(t))
+
+	// A group reference is not a single test and must be rejected (no fan-out).
+	_, err := svc.ResolveTestBuildID(context.Background(), "scylla-2026.2", "tier1")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, services.ErrEntityNotFound)
+}
+
 func TestPlannerService_ExpandGroup_EnabledOnly(t *testing.T) {
 	t.Parallel()
 	svc := newPlannerSvc(t, gridviewMux(t, nil))
