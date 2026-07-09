@@ -147,7 +147,7 @@ func runExecuteSingle(cmd *cobra.Command, _ []string) error {
 		return out.Write(models.NewKVTabular(merged))
 	}
 
-	queueItem, err := svc.TriggerBuild(ctx, buildID, merged)
+	queueItem, nextBuildNumber, err := svc.TriggerBuildWithNumber(ctx, buildID, merged)
 	if err != nil {
 		log.Error().Err(err).Str("build_id", buildID).Msg("failed to trigger build")
 		return err
@@ -155,7 +155,15 @@ func runExecuteSingle(cmd *cobra.Command, _ []string) error {
 	log.Info().Str("build_id", buildID).Int("queue_item", queueItem).Msg("build triggered successfully")
 
 	if !wait {
-		return out.Write(models.NewKVTabular(models.JenkinsBuildResponse{QueueItem: queueItem}))
+		cfg := cmdctx.ConfigFrom(ctx)
+		result := models.ExecutedBuild{
+			BuildID:     buildID,
+			QueueItem:   queueItem,
+			BuildNumber: nextBuildNumber,
+			ArgusURL:    argusRunURL(cfg.URL, buildID, nextBuildNumber),
+		}
+		log.Info().Str("build_id", buildID).Int("build_number", nextBuildNumber).Str("argus_url", result.ArgusURL).Msg("build queued")
+		return out.Write(models.NewKVTabular(result))
 	}
 
 	timeout, _ := cmd.Flags().GetDuration("wait-timeout")
