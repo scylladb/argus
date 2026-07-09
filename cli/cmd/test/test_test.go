@@ -1,6 +1,7 @@
 package test
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -85,4 +86,37 @@ func TestBuildNumberFlag(t *testing.T) {
 	n := buildNumberFlag(cmd)
 	require.NotNil(t, n)
 	assert.Equal(t, 42, *n)
+}
+
+// newAddressedCmd builds a command carrying the shared addressing flags so
+// resolveBuildID's flag handling can be unit-tested in isolation.
+func newAddressedCmd() *cobra.Command {
+	cmd := &cobra.Command{Use: "execute"}
+	addAddressingFlags(cmd)
+	return cmd
+}
+
+func TestResolveBuildID_ExplicitBuildID(t *testing.T) {
+	cmd := newAddressedCmd()
+	require.NoError(t, cmd.Flags().Set("build-id", "scylla-2026.2/longevity/longevity-100gb"))
+
+	// --build-id is returned verbatim without any client/cache access.
+	got, err := resolveBuildID(context.Background(), cmd, nil, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "scylla-2026.2/longevity/longevity-100gb", got)
+}
+
+func TestResolveBuildID_NoModeSupplied(t *testing.T) {
+	// Neither --build-id nor --release/--test → error before any resolution.
+	_, err := resolveBuildID(context.Background(), newAddressedCmd(), nil, nil)
+	require.Error(t, err)
+}
+
+func TestResolveBuildID_ReleaseWithoutTest(t *testing.T) {
+	cmd := newAddressedCmd()
+	require.NoError(t, cmd.Flags().Set("release", "scylla-2026.2"))
+
+	// --release without --test is incomplete and must not attempt resolution.
+	_, err := resolveBuildID(context.Background(), cmd, nil, nil)
+	require.Error(t, err)
 }

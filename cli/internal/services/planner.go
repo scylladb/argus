@@ -339,7 +339,36 @@ func (s *PlannerService) ResolveEntityID(ctx context.Context, ref, releaseID str
 		}
 		return g.ID, nil
 	}
-	return resolveTest(grid, ref)
+	t, err := resolveTestEntity(grid, ref)
+	if err != nil {
+		return "", err
+	}
+	return t.ID, nil
+}
+
+// ResolveTestBuildID resolves a release name and a single test reference to the
+// test's build_system_id (the Jenkins job path the test-execution endpoints
+// consume). The test reference uses the same priority as [ResolveEntityID]:
+// exact build_system_id, group-qualified "group/test", then unique bare name.
+//
+// Unlike assignment resolution, a reference that names a group (not a single
+// test) is rejected — a build targets exactly one job — with an
+// [ErrEntityNotFound]-wrapped message. An ambiguous test reference aborts with
+// [ErrAmbiguousEntity] and a candidate list so the user can disambiguate.
+func (s *PlannerService) ResolveTestBuildID(ctx context.Context, releaseRef, testRef string) (string, error) {
+	releaseID, err := s.ResolveReleaseID(ctx, releaseRef)
+	if err != nil {
+		return "", err
+	}
+	grid, err := s.GetReleaseStructure(ctx, releaseID)
+	if err != nil {
+		return "", err
+	}
+	t, err := resolveTestEntity(grid, testRef)
+	if err != nil {
+		return "", err
+	}
+	return t.BuildSystemID, nil
 }
 
 // ExpandGroup resolves a group reference and returns the UUIDs of its enabled
@@ -387,13 +416,14 @@ func findGroup(grid models.GridView, ref string) (models.GridEntity, error) {
 	}
 }
 
-// resolveTest implements the test resolution priority described on
-// [PlannerService.ResolveEntityID].
-func resolveTest(grid models.GridView, ref string) (string, error) {
+// resolveTestEntity implements the test resolution priority described on
+// [PlannerService.ResolveEntityID], returning the matched gridview entity so
+// callers can read either its UUID or its build_system_id.
+func resolveTestEntity(grid models.GridView, ref string) (models.GridEntity, error) {
 	// (1) exact build_system_id — globally unique, never ambiguous.
-	for id, t := range grid.Tests {
+	for _, t := range grid.Tests {
 		if t.BuildSystemID == ref {
-			return id, nil
+			return t, nil
 		}
 	}
 
@@ -403,26 +433,26 @@ func resolveTest(grid models.GridView, ref string) (string, error) {
 		g, err := findGroup(grid, groupPart)
 		switch {
 		case err == nil:
-			var matches []string
-			for id, t := range grid.Tests {
+			var matches []models.GridEntity
+			for _, t := range grid.Tests {
 				if t.GroupID == g.ID && strings.EqualFold(t.Name, testName) {
-					matches = append(matches, id)
+					matches = append(matches, t)
 				}
 			}
 			if len(matches) == 1 {
 				return matches[0], nil
 			}
 			if len(matches) > 1 {
-				return "", fmt.Errorf("%w: ambiguous test %q within group %q (%d matches)", ErrAmbiguousEntity, testName, groupPart, len(matches))
+				return models.GridEntity{}, fmt.Errorf("%w: ambiguous test %q within group %q (%d matches)", ErrAmbiguousEntity, testName, groupPart, len(matches))
 			}
-			return "", fmt.Errorf("%w: no test %q in group %q", ErrEntityNotFound, testName, groupPart)
+			return models.GridEntity{}, fmt.Errorf("%w: no test %q in group %q", ErrEntityNotFound, testName, groupPart)
 		case errors.Is(err, ErrEntityNotFound):
 			// The prefix isn't a known group; fall through to bare-name
 			// resolution (the ref may be a plain name that contains a slash).
 		default:
 			// Ambiguous group prefix (or other error): surface it so callers
 			// abort for disambiguation instead of misreporting "test not found".
-			return "", err
+			return models.GridEntity{}, err
 		}
 	}
 
@@ -435,11 +465,11 @@ func resolveTest(grid models.GridView, ref string) (string, error) {
 	}
 	switch len(matches) {
 	case 1:
-		return matches[0].ID, nil
+		return matches[0], nil
 	case 0:
-		return "", fmt.Errorf("%w: no test %q in this release (use build_system_id or group/test)", ErrEntityNotFound, ref)
+		return models.GridEntity{}, fmt.Errorf("%w: no test %q in this release (use build_system_id or group/test)", ErrEntityNotFound, ref)
 	default:
-		return "", fmt.Errorf("%w: ambiguous test %q (%d matches): use build_system_id or group/test\n%s",
+		return models.GridEntity{}, fmt.Errorf("%w: ambiguous test %q (%d matches): use build_system_id or group/test\n%s",
 			ErrAmbiguousEntity, ref, len(matches), formatTestCandidates(matches))
 	}
 }

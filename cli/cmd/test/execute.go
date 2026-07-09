@@ -22,13 +22,19 @@ func registerExecute(parent *cobra.Command) {
 	cmd := &cobra.Command{
 		Use:   "execute",
 		Short: "Trigger a Jenkins test build",
-		Long: `Trigger a build of a test, addressed by its build_system_id (the Jenkins
-job path). Parameters are resolved with the cascade defaults < --file < --param:
-the job's current default parameters are the base, a --file JSON map overrides
-them, and repeatable --param name=value flags override both.
+		Long: `Trigger a build of a test. Parameters are resolved with the cascade
+defaults < --file < --param: the job's current default parameters are the base,
+a --file JSON map overrides them, and repeatable --param name=value flags
+override both.
 
-  # Rebuild with the job's current defaults:
+The test is addressed either by its build_system_id directly, or by a release
+name plus a test reference resolved against that release's gridview:
+
+  # Rebuild with the job's current defaults (by build_system_id):
   argus test execute --build-id scylla-2026.2/longevity/longevity-100gb
+
+  # Same test addressed by release + name:
+  argus test execute --release scylla-2026.2 --test longevity/longevity-100gb
 
   # Override a couple of values on top of the defaults:
   argus test execute --build-id scylla-2026.2/longevity/longevity-100gb \
@@ -45,14 +51,13 @@ your --file/--param values are sent.`,
 		RunE: runExecute,
 	}
 
-	cmd.Flags().StringP("build-id", "b", "", "Test build_system_id (Jenkins job path) (required)")
+	addAddressingFlags(cmd)
 	cmd.Flags().Int("build-number", 0, "Seed default parameters from this build number (default: last build)")
 	cmd.Flags().StringP("file", "f", "", "JSON file with a {name: value} parameter map (\"-\" for stdin)")
 	cmd.Flags().StringArray("param", nil, "Parameter override as name=value (repeatable)")
 	cmd.Flags().Bool("dry-run", false, "Print the merged parameters and exit without triggering a build")
 	cmd.Flags().Bool("wait", false, "Wait for the build to start and report its URL")
 	cmd.Flags().Duration("wait-timeout", 5*time.Minute, "Maximum time to wait when --wait is set")
-	_ = cmd.MarkFlagRequired("build-id")
 
 	parent.AddCommand(cmd)
 }
@@ -66,7 +71,10 @@ func runExecute(cmd *cobra.Command, _ []string) error {
 	c := cmdctx.CacheFrom(ctx)
 	log := logging.For(cmdctx.LoggerFrom(ctx), "test-execute")
 
-	buildID, _ := cmd.Flags().GetString("build-id")
+	buildID, err := resolveBuildID(ctx, cmd, client, c)
+	if err != nil {
+		return err
+	}
 	buildNumber := buildNumberFlag(cmd)
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	wait, _ := cmd.Flags().GetBool("wait")

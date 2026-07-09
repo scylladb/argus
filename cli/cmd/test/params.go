@@ -15,9 +15,13 @@ func registerParams(parent *cobra.Command) {
 	cmd := &cobra.Command{
 		Use:   "params",
 		Short: "Show a Jenkins job's parameters",
-		Long: `Fetch the parameter set for a test, addressed by its build_system_id
-(the Jenkins job path). By default the last build's values are used, falling
-back to the job's default parameter definitions.
+		Long: `Fetch the parameter set for a test. By default the last build's
+values are used, falling back to the job's default parameter definitions.
+
+The test is addressed either by its build_system_id directly, or by a release
+name plus a test reference resolved against that release's gridview:
+  argus test params --build-id scylla-2026.2/longevity/longevity-100gb
+  argus test params --release scylla-2026.2 --test longevity/longevity-100gb
 
 By default only a {name: value} map is emitted, which can be redirected to a
 file and fed straight into 'test execute --file':
@@ -29,10 +33,9 @@ job has no builds and no default definitions, this command fails; use
 		RunE: runParams,
 	}
 
-	cmd.Flags().StringP("build-id", "b", "", "Test build_system_id (Jenkins job path) (required)")
+	addAddressingFlags(cmd)
 	cmd.Flags().Int("build-number", 0, "Seed parameters from this build number (default: last build)")
 	cmd.Flags().Bool("full", false, "Show full parameter details (description, choices) instead of a values map")
-	_ = cmd.MarkFlagRequired("build-id")
 
 	parent.AddCommand(cmd)
 }
@@ -46,7 +49,10 @@ func runParams(cmd *cobra.Command, _ []string) error {
 	c := cmdctx.CacheFrom(ctx)
 	log := logging.For(cmdctx.LoggerFrom(ctx), "test-params")
 
-	buildID, _ := cmd.Flags().GetString("build-id")
+	buildID, err := resolveBuildID(ctx, cmd, client, c)
+	if err != nil {
+		return err
+	}
 	buildNumber := buildNumberFlag(cmd)
 	full, _ := cmd.Flags().GetBool("full")
 	log.Debug().Str("build_id", buildID).Bool("full", full).Msg("fetching job parameters")
