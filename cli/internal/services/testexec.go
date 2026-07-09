@@ -26,7 +26,7 @@ const noBuildsSignal = "#noBuildsAvailable"
 // Default polling behaviour for [TestExecutionService.WaitForBuild].
 const (
 	defaultWaitTimeout  = 5 * time.Minute
-	defaultWaitInterval = 2 * time.Second
+	defaultWaitInterval = 3 * time.Second
 )
 
 // TestExecutionService drives the Jenkins-backed test-execution endpoints:

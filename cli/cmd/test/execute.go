@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -163,8 +164,15 @@ func runExecuteSingle(cmd *cobra.Command, _ []string) error {
 		log.Error().Err(err).Int("queue_item", queueItem).Msg("failed while waiting for build to start")
 		return err
 	}
-	log.Info().Str("build_id", buildID).Str("url", info.URL).Msg("build started")
-	return out.Write(models.NewKVTabular(info))
+	cfg := cmdctx.ConfigFrom(ctx)
+	result := models.StartedBuild{
+		BuildID:     buildID,
+		JenkinsURL:  info.URL,
+		BuildNumber: info.Number,
+		ArgusURL:    argusRunURL(cfg.URL, buildID, info.Number),
+	}
+	log.Info().Str("build_id", buildID).Str("url", info.URL).Str("argus_url", result.ArgusURL).Msg("build started")
+	return out.Write(models.NewKVTabular(result))
 }
 
 // runExecutePlan is the RunE handler for the plan fan-out mode of "test execute"
@@ -251,7 +259,8 @@ func runExecutePlan(cmd *cobra.Command) error {
 
 	if wait {
 		timeout, _ := cmd.Flags().GetDuration("wait-timeout")
-		waitAllBuilds(ctx, svc, results, timeout, log)
+		cfg := cmdctx.ConfigFrom(ctx)
+		waitAllBuilds(ctx, svc, results, cfg.URL, timeout, log)
 	}
 
 	return out.Write(results)
@@ -262,7 +271,9 @@ func runExecutePlan(cmd *cobra.Command) error {
 // batch-wide deadline (timeout) bounds the whole wait; when it elapses the
 // shared context is cancelled and any still-pending builds are marked timed out.
 // results is mutated in place — each goroutine writes only its own index.
-func waitAllBuilds(ctx context.Context, svc *services.TestExecutionService, results models.TriggeredBuilds, timeout time.Duration, log zerolog.Logger) {
+// argusBase is the Argus base URL used to derive each row's Argus run link once
+// its build number is known.
+func waitAllBuilds(ctx context.Context, svc *services.TestExecutionService, results models.TriggeredBuilds, argusBase string, timeout time.Duration, log zerolog.Logger) {
 	waitCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -284,6 +295,7 @@ func waitAllBuilds(ctx context.Context, svc *services.TestExecutionService, resu
 				return
 			}
 			results[i].URL = info.URL
+			results[i].ArgusURL = argusRunURL(argusBase, results[i].BuildSystemID, info.Number)
 			results[i].Status = "started"
 		}(i)
 	}
@@ -309,6 +321,16 @@ func loadParamsFile(cmd *cobra.Command) (map[string]any, error) {
 		return nil, fmt.Errorf("parsing params file (expected a {name: value} object): %w", err)
 	}
 	return params, nil
+}
+
+// argusRunURL builds the stable Argus run link for a build from the configured
+// Argus base URL, the test's build_system_id, and its Jenkins build number.
+// It returns "" when the build number is not yet known (number == 0).
+func argusRunURL(base, buildID string, number int) string {
+	if number == 0 {
+		return ""
+	}
+	return strings.TrimRight(base, "/") + "/test/" + buildID + "/" + strconv.Itoa(number)
 }
 
 // readFileOrStdin returns the contents of the file at path, or of standard
