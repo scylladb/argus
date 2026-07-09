@@ -371,6 +371,127 @@ func (s *PlannerService) ResolveTestBuildID(ctx context.Context, releaseRef, tes
 	return t.BuildSystemID, nil
 }
 
+// LabeledTest is a plan test selected by label: its group-qualified "group/test"
+// reference, the build_system_id the test-execution endpoints consume, and the
+// labels the underlying plan entity carries (for display).
+type LabeledTest struct {
+	Ref           string
+	BuildSystemID string
+	Labels        []string
+}
+
+// ResolveLabeledTests resolves a plan (by UUID or "releaseName#planNumber" key)
+// and a set of labels to the plan's matching tests. A plan entity matches when
+// its labels intersect the requested set (union), or — when matchAll is set —
+// when it carries every requested label. Matching is case-insensitive.
+//
+// A matching test yields its own build_system_id; a matching group fans out to
+// its enabled member tests. Entities no longer present in the release gridview
+// (e.g. since disabled) are skipped. Results are de-duplicated by
+// build_system_id and sorted by reference. When nothing matches, the error
+// lists the labels actually present in the plan so the caller can correct a typo.
+func (s *PlannerService) ResolveLabeledTests(ctx context.Context, planRef string, labels []string, matchAll bool) ([]LabeledTest, error) {
+	if len(labels) == 0 {
+		return nil, fmt.Errorf("at least one label is required")
+	}
+	plan, err := s.GetPlan(ctx, planRef)
+	if err != nil {
+		return nil, err
+	}
+	options, err := models.ParsePlanOptions(plan.Options)
+	if err != nil {
+		return nil, fmt.Errorf("parsing plan options: %w", err)
+	}
+	grid, err := s.GetReleaseStructure(ctx, plan.ReleaseID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Wanted labels, lower-cased for case-insensitive matching.
+	wanted := make(map[string]struct{}, len(labels))
+	for _, l := range labels {
+		wanted[strings.ToLower(l)] = struct{}{}
+	}
+
+	// Collect every distinct label seen in the plan, so an empty match can steer
+	// the user toward a valid one.
+	available := newOrderedSet()
+
+	results := make([]LabeledTest, 0)
+	seen := map[string]struct{}{} // dedup by build_system_id
+	appendTest := func(t models.GridEntity, entityLabels []string) {
+		if _, dup := seen[t.BuildSystemID]; dup {
+			return
+		}
+		seen[t.BuildSystemID] = struct{}{}
+		results = append(results, LabeledTest{
+			Ref:           t.Group + "/" + t.Name,
+			BuildSystemID: t.BuildSystemID,
+			Labels:        append([]string(nil), entityLabels...),
+		})
+	}
+
+	for entityID, opt := range options {
+		for _, l := range opt.Labels {
+			available.add(l)
+		}
+		if !labelsMatch(opt.Labels, wanted, matchAll) {
+			continue
+		}
+		if t, ok := grid.Tests[entityID]; ok {
+			appendTest(t, opt.Labels)
+			continue
+		}
+		if _, ok := grid.Groups[entityID]; ok {
+			// A labelled group fans out to its enabled member tests. Iterate the
+			// gridview directly by group UUID (ExpandGroup resolves by name).
+			for _, t := range grid.Tests {
+				if t.GroupID == entityID && t.Enabled {
+					appendTest(t, opt.Labels)
+				}
+			}
+		}
+		// Entity absent from the gridview (disabled/removed): skip.
+	}
+
+	if len(results) == 0 {
+		if len(available.items) == 0 {
+			return nil, fmt.Errorf("plan %q has no labelled tests", planRef)
+		}
+		sort.Strings(available.items)
+		return nil, fmt.Errorf("no tests in plan %q match the requested labels; available labels: %s",
+			planRef, strings.Join(available.items, ", "))
+	}
+
+	sort.Slice(results, func(i, j int) bool { return results[i].Ref < results[j].Ref })
+	return results, nil
+}
+
+// labelsMatch reports whether an entity's labels satisfy the wanted set. With
+// matchAll it requires every wanted label to be present (intersection == wanted);
+// otherwise a single overlap suffices (union). Comparison is case-insensitive
+// via the lower-cased wanted set.
+func labelsMatch(entityLabels []string, wanted map[string]struct{}, matchAll bool) bool {
+	if matchAll {
+		have := make(map[string]struct{}, len(entityLabels))
+		for _, l := range entityLabels {
+			have[strings.ToLower(l)] = struct{}{}
+		}
+		for w := range wanted {
+			if _, ok := have[w]; !ok {
+				return false
+			}
+		}
+		return true
+	}
+	for _, l := range entityLabels {
+		if _, ok := wanted[strings.ToLower(l)]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 // ExpandGroup resolves a group reference and returns the UUIDs of its enabled
 // member tests, taken from the gridview's enabled-only tests map (deliberately
 // not testByGroup / explode, which include disabled tests). The result is

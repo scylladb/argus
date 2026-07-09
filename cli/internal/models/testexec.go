@@ -2,6 +2,7 @@ package models
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 )
 
@@ -116,4 +117,43 @@ func paramValueString(v any) string {
 		return ""
 	}
 	return string(b)
+}
+
+// ---------------------------------------------------------------------------
+// Fan-out (label-based) execution results
+// ---------------------------------------------------------------------------
+
+// TriggeredBuild is one row of a fan-out execution result: the test reference
+// and its build_system_id, the Jenkins queue item the build was scheduled as,
+// its resolved URL (populated only when --wait is used and the build started),
+// and a human-readable status.
+type TriggeredBuild struct {
+	Test          string `json:"test"`
+	BuildSystemID string `json:"build_system_id"`
+	QueueItem     int    `json:"queue_item,omitempty"`
+	URL           string `json:"url,omitempty"`
+	Status        string `json:"status"`
+}
+
+// TriggeredBuilds is a fan-out execution result set. It implements
+// output.Tabular for text rendering while JSON output marshals the slice
+// directly.
+type TriggeredBuilds []TriggeredBuild
+
+// Headers implements output.Tabular.
+func (TriggeredBuilds) Headers() []string {
+	return []string{"Test", "Build System ID", "Queue Item", "URL", "Status"}
+}
+
+// Rows implements output.Tabular.
+func (b TriggeredBuilds) Rows() [][]string {
+	rows := make([][]string, 0, len(b))
+	for _, r := range b {
+		queue := ""
+		if r.QueueItem != 0 {
+			queue = strconv.Itoa(r.QueueItem)
+		}
+		rows = append(rows, []string{r.Test, r.BuildSystemID, queue, r.URL, r.Status})
+	}
+	return rows
 }
