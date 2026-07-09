@@ -438,11 +438,20 @@ def build_jenkins_job():
 
     result = service.build_job(build_id=payload["buildId"], params=payload["parameters"])
 
+    response = {
+        "queueItem": result
+    }
+    # The CLI opts in via includeBuildNumber to receive the guessed next build
+    # number, so it can print a stable Argus run link without waiting for the
+    # build to leave the queue. Omitted (not fatal) when it can't be resolved.
+    if payload.get("includeBuildNumber"):
+        next_build_number = service.next_build_number(build_id=payload["buildId"])
+        if next_build_number > 0:
+            response["nextBuildNumber"] = next_build_number
+
     return {
         "status": "ok",
-        "response": {
-            "queueItem": result
-        }
+        "response": response
     }
 
 

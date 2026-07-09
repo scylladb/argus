@@ -145,6 +145,18 @@ class JenkinsService:
         except jenkins.JenkinsException:
             raise JenkinsServiceError("Job doesn't exist", build_id)
 
+    def next_build_number(self, build_id: str) -> int:
+        """Best-effort guess of the build number Jenkins will assign to the next
+        build of ``build_id``. Used to hand out a stable Argus run link right
+        after triggering, before the build leaves the queue. Returns ``-1`` when
+        the number can't be determined (the trigger itself already succeeded, so
+        this must never be fatal)."""
+        try:
+            job_info = self._jenkins.get_job_info(name=build_id)
+            return job_info.get("nextBuildNumber", -1)
+        except jenkins.JenkinsException:
+            return -1
+
     def get_releases_for_clone(self, test_id: str):
         test_id = UUID(test_id)
         # TODO: Filtering based on origin location / user preferences
