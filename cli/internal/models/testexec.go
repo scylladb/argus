@@ -126,12 +126,14 @@ func paramValueString(v any) string {
 // TriggeredBuild is one row of a fan-out execution result: the test reference
 // and its build_system_id, the Jenkins queue item the build was scheduled as,
 // its resolved URL (populated only when --wait is used and the build started),
+// the Argus run URL (also populated on --wait once the build number is known),
 // and a human-readable status.
 type TriggeredBuild struct {
 	Test          string `json:"test"`
 	BuildSystemID string `json:"build_system_id"`
 	QueueItem     int    `json:"queue_item,omitempty"`
 	URL           string `json:"url,omitempty"`
+	ArgusURL      string `json:"argus_url,omitempty"`
 	Status        string `json:"status"`
 }
 
@@ -142,7 +144,7 @@ type TriggeredBuilds []TriggeredBuild
 
 // Headers implements output.Tabular.
 func (TriggeredBuilds) Headers() []string {
-	return []string{"Test", "Build System ID", "Queue Item", "URL", "Status"}
+	return []string{"Test", "Build System ID", "Queue Item", "URL", "Argus URL", "Status"}
 }
 
 // Rows implements output.Tabular.
@@ -153,9 +155,19 @@ func (b TriggeredBuilds) Rows() [][]string {
 		if r.QueueItem != 0 {
 			queue = strconv.Itoa(r.QueueItem)
 		}
-		rows = append(rows, []string{r.Test, r.BuildSystemID, queue, r.URL, r.Status})
+		rows = append(rows, []string{r.Test, r.BuildSystemID, queue, r.URL, r.ArgusURL, r.Status})
 	}
 	return rows
+}
+
+// StartedBuild is the result of a single 'test execute --wait': the triggered
+// job, its Jenkins build URL/number once scheduled, and the stable Argus run
+// URL derived from the build_system_id and build number.
+type StartedBuild struct {
+	BuildID     string `json:"build_id"`
+	JenkinsURL  string `json:"jenkins_url,omitempty"`
+	BuildNumber int    `json:"build_number,omitempty"`
+	ArgusURL    string `json:"argus_url,omitempty"`
 }
 
 // ---------------------------------------------------------------------------
