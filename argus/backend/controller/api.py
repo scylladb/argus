@@ -7,7 +7,8 @@ from flask import (
     current_app,
     g,
     redirect,
-    request, Response
+    request, Response,
+    url_for,
 )
 from flask.json import jsonify
 from argus.backend.error_handlers import handle_api_exception
@@ -44,6 +45,24 @@ def app_version():
         "status": "ok",
         "response": {
             "commit_id": argus_version
+        }
+    })
+
+
+@bp.route("/test/<path:build_id>/<int:build_number>")
+@api_login_required
+def get_run_by_build(build_id: str, build_number: int):
+    # JSON sibling of main.get_run_by_build: resolve a run from its
+    # build_system_id + Jenkins build number and return its id and Argus URL.
+    run = TestRunService().get_run_by_build_number(build_id, build_number)
+    if not run:
+        raise Exception(f"Run not found for {build_id} #{build_number}")
+    return jsonify({
+        "status": "ok",
+        "response": {
+            "run_id": str(run.id),
+            "plugin_name": run._plugin_name,
+            "url": url_for("main.get_run_by_plugin", plugin_name=run._plugin_name, run_id=run.id, _external=True),
         }
     })
 
