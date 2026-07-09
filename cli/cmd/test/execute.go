@@ -299,13 +299,7 @@ func loadParamsFile(cmd *cobra.Command) (map[string]any, error) {
 		return nil, nil
 	}
 
-	var raw []byte
-	var err error
-	if path == "-" {
-		raw, err = io.ReadAll(bufio.NewReader(os.Stdin))
-	} else {
-		raw, err = os.ReadFile(path)
-	}
+	raw, err := readFileOrStdin(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading params file: %w", err)
 	}
@@ -315,6 +309,15 @@ func loadParamsFile(cmd *cobra.Command) (map[string]any, error) {
 		return nil, fmt.Errorf("parsing params file (expected a {name: value} object): %w", err)
 	}
 	return params, nil
+}
+
+// readFileOrStdin returns the contents of the file at path, or of standard
+// input when path is "-".
+func readFileOrStdin(path string) ([]byte, error) {
+	if path == "-" {
+		return io.ReadAll(bufio.NewReader(os.Stdin))
+	}
+	return os.ReadFile(path)
 }
 
 // parseParams parses repeatable "name=value" flag values into a parameter map.

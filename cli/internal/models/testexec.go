@@ -157,3 +157,41 @@ func (b TriggeredBuilds) Rows() [][]string {
 	}
 	return rows
 }
+
+// ---------------------------------------------------------------------------
+// Queue status snapshot (check-queue)
+// ---------------------------------------------------------------------------
+
+// QueueStatus is one row of a `test check-queue` result: the queried Jenkins
+// queue item and its current state. A scheduled item carries URL/Number; an
+// item still waiting carries Why. Status is a human-readable summary
+// ("started", "pending", or "error: ...").
+type QueueStatus struct {
+	QueueItem int    `json:"queue_item"`
+	Status    string `json:"status"`
+	URL       string `json:"url,omitempty"`
+	Number    int    `json:"number,omitempty"`
+	Why       string `json:"why,omitempty"`
+}
+
+// QueueStatuses is a check-queue result set. It implements output.Tabular for
+// text rendering while JSON output marshals the slice directly.
+type QueueStatuses []QueueStatus
+
+// Headers implements output.Tabular.
+func (QueueStatuses) Headers() []string {
+	return []string{"Queue Item", "Status", "URL", "Number", "Why"}
+}
+
+// Rows implements output.Tabular.
+func (s QueueStatuses) Rows() [][]string {
+	rows := make([][]string, 0, len(s))
+	for _, r := range s {
+		number := ""
+		if r.Number != 0 {
+			number = strconv.Itoa(r.Number)
+		}
+		rows = append(rows, []string{strconv.Itoa(r.QueueItem), r.Status, r.URL, number, r.Why})
+	}
+	return rows
+}
