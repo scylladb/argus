@@ -120,3 +120,61 @@ func TestResolveBuildID_ReleaseWithoutTest(t *testing.T) {
 	_, err := resolveBuildID(context.Background(), cmd, nil, nil)
 	require.Error(t, err)
 }
+
+// executeCmd returns the fully-registered "execute" command so its flag groups
+// and plan-mode validation can be exercised.
+func executeCmd() *cobra.Command {
+	parent := &cobra.Command{Use: "test"}
+	registerExecute(parent)
+	for _, c := range parent.Commands() {
+		if c.Name() == "execute" {
+			return c
+		}
+	}
+	return nil
+}
+
+func TestExecute_PlanRejectsFile(t *testing.T) {
+	cmd := executeCmd()
+	require.NoError(t, cmd.Flags().Set("plan-id", "scylla-2026.2#1"))
+	require.NoError(t, cmd.Flags().Set("label", "smoke"))
+	require.NoError(t, cmd.Flags().Set("file", "params.json"))
+
+	// The plan path rejects --file before touching any dependencies.
+	cmd.SetContext(context.Background())
+	err := runExecutePlan(cmd)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--file is not supported")
+}
+
+func TestExecute_PlanRejectsBuildNumber(t *testing.T) {
+	cmd := executeCmd()
+	require.NoError(t, cmd.Flags().Set("plan-id", "scylla-2026.2#1"))
+	require.NoError(t, cmd.Flags().Set("label", "smoke"))
+	require.NoError(t, cmd.Flags().Set("build-number", "7"))
+
+	cmd.SetContext(context.Background())
+	err := runExecutePlan(cmd)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--build-number is not supported")
+}
+
+func TestExecute_PlanIDRequiresLabel(t *testing.T) {
+	cmd := executeCmd()
+	require.NoError(t, cmd.Flags().Set("plan-id", "scylla-2026.2#1"))
+
+	// Cobra's required-together group fires during flag-group validation.
+	err := cmd.ValidateFlagGroups()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "label")
+}
+
+func TestExecute_BuildIDExclusiveWithPlanID(t *testing.T) {
+	cmd := executeCmd()
+	require.NoError(t, cmd.Flags().Set("build-id", "scylla-2026.2/longevity/longevity-100gb"))
+	require.NoError(t, cmd.Flags().Set("plan-id", "scylla-2026.2#1"))
+	require.NoError(t, cmd.Flags().Set("label", "smoke"))
+
+	err := cmd.ValidateFlagGroups()
+	require.Error(t, err)
+}

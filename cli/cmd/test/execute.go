@@ -2,14 +2,17 @@ package test
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/scylladb/argus/cli/internal/cmdctx"
 	"github.com/scylladb/argus/cli/internal/logging"
 	"github.com/scylladb/argus/cli/internal/models"
@@ -47,11 +50,24 @@ name plus a test reference resolved against that release's gridview:
 Use --dry-run to print the merged parameters without triggering a build, and
 --wait to block until the build leaves the queue and report its URL. If the job
 has no builds and no default definitions, the defaults are simply empty and only
-your --file/--param values are sent.`,
+your --file/--param values are sent.
+
+Alternatively, fan out across a plan's labelled tests with --plan-id and one or
+more --label flags: every plan test carrying any of the labels is triggered (use
+--match-all to require all labels). --param overrides apply to every build;
+--wait then blocks until all builds start (or --wait-timeout elapses), waiting in
+parallel:
+
+  argus test execute --plan-id scylla-2026.2#3 --label smoke --label nightly
+  argus test execute --plan-id scylla-2026.2#3 --label smoke --dry-run
+  argus test execute --plan-id scylla-2026.2#3 --label smoke --label perf --match-all --wait`,
 		RunE: runExecute,
 	}
 
 	addAddressingFlags(cmd)
+	cmd.Flags().StringP("plan-id", "p", "", "Plan UUID or key to fan out across (with --label)")
+	cmd.Flags().StringArray("label", nil, "Select plan tests carrying this label (repeatable; requires --plan-id)")
+	cmd.Flags().Bool("match-all", false, "Require plan tests to carry all --label values instead of any")
 	cmd.Flags().Int("build-number", 0, "Seed default parameters from this build number (default: last build)")
 	cmd.Flags().StringP("file", "f", "", "JSON file with a {name: value} parameter map (\"-\" for stdin)")
 	cmd.Flags().StringArray("param", nil, "Parameter override as name=value (repeatable)")
@@ -59,11 +75,30 @@ your --file/--param values are sent.`,
 	cmd.Flags().Bool("wait", false, "Wait for the build to start and report its URL")
 	cmd.Flags().Duration("wait-timeout", 5*time.Minute, "Maximum time to wait when --wait is set")
 
+	// Plan fan-out is its own addressing mode: --plan-id/--label go together and
+	// are mutually exclusive with the single-test selectors.
+	cmd.MarkFlagsRequiredTogether("plan-id", "label")
+	cmd.MarkFlagsMutuallyExclusive("build-id", "plan-id")
+	cmd.MarkFlagsMutuallyExclusive("release", "plan-id")
+	cmd.MarkFlagsMutuallyExclusive("test", "plan-id")
+	cmd.MarkFlagsMutuallyExclusive("build-id", "label")
+	cmd.MarkFlagsMutuallyExclusive("release", "label")
+	cmd.MarkFlagsMutuallyExclusive("test", "label")
+
 	parent.AddCommand(cmd)
 }
 
-// runExecute is the RunE handler for "test execute".
-func runExecute(cmd *cobra.Command, _ []string) error {
+// runExecute dispatches to the single-test or plan fan-out path based on whether
+// --plan-id was supplied.
+func runExecute(cmd *cobra.Command, args []string) error {
+	if planID, _ := cmd.Flags().GetString("plan-id"); planID != "" {
+		return runExecutePlan(cmd)
+	}
+	return runExecuteSingle(cmd, args)
+}
+
+// runExecuteSingle is the RunE handler for a single-test "test execute".
+func runExecuteSingle(cmd *cobra.Command, _ []string) error {
 	cmd.SilenceUsage = true
 	ctx := cmd.Context()
 	client := cmdctx.APIClientFrom(ctx)
@@ -130,6 +165,130 @@ func runExecute(cmd *cobra.Command, _ []string) error {
 	}
 	log.Info().Str("build_id", buildID).Str("url", info.URL).Msg("build started")
 	return out.Write(models.NewKVTabular(info))
+}
+
+// runExecutePlan is the RunE handler for the plan fan-out mode of "test execute"
+// (--plan-id with --label): it resolves the plan's labelled tests and triggers a
+// build for each, optionally waiting for all of them in parallel.
+func runExecutePlan(cmd *cobra.Command) error {
+	cmd.SilenceUsage = true
+
+	// --file and --build-number are per-test and make no sense across a fan-out;
+	// reject them up front (before any dependencies are touched).
+	if path, _ := cmd.Flags().GetString("file"); path != "" {
+		return fmt.Errorf("--file is not supported with --plan-id (each test has its own parameters)")
+	}
+	if cmd.Flags().Changed("build-number") {
+		return fmt.Errorf("--build-number is not supported with --plan-id (each test is a distinct job)")
+	}
+
+	ctx := cmd.Context()
+	client := cmdctx.APIClientFrom(ctx)
+	out := cmdctx.OutputterFrom(ctx)
+	c := cmdctx.CacheFrom(ctx)
+	log := logging.For(cmdctx.LoggerFrom(ctx), "test-execute-plan")
+
+	planID, _ := cmd.Flags().GetString("plan-id")
+	labels, _ := cmd.Flags().GetStringArray("label")
+	matchAll, _ := cmd.Flags().GetBool("match-all")
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	wait, _ := cmd.Flags().GetBool("wait")
+
+	rawFlags, _ := cmd.Flags().GetStringArray("param")
+	flagParams, err := parseParams(rawFlags)
+	if err != nil {
+		return err
+	}
+
+	planner := services.NewPlannerService(client, c)
+	targets, err := planner.ResolveLabeledTests(ctx, planID, labels, matchAll)
+	if err != nil {
+		log.Error().Err(err).Str("plan_id", planID).Msg("failed to resolve labelled tests")
+		return err
+	}
+	log.Info().Str("plan_id", planID).Int("count", len(targets)).Bool("match_all", matchAll).Msg("resolved labelled tests")
+
+	if dryRun {
+		overview := make(models.ReleaseGrid, len(targets))
+		for _, t := range targets {
+			overview[t.Ref] = t.BuildSystemID
+		}
+		log.Info().Str("plan_id", planID).Int("count", len(targets)).Msg("dry run: not triggering builds")
+		return out.Write(overview)
+	}
+
+	svc := services.NewTestExecutionService(client, c)
+
+	// Trigger sequentially so queue assignment is deterministic; a per-test
+	// failure is recorded and the batch continues.
+	results := make(models.TriggeredBuilds, len(targets))
+	for i, t := range targets {
+		results[i] = models.TriggeredBuild{Test: t.Ref, BuildSystemID: t.BuildSystemID}
+
+		defaults, err := svc.FetchParams(ctx, t.BuildSystemID, nil)
+		if err != nil {
+			if errors.Is(err, services.ErrNoBuildsAvailable) {
+				log.Warn().Str("build_id", t.BuildSystemID).Msg("no builds available; sending only --param values")
+				defaults = nil
+			} else {
+				log.Error().Err(err).Str("build_id", t.BuildSystemID).Msg("failed to fetch default parameters")
+				results[i].Status = "error: " + err.Error()
+				continue
+			}
+		}
+
+		merged := services.MergeParams(defaults, nil, flagParams)
+		queueItem, err := svc.TriggerBuild(ctx, t.BuildSystemID, merged)
+		if err != nil {
+			log.Error().Err(err).Str("build_id", t.BuildSystemID).Msg("failed to trigger build")
+			results[i].Status = "error: " + err.Error()
+			continue
+		}
+		results[i].QueueItem = queueItem
+		results[i].Status = "queued"
+		log.Info().Str("build_id", t.BuildSystemID).Int("queue_item", queueItem).Msg("build triggered")
+	}
+
+	if wait {
+		timeout, _ := cmd.Flags().GetDuration("wait-timeout")
+		waitAllBuilds(ctx, svc, results, timeout, log)
+	}
+
+	return out.Write(results)
+}
+
+// waitAllBuilds waits, in parallel, for every successfully-queued build in
+// results to leave the queue and receive an executable URL. A single
+// batch-wide deadline (timeout) bounds the whole wait; when it elapses the
+// shared context is cancelled and any still-pending builds are marked timed out.
+// results is mutated in place — each goroutine writes only its own index.
+func waitAllBuilds(ctx context.Context, svc *services.TestExecutionService, results models.TriggeredBuilds, timeout time.Duration, log zerolog.Logger) {
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	for i := range results {
+		if results[i].QueueItem == 0 {
+			continue // skipped or failed to trigger — nothing to wait for.
+		}
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			info, err := svc.WaitForBuild(waitCtx, results[i].QueueItem, timeout, 0)
+			if err != nil {
+				if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+					results[i].Status = "timed out"
+				} else {
+					results[i].Status = "error: " + err.Error()
+				}
+				return
+			}
+			results[i].URL = info.URL
+			results[i].Status = "started"
+		}(i)
+	}
+	wg.Wait()
+	log.Info().Int("count", len(results)).Msg("finished waiting for builds")
 }
 
 // loadParamsFile reads the --file parameter map (path or stdin) into a

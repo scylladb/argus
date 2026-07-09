@@ -331,6 +331,110 @@ func TestPlannerService_ResolveTestBuildID_GroupRejected(t *testing.T) {
 	assert.ErrorIs(t, err, services.ErrEntityNotFound)
 }
 
+// labeledPlanMux extends resolveMux (releases + gridview) with a plan-get
+// endpoint whose Options blob attaches labels to plan entities: t1 carries
+// smoke+nightly, t2 carries perf, t3 carries smoke, group g1 carries regression
+// (and fans out to its enabled tests t1+t2), and a stale UUID carries smoke to
+// exercise the "not in gridview" skip.
+func labeledPlanMux(t *testing.T) *http.ServeMux {
+	t.Helper()
+	mux := resolveMux(t)
+	options, err := json.Marshal(map[string]models.EntityOptions{
+		"t1":    {Labels: []string{"smoke", "nightly"}},
+		"t2":    {Labels: []string{"perf"}},
+		"t3":    {Labels: []string{"smoke"}},
+		"g1":    {Labels: []string{"regression"}},
+		"stale": {Labels: []string{"smoke"}},
+	})
+	require.NoError(t, err)
+	mux.HandleFunc("/api/v1/planning/plan/plan-1/get", func(w http.ResponseWriter, r *http.Request) {
+		jsonOK(t, w, models.ReleasePlan{
+			ID:        "plan-1",
+			Key:       "scylla-2026.2#1",
+			ReleaseID: "rel-1",
+			Tests:     []string{"t1", "t2", "t3"},
+			Groups:    []string{"g1"},
+			Options:   string(options),
+		})
+	})
+	return mux
+}
+
+// refs extracts the ordered reference list from a LabeledTest slice.
+func refs(tests []services.LabeledTest) []string {
+	out := make([]string, len(tests))
+	for i, t := range tests {
+		out[i] = t.Ref
+	}
+	return out
+}
+
+func TestPlannerService_ResolveLabeledTests_Union(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, labeledPlanMux(t))
+
+	// "smoke" matches t1 and t3 (sorted by group-qualified ref).
+	got, err := svc.ResolveLabeledTests(context.Background(), "plan-1", []string{"smoke"}, false)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Tier 1/longevity-100gb", "Tier 2/longevity-100gb"}, refs(got))
+	assert.Equal(t, "scylla-2026.2/tier1/longevity-100gb", got[0].BuildSystemID)
+}
+
+func TestPlannerService_ResolveLabeledTests_UnionMultiple(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, labeledPlanMux(t))
+
+	// nightly (t1) ∪ perf (t2).
+	got, err := svc.ResolveLabeledTests(context.Background(), "plan-1", []string{"nightly", "perf"}, false)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Tier 1/longevity-100gb", "Tier 1/longevity-200gb"}, refs(got))
+}
+
+func TestPlannerService_ResolveLabeledTests_MatchAll(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, labeledPlanMux(t))
+
+	// Only t1 carries both smoke and nightly; t3 (smoke only) is excluded.
+	got, err := svc.ResolveLabeledTests(context.Background(), "plan-1", []string{"smoke", "nightly"}, true)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Tier 1/longevity-100gb"}, refs(got))
+}
+
+func TestPlannerService_ResolveLabeledTests_CaseInsensitive(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, labeledPlanMux(t))
+
+	got, err := svc.ResolveLabeledTests(context.Background(), "plan-1", []string{"SMOKE"}, false)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Tier 1/longevity-100gb", "Tier 2/longevity-100gb"}, refs(got))
+}
+
+func TestPlannerService_ResolveLabeledTests_GroupFanoutAndDedup(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, labeledPlanMux(t))
+
+	// regression is on group g1 → fans out to enabled t1+t2; combined with smoke
+	// (t1, t3) the t1 overlap is de-duplicated. Expect t1, t2, t3 once each.
+	got, err := svc.ResolveLabeledTests(context.Background(), "plan-1", []string{"regression", "smoke"}, false)
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"Tier 1/longevity-100gb",
+		"Tier 1/longevity-200gb",
+		"Tier 2/longevity-100gb",
+	}, refs(got))
+}
+
+func TestPlannerService_ResolveLabeledTests_NoMatchListsLabels(t *testing.T) {
+	t.Parallel()
+	svc := newPlannerSvc(t, labeledPlanMux(t))
+
+	_, err := svc.ResolveLabeledTests(context.Background(), "plan-1", []string{"does-not-exist"}, false)
+	require.Error(t, err)
+	// The error names the labels actually present so the user can correct a typo.
+	assert.Contains(t, err.Error(), "smoke")
+	assert.Contains(t, err.Error(), "regression")
+}
+
 func TestPlannerService_ExpandGroup_EnabledOnly(t *testing.T) {
 	t.Parallel()
 	svc := newPlannerSvc(t, gridviewMux(t, nil))
