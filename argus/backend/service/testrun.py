@@ -75,6 +75,25 @@ class TestRunService:
             except plugin.model.DoesNotExist:
                 return None
 
+    def get_run_by_build_number(self, build_id: str, build_number: int) -> PluginModelBase | None:
+        """Resolve a run from its build_system_id and Jenkins build number.
+
+        build_id is the partition key of the plugin run table, so filtering by
+        build_number stays within a single small partition (ALLOW FILTERING).
+        Returns None when the test, its plugin, or a matching run is not found
+        (e.g. during the brief window after a build starts but before its run
+        has been reported to Argus).
+        """
+        try:
+            test: ArgusTest = ArgusTest.get(build_system_id=build_id)
+        except ArgusTest.DoesNotExist:
+            return None
+        plugin = self.get_plugin(plugin_name=test.plugin_name)
+        if not plugin:
+            return None
+        runs = list(plugin.model.filter(build_id=build_id, build_number=build_number).allow_filtering().all())
+        return runs[0] if runs else None
+
     def get_test_type_for_run(self, run_id: str) -> str:
         for name, plugin in AVAILABLE_PLUGINS.items():
             try:

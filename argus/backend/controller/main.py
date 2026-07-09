@@ -58,6 +58,21 @@ def get_run_by_plugin(plugin_name: str, run_id: UUID | str, tab: str):
     return render_template("run_view_by_plugin.html.j2", run=run, tab=tab)
 
 
+@bp.route("/test/<path:build_id>/<int:build_number>", defaults={"tab": "details"})
+@bp.route("/test/<path:build_id>/<int:build_number>/<string:tab>")
+@login_required
+def get_run_by_build(build_id: str, build_number: int, tab: str):
+    # Resolve a run from its build_system_id + Jenkins build number. This gives
+    # a stable, clickable link that can be produced the moment a build starts —
+    # even during the brief window before its run_id exists — and resolves once
+    # the run has been reported to Argus.
+    run = TestRunService().get_run_by_build_number(build_id, build_number)
+    if not run:
+        flash(f"Run {build_id} #{build_number} not found.", "error")
+        return redirect(url_for("main.error", type=404))
+    return render_template("run_view_by_plugin.html.j2", run=run, tab=tab)
+
+
 @bp.route("/")
 def home():
     return redirect(url_for("main.run_dashboard"))
