@@ -69,19 +69,34 @@ func (s *TestExecutionService) FetchParams(ctx context.Context, buildID string, 
 // TriggerBuild schedules a build of the job identified by buildID with the
 // given parameters and returns the Jenkins queue item number.
 func (s *TestExecutionService) TriggerBuild(ctx context.Context, buildID string, params map[string]any) (int, error) {
+	queueItem, _, err := s.triggerBuild(ctx, buildID, params, false)
+	return queueItem, err
+}
+
+// TriggerBuildWithNumber behaves like TriggerBuild but also asks the backend to
+// guess the next build number for the job (an extra Jenkins lookup). The guess
+// is best-effort: it is 0 when the backend couldn't resolve it. Used by the
+// non-wait single execute path to derive an Argus run link at trigger time.
+func (s *TestExecutionService) TriggerBuildWithNumber(ctx context.Context, buildID string, params map[string]any) (queueItem, nextBuildNumber int, err error) {
+	return s.triggerBuild(ctx, buildID, params, true)
+}
+
+// triggerBuild posts to the build endpoint, optionally requesting the guessed
+// next build number.
+func (s *TestExecutionService) triggerBuild(ctx context.Context, buildID string, params map[string]any, includeBuildNumber bool) (int, int, error) {
 	if params == nil {
 		params = map[string]any{}
 	}
-	body := models.JenkinsBuildRequest{BuildID: buildID, Parameters: params}
+	body := models.JenkinsBuildRequest{BuildID: buildID, Parameters: params, IncludeBuildNumber: includeBuildNumber}
 	req, err := s.client.NewRequest(ctx, "POST", api.JenkinsBuild, body)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	resp, err := api.DoJSON[models.JenkinsBuildResponse](s.client, req)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	return resp.QueueItem, nil
+	return resp.QueueItem, resp.NextBuildNumber, nil
 }
 
 // QueueInfo returns the current state of a Jenkins queue item: either the

@@ -68,3 +68,49 @@ func TestStartedBuild_MarshalJSON_OmitsEmpty(t *testing.T) {
 	_, hasArgus := back["argus_url"]
 	assert.False(t, hasArgus)
 }
+
+func TestExecutedBuild_MarshalJSON(t *testing.T) {
+	b := models.ExecutedBuild{
+		BuildID:     "scylla-2026.2/longevity/longevity-100gb",
+		QueueItem:   101,
+		BuildNumber: 43,
+		ArgusURL:    "https://argus/test/scylla-2026.2/longevity/longevity-100gb/43",
+	}
+	raw, err := json.Marshal(b)
+	require.NoError(t, err)
+
+	var back map[string]any
+	require.NoError(t, json.Unmarshal(raw, &back))
+	assert.Equal(t, "scylla-2026.2/longevity/longevity-100gb", back["build_id"])
+	assert.Equal(t, float64(101), back["queue_item"])
+	assert.Equal(t, float64(43), back["build_number"])
+	assert.Equal(t, "https://argus/test/scylla-2026.2/longevity/longevity-100gb/43", back["argus_url"])
+}
+
+func TestExecutedBuild_MarshalJSON_OmitsGuessWhenUnknown(t *testing.T) {
+	// The queue item is always present; the guessed number/link are omitted
+	// when the backend couldn't resolve the next build number.
+	raw, err := json.Marshal(models.ExecutedBuild{BuildID: "scylla-2026.2/other", QueueItem: 7})
+	require.NoError(t, err)
+
+	var back map[string]any
+	require.NoError(t, json.Unmarshal(raw, &back))
+	assert.Equal(t, float64(7), back["queue_item"])
+	_, hasNumber := back["build_number"]
+	assert.False(t, hasNumber)
+	_, hasArgus := back["argus_url"]
+	assert.False(t, hasArgus)
+}
+
+func TestJenkinsBuildResponse_DecodesNextBuildNumber(t *testing.T) {
+	var resp models.JenkinsBuildResponse
+	require.NoError(t, json.Unmarshal([]byte(`{"queueItem":101,"nextBuildNumber":43}`), &resp))
+	assert.Equal(t, 101, resp.QueueItem)
+	assert.Equal(t, 43, resp.NextBuildNumber)
+
+	// Absent nextBuildNumber decodes to 0 (guess unavailable).
+	var noGuess models.JenkinsBuildResponse
+	require.NoError(t, json.Unmarshal([]byte(`{"queueItem":5}`), &noGuess))
+	assert.Equal(t, 5, noGuess.QueueItem)
+	assert.Zero(t, noGuess.NextBuildNumber)
+}

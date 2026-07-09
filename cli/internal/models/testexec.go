@@ -36,15 +36,22 @@ type JenkinsParamsResponse struct {
 
 // JenkinsBuildRequest is the request body for POST /api/v1/jenkins/build. The
 // backend adds the reserved requested_by_user parameter from the authenticated
-// user automatically, so it must not be included here.
+// user automatically, so it must not be included here. IncludeBuildNumber opts
+// in to receiving the guessed next build number in the response (an extra
+// Jenkins lookup on the backend), used to derive an Argus link without waiting.
 type JenkinsBuildRequest struct {
-	BuildID    string         `json:"buildId"`
-	Parameters map[string]any `json:"parameters"`
+	BuildID            string         `json:"buildId"`
+	Parameters         map[string]any `json:"parameters"`
+	IncludeBuildNumber bool           `json:"includeBuildNumber,omitempty"`
 }
 
 // JenkinsBuildResponse is the response payload for POST /api/v1/jenkins/build.
+// NextBuildNumber is the backend's best-effort guess of the build number the
+// triggered build will receive; it is present only when the request set
+// IncludeBuildNumber and the backend could resolve it.
 type JenkinsBuildResponse struct {
-	QueueItem int `json:"queueItem"`
+	QueueItem       int `json:"queueItem"`
+	NextBuildNumber int `json:"nextBuildNumber,omitempty"`
 }
 
 // JenkinsQueueInfo is the response payload for GET /api/v1/jenkins/queue_info.
@@ -166,6 +173,18 @@ func (b TriggeredBuilds) Rows() [][]string {
 type StartedBuild struct {
 	BuildID     string `json:"build_id"`
 	JenkinsURL  string `json:"jenkins_url,omitempty"`
+	BuildNumber int    `json:"build_number,omitempty"`
+	ArgusURL    string `json:"argus_url,omitempty"`
+}
+
+// ExecutedBuild is the result of a single 'test execute' without --wait: the
+// triggered job, its Jenkins queue item, and — when the backend could guess the
+// next build number — the guessed build number and the stable Argus run URL
+// derived from it. The number is a best-effort guess made at trigger time, so
+// BuildNumber/ArgusURL are omitted when it isn't known.
+type ExecutedBuild struct {
+	BuildID     string `json:"build_id"`
+	QueueItem   int    `json:"queue_item"`
 	BuildNumber int    `json:"build_number,omitempty"`
 	ArgusURL    string `json:"argus_url,omitempty"`
 }
