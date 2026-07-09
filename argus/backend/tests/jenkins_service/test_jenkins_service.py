@@ -1,5 +1,7 @@
 import xml.etree.ElementTree as ET
 
+import jenkins
+
 from argus.backend.service.jenkins_service import JenkinsService
 
 
@@ -114,3 +116,41 @@ def test_regular_choice_param_defaults_to_first():
     _apply(params, {"region": ["us-east-1", "eu-west-1"]})
     assert params[0]["value"] == "us-east-1"
     assert params[0]["choices"] == ["us-east-1", "eu-west-1"]
+
+
+class _FakeJenkins:
+    """Minimal stand-in for the python-jenkins client so next_build_number can
+    be tested without a real Jenkins connection."""
+
+    def __init__(self, job_info=None, error=None):
+        self._job_info = job_info or {}
+        self._error = error
+
+    def get_job_info(self, name):  # noqa: ARG002 - signature parity
+        if self._error is not None:
+            raise self._error
+        return self._job_info
+
+
+def _service_with(fake):
+    # Bypass __init__ (which opens a real Jenkins connection) and inject the fake.
+    service = object.__new__(JenkinsService)
+    service._jenkins = fake
+    return service
+
+
+def test_next_build_number_returns_next():
+    service = _service_with(_FakeJenkins(job_info={"nextBuildNumber": 43}))
+    assert service.next_build_number("scylla-2026.2/longevity/longevity-100gb") == 43
+
+
+def test_next_build_number_missing_is_minus_one():
+    # A job Jenkins reports without nextBuildNumber yields the sentinel -1.
+    service = _service_with(_FakeJenkins(job_info={}))
+    assert service.next_build_number("scylla-2026.2/longevity/longevity-100gb") == -1
+
+
+def test_next_build_number_jenkins_error_is_non_fatal():
+    # A Jenkins error must not propagate: the trigger already succeeded.
+    service = _service_with(_FakeJenkins(error=jenkins.JenkinsException("boom")))
+    assert service.next_build_number("scylla-2026.2/longevity/longevity-100gb") == -1
