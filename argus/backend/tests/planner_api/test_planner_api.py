@@ -99,23 +99,12 @@ def test_update_plan(flask_client, release, fake_test, cleanup_plans):
     created = _create_plan(flask_client, release, fake_test)["response"]
     plan_id = created["id"]
 
+    # update_plan takes a diff-based payload (PlanDiffPayload): only changed
+    # scalar fields and add/remove list diffs are sent.
     update_payload = {
         "id": plan_id,
-        "name": created["name"],
-        "completed": False,
         "description": "updated description",
-        "owner": str(g.user.id),
-        "participants": [],
         "target_version": "9.9",
-        "assignee_mapping": {},
-        "release_id": str(release.id),
-        "tests": [str(fake_test.id)],
-        "groups": [],
-        "creation_time": datetime.datetime.now(tz=datetime.UTC).isoformat(),
-        "last_updated": datetime.datetime.now(tz=datetime.UTC).isoformat(),
-        "ends_at": datetime.datetime.now(tz=datetime.UTC).isoformat(),
-        "created_from": None,
-        "view_id": created["view_id"],
     }
     res = flask_client.post("/api/v1/planning/plan/update", json=update_payload).json
     assert res["status"] == "ok"
@@ -252,6 +241,9 @@ def test_copy_plan_creates_plan_in_target_release(
     plan_id = flask_client.post(
         "/api/v1/planning/plan/create", json=source_payload
     ).json["response"]["id"]
+    # copy_plan resolves the source plan by its real key/id; the service mints a
+    # fresh key for the copy, so the payload key is echoed back from the source.
+    source_key = ArgusReleasePlan.get(id=plan_id).key
 
     target_release = release_manager_service.create_release(
         f"copy_target_{uuid.uuid4().hex[:8]}", "Copy Target", False
@@ -265,6 +257,7 @@ def test_copy_plan_creates_plan_in_target_release(
             "completed": False,
             "description": "copied plan",
             "owner": str(g.user.id),
+            "key": source_key,
             "participants": [participant_id],
             "target_version": "2.0",
             "assignee_mapping": {},
@@ -275,6 +268,7 @@ def test_copy_plan_creates_plan_in_target_release(
             "last_updated": "",
             "ends_at": "",
             "created_from": plan_id,
+            "options": {},
         },
         "keepParticipants": True,
         "replacements": {},
@@ -294,6 +288,257 @@ def test_copy_plan_creates_plan_in_target_release(
     assert body["description"] == "copied plan"
     # keepParticipants=True copies participants from the payload
     assert body["participants"] == [participant_id]
+
+
+def test_create_plan_generates_sequential_keys_per_release(
+    flask_client, release_manager_service, fake_test, cleanup_plans
+):
+    """create_plan auto-assigns human-readable keys (``<release.name>#N``) that
+    increment per release. A fresh release is used so the counter starts at 1
+    regardless of plans created by other tests in the shared session release.
+    """
+    rel = release_manager_service.create_release(
+        f"keyrel_{uuid.uuid4().hex[:8]}", "Key Release", False
+    )
+
+    first_id = _create_plan(flask_client, rel, fake_test, tests=[])["response"]["id"]
+    second_id = _create_plan(flask_client, rel, fake_test, tests=[])["response"]["id"]
+
+    assert ArgusReleasePlan.get(id=first_id).key == f"{rel.name}#1"
+    assert ArgusReleasePlan.get(id=second_id).key == f"{rel.name}#2"
+
+
+def test_copy_plan_generates_fresh_key_for_target_release(
+    flask_client, release_manager_service, release, fake_test, cleanup_plans
+):
+    """copy_plan mints a new key scoped to the target release rather than
+    carrying over the source plan's key (the payload key is ignored)."""
+    source_payload = {
+        "name": f"src_{uuid.uuid4().hex[:8]}",
+        "description": "source plan",
+        "owner": str(g.user.id),
+        "participants": [],
+        "target_version": "1.0",
+        "release_id": str(release.id),
+        "tests": [],
+        "groups": [],
+        "assignments": {},
+    }
+    src_id = flask_client.post(
+        "/api/v1/planning/plan/create", json=source_payload
+    ).json["response"]["id"]
+    src_key = ArgusReleasePlan.get(id=src_id).key
+
+    target_release = release_manager_service.create_release(
+        f"copykey_{uuid.uuid4().hex[:8]}", "Copy Key Target", False
+    )
+    payload = {
+        "plan": {
+            "id": src_id,
+            "name": f"copied_{uuid.uuid4().hex[:8]}",
+            "completed": False,
+            "description": "copied plan",
+            "owner": str(g.user.id),
+            "key": src_key,
+            "participants": [],
+            "target_version": "3.0",
+            "assignee_mapping": {},
+            "release_id": str(target_release.id),
+            "tests": [],
+            "groups": [],
+            "creation_time": "",
+            "last_updated": "",
+            "ends_at": "",
+            "created_from": src_id,
+            "options": {},
+        },
+        "keepParticipants": False,
+        "replacements": {},
+        "targetReleaseId": str(target_release.id),
+        "targetReleaseName": target_release.name,
+    }
+    res = flask_client.post("/api/v1/planning/plan/copy", json=payload).json
+    assert res["status"] == "ok", res
+
+    new_key = ArgusReleasePlan.get(id=res["response"]["id"]).key
+    assert new_key == f"{target_release.name}#1"
+    assert new_key != src_key
+
+
+def test_update_plan_resolves_source_by_key(
+    flask_client, release_manager_service, fake_test, cleanup_plans
+):
+    """A plan's key is an alternate identifier: update_plan resolves the target
+    by key when the diff payload's ``id`` carries the key string instead of the
+    UUID."""
+    rel = release_manager_service.create_release(
+        f"reskey_{uuid.uuid4().hex[:8]}", "Resolve Key Release", False
+    )
+    plan_id = _create_plan(flask_client, rel, fake_test, tests=[])["response"]["id"]
+    plan_key = ArgusReleasePlan.get(id=plan_id).key
+
+    res = flask_client.post(
+        "/api/v1/planning/plan/update",
+        json={"id": plan_key, "description": "updated via key"},
+    ).json
+    assert res["status"] == "ok"
+    assert res["response"] is True
+
+    assert ArgusReleasePlan.get(id=plan_id).description == "updated via key"
+
+
+def test_update_plan_leaves_omitted_scalars_unchanged(
+    flask_client, release, fake_test, cleanup_plans
+):
+    """PlanDiffPayload scalars are Optional[...] = None: only fields present in
+    the payload are applied, the rest are left untouched (last-edit-wins)."""
+    created = _create_plan(flask_client, release, fake_test, target_version="7.7")["response"]
+    plan_id = created["id"]
+    original = ArgusReleasePlan.get(id=plan_id)
+    orig_name, orig_owner = original.name, original.owner
+
+    res = flask_client.post(
+        "/api/v1/planning/plan/update",
+        json={"id": plan_id, "description": "only desc changed"},
+    ).json
+    assert res["status"] == "ok"
+
+    updated = ArgusReleasePlan.get(id=plan_id)
+    assert updated.description == "only desc changed"
+    assert updated.name == orig_name
+    assert updated.owner == orig_owner
+    assert updated.target_version == "7.7"
+
+
+def test_update_plan_toggles_completed(flask_client, release, fake_test, cleanup_plans):
+    """The ``completed`` scalar diff flips the plan's boolean flag."""
+    plan_id = _create_plan(flask_client, release, fake_test)["response"]["id"]
+    assert ArgusReleasePlan.get(id=plan_id).completed is False
+
+    flask_client.post(
+        "/api/v1/planning/plan/update",
+        json={"id": plan_id, "completed": True},
+    )
+    assert ArgusReleasePlan.get(id=plan_id).completed is True
+
+
+def test_update_plan_adds_and_removes_tests(
+    flask_client, release_manager_service, group, release, fake_test, cleanup_plans
+):
+    """tests_add / tests_remove diffs mutate the plan's test list (remove wins)."""
+    second_test = release_manager_service.create_test(
+        f"t2_{uuid.uuid4().hex[:8]}", "Second Test",
+        f"bsid_{uuid.uuid4().hex[:8]}", "url",
+        group_id=str(group.id), release_id=str(release.id),
+        plugin_name="scylla-cluster-tests",
+    )
+    plan_id = _create_plan(flask_client, release, fake_test)["response"]["id"]
+
+    flask_client.post(
+        "/api/v1/planning/plan/update",
+        json={"id": plan_id, "tests_add": [str(second_test.id)]},
+    )
+    assert set(ArgusReleasePlan.get(id=plan_id).tests) == {fake_test.id, second_test.id}
+
+    flask_client.post(
+        "/api/v1/planning/plan/update",
+        json={"id": plan_id, "tests_remove": [str(fake_test.id)]},
+    )
+    assert set(ArgusReleasePlan.get(id=plan_id).tests) == {second_test.id}
+
+
+def test_update_plan_add_tests_is_idempotent(
+    flask_client, release, fake_test, cleanup_plans
+):
+    """Re-adding a test already in the plan is a no-op (no duplicate entry)."""
+    plan_id = _create_plan(flask_client, release, fake_test)["response"]["id"]
+
+    flask_client.post(
+        "/api/v1/planning/plan/update",
+        json={"id": plan_id, "tests_add": [str(fake_test.id)]},
+    )
+    assert ArgusReleasePlan.get(id=plan_id).tests == [fake_test.id]
+
+
+def test_update_plan_adds_and_removes_groups(
+    flask_client, release_manager_service, release, fake_test, cleanup_plans
+):
+    """groups_add / groups_remove diffs mutate the plan's group list."""
+    new_group = release_manager_service.create_group(
+        f"g2_{uuid.uuid4().hex[:8]}", "Second Group",
+        build_system_id=f"gbsid_{uuid.uuid4().hex[:8]}", release_id=str(release.id),
+    )
+    plan_id = _create_plan(flask_client, release, fake_test, groups=[])["response"]["id"]
+
+    flask_client.post(
+        "/api/v1/planning/plan/update",
+        json={"id": plan_id, "groups_add": [str(new_group.id)]},
+    )
+    assert set(ArgusReleasePlan.get(id=plan_id).groups) == {new_group.id}
+
+    flask_client.post(
+        "/api/v1/planning/plan/update",
+        json={"id": plan_id, "groups_remove": [str(new_group.id)]},
+    )
+    assert ArgusReleasePlan.get(id=plan_id).groups == []
+
+
+def test_update_plan_adds_and_removes_participants(
+    flask_client, release, fake_test, cleanup_plans
+):
+    """participants_add / participants_remove diffs mutate the participant list."""
+    plan_id = _create_plan(flask_client, release, fake_test)["response"]["id"]
+    p1, p2 = str(uuid.uuid4()), str(uuid.uuid4())
+
+    flask_client.post(
+        "/api/v1/planning/plan/update",
+        json={"id": plan_id, "participants_add": [p1, p2]},
+    )
+    assert set(ArgusReleasePlan.get(id=plan_id).participants) == {uuid.UUID(p1), uuid.UUID(p2)}
+
+    flask_client.post(
+        "/api/v1/planning/plan/update",
+        json={"id": plan_id, "participants_remove": [p1]},
+    )
+    assert set(ArgusReleasePlan.get(id=plan_id).participants) == {uuid.UUID(p2)}
+
+
+def test_update_plan_sets_and_removes_assignee_mapping(
+    flask_client, planner_user, release, fake_test, cleanup_plans
+):
+    """assignee_mapping_set / assignee_mapping_remove diffs mutate the per-entity
+    assignee map (entity must be a member of the plan)."""
+    plan_id = _create_plan(flask_client, release, fake_test)["response"]["id"]
+
+    flask_client.post(
+        "/api/v1/planning/plan/update",
+        json={"id": plan_id, "assignee_mapping_set": {str(fake_test.id): str(planner_user.id)}},
+    )
+    assert ArgusReleasePlan.get(id=plan_id).assignee_mapping == {fake_test.id: planner_user.id}
+
+    flask_client.post(
+        "/api/v1/planning/plan/update",
+        json={"id": plan_id, "assignee_mapping_remove": [str(fake_test.id)]},
+    )
+    assert ArgusReleasePlan.get(id=plan_id).assignee_mapping == {}
+
+
+def test_update_plan_prunes_assignee_mapping_for_removed_test(
+    flask_client, planner_user, release, fake_test, cleanup_plans
+):
+    """Removing a test from the plan also drops its assignee_mapping entry."""
+    plan_id = _create_plan(flask_client, release, fake_test)["response"]["id"]
+    flask_client.post(
+        "/api/v1/planning/plan/update",
+        json={"id": plan_id, "assignee_mapping_set": {str(fake_test.id): str(planner_user.id)}},
+    )
+    assert ArgusReleasePlan.get(id=plan_id).assignee_mapping == {fake_test.id: planner_user.id}
+
+    flask_client.post(
+        "/api/v1/planning/plan/update",
+        json={"id": plan_id, "tests_remove": [str(fake_test.id)]},
+    )
+    assert ArgusReleasePlan.get(id=plan_id).assignee_mapping == {}
 
 
 def test_trigger_jobs_no_plans_returns_falsy(flask_client, mock_jenkins_service):
