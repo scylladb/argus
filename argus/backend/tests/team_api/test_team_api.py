@@ -29,24 +29,33 @@ def team_member_2():
     return _make_user()
 
 
-@pytest.fixture(autouse=True)
-def cleanup_teams():
-    yield
-    for team in list(Team.all()):
-        team.delete()
+@pytest.fixture
+def create_team(flask_client):
+    """Factory that creates teams via the API and deletes only what it created."""
+    created_ids = []
+
+    def _create(name=None, leader_id=None, members=None):
+        payload = {
+            "name": name or f"team_{uuid.uuid4().hex[:8]}",
+            "leader": str(leader_id or g.user.id),
+            "members": [str(m) for m in (members or [])],
+        }
+        result = flask_client.post("/api/v1/team/create", json=payload).json
+        if result.get("status") == "ok":
+            created_ids.append(result["response"]["id"])
+        return result
+
+    yield _create
+
+    for team_id in created_ids:
+        try:
+            Team.get(id=team_id).delete()
+        except Team.DoesNotExist:
+            pass
 
 
-def _create_team(flask_client, name=None, leader_id=None, members=None):
-    payload = {
-        "name": name or f"team_{uuid.uuid4().hex[:8]}",
-        "leader": str(leader_id or g.user.id),
-        "members": [str(m) for m in (members or [])],
-    }
-    return flask_client.post("/api/v1/team/create", json=payload).json
-
-
-def test_team_create_includes_leader_in_members(flask_client, team_member):
-    res = _create_team(flask_client, members=[team_member.id])
+def test_team_create_includes_leader_in_members(flask_client, create_team, team_member):
+    res = create_team(members=[team_member.id])
     assert res["status"] == "ok"
     team_id = res["response"]["id"]
     fetched = flask_client.get(f"/api/v1/team/{team_id}/get").json
@@ -63,8 +72,8 @@ def test_team_get_unknown_id_errors(flask_client):
     assert "does not exist" in res["response"]["arguments"][0]
 
 
-def test_team_edit_updates_name_and_members(flask_client, team_member, team_member_2):
-    created = _create_team(flask_client, members=[team_member.id])["response"]
+def test_team_edit_updates_name_and_members(flask_client, create_team, team_member, team_member_2):
+    created = create_team(members=[team_member.id])["response"]
     team_id = created["id"]
 
     res = flask_client.post(
@@ -86,9 +95,9 @@ def test_team_edit_updates_name_and_members(flask_client, team_member, team_memb
     assert str(team_member.id) not in member_ids
 
 
-def test_team_edit_by_non_leader_errors(flask_client, team_member):
+def test_team_edit_by_non_leader_errors(flask_client, create_team, team_member):
     other_leader = _make_user()
-    created = _create_team(flask_client, leader_id=other_leader.id)["response"]
+    created = create_team(leader_id=other_leader.id)["response"]
     team_id = created["id"]
 
     res = flask_client.post(
@@ -99,8 +108,8 @@ def test_team_edit_by_non_leader_errors(flask_client, team_member):
     assert "doesn't belong to the user" in res["response"]["arguments"][0]
 
 
-def test_team_edit_motd_success(flask_client):
-    created = _create_team(flask_client)["response"]
+def test_team_edit_motd_success(flask_client, create_team):
+    created = create_team()["response"]
     team_id = created["id"]
 
     res = flask_client.post(
@@ -113,9 +122,9 @@ def test_team_edit_motd_success(flask_client):
     assert fetched["motd"] == "hello-team"
 
 
-def test_team_edit_motd_by_non_leader_errors(flask_client):
+def test_team_edit_motd_by_non_leader_errors(flask_client, create_team):
     other_leader = _make_user()
-    team_id = _create_team(flask_client, leader_id=other_leader.id)["response"]["id"]
+    team_id = create_team(leader_id=other_leader.id)["response"]["id"]
     res = flask_client.post(
         f"/api/v1/team/{team_id}/motd/edit",
         json={"id": team_id, "motd": "nope"},
@@ -124,8 +133,8 @@ def test_team_edit_motd_by_non_leader_errors(flask_client):
     assert "doesn't belong to the user" in res["response"]["arguments"][0]
 
 
-def test_team_delete_success(flask_client):
-    team_id = _create_team(flask_client)["response"]["id"]
+def test_team_delete_success(flask_client, create_team):
+    team_id = create_team()["response"]["id"]
     res = flask_client.delete(f"/api/v1/team/{team_id}/delete").json
     assert res["status"] == "ok"
     assert res["response"]["status"] == "deleted"
@@ -134,9 +143,9 @@ def test_team_delete_success(flask_client):
     assert after["status"] == "error"
 
 
-def test_team_delete_by_non_leader_errors(flask_client):
+def test_team_delete_by_non_leader_errors(flask_client, create_team):
     other_leader = _make_user()
-    team_id = _create_team(flask_client, leader_id=other_leader.id)["response"]["id"]
+    team_id = create_team(leader_id=other_leader.id)["response"]["id"]
     res = flask_client.delete(f"/api/v1/team/{team_id}/delete").json
     assert res["status"] == "error"
     assert "doesn't belong to the user" in res["response"]["arguments"][0]
@@ -148,27 +157,27 @@ def test_team_delete_unknown_id_errors(flask_client):
     assert "doesn't exist" in res["response"]["arguments"][0]
 
 
-def test_leader_teams_lists_owned_teams(flask_client):
-    a = _create_team(flask_client)["response"]["id"]
-    b = _create_team(flask_client)["response"]["id"]
+def test_leader_teams_lists_owned_teams(flask_client, create_team):
+    a = create_team()["response"]["id"]
+    b = create_team()["response"]["id"]
     res = flask_client.get(f"/api/v1/team/leader/{g.user.id}/teams").json
     assert res["status"] == "ok"
     ids = {t["id"] for t in res["response"]}
     assert {a, b}.issubset(ids)
 
 
-def test_leader_teams_other_user_empty(flask_client):
-    _create_team(flask_client)
+def test_leader_teams_other_user_empty(flask_client, create_team):
+    create_team()
     other = _make_user()
     res = flask_client.get(f"/api/v1/team/leader/{other.id}/teams").json
     assert res["status"] == "ok"
     assert res["response"] == []
 
 
-def test_user_teams_includes_owned_and_member(flask_client, team_member):
-    owned = _create_team(flask_client)["response"]["id"]
+def test_user_teams_includes_owned_and_member(flask_client, create_team, team_member):
+    owned = create_team()["response"]["id"]
     other_leader = _make_user()
-    member_team = _create_team(flask_client, leader_id=other_leader.id, members=[g.user.id])["response"]["id"]
+    member_team = create_team(leader_id=other_leader.id, members=[g.user.id])["response"]["id"]
 
     res = flask_client.get(f"/api/v1/team/user/{g.user.id}/teams").json
     assert res["status"] == "ok"

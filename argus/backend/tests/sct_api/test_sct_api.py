@@ -392,10 +392,12 @@ def test_submit_single_event(flask_client, sct_run_id):
     assert isinstance(events, list)
     assert len(events) == 1
     event = events[0]
-    assert event["severity"] == "ERROR"
-    assert event["message"] == "Something went wrong on node-1"
-    assert event["event_type"] == "DatabaseLogEvent"
-    assert event["node"] == "node-1"
+    assert {k: event[k] for k in ("severity", "message", "event_type", "node")} == {
+        "severity": "ERROR",
+        "message": "Something went wrong on node-1",
+        "event_type": "DatabaseLogEvent",
+        "node": "node-1",
+    }
 
 
 def test_submit_event_batch(flask_client, sct_run_id):

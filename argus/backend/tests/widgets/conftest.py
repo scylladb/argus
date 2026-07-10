@@ -23,6 +23,7 @@ from argus.backend.models.result import (
     ArgusGenericResultMetadata,
     ArgusGraphView,
 )
+from argus.backend.models.pytest import PytestResultTable, PytestUserField
 from argus.backend.models.web import ArgusUserView
 from argus.backend.plugins.sct.testrun import SCTTestRun
 
@@ -44,12 +45,12 @@ class SeededView(NamedTuple):
 
 
 @pytest.fixture
-def sct_run(flask_client, fake_test) -> SctRun:
+def sct_run(request, flask_client, fake_test) -> SctRun:
     """Submit a single SCT run + scylla-server package version.
 
     Mirrors the canonical seeding sequence used by ``tests/sct_api/test_sct_api.py``:
     POST to the SCT plugin's submit endpoint, then attach a package via the
-    ``/packages/submit`` route. Yields the run id, test id and package version
+    ``/packages/submit`` route. Returns the run id, test id and package version
     so tests can assert against them.
     """
     run_id = str(uuid.uuid4())
@@ -70,6 +71,16 @@ def sct_run(flask_client, fake_test) -> SctRun:
     )
     assert resp.status_code == 200, resp.text
 
+    # Register cleanup immediately after the run is created so it runs even if
+    # a subsequent seeding step (e.g. the packages POST) fails.
+    def _cleanup():
+        try:
+            SCTTestRun.get(id=run_id).delete()
+        except SCTTestRun.DoesNotExist:
+            pass
+
+    request.addfinalizer(_cleanup)
+
     package_payload = {
         "packages": [
             {
@@ -88,7 +99,7 @@ def sct_run(flask_client, fake_test) -> SctRun:
     )
     assert resp.status_code == 200, resp.text
 
-    yield SctRun(
+    return SctRun(
         run_id=run_id,
         test_id=str(fake_test.id),
         package_name="scylla-server",
@@ -97,11 +108,6 @@ def sct_run(flask_client, fake_test) -> SctRun:
         package_revision_id="deadbeef",
         test_method="widget_seed_module.WidgetSeedTest.test_widget",
     )
-
-    try:
-        SCTTestRun.get(id=run_id).delete()
-    except SCTTestRun.DoesNotExist:
-        pass
 
 
 @pytest.fixture
@@ -290,7 +296,6 @@ def seeded_pytest_row(client_service, fake_test):
 
     # Best-effort cleanup; pytest tables are partition-keyed by name so
     # a delete-by-PK is safe.
-    from argus.backend.models.pytest import PytestResultTable, PytestUserField
     try:
         PytestResultTable.filter(name=inserted["name"]).delete()
     except Exception:
