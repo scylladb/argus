@@ -110,3 +110,11 @@ WARNING: `start_argus.sh` assumes pyenv is installed into `~/.pyenv`
 sudo systemctl daemon-reload
 sudo systemctl enable --now argus.service
 ```
+
+`uwsgi.ini` logs to `/var/log/argus/argus.log`; make sure that directory exists and is writable by the `argus` user, then install log rotation by copying `docs/config/argus.logrotate` to `/etc/logrotate.d/argus`:
+
+```bash
+sudo mkdir -p /var/log/argus
+sudo chown argus:argus /var/log/argus
+sudo cp docs/config/argus.logrotate /etc/logrotate.d/argus
+```
