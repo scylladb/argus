@@ -446,7 +446,16 @@ class DriverTestRun(PluginModelBase):
         self.index_version()
 
     def finish_run(self, payload: dict = None):
-        self.end_time = datetime.utcnow()
+        payload = payload or {}
+        # ``end_time`` may be supplied (as an epoch timestamp) so replay can
+        # preserve the run's original finish time; otherwise stamp it now.
+        # ``is not None`` so an explicit epoch of 0 is honoured, not treated
+        # as absent.
+        end_time = payload.get("end_time")
+        if end_time is not None:
+            self.end_time = datetime.utcfromtimestamp(end_time)
+        else:
+            self.end_time = datetime.utcnow()
         status = payload.get("status", "passed")
         self.status = TestStatus(status).value
         self.invalidate_release_snapshot()

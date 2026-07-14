@@ -417,7 +417,11 @@ class SCTTestRun(PluginModelBase):
         self.index_version()
 
     def finish_run(self, payload: dict = None):
-        self.end_time = datetime.utcnow()
+        end_time = payload.get("end_time") if payload else None
+        if end_time is not None:
+            self.end_time = datetime.utcfromtimestamp(end_time)
+        else:
+            self.end_time = datetime.utcnow()
         self.invalidate_release_snapshot()
         self.index_version()
         self.index_image(self)

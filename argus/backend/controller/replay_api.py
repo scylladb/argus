@@ -70,6 +70,9 @@ def replay_ingest():
     create_missing_tests = request.args.get(
         "create_missing_tests", "false",
     ).lower() in {"1", "true", "yes"}
+    backfill_logs = request.args.get(
+        "backfill_logs", "true",
+    ).lower() in {"1", "true", "yes"}
 
     # Propagate the caller's Authorization header to the in-process
     # ``test_client`` so internal proxied requests inherit the same identity
@@ -81,6 +84,7 @@ def replay_ingest():
     summary = ReplayService(
         auth_header=auth_header,
         create_missing_tests=create_missing_tests,
+        backfill_logs=backfill_logs,
     ).ingest(archive, dry_run=dry_run)
 
     return {"status": "ok", "response": summary.as_dict()}
