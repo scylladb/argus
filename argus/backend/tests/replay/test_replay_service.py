@@ -20,6 +20,7 @@ import zstandard as zstd
 
 from argus.backend.service.replay_service import (
     CLIENT_ROUTE_PREFIX,
+    FINALIZE_ENDPOINT,
     ReplayService,
     ReplayServiceError,
     SKIP_ENDPOINTS,
@@ -106,6 +107,8 @@ def _make_service(
     *,
     create_missing_tests: bool = False,
     auth_header: str | None = None,
+    backfill_logs: bool = False,
+    s3_client=None,
 ) -> ReplayService:
     """Service wired to a recording mock client (default: always-200)."""
     if client is None:
@@ -116,6 +119,8 @@ def _make_service(
         app=app,
         auth_header=auth_header,
         create_missing_tests=create_missing_tests,
+        backfill_logs=backfill_logs,
+        s3_client=s3_client,
     )
 
 
@@ -262,6 +267,134 @@ def test_terminal_set_status_runs_last():
     ]
 
 
+def test_finalize_is_dispatched_and_runs_in_terminal_group():
+    # ``finalize`` is the ONLY call that back-fills a generic (dtest/pytest)
+    # run's terminal status/scylla_version/end_time. Regression guard: it must
+    # be dispatched (not skipped) and ordered after every middle record, even
+    # when its ts is older than a middle record's.
+    archive = _make_archive({
+        "argus_replay_log_r_1.jsonl": [
+            _rec(FINALIZE_ENDPOINT, ts=5,
+                 location_params={"type": "generic", "id": "X"},
+                 body={"status": "passed", "scylla_version": "6.2.0"}),
+            _rec("/testrun/$type/$id/submit_results", ts=10,
+                 location_params={"type": "generic", "id": "X"},
+                 body={"run_id": "X"}),
+        ],
+    })
+    client = MagicMock()
+    client.open.return_value = _Response(200)
+    _make_service(client).ingest(archive)
+    urls = [c.args[0] for c in client.open.call_args_list]
+    assert urls == [
+        f"{CLIENT_ROUTE_PREFIX}/testrun/generic/X/submit_results",
+        f"{CLIENT_ROUTE_PREFIX}/testrun/generic/X/finalize",
+    ]
+    # The terminal status/version payload is forwarded intact, and the run's
+    # original finish time is injected from the record ts, which is in
+    # milliseconds (5ms -> 0.005s).
+    final_json = client.open.call_args.kwargs["json"]
+    assert final_json["status"] == "passed"
+    assert final_json["scylla_version"] == "6.2.0"
+    assert final_json["end_time"] == 5 / 1000
+
+
+def test_finalize_end_time_is_injected_from_ts_when_absent():
+    # ReplayRecord.ts is milliseconds (== _now_ns() // 1_000_000), so a ts of
+    # 1_700_000_000_000ms must inject end_time == 1_700_000_000.0s.
+    archive = _make_archive({
+        "argus_replay_log_r_1.jsonl": [
+            _rec(FINALIZE_ENDPOINT, ts=1_700_000_000_000,
+                 location_params={"type": "generic", "id": "X"},
+                 body={"status": "passed"}),
+        ],
+    })
+    client = MagicMock()
+    client.open.return_value = _Response(200)
+    _make_service(client).ingest(archive)
+    assert client.open.call_args.kwargs["json"]["end_time"] == 1_700_000_000.0
+
+
+def test_finalize_preserves_explicit_end_time_in_body():
+    # A finalize record that already carries end_time is left untouched.
+    archive = _make_archive({
+        "argus_replay_log_r_1.jsonl": [
+            _rec(FINALIZE_ENDPOINT, ts=5,
+                 location_params={"type": "generic", "id": "X"},
+                 body={"status": "passed", "end_time": 1234.5}),
+        ],
+    })
+    client = MagicMock()
+    client.open.return_value = _Response(200)
+    _make_service(client).ingest(archive)
+    assert client.open.call_args.kwargs["json"]["end_time"] == 1234.5
+
+
+def test_finalize_end_time_falls_back_to_last_seen_ts_when_own_ts_absent():
+    # The finalize record itself has no ts (e.g. reconstructed rather than
+    # originally recorded) -- fall back to the highest ts seen anywhere in
+    # the replay log for this run, not the replay moment, since recovering
+    # from an outage can take days and the run itself may be days-long.
+    archive = _make_archive({
+        "argus_replay_log_r_1.jsonl": [
+            _rec("/testrun/$type/$id/submit_results", ts=10,
+                 location_params={"type": "generic", "id": "X"},
+                 body={"run_id": "X"}),
+            _rec("/testrun/$type/$id/heartbeat", ts=1_700_000_000_000,
+                 location_params={"type": "generic", "id": "X"}, body={}),
+            _rec(FINALIZE_ENDPOINT, ts=0,
+                 location_params={"type": "generic", "id": "X"},
+                 body={"status": "passed"}),
+        ],
+    })
+    client = MagicMock()
+    client.open.return_value = _Response(200)
+    _make_service(client).ingest(archive)
+    finalize_call = next(
+        c for c in client.open.call_args_list
+        if c.args[0].endswith("/finalize"))
+    assert finalize_call.kwargs["json"]["end_time"] == 1_700_000_000.0
+
+
+def test_finalize_end_time_untouched_when_no_ts_anywhere_for_run():
+    # No record for the run carries a ts at all -- end_time is left unset,
+    # same as before this fallback existed, rather than injecting a bogus 0.
+    archive = _make_archive({
+        "argus_replay_log_r_1.jsonl": [
+            _rec(FINALIZE_ENDPOINT, ts=0,
+                 location_params={"type": "generic", "id": "X"},
+                 body={"status": "passed"}),
+        ],
+    })
+    client = MagicMock()
+    client.open.return_value = _Response(200)
+    _make_service(client).ingest(archive)
+    assert "end_time" not in client.open.call_args.kwargs["json"]
+
+
+def test_finalize_runs_after_terminal_set_status():
+    # When both are present (the SCT flow emits set_status *and* finalize),
+    # finalize still lands last so end_time is written after the status flip.
+    archive = _make_archive({
+        "argus_replay_log_r_1.jsonl": [
+            _rec(FINALIZE_ENDPOINT, ts=5,
+                 location_params={"type": "scylla-cluster-tests", "id": "X"},
+                 body={}),
+            _rec("/testrun/$type/$id/set_status", ts=10,
+                 location_params={"type": "scylla-cluster-tests", "id": "X"},
+                 body={"new_status": "passed"}),
+        ],
+    })
+    client = MagicMock()
+    client.open.return_value = _Response(200)
+    _make_service(client).ingest(archive)
+    urls = [c.args[0] for c in client.open.call_args_list]
+    assert urls == [
+        f"{CLIENT_ROUTE_PREFIX}/testrun/scylla-cluster-tests/X/set_status",
+        f"{CLIENT_ROUTE_PREFIX}/testrun/scylla-cluster-tests/X/finalize",
+    ]
+
+
 def test_non_terminal_set_status_keeps_natural_order():
     archive = _make_archive({
         "argus_replay_log_r_1.jsonl": [
@@ -358,6 +491,13 @@ def test_auth_header_is_forwarded():
 # ---------------------------------------------------------------------------
 # skip list
 # ---------------------------------------------------------------------------
+
+def test_finalize_is_not_in_skip_list():
+    # finalize has no side effect outside Argus (it only writes the run row)
+    # and is the sole terminal-state source for non-SCT plugins, so it must be
+    # replayed, not skipped.
+    assert FINALIZE_ENDPOINT not in SKIP_ENDPOINTS
+
 
 @pytest.mark.parametrize("endpoint", sorted(SKIP_ENDPOINTS))
 def test_skip_endpoints_are_not_dispatched(endpoint: str):
@@ -717,3 +857,134 @@ def test_diagnose_parses_two_segment_build_id():
     assert "release='scylla-master'" in result
     assert "group='scylla-master-root'" in result
     assert "test='perf'" in result
+
+
+# ---------------------------------------------------------------------------
+# S3 log back-fill (backfill_logs=True)
+# ---------------------------------------------------------------------------
+
+_RUN_ID = "15bb6cad-1d24-4e81-800e-9c45d6ea7d06"
+_BUCKET = "cloudius-jenkins-test"
+
+
+def _s3_url(key: str) -> str:
+    return f"https://{_BUCKET}.s3.amazonaws.com/{key}"
+
+
+def _mock_s3(keys: list[str]):
+    """A boto3-S3 stand-in whose ``list_objects_v2`` returns ``keys``."""
+    s3 = MagicMock()
+    s3.list_objects_v2.return_value = {
+        "Contents": [{"Key": k} for k in keys],
+        "IsTruncated": False,
+    }
+    return s3
+
+
+def _logs_archive(recorded_keys: list[str]) -> bytes:
+    """Archive with a single ``logs/submit`` recording links for ``recorded_keys``."""
+    return _make_archive({"argus_replay_log_run.jsonl": [
+        _rec("/testrun/$type/$id/logs/submit", ts=1,
+             location_params={"type": "scylla-cluster-tests", "id": _RUN_ID},
+             body={"schema_version": "v8", "logs": [
+                 {"log_name": k.rsplit("/", 1)[-1], "log_link": _s3_url(k)}
+                 for k in recorded_keys
+             ]}),
+    ]})
+
+
+def test_backfill_submits_only_missing_s3_objects():
+    recorded = f"{_RUN_ID}/20260526_115014/db-node-0-1-15bb6cad.tar.zst"
+    loader = f"{_RUN_ID}/20260526_115014/loader-set-15bb6cad.tar.zst"
+    runner = f"{_RUN_ID}/20260526_115014/sct-runner-events-15bb6cad.tar.zst"
+    s3 = _mock_s3([recorded, loader, runner])
+
+    client = MagicMock()
+    client.open.return_value = _Response(200, b'{"status":"ok"}')
+    service = _make_service(client, backfill_logs=True, s3_client=s3)
+    summary = service.ingest(_logs_archive([recorded]))
+
+    # Listed the run's prefix once.
+    s3.list_objects_v2.assert_called_once()
+    assert s3.list_objects_v2.call_args.kwargs["Prefix"] == f"{_RUN_ID}/"
+
+    # Two dispatches: the recorded logs/submit + one back-fill logs/submit.
+    bodies = [c.kwargs["json"] for c in client.open.call_args_list]
+    backfill_bodies = [b for b in bodies if b and any(
+        "loader-set" in l["log_name"] or "sct-runner" in l["log_name"] for l in b.get("logs", []))]
+    assert len(backfill_bodies) == 1
+    submitted = {l["log_link"] for l in backfill_bodies[0]["logs"]}
+    # Only the two *missing* archives, never the already-recorded db-node link.
+    assert submitted == {_s3_url(loader), _s3_url(runner)}
+    assert _s3_url(recorded) not in submitted
+    assert summary.backfilled_logs == 2
+
+
+def test_backfill_can_be_disabled():
+    # The ingest endpoint enables backfill by default; passing backfill_logs=False
+    # (?backfill_logs=false) must suppress the S3 listing entirely.
+    recorded = f"{_RUN_ID}/20260526_115014/db-node-0-1-15bb6cad.tar.zst"
+    loader = f"{_RUN_ID}/20260526_115014/loader-set-15bb6cad.tar.zst"
+    s3 = _mock_s3([recorded, loader])
+
+    client = MagicMock()
+    client.open.return_value = _Response(200, b'{"status":"ok"}')
+    service = _make_service(client, backfill_logs=False, s3_client=s3)
+    summary = service.ingest(_logs_archive([recorded]))
+
+    s3.list_objects_v2.assert_not_called()
+    assert summary.backfilled_logs == 0
+
+
+def test_backfill_noop_when_all_logs_already_present():
+    recorded = f"{_RUN_ID}/20260526_115014/db-node-0-1-15bb6cad.tar.zst"
+    s3 = _mock_s3([recorded])  # S3 has nothing new
+
+    client = MagicMock()
+    client.open.return_value = _Response(200, b'{"status":"ok"}')
+    service = _make_service(client, backfill_logs=True, s3_client=s3)
+    summary = service.ingest(_logs_archive([recorded]))
+
+    assert summary.backfilled_logs == 0
+    # Only the single recorded logs/submit was dispatched.
+    assert client.open.call_count == 1
+
+
+def test_backfill_skipped_on_dry_run():
+    recorded = f"{_RUN_ID}/20260526_115014/db-node-0-1-15bb6cad.tar.zst"
+    loader = f"{_RUN_ID}/20260526_115014/loader-set-15bb6cad.tar.zst"
+    s3 = _mock_s3([recorded, loader])
+
+    service = _make_service(backfill_logs=True, s3_client=s3)
+    summary = service.ingest(_logs_archive([recorded]), dry_run=True)
+
+    s3.list_objects_v2.assert_not_called()
+    assert summary.backfilled_logs == 0
+
+
+def test_backfill_falls_back_to_sct_default_bucket_when_no_bucket_derivable():
+    # Only a non-S3 link recorded -> no bucket to learn from, and no
+    # REPLAY_LOG_BACKFILL_BUCKET config (no app context in tests) -- falls
+    # back to SCT's own default bucket rather than silently skipping.
+    loader = f"{_RUN_ID}/x/loader-set.tar.zst"
+    archive = _make_archive({"argus_replay_log_run.jsonl": [
+        _rec("/testrun/$type/$id/logs/submit", ts=1,
+             location_params={"type": "scylla-cluster-tests", "id": _RUN_ID},
+             body={"schema_version": "v8", "logs": [
+                 {"log_name": "local", "log_link": "http://example.com/local.tar.zst"}]}),
+    ]})
+    s3 = _mock_s3([loader])
+
+    service = _make_service(backfill_logs=True, s3_client=s3)
+    summary = service.ingest(archive)
+
+    s3.list_objects_v2.assert_called_once_with(Bucket=_BUCKET, Prefix=f"{_RUN_ID}/")
+    assert summary.backfilled_logs == 1
+
+
+def test_log_name_from_key_strips_archive_suffix():
+    assert ReplayService._log_name_from_key(
+        f"{_RUN_ID}/ts/loader-set-15bb6cad.tar.zst") == "loader-set-15bb6cad"
+    assert ReplayService._log_name_from_key(
+        f"{_RUN_ID}/ts/history.jsonl.tar.gz") == "history.jsonl"
+    assert ReplayService._log_name_from_key(f"{_RUN_ID}/ts/plain.log") == "plain.log"

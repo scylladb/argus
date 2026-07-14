@@ -254,6 +254,24 @@ def test_nemesis_submit_and_finalize(flask_client, sct_run_id):
     assert nem.status == "succeeded"
     assert nem.end_time and nem.end_time > 0
     assert nem.stack_trace == "done"
+    stats_after_first = dict(run.nemesis_stats or {})
+    end_time_after_first = nem.end_time
+
+    resp = flask_client.post(
+        f"{API_PREFIX}/{sct_run_id}/nemesis/finalize",
+        data=json.dumps(finalize_payload),
+        content_type="application/json",
+    )
+    assert resp.status_code == 200
+    assert resp.json["status"] == "ok"
+
+    run = SCTTestRun.get(id=sct_run_id)
+    nemesis_data = SCTNemesis.filter(run_id=run.id).all()
+    nem = next(n for n in nemesis_data if n.name ==
+               "ChaosMonkey" and n.start_time == 123456)
+    assert nem.status == "succeeded"
+    assert nem.end_time == end_time_after_first
+    assert dict(run.nemesis_stats or {}) == stats_after_first
 
 
 def test_stress_commands(flask_client, sct_run_id):

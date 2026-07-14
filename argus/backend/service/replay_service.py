@@ -23,18 +23,33 @@ exactly as they would for a live client.
 
 Two side concerns remain server-side:
 
-* **Ordering** -- ``submit_run`` must run before anything referencing the run,
-  terminal ``set_status`` runs last so ``end_time`` is back-filled, and
-  heartbeats collapse to the most recent record (per run).
-* **Skip-list** -- endpoints with side effects outside Argus
+* **Ordering** -- ``submit_run`` must run before anything referencing the run;
+  terminal ``set_status`` and ``finalize`` run last; and heartbeats collapse to
+  the most recent record (per run). ``finalize`` is the only call that
+  back-fills ``end_time`` -- and, for the generic (pytest/dtest) and
+  driver-matrix plugins, the terminal ``status`` and ``scylla_version`` too --
+  so it must land after every middle record.
+* **Skip-list** -- only endpoints with side effects *outside* Argus
   (``/testrun/report/email``, ``/planning/plan/trigger``) are skipped so
-  replay doesn't send emails or trigger CI jobs.
+  replay doesn't send emails or trigger CI jobs. ``finalize`` is deliberately
+  *not* skipped: it only writes to the run row and is the single source of
+  terminal status/version for non-SCT plugins, so skipping it silently left
+  replayed dtest/pytest runs stuck without a final status.
 
 When ``create_missing_tests`` is set, ``submit_run`` records get a pre-step
 that ensures the ``ArgusRelease/Group/Test`` triple exists for the run's
 build_id, so that the controller's ``assign_categories`` can populate
 ``test_id`` on the row. This is opt-in because curated instances already have
 the hierarchy populated and don't want orphan auto-creates.
+
+When ``backfill_logs`` is set, a post-step lists each run's S3 log prefix
+(derived from the run-id in any recorded log link) and submits links for any
+archive that reached S3 but whose ``logs/submit`` was never recorded -- e.g.
+loader/monitor/sct-runner bundles collected at teardown. The ingest endpoint
+enables this by default (disable with ``?backfill_logs=false``); it re-uses
+the app's existing read-only S3 credentials and the link-only log model
+(nothing is uploaded or hosted), and is idempotent, so the extra S3 list per
+ingest is the only cost when there is nothing to back-fill.
 """
 import gzip
 import io
@@ -59,9 +74,6 @@ LOGGER = logging.getLogger(__name__)
 SKIP_ENDPOINTS: frozenset[str] = frozenset({
     "/testrun/report/email",       # would send actual mail
     "/planning/plan/trigger",      # would re-trigger CI jobs
-    # ``finalize`` is folded into terminal ``set_status`` by the new client
-    # flow; older logs that still emit it are no-ops.
-    "/testrun/$type/$id/finalize",
 })
 
 # Set of ``set_status`` body.new_status values that we treat as terminal.
@@ -74,6 +86,33 @@ TERMINAL_STATUSES = frozenset({
 # ``/testrun/$type/submit``); we prepend this when reconstructing the URL
 # for the Flask test client.
 CLIENT_ROUTE_PREFIX = "/api/v1/client"
+
+# The ``logs/submit`` endpoint template, referenced from both ordering and the
+# S3 log back-fill.
+LOGS_SUBMIT_ENDPOINT = "/testrun/$type/$id/logs/submit"
+
+# The ``finalize`` endpoint template. It writes the run's terminal state
+# (``end_time`` for every plugin; ``status`` and ``scylla_version`` for the
+# generic/driver-matrix plugins), so ordering runs it in the terminal group.
+FINALIZE_ENDPOINT = "/testrun/$type/$id/finalize"
+
+# SCT's ``S3Storage.bucket_name`` default (sdcm/utils/common.py) -- every SCT
+# log collector (``LogCollector.collect_logs``, ``collect_sct_logs``,
+# ``upload_system_table_to_s3``) uploads here unless a run overrides it, so
+# it's the right fallback when a run recorded no S3 links to derive its
+# bucket from.
+_DEFAULT_LOG_BACKFILL_BUCKET = "cloudius-jenkins-test"
+
+# Parse ``bucket`` and ``key`` out of a virtual-hosted S3 URL, e.g.
+# ``https://cloudius-jenkins-test.s3.amazonaws.com/<run_id>/<ts>/<name>``.
+# Mirrors ``TestRunService._match_s3_link`` so the URLs we synthesise line up
+# byte-for-byte with the ones the client records.
+_S3_LINK_RE = re.compile(
+    r"(https:\/\/)?(?P<bucket>[\w\-]+)\.s3(?P<region>\.[\w\-\d]*)?\.amazonaws\.com\/(?P<key>.+)"
+)
+
+# Suffixes stripped from an S3 key's basename to derive a human log name.
+_LOG_NAME_SUFFIXES = (".tar.zst", ".tar.gz", ".tar.zstd", ".tgz", ".tar", ".zip")
 
 
 @dataclass
@@ -91,6 +130,9 @@ class ReplaySummary:
     succeeded: int = 0
     failed: int = 0
     skipped_no_replay: int = 0
+    # Number of log links discovered in S3 and back-filled onto runs (i.e. logs
+    # that were uploaded but whose ``logs/submit`` call was never recorded).
+    backfilled_logs: int = 0
     errors: list[dict] = field(default_factory=list)
 
     def as_dict(self) -> dict:
@@ -100,6 +142,7 @@ class ReplaySummary:
             "succeeded": self.succeeded,
             "failed": self.failed,
             "skipped_no_replay": self.skipped_no_replay,
+            "backfilled_logs": self.backfilled_logs,
             "errors": self.errors,
         }
 
@@ -130,10 +173,15 @@ class ReplayService:
         app=None,
         auth_header: str | None = None,
         create_missing_tests: bool = False,
+        backfill_logs: bool = False,
+        s3_client=None,
     ) -> None:
         self._app = app
         self._auth_header = auth_header
         self._create_missing_tests = create_missing_tests
+        self._backfill_logs = backfill_logs
+        # Lazily built from app config on first use; injectable for tests.
+        self._s3 = s3_client
 
     # ------------------------------------------------------------------
     # Entry point
@@ -145,15 +193,27 @@ class ReplayService:
         summary = ReplaySummary(total=len(records))
         if records:
             client = self._test_client()
+            last_seen_ts = self._compute_last_seen_ts(records)
             for rec in records:
-                self._process_one(client, rec, summary, dry_run=dry_run)
+                self._process_one(client, rec, summary, dry_run=dry_run, last_seen_ts=last_seen_ts)
+
+            # After the recorded calls are applied, optionally discover log
+            # archives that reached S3 but whose ``logs/submit`` was never
+            # recorded (e.g. loader/monitor/sct-runner bundles), and submit
+            # their links through the same dispatch path. Skipped on dry_run.
+            if self._backfill_logs and not dry_run:
+                backfill_records = self._build_log_backfill_records(records)
+                summary.total += len(backfill_records)
+                for rec in backfill_records:
+                    self._process_one(client, rec, summary, dry_run=dry_run, last_seen_ts=last_seen_ts)
+                    summary.backfilled_logs += len((rec.get("body") or {}).get("logs") or [])
 
         LOGGER.info(
             "Replay ingest complete: total=%d processed=%d ok=%d failed=%d skipped=%d "
-            "(dry_run=%s, create_missing_tests=%s)",
+            "backfilled_logs=%d (dry_run=%s, create_missing_tests=%s, backfill_logs=%s)",
             summary.total, summary.processed, summary.succeeded,
-            summary.failed, summary.skipped_no_replay,
-            dry_run, self._create_missing_tests,
+            summary.failed, summary.skipped_no_replay, summary.backfilled_logs,
+            dry_run, self._create_missing_tests, self._backfill_logs,
         )
         return summary
 
@@ -292,13 +352,17 @@ class ReplayService:
 
         * ``submit_run`` records run first (the run must exist before
           anything else touches it).
-        * Terminal ``set_status`` records run last (back-fills ``end_time``).
+        * Terminal ``set_status`` and ``finalize`` records run last.
+          ``finalize`` is the only call that back-fills ``end_time`` (and, for
+          the generic/driver-matrix plugins, the terminal ``status`` and
+          ``scylla_version``), so it must run after every middle record.
         * Heartbeats are collapsed to only the last one per ``(type, id)``.
         """
         records.sort(key=lambda r: r.get("ts", 0))
 
         submit_runs: list[dict] = []
         terminal_statuses: list[dict] = []
+        finalizes: list[dict] = []
         middle: list[dict] = []
         last_heartbeat: dict[tuple, dict] = {}
 
@@ -308,6 +372,8 @@ class ReplayService:
                 submit_runs.append(r)
             elif endpoint == "/testrun/$type/$id/set_status" and ReplayService._is_terminal_status(r):
                 terminal_statuses.append(r)
+            elif endpoint == FINALIZE_ENDPOINT:
+                finalizes.append(r)
             elif endpoint == "/testrun/$type/$id/heartbeat":
                 loc = r.get("location_params") or {}
                 key = (loc.get("type"), loc.get("id"))
@@ -315,13 +381,35 @@ class ReplayService:
             else:
                 middle.append(r)
 
-        return submit_runs + middle + list(last_heartbeat.values()) + terminal_statuses
+        return (
+            submit_runs + middle + list(last_heartbeat.values())
+            + terminal_statuses + finalizes
+        )
 
     @staticmethod
     def _is_terminal_status(record: dict) -> bool:
         body = record.get("body") or {}
         new_status = (body.get("new_status") or "").lower()
         return new_status in TERMINAL_STATUSES
+
+    @staticmethod
+    def _compute_last_seen_ts(records: list[dict]) -> dict[tuple, int]:
+        """Map each run touched by ``records`` to the highest ``ts`` seen for it.
+
+        Used as the ``finalize`` ``end_time`` fallback when a record's own
+        ``ts`` is missing: recovering from an Argus outage can take days, and
+        the run itself may be days-long, so defaulting to the replay moment
+        would badly misrepresent when the run actually finished. The last
+        timestamp Argus recorded for that run is a far closer approximation.
+        """
+        last_seen: dict[tuple, int] = {}
+        for r in records:
+            loc = r.get("location_params") or {}
+            key = (loc.get("type"), loc.get("id"))
+            ts = r.get("ts", 0)
+            if ts and ts > last_seen.get(key, 0):
+                last_seen[key] = ts
+        return last_seen
 
     # ------------------------------------------------------------------
     # URL reconstruction
@@ -479,6 +567,146 @@ class ReplayService:
             )
 
     # ------------------------------------------------------------------
+    # S3 log back-fill (opt-in: backfill_logs=True)
+    # ------------------------------------------------------------------
+    def _s3_client(self):
+        """Lazily build (or return the injected) boto3 S3 client.
+
+        Uses the same credentials the app already reads log objects with, so
+        listing a run's prefix works exactly where ``get_log`` presigning does.
+        """
+        if self._s3 is None:
+            import boto3
+            self._s3 = boto3.client(
+                service_name="s3",
+                aws_access_key_id=current_app.config.get("AWS_CLIENT_ID"),
+                aws_secret_access_key=current_app.config.get("AWS_CLIENT_SECRET"),
+            )
+        return self._s3
+
+    @staticmethod
+    def _s3_url(bucket: str, key: str) -> str:
+        return f"https://{bucket}.s3.amazonaws.com/{key}"
+
+    @staticmethod
+    def _log_name_from_key(key: str) -> str:
+        """Derive a display log name from an S3 key's basename.
+
+        Strips the archive suffix so ``.../loader-set-15bb6cad.tar.zst`` becomes
+        ``loader-set-15bb6cad``. Only used for links that were *not* recorded,
+        so it never has to match a client-chosen name.
+        """
+        name = key.rsplit("/", 1)[-1]
+        for suffix in _LOG_NAME_SUFFIXES:
+            if name.endswith(suffix):
+                return name[: -len(suffix)]
+        return name
+
+    @classmethod
+    def _resolve_run_bucket(cls, recorded_links: set[str]) -> str | None:
+        """Derive the S3 bucket from any recorded log link for the run.
+
+        Falls back to ``REPLAY_LOG_BACKFILL_BUCKET`` from config, then to
+        SCT's own default bucket, when the run recorded no S3 links to learn
+        the bucket from.
+        """
+        for link in recorded_links:
+            match = _S3_LINK_RE.match(link or "")
+            if match:
+                return match.group("bucket")
+        try:
+            configured = current_app.config.get("REPLAY_LOG_BACKFILL_BUCKET")
+        except RuntimeError:
+            # No application context (e.g. unit tests): no configured override.
+            configured = None
+        return configured or _DEFAULT_LOG_BACKFILL_BUCKET
+
+    def _list_s3_run_objects(self, bucket: str, prefix: str) -> list[str]:
+        """Return every (non-directory) object key under ``prefix``, paginated."""
+        s3 = self._s3_client()
+        keys: list[str] = []
+        continuation: str | None = None
+        while True:
+            kwargs = {"Bucket": bucket, "Prefix": prefix}
+            if continuation:
+                kwargs["ContinuationToken"] = continuation
+            resp = s3.list_objects_v2(**kwargs)
+            for obj in resp.get("Contents", []) or []:
+                key = obj.get("Key", "")
+                if key and not key.endswith("/"):
+                    keys.append(key)
+            if not resp.get("IsTruncated"):
+                break
+            continuation = resp.get("NextContinuationToken")
+            if not continuation:
+                break
+        return keys
+
+    def _build_log_backfill_records(self, records: list[dict]) -> list[dict]:
+        """Synthesise ``logs/submit`` records for a run's S3 log archives that
+        were uploaded but never recorded.
+
+        For each run touched by the archive we derive its S3 bucket + ``run_id``
+        prefix from any recorded log link, list the prefix, and emit a record
+        for every object whose URL is not already in the recorded set. The
+        records are dispatched through the normal ``logs/submit`` path, whose
+        ``submit_logs`` appends-and-dedups -- so this is idempotent across
+        re-ingests (deterministic key-derived names) and never clobbers links
+        the client already submitted.
+        """
+        runs: dict[tuple, set] = {}
+        schema_version: str | None = None
+        for rec in records:
+            loc = rec.get("location_params") or {}
+            run_type, run_id = loc.get("type"), loc.get("id")
+            if not run_type or not run_id:
+                continue
+            links = runs.setdefault((run_type, run_id), set())
+            if self._normalise_endpoint(rec.get("endpoint", "")) == LOGS_SUBMIT_ENDPOINT:
+                body = rec.get("body") or {}
+                schema_version = schema_version or body.get("schema_version")
+                for log in body.get("logs") or []:
+                    if log.get("log_link"):
+                        links.add(log["log_link"])
+
+        backfill: list[dict] = []
+        for (run_type, run_id), recorded_links in runs.items():
+            bucket = self._resolve_run_bucket(recorded_links)
+            if not bucket:
+                LOGGER.info(
+                    "log backfill: no S3 bucket derivable for run %s; skipping", run_id)
+                continue
+            try:
+                keys = self._list_s3_run_objects(bucket, f"{run_id}/")
+            except Exception:  # noqa: BLE001 -- isolate per run; S3 outage != ingest failure
+                LOGGER.exception(
+                    "log backfill: listing s3://%s/%s/ failed", bucket, run_id)
+                continue
+
+            new_logs = [
+                {"log_name": self._log_name_from_key(key), "log_link": url}
+                for key in keys
+                if (url := self._s3_url(bucket, key)) not in recorded_links
+            ]
+            if not new_logs:
+                continue
+            body: dict = {"logs": new_logs}
+            if schema_version:
+                body["schema_version"] = schema_version
+            backfill.append({
+                "ts": 0,
+                "method": "POST",
+                "endpoint": LOGS_SUBMIT_ENDPOINT,
+                "location_params": {"type": run_type, "id": run_id},
+                "params": {},
+                "body": body,
+            })
+            LOGGER.info(
+                "log backfill: %d new log(s) for run %s from s3://%s/%s/",
+                len(new_logs), run_id, bucket, run_id)
+        return backfill
+
+    # ------------------------------------------------------------------
     # Per-record execution
     # ------------------------------------------------------------------
     def _process_one(
@@ -488,6 +716,7 @@ class ReplayService:
         summary: ReplaySummary,
         *,
         dry_run: bool,
+        last_seen_ts: dict[tuple, int] | None = None,
     ) -> None:
         endpoint = self._normalise_endpoint(record.get("endpoint", ""))
         ts = record.get("ts", 0)
@@ -543,6 +772,24 @@ class ReplayService:
         params = record.get("params") or {}
         body = record.get("body")
         method = (record.get("method") or "POST").upper()
+
+        # Preserve the run's original finish time on replay. ``ts`` is the
+        # millisecond moment the finalize call was originally recorded
+        # (ReplayRecord.ts == _now_ns() // 1_000_000) -- i.e. the run's real end
+        # time -- so inject it (converted to epoch seconds) as ``end_time`` and
+        # let ``finish_run`` stamp that instead of the replay moment. Live
+        # finalize calls never carry ``end_time``, so this only ever fills a gap.
+        # When the finalize record itself has no ``ts`` (e.g. it was
+        # reconstructed rather than originally recorded), fall back to the
+        # last ``ts`` seen anywhere in the replay log for this run instead of
+        # the replay moment -- recovery from an outage can take days, and the
+        # run itself may be days-long, so "now" would badly misrepresent when
+        # it actually finished.
+        if endpoint == FINALIZE_ENDPOINT and isinstance(body, dict) and "end_time" not in body:
+            run_key = (location_params.get("type"), location_params.get("id"))
+            effective_ts = ts or (last_seen_ts or {}).get(run_key, 0)
+            if effective_ts:
+                body = {**body, "end_time": effective_ts / 1000}
 
         url = self._resolve_url(endpoint, location_params)
 
