@@ -80,8 +80,14 @@ class GenericRun(PluginModelBase):
         return run
 
     def finish_run(self, payload: GenericRunFinishRequest = None):
-        self.end_time = datetime.now(UTC)
-        self.status = TestStatus(payload["status"]).value
+        payload = payload or {}
+        end_time = payload.get("end_time")
+        if end_time is not None:
+            self.end_time = datetime.fromtimestamp(end_time, UTC)
+        else:
+            self.end_time = datetime.now(UTC)
+        if status := payload.get("status"):
+            self.status = TestStatus(status).value
         if version := payload.get("scylla_version"):
             self.submit_product_version(version)
         self.invalidate_release_snapshot()
