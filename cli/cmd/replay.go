@@ -43,14 +43,20 @@ Use --dir to scan a directory for argus_replay_log_*.jsonl (and .jsonl.zst)
 files; use --run-id to filter by the run encoded in the filename — the
 filter also applies to entries inside tar.zst archives. --dry-run asks the
 server to validate the archive and return the summary without executing any
-side effects. Use --target-url to replay against a different Argus instance;
-you must already hold credentials valid for that target (the CLI does not
-re-authenticate against a different host).`,
+side effects. After replaying, the server lists each run's S3 log prefix and
+attaches any log archives that were uploaded but whose logs/submit was never
+recorded (e.g. loader/monitor/sct-runner bundles); pass --backfill-logs=false
+to skip that step. Use --target-url to replay against a different Argus
+instance; you must already hold credentials valid for that target (the CLI
+does not re-authenticate against a different host).`,
 	Example: `  # Replay all files for a run from the SCT results directory
   argus run replay --dir ~/sct-results/latest --run-id 550e8400-e29b-41d4-a716-446655440000
 
   # Replay an SCT events bundle directly
   argus run replay --file ~/sct-extract/sct-runner-events-abc.tar.zst
+
+  # Replay without the default S3 log-link back-fill
+  argus run replay --file ~/sct-extract/sct-runner-events-abc.tar.zst --backfill-logs=false
 
   # Replay a compressed single log
   argus run replay --file argus_replay_log_R_1.jsonl.zst
@@ -67,6 +73,7 @@ re-authenticate against a different host).`,
 		fileArgs, _ := cmd.Flags().GetStringArray("file")
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 		createMissingTests, _ := cmd.Flags().GetBool("create-missing-tests")
+		backfillLogs, _ := cmd.Flags().GetBool("backfill-logs")
 		targetURL, _ := cmd.Flags().GetString("target-url")
 		reportFmt, _ := cmd.Flags().GetString("report")
 
@@ -90,7 +97,7 @@ re-authenticate against a different host).`,
 			return err
 		}
 
-		summary, err := uploadReplay(ctx, client, files, dryRun, createMissingTests, log)
+		summary, err := uploadReplay(ctx, client, files, dryRun, createMissingTests, backfillLogs, log)
 		if err != nil {
 			return err
 		}
@@ -230,6 +237,7 @@ func uploadReplay(
 	files []string,
 	dryRun bool,
 	createMissingTests bool,
+	backfillLogs bool,
 	log zerolog.Logger,
 ) (*models.ReplayIngestSummary, error) {
 	route := api.ReplayIngest
@@ -239,6 +247,10 @@ func uploadReplay(
 	}
 	if createMissingTests {
 		q.Set("create_missing_tests", "true")
+	}
+	// Backfill is on by default server-side; only send the param to disable it.
+	if !backfillLogs {
+		q.Set("backfill_logs", "false")
 	}
 	if encoded := q.Encode(); encoded != "" {
 		route += "?" + encoded
@@ -296,6 +308,7 @@ func uploadReplay(
 		Int("succeeded", summary.Succeeded).
 		Int("failed", summary.Failed).
 		Int("skipped", summary.SkippedNoReplay).
+		Int("backfilled_logs", summary.BackfilledLogs).
 		Msg("replay upload complete")
 	return &summary, nil
 }
@@ -310,8 +323,8 @@ func renderReplaySummary(cmd *cobra.Command, reportFmt string, summary *models.R
 	switch strings.ToLower(reportFmt) {
 	case "", "text":
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(),
-			"Replay summary: total=%d processed=%d succeeded=%d failed=%d skipped=%d\n",
-			summary.Total, summary.Processed, summary.Succeeded, summary.Failed, summary.SkippedNoReplay,
+			"Replay summary: total=%d processed=%d succeeded=%d failed=%d skipped=%d backfilled_logs=%d\n",
+			summary.Total, summary.Processed, summary.Succeeded, summary.Failed, summary.SkippedNoReplay, summary.BackfilledLogs,
 		)
 		if len(summary.Errors) == 0 {
 			return nil
@@ -337,6 +350,12 @@ func init() {
 			"When false (default), submit_run records whose test entity does not yet exist "+
 			"are reported as failures naming the would-be release/group/test and which level "+
 			"is missing -- rather than silently inserting a broken run with empty test_id.")
+	replayCmd.Flags().Bool("backfill-logs", true,
+		"After replaying, have the server list each run's S3 log prefix and submit links "+
+			"for any log archives that were uploaded but whose logs/submit was never recorded "+
+			"(e.g. loader/monitor/sct-runner bundles). Uses the server's existing read-only S3 "+
+			"credentials; idempotent. On by default; pass --backfill-logs=false to disable. "+
+			"Ignored with --dry-run.")
 	replayCmd.Flags().String("target-url", "", "Override the base URL (replay against a different Argus instance)")
 	replayCmd.Flags().String("report", "text", `Output format: "text" or "json"`)
 

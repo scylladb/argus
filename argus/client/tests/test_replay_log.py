@@ -522,3 +522,101 @@ def test_argus_client_replay_log_path_includes_run_id_when_set(tmp_path):
     assert str(run_id) in client.replay_log_path.name
     assert "scylla-cluster-tests" not in client.replay_log_path.name  # test_type isn't in filename
     client.close()
+
+
+def test_argus_client_replay_log_only_records_submitted_log_links(tmp_path):
+    # Log links are stored in the replay log: submit_sct_logs must persist every
+    # (log_name, log_link) pair to the JSONL so replay can re-attach them to the
+    # run once Argus is reachable -- even for the runner/loader archives, and
+    # even in replay-only mode where no HTTP call is made.
+    from argus.client.sct.client import ArgusSCTClient
+    from argus.client.sct.types import LogLink
+
+    client = ArgusSCTClient(
+        run_id=uuid4(),
+        auth_token="t",
+        base_url="https://unreachable.invalid",
+        log_dir=tmp_path,
+        replay_log_only=True,
+    )
+    links = [
+        LogLink(log_name="sct-runner-events", log_link="https://s3/x/sct-runner-events.tar.zst"),
+        LogLink(log_name="loader-set", log_link="https://s3/x/loader-node-1.tar.zst"),
+        LogLink(log_name="db-cluster", log_link="https://s3/x/db-node-1.tar.zst"),
+    ]
+    client.submit_sct_logs(links)
+    client.close()
+
+    records = _read_records(client.replay_log_path)
+    log_records = [r for r in records if r["endpoint"] == ArgusClient.Routes.SUBMIT_LOGS]
+    assert len(log_records) == 1
+    stored = {(l["log_name"], l["log_link"]) for l in log_records[0]["body"]["logs"]}
+    assert stored == {(l.log_name, l.log_link) for l in links}
+
+
+def test_argus_client_replay_log_only_records_submitted_events(tmp_path):
+    # Events MUST land in the replay log so a recovered run isn't left empty.
+    # submit_event carries the full structured RawEventPayload -- every field
+    # (severity, ts, message, event_type, node, nemesis/target, duration,
+    # known_issue, ...) must survive verbatim into the JSONL, for both the
+    # single-event and the batched-list call shapes, even in replay-only mode.
+    from argus.client.sct.client import ArgusSCTClient
+
+    run_id = uuid4()
+    client = ArgusSCTClient(
+        run_id=run_id,
+        auth_token="t",
+        base_url="https://unreachable.invalid",
+        log_dir=tmp_path,
+        replay_log_only=True,
+    )
+
+    db_event = {
+        "run_id": str(run_id),
+        "severity": "ERROR",
+        "ts": 1_700_000_000.123,
+        "message": "2026-01-01 00:00:00.000 <2026-01-01 00:00:01.000>: (DatabaseLogEvent Severity.ERROR) ... node=db-node-1",
+        "event_type": "DatabaseLogEvent",
+        "received_timestamp": "2026-01-01T00:00:01+00:00",
+        "nemesis_name": None,
+        "duration": None,
+        "node": "db-node-1",
+        "target_node": None,
+        "known_issue": None,
+        "nemesis_status": None,
+    }
+    nemesis_event = {
+        "run_id": str(run_id),
+        "severity": "NORMAL",
+        "ts": 1_700_000_050.0,
+        "message": "(DisruptionEvent Severity.NORMAL) nemesis=ChaosMonkey target_node=db-node-2",
+        "event_type": "DisruptionEvent",
+        "received_timestamp": None,
+        "nemesis_name": "ChaosMonkey",
+        "duration": 12.5,
+        "node": None,
+        "target_node": "db-node-2",
+        "known_issue": "https://github.com/scylladb/scylladb/issues/1",
+        "nemesis_status": "succeeded",
+    }
+
+    # Batched list submission ...
+    client.submit_event([db_event, nemesis_event])
+    # ... and a single-event submission.
+    client.submit_event(db_event)
+    client.close()
+
+    records = _read_records(client.replay_log_path)
+    event_records = [r for r in records
+                     if r["endpoint"] == ArgusSCTClient.Routes.SUBMIT_EVENT]
+    assert len(event_records) == 2
+    # Both call shapes are recorded against the run, with the payload intact.
+    for r in event_records:
+        assert r["location_params"] == {"id": str(run_id)}
+        assert r["method"] == "POST"
+
+    batched, single = event_records
+    # The list call preserves order and every field of every event.
+    assert batched["body"]["data"] == [db_event, nemesis_event]
+    # The single call preserves the lone event verbatim (not wrapped in a list).
+    assert single["body"]["data"] == db_event

@@ -9,6 +9,7 @@ type ReplayIngestSummary struct {
 	Succeeded       int                 `json:"succeeded"`
 	Failed          int                 `json:"failed"`
 	SkippedNoReplay int                 `json:"skipped_no_replay"`
+	BackfilledLogs  int                 `json:"backfilled_logs"`
 	Errors          []ReplayIngestError `json:"errors"`
 }
 

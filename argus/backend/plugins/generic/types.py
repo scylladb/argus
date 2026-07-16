@@ -14,3 +14,4 @@ class GenericRunSubmitRequest(TypedDict):
 class GenericRunFinishRequest(TypedDict):
     status: str
     scylla_version: str | None
+    end_time: float | None

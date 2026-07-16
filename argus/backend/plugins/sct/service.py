@@ -456,6 +456,12 @@ class SCTService:
             run: SCTTestRun = SCTTestRun.get(id=run_id)
             nemesis = SCTNemesis.get(
                 run_id=run.id, start_time=int(nem_req.start_time))
+            # Idempotency (e.g. the same replay archive uploaded twice): once a
+            # nemesis is finalized its status leaves RUNNING. Re-finalizing would
+            # re-increment ``nemesis_stats`` and recompute end_time/duration, so
+            # skip when it is already in a terminal state.
+            if nemesis.status != NemesisStatus.RUNNING.value:
+                return "updated"
             nemesis.status = NemesisStatus(nem_req.status).value
             nemesis.stack_trace = nem_req.message
             nemesis.end_time = int(time())
@@ -548,7 +554,8 @@ class SCTService:
     @staticmethod
     def submit_events(run_id: str, events: list[dict]) -> str:
         # NOTE: Dummied out – EventsBySeverity column is being dropped.
-        # Kept for API compatibility with old clients.
+        # Kept for API compatibility with old clients. Events are submitted
+        # through the per-event ``event/submit`` endpoint instead.
         return "added"
 
     @classmethod
