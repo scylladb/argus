@@ -1,120 +1,85 @@
 # Argus
-[![PyPI - Version](https://img.shields.io/pypi/v/argus-alm)](https://pypi.python.org/pypi/argus-alm)
 
-## Description
+Argus is a test tracking system for automated pipelines. It helps teams inspect test runs, compare results across runs, track events and failures, and understand resource usage for long-running test infrastructure.
 
-Argus is a test tracking system intended to provide observability into automated test pipelines which use long-running resources. It allows observation of a test status, its events and its allocated resources. It also allows easy comparison between particular runs of a specific test.
+## Quick Links
+
+- Full CLI guide: [`cli/README.md`](cli/README.md)
+- REST API usage: [`docs/api_usage.md`](docs/api_usage.md)
+- Local development setup: [`docs/dev-setup.md`](docs/dev-setup.md)
+- Production deployment: [`docs/deployment.md`](docs/deployment.md)
+
+## Install the CLI
+
+Download the latest CLI release into `~/.local/bin`:
+
+### Linux amd64
+
+```bash
+VERSION=$(curl -sL https://api.github.com/repos/scylladb/argus/releases | grep -oP '"tag_name":\s*"cli/v\K[^"]+' | head -1)
+mkdir -p ~/.local/bin
+curl -sL "https://github.com/scylladb/argus/releases/download/cli/v${VERSION}/argus_${VERSION}_linux_amd64.tar.gz" | tar xz -C ~/.local/bin argus
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+### macOS amd64
+
+```bash
+VERSION=$(curl -sL https://api.github.com/repos/scylladb/argus/releases | grep -oP '"tag_name":\s*"cli/v\K[^"]+' | head -1)
+mkdir -p ~/.local/bin
+curl -sL "https://github.com/scylladb/argus/releases/download/cli/v${VERSION}/argus_${VERSION}_macOS_amd64.tar.gz" | tar xz -C ~/.local/bin argus
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Verify the install:
+
+```bash
+argus version
+```
+
+## First Successful Command
+
+Authenticate against the default production Argus instance:
+
+```bash
+argus auth
+```
+
+This opens a browser-based login flow when needed and stores credentials for later commands.
+
+If you are running in CI, on a server, or against a local instance, use the auth mode documented in [`cli/README.md`](cli/README.md).
+
+## Use the CLI
+
+Typical next commands:
+
+```bash
+argus config list
+argus auth logout
+```
+
+For authentication modes, Cloudflare behavior, configuration, and command usage, see [`cli/README.md`](cli/README.md).
+
+## Use the API
+
+Generate an API token from your Argus profile page, then call the API with:
+
+```bash
+curl --request GET \
+  --url https://argus.scylladb.com/api/v1/client/driver_matrix/test_report?buildId=example/driver-matrix/test \
+  --header "Authorization: token <YOUR_TOKEN>"
+```
+
+Full endpoint details and payload examples live in [`docs/api_usage.md`](docs/api_usage.md).
+
+## Local Development
+
+For local setup, dependencies, ScyllaDB, seed data, and daily workflow, see [`docs/dev-setup.md`](docs/dev-setup.md).
+
+## Production Deployment
+
+For source-based production installation, nginx, systemd, and logging setup, see [`docs/deployment.md`](docs/deployment.md).
 
 ## Contributing
 
 Review the [Repository Guidelines](AGENTS.md) for project structure, tooling expectations, and pull request practices before submitting changes.
-
-## Installation notes
-
-### Development
-
-For development setup instructions, see [dev-setup.md](./docs/dev-setup.md).
-
-### Prerequisites
-
-- Python >=3.10.0 (system-wide or pyenv)
-
-- NodeJS >=16 (with npm)
-
-- Yarn (can be installed globally with `npm -g install yarn`)
-
-- nginx
-
-- uv
-
-### From source
-
-#### Production
-
-Perform the following steps:
-
-Create a user that will be used by uwsgi:
-
-```bash
-useradd -m -s /bin/bash argus
-sudo -iu argus
-```
-
-(Optional) Install pyenv and create a virtualenv for this user:
-
-```bash
-pyenv install 3.10.0
-pyenv virtualenv argus
-pyenv activate argus
-```
-
-Clone the project into a directory somewhere where user has full write permissions
-
-```bash
-git clone https://github.com/scylladb/argus ~/app
-cd ~/app
-```
-
-Install project dependencies:
-
-```bash
-uv sync --all-extras
-yarn install
-```
-
-Compile frontend files from `/frontend` into `/public/dist`
-
-```bash
-yarn build
-```
-
-Create a `argus.local.yaml` configuration file (used to configure database connection) and a `argus_web.yaml` (used for webapp secrets) in your application install directory.
-
-```bash
-cp argus_web.example.yaml argus_web.yaml
-cp argus.yaml argus.local.yaml
-```
-
-Open `argus.local.yaml` and add the database connection information (contact_points, user, password and keyspace name).
-
-Open `argus_web.yaml` and change the `SECRET_KEY` value to something secure, like a sha512 digest of random bytes. Fill out GITHUB_* variables with their respective values.
-
-Copy nginx configuration file from `docs/configs/argus.nginx.conf` to nginx virtual hosts directory:
-
-Ubuntu:
-
-```bash
-sudo cp docs/configs/argus.nginx.conf /etc/nginx/sites-available/argus
-sudo ln -s /etc/nginx/sites-enabled/argus /etc/nginx/sites-available/argus
-```
-
-RHEL/Centos/Alma/Fedora:
-
-```bash
-sudo cp docs/configs/argus.nginx.conf /etc/nginx/conf.d/argus.conf
-```
-
-Adjust the webhost settings in that file as necessary, particularly `listen` and `server_name` directives.
-
-Copy systemd service file from `docs/config/argus.service` to `/etc/systemd/system` directory:
-
-```bash
-sudo cp docs/config/argus.service /etc/systemd/system
-```
-
-Open it and adjust the path to the `start_argus.sh` script in the `ExecStart=` directive and the user/group, then reload systemd daemon configuration and enable (and optionally start) the service.
-
-WARNING: `start_argus.sh` assumes pyenv is installed into `~/.pyenv`
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now argus.service
-```
-
-`uwsgi.ini` logs to `/var/log/argus/argus.log`; make sure that directory exists and is writable by the `argus` user, then install log rotation by copying `docs/config/argus.logrotate` to `/etc/logrotate.d/argus`:
-
-```bash
-sudo mkdir -p /var/log/argus
-sudo chown argus:argus /var/log/argus
-sudo cp docs/config/argus.logrotate /etc/logrotate.d/argus
-```

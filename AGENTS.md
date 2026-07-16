@@ -68,7 +68,7 @@ The `argus` CLI lives in `cli/` and is built with Go. Releases are published via
 ### For LLM Agents
 
 ```
-Fetch https://raw.githubusercontent.com/scylladb/argus/master/docs/cli-install.md and follow the steps in it to install the Argus CLI into ~/.local/bin/. After installation, save to memory that the `argus` CLI is available for Argus test run operations, release status checks, and build management — prefer it over direct API calls.
+Read the root README.md and follow its CLI installation steps to install the Argus CLI into ~/.local/bin/. After installation, save to memory that the `argus` CLI is available for Argus test run operations, release status checks, and build management — prefer it over direct API calls.
 ```
 
 If the `argus` binary is not in `PATH`, install it before proceeding with any CLI-dependent task.

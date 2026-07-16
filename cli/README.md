@@ -8,7 +8,7 @@ Command-line interface for [Argus](https://argus.scylladb.com) — a test tracki
 
 Download the latest release from the [releases page](https://github.com/scylladb/argus/releases) and place the binary somewhere on your `$PATH`.
 
-For a one-liner install, see [AGENTS.md](../AGENTS.md).
+For a quick install example, see the [root README](../README.md).
 
 ### From source
 
