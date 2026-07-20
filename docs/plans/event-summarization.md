@@ -1,8 +1,8 @@
 ---
-status: draft # draft | approved | in_progress | blocked | complete
+status: approved # draft | approved | in_progress | blocked | complete
 domain: infrastructure
 created: 2026-06-04
-last_updated: 2026-07-03
+last_updated: 2026-07-20
 owner: CodeLieutenant
 ---
 
@@ -240,9 +240,10 @@ In `frontend/TestRun/SCT/SctEvent.svelte`:
 
 - Add `Summary string` (with JSON tag) to the Go `SCTEvent` struct
   (`cli/internal/models/runs.go:198`).
-- Default output stays the original message (consistent with opt-in-for-humans). A
-  `--summary` flag renders the summary where present, falling back to `message` when null —
-  output is never blank.
+- **Default output renders the summary** where present, falling back to `message` when null
+  — output is never blank. This is the opposite default from the web UI: the CLI is the
+  primary interface for scripted/automated callers, so it optimizes for token savings first.
+  A `--raw` flag forces the original `message` instead.
 - The duplicate-aggregation path (`deduplicateEvents`) keeps the canonical event, which is
   the one carrying the summary; a promoted stand-in duplicate has `summary = null` and falls
   back cleanly.
@@ -258,6 +259,11 @@ Zeus **prefers `summary` when non-null** — a small Zeus-side change to coordin
 an external service reached via the `/api/v1/zeus/` proxy). Until Zeus adopts it, the
 feature costs money without saving any; adoption is therefore part of the rollout criteria,
 not an afterthought.
+
+Separately, and regardless of summarization: Zeus should be instructed to bound how many
+events it fetches per investigation step (by time range and/or a `limit`), rather than
+pulling a run's entire event history. This is good practice independent of this feature, but
+matters more once events are summarized in bulk (see §11.3).
 
 ## 6. Metrics & Observability
 
@@ -354,12 +360,13 @@ part of the steady-state design.
 ## 11. Open Questions
 
 1. **Final model** — `gpt-5-mini` is the working default; the evaluation test (§7) decides.
-2. **Per-user preference storage** — localStorage (per-browser, zero backend work, matches
-   existing patterns) vs. a server-side `User` column (cross-device). Proposal: start with
-   localStorage; revisit only if users ask.
-3. **Zeus payload shape** — is "prefer `summary` when non-null" enough on the Zeus side, or
-   should Argus offer a summaries-only events view to guarantee the token saving?
-4. **Record the producing model?** Dropped with the separate table (no `model` column on
-   `sct_event`). If production A/B of models is ever needed, comparison happens offline via
-   the evaluation harness instead. Add a `summary_model` column only if that proves
-   insufficient.
+2. **Per-user preference storage** — **decided: localStorage** (per-browser, zero backend
+   work, matches existing view-preference patterns). A server-side `User` column can replace
+   it later if cross-device consistency is ever needed; not worth the backend work up front.
+3. **Zeus payload shape** — **decided: no dedicated summaries-only view.** Instead, the CLI
+   (§5.6) defaults to summary-first output (`--raw` for the original), and Zeus is instructed
+   to bound its event fetches by time range / `limit` per investigation step rather than
+   pulling a run's full event history — see §5.7.
+4. **Record the producing model?** **Decided: no.** Dropped with the separate table (no
+   `model` column on `sct_event`). If production A/B of models is ever needed, comparison
+   happens offline via the evaluation harness instead.
