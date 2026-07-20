@@ -442,6 +442,31 @@ def test_no_post_reports(testdir, requests_mock):  # pylint: disable=redefined-o
     assert not requests_mock.called, "Requests are not made to Argus when post_reports is False"
 
 
+def test_replay_log_filename_carries_run_id(testdir, requests_mock):  # pylint: disable=redefined-outer-name
+    # Regression test: ArgusReporter.argus_client used to construct
+    # ArgusGenericClient without run_id, so the replay log filename always
+    # fell back to "unknown" instead of the actual ARGUS_RUN_ID (set to
+    # "1234" by the configure_needed_env_vars fixture).
+    testdir.makepyfile(
+        """
+        import pytest
+
+        def test_1(argus_reporter):
+            argus_reporter.argus_client  # force construction
+        """
+    )
+
+    result = testdir.runpytest("--argus-post-reports", "-s", "-v")
+
+    result.stdout.fnmatch_lines(["*::test_1 PASSED*"])
+    assert result.ret == 0
+
+    replay_logs = list(testdir.tmpdir.visit("argus_replay_log_*"))
+    assert replay_logs, "expected a replay log file to be created"
+    assert "1234" in replay_logs[0].basename
+    assert "unknown" not in replay_logs[0].basename
+
+
 def test_subtests(testdir, requests_mock):  # pylint: disable=redefined-outer-name
     """Make sure subtests are identified and reported."""
 

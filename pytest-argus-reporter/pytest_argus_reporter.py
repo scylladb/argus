@@ -215,6 +215,7 @@ class ArgusReporter(object):  # pylint: disable=too-many-instance-attributes
             log_dir=self.log_dir,
             use_tunnel=self.use_tunnel,
             extra_headers=self.extra_headers,
+            run_id=self.run_id,
         )
 
     def append_test_data(self, request, test_data):

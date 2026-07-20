@@ -522,3 +522,21 @@ def test_argus_client_replay_log_path_includes_run_id_when_set(tmp_path):
     assert str(run_id) in client.replay_log_path.name
     assert "scylla-cluster-tests" not in client.replay_log_path.name  # test_type isn't in filename
     client.close()
+
+
+def test_argus_generic_client_replay_log_path_includes_run_id_when_set(tmp_path):
+    # Regression test: ArgusGenericClient used to drop run_id entirely, so
+    # every replay log fell back to "unknown" regardless of what pytest-argus-
+    # reporter (or any other caller) passed in.
+    from argus.client.generic.client import ArgusGenericClient
+    run_id = uuid4()
+    client = ArgusGenericClient(
+        run_id=run_id,
+        auth_token="t",
+        base_url="https://test.example.com",
+        log_dir=tmp_path,
+        replay_log_only=True,
+    )
+    assert str(run_id) in client.replay_log_path.name
+    assert "unknown" not in client.replay_log_path.name
+    client.close()
