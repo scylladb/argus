@@ -27,13 +27,14 @@ hangs with no output until it times out.
 - Mapping Confluence-named tests or categories to real Argus tests/groups via `argus search`/`argus planner overview`
 - Setting up or validating label-based test triggering (`argus test execute --plan-id --label`)
 - Comparing a new release's plan against a prior release's plan for scope parity
+- Publishing a finished plan to Confluence as a companion page next to its source doc
 
 ## When NOT to Use
 
 - Deleting a release plan — this skill deliberately excludes plan deletion guidance; only use `planner delete` ad hoc on plans you created yourself for testing, never as a documented workflow
 - Triggering a real (non-dry-run) Jenkins build outside of an already-reviewed, intentional test run
 - General Jenkins/Argus test-result questions unrelated to plan/label management (see other Argus docs)
-- Confluence operations unrelated to fetching a test-plan doc's content (e.g. writing/editing pages)
+- Confluence operations beyond reading a source doc and drafting companion-page content — there's no `acli` write path, so actually creating/editing pages is the user's action, not this skill's
 
 ## Mandatory clarification checklist
 
@@ -181,6 +182,64 @@ any (or, with `--match-all`, every) given label and prints what would run —
 before dropping `--dry-run` to actually trigger Jenkins builds. `--wait`
 blocks until builds start and reports URLs.
 
+## Publishing the plan to Confluence
+
+Once a plan is created/updated to the point the release owner is happy with
+it, propose mirroring it to Confluence as a companion page — don't wait to be
+asked, and don't do it unprompted either; it's a proposal, not an automatic
+step.
+
+1. **Placement**: name it `<Release> Argus Test Plan` (e.g.
+   "2026.3 Argus Test Plan") and place it as a sibling of the source
+   test-plan/strategy page the plan was built from. If sibling placement
+   isn't practical (permissions, unclear parent space), nest it under that
+   same source page instead.
+2. **`acli confluence page` has no write path — only `view`.** There is no
+   `create`/`update`/`edit` subcommand in this CLI (checked directly:
+   `acli confluence page --help` lists only `view`). Don't assume one exists
+   because `space`/`blog` have `create` — `page` doesn't. So: generate the
+   page content yourself (table + Labels section, below) and ask the user to
+   either create the page and paste it in, or create an empty page and give
+   you its ID — but say plainly that giving you the ID only lets you `view`
+   it back to confirm content, not edit it; they still have to paste the
+   content themselves.
+3. **Content — a table**: `Group | Test | Labels | Assignee`, one row per
+   test in the plan (expand any whole-group entries to their member tests so
+   each row is a single test, not a group). Source it from
+   `planner get --plan-id <key> --resolved` (or the template form) — Group is
+   the key's prefix before `/`, Test the suffix, Labels from the entity's
+   `options.labels` (empty if none), Assignee from `assignee` (`$owner` shown
+   as the owner's name, or blank).
+4. **Content — a Labels section**, explaining what each label means, e.g.:
+
+   ```markdown
+   # Labels
+   * **triggered**: This test is triggered either by a package build or a weekly trigger.
+
+   ### Week 1
+   * Tablets tier 2
+   * Vnodes tier 1 and tier 2
+   * Non-triggered longevities
+
+   ### Week 2
+   * Feature tests
+   * Scale tests
+   * Customer test cases
+
+   ### Week 3
+   * Alternator tests
+
+   ### Week 4
+   * Gemini
+   * Jepsen
+   ```
+
+   This is a *format* example, not a fixed taxonomy — the groupings (weeks,
+   or whatever scheme) and which categories fall under each are whatever the
+   release owner actually decided when the label scheme was designed (see
+   the clarification checklist above); write down their real decision, don't
+   default to this example's specific mapping for a different release.
+
 ## Common mistakes
 
 | Mistake | Fix |
@@ -188,6 +247,7 @@ blocks until builds start and reports URLs.
 | Running `argus ...` without `--non-interactive` | Hangs ~2min on a silent re-auth prompt with no output |
 | Fetching a Confluence page with anything but `acli` | It's auth-walled; a generic web-fetch tool returns a login page or refuses outright — not the page content |
 | Fetching Confluence with `--body-format storage` | `@mention`s carry no display-name text in that format and vanish on conversion; use `--body-format view` |
+| Assuming `acli confluence page` can create/edit a page | It only has `view`; generate the content and ask the user to create/paste it |
 | Passing a `/wiki/x/<code>` tinylink as `--id` | `acli` needs a numeric ID; resolve the redirect or ask the user |
 | Inventing a label taxonomy from a spec doc | Ask the release owner — labels are their interactive call |
 | Assuming a Confluence test name is exact | Verify against `planner overview`/`search` for the *current* release; names drift |
