@@ -2,13 +2,11 @@
 
 Command-line interface for [Argus](https://argus.scylladb.com) — a test tracking system for automated pipelines. Use it to inspect test runs, fetch logs, stream activity, submit comments, and manage SSH tunnels into Argus clusters.
 
----
-
 ## Installation
 
 Download the latest release from the [releases page](https://github.com/scylladb/argus/releases) and place the binary somewhere on your `$PATH`.
 
-For a one-liner install, see [AGENTS.md](../AGENTS.md).
+For a quick install example, see the [root README](../README.md).
 
 ### From source
 
@@ -20,7 +18,43 @@ cd argus/cli
 go build -o argus .
 ```
 
----
+## Common Flows
+
+Most users only need one of these:
+
+### Production Argus with browser login
+
+Use this on a developer machine when connecting to `argus.scylladb.com` or another Argus instance protected by Cloudflare Access.
+
+```bash
+argus auth
+```
+
+### CI, automation, or servers
+
+Use environment variables instead of keychain-based auth:
+
+```bash
+export ARGUS_CF_ACCESS_CLIENT_ID=your-client-id
+export ARGUS_CF_ACCESS_CLIENT_SECRET=your-client-secret
+export ARGUS_AUTH_TOKEN=your-pat
+```
+
+### Local or non-Cloudflare Argus
+
+Use a direct token against a local or internal deployment:
+
+```bash
+argus auth-token <your-token>
+```
+
+### After auth
+
+Check the current CLI configuration:
+
+```bash
+argus config list
+```
 
 ## Authentication
 
@@ -34,8 +68,6 @@ The CLI needs two things to talk to Argus:
 2. A **Cloudflare Access credential** — required only when Argus is behind Cloudflare Access (the default for production at `argus.scylladb.com`).
 
 The first time you run `argus auth`, it fetches both automatically and stores them. Subsequent commands pull them from the keychain silently. If a credential expires, the CLI re-authenticates transparently and retries.
-
----
 
 ### Cloudflared: what it is and when you need it
 
@@ -52,8 +84,6 @@ The first time you run `argus auth`, it fetches both automatically and stores th
 - You explicitly disable it (see [Bypassing Cloudflare](#bypassing-cloudflare) below).
 
 **The CLI manages cloudflared for you.** It checks `$PATH`, then its own cache at `$XDG_CACHE_HOME/argus-cli/cloudflared`, and downloads the latest release from GitHub if neither is found. You do not need to install it manually.
-
----
 
 ### Auth modes
 
@@ -109,8 +139,6 @@ argus auth-token <your-token>
 
 Stores the PAT directly. Cloudflare is never consulted. This is equivalent to setting `ARGUS_AUTH_TOKEN` but persists the token to the keychain.
 
----
-
 ### Bypassing Cloudflare
 
 Several mechanisms disable Cloudflare integration. Use whichever fits your workflow:
@@ -121,8 +149,6 @@ Several mechanisms disable Cloudflare integration. Use whichever fits your workf
 | `ARGUS_DISABLE_CLOUDFLARE=true` | env var, process-wide | CI/CD, scripts, one-off commands (also settable via `argus config set use_cloudflare false`) |
 | `--disable-cloudflare` flag | single command | Ad-hoc overrides |
 | `argus config set use_cloudflare false` | config file, persistent | When you always connect without CF |
-
----
 
 ### Credential priority
 
@@ -145,8 +171,6 @@ Credentials are layered — later sources override earlier ones, so environment 
 4. `ARGUS_TOKEN` env var — fallback if `ARGUS_AUTH_TOKEN` is unset
 5. `ARGUS_CF_ACCESS_CLIENT_ID` + `ARGUS_CF_ACCESS_CLIENT_SECRET` — overrides CF headers from keychain
 
----
-
 ### Logging out
 
 ```
@@ -154,8 +178,6 @@ argus auth logout
 ```
 
 Removes all stored credentials (PAT, session, CF service-account bundle) from the system keychain.
-
----
 
 ## Configuration
 
