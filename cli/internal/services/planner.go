@@ -47,8 +47,9 @@ type PlannerService struct {
 	client *api.Client
 	cache  *cache.Cache
 
+	userSvc *UserService
+
 	releases  models.ReleaseList
-	users     models.UsersMap
 	gridviews map[string]models.GridView
 }
 
@@ -57,6 +58,7 @@ func NewPlannerService(client *api.Client, c *cache.Cache) *PlannerService {
 	return &PlannerService{
 		client:    client,
 		cache:     c,
+		userSvc:   NewUserService(client, c),
 		gridviews: map[string]models.GridView{},
 	}
 }
@@ -227,52 +229,17 @@ func (s *PlannerService) ResolveReleaseID(ctx context.Context, ref string) (stri
 // User resolution
 // ---------------------------------------------------------------------------
 
-// getUsers returns the users map, memoised then disk-cached.
+// getUsers returns the users map. User fetching and caching is owned by
+// [UserService]; this shim delegates so a PlannerService and its UserService
+// share a single fetch.
 func (s *PlannerService) getUsers(ctx context.Context) (models.UsersMap, error) {
-	if s.users != nil {
-		return s.users, nil
-	}
-	if cached, _, err := cache.Get[models.UsersMap](s.cache, cache.UsersKey()); err == nil {
-		s.users = cached
-		return cached, nil
-	}
-
-	req, err := s.client.NewRequest(ctx, "GET", api.Users, nil)
-	if err != nil {
-		return nil, err
-	}
-	users, err := api.DoJSON[models.UsersMap](s.client, req)
-	if err != nil {
-		return nil, err
-	}
-	_ = cache.Set(s.cache, cache.UsersKey(), users, api.Users, cache.TTLUsers)
-	s.users = users
-	return users, nil
+	return s.userSvc.getUsers(ctx)
 }
 
 // ResolveUserID resolves a username (exact, case-insensitive) to its UUID.
-// Raw UUIDs are not accepted; 0 or >1 matches error with candidate usernames.
+// It delegates to [UserService.ResolveUserID].
 func (s *PlannerService) ResolveUserID(ctx context.Context, ref string) (string, error) {
-	users, err := s.getUsers(ctx)
-	if err != nil {
-		return "", err
-	}
-
-	var matches []string
-	for id, u := range users {
-		if strings.EqualFold(u.Username, ref) {
-			matches = append(matches, id)
-		}
-	}
-
-	switch len(matches) {
-	case 1:
-		return matches[0], nil
-	case 0:
-		return "", fmt.Errorf("no user named %q", ref)
-	default:
-		return "", fmt.Errorf("ambiguous username %q (%d matches)", ref, len(matches))
-	}
+	return s.userSvc.ResolveUserID(ctx, ref)
 }
 
 // ---------------------------------------------------------------------------
