@@ -94,3 +94,69 @@ func TestUserService_GetUser_Ambiguous(t *testing.T) {
 	_, err := svc.GetUser(context.Background(), "email", "shared@scylladb.com")
 	require.Error(t, err)
 }
+
+func TestUserService_SearchUsers(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name          string
+		term          string
+		wantUsernames []string
+	}{
+		{"username substring", "ali", []string{"alice"}},
+		{"case-insensitive", "ALI", []string{"alice"}},
+		{"full name substring", "Bob B", []string{"bob"}},
+		{"email domain matches all", "@scylladb.com", []string{"alice", "bob", "carol"}},
+		{"empty term returns all", "", []string{"alice", "bob", "carol"}},
+		{"no match", "dave", []string{}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			svc := newUserSvc(t, userServiceMux(t))
+			got, err := svc.SearchUsers(context.Background(), tc.term)
+			require.NoError(t, err)
+
+			names := make([]string, len(got))
+			for i, u := range got {
+				names[i] = u.Username
+			}
+			assert.Equal(t, tc.wantUsernames, names)
+		})
+	}
+}
+
+func TestUserService_SearchUsers_DiacriticInsensitive(t *testing.T) {
+	t.Parallel()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/users", func(w http.ResponseWriter, _ *http.Request) {
+		jsonOK(t, w, models.UsersMap{
+			"u1": {ID: "u1", Username: "lkaczmarek", Email: "lk@scylladb.com", FullName: "Łukasz Częstochowski"},
+			"u2": {ID: "u2", Username: "jnovak", Email: "jn@scylladb.com", FullName: "Jiří Dvořák"},
+		})
+	})
+
+	cases := []struct {
+		name     string
+		term     string
+		wantUser string
+	}{
+		{"ascii term matches diacritic name", "lukasz", "lkaczmarek"},
+		{"partial folded surname", "czest", "lkaczmarek"},
+		{"czech name folded", "jiri dvorak", "jnovak"},
+		{"diacritic term matches too", "Łukasz", "lkaczmarek"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			svc := newUserSvc(t, mux)
+			got, err := svc.SearchUsers(context.Background(), tc.term)
+			require.NoError(t, err)
+			require.Len(t, got, 1)
+			assert.Equal(t, tc.wantUser, got[0].Username)
+		})
+	}
+}
