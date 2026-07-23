@@ -13,12 +13,19 @@ from argus.backend.models.web import ArgusRelease, WebFileStorage
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.planner_service import PlanningService
 from argus.backend.service.user import UserService, UserServiceException, login_required
-from argus.backend.service.views import UserViewService
+from argus.backend.service.views import UserViewException, UserViewService
 
 LOGGER = logging.getLogger(__name__)
 
+
+def handle_view_not_found(exception: UserViewException):
+    flash(message=str(exception), category="error")
+    return redirect(url_for("main.views"))
+
+
 bp = Blueprint('main', __name__)
 bp.register_error_handler(UserServiceException, handle_profile_exception)
+bp.register_error_handler(UserViewException, handle_view_not_found)
 bp.register_blueprint(notifications_bp)
 bp.register_blueprint(teams_bp)
 
