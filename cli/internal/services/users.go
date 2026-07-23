@@ -69,6 +69,32 @@ func (s *UserService) ListUsers(ctx context.Context) ([]models.User, error) {
 	return out, nil
 }
 
+// SearchUsers returns users whose username, email or full name contains term
+// (case-insensitive, accent-insensitive substring). Diacritics are folded to
+// their ASCII equivalents on both the term and the compared fields, so "lukasz"
+// matches a full name of "Łukasz". An empty term returns every user. Results
+// are sorted by username for stable output.
+func (s *UserService) SearchUsers(ctx context.Context, term string) ([]models.User, error) {
+	users, err := s.getUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	needle := normalizeLatin(term)
+
+	out := make([]models.User, 0, len(users))
+	for _, u := range users {
+		if strings.Contains(normalizeLatin(u.Username), needle) ||
+			strings.Contains(normalizeLatin(u.Email), needle) ||
+			strings.Contains(normalizeLatin(u.FullName), needle) {
+			out = append(out, u)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return strings.ToLower(out[i].Username) < strings.ToLower(out[j].Username)
+	})
+	return out, nil
+}
+
 // GetUser returns the single user whose field matches value (case-insensitive).
 // field must be one of "username", "uuid", or "email". It errors when no user
 // matches or when more than one does.

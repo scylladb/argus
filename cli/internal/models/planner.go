@@ -221,17 +221,18 @@ type User struct {
 // user's UUID string with the user object as the value.
 type UsersMap = map[string]User
 
-// UserListEntry is the compact row shown by `users list`: username, email and
-// the user's UUID (the backend's id, surfaced as "uuid").
+// UserListEntry is the compact row shown by `users list`: username, full name,
+// email and the user's UUID (the backend's id, surfaced as "uuid").
 type UserListEntry struct {
 	Username string `json:"username"`
+	FullName string `json:"full_name"`
 	Email    string `json:"email"`
 	ID       string `json:"uuid"`
 }
 
 // NewUserListEntry projects a [User] onto the compact list row.
 func NewUserListEntry(u User) UserListEntry {
-	return UserListEntry{Username: u.Username, Email: u.Email, ID: u.ID}
+	return UserListEntry{Username: u.Username, FullName: u.FullName, Email: u.Email, ID: u.ID}
 }
 
 // GridEntity is a single test or group in a release's gridview (and the shape

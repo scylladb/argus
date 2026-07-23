@@ -6,4 +6,5 @@ import "github.com/spf13/cobra"
 func Register(parent *cobra.Command) {
 	registerList(parent)
 	registerGet(parent)
+	registerSearch(parent)
 }
