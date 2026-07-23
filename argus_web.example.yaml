@@ -104,7 +104,7 @@ ZEUS_TOKEN: your-token
 EVENT_SUMMARIZATION_ENABLED: false
 # OPENAI_API_KEY: your-openai-key            # required only when summarization is enabled
 # OPENAI_BASE_URL: https://api.openai.com/v1 # set for Azure / proxy / compatible endpoints
-OPENAI_SUMMARY_MODEL: gpt-5-mini             # winner of the evaluation sweep (argusAI/eval)
+OPENAI_SUMMARY_MODEL: gpt-5.6-terra          # starting point; final pick gated on the eval (argusAI/eval)
 EVENT_SUMMARIZATION_MAX_CONCURRENCY: 4       # bounded executor / rate-limit guard
 # Max events waiting to be summarized before new ones are dropped. Decoupled from
 # concurrency so a burst is buffered, not lost; bounds memory if the API stalls.
@@ -113,6 +113,11 @@ EVENT_SUMMARIZATION_MAX_BACKLOG: 1000
 # compresses). 250 is the data-backed default (argusAI/eval §7, ≈800 chars of SCT event body);
 # set 0 to summarize everything.
 EVENT_SUMMARIZATION_MIN_TOKENS: 250
+# Expose Prometheus metrics for the summarization worker on this port (0 = off). The worker
+# is a standalone process, so it serves its own /metrics endpoint (separate from the web app's).
+# Metrics are labeled by model to compare live behaviour against the eval sweep (argusAI/eval):
+# input/output tokens, compression ratio, latency, lag, and ok/failed/dropped counts.
+EVENT_SUMMARIZATION_METRICS_PORT: 9109
 # Pick which versioned prompt to use (a stem from argusAI/prompts/, e.g. v1_surgical).
 # Also settable via the EVENT_SUMMARIZATION_PROMPT_VERSION env var. Defaults to the winner.
 # EVENT_SUMMARIZATION_PROMPT_VERSION: v1_surgical
