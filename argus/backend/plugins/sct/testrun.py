@@ -86,6 +86,7 @@ class SCTEvent(Model):
     event_type = columns.Text()
     message = columns.Text(required=True)
     duplicate_id = columns.UUID()
+    summary = columns.Text()  # LLM-generated summary; null until/unless summarized (see argusAI)
 
     # DB Log columns
     node = columns.Text()

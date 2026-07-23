@@ -14,7 +14,7 @@ class MessageSanitizer:
     Sanitized messages are written to a file for further analysis.
     """
 
-    def __init__(self):
+    def __init__(self, write_log: bool = True):
         self.event_pattern: Pattern = re.compile(r"Severity\.(ERROR|CRITICAL|WARNING|INFO)\)")
         self.event_id_pattern: Pattern = re.compile(
             r"(?:event_id=)?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
@@ -108,16 +108,19 @@ class MessageSanitizer:
             self.remove_special_chars,
             self.normalize_whitespace,
         ]
-        os.makedirs("logs", exist_ok=True)
-        self.sanitized_messages_fp = open(
-            "logs/sanitized_messages_" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".log", "w"
-        )
+        self.sanitized_messages_fp = None
+        if write_log:
+            os.makedirs("logs", exist_ok=True)
+            self.sanitized_messages_fp = open(
+                "logs/sanitized_messages_" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".log", "w"
+            )
 
     def sanitize(self, run_id: UUID, message: str) -> str:
         result = message
         for sanitizer in self.sanitizers:
             result = sanitizer(result)
-        self.sanitized_messages_fp.write(f"{run_id}: {result}\n")
+        if self.sanitized_messages_fp is not None:
+            self.sanitized_messages_fp.write(f"{run_id}: {result}\n")
         return result
 
     def remove_preface(self, text: str) -> str:

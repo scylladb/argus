@@ -6,8 +6,9 @@ from time import sleep
 
 from flask.testing import FlaskClient
 
+from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest
-from argus.backend.plugins.sct.testrun import SCTEventSeverity, SCTTestRun
+from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTTestRun
 from argus.backend.service.client_service import ClientService
 from argus.backend.plugins.sct.service import SCTService
 from argus.backend.service.testrun import TestRunService
@@ -41,6 +42,52 @@ def test_submit_event(client_service: ClientService, sct_service: SCTService, te
 
     all_events = run.get_all_events()
     assert len(all_events) == 1, "Event not found"
+
+
+def test_get_events_includes_summary_field(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
+    run_type, run_req = get_fake_test_run(fake_test)
+    client_service.submit_run(run_type, asdict(run_req))
+    run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
+
+    message = "database error: sstable corruption at offset 42"
+    event_data: RawEventPayload = {
+        "duration": 30.0,
+        "event_type": "end",
+        "known_issue": None,
+        "message": message,
+        "nemesis_name": None,
+        "nemesis_status": None,
+        "node": None,
+        "received_timestamp": None,
+        "run_id": run.id,
+        "severity": SCTEventSeverity.ERROR.value,
+        "target_node": None,
+        "ts": datetime.now(tz=UTC).timestamp()
+    }
+    _ = sct_service.submit_event(str(run.id), event_data)
+
+    # A freshly submitted event has no summary yet: the field is present and null,
+    # and consumers fall back to the original message (goal 4).
+    before = run.get_events_limited(run.id, severities=[SCTEventSeverity.ERROR])
+    assert len(before) == 1, "Event not found"
+    assert "summary" in before[0], "summary column must ride along in the get_events payload"
+    assert before[0]["summary"] is None, "un-summarized event must report summary=null"
+    assert before[0]["message"] == message
+
+    # Simulate the argusAI worker writing a summary back with its exact raw-CQL upsert.
+    evt = before[0]
+    cluster = ScyllaCluster.get()
+    stmt = cluster.prepare(
+        f"UPDATE {SCTEvent.table_name()} SET summary = ? WHERE run_id = ? AND severity = ? AND ts = ?"
+    )
+    summary = "ERROR on sstable corruption (offset 42)"
+    cluster.session.execute(stmt, (summary, evt["run_id"], evt["severity"], evt["ts"]))
+
+    # Serving now carries the summary, and the original message is intact (additive, goal 3).
+    after = run.get_events_limited(run.id, severities=[SCTEventSeverity.ERROR])
+    assert len(after) == 1
+    assert after[0]["summary"] == summary
+    assert after[0]["message"] == message, "original message must remain intact alongside the summary"
 
 
 def test_get_events_by_severity(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):

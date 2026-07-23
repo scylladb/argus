@@ -78,6 +78,7 @@ dev = [
 ]
 ai = [
     "chromadb >= 1.0.15",
+    "openai >= 1.60.0",
 ]
 
 [tool.ruff]
