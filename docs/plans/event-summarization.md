@@ -1,8 +1,8 @@
 ---
-status: approved # draft | approved | in_progress | blocked | complete
+status: in_progress # draft | approved | in_progress | blocked | complete
 domain: infrastructure
 created: 2026-06-04
-last_updated: 2026-07-20
+last_updated: 2026-07-22
 owner: CodeLieutenant
 ---
 
@@ -121,7 +121,11 @@ These were in earlier drafts and are **deliberately dropped**:
   paths — right for embedding similarity, wrong for summaries, where those are the details
   worth keeping (see the worked example in the PR discussion, which preserves node name and
   event id). The summarizer receives the raw message.
-- **No min-length gate.** Every unique ERROR/CRITICAL event is summarized, full stop.
+- **Token-based min-length gate.** Events below `EVENT_SUMMARIZATION_MIN_TOKENS` (default
+  `250` ≈ 800 chars of SCT event body) are skipped: §7 showed sub-threshold events expand
+  rather than compress, so summarizing them only burns tokens. The input is tokenized once
+  (tiktoken, same encoder as the eval harness) and reused for both the gate and the
+  input-size metric. Set `0` to summarize every unique ERROR/CRITICAL event.
 - **No `status=failed` markers, no retries.** On failure: log, leave `summary` null, move
   on. Null already means "fall back to the original".
 - **No live model swap.** Changing the model is a config edit + worker restart.
@@ -206,10 +210,15 @@ Config keys (in `argus_web.example.yaml`, read once at worker startup via
 | `OPENAI_API_KEY` | — | placeholder in the example file only; follows the existing secret conventions |
 | `OPENAI_SUMMARY_MODEL` | `gpt-5-mini` | starting point; final choice is gated on the evaluation (§7) |
 | `EVENT_SUMMARIZATION_ENABLED` | `false` | master switch |
-| `EVENT_SUMMARIZATION_PROMPT` | built-in default | editable without a code change; the working baseline from the PR discussion: *"Summarize this error event in a way we don't lose information and use minimum tokens. Don't add anything more from your side."* |
+| `EVENT_SUMMARIZATION_PROMPT` | built-in default (`v1_surgical`) | inline prompt text; overrides the versioned prompt below when set |
+| `EVENT_SUMMARIZATION_PROMPT_VERSION` | `v1_surgical` | pick a versioned prompt by stem from `argusAI/prompts/` (e.g. `v2_summary`); the eval winner is the default |
+| `EVENT_SUMMARIZATION_MIN_TOKENS` | `250` | skip events smaller than this (data-backed §7 floor; `0` disables the gate) |
 | `EVENT_SUMMARIZATION_MAX_CONCURRENCY` | `4` | executor size / rate-limit guard |
+| `EVENT_SUMMARIZATION_MAX_BACKLOG` | `1000` | max events queued for summarization before new ones are dropped (bounds memory if the API stalls) |
+| `EVENT_SUMMARIZATION_METRICS_PORT` | `0` | Prometheus `/metrics` port for the standalone worker (§6); `0` = off |
 
-New dependency: `openai` in the root `pyproject.toml` (argusAI uses the root project).
+New dependencies in the root `pyproject.toml` `ai` extra (argusAI uses the root project):
+`openai` and `tiktoken` (the latter powers the token gate above).
 
 ### 5.4 Serving
 
@@ -280,6 +289,15 @@ Plus periodic aggregate counters: events summarized, failures, dispatches skippe
 
 These logs are the data source for the cost evaluation below and for ongoing monitoring of
 coverage (what fraction of unique ERROR/CRITICAL events end up with a summary).
+
+**Prometheus.** The worker runs as its own process (not under uWSGI), so when
+`EVENT_SUMMARIZATION_METRICS_PORT` is set it serves its own `/metrics` endpoint via
+`prometheus_client` (`argusAI/utils/summary_metrics.py`), separate from the web app's
+exporter. Series are labeled by `model` on the same axes the eval harness reports — input
+tokens, output tokens, compression ratio, latency, lag, cached prompt tokens, and an
+outcome counter (`ok`/`failed`/`dropped`, also labeled by `severity`) — so a model that won
+the offline sweep can be checked against live traffic and re-baselined when the model or
+prompt changes.
 
 ## 7. Evaluation
 
@@ -370,3 +388,15 @@ part of the steady-state design.
 4. **Record the producing model?** **Decided: no.** Dropped with the separate table (no
    `model` column on `sct_event`). If production A/B of models is ever needed, comparison
    happens offline via the evaluation harness instead.
+
+## 12. Implementation Status
+
+Tracked as 5 phases (`progress.json`); Zeus (§5.7) is an external service tracked separately.
+
+| # | Phase | Covers | Status |
+| - | ----- | ------ | ------ |
+| 1 | Backend worker | §5.1 `summary` column · §5.2 dispatch · §5.3 Summarizer + config · §6 per-call & aggregate metrics | **done** |
+| 2 | Evaluation harness | §7 prompt/model sweep, LLM judge, token-based cost/compression, HTML report | **done** |
+| 3 | Serving & tests | §5.4 (`SELECT *`, no code) · §8 backend serving test (`summary` in payload, `message` intact) done; integration test pending | in progress |
+| 4 | CLI | §5.6 Go `Summary` field, summary-first output, `--raw` | todo |
+| 5 | Web UI | §5.5 Svelte toggle + per-user localStorage preference | todo |
