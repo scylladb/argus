@@ -61,7 +61,7 @@ def _config(**over):
     cfg = {
         "EVENT_SUMMARIZATION_ENABLED": True,
         "OPENAI_API_KEY": "test-key",
-        "OPENAI_SUMMARY_MODEL": "gpt-5-mini",
+        "OPENAI_SUMMARY_MODEL": "gpt-5.6-terra",
         "EVENT_SUMMARIZATION_MAX_CONCURRENCY": 2,
         "EVENT_SUMMARIZATION_MIN_TOKENS": 0,  # gate off by default; the gate test opts in
     }
