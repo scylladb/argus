@@ -24,9 +24,13 @@ type JenkinsParameter struct {
 // JenkinsParamsRequest is the request body for POST /api/v1/jenkins/params.
 // BuildNumber is a pointer so that a nil value is encoded as JSON null, which
 // the backend interprets as "seed from the last build (or job defaults)".
+// FromDefaults asks the backend to return the job's configured default
+// parameters instead of seeding from a past build; it is omitted (false) for
+// rebuild/clone requests so the historical behaviour is preserved.
 type JenkinsParamsRequest struct {
-	BuildID     string `json:"buildId"`
-	BuildNumber *int   `json:"buildNumber"`
+	BuildID      string `json:"buildId"`
+	BuildNumber  *int   `json:"buildNumber"`
+	FromDefaults bool   `json:"fromDefaults,omitempty"`
 }
 
 // JenkinsParamsResponse is the response payload for POST /api/v1/jenkins/params.

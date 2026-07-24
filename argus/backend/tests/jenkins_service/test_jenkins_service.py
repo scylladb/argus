@@ -1,7 +1,9 @@
 import xml.etree.ElementTree as ET
 
 import jenkins
+import pytest
 
+from argus.backend.error_handlers import DataValidationError
 from argus.backend.service.jenkins_service import JenkinsService
 
 
@@ -122,14 +124,22 @@ class _FakeJenkins:
     """Minimal stand-in for the python-jenkins client so next_build_number can
     be tested without a real Jenkins connection."""
 
-    def __init__(self, job_info=None, error=None):
+    def __init__(self, job_info=None, error=None, job_config=None, build_info=None):
         self._job_info = job_info or {}
         self._error = error
+        self._job_config = job_config
+        self._build_info = build_info or {}
 
     def get_job_info(self, name):  # noqa: ARG002 - signature parity
         if self._error is not None:
             raise self._error
         return self._job_info
+
+    def get_job_config(self, name):  # noqa: ARG002 - signature parity
+        return self._job_config
+
+    def get_build_info(self, name, number):  # noqa: ARG002 - signature parity
+        return self._build_info
 
 
 def _service_with(fake):
@@ -154,3 +164,115 @@ def test_next_build_number_jenkins_error_is_non_fatal():
     # A Jenkins error must not propagate: the trigger already succeeded.
     service = _service_with(_FakeJenkins(error=jenkins.JenkinsException("boom")))
     assert service.next_build_number("scylla-2026.2/longevity/longevity-100gb") == -1
+
+
+def test_validate_sct_version_source_accepts_single_source():
+    # Exactly one family set (with other keys empty) is valid.
+    JenkinsService.validate_sct_version_source({"scylla_version": "master:latest", "scylla_repo": ""})
+
+
+def test_validate_sct_version_source_accepts_image_variant():
+    # Any single key of the image family counts as one source.
+    JenkinsService.validate_sct_version_source({"gce_image_db": "https://www.googleapis.com/compute/v1/x"})
+
+
+def test_validate_sct_version_source_rejects_none_set():
+    with pytest.raises(DataValidationError):
+        JenkinsService.validate_sct_version_source({"scylla_version": "", "scylla_repo": "  "})
+
+
+def test_validate_sct_version_source_rejects_missing_keys_entirely():
+    # No source keys present at all is also invalid.
+    with pytest.raises(DataValidationError):
+        JenkinsService.validate_sct_version_source({"backend": "aws"})
+
+
+def test_validate_sct_version_source_rejects_multiple_families():
+    with pytest.raises(DataValidationError) as exc:
+        JenkinsService.validate_sct_version_source(
+            {"scylla_version": "master:latest", "scylla_ami_id": "ami-1234"}
+        )
+    # The message should name the conflicting families.
+    assert "scylla_version" in str(exc.value)
+    assert "scylla_image" in str(exc.value)
+
+
+# job_info whose configured defaults (scylla_version=master:latest) differ from
+# the last build's actual parameters, so the two fetch modes are distinguishable.
+_JOB_INFO_WITH_DEFAULTS = {
+    "nextBuildNumber": 6,
+    "property": [
+        {
+            "_class": "hudson.model.ParametersDefinitionProperty",
+            "parameterDefinitions": [
+                {"name": "scylla_version", "defaultParameterValue": {"value": "master:latest"}},
+                {"name": "billing_project", "defaultParameterValue": {"value": "sct"}},
+                {"name": "requested_by_user", "defaultParameterValue": {"value": "seed"}},
+            ],
+        }
+    ],
+}
+
+_BUILD_INFO_WITH_PARAMS = {
+    "actions": [
+        {
+            "_class": "hudson.model.ParametersAction",
+            "parameters": [
+                {"name": "scylla_version", "value": "5.4:latest"},
+                {"name": "billing_project", "value": "qa"},
+                {"name": "requested_by_user", "value": "someone"},
+            ],
+        }
+    ],
+}
+
+
+def _params_by_name(params):
+    return {p["name"]: p for p in params}
+
+
+def _params_service():
+    fake = _FakeJenkins(
+        job_info=_JOB_INFO_WITH_DEFAULTS,
+        job_config=CONFIG_WITH_CHOICES,
+        build_info=_BUILD_INFO_WITH_PARAMS,
+    )
+    return _service_with(fake)
+
+
+def test_retrieve_job_parameters_from_defaults_uses_job_config():
+    # from_defaults ignores the last build and returns the configured defaults.
+    params = _params_service().retrieve_job_parameters("job", None, from_defaults=True)
+    by_name = _params_by_name(params)
+    assert by_name["scylla_version"]["value"] == "master:latest"
+    # requested_by_user is always stripped from the returned set.
+    assert "requested_by_user" not in by_name
+    # billing_project is an optional choice: it defaults to empty with a blank
+    # option prepended, regardless of its configured default.
+    assert by_name["billing_project"]["value"] == ""
+    assert by_name["billing_project"]["choices"] == ["", "sct", "qa", "perf"]
+
+
+def test_retrieve_job_parameters_from_defaults_ignores_missing_builds():
+    # A fresh job with no builds still yields its defaults (no build lookup).
+    fake = _FakeJenkins(
+        job_info={"property": _JOB_INFO_WITH_DEFAULTS["property"]},
+        job_config=CONFIG_WITH_CHOICES,
+    )
+    params = _service_with(fake).retrieve_job_parameters("job", None, from_defaults=True)
+    assert _params_by_name(params)["scylla_version"]["value"] == "master:latest"
+
+
+def test_retrieve_job_parameters_rebuild_uses_last_build():
+    # Default mode (from_defaults=False) seeds from the last build's parameters.
+    params = _params_service().retrieve_job_parameters("job", None, from_defaults=False)
+    by_name = _params_by_name(params)
+    assert by_name["scylla_version"]["value"] == "5.4:latest"
+    assert by_name["billing_project"]["value"] == "qa"
+    assert "requested_by_user" not in by_name
+
+
+def test_retrieve_job_parameters_rebuild_specific_build():
+    # A specific build number also uses the build's parameters.
+    params = _params_service().retrieve_job_parameters("job", 3, from_defaults=False)
+    assert _params_by_name(params)["scylla_version"]["value"] == "5.4:latest"

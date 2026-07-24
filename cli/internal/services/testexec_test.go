@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -63,13 +64,14 @@ func TestFetchParams_Success(t *testing.T) {
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 		assert.Equal(t, "scylla/longevity", body.BuildID)
 		assert.Nil(t, body.BuildNumber)
+		assert.True(t, body.FromDefaults)
 		jsonOK(t, w, models.JenkinsParamsResponse{Parameters: []models.JenkinsParameter{
 			{Name: "backend", Value: "aws", Choices: []string{"aws", "gce"}},
 		}})
 	})
 	svc := newTestExecSvc(t, mux)
 
-	params, err := svc.FetchParams(context.Background(), "scylla/longevity", nil)
+	params, err := svc.FetchParams(context.Background(), "scylla/longevity", nil, true)
 	require.NoError(t, err)
 	require.Len(t, params, 1)
 	assert.Equal(t, "backend", params[0].Name)
@@ -83,12 +85,13 @@ func TestFetchParams_BuildNumberSent(t *testing.T) {
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 		require.NotNil(t, body.BuildNumber)
 		assert.Equal(t, 42, *body.BuildNumber)
+		assert.False(t, body.FromDefaults)
 		jsonOK(t, w, models.JenkinsParamsResponse{})
 	})
 	svc := newTestExecSvc(t, mux)
 
 	n := 42
-	_, err := svc.FetchParams(context.Background(), "scylla/longevity", &n)
+	_, err := svc.FetchParams(context.Background(), "scylla/longevity", &n, false)
 	require.NoError(t, err)
 }
 
@@ -99,7 +102,7 @@ func TestFetchParams_NoBuildsAvailable(t *testing.T) {
 	})
 	svc := newTestExecSvc(t, mux)
 
-	_, err := svc.FetchParams(context.Background(), "scylla/longevity", nil)
+	_, err := svc.FetchParams(context.Background(), "scylla/longevity", nil, false)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, services.ErrNoBuildsAvailable))
 }
@@ -178,4 +181,17 @@ func TestWaitForBuild_Timeout(t *testing.T) {
 	_, err := svc.WaitForBuild(context.Background(), 777, 20*time.Millisecond, time.Millisecond)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "timed out")
+}
+
+func TestIsValidationError(t *testing.T) {
+	// A backend DataValidationError is recognised as a terminal validation
+	// failure, even when wrapped.
+	verr := &api.APIError{Body: models.ErrorBody{Exception: "DataValidationError", Message: "bad"}}
+	assert.True(t, services.IsValidationError(verr))
+	assert.True(t, services.IsValidationError(fmt.Errorf("wrapped: %w", verr)))
+
+	// Other API errors and plain errors are not validation failures.
+	assert.False(t, services.IsValidationError(&api.APIError{Body: models.ErrorBody{Exception: "SomeOtherError"}}))
+	assert.False(t, services.IsValidationError(errors.New("boom")))
+	assert.False(t, services.IsValidationError(nil))
 }
