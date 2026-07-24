@@ -117,6 +117,7 @@ th{color:var(--ink-2);font-weight:600}tbody tr:first-child td{font-weight:600}
 .sum{flex:1 1 300px;border:1px solid var(--border);border-radius:8px;padding:10px}
 .sum h4{margin:0 0 6px;font-size:13px;display:flex;justify-content:space-between;align-items:center}
 .sum .txt{white-space:pre-wrap;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+.toks{font-size:11px;color:var(--ink-2);margin:0 0 6px;font-variant-numeric:tabular-nums}
 .score{font-size:11px;color:var(--ink-2);font-weight:500}
 .tag{display:inline-block;font-size:10px;padding:1px 6px;border-radius:10px;background:var(--grid);color:var(--ink-2);margin-left:4px}
 .warn{color:#D55E00}.err{color:#D55E00;font-style:italic}
@@ -143,15 +144,21 @@ def _summary_table(stats: list[SeriesStats], judged: bool) -> str:
     head = (
         "<tr><th>Model" + ("·prompt" if any("·" in s.key for s in stats) else "") + "</th>"
         "<th>Overall</th><th>Cover</th><th>Faith</th><th>Concise</th>"
-        "<th>Compress</th><th>Out tok</th><th>Cost/ev</th><th>Latency</th><th>Drop</th><th>Halluc</th><th>Err</th></tr>"
+        "<th>Compress</th><th>In tok</th><th>Sum tok</th><th>Saved/ev</th><th>Saved</th>"
+        "<th>Out tok</th><th>Cost/ev</th><th>Latency</th><th>Drop</th><th>Halluc</th><th>Err</th></tr>"
     )
     body = ""
     for s in stats:
         ov = f"{s.avg_overall:.1f}" if judged else "—"
+        # avg original tokens → avg summary tokens, tokens saved per event, and total saved
+        # across the whole set (the headline "how much smaller" figure).
         body += (
             f"<tr><td>{html.escape(s.key)}</td>"
             f"<td>{ov}</td><td>{s.avg_coverage:.0f}</td><td>{s.avg_faithfulness:.0f}</td>"
             f"<td>{s.avg_conciseness:.0f}</td><td>{s.avg_compression * 100:.0f}%</td>"
+            f"<td>{s.avg_input_tokens:,.0f}</td><td>{s.avg_summary_tokens:,.0f}</td>"
+            f"<td>{s.avg_tokens_saved:,.0f}</td>"
+            f'<td title="{s.total_tokens_saved:,} tok saved over {s.n} events">{s.savings_pct:.0f}%</td>'
             f"<td>{s.avg_completion_tokens:.0f}</td><td>${s.avg_cost:.5f}</td>"
             f"<td>{s.avg_latency_ms:.0f}ms</td><td>{s.total_dropped}</td>"
             f"<td>{s.total_hallucinations}</td><td>{s.errors}</td></tr>"
@@ -226,14 +233,28 @@ def _summary_card(c: dict, show_prompt: bool) -> str:
     name = html.escape(c["model_label"])
     if show_prompt:
         name += f' <span class="tag">{html.escape(c["prompt_name"])}</span>'
-    return f'<div class="sum"><h4><span>{name}</span>{score}</h4><div class="txt">{txt}</div>{tags}</div>'
+    return (
+        f'<div class="sum"><h4><span>{name}</span>{score}</h4>{_card_tokens(c)}<div class="txt">{txt}</div>{tags}</div>'
+    )
 
 
-def _event_header(ev: dict, key: str) -> str:
+def _card_tokens(c: dict) -> str:
+    """Per-summary token line: original event tokens -> summary tokens, and how many saved."""
+    inp, summ = c.get("input_tokens", 0), c.get("summary_tokens", 0)
+    if not summ:  # failed cell or no summary produced
+        return ""
+    saved = inp - summ
+    pct = (saved / inp * 100) if inp else 0.0
+    return f'<div class="toks">{inp:,} → {summ:,} tok · saved {saved:,} ({pct:.0f}%)</div>'
+
+
+def _event_header(ev: dict, key: str, orig_tokens: int = 0) -> str:
     header = f"{html.escape(ev.get('event_type', 'event'))} · {html.escape(ev.get('severity', ''))}"
     if ev.get("node"):
         header += f" · {html.escape(ev['node'])}"
-    return header + f' <span class="pill">({ev.get("message_chars", len(key))} chars)</span>'
+    chars = ev.get("message_chars", len(key))
+    tok = f" · {orig_tokens:,} tok" if orig_tokens else ""
+    return header + f' <span class="pill">({chars:,} chars{tok})</span>'
 
 
 def _events_section(results: dict) -> str:
@@ -246,10 +267,13 @@ def _events_section(results: dict) -> str:
     for key, cs in by_event.items():
         ev = events.get(key.strip(), {})
         show_prompt = len({x["prompt_name"] for x in cs}) > 1
+        # Original event token count is per-model but ~identical across the gpt-5 family
+        # (shared o200k_base); take the max seen so the header shows the true input size.
+        orig_tokens = max((c.get("input_tokens", 0) for c in cs), default=0)
         ordered = sorted(cs, key=lambda x: (x["model_label"], x["prompt_name"]))
         sums = "".join(_summary_card(c, show_prompt) for c in ordered)
         blocks.append(
-            f'<details class="event"><summary>{_event_header(ev, key)}</summary>'
+            f'<details class="event"><summary>{_event_header(ev, key, orig_tokens)}</summary>'
             f'<div class="ev-body"><div class="orig">{html.escape(ev.get("message", key))}</div>'
             f'<div class="sums">{sums}</div></div></details>'
         )
