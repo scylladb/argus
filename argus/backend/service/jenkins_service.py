@@ -97,11 +97,13 @@ class JenkinsService:
 
     def retrieve_job_parameters(self, build_id: str, build_number: int | None,
                                 from_defaults: bool = False) -> list[Parameter]:
-        """Return a job's parameters. By default (from_defaults=True, used by the
-        CLI) the job's configured default values are returned so a fresh trigger
-        starts from a clean slate. When from_defaults is False the values are
+        """Return a job's parameters. When from_defaults is False the values are
         seeded from a past build instead: the given build_number, or the last
-        build when build_number is falsy (the rebuild/clone behaviour)."""
+        build when build_number is falsy (the rebuild/clone behaviour).
+        Default values:
+        Cli: True
+        Frontend: False
+        """
         job_info = self._jenkins.get_job_info(name=build_id)
         raw_config = self._jenkins.get_job_config(name=build_id)
         config = ET.fromstring(raw_config)

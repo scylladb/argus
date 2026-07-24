@@ -532,7 +532,7 @@ def test_jenkins_params_invokes_service(flask_client, mock_jenkins_service):
     assert resp.status_code == 200, resp.text
     assert resp.json["status"] == "ok"
     assert resp.json["response"]["parameters"] == [{"name": "BRANCH", "value": "main"}]
-    inst.retrieve_job_parameters.assert_called_once_with(build_id="job/foo", build_number=17)
+    inst.retrieve_job_parameters.assert_called_once_with(build_id="job/foo", build_number=17, from_defaults=False)
 
 
 def test_jenkins_build_returns_queue_item(flask_client, mock_jenkins_service):
