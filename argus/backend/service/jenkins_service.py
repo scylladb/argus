@@ -8,10 +8,23 @@ import logging
 
 from flask import current_app, g
 
+from argus.backend.error_handlers import DataValidationError
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, UserOauthToken
 
 LOGGER = logging.getLogger(__name__)
 GITHUB_REPO_RE = r"(?P<http>^https?:\/\/(www\.)?github\.com\/(?P<user>[\w\d\-]+)\/(?P<repo>[\w\d\-]+)(\.git)?$)|(?P<ssh>git@github\.com:(?P<ssh_user>[\w\d\-]+)\/(?P<ssh_repo>[\w\d\-]+)(\.git)?)"
+
+# The mutually-exclusive Scylla "version source" families for scylla-cluster-tests
+# jobs, mirroring the SCTParameterWizard front-end. Exactly one family must carry
+# a non-empty value for a build to start correctly. The image family groups the
+# per-backend image parameters (only one is ever relevant for a given backend).
+SCT_VERSION_SOURCE_FAMILIES: dict[str, list[str]] = {
+    "scylla_version": ["scylla_version"],
+    "scylla_repo": ["scylla_repo"],
+    "scylla_image": ["scylla_ami_id", "gce_image_db", "azure_image_db", "oci_image_db"],
+    "rolling_upgrade": ["new_scylla_repo"],
+    "scylla_byo": ["byo_scylla_repo"],
+}
 
 
 class Parameter(TypedDict):
@@ -156,6 +169,30 @@ class JenkinsService:
             return job_info.get("nextBuildNumber", -1)
         except jenkins.JenkinsException:
             return -1
+
+    @staticmethod
+    def validate_sct_version_source(params: dict) -> None:
+        """Ensure a scylla-cluster-tests build specifies exactly one Scylla
+        version source (see SCT_VERSION_SOURCE_FAMILIES). Raises
+        DataValidationError when none or more than one family carries a value, so
+        the trigger is aborted before Jenkins schedules a doomed build."""
+        set_families = [
+            family
+            for family, keys in SCT_VERSION_SOURCE_FAMILIES.items()
+            if any(str(params.get(key) or "").strip() for key in keys)
+        ]
+        if not set_families:
+            options = ", ".join(
+                key for keys in SCT_VERSION_SOURCE_FAMILIES.values() for key in keys
+            )
+            raise DataValidationError(
+                f"A Scylla version source must be set: one of {options}."
+            )
+        if len(set_families) > 1:
+            raise DataValidationError(
+                "Only one Scylla version source may be set, but multiple were "
+                f"provided: {', '.join(set_families)}."
+            )
 
     def get_releases_for_clone(self, test_id: str):
         test_id = UUID(test_id)
