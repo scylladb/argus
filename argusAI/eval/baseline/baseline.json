@@ -1,0 +1,60 @@
+{
+  "generated_at": "2026-07-21T13:47:49.825381+00:00",
+  "judge_model": "gpt-5",
+  "num_events": 62,
+  "tolerance": 3.0,
+  "multi_prompt": true,
+  "series": [
+    {
+      "key": "gpt-5-mini \u00b7 v5_surgical",
+      "model": "gpt-5-mini",
+      "prompt_name": "v5_surgical",
+      "n": 62,
+      "errors": 0,
+      "avg_coverage": 97.0,
+      "avg_faithfulness": 99.7,
+      "avg_conciseness": 93.0,
+      "avg_overall": 97.5,
+      "avg_cost": 0.002149,
+      "avg_compression": 0.692,
+      "avg_latency_ms": 10519.0,
+      "avg_completion_tokens": 851.1,
+      "total_dropped": 16,
+      "total_hallucinations": 2
+    },
+    {
+      "key": "gpt-5-mini \u00b7 v6_summary",
+      "model": "gpt-5-mini",
+      "prompt_name": "v6_summary",
+      "n": 62,
+      "errors": 0,
+      "avg_coverage": 86.6,
+      "avg_faithfulness": 86.5,
+      "avg_conciseness": 84.8,
+      "avg_overall": 86.3,
+      "avg_cost": 0.001408,
+      "avg_compression": 0.902,
+      "avg_latency_ms": 7806.0,
+      "avg_completion_tokens": 488.9,
+      "total_dropped": 173,
+      "total_hallucinations": 74
+    },
+    {
+      "key": "gpt-5-mini \u00b7 v7_summary",
+      "model": "gpt-5-mini",
+      "prompt_name": "v7_summary",
+      "n": 62,
+      "errors": 0,
+      "avg_coverage": 86.0,
+      "avg_faithfulness": 99.0,
+      "avg_conciseness": 87.1,
+      "avg_overall": 91.4,
+      "avg_cost": 0.001993,
+      "avg_compression": 0.451,
+      "avg_latency_ms": 7095.0,
+      "avg_completion_tokens": 443.4,
+      "total_dropped": 173,
+      "total_hallucinations": 6
+    }
+  ]
+}

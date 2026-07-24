@@ -17,12 +17,10 @@ table size.
 
 import logging
 import time
-from pathlib import Path
 from threading import Event
 from uuid import UUID
 from datetime import datetime
 
-from chromadb.utils.embedding_functions.onnx_mini_lm_l6_v2 import ONNXMiniLM_L6_V2
 from chromadb.utils.distance_functions import cosine
 from numpy import array
 
@@ -30,30 +28,15 @@ from argus.backend.models.argus_ai import SCTCriticalEventEmbedding, SCTErrorEve
 from argus.backend.plugins.sct.testrun import SCTUnprocessedEvent, SCTEvent
 from argus.backend.util.logsetup import setup_application_logging
 from argusAI.utils.scylla_connection import ScyllaConnection
+from argusAI.utils.embedding import BgeSmallEnEmbeddingModel
 from argusAI.utils.event_message_sanitizer import MessageSanitizer
+from argusAI.utils.summary_dispatcher import SummaryDispatcher
 
 LOGGER = logging.getLogger(__name__)
 SLEEP_INTERVAL = 1  # Sleep for 1 second between processing cycles
 
 # Maximum cosine distance for two embeddings to be considered duplicates.
 DUPLICATE_DISTANCE_THRESHOLD = 0.05
-
-
-class BgeSmallEnEmbeddingModel(ONNXMiniLM_L6_V2):
-    """
-    Compact English text embedding model by BAAI, released Sep 2023.
-    Trained on large-scale paired data with RetroMAE and contrastive learning.
-    Produces high-quality 384-dim embeddings, optimized for efficiency in semantic search, classification, and clustering.
-    """
-
-    MODEL_NAME: str = "bge-small-en-v1.5"
-    DOWNLOAD_PATH: Path = Path.home() / ".cache" / "chroma" / "onnx_models" / MODEL_NAME
-    EXTRACTED_FOLDER_NAME: str = "onnx"
-    ARCHIVE_FILENAME: str = "onnx.tar.gz"
-    MODEL_DOWNLOAD_URL: str = (
-        "https://scylla-qa-public.s3.us-east-1.amazonaws.com/ArgusAI/bge-small-en-v1.5/onnx.tar.gz"
-    )
-    _MODEL_SHA256: str = "e7d1743b0c08f55c687cff6af696683398682f9ab4fb3cad1be644ee5553a72d"
 
 
 class EventSimilarityProcessorV2:
@@ -79,6 +62,10 @@ class EventSimilarityProcessorV2:
             or SCTErrorEventEmbedding.__keyspace__
             or self.db.config["SCYLLA_KEYSPACE_NAME"]
         )
+        # Best-effort summarization of unique events, dispatched from the per-event pipeline.
+        # Inert unless EVENT_SUMMARIZATION_ENABLED and OPENAI_API_KEY are configured; the
+        # embedding path is never blocked or altered by it.
+        self.summary_dispatcher = SummaryDispatcher(self.db, self.db.config)
         LOGGER.info("EventSimilarityProcessorV2 initialized")
 
     def _get_potential_duplicate_rows(self, run_id: UUID, table_name: str) -> list:
@@ -243,6 +230,10 @@ class EventSimilarityProcessorV2:
         if self._mark_event_is_duplicate(run_id, ts, severity, embedding):
             return
 
+        # Step 3.6: Event is unique — dispatch summarization of the RAW message (not the
+        # sanitized one) as a fire-and-forget background task. Never blocks Step 4.
+        self.summary_dispatcher.dispatch(run_id, severity, ts, message)
+
         # Step 4: Store embedding in severity-specific table
         try:
             if severity == "ERROR":
@@ -270,6 +261,8 @@ class EventSimilarityProcessorV2:
     def shutdown(self) -> None:
         """Shutdown the processor and cleanup resources."""
         self.stop_event.set()
+        # Drain in-flight summarization tasks before closing the DB they write through.
+        self.summary_dispatcher.shutdown()
         self.db.shutdown()
         LOGGER.info("EventSimilarityProcessorV2 shutdown complete")
 

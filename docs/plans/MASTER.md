@@ -52,4 +52,4 @@ _No plans in this domain yet._
 
 | Plan                | Status  | File                                             | Owner    |
 | ------------------- | ------- | ------------------------------------------------ | -------- |
-| Event Summarization | `draft` | [event-summarization.md](event-summarization.md) | CodeLieutenant |
+| Event Summarization | `in_progress` | [event-summarization.md](event-summarization.md) | CodeLieutenant |

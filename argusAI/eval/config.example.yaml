@@ -1,0 +1,66 @@
+# Event Summarization — evaluation config.
+#
+# Everything here is configurable so the same harness prices and validates any model.
+# The API key is NEVER in this file — it comes from the environment:
+#     export OPENAI_API_KEY=sk-...
+# (override the var name with `openai_api_key_env` below.)
+
+# --- What to summarize -------------------------------------------------------
+# Provide explicit run UUIDs, and/or a test UUID (its recent runs are auto-listed).
+# Use runs that actually have ERROR/CRITICAL events with retained message bodies.
+run_ids: []
+#  - 24e09748-bba4-47fd-a615-bf7ea2c425eb
+# test_id: 1eb20296-99ad-4857-97d0-c62e2e1754b3
+test_run_limit: 20          # how many recent runs to scan when test_id is set
+max_events: 25              # cap the unique-event set so a sweep stays cheap
+
+# Collapse semantically-similar events the way production does (sanitize -> BGE embed ->
+# cosine distance < threshold), instead of only exact-string dedup. Gives the true canonical
+# set production would summarize. Needs the 'ai-eval' extra (chromadb); downloads the BGE model.
+similarity_dedup: false
+similarity_threshold: 0.05  # cosine distance; matches the worker (0.05 ≈ 95% similar)
+
+# Reuse a previously fetched set instead of hitting Argus again (from a --fetch-only run):
+# events_file: argusAI/eval/out/events.json
+
+# --- Models to compare -------------------------------------------------------
+# `params` are passed straight through to the API call, so each model gets the knobs
+# it actually supports (reasoning_effort, max_completion_tokens, temperature, ...).
+models:
+  - name: gpt-5.6-luna
+    params: { reasoning_effort: low }
+  - name: gpt-5.6-terra
+    params: { reasoning_effort: low }
+  - name: gpt-5.6-sol
+    params: { reasoning_effort: low }
+
+# --- Prompts to sweep (file stems from argusAI/prompts/vN_*.md) ---------------
+# List several to A/B them on the same events; one is enough once a winner is picked.
+# Add a new argusAI/prompts/vN_*.md file to introduce a new candidate.
+prompts:
+  - v1_surgical       # production winner: verbatim-leaning, high coverage
+  - v2_summary        # challenger: readable summary-first, preserves SCT metadata
+
+# --- Judge (frontier model scores each summary against the ORIGINAL) ----------
+judge_enabled: true
+judge_model: gpt-5          # neutral scorer: outside the candidate set, avoids self-preference
+judge_params: { reasoning_effort: medium }
+
+# --- Provider / infra --------------------------------------------------------
+openai_api_key_env: OPENAI_API_KEY
+# openai_base_url:            # set for Azure/proxy/compatible endpoints
+request_timeout: 90
+max_concurrency: 4           # bounded, to respect rate limits
+# argus_cli: /Users/you/bin/argus   # defaults to PATH, then ~/bin/argus
+no_cache: false
+output_dir: argusAI/eval/out
+
+# --- Pricing (USD per 1M tokens) — override the placeholders with real numbers -
+# Unknown models cost $0 and are flagged in the report.
+# GPT-5.6 family per 1M tokens (GA 2026-07-09) — Luna/Terra/Sol are capability tiers, so rates
+# differ ~5x. Cached input bills at 10% of the input rate. Override if your account differs.
+pricing:
+  gpt-5:         { input_per_1m: 1.25, output_per_1m: 10.00, cached_per_1m: 0.125 }  # judge
+  gpt-5.6-luna:  { input_per_1m: 1.00, output_per_1m: 6.00,  cached_per_1m: 0.10 }
+  gpt-5.6-terra: { input_per_1m: 2.50, output_per_1m: 15.00, cached_per_1m: 0.25 }
+  gpt-5.6-sol:   { input_per_1m: 5.00, output_per_1m: 30.00, cached_per_1m: 0.50 }

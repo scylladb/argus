@@ -78,6 +78,14 @@ dev = [
 ]
 ai = [
     "chromadb >= 1.0.15",
+    "openai >= 1.60.0",
+    "tiktoken >= 0.7.0",  # token-count gate for the summarization worker (EVENT_SUMMARIZATION_MIN_TOKENS)
+]
+ai-eval = [
+    "openai >= 1.60.0",
+    "PyYAML ~= 6.0.0",
+    "tiktoken >= 0.7.0",
+    "chromadb >= 1.0.15",  # BGE embeddings for optional similarity dedup (mirrors the worker)
 ]
 
 [tool.ruff]
