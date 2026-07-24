@@ -1,7 +1,9 @@
 import xml.etree.ElementTree as ET
 
 import jenkins
+import pytest
 
+from argus.backend.error_handlers import DataValidationError
 from argus.backend.service.jenkins_service import JenkinsService
 
 
@@ -154,3 +156,34 @@ def test_next_build_number_jenkins_error_is_non_fatal():
     # A Jenkins error must not propagate: the trigger already succeeded.
     service = _service_with(_FakeJenkins(error=jenkins.JenkinsException("boom")))
     assert service.next_build_number("scylla-2026.2/longevity/longevity-100gb") == -1
+
+
+def test_validate_sct_version_source_accepts_single_source():
+    # Exactly one family set (with other keys empty) is valid.
+    JenkinsService.validate_sct_version_source({"scylla_version": "master:latest", "scylla_repo": ""})
+
+
+def test_validate_sct_version_source_accepts_image_variant():
+    # Any single key of the image family counts as one source.
+    JenkinsService.validate_sct_version_source({"gce_image_db": "https://www.googleapis.com/compute/v1/x"})
+
+
+def test_validate_sct_version_source_rejects_none_set():
+    with pytest.raises(DataValidationError):
+        JenkinsService.validate_sct_version_source({"scylla_version": "", "scylla_repo": "  "})
+
+
+def test_validate_sct_version_source_rejects_missing_keys_entirely():
+    # No source keys present at all is also invalid.
+    with pytest.raises(DataValidationError):
+        JenkinsService.validate_sct_version_source({"backend": "aws"})
+
+
+def test_validate_sct_version_source_rejects_multiple_families():
+    with pytest.raises(DataValidationError) as exc:
+        JenkinsService.validate_sct_version_source(
+            {"scylla_version": "master:latest", "scylla_ami_id": "ami-1234"}
+        )
+    # The message should name the conflicting families.
+    assert "scylla_version" in str(exc.value)
+    assert "scylla_image" in str(exc.value)

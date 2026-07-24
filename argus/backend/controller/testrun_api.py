@@ -436,6 +436,17 @@ def build_jenkins_job():
     payload = get_payload(request)
     service = JenkinsService()
 
+    # scylla-cluster-tests jobs require exactly one Scylla version source to be
+    # set, otherwise the build fails to start. Validate before triggering so the
+    # caller (CLI/UI/API) gets a clear error instead of a broken run. Skipped
+    # when the test/plugin can't be resolved (e.g. a brand-new job).
+    try:
+        test = ArgusTest.get(build_system_id=payload["buildId"])
+    except ArgusTest.DoesNotExist:
+        test = None
+    if test and test.plugin_name == "scylla-cluster-tests":
+        JenkinsService.validate_sct_version_source(payload["parameters"])
+
     result = service.build_job(build_id=payload["buildId"], params=payload["parameters"])
 
     response = {
