@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -178,4 +179,17 @@ func TestWaitForBuild_Timeout(t *testing.T) {
 	_, err := svc.WaitForBuild(context.Background(), 777, 20*time.Millisecond, time.Millisecond)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "timed out")
+}
+
+func TestIsValidationError(t *testing.T) {
+	// A backend DataValidationError is recognised as a terminal validation
+	// failure, even when wrapped.
+	verr := &api.APIError{Body: models.ErrorBody{Exception: "DataValidationError", Message: "bad"}}
+	assert.True(t, services.IsValidationError(verr))
+	assert.True(t, services.IsValidationError(fmt.Errorf("wrapped: %w", verr)))
+
+	// Other API errors and plain errors are not validation failures.
+	assert.False(t, services.IsValidationError(&api.APIError{Body: models.ErrorBody{Exception: "SomeOtherError"}}))
+	assert.False(t, services.IsValidationError(errors.New("boom")))
+	assert.False(t, services.IsValidationError(nil))
 }

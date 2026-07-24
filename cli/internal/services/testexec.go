@@ -180,3 +180,16 @@ func isNoBuildsError(err error) bool {
 	}
 	return false
 }
+
+// validationErrorException is the backend exception class name raised when a
+// build request fails server-side validation (e.g. a scylla-cluster-tests job
+// without exactly one Scylla version source).
+const validationErrorException = "DataValidationError"
+
+// IsValidationError reports whether err is a backend validation failure. Such
+// errors are terminal: the request will never succeed as-is, so callers abort
+// immediately rather than retrying or continuing a batch.
+func IsValidationError(err error) bool {
+	var apiErr *api.APIError
+	return errors.As(err, &apiErr) && apiErr.Body.Exception == validationErrorException
+}
