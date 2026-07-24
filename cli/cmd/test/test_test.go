@@ -189,3 +189,76 @@ func TestArgusRunURL_NoBuildNumber(t *testing.T) {
 	// Build number not yet known → no link.
 	assert.Empty(t, argusRunURL("https://argus.scylladb.com", "scylla-2026.2/longevity/longevity-100gb", 0))
 }
+
+func TestNormalizeSCTVersionSource_ClearsSiblings(t *testing.T) {
+	// Defaults seed a scylla_version, but the caller explicitly picked
+	// scylla_repo — the inherited version (and any other sibling source present)
+	// must be emptied so only the chosen source survives.
+	merged := map[string]any{
+		"scylla_version": "master:latest",
+		"scylla_repo":    "http://repo/master.repo",
+		"scylla_ami_id":  "ami-123",
+		"backend":        "aws",
+	}
+	normalizeSCTVersionSource(merged, explicitParamKeys(map[string]any{"scylla_repo": "http://repo/master.repo"}))
+
+	assert.Equal(t, "", merged["scylla_version"])
+	assert.Equal(t, "", merged["scylla_ami_id"])
+	assert.Equal(t, "http://repo/master.repo", merged["scylla_repo"], "chosen source must be untouched")
+	assert.Equal(t, "aws", merged["backend"], "unrelated params must be untouched")
+}
+
+func TestNormalizeSCTVersionSource_ClearsByoCompanion(t *testing.T) {
+	// Choosing a repo clears the whole BYO family, including its companion
+	// byo_scylla_branch.
+	merged := map[string]any{
+		"scylla_repo":       "http://repo/master.repo",
+		"byo_scylla_repo":   "git@github.com:user/scylla",
+		"byo_scylla_branch": "next",
+	}
+	normalizeSCTVersionSource(merged, explicitParamKeys(map[string]any{"scylla_repo": "x"}))
+
+	assert.Equal(t, "", merged["byo_scylla_repo"])
+	assert.Equal(t, "", merged["byo_scylla_branch"])
+	assert.Equal(t, "http://repo/master.repo", merged["scylla_repo"])
+}
+
+func TestNormalizeSCTVersionSource_LeavesAbsentKeysAbsent(t *testing.T) {
+	// Sibling keys not present in merged must not be introduced.
+	merged := map[string]any{"scylla_repo": "http://repo/master.repo"}
+	normalizeSCTVersionSource(merged, explicitParamKeys(map[string]any{"scylla_repo": "x"}))
+
+	_, hasVersion := merged["scylla_version"]
+	assert.False(t, hasVersion, "absent sibling keys must stay absent")
+	assert.Len(t, merged, 1)
+}
+
+func TestNormalizeSCTVersionSource_NoExplicitSourceIsNoOp(t *testing.T) {
+	// No explicit source selected (only an unrelated override) → leave the
+	// collision for the backend to validate.
+	merged := map[string]any{
+		"scylla_version": "master:latest",
+		"scylla_repo":    "http://repo/master.repo",
+	}
+	normalizeSCTVersionSource(merged, explicitParamKeys(map[string]any{"backend": "aws"}))
+
+	assert.Equal(t, "master:latest", merged["scylla_version"])
+	assert.Equal(t, "http://repo/master.repo", merged["scylla_repo"])
+}
+
+func TestNormalizeSCTVersionSource_MultipleExplicitSourcesIsNoOp(t *testing.T) {
+	// The caller explicitly set two families; that is ambiguous, so we do not
+	// guess which to clear and defer to the backend validator.
+	merged := map[string]any{
+		"scylla_version": "master:latest",
+		"scylla_repo":    "http://repo/master.repo",
+	}
+	explicit := explicitParamKeys(map[string]any{
+		"scylla_version": "master:latest",
+		"scylla_repo":    "http://repo/master.repo",
+	})
+	normalizeSCTVersionSource(merged, explicit)
+
+	assert.Equal(t, "master:latest", merged["scylla_version"])
+	assert.Equal(t, "http://repo/master.repo", merged["scylla_repo"])
+}
