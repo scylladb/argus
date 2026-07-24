@@ -5,6 +5,7 @@ from typing import TypedDict
 from uuid import UUID
 
 from cassandra.cqlengine.models import Model
+from argus.backend.error_handlers import APIException
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.pytest import PytestResultTable
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, ArgusUserView, User
@@ -15,7 +16,7 @@ from argus.backend.util.common import chunk, current_user
 LOGGER = logging.getLogger(__name__)
 
 
-class UserViewException(Exception):
+class UserViewException(APIException):
     pass
 
 
@@ -110,13 +111,19 @@ class UserViewService:
         return True
 
     def get_view(self, view_id: str | UUID) -> ArgusUserView:
-        view: ArgusUserView = ArgusUserView.get(id=view_id)
+        try:
+            view: ArgusUserView = ArgusUserView.get(id=view_id)
+        except ArgusUserView.DoesNotExist as exc:
+            raise UserViewException(f"View {view_id} does not exist") from exc
         if datetime.datetime.utcnow() - (view.last_updated or datetime.datetime.fromtimestamp(0)) > datetime.timedelta(hours=1):
             self.refresh_stale_view(view)
         return view
 
     def get_view_by_name(self, view_name: str) -> ArgusUserView:
-        view: ArgusUserView = ArgusUserView.get(name=view_name)
+        try:
+            view: ArgusUserView = ArgusUserView.get(name=view_name)
+        except ArgusUserView.DoesNotExist as exc:
+            raise UserViewException(f'View "{view_name}" does not exist') from exc
         if datetime.datetime.utcnow() - (view.last_updated or datetime.datetime.fromtimestamp(0)) > datetime.timedelta(hours=1):
             self.refresh_stale_view(view)
         return view
@@ -127,7 +134,10 @@ class UserViewService:
         return list(ArgusUserView.filter().all())
 
     def resolve_view_tests(self, view_id: str | UUID) -> list[ArgusTest]:
-        view = ArgusUserView.get(id=view_id)
+        try:
+            view = ArgusUserView.get(id=view_id)
+        except ArgusUserView.DoesNotExist as exc:
+            raise UserViewException(f"View {view_id} does not exist") from exc
         return self.resolve_tests_by_id(view.tests)
 
     def resolve_tests_by_id(self, test_ids: list[str | UUID]) -> list[ArgusTest]:
