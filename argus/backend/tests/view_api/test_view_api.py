@@ -159,7 +159,7 @@ def test_delete_view_success(flask_client, view_name):
 
     after = flask_client.get(f"/api/v1/views/get?viewId={view_id}").json
     assert after["status"] == "error"
-    assert after["response"]["exception"] == "DoesNotExist"
+    assert after["response"]["exception"] == "UserViewException"
 
 
 def test_delete_view_unknown_id_errors(flask_client):
