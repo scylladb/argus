@@ -29,6 +29,15 @@ class SeriesStats:
     avg_compression: float
     avg_latency_ms: float
     avg_completion_tokens: float
+    # Token accounting: input = original event tokens, summary = tokens in the stored summary,
+    # saved = input - summary (what a downstream reader no longer has to ingest).
+    avg_input_tokens: float
+    avg_summary_tokens: float
+    avg_tokens_saved: float
+    total_input_tokens: int
+    total_summary_tokens: int
+    total_tokens_saved: int
+    savings_pct: float
     total_dropped: int
     total_hallucinations: int
 
@@ -51,6 +60,9 @@ def _avg(cells: list[dict], field: str, default: float = 0.0) -> float:
 
 def _series_stats(key: str, model: str, prompt_name: str, cells: list[dict]) -> SeriesStats:
     ok = [c for c in cells if not c.get("error")]
+    total_input = sum(c.get("input_tokens", 0) for c in ok)
+    total_summary = sum(c.get("summary_tokens", 0) for c in ok)
+    total_saved = total_input - total_summary
     return SeriesStats(
         key=key,
         model=model,
@@ -65,6 +77,13 @@ def _series_stats(key: str, model: str, prompt_name: str, cells: list[dict]) -> 
         avg_compression=_avg(ok, "compression_ratio"),
         avg_latency_ms=_avg(ok, "latency_ms"),
         avg_completion_tokens=_avg(ok, "completion_tokens"),
+        avg_input_tokens=_avg(ok, "input_tokens"),
+        avg_summary_tokens=_avg(ok, "summary_tokens"),
+        avg_tokens_saved=_avg(ok, "input_tokens") - _avg(ok, "summary_tokens"),
+        total_input_tokens=total_input,
+        total_summary_tokens=total_summary,
+        total_tokens_saved=total_saved,
+        savings_pct=(total_saved / total_input * 100) if total_input else 0.0,
         total_dropped=_count(ok, "dropped_critical"),
         total_hallucinations=_count(ok, "hallucinations"),
     )
