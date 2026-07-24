@@ -43,6 +43,7 @@ func newExecuteCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "execute"}
 	cmd.Flags().String("file", "", "")
 	cmd.Flags().Int("build-number", 0, "")
+	cmd.Flags().Bool("rebuild", false, "")
 	return cmd
 }
 
@@ -86,6 +87,27 @@ func TestBuildNumberFlag(t *testing.T) {
 	n := buildNumberFlag(cmd)
 	require.NotNil(t, n)
 	assert.Equal(t, 42, *n)
+}
+
+func TestSeedFromDefaults(t *testing.T) {
+	// No flags → seed from the job's configured defaults.
+	assert.True(t, seedFromDefaults(newExecuteCmd()))
+
+	// --rebuild opts into last-build seeding.
+	rebuild := newExecuteCmd()
+	require.NoError(t, rebuild.Flags().Set("rebuild", "true"))
+	assert.False(t, seedFromDefaults(rebuild))
+
+	// --build-number targets a specific build (implies rebuild-style seeding).
+	byNumber := newExecuteCmd()
+	require.NoError(t, byNumber.Flags().Set("build-number", "7"))
+	assert.False(t, seedFromDefaults(byNumber))
+
+	// Both together are still not defaults.
+	both := newExecuteCmd()
+	require.NoError(t, both.Flags().Set("rebuild", "true"))
+	require.NoError(t, both.Flags().Set("build-number", "7"))
+	assert.False(t, seedFromDefaults(both))
 }
 
 // newAddressedCmd builds a command carrying the shared addressing flags so

@@ -15,8 +15,10 @@ func registerParams(parent *cobra.Command) {
 	cmd := &cobra.Command{
 		Use:   "params",
 		Short: "Show a Jenkins job's parameters",
-		Long: `Fetch the parameter set for a test. By default the last build's
-values are used, falling back to the job's default parameter definitions.
+		Long: `Fetch the parameter set for a test. By default the job's configured
+default parameters are returned. Use --rebuild to seed from the last build's
+values instead (falling back to the job defaults), or --build-number to seed
+from a specific build.
 
 The test is addressed either by its build_system_id directly, or by a release
 name plus a test reference resolved against that release's gridview:
@@ -27,14 +29,13 @@ By default only a {name: value} map is emitted, which can be redirected to a
 file and fed straight into 'test execute --file':
   argus test params --build-id scylla-2026.2/longevity/longevity-100gb > params.json
 
-Use --full to also see each parameter's description and allowed choices. If the
-job has no builds and no default definitions, this command fails; use
-'test execute' with --file/--param to launch it anyway.`,
+Use --full to also see each parameter's description and allowed choices.`,
 		RunE: runParams,
 	}
 
 	addAddressingFlags(cmd)
-	cmd.Flags().Int("build-number", 0, "Seed parameters from this build number (default: last build)")
+	cmd.Flags().Int("build-number", 0, "Seed parameters from this build number (implies --rebuild)")
+	cmd.Flags().Bool("rebuild", false, "Seed from the last build's parameters instead of the job's defaults")
 	cmd.Flags().Bool("full", false, "Show full parameter details (description, choices) instead of a values map")
 
 	parent.AddCommand(cmd)
@@ -59,7 +60,7 @@ func runParams(cmd *cobra.Command, _ []string) error {
 
 	svc := services.NewTestExecutionService(client, c)
 
-	params, err := svc.FetchParams(ctx, buildID, buildNumber)
+	params, err := svc.FetchParams(ctx, buildID, buildNumber, seedFromDefaults(cmd))
 	if err != nil {
 		if errors.Is(err, services.ErrNoBuildsAvailable) {
 			log.Error().Str("build_id", buildID).Msg("no builds available; job default parameters unavailable")
@@ -90,4 +91,13 @@ func buildNumberFlag(cmd *cobra.Command) *int {
 	}
 	n, _ := cmd.Flags().GetInt("build-number")
 	return &n
+}
+
+// seedFromDefaults reports whether parameters should be seeded from the job's
+// configured defaults (the initial set) rather than a past build. That is the
+// default; --rebuild opts into last-build seeding, and --build-number targets a
+// specific build (which also implies rebuild-style seeding).
+func seedFromDefaults(cmd *cobra.Command) bool {
+	rebuild, _ := cmd.Flags().GetBool("rebuild")
+	return !rebuild && !cmd.Flags().Changed("build-number")
 }

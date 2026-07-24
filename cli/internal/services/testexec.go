@@ -44,14 +44,16 @@ func NewTestExecutionService(client *api.Client, c *cache.Cache) *TestExecutionS
 }
 
 // FetchParams returns the parameter set for the job identified by buildID
-// (a build_system_id). buildNumber selects which historical build's parameters
-// to seed from; nil means "the last build, falling back to job defaults".
+// (a build_system_id). When fromDefaults is true the backend returns the job's
+// configured default parameters (a clean starting point for a new trigger);
+// otherwise buildNumber selects which historical build's parameters to seed
+// from, nil meaning "the last build, falling back to job defaults".
 //
 // When the job has no builds and no default definitions, the backend signals
 // "#noBuildsAvailable"; FetchParams maps that to [ErrNoBuildsAvailable] so
 // callers can distinguish it from a genuine failure.
-func (s *TestExecutionService) FetchParams(ctx context.Context, buildID string, buildNumber *int) ([]models.JenkinsParameter, error) {
-	body := models.JenkinsParamsRequest{BuildID: buildID, BuildNumber: buildNumber}
+func (s *TestExecutionService) FetchParams(ctx context.Context, buildID string, buildNumber *int, fromDefaults bool) ([]models.JenkinsParameter, error) {
+	body := models.JenkinsParamsRequest{BuildID: buildID, BuildNumber: buildNumber, FromDefaults: fromDefaults}
 	req, err := s.client.NewRequest(ctx, "POST", api.JenkinsParams, body)
 	if err != nil {
 		return nil, err
