@@ -419,7 +419,11 @@ def get_jenkins_job_params():
     payload = get_payload(request)
     service = JenkinsService()
 
-    result = service.retrieve_job_parameters(build_id=payload["buildId"], build_number=payload["buildNumber"])
+    result = service.retrieve_job_parameters(
+        build_id=payload["buildId"],
+        build_number=payload["buildNumber"],
+        from_defaults=payload.get("fromDefaults", False),
+    )
 
     return {
         "status": "ok",
