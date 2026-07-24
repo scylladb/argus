@@ -27,9 +27,12 @@ func registerExecute(parent *cobra.Command) {
 		Use:   "execute",
 		Short: "Trigger a Jenkins test build",
 		Long: `Trigger a build of a test. Parameters are resolved with the cascade
-defaults < --file < --param: the job's current default parameters are the base,
-a --file JSON map overrides them, and repeatable --param name=value flags
-override both.
+defaults < --file < --param: the job's default parameters are the base, a --file
+JSON map overrides them, and repeatable --param name=value flags override both.
+
+By default the base is the job's configured default parameters (a clean initial
+set). Use --rebuild to base it on the last build's parameters instead, or
+--build-number to base it on a specific build.
 
 The test is addressed either by its build_system_id directly, or by a release
 name plus a test reference resolved against that release's gridview:
@@ -69,7 +72,8 @@ parallel:
 	cmd.Flags().StringP("plan-id", "p", "", "Plan UUID or key to fan out across (with --label)")
 	cmd.Flags().StringArray("label", nil, "Select plan tests carrying this label (repeatable; requires --plan-id)")
 	cmd.Flags().Bool("match-all", false, "Require plan tests to carry all --label values instead of any")
-	cmd.Flags().Int("build-number", 0, "Seed default parameters from this build number (default: last build)")
+	cmd.Flags().Int("build-number", 0, "Seed default parameters from this build number (implies --rebuild)")
+	cmd.Flags().Bool("rebuild", false, "Seed from the last build's parameters instead of the job's defaults")
 	cmd.Flags().StringP("file", "f", "", "JSON file with a {name: value} parameter map (\"-\" for stdin)")
 	cmd.Flags().StringArray("param", nil, "Parameter override as name=value (repeatable)")
 	cmd.Flags().Bool("dry-run", false, "Print the merged parameters and exit without triggering a build")
@@ -129,7 +133,7 @@ func runExecuteSingle(cmd *cobra.Command, _ []string) error {
 
 	// Fetch defaults; a job with no builds/defaults is not fatal here — proceed
 	// with empty defaults so --file/--param can still launch it.
-	defaults, err := svc.FetchParams(ctx, buildID, buildNumber)
+	defaults, err := svc.FetchParams(ctx, buildID, buildNumber, seedFromDefaults(cmd))
 	if err != nil {
 		if errors.Is(err, services.ErrNoBuildsAvailable) {
 			log.Warn().Str("build_id", buildID).Msg("no builds available; sending empty defaults plus --file/--param values")
@@ -236,13 +240,17 @@ func runExecutePlan(cmd *cobra.Command) error {
 
 	svc := services.NewTestExecutionService(client, c)
 
+	// --build-number is rejected above, so this reflects only --rebuild: default
+	// seeds each test from its job defaults, --rebuild from its own last build.
+	fromDefaults := seedFromDefaults(cmd)
+
 	// Trigger sequentially so queue assignment is deterministic; a per-test
 	// failure is recorded and the batch continues.
 	results := make(models.TriggeredBuilds, len(targets))
 	for i, t := range targets {
 		results[i] = models.TriggeredBuild{Test: t.Ref, BuildSystemID: t.BuildSystemID}
 
-		defaults, err := svc.FetchParams(ctx, t.BuildSystemID, nil)
+		defaults, err := svc.FetchParams(ctx, t.BuildSystemID, nil, fromDefaults)
 		if err != nil {
 			if errors.Is(err, services.ErrNoBuildsAvailable) {
 				log.Warn().Str("build_id", t.BuildSystemID).Msg("no builds available; sending only --param values")
