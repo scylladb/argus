@@ -5,6 +5,8 @@ import uuid
 import pytest
 from flask import g
 
+from argus.backend.service.views import UserViewException, UserViewService
+
 
 def _create_view(flask_client, name, items=None, settings='{"widgets": []}',
                  description=None, display_name=None):
@@ -75,9 +77,25 @@ def test_get_view_missing_id_errors(flask_client):
 
 
 def test_get_view_unknown_id_errors(flask_client):
-    res = flask_client.get(f"/api/v1/views/get?viewId={uuid.uuid4()}").json
+    missing_id = uuid.uuid4()
+    res = flask_client.get(f"/api/v1/views/get?viewId={missing_id}").json
     assert res["status"] == "error"
-    assert res["response"]["exception"] == "DoesNotExist"
+    assert res["response"]["exception"] == "UserViewException"
+    assert str(missing_id) in res["response"]["message"]
+
+
+def test_resolve_view_tests_unknown_id_errors(flask_client):
+    missing_id = uuid.uuid4()
+    res = flask_client.get(f"/api/v1/views/{missing_id}/resolve/tests").json
+    assert res["status"] == "error"
+    assert res["response"]["exception"] == "UserViewException"
+    assert str(missing_id) in res["response"]["message"]
+
+
+def test_service_get_view_by_name_unknown_name_raises_user_view_exception():
+    missing_name = f"view_{uuid.uuid4().hex[:12]}"
+    with pytest.raises(UserViewException, match=missing_name):
+        UserViewService().get_view_by_name(missing_name)
 
 
 def test_all_views_filters_by_user(flask_client, view_name):
@@ -141,7 +159,7 @@ def test_delete_view_success(flask_client, view_name):
 
     after = flask_client.get(f"/api/v1/views/get?viewId={view_id}").json
     assert after["status"] == "error"
-    assert after["response"]["exception"] == "DoesNotExist"
+    assert after["response"]["exception"] == "UserViewException"
 
 
 def test_delete_view_unknown_id_errors(flask_client):
