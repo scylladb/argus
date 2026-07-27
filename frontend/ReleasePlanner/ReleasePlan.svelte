@@ -49,7 +49,7 @@
             if (error?.status === "error") {
                 sendMessage(
                     "error",
-                    `API Error when fetching view for release plan.\nMessage: ${error.response.arguments[0]}`,
+                    `API Error when fetching view for release plan.\nMessage: ${error.response.message}`,
                     "ReleasePlanner::fetchAllPlans"
                 );
             } else {
@@ -60,6 +60,7 @@
                 );
                 console.log(error);
             }
+            return null;
         }
     };
 
@@ -113,8 +114,12 @@
         {#await fetchViewForPlan(plan.view_id)}
             <div class="text-center text-muted p-2">Loading view...</div>
         {:then view}
-            <div><a href="/view/{view.name}" class="btn btn-sm btn-primary"><Fa icon={faLink}/> View</a></div>
-            <ViewDashboard bind:stats={planStats} productVersion={plan.target_version} {view}/>
+            {#if view}
+                <div><a href="/view/{view.name}" class="btn btn-sm btn-primary"><Fa icon={faLink}/> View</a></div>
+                <ViewDashboard bind:stats={planStats} productVersion={plan.target_version} {view}/>
+            {:else}
+                <div class="text-center text-muted p-2">This plan's view is no longer available.</div>
+            {/if}
         {/await}
     </div>
 </div>

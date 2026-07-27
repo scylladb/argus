@@ -73,3 +73,7 @@ def handle_api_exception(exception: Exception):
 def handle_profile_exception(exception: Exception):
     flash(message=" ".join(exception.args), category="error")
     return redirect(url_for("main.profile"))
+
+def handle_view_not_found(exception: Exception):
+    flash(message=str(exception), category="error")
+    return redirect(url_for("main.views"))
