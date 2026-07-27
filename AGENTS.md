@@ -81,6 +81,7 @@ AI agent skills live in `skills/` and provide task-specific guidance with struct
 | ---------------- | --------------------------------------------------------------------- | ---------------------------------- |
 | writing-plans    | Write implementation plans (full 7-section or lightweight mini-plans) | `skills/writing-plans/SKILL.md`    |
 | designing-skills | Meta-skill for creating and structuring new AI agent skills           | `skills/designing-skills/SKILL.md` |
+| managing-argus-release-plans | Create/update Argus release test plans, map Confluence test-plan docs to Argus tests, manage label-based test triggering | `skills/managing-argus-release-plans/SKILL.md` |
 
 ## Implementation Plans
 
