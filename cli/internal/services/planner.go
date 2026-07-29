@@ -22,6 +22,8 @@ const (
 	KindTest EntityKind = "test"
 	// KindGroup selects group resolution (group name within the release).
 	KindGroup EntityKind = "group"
+	// KindRelease denotes a whole release (a single-segment global reference).
+	KindRelease EntityKind = "release"
 )
 
 // Resolution sentinel errors. They let callers distinguish a reference that
@@ -344,6 +346,97 @@ func (s *PlannerService) ResolveEntityID(ctx context.Context, ref, releaseID str
 		return "", err
 	}
 	return t.ID, nil
+}
+
+// ResolveGlobalRef resolves a release-qualified entity reference — expressed as
+// a build_system_id — to its UUID and [EntityKind], without the caller needing
+// to know the release up front. It is the resolver behind the view commands,
+// where items and widget filters span many releases.
+//
+// The reference grammar is the entity's build_system_id (the release prefix is
+// always included), matched exactly (case-sensitive):
+//
+//   - a single segment ("scylla-2026.2") is a release name → (id, KindRelease);
+//   - "release/group" is a group's build_system_id → (id, KindGroup);
+//   - "release/group/test" is a test's build_system_id → (id, KindTest).
+//
+// The leading segment names the release, which is resolved first (releases are
+// looked up by name, case-insensitively); the whole reference is then matched
+// against that release's gridview. Tests take priority over groups on an exact
+// build_system_id match, mirroring [resolveTestEntity]. A reference matching
+// nothing yields an [ErrEntityNotFound]-wrapped error so view callers can
+// warn-and-skip it.
+func (s *PlannerService) ResolveGlobalRef(ctx context.Context, ref string) (string, EntityKind, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return "", "", fmt.Errorf("%w: empty reference", ErrEntityNotFound)
+	}
+
+	// No slash → a bare release name.
+	if !strings.Contains(ref, "/") {
+		id, err := s.ResolveReleaseID(ctx, ref)
+		if err != nil {
+			return "", "", err
+		}
+		return id, KindRelease, nil
+	}
+
+	// Otherwise the leading segment is the release name and the whole reference
+	// is a group's or test's build_system_id within that release.
+	releaseName := ref[:strings.Index(ref, "/")]
+	releaseID, err := s.ResolveReleaseID(ctx, releaseName)
+	if err != nil {
+		return "", "", err
+	}
+	grid, err := s.GetReleaseStructure(ctx, releaseID)
+	if err != nil {
+		return "", "", err
+	}
+	// Tests first (a test build_system_id is the deepest, most specific path).
+	for _, t := range grid.Tests {
+		if t.BuildSystemID == ref {
+			return t.ID, KindTest, nil
+		}
+	}
+	for _, g := range grid.Groups {
+		if g.BuildSystemID == ref {
+			return g.ID, KindGroup, nil
+		}
+	}
+	return "", "", fmt.Errorf("%w: no test or group with build_system_id %q in release %q", ErrEntityNotFound, ref, releaseName)
+}
+
+// UsernameByID returns the username for a user UUID, falling back to the raw id
+// when the user is not in the users list (so display commands never fail on a
+// stale or external id).
+func (s *PlannerService) UsernameByID(ctx context.Context, id string) (string, error) {
+	users, err := s.getUsers(ctx)
+	if err != nil {
+		return "", err
+	}
+	if u, ok := users[id]; ok {
+		return u.Username, nil
+	}
+	return id, nil
+}
+
+// PlanKeyByID resolves a plan UUID to its human-friendly key
+// ("releaseName#planNumber", e.g. "scylla-2026.2#3"). An empty id yields an
+// empty string. A lookup that fails — a stale, deleted, or otherwise
+// inaccessible plan_id — falls back to the raw id rather than erroring, so
+// display commands never break on a dangling plan reference.
+func (s *PlannerService) PlanKeyByID(ctx context.Context, id string) (string, error) {
+	if strings.TrimSpace(id) == "" {
+		return "", nil
+	}
+	plan, err := s.GetPlan(ctx, id)
+	if err != nil {
+		return id, nil
+	}
+	if plan.Key == "" {
+		return id, nil
+	}
+	return plan.Key, nil
 }
 
 // ResolveTestBuildID resolves a release name and a single test reference to the

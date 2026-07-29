@@ -67,6 +67,14 @@ const (
 	GroupExplode    = "/api/v1/planning/group/%s/explode"         // GET    – explode a group into its tests (group_id)
 	Gridview        = "/api/v1/planning/release/%s/gridview"      // GET    – release structure (enabled tests + groups) (release_id)
 
+	// User view routes (view_api blueprint, mounted at /api/v1/views)
+	ViewAll     = "/api/v1/views/all"        // GET  – list views; query param userId scopes to one user (else all)
+	ViewGet     = "/api/v1/views/get"        // GET  – single view; query param viewId
+	ViewResolve = "/api/v1/views/%s/resolve" // GET  – resolved view for edit (items carry build_system_id/name) (view_id)
+	ViewCreate  = "/api/v1/views/create"     // POST – create a view (ViewCreateRequest)
+	ViewUpdate  = "/api/v1/views/update"     // POST – update a view (ViewUpdateRequest: viewId + updateData)
+	ViewDelete  = "/api/v1/views/delete"     // POST – delete a view (body {viewId})
+
 	// Jenkins test-execution routes (testrun_api blueprint)
 	JenkinsParams    = "/api/v1/jenkins/params"     // POST – fetch a job's params (body {buildId, buildNumber}); buildId is build_system_id
 	JenkinsBuild     = "/api/v1/jenkins/build"      // POST – trigger a build (body {buildId, parameters}); returns {queueItem}
