@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/scylladb/argus/cli/internal/api"
@@ -15,6 +16,25 @@ import (
 	"github.com/scylladb/argus/cli/internal/models"
 	"github.com/spf13/cobra"
 )
+
+// tarZstSuffixes are the known suffixes of zstd-compressed tar archives that
+// extractTarZst can actually decode; any other log file (e.g. the bare
+// zstd-compressed ".log.zst" SCT runner log chunks) is a single file that
+// only needs decompressing. This is an exact-suffix match, not a substring
+// match: extractTarZst hardcodes zstd decompression, so a name that merely
+// contains ".tar." (e.g. a plain log named "foo.tar.old.log.zst") must not
+// be routed here, and a genuinely different tar compression (".tar.gz")
+// would need its own decoder in extractTarZst before it could be added below.
+var tarZstSuffixes = [...]string{".tar.zst", ".tar.zstd"}
+
+func isTarZstName(logName string) bool {
+	for _, suffix := range tarZstSuffixes {
+		if strings.HasSuffix(logName, suffix) {
+			return true
+		}
+	}
+	return false
+}
 
 // ---------------------------------------------------------------------------
 // Parent command: run logs
@@ -92,8 +112,10 @@ var logsListCmd = &cobra.Command{
 var logsDownloadCmd = &cobra.Command{
 	Use:   "download <log-name>",
 	Short: "Download and extract a log file for a test run",
-	Long: `Fetch a .tar.zst log file for a test run from Argus and extract its
-contents to the destination directory.
+	Long: `Fetch a log file for a test run from Argus and write its contents to
+the destination directory. ".tar.zst" archives are extracted; any other
+log file (e.g. a bare ".log.zst" chunk) is decompressed and written out
+as a single file.
 
 The log-name argument must match a name shown by "argus run logs list".
 If --dest is omitted the files are extracted into the current working directory.`,
@@ -151,11 +173,21 @@ If --dest is omitted the files are extracted into the current working directory.
 			return err
 		}
 
-		log.Debug().Str("run_id", runID).Str("log_name", logName).Str("dest", dest).Msg("extracting log archive")
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Extracting %s to %s\n", logName, dest)
-		if err := extractTarZst(resp.Body, dest); err != nil {
-			log.Error().Err(err).Str("run_id", runID).Str("log_name", logName).Str("dest", dest).Msg("failed to extract log archive")
-			return err
+		isTarArchive := isTarZstName(logName)
+
+		log.Debug().Str("run_id", runID).Str("log_name", logName).Str("dest", dest).Bool("is_tar_archive", isTarArchive).Msg("extracting log archive")
+
+		var extractErr error
+		if isTarArchive {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Extracting %s to %s\n", logName, dest)
+			extractErr = extractTarZst(resp.Body, dest)
+		} else {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Decompressing %s to %s\n", logName, dest)
+			extractErr = extractPlainZst(logName, resp.Body, dest)
+		}
+		if extractErr != nil {
+			log.Error().Err(extractErr).Str("run_id", runID).Str("log_name", logName).Str("dest", dest).Msg("failed to extract log archive")
+			return extractErr
 		}
 
 		log.Info().Str("run_id", runID).Str("log_name", logName).Str("dest", dest).Msg("log downloaded and extracted successfully")
@@ -211,9 +243,9 @@ func logEntriesFromMap(m map[string]string) []models.LogEntry {
 	return entries
 }
 
-// extractTarFile opens target for writing, copies src into it, and closes the
-// file — propagating both copy and close errors.
-func extractTarFile(target string, mode int64, src io.Reader) error {
+// writeExtractedFile opens target for writing, copies src into it, and closes
+// the file — propagating both copy and close errors.
+func writeExtractedFile(target string, mode int64, src io.Reader) error {
 	f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(mode)&0777)
 	if err != nil {
 		return fmt.Errorf("creating file %q: %w", target, err)
@@ -263,12 +295,38 @@ func extractTarZst(r io.Reader, dest string) error {
 			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 				return fmt.Errorf("creating parent directory for %q: %w", target, err)
 			}
-			if err := extractTarFile(target, hdr.Mode, tr); err != nil {
+			if err := writeExtractedFile(target, hdr.Mode, tr); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+// extractPlainZst decompresses a zstandard-compressed single log file from r
+// and writes it under dest, using logName with its ".zst" suffix stripped as
+// the output file name. Unsafe (non-local) names are rejected.
+func extractPlainZst(logName string, r io.Reader, dest string) error {
+	zr, err := zstd.NewReader(r)
+	if err != nil {
+		return fmt.Errorf("creating zstd reader: %w", err)
+	}
+	defer zr.Close()
+
+	outName := strings.TrimSuffix(logName, ".zst")
+	cleanName := filepath.Clean(outName)
+	if cleanName == "." {
+		return fmt.Errorf("log name %q is invalid", logName)
+	}
+	if !filepath.IsLocal(cleanName) {
+		return fmt.Errorf("log name %q has an unsafe path", logName)
+	}
+	target := filepath.Join(dest, cleanName)
+
+	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+		return fmt.Errorf("creating parent directory for %q: %w", target, err)
+	}
+	return writeExtractedFile(target, 0644, zr)
 }
 
 // ---------------------------------------------------------------------------
