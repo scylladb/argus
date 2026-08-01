@@ -45,7 +45,8 @@ def _resolve_build_id() -> str | None:
     if len(build_id) > _MAX_BUILD_ID_LEN:
         LOGGER.warning(
             "Jenkins build id is %d chars (> %d); omitting tunnel attribution header",
-            len(build_id), _MAX_BUILD_ID_LEN,
+            len(build_id),
+            _MAX_BUILD_ID_LEN,
         )
         return None
     return build_id
@@ -58,6 +59,24 @@ def _resolve_build_url() -> str | None:
     straight back to the originating build. ``None`` when not running in CI.
     """
     return os.environ.get("BUILD_URL", "").strip() or None
+
+
+def build_attribution_headers() -> dict[str, str]:
+    """Jenkins attribution for every request, tunneled or not.
+
+    ``TunneledSession._tunnel_headers`` adds the same two headers, but only to a
+    request the tunnel actually carried. That left tunnel adoption unmeasurable:
+    a job that never opened a tunnel, or that fell back to a direct connection,
+    sent no attribution at all, and its traffic became indistinguishable from a
+    browser hitting the UI. Setting them at session level lets the backend name
+    the job behind direct traffic too.
+    """
+    headers = {}
+    if build_id := _resolve_build_id():
+        headers["X-Argus-Build-Id"] = build_id
+    if build_url := _resolve_build_url():
+        headers["X-Argus-Build-Url"] = build_url
+    return headers
 
 
 def _resolve_monitor_interval() -> float:
@@ -163,7 +182,7 @@ class TunneledSession(requests.Session):
     def _rewrite_url(self, url: str) -> str:
         tunnel_url = self._active_tunnel_url()
         if tunnel_url and url.startswith(self._original_base_url):
-            return tunnel_url + url[len(self._original_base_url):]
+            return tunnel_url + url[len(self._original_base_url) :]
         return url
 
     def _ensure_tunnel(self) -> None:
@@ -341,5 +360,10 @@ def create_session(
     max_retries: int = 3,
 ) -> requests.Session:
     if _resolve_use_tunnel(use_tunnel):
-        return TunneledSession(auth_token=auth_token, original_base_url=base_url, max_retries=max_retries)
-    return _build_retry_session(max_retries)
+        session = TunneledSession(auth_token=auth_token, original_base_url=base_url, max_retries=max_retries)
+    else:
+        session = _build_retry_session(max_retries)
+    # Both branches, so that a job which never opens a tunnel, or which falls
+    # back to a direct connection, is still named in the backend metrics.
+    session.headers.update(build_attribution_headers())
+    return session

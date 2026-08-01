@@ -5,6 +5,7 @@ from flask import Flask, request
 from prometheus_flask_exporter import NO_PREFIX
 from argus.backend.error_handlers import DBErrorHandler
 from argus.backend.metrics import METRICS
+from argus.backend import metrics_labels
 from argus.backend.template_filters import export_filters
 from argus.backend.controller import admin, api, main
 from argus.backend.cli import cli_bp
@@ -17,22 +18,6 @@ from jwt import PyJWKClient
 from argus.backend.service.user import cache_ssh_tunnel_server_allowed_endpoints
 
 LOGGER = logging.getLogger(__name__)
-
-
-def _categorize_user_agent(ua: str) -> str:  # noqa: PLR0911
-    if not ua:
-        return "unknown"
-    if "argus-client-ssh-tunnel" in ua:
-        return "argus-client-tunnel"
-    if ua.startswith(("python-requests", "python-urllib")):
-        return "argus-client"
-    if ua.startswith("Go-http-client"):
-        return "argus-cli-go"
-    if "Mozilla" in ua:
-        return "browser"
-    if "curl" in ua:
-        return "curl"
-    return "other"
 
 
 def register_metrics():
@@ -63,9 +48,22 @@ def register_metrics():
             "http_request_ssh_tunnel_total",
             "Total requests by SSH tunnel presence",
             labels={
-                "ssh_tunnel": lambda: "yes" if request.headers.get("X-SSH-Tunnel-Origin") else "no",
+                "ssh_tunnel": metrics_labels.ssh_tunnel,
                 "tunnel_established": lambda: "yes" if request.headers.get("X-Tunnel-Established-At") else "no",
                 "endpoint": lambda: request.endpoint,
+            },
+        )
+    )
+    # The metric that answers "which jobs are not using the tunnel". The
+    # per-build counter cannot: it mints a series per build, which rules out
+    # keeping the long ranges that adoption has to be measured over.
+    METRICS.register_default(
+        METRICS.counter(
+            "http_request_job_tunnel_total",
+            "Requests by Jenkins job and SSH tunnel state, build number stripped",
+            labels={
+                "job_name": metrics_labels.job_name,
+                "ssh_tunnel": metrics_labels.ssh_tunnel,
             },
         )
     )
@@ -74,7 +72,9 @@ def register_metrics():
             "http_request_by_user_agent_total",
             "Total requests by user agent category",
             labels={
-                "user_agent_category": lambda: _categorize_user_agent(request.headers.get("User-Agent", "")),
+                "user_agent_category": lambda: metrics_labels.categorize_user_agent(
+                    request.headers.get("User-Agent", "")
+                ),
                 "endpoint": lambda: request.endpoint,
             },
         )
@@ -82,10 +82,11 @@ def register_metrics():
     METRICS.register_default(
         METRICS.counter(
             "http_request_tunnel_build_total",
-            "Tunneled requests by Jenkins build/job id (X-Argus-Build-Id)",
+            "Requests by Jenkins build id (X-Argus-Build-Id) and SSH tunnel state",
             labels={
-                "build_id": lambda: request.headers.get("X-Argus-Build-Id") or "unknown",
+                "build_id": metrics_labels.build_id,
                 "build_url": lambda: request.headers.get("X-Argus-Build-Url") or "",
+                "ssh_tunnel": metrics_labels.ssh_tunnel,
             },
         )
     )

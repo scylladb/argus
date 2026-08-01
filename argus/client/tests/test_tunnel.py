@@ -9,6 +9,7 @@ from argus.client.base import ArgusClient
 from argus.client.tunnel import api as tunnel_api
 from argus.client.tunnel import ssh as tunnel_ssh
 from argus.client.tunnel import state as tunnel_state
+from argus.client import session as session_mod
 from argus.client.session import TunneledSession
 from argus.client.tunnel import TunnelConfig
 from argus.client.tunnel.models import parse_datetime
@@ -578,3 +579,63 @@ def test_prepare_known_hosts_file_rejects_unknown_format(tunnel_state_dir):
 
     with pytest.raises(tunnel_ssh.TunnelClientError, match="unrecognised format"):
         tunnel_ssh.SSHTunnel._prepare_known_hosts_file(config)
+
+
+@pytest.mark.parametrize(
+    "env, expected",
+    [
+        (
+            {"JOB_NAME": "scylla-master/byo/byo_build_tests_dtest", "BUILD_NUMBER": "42",
+             "BUILD_URL": "https://jenkins.example.com/job/x/42/"},
+            {"X-Argus-Build-Id": "scylla-master/byo/byo_build_tests_dtest#42",
+             "X-Argus-Build-Url": "https://jenkins.example.com/job/x/42/"},
+        ),
+        # A job without a build number still names itself.
+        ({"JOB_NAME": "manual-job"}, {"X-Argus-Build-Id": "manual-job"}),
+        # Outside CI there is nothing to attribute.
+        ({}, {}),
+    ],
+)
+def test_build_attribution_headers(monkeypatch, env, expected):
+    for key in ("JOB_NAME", "BUILD_NUMBER", "BUILD_URL"):
+        monkeypatch.delenv(key, raising=False)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+
+    assert session_mod.build_attribution_headers() == expected
+
+
+def test_build_attribution_headers_drops_oversized_build_id(monkeypatch):
+    monkeypatch.setenv("JOB_NAME", "x" * (session_mod._MAX_BUILD_ID_LEN + 1))
+    monkeypatch.delenv("BUILD_NUMBER", raising=False)
+    monkeypatch.delenv("BUILD_URL", raising=False)
+
+    assert session_mod.build_attribution_headers() == {}
+
+
+def test_direct_session_carries_build_attribution(monkeypatch):
+    """The point of the change: a job that never tunnels is still named."""
+    monkeypatch.delenv("ARGUS_USE_TUNNEL", raising=False)
+    monkeypatch.setenv("JOB_NAME", "scylla-master/longevity")
+    monkeypatch.setenv("BUILD_NUMBER", "7")
+    monkeypatch.delenv("BUILD_URL", raising=False)
+
+    session = session_mod.create_session(
+        auth_token="token", base_url="https://argus.example.com", use_tunnel=False)
+
+    assert not isinstance(session, TunneledSession)
+    assert session.headers["X-Argus-Build-Id"] == "scylla-master/longevity#7"
+
+
+def test_tunneled_session_carries_build_attribution_for_fallback(monkeypatch):
+    """A TunneledSession that never establishes still attributes its direct requests."""
+    monkeypatch.setenv("JOB_NAME", "scylla-master/longevity")
+    monkeypatch.setenv("BUILD_NUMBER", "7")
+
+    session = session_mod.create_session(
+        auth_token="token", base_url="https://argus.example.com", use_tunnel=True)
+    try:
+        assert isinstance(session, TunneledSession)
+        assert session.headers["X-Argus-Build-Id"] == "scylla-master/longevity#7"
+    finally:
+        session.close()
