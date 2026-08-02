@@ -6,7 +6,7 @@ from flask import Blueprint, Response, g, request
 
 from argus.backend.error_handlers import handle_api_exception
 from argus.backend.models.web import UserRoles
-from argus.backend.service.tunnel_service import TunnelService
+from argus.backend.service.tunnel_service import TunnelService, TunnelServiceException
 from argus.backend.service.user import allow_ssh_tunnel_server_scope, api_login_required, check_roles
 
 
@@ -64,7 +64,10 @@ def register_tunnel():
 @bp.route("/tunnel", methods=["GET"])
 @api_login_required
 def get_tunnel_connection():
-    result = TunnelService().get_tunnel_connection(proxy_host=request.args.get("proxy_host"))
+    result = TunnelService().get_tunnel_connection(
+        user_id=g.user.id,
+        proxy_host=request.args.get("proxy_host"),
+    )
     return {"status": "ok", "response": asdict(result)}
 
 
@@ -88,11 +91,27 @@ def get_user_keys():
 @check_roles([UserRoles.SSHTunnelServer, UserRoles.Admin])
 def get_authorized_keys():
     """
-    Return all non-expired SSH public keys in OpenSSH ``authorized_keys``
-    format (plain text, one key per line).
+    Return non-expired SSH public keys in OpenSSH ``authorized_keys`` format
+    (plain text, one key per line).
 
     This endpoint is called by the proxy host's ``AuthorizedKeysCommand``
-    (via ``argus-cli ssh-keys``) on every SSH connection attempt.
+    (via ``argus ssh keys list``) on every SSH connection attempt.
+
+    Optional query params:
+    - fingerprint: ``SHA256:...`` of the key the client offered, taken from the
+      sshd ``%f`` token. Scopes the response to that one key. Proxy hosts that
+      still run the old wrapper omit it and get the full list.
     """
-    keys_text = TunnelService().get_authorized_keys()
+    try:
+        keys_text = TunnelService().get_authorized_keys(fingerprint=request.args.get("fingerprint"))
+    except TunnelServiceException as exc:
+        # Answer in plain text. The shared JSON error handler replies 200, and
+        # sshd would then read the JSON body as an authorized_keys file.
+        LOGGER.warning("Rejected authorized_keys request: %s", exc)
+        return Response("", mimetype="text/plain", status=400)
+    except Exception:  # noqa: BLE001
+        # Same reason. A driver error, a timeout, or a missing secondary index
+        # must not reach sshd as a 200 with a JSON body.
+        LOGGER.exception("authorized_keys lookup failed")
+        return Response("", mimetype="text/plain", status=500)
     return Response(keys_text, mimetype="text/plain")

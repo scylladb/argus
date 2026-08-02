@@ -18,7 +18,7 @@ from argus.backend.models.runtime_store import RuntimeStore
 from argus.backend.models.view_widgets import WidgetHighlights, WidgetComment
 from argus.backend.models.argus_ai import ErrorEventEmbeddings, CriticalEventEmbeddings, SCTErrorEventEmbedding, \
     SCTCriticalEventEmbedding
-from argus.backend.models.ssh_key import SSHTunnelKey, ProxyTunnelConfig
+from argus.backend.models.ssh_key import SSHTunnelKey, SSHTunnelKeyByFingerprint, ProxyTunnelConfig
 
 
 def uuid_now():
@@ -482,6 +482,7 @@ USED_MODELS: list[Model] = [
     RunConfiguration,
     RunConfigParam,
     SSHTunnelKey,
+    SSHTunnelKeyByFingerprint,
     ProxyTunnelConfig,
     ReleaseStatsSnapshot,
 ]

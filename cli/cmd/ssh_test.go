@@ -42,6 +42,16 @@ func TestSSHKeysListCommand_SkipsAuthRetry(t *testing.T) {
 	assert.Equal(t, "true", annotations[SkipAuthRetryAnnotation])
 }
 
+func TestSSHKeysListCommand_HasFingerprintFlag(t *testing.T) {
+	cmd, _, err := rootCmd.Find([]string{"ssh", "keys", "list"})
+	require.NoError(t, err)
+	require.NotNil(t, cmd)
+
+	flag := cmd.Flags().Lookup("fingerprint")
+	require.NotNil(t, flag, "AuthorizedKeysCommand passes the sshd %f token through this flag")
+	assert.Equal(t, "", flag.DefValue)
+}
+
 func TestWaitForTunnelReadiness_PortReady(t *testing.T) {
 	t.Parallel()
 

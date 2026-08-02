@@ -17,7 +17,8 @@ Automated traffic (SCT, dtest) routes through Cloudflare (HTTPS), incurring cost
 - **Client-generated keypairs** — Clients generate ed25519 keypairs locally using Python's `cryptography` library. Only the public key is sent to Argus and stored in DB; the private key never leaves the client. This follows standard SSH key registration practices.
 - **Single client per host** — no multi-client coordination needed.
 - **DB-backed proxy tunnel config** — connection details stored in DB and managed via admin panel (not YAML config).
-- **Real-time key lookup** — proxy host uses sshd `AuthorizedKeysCommand` to fetch valid keys from Argus API on each SSH auth attempt (via argus-cli). No `authorized_keys` file management.
+- **Real-time key lookup** — proxy host uses sshd `AuthorizedKeysCommand` to fetch the offered key from the Argus API on each SSH auth attempt (via argus-cli). No `authorized_keys` file management.
+- **One key per lookup** — sshd passes the fingerprint of the offered key as the `%f` token. The backend answers with that one key, not the whole key table. See "Fingerprint-scoped key lookup" below.
 - **In-process tunnel lifecycle** — per-session, with `atexit` cleanup.
 
 ### Security Properties
@@ -83,16 +84,89 @@ Client
     - Spawns `ssh -N -L` subprocess with `StrictHostKeyChecking=yes` and `atexit` cleanup
     - Probes local port with `socket.connect_ex` to confirm tunnel is up
 3. Before each subsequent request: checks tunnel is alive via `socket.connect_ex`
-4. If tunnel dies mid-session: reconnect (up to 3 retries)
+4. If tunnel dies mid-session: the monitor thread tears it down and re-establishes on a backoff ladder
 5. On process exit: `atexit` handler terminates SSH subprocess
 
-### Graceful Fallback
+### Graceful Fallback and Reconnect
 
-If `ssh` binary missing, tunnel fails, or reconnection exhausted:
+The `argus-tunnel-monitor` daemon thread owns every tunnel state transition.
+`TunneledSession.request()` never spawns SSH and never blocks on it.
 
-- `LOGGER.warning(...)` with clear message
-- Fall back to original `base_url` (Cloudflare)
-- No exceptions propagate — client continues to work
+If the `ssh` binary is missing, or the tunnel fails to establish:
+
+- `LOGGER.warning(...)` once per outage, naming the reason
+- Traffic falls back to the original `base_url` (Cloudflare) immediately
+- No exceptions propagate — the client keeps working
+
+The monitor keeps re-attempting in the background:
+
+1. Nothing happens until the session has made `ARGUS_TUNNEL_MIN_REQUESTS`
+   requests (default 10). See "Paying for the handshake" below.
+2. After a failure the next attempt is delayed, and the delay doubles from
+   `ARGUS_TUNNEL_RETRY_MIN_SECONDS` (default 30) up to
+   `ARGUS_TUNNEL_RETRY_MAX_SECONDS` (default 600).
+3. Each delay carries ±20 % jitter. A fleet of CI runners that lose one proxy
+   at the same moment must not retry in lockstep against its replacement.
+4. On success the delay resets and the log records `SSH tunnel restored`.
+   Later requests move back onto the tunnel with no client restart.
+
+When a request through the tunnel raises `ConnectionError`, the request thread
+flags the tunnel and retries directly. The monitor tears the tunnel down on its
+next tick. The caller never waits on SSH.
+
+### Paying for the handshake
+
+Building a tunnel is not free. It costs one registration call from the client
+and one authorized-keys lookup from the proxy host, and both travel direct
+because they are what create the tunnel. A process that makes two requests and
+exits therefore adds public traffic instead of removing it.
+
+Measured on production, the handshake ran at 25.3 requests per minute while the
+tunnel carried 7.6. The tunnel was costing more public requests than it moved.
+
+Two changes address it, one in each repository:
+
+- **The client does not tunnel until it is worth it.** `TunneledSession` counts
+  requests and the monitor stays idle below `ARGUS_TUNNEL_MIN_REQUESTS`
+  (default 10). A one-shot client such as `argus-client-generic submit` never
+  handshakes. A long SCT run passes the threshold in seconds and loses ten
+  direct requests out of thousands.
+- **The proxy host looks keys up over the private network.** The
+  `AuthorizedKeysCommand` runs once per SSH authentication attempt. Pointing it
+  at the public URL sends every one of those through Cloudflare, from inside the
+  VPC, to reach a backend the host already forwards TCP to. The `argus_tunnel`
+  role defaults `argus_tunnel_keys_url` to the backend's private address.
+
+### Proxy failover
+
+The tunnel API returns a `proxies` array holding every active proxy, best
+choice for this user first. `TunnelConfig.candidates()` exposes them in order,
+and each establish attempt walks the whole list before it gives up. A dead
+primary therefore costs one extra SSH connect timeout, not a full backoff
+window on the public endpoint.
+
+The array is additive. A client that predates it reads only the scalar
+`proxy_host` / `proxy_port` fields and behaves exactly as before.
+
+### Proxy selection
+
+`_ordered_active_configs(user_id)` scores each active proxy with
+`sha256(f"{user_id}:{config.id}")` and sorts by the score. That is rendezvous
+hashing. Three properties matter:
+
+- **No shared state.** The previous design kept a counter in a single
+  `RuntimeStore` row and rewrote it on every registration. That is one
+  contended partition under concurrent CI load, and lost updates skewed the
+  distribution it was meant to even out.
+- **Stable per user.** A client's cached config and a later `GET /ssh/tunnel`
+  name the same primary. Under the old counter they could disagree, so a
+  re-registration could silently move a client to a different proxy.
+- **Minimal churn.** Adding or retiring a proxy only reassigns the users that
+  proxy owns, about 1/N of them. Rotating the list by `hash % len` would give
+  the same load spread but reassign roughly 2/N — measured at 67 % against
+  33 % when a third proxy joins two.
+
+Different users still get different primaries, so load spreads.
 
 ### Key Lifecycle
 
@@ -138,16 +212,94 @@ Match User argus-proxy
     ClientAliveInterval 600
     ClientAliveCountMax 1
     AuthorizedKeysFile none
-    AuthorizedKeysCommand /usr/local/bin/argus-authorized-keys
+    AuthorizedKeysCommand /usr/local/bin/argus-authorized-keys %f
     AuthorizedKeysCommandUser nobody
 ```
 
-**`AuthorizedKeysCommand` explanation:** On each SSH connection attempt by `argus-proxy`, sshd runs the `argus-authorized-keys` wrapper script. The wrapper calls `argus-cli ssh-keys`, which hits `GET /api/v1/client/ssh/keys` on the Argus backend and returns all non-expired public keys. sshd uses the output as the authorized_keys for that connection. This eliminates all file sync, race conditions, and stale state — key validity is always real-time from DB.
+**`AuthorizedKeysCommand` explanation:** On each SSH connection attempt by `argus-proxy`, sshd runs the `argus-authorized-keys` wrapper script. sshd expands the `%f` token to the SHA-256 fingerprint of the key the client offered, and passes it as `$1`. The wrapper calls `argus ssh keys list --fingerprint "$1"`, which hits `GET /api/v1/client/ssh/keys?fingerprint=...` and gets back that one key. sshd uses the output as the authorized_keys for that connection. This eliminates all file sync, race conditions, and stale state — key validity is always real-time from DB.
 
-**Proxy Host requirements:**
+The `%f` token needs OpenSSH 6.9 or later.
 
-- `argus-cli` binary installed at `/usr/local/bin/argus-cli` (owned by root, not writable by group/others — sshd requirement)
-- `argus-authorized-keys` wrapper script at `/usr/local/bin/argus-authorized-keys` with API URL and auth token embedded (see provisioning template)
+### Fingerprint-scoped key lookup
+
+Before this change the endpoint scanned the whole `SSHTunnelKey` table and
+returned every non-expired key of every user, on every authentication attempt.
+With hundreds of concurrent CI runners each holding a 24 h key, the transfer
+grew with the size of the fleet.
+
+Three parts fixed it:
+
+1. `SSHTunnelKeyByFingerprint` keys the fingerprint as the partition key, so the
+   lookup is an exact match instead of a table scan. See "Why a table, not a
+   secondary index" below.
+2. `get_authorized_keys(fingerprint=...)` returns only the matching key. An
+   unknown fingerprint returns an empty body, which sshd reads as a denial. A
+   malformed fingerprint gets a plain-text 400, never a JSON error body.
+3. The Go client sets `IdentitiesOnly=yes`. Without it `ssh` offers every agent
+   key and default identity before `-i`, and each rejected offer costs the
+   proxy host one more lookup and one more `MaxAuthTries` slot. The Go client
+   does not set `PubkeyAcceptedAlgorithms`, because that option needs OpenSSH
+   8.5 and the CLI also runs on developer machines with older clients, where an
+   unknown option makes `ssh` exit 255.
+
+The lookup is not scoped by tunnel. All proxies front the same backend, so a
+key registered against one proxy and accepted by another is not an escalation.
+Scoping would instead break for a client whose primary proxy is down and that
+has failed over to another one.
+
+Calls that omit `fingerprint` still get the full list, with a warning in the
+log. That path exists only for proxy hosts that still run the old wrapper.
+Re-apply the `argus_tunnel` role from `qatools-deployments` on those hosts, then
+remove the path.
+
+### Why a table, not a secondary index
+
+A secondary index on `SSHTunnelKey.fingerprint` is a materialized view.
+ScyllaDB applies the view update after it acknowledges the base write, so a
+read through the index can miss a row that the base table already holds.
+
+That window sits on the authentication path. A client registers a key and
+connects at once, and the SSH attempt is the request right after the write. An
+index miss reads as "no authorized key", so the client is denied. Client retry
+hides it, but every denial costs an SSH round trip and one `MaxAuthTries` slot,
+and hundreds of CI runners registering together widen the window.
+
+`SSHTunnelKeyByFingerprint` is a plain table with `fingerprint` as the partition
+key and `key_id` as the clustering key. Argus writes it on the registration path
+and reads it by partition key. Both operations run at `QUORUM`, so the read that
+follows the write always sees the row.
+
+The cost is manual consistency:
+
+1. `register_tunnel` writes both tables. It also repairs a missing lookup row
+   when a client registers a key it already holds.
+2. `delete_key` removes the lookup row first, then the key. A revoked key that
+   still authenticates is worse than a lookup row with no key behind it.
+3. Both rows carry the same TTL, so ScyllaDB expires them together.
+
+Keys registered before the table existed have no lookup row. Run
+`scripts/migration/migration_2026-08-03.py` after `flask cli sync-models` and
+before the new backend takes traffic. Then drop the now-unused secondary index
+on `ssh_tunnel_key.fingerprint`.
+
+**Proxy host provisioning lives in `qatools-deployments`, not in this repository.**
+
+The `argus_tunnel` Ansible role owns the proxy host: the restricted accounts, the
+Argus CLI, the credentials file, the `AuthorizedKeysCommand` wrapper, and the sshd
+drop-in. This repository ships the API and the CLI that the role installs.
+
+The role turns the `%f` token on only when the Argus CLI on the host accepts
+`--fingerprint`. An older binary exits non-zero, and sshd reads that as "no
+authorized keys", so it would reject every client. Raise
+`argus_tunnel_cli_version` and `cli_tools_argus_version` together once a release
+carries the flag.
+
+**Proxy host requirements:**
+
+- `argus` binary installed at `/usr/local/bin/argus`, owned by root and not writable by group or others, which sshd requires
+- `argus-authorized-keys` wrapper at `/usr/local/bin/argus-authorized-keys`, root-owned 0755
+- Credentials in a separate 0640 file owned by root and readable only by the `AuthorizedKeysCommandUser` account. Never embed the token in the wrapper: sshd requires the wrapper to be world-readable
+- OpenSSH 6.9 or later, for the `%f` token
 
 ### Configuring target_host
 
@@ -215,7 +367,8 @@ Add to `USED_MODELS`. Managed via admin panel (Step 4d).
 
 **Multi-host active mode:** Multiple proxy hosts may be active at the same time (`is_active=True`).
 
-- Tunnel registration and tunnel-info endpoints can pick among active hosts (round-robin).
+- Tunnel registration and tunnel-info endpoints return **every** active host,
+  ordered by a stable rotation keyed on the requesting user.
 - Admin can disable a host by setting `is_active=False`.
 - Disabled hosts remain in DB for audit/re-enable workflows.
 
@@ -231,13 +384,18 @@ Class `TunnelService`:
 
 - `register_tunnel(user: User, public_key: str, ttl_seconds: int = None) -> dict`:
     1. Store `SSHTunnelKey` in DB (public key only) with ScyllaDB TTL (default 86400s / 24h, or client-provided `ttl_seconds`). Set `expires_at = now_utc + ttl` for informational purposes.
-    2. Get one active `ProxyTunnelConfig` (round-robin across active hosts)
-    3. Return `{proxy_host, proxy_port, proxy_user, target_host, target_port, host_key_fingerprint, expires_at}` (all datetimes UTC ISO-8601)
+    2. Order active `ProxyTunnelConfig` rows for this user and take the first as primary
+    3. Return `{proxy_host, proxy_port, proxy_user, target_host, target_port, host_key_fingerprint, expires_at, proxies}` (all datetimes UTC ISO-8601)
 
-- `get_authorized_keys() -> str`:
-    1. Fetch all `SSHTunnelKey` records (expired rows already removed by ScyllaDB TTL)
-    2. Return newline-separated public keys in OpenSSH `authorized_keys` format
-    3. Called by proxy host via `AuthorizedKeysCommand` → argus-cli → this API
+- `get_tunnel_connection(user_id: UUID, proxy_host: str | None = None) -> dict`:
+    1. Return the primary proxy for `user_id` plus a `proxies` list holding every active proxy
+    2. `proxy_host` pins a specific primary; the rest of the list still follows so failover keeps working
+
+- `get_authorized_keys(fingerprint: str | None = None) -> str`:
+    1. With a fingerprint: validate the `SHA256:<43-char base64>` shape, then fetch the single matching `SSHTunnelKey` by indexed lookup
+    2. Without one: fetch all records and log a deprecation warning (old proxy wrappers only)
+    3. Return newline-separated public keys in OpenSSH `authorized_keys` format
+    4. Called by proxy host via `AuthorizedKeysCommand` → argus-cli → this API
 
 - `delete_key(key_id: UUID)`:
     1. Delete `SSHTunnelKey` row from DB
@@ -245,7 +403,7 @@ Class `TunnelService`:
 
 - `get_proxy_tunnel_config() -> ProxyTunnelConfig | None`:
     1. Return one deterministic active proxy tunnel config (for admin panel display)
-    2. Must be non-mutating (does not advance round-robin state used by client tunnel selection)
+    2. Non-mutating. Proxy selection holds no shared state, so an admin read cannot disturb it.
 
 - `save_proxy_tunnel_config(payload: dict) -> ProxyTunnelConfig`:
     1. Create a proxy tunnel config row (active by default, or explicitly disabled via `is_active=false`)
@@ -293,7 +451,10 @@ def register_tunnel():
 @api_login_required
 def get_authorized_keys():
     """Called by argus-cli on the proxy host via AuthorizedKeysCommand."""
-    keys = TunnelService().get_authorized_keys()
+    try:
+        keys = TunnelService().get_authorized_keys(fingerprint=request.args.get("fingerprint"))
+    except TunnelServiceException:
+        return Response("", mimetype="text/plain", status=400)
     return Response(keys, mimetype="text/plain")
 ```
 
@@ -522,6 +683,17 @@ def _ensure_tunnel(self):
     self._tunnel = None
     self._use_tunnel = False  # don't retry this session
 ```
+
+**The shipped code diverges from this sketch.** Three differences matter:
+
+- The keypair is never deleted on failure. It stays valid while the proxy host
+  is unreachable, and deleting it would force a pointless re-registration over
+  Cloudflare on every retry.
+- The tunnel is never disabled for the rest of the session. The monitor thread
+  keeps retrying with an escalating jittered delay, so a run that starts during
+  a proxy outage still moves onto the tunnel once the proxy returns. See
+  "Graceful Fallback and Reconnect" above.
+- `request()` does not establish or reconnect. Only the monitor thread does.
 
 ### Step 7: Python CLI integration
 

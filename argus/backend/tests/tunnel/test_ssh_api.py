@@ -10,6 +10,7 @@ Run with:
     uv run pytest argus/backend/tests/tunnel/test_ssh_api.py -m docker_required -v
 """
 import json
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -18,8 +19,8 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from flask import g
 from flask.testing import FlaskClient
 
-from argus.backend.models.runtime_store import RuntimeStore
-from argus.backend.models.ssh_key import ProxyTunnelConfig, SSHTunnelKey
+from argus.backend.models.ssh_key import ProxyTunnelConfig, SSHTunnelKey, SSHTunnelKeyByFingerprint
+from argus.backend.service.tunnel_service import TunnelService, _derive_fingerprint
 
 API_PREFIX = "/api/v1/client/ssh"
 
@@ -33,6 +34,36 @@ def _make_public_key() -> str:
     priv = Ed25519PrivateKey.generate()
     pub = priv.public_key()
     return pub.public_bytes(Encoding.OpenSSH, PublicFormat.OpenSSH).decode("utf-8")
+
+
+def _seed_key(user_id, tunnel_id, public_key: str, fingerprint: str, ttl: int = 86400) -> SSHTunnelKey:
+    """Insert a key the way ``register_tunnel`` does, both tables at once.
+
+    The scoped proxy-host role cannot call the register endpoint, so these
+    tests seed the database directly. Writing only the base table leaves the
+    fingerprint lookup empty and every ``?fingerprint=`` read returns nothing.
+    """
+    now_utc = datetime.now(tz=UTC).replace(tzinfo=None)
+    expires_at = now_utc + timedelta(seconds=ttl)
+    key = SSHTunnelKey.objects.ttl(ttl).create(
+        id=uuid4(),
+        user_id=user_id,
+        tunnel_id=tunnel_id,
+        public_key=public_key,
+        fingerprint=fingerprint,
+        created_at=now_utc,
+        expires_at=expires_at,
+    )
+    SSHTunnelKeyByFingerprint.objects.ttl(ttl).create(
+        fingerprint=fingerprint,
+        key_id=key.id,
+        user_id=user_id,
+        tunnel_id=tunnel_id,
+        public_key=public_key,
+        created_at=now_utc,
+        expires_at=expires_at,
+    )
+    return key
 
 
 def _make_active_config(**overrides) -> ProxyTunnelConfig:
@@ -69,8 +100,6 @@ def active_config(argus_db) -> ProxyTunnelConfig:
     for cfg_id in previous_active_ids:
         cfg = ProxyTunnelConfig.get(id=cfg_id)
         cfg.update(is_active=False)
-
-    _clear_proxy_rr_state()
 
     config = _make_active_config(service_user_id=g.user.id)
     yield config
@@ -118,13 +147,6 @@ def _restore_active_configs(cfg_ids: list):
             pass
 
 
-def _clear_proxy_rr_state() -> None:
-    try:
-        RuntimeStore.get(key="ssh_tunnel_proxy_rr_index").delete()
-    except RuntimeStore.DoesNotExist:
-        pass
-
-
 # ---------------------------------------------------------------------------
 # GET /api/v1/client/ssh/tunnel
 # ---------------------------------------------------------------------------
@@ -162,18 +184,25 @@ def test_get_tunnel_connection_select_specific_host(flask_client: FlaskClient, a
 
 
 @pytest.mark.docker_required
-def test_get_tunnel_connection_round_robin(flask_client: FlaskClient, argus_db, active_config):
+def test_get_tunnel_connection_returns_stable_primary_and_failover_list(
+    flask_client: FlaskClient, argus_db, active_config
+):
+    """One user always gets the same primary, plus every proxy for failover."""
     second = _make_active_config(is_active=True)
     try:
-        _clear_proxy_rr_state()
         resp1 = flask_client.get(f"{API_PREFIX}/tunnel")
         resp2 = flask_client.get(f"{API_PREFIX}/tunnel")
         assert resp1.status_code == 200
         assert resp2.status_code == 200
-        host1 = resp1.json["response"]["proxy_host"]
-        host2 = resp2.json["response"]["proxy_host"]
-        assert host1 != host2
-        assert {host1, host2} == {active_config.host, second.host}
+        body = resp1.json["response"]
+        assert body["proxy_host"] == resp2.json["response"]["proxy_host"]
+
+        hosts = [p["proxy_host"] for p in body["proxies"]]
+        assert set(hosts) == {active_config.host, second.host}
+        assert hosts[0] == body["proxy_host"]
+        for entry in body["proxies"]:
+            assert {"proxy_host", "proxy_port", "proxy_user", "target_host",
+                    "target_port", "host_key_fingerprint", "tunnel_id"} <= set(entry)
     finally:
         try:
             second.delete()
@@ -299,20 +328,8 @@ def test_register_tunnel_unauthenticated(argus_db, active_config):
 @pytest.mark.docker_required
 def test_get_authorized_keys_success(flask_client: FlaskClient, argus_db, active_config, ssh_tunnel_server_identity):
     """GET /ssh/keys should return 200 with plain-text content."""
-    # Insert a key directly so scoped role does not call other endpoints.
-    from datetime import UTC, datetime
-
     pub_key = _make_public_key()
-    now_utc = datetime.now(tz=UTC).replace(tzinfo=None)
-    SSHTunnelKey.objects.ttl(86400).create(
-        id=uuid4(),
-        user_id=g.user.id,
-        tunnel_id=active_config.id,
-        public_key=pub_key,
-        fingerprint="SHA256:test-one",
-        created_at=now_utc,
-        expires_at=now_utc,
-    )
+    _seed_key(g.user.id, active_config.id, pub_key, "SHA256:test-one")
 
     resp = flask_client.get(f"{API_PREFIX}/keys")
 
@@ -320,6 +337,53 @@ def test_get_authorized_keys_success(flask_client: FlaskClient, argus_db, active
     assert resp.content_type.startswith("text/plain")
     keys_text = resp.data.decode("utf-8")
     assert pub_key.strip() in keys_text
+
+
+@pytest.mark.docker_required
+def test_get_authorized_keys_fingerprint_param_scopes_response(
+    flask_client: FlaskClient, argus_db, active_config, ssh_tunnel_server_identity
+):
+    """The ?fingerprint= query param reaches the service and narrows the result."""
+    wanted = _make_public_key()
+    other = _make_public_key()
+    for pub_key in (wanted, other):
+        _seed_key(g.user.id, active_config.id, pub_key, _derive_fingerprint(pub_key))
+
+    resp = flask_client.get(f"{API_PREFIX}/keys", query_string={"fingerprint": _derive_fingerprint(wanted)})
+
+    assert resp.status_code == 200
+    keys_text = resp.data.decode("utf-8")
+    assert wanted.strip() in keys_text
+    assert other.strip() not in keys_text
+
+
+@pytest.mark.docker_required
+def test_get_authorized_keys_rejects_malformed_fingerprint(
+    flask_client: FlaskClient, argus_db, active_config, ssh_tunnel_server_identity
+):
+    """A malformed fingerprint gets a plain-text 400, never a JSON body sshd would parse as keys."""
+    resp = flask_client.get(f"{API_PREFIX}/keys", query_string={"fingerprint": "bogus"})
+
+    assert resp.status_code == 400
+    assert resp.content_type.startswith("text/plain")
+    assert resp.data == b""
+
+
+@pytest.mark.docker_required
+def test_get_authorized_keys_returns_plain_text_on_an_internal_error(
+    flask_client: FlaskClient, argus_db, active_config, ssh_tunnel_server_identity, monkeypatch
+):
+    """A driver fault must not reach sshd as a 200 with a JSON body either."""
+    def _boom(self, fingerprint=None):
+        raise RuntimeError("secondary index is missing")
+
+    monkeypatch.setattr(TunnelService, "get_authorized_keys", _boom)
+
+    resp = flask_client.get(f"{API_PREFIX}/keys", query_string={"fingerprint": _derive_fingerprint(_make_public_key())})
+
+    assert resp.status_code == 500
+    assert resp.content_type.startswith("text/plain")
+    assert resp.data == b""
 
 
 @pytest.mark.docker_required
