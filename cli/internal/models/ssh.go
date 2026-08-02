@@ -19,4 +19,23 @@ type SSHTunnelConfig struct {
 	TargetPort          int    `json:"target_port"`
 	HostKnownHostsEntry string `json:"host_key_fingerprint,omitempty"`
 	ExpiresAt           string `json:"expires_at,omitempty"`
+	// Proxies lists every active proxy, best choice first, so a client can fail
+	// over locally instead of giving up. Empty against an older backend.
+	Proxies []SSHTunnelConfig `json:"proxies,omitempty"`
+}
+
+// Candidates returns the proxies to try in order: this one, then every
+// failover proxy the backend offered.
+func (c SSHTunnelConfig) Candidates() []SSHTunnelConfig {
+	candidates := []SSHTunnelConfig{c}
+	for _, proxy := range c.Proxies {
+		if proxy.ProxyHost == c.ProxyHost && proxy.ProxyPort == c.ProxyPort {
+			continue
+		}
+		proxy.KeyID = c.KeyID
+		proxy.ExpiresAt = c.ExpiresAt
+		proxy.Proxies = nil
+		candidates = append(candidates, proxy)
+	}
+	return candidates
 }

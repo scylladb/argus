@@ -15,8 +15,7 @@ from uuid import uuid4
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
-from argus.backend.models.runtime_store import RuntimeStore
-from argus.backend.models.ssh_key import ProxyTunnelConfig, SSHTunnelKey
+from argus.backend.models.ssh_key import ProxyTunnelConfig, SSHTunnelKey, SSHTunnelKeyByFingerprint
 from argus.backend.models.web import User, UserRoles
 from argus.backend.service.tunnel_service import TunnelService, TunnelServiceException, _derive_fingerprint
 
@@ -84,13 +83,6 @@ def _restore_configs(config_ids: list) -> None:
             pass
 
 
-def _clear_proxy_rr_state() -> None:
-    try:
-        RuntimeStore.get(key="ssh_tunnel_proxy_rr_index").delete()
-    except RuntimeStore.DoesNotExist:
-        pass
-
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -109,7 +101,6 @@ def tunnel_user(argus_db) -> User:
 def active_config(argus_db) -> ProxyTunnelConfig:
     previous_active_ids = _active_config_ids()
     _deactivate_configs(previous_active_ids)
-    _clear_proxy_rr_state()
 
     config = _make_active_config()
     yield config
@@ -293,6 +284,123 @@ def test_get_authorized_keys_includes_keys_from_multiple_tunnels(argus_db, tunne
 
 
 @pytest.mark.docker_required
+def test_get_authorized_keys_by_fingerprint_returns_only_that_key(argus_db, tunnel_user, active_config):
+    """A fingerprint scopes the response to the single matching key."""
+    wanted = _make_public_key()
+    other = _make_public_key()
+    svc = TunnelService()
+    svc.register_tunnel(user=tunnel_user, public_key=wanted)
+    svc.register_tunnel(user=tunnel_user, public_key=other)
+
+    keys_text = svc.get_authorized_keys(fingerprint=_derive_fingerprint(wanted))
+
+    lines = [ln for ln in keys_text.splitlines() if ln.strip()]
+    assert len(lines) == 1
+    assert wanted.strip() in lines[0]
+    assert other.strip() not in keys_text
+
+
+@pytest.mark.docker_required
+def test_get_authorized_keys_by_unknown_fingerprint_is_empty(argus_db, tunnel_user, active_config):
+    """An unregistered fingerprint yields an empty body, which sshd reads as a denial."""
+    svc = TunnelService()
+    svc.register_tunnel(user=tunnel_user, public_key=_make_public_key())
+
+    unknown = _derive_fingerprint(_make_public_key())
+    assert svc.get_authorized_keys(fingerprint=unknown) == ""
+
+
+@pytest.mark.docker_required
+def test_a_key_authenticates_on_the_attempt_that_follows_registration(argus_db, tunnel_user, active_config):
+    """No secondary-index lag between registering a key and using it.
+
+    The client registers and connects immediately. A secondary index propagates
+    asynchronously, so that first attempt could be denied. The lookup table is
+    written on the registration path, so it cannot be.
+    """
+    public_key = _make_public_key()
+    svc = TunnelService()
+    svc.register_tunnel(user=tunnel_user, public_key=public_key)
+
+    keys_text = svc.get_authorized_keys(fingerprint=_derive_fingerprint(public_key))
+
+    assert public_key.strip() in keys_text
+
+
+@pytest.mark.docker_required
+def test_registering_again_repairs_a_missing_lookup_row(argus_db, tunnel_user, active_config):
+    """A key stored before the lookup table existed authenticates after a re-register."""
+    public_key = _make_public_key()
+    svc = TunnelService()
+    result = svc.register_tunnel(user=tunnel_user, public_key=public_key)
+    fingerprint = _derive_fingerprint(public_key)
+
+    SSHTunnelKeyByFingerprint.objects.filter(fingerprint=fingerprint, key_id=result.key_id).delete()
+    assert svc.get_authorized_keys(fingerprint=fingerprint) == ""
+
+    again = svc.register_tunnel(user=tunnel_user, public_key=public_key)
+
+    assert again.key_id == result.key_id
+    assert public_key.strip() in svc.get_authorized_keys(fingerprint=fingerprint)
+
+
+class _FakeConfig:
+    """Only ``id`` matters to proxy ordering, so a stub keeps this test DB-free."""
+
+    def __init__(self, name: str):
+        self.id = name
+
+
+def _order(user_id, names: list[str]) -> list[str]:
+    svc = TunnelService()
+    configs = [_FakeConfig(name) for name in names]
+    svc._get_active_configs = lambda: list(configs)
+    return [cfg.id for cfg in svc._ordered_active_configs(user_id)]
+
+
+def test_proxy_order_is_stable_for_a_user():
+    user = uuid4()
+    assert _order(user, ["a", "b", "c"]) == _order(user, ["c", "b", "a"])
+
+
+def test_proxy_order_spreads_users_and_lists_every_proxy():
+    names = ["a", "b", "c"]
+    primaries = {_order(uuid4(), names)[0] for _ in range(200)}
+    assert primaries == set(names)
+    assert sorted(_order(uuid4(), names)) == sorted(names)
+
+
+def test_adding_a_proxy_reassigns_only_its_own_share():
+    """Rendezvous hashing keeps churn near 1/N. Rotating by ``hash % len`` moves everyone."""
+    users = [uuid4() for _ in range(2000)]
+    before = {u: _order(u, ["a", "b"])[0] for u in users}
+    after = {u: _order(u, ["a", "b", "c"])[0] for u in users}
+
+    moved = sum(1 for u in users if before[u] != after[u])
+    assert 0.25 < moved / len(users) < 0.45
+
+
+def test_no_active_proxies_raises():
+    with pytest.raises(TunnelServiceException, match="No active proxy tunnel configuration"):
+        _order(uuid4(), [])
+
+
+@pytest.mark.parametrize("bad", [
+    "",
+    "not-a-fingerprint",
+    "MD5:aa:bb:cc",
+    "SHA256:",
+    "SHA256:tooshort",
+    "SHA256:" + "A" * 44,
+    "SHA256:" + "!" * 43,
+])
+def test_get_authorized_keys_rejects_malformed_fingerprint(bad):
+    """A malformed fingerprint is rejected before it reaches the database."""
+    with pytest.raises(TunnelServiceException):
+        TunnelService().get_authorized_keys(fingerprint=bad)
+
+
+@pytest.mark.docker_required
 def test_derive_fingerprint_matches_openssh_wire_blob(argus_db):
     """Fingerprint derivation should match SHA256 of OpenSSH wire blob (ssh-keygen format)."""
     public_key = _make_public_key()
@@ -317,6 +425,20 @@ def test_delete_key_removes_row(argus_db, tunnel_user, active_config):
 
     with pytest.raises(SSHTunnelKey.DoesNotExist):
         SSHTunnelKey.get(id=key_id)
+
+
+@pytest.mark.docker_required
+def test_deleted_key_stops_authenticating(argus_db, tunnel_user, active_config):
+    """A revoked key must not survive in the fingerprint lookup table."""
+    pub_key = _make_public_key()
+    svc = TunnelService()
+    result = svc.register_tunnel(user=tunnel_user, public_key=pub_key)
+    fingerprint = _derive_fingerprint(pub_key)
+    assert pub_key.strip() in svc.get_authorized_keys(fingerprint=fingerprint)
+
+    svc.delete_key(result.key_id)
+
+    assert svc.get_authorized_keys(fingerprint=fingerprint) == ""
 
 
 @pytest.mark.docker_required
@@ -619,12 +741,11 @@ def test_get_proxy_tunnel_config_returns_none_for_inactive_tunnel_id(argus_db):
 
 
 @pytest.mark.docker_required
-def test_get_proxy_tunnel_config_round_robin_without_tunnel_id(argus_db):
+def test_get_proxy_tunnel_config_is_deterministic(argus_db):
     """get_proxy_tunnel_config() should be deterministic for admin reads."""
     first = _make_active_config(is_active=True)
     second = _make_active_config(is_active=True)
     try:
-        _clear_proxy_rr_state()
         svc = TunnelService()
         pick1 = svc.get_proxy_tunnel_config()
         pick2 = svc.get_proxy_tunnel_config()
@@ -643,20 +764,18 @@ def test_get_proxy_tunnel_config_round_robin_without_tunnel_id(argus_db):
 
 
 @pytest.mark.docker_required
-def test_get_proxy_tunnel_config_does_not_advance_round_robin_index(argus_db):
-    """Admin reads should not mutate RR index used by client tunnel selection."""
+def test_get_tunnel_connection_is_stable_for_one_user(argus_db):
+    """Repeat lookups give the same primary, so a cached config never drifts."""
     previous_active_ids = _active_config_ids()
     _deactivate_configs(previous_active_ids)
     first = _make_active_config(is_active=True)
     second = _make_active_config(is_active=True)
+    user_id = uuid4()
     try:
-        _clear_proxy_rr_state()
         service = TunnelService()
-        _ = service.get_proxy_tunnel_config()
-        first_pick = service.get_tunnel_connection().proxy_host
-        second_pick = service.get_tunnel_connection().proxy_host
-        assert first_pick != second_pick
-        assert {first_pick, second_pick} == {first.host, second.host}
+        picks = {service.get_tunnel_connection(user_id=user_id).proxy_host for _ in range(5)}
+        assert len(picks) == 1
+        assert picks.pop() in {first.host, second.host}
     finally:
         try:
             first.delete()
@@ -672,7 +791,7 @@ def test_get_proxy_tunnel_config_does_not_advance_round_robin_index(argus_db):
 @pytest.mark.docker_required
 def test_get_tunnel_connection_returns_active_fields(argus_db, active_config):
     """get_tunnel_connection should return active config fields used by SSH clients."""
-    result = TunnelService().get_tunnel_connection()
+    result = TunnelService().get_tunnel_connection(user_id=uuid4())
     assert result.proxy_host == active_config.host
     assert result.proxy_port == active_config.port
     assert result.proxy_user == active_config.proxy_user
@@ -682,17 +801,17 @@ def test_get_tunnel_connection_returns_active_fields(argus_db, active_config):
 
 
 @pytest.mark.docker_required
-def test_register_tunnel_uses_round_robin_when_multiple_active(argus_db, tunnel_user, active_config):
-    """register_tunnel should rotate selected host when multiple active configs exist."""
+def test_register_tunnel_is_stable_per_user_and_lists_every_proxy(argus_db, tunnel_user, active_config):
+    """One user keeps one primary, and the response carries the whole failover list."""
     second = _make_active_config(is_active=True)
     try:
-        _clear_proxy_rr_state()
         svc = TunnelService()
         first = svc.register_tunnel(user=tunnel_user, public_key=_make_public_key())
-        second_pick = svc.register_tunnel(user=tunnel_user, public_key=_make_public_key())
+        again = svc.register_tunnel(user=tunnel_user, public_key=_make_public_key())
 
-        assert first.proxy_host != second_pick.proxy_host
-        assert {first.proxy_host, second_pick.proxy_host} == {active_config.host, second.host}
+        assert first.proxy_host == again.proxy_host
+        assert {p.proxy_host for p in first.proxies} == {active_config.host, second.host}
+        assert first.proxies[0].proxy_host == first.proxy_host
     finally:
         try:
             second.delete()
@@ -705,7 +824,7 @@ def test_get_tunnel_connection_selects_specific_host(argus_db, active_config):
     """get_tunnel_connection should return requested active host when proxy_host is provided."""
     second = _make_active_config(is_active=True)
     try:
-        result = TunnelService().get_tunnel_connection(proxy_host=second.host)
+        result = TunnelService().get_tunnel_connection(user_id=uuid4(), proxy_host=second.host)
         assert result.proxy_host == second.host
         assert result.proxy_port == second.port
         assert result.proxy_user == second.proxy_user
@@ -720,21 +839,17 @@ def test_get_tunnel_connection_selects_specific_host(argus_db, active_config):
 def test_get_tunnel_connection_unknown_host_raises(argus_db, active_config):
     """Selecting an inactive/unknown host should raise."""
     with pytest.raises(TunnelServiceException, match="No active proxy tunnel configuration found for host"):
-        TunnelService().get_tunnel_connection(proxy_host="missing-host.example.com")
+        TunnelService().get_tunnel_connection(user_id=uuid4(), proxy_host="missing-host.example.com")
 
 
 @pytest.mark.docker_required
-def test_get_tunnel_connection_round_robin(argus_db, active_config):
-    """get_tunnel_connection without proxy_host should rotate across active hosts."""
+def test_get_tunnel_connection_spreads_users_across_proxies(argus_db, active_config):
+    """Different users start at different proxies without a shared counter."""
     second = _make_active_config(is_active=True)
     try:
-        _clear_proxy_rr_state()
         svc = TunnelService()
-        first = svc.get_tunnel_connection()
-        second_pick = svc.get_tunnel_connection()
-
-        assert first.proxy_host != second_pick.proxy_host
-        assert {first.proxy_host, second_pick.proxy_host} == {active_config.host, second.host}
+        picks = {svc.get_tunnel_connection(user_id=uuid4()).proxy_host for _ in range(40)}
+        assert picks == {active_config.host, second.host}
     finally:
         try:
             second.delete()

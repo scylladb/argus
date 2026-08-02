@@ -211,9 +211,14 @@ func (s *SSHService) GetTunnelConfig(ctx context.Context, tunnelID string) (mode
 	return api.DoJSON[models.SSHTunnelConfig](s.client, req)
 }
 
-// ListAuthorizedKeys returns the raw authorized_keys payload.
-func (s *SSHService) ListAuthorizedKeys(ctx context.Context, tunnelID string) (string, error) {
-	route := withTunnelID(api.SSHKeysList, tunnelID)
+// ListAuthorizedKeys returns the raw authorized_keys payload. A non-empty
+// fingerprint scopes the response to the single matching key, so the proxy host
+// transfers one key per SSH authentication attempt instead of the whole table.
+func (s *SSHService) ListAuthorizedKeys(ctx context.Context, tunnelID, fingerprint string) (string, error) {
+	route := withQuery(api.SSHKeysList, map[string]string{
+		"tunnel_id":   tunnelID,
+		"fingerprint": fingerprint,
+	})
 	req, err := s.client.NewRequest(ctx, http.MethodGet, route, nil)
 	if err != nil {
 		return "", err
@@ -243,11 +248,19 @@ func (s *SSHService) ListAuthorizedKeys(ctx context.Context, tunnelID string) (s
 }
 
 func withTunnelID(route, tunnelID string) string {
-	if strings.TrimSpace(tunnelID) == "" {
+	return withQuery(route, map[string]string{"tunnel_id": tunnelID})
+}
+
+func withQuery(route string, params map[string]string) string {
+	q := url.Values{}
+	for key, value := range params {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			q.Set(key, trimmed)
+		}
+	}
+	if len(q) == 0 {
 		return route
 	}
-	q := url.Values{}
-	q.Set("tunnel_id", tunnelID)
 	return route + "?" + q.Encode()
 }
 
@@ -268,10 +281,9 @@ func FindFreeLocalPort() (int, error) {
 // PrepareKnownHostsFile creates a temporary known_hosts file populated with the
 // proxy host fingerprint value returned by the API.
 func (s *SSHService) PrepareKnownHostsFile(_ context.Context, cfg models.SSHTunnelConfig) (string, error) {
-	knownHostsEntry, err := normalizeKnownHostsEntries(cfg.HostKnownHostsEntry)
+	knownHostsEntry, err := normalizeKnownHostsEntries(cfg.HostKnownHostsEntry, cfg.ProxyHost, cfg.ProxyPort)
 	if err != nil {
-		// TODO: restore strict verification once backend returns full known_hosts entries.
-		return "", nil //nolint:nilerr
+		return "", fmt.Errorf("refusing to connect without host verification: %w", err)
 	}
 
 	f, err := os.CreateTemp("", "argus-known-hosts-*")
@@ -295,7 +307,7 @@ func (s *SSHService) PrepareKnownHostsFile(_ context.Context, cfg models.SSHTunn
 	return f.Name(), nil
 }
 
-func normalizeKnownHostsEntries(raw string) (string, error) {
+func normalizeKnownHostsEntries(raw, host string, port int) (string, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
 		return "", errors.New("empty value")
@@ -316,7 +328,7 @@ func normalizeKnownHostsEntries(raw string) (string, error) {
 		if len(fields) < 3 {
 			return "", fmt.Errorf("invalid known_hosts entry %q", line)
 		}
-		entries = append(entries, line)
+		entries = append(entries, fmt.Sprintf("%s %s %s", knownHostsToken(host, port, fields[0]), fields[1], fields[2]))
 	}
 
 	if len(entries) == 0 {
@@ -324,6 +336,19 @@ func normalizeKnownHostsEntries(raw string) (string, error) {
 	}
 
 	return strings.Join(entries, "\n"), nil
+}
+
+// knownHostsToken returns the host token ssh looks the entry up by. ssh matches
+// on the literal connect address, and uses "[host]:port" whenever -p names a
+// port other than 22, so an entry keyed on the bare host is ignored there.
+func knownHostsToken(host string, port int, fallback string) string {
+	if strings.TrimSpace(host) == "" {
+		return fallback
+	}
+	if port == 0 || port == 22 {
+		return host
+	}
+	return fmt.Sprintf("[%s]:%d", host, port)
 }
 
 // BuildSSHConnectArgs returns ssh arguments to establish the local tunnel.
@@ -339,15 +364,13 @@ func BuildSSHConnectArgs(cfg models.SSHTunnelConfig, privateKeyPath string, loca
 		"-o", "ExitOnForwardFailure=yes",
 		"-o", "ServerAliveInterval=30",
 		"-o", "ServerAliveCountMax=3",
-	}
-	if strings.TrimSpace(knownHostsPath) != "" {
-		args = append(args,
-			"-o", "StrictHostKeyChecking=yes",
-			"-o", fmt.Sprintf("UserKnownHostsFile=%s", knownHostsPath),
-		)
-	} else {
-		// TODO: remove once backend always returns a full known_hosts entry.
-		args = append(args, "-o", "StrictHostKeyChecking=no")
+		// Without this, ssh offers agent keys and default identities before
+		// -i. Every rejected offer is one more AuthorizedKeysCommand call on
+		// the proxy host, and it burns the MaxAuthTries budget.
+		"-o", "IdentitiesOnly=yes",
+		"-o", "StrictHostKeyChecking=yes",
+		"-o", fmt.Sprintf("UserKnownHostsFile=%s", knownHostsPath),
+		"-o", "GlobalKnownHostsFile=/dev/null",
 	}
 	args = append(args, host)
 	return args
