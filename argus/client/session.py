@@ -5,6 +5,7 @@ import threading
 import time
 import weakref
 from datetime import datetime, timezone
+from importlib import metadata
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -61,6 +62,19 @@ def _resolve_build_url() -> str | None:
     return os.environ.get("BUILD_URL", "").strip() or None
 
 
+def _resolve_client_version() -> str:
+    """The installed argus-alm version, or "unknown" when it cannot be read.
+
+    Tunnel support starts at 0.16.0. A release line that pins an older client
+    cannot tunnel at all, and until the backend can see the version it looks
+    identical to a job whose tunnel is failing.
+    """
+    try:
+        return metadata.version("argus-alm")
+    except metadata.PackageNotFoundError:
+        return "unknown"
+
+
 def build_attribution_headers() -> dict[str, str]:
     """Jenkins attribution for every request, tunneled or not.
 
@@ -71,7 +85,7 @@ def build_attribution_headers() -> dict[str, str]:
     browser hitting the UI. Setting them at session level lets the backend name
     the job behind direct traffic too.
     """
-    headers = {}
+    headers = {"X-Argus-Client-Version": _resolve_client_version()}
     if build_id := _resolve_build_id():
         headers["X-Argus-Build-Id"] = build_id
     if build_url := _resolve_build_url():
