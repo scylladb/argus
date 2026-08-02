@@ -60,9 +60,11 @@ def register_metrics():
     METRICS.register_default(
         METRICS.counter(
             "http_request_job_tunnel_total",
-            "Requests by Jenkins job and SSH tunnel state, build number stripped",
+            "Requests by Jenkins job, release line, client version and SSH tunnel state",
             labels={
                 "job_name": metrics_labels.job_name,
+                "branch": metrics_labels.branch,
+                "client_version": metrics_labels.client_version,
                 "ssh_tunnel": metrics_labels.ssh_tunnel,
             },
         )
@@ -70,11 +72,15 @@ def register_metrics():
     METRICS.register_default(
         METRICS.counter(
             "http_request_by_user_agent_total",
-            "Total requests by user agent category",
+            "Total requests by user agent category and client version",
             labels={
                 "user_agent_category": lambda: metrics_labels.categorize_user_agent(
                     request.headers.get("User-Agent", "")
                 ),
+                # A client too old to send X-Argus-Build-Id is also too old to
+                # appear in http_request_job_tunnel_total under its own job. Here
+                # it still counts, as an argus-client of version "unknown".
+                "client_version": metrics_labels.client_version,
                 "endpoint": lambda: request.endpoint,
             },
         )

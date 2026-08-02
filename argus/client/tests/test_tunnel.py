@@ -602,7 +602,10 @@ def test_build_attribution_headers(monkeypatch, env, expected):
     for key, value in env.items():
         monkeypatch.setenv(key, value)
 
-    assert session_mod.build_attribution_headers() == expected
+    headers = session_mod.build_attribution_headers()
+
+    assert headers.pop("X-Argus-Client-Version") == session_mod._resolve_client_version()
+    assert headers == expected
 
 
 def test_build_attribution_headers_drops_oversized_build_id(monkeypatch):
@@ -610,7 +613,7 @@ def test_build_attribution_headers_drops_oversized_build_id(monkeypatch):
     monkeypatch.delenv("BUILD_NUMBER", raising=False)
     monkeypatch.delenv("BUILD_URL", raising=False)
 
-    assert session_mod.build_attribution_headers() == {}
+    assert set(session_mod.build_attribution_headers()) == {"X-Argus-Client-Version"}
 
 
 def test_direct_session_carries_build_attribution(monkeypatch):
@@ -639,3 +642,23 @@ def test_tunneled_session_carries_build_attribution_for_fallback(monkeypatch):
         assert session.headers["X-Argus-Build-Id"] == "scylla-master/longevity#7"
     finally:
         session.close()
+
+
+def test_every_session_reports_its_client_version(monkeypatch):
+    """The label that separates "cannot tunnel" from "tunnel is failing"."""
+    monkeypatch.delenv("ARGUS_USE_TUNNEL", raising=False)
+    monkeypatch.delenv("JOB_NAME", raising=False)
+
+    session = session_mod.create_session(
+        auth_token="token", base_url="https://argus.example.com", use_tunnel=False)
+
+    assert session.headers["X-Argus-Client-Version"] == session_mod._resolve_client_version()
+
+
+def test_client_version_is_unknown_when_the_package_is_not_installed(monkeypatch):
+    def _raise(_name):
+        raise session_mod.metadata.PackageNotFoundError("argus-alm")
+
+    monkeypatch.setattr(session_mod.metadata, "version", _raise)
+
+    assert session_mod._resolve_client_version() == "unknown"
