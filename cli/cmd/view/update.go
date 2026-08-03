@@ -18,13 +18,16 @@ widgets, so metadata-only edits start from the view's current state.
 
 The view is addressed by its UUID or name. Provide a --file to replace the
 view's items and widgets wholesale (the schema 'get' emits); without --file the
-current view is used as the base so --name/--display-name/--description edit just
-the metadata while preserving items and widgets. The --item and --widget flags
-append onto whichever base is used. Flags override matching metadata fields from
-the file. References resolve as for 'create'.
+current view is used as the base so --name/--description edit just the metadata
+while preserving items and widgets. The --item and --widget flags append onto
+whichever base is used. References resolve as for 'create'.
+
+The --name value is the view's display name; its internal name (the URL slug
+used to address the view) is re-derived from it, e.g. "My Dashboard (2026.2)"
+becomes "my-dashboard-2026-2".
 
   # Rename only (items and widgets preserved):
-  argus view update --view my-dashboard --display-name "My Dashboard (2026.2)"
+  argus view update --view my-dashboard --name "My Dashboard (2026.2)"
 
   # Append an item and a widget to the current view:
   argus view update --view my-dashboard \
@@ -40,8 +43,7 @@ that do not resolve are reported and omitted.`,
 
 	cmd.Flags().StringP("view", "i", "", "View UUID or name (required)")
 	cmd.Flags().StringP("file", "f", "", "View spec JSON file (\"-\" for stdin); replaces items and widgets")
-	cmd.Flags().String("name", "", "New view name (slug)")
-	cmd.Flags().String("display-name", "", "New display name")
+	cmd.Flags().String("name", "", "New view name; used as the display name, with a URL slug derived from it")
 	cmd.Flags().String("description", "", "New description")
 	cmd.Flags().StringArray("item", nil, "Item to add as a build_system_id reference (release, release/group, or release/group/test; repeatable)")
 	cmd.Flags().StringArray("widget", nil, "Widget type to add with default settings (see 'argus view widgets'; repeatable)")
@@ -95,7 +97,7 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 	}
-	overlayMetaFlags(cmd, &tmpl)
+	overlayNameMeta(cmd, &tmpl)
 	if err := overlayItemsAndWidgets(cmd, &tmpl); err != nil {
 		return err
 	}

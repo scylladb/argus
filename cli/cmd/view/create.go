@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/gosimple/slug"
 	"github.com/scylladb/argus/cli/internal/cmdctx"
 	"github.com/scylladb/argus/cli/internal/logging"
 	"github.com/scylladb/argus/cli/internal/models"
@@ -32,10 +33,14 @@ UUIDs automatically.
   argus view create --file view.json
 
   # Build entirely from flags (no file):
-  argus view create --name my-dashboard --display-name "My Dashboard" \
+  argus view create --name "My Dashboard" \
     --item scylla-2026.2/tier1 \
     --item scylla-2026.2/tier1/longevity-100gb \
     --widget testDashboard --widget releaseStats
+
+The --name value is the view's display name; its internal name (the URL slug
+used to address the view) is derived from it automatically, e.g. "My Dashboard"
+becomes "my-dashboard".
 
 Widgets added with --widget are created with their default settings; run
 'argus view widgets' to list the valid widget types. Items or filters that do
@@ -48,8 +53,7 @@ accept plan_id on create); plan-backed views are created from the planner.`,
 	}
 
 	cmd.Flags().StringP("file", "f", "", "View spec JSON file (\"-\" for stdin)")
-	cmd.Flags().String("name", "", "View name (slug)")
-	cmd.Flags().String("display-name", "", "View display name")
+	cmd.Flags().String("name", "", "View name; used as the display name, with a URL slug derived from it")
 	cmd.Flags().String("description", "", "View description")
 	cmd.Flags().StringArray("item", nil, "Item to add as a build_system_id reference (release, release/group, or release/group/test; repeatable)")
 	cmd.Flags().StringArray("widget", nil, "Widget type to add with default settings (see 'argus view widgets'; repeatable)")
@@ -74,7 +78,7 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	if err := validateWidgetTypes(tmpl.Widgets); err != nil {
 		return err
 	}
-	overlayMetaFlags(cmd, &tmpl)
+	overlayNameMeta(cmd, &tmpl)
 	if err := overlayItemsAndWidgets(cmd, &tmpl); err != nil {
 		return err
 	}
@@ -133,14 +137,19 @@ func loadTemplate(cmd *cobra.Command) (models.ViewTemplate, error) {
 	return tmpl, nil
 }
 
-// overlayMetaFlags applies the metadata flags (--name/--display-name/
-// --description) onto tmpl, overriding the file value only when explicitly set.
-func overlayMetaFlags(cmd *cobra.Command, tmpl *models.ViewTemplate) {
+// overlayNameMeta applies the name/description metadata flags onto tmpl, shared
+// by create and update. --name is the human display name; the view's internal
+// name (its URL slug) is derived from it automatically, mirroring the dashboard
+// editor. --description overrides the file/base value when set. When a base
+// template (a --file spec or the current view) supplied a display name but no
+// internal name, the slug is likewise derived so the view always has a name.
+func overlayNameMeta(cmd *cobra.Command, tmpl *models.ViewTemplate) {
 	if cmd.Flags().Changed("name") {
-		tmpl.Name, _ = cmd.Flags().GetString("name")
-	}
-	if cmd.Flags().Changed("display-name") {
-		tmpl.DisplayName, _ = cmd.Flags().GetString("display-name")
+		name, _ := cmd.Flags().GetString("name")
+		tmpl.DisplayName = name
+		tmpl.Name = slug.Make(name)
+	} else if tmpl.Name == "" && tmpl.DisplayName != "" {
+		tmpl.Name = slug.Make(tmpl.DisplayName)
 	}
 	if cmd.Flags().Changed("description") {
 		tmpl.Description, _ = cmd.Flags().GetString("description")
