@@ -22,19 +22,28 @@ func registerCreate(parent *cobra.Command) {
 		Long: `Create a user view from a JSON file and/or flags.
 
 The view is described by a --file (the same schema 'get' emits by default) and/or
-built up with flags; flags override matching metadata fields from the file.
-Items and widget filters are release-qualified build_system_id references
-(a single segment is a release, "release/group" a group, and
-"release/group/test" a test) and are resolved to UUIDs automatically.
+built up with flags; flags override matching metadata fields from the file and
+append to the file's items and widgets. Items and widget filters are
+release-qualified build_system_id references (a single segment is a release,
+"release/group" a group, and "release/group/test" a test) and are resolved to
+UUIDs automatically.
 
   # From an edited template:
   argus view create --file view.json
 
-  # Metadata-only from flags (empty view, no widgets):
-  argus view create --name my-dashboard --display-name "My Dashboard"
+  # Build entirely from flags (no file):
+  argus view create --name my-dashboard --display-name "My Dashboard" \
+    --item scylla-2026.2/tier1 \
+    --item scylla-2026.2/tier1/longevity-100gb \
+    --widget testDashboard --widget releaseStats
 
-Items or filters that do not resolve to an existing release/group/test are
-reported and omitted, and the view is created anyway.`,
+Widgets added with --widget are created with their default settings; run
+'argus view widgets' to list the valid widget types. Items or filters that do
+not resolve to an existing release/group/test are reported and omitted, and the
+view is created anyway.
+
+Note: a view cannot be linked to a plan at creation time (the API does not
+accept plan_id on create); plan-backed views are created from the planner.`,
 		RunE: runCreate,
 	}
 
@@ -42,6 +51,8 @@ reported and omitted, and the view is created anyway.`,
 	cmd.Flags().String("name", "", "View name (slug)")
 	cmd.Flags().String("display-name", "", "View display name")
 	cmd.Flags().String("description", "", "View description")
+	cmd.Flags().StringArray("item", nil, "Item to add as a build_system_id reference (release, release/group, or release/group/test; repeatable)")
+	cmd.Flags().StringArray("widget", nil, "Widget type to add with default settings (see 'argus view widgets'; repeatable)")
 
 	parent.AddCommand(cmd)
 }
@@ -59,7 +70,14 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	// Widgets from --file are user-authored, so reject unknown types up front.
+	if err := validateWidgetTypes(tmpl.Widgets); err != nil {
+		return err
+	}
 	overlayMetaFlags(cmd, &tmpl)
+	if err := overlayItemsAndWidgets(cmd, &tmpl); err != nil {
+		return err
+	}
 
 	svc := services.NewViewService(client, c)
 
@@ -127,4 +145,38 @@ func overlayMetaFlags(cmd *cobra.Command, tmpl *models.ViewTemplate) {
 	if cmd.Flags().Changed("description") {
 		tmpl.Description, _ = cmd.Flags().GetString("description")
 	}
+}
+
+// overlayItemsAndWidgets appends the repeatable --item and --widget flag values
+// onto the template's items and widgets. Items are added verbatim as
+// build_system_id references (resolved later); widgets are added with their
+// type's default settings. An unknown --widget type is rejected here (the flag
+// value is user-supplied), listing the valid types. Both append to whatever the
+// file provided; final widget positions are assigned by the service when it
+// builds the request.
+func overlayItemsAndWidgets(cmd *cobra.Command, tmpl *models.ViewTemplate) error {
+	if items, _ := cmd.Flags().GetStringArray("item"); len(items) > 0 {
+		tmpl.Items = append(tmpl.Items, items...)
+	}
+	if widgets, _ := cmd.Flags().GetStringArray("widget"); len(widgets) > 0 {
+		for _, wt := range widgets {
+			if err := models.ValidateWidgetType(wt); err != nil {
+				return err
+			}
+			tmpl.Widgets = append(tmpl.Widgets, models.NewWidgetWithDefaults(wt, 0))
+		}
+	}
+	return nil
+}
+
+// validateWidgetTypes rejects any widget whose type this CLI does not recognise,
+// listing the valid types. It guards user-supplied widgets (--file specs); it is
+// deliberately not applied to widgets read back from a stored view.
+func validateWidgetTypes(widgets []models.ViewWidget) error {
+	for _, w := range widgets {
+		if err := models.ValidateWidgetType(w.Type); err != nil {
+			return err
+		}
+	}
+	return nil
 }

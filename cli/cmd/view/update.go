@@ -19,11 +19,16 @@ widgets, so metadata-only edits start from the view's current state.
 The view is addressed by its UUID or name. Provide a --file to replace the
 view's items and widgets wholesale (the schema 'get' emits); without --file the
 current view is used as the base so --name/--display-name/--description edit just
-the metadata while preserving items and widgets. Flags override matching
-metadata fields from the file. References resolve as for 'create'.
+the metadata while preserving items and widgets. The --item and --widget flags
+append onto whichever base is used. Flags override matching metadata fields from
+the file. References resolve as for 'create'.
 
   # Rename only (items and widgets preserved):
   argus view update --view my-dashboard --display-name "My Dashboard (2026.2)"
+
+  # Append an item and a widget to the current view:
+  argus view update --view my-dashboard \
+    --item scylla-2026.2/tier1 --widget releaseStats
 
   # Replace items/widgets from an edited template:
   argus view update --view my-dashboard --file view.json
@@ -38,6 +43,8 @@ that do not resolve are reported and omitted.`,
 	cmd.Flags().String("name", "", "New view name (slug)")
 	cmd.Flags().String("display-name", "", "New display name")
 	cmd.Flags().String("description", "", "New description")
+	cmd.Flags().StringArray("item", nil, "Item to add as a build_system_id reference (release, release/group, or release/group/test; repeatable)")
+	cmd.Flags().StringArray("widget", nil, "Widget type to add with default settings (see 'argus view widgets'; repeatable)")
 	_ = cmd.MarkFlagRequired("view")
 
 	parent.AddCommand(cmd)
@@ -70,6 +77,13 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 		if err != nil {
 			return err
 		}
+		// Widgets from --file are user-authored, so reject unknown types up
+		// front. Widgets sourced from the current view (the else branch) are
+		// left unvalidated so a view built with a newer widget catalog than
+		// this CLI knows can still be edited.
+		if err := validateWidgetTypes(tmpl.Widgets); err != nil {
+			return err
+		}
 	} else {
 		var warnings []string
 		tmpl, warnings, err = svc.ViewToTemplate(ctx, view)
@@ -82,6 +96,9 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 		}
 	}
 	overlayMetaFlags(cmd, &tmpl)
+	if err := overlayItemsAndWidgets(cmd, &tmpl); err != nil {
+		return err
+	}
 
 	req, warnings, err := svc.BuildUpdateRequest(ctx, view.ID, tmpl)
 	for _, w := range warnings {
