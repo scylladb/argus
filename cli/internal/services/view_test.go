@@ -391,6 +391,75 @@ func TestViewService_BuildCreateRequest_NameRequired(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestViewService_BuildCreateRequest_WidgetDefaultsFilledAndReflowed(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	registerResolveEndpoints(t, mux)
+	svc := newViewSvc(t, mux)
+
+	// Two widgets: the first carries a partial override, the second a bare
+	// type from --widget (position 0). Both must land with full defaults and
+	// 1-based positions.
+	tmpl := models.ViewTemplate{
+		Name: "dash-a",
+		Widgets: []models.ViewWidget{
+			{Position: 0, Type: "summary", Settings: json.RawMessage(`{"packageName":"scylla-enterprise"}`)},
+			models.NewWidgetWithDefaults("releaseStats", 0),
+		},
+	}
+	req, warnings, err := svc.BuildCreateRequest(context.Background(), tmpl)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+
+	var widgets []map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal([]byte(req.Settings), &widgets))
+	require.Len(t, widgets, 2)
+
+	// Positions reflow to a 1-based sequence regardless of the input.
+	assert.JSONEq(t, "1", string(widgets[0]["position"]))
+	assert.JSONEq(t, "2", string(widgets[1]["position"]))
+
+	// The caller's override is preserved; other default keys are added.
+	var s0 map[string]any
+	require.NoError(t, json.Unmarshal(widgets[0]["settings"], &s0))
+	assert.Equal(t, "scylla-enterprise", s0["packageName"], "explicit setting preserved")
+
+	// The bare --widget keeps its full defaults untouched.
+	var s1 map[string]any
+	require.NoError(t, json.Unmarshal(widgets[1]["settings"], &s1))
+	assert.Equal(t, false, s1["horizontal"])
+	assert.Equal(t, false, s1["displayExtendedStats"])
+	assert.Contains(t, s1, "hiddenStatuses")
+}
+
+func TestViewService_BuildCreateRequest_UnknownWidgetTypePassesThrough(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	registerResolveEndpoints(t, mux)
+	svc := newViewSvc(t, mux)
+
+	// The service no longer rejects an unrecognised type: it stores the widget
+	// verbatim (no defaults are known) and warns, so a view built with a newer
+	// widget catalog than this CLI knows still round-trips. Strict rejection of
+	// user-supplied types lives at the command boundary instead.
+	tmpl := models.ViewTemplate{
+		Name: "dash-a",
+		Widgets: []models.ViewWidget{
+			{Type: "futureWidget", Settings: json.RawMessage(`{"keep":"me"}`)},
+		},
+	}
+	req, warnings, err := svc.BuildCreateRequest(context.Background(), tmpl)
+	require.NoError(t, err)
+	assert.NotEmpty(t, warnings, "an unrecognised widget type is reported")
+
+	var widgets []map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal([]byte(req.Settings), &widgets))
+	require.Len(t, widgets, 1)
+	assert.JSONEq(t, `"futureWidget"`, string(widgets[0]["type"]), "type kept verbatim")
+	// Settings are untouched: no default keys are injected for an unknown type.
+	assert.JSONEq(t, `{"keep":"me"}`, string(widgets[0]["settings"]))
+}
+
 // --------------------------------------------------------------------------
 // Update request shaping
 // --------------------------------------------------------------------------

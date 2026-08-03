@@ -239,22 +239,42 @@ func isNotFound(err error) bool {
 	return strings.HasPrefix(err.Error(), "no release named ")
 }
 
-// buildWidgetSettings maps each widget's filter references to bare UUIDs and
-// returns the widget_settings JSON array string the backend stores. An empty
-// widget list yields "[]" (the backend requires a non-empty string).
+// buildWidgetSettings fills in each widget type's default settings for any
+// missing keys, resolves filter references to bare UUIDs, and reflows positions
+// to a 1-based sequence — mirroring the dashboard editor — then returns the
+// widget_settings JSON array string the backend stores. An empty widget list
+// yields "[]" (the backend requires a non-empty string).
+//
+// An unrecognised widget type is not an error here: it is stored verbatim (no
+// default settings are known) and reported as a warning, so a view built with a
+// newer widget catalog than this CLI knows still round-trips through an update.
+// User-supplied widget types (--widget / --file) are validated separately at the
+// command boundary via [models.ValidateWidgetType].
 func (s *ViewService) buildWidgetSettings(ctx context.Context, widgets []models.ViewWidget) (string, []string, error) {
 	if len(widgets) == 0 {
 		return "[]", nil, nil
 	}
 	var warnings []string
 	out := make([]models.ViewWidget, 0, len(widgets))
-	for _, w := range widgets {
+	for i, w := range widgets {
+		if models.IsKnownWidgetType(w.Type) {
+			merged, err := fillWidgetDefaults(w.Type, w.Settings)
+			if err != nil {
+				return "", warnings, err
+			}
+			w.Settings = merged
+		} else {
+			warnings = append(warnings, fmt.Sprintf("widget type %q is not recognised by this CLI version — stored as-is", w.Type))
+		}
+
 		ids, warns, err := s.resolveFilterRefs(ctx, w.Filter)
 		if err != nil {
 			return "", warnings, err
 		}
 		warnings = append(warnings, warns...)
 		w.Filter = nonNilSlice(ids)
+
+		w.Position = i + 1
 		out = append(out, w)
 	}
 	raw, err := json.Marshal(out)
@@ -262,6 +282,29 @@ func (s *ViewService) buildWidgetSettings(ctx context.Context, widgets []models.
 		return "", warnings, fmt.Errorf("encoding widget settings: %w", err)
 	}
 	return string(raw), warnings, nil
+}
+
+// fillWidgetDefaults merges the default settings for a widget type into the
+// given settings JSON, adding only keys the caller omitted (existing values are
+// preserved). A nil/empty settings object yields the type's full defaults. This
+// matches the frontend's populateWidgetSettings behaviour.
+func fillWidgetDefaults(widgetType string, settings json.RawMessage) (json.RawMessage, error) {
+	current := map[string]any{}
+	if len(settings) > 0 {
+		if err := json.Unmarshal(settings, &current); err != nil {
+			return nil, fmt.Errorf("parsing settings for widget %q: %w", widgetType, err)
+		}
+	}
+	for k, v := range models.DefaultWidgetSettings(widgetType) {
+		if _, ok := current[k]; !ok {
+			current[k] = v
+		}
+	}
+	raw, err := json.Marshal(current)
+	if err != nil {
+		return nil, fmt.Errorf("encoding settings for widget %q: %w", widgetType, err)
+	}
+	return raw, nil
 }
 
 // ---------------------------------------------------------------------------
