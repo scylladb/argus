@@ -1,7 +1,9 @@
 from datetime import datetime, timedelta, timezone
 from io import StringIO
 from unittest.mock import Mock
+import atexit
 import os
+import time
 
 import pytest
 
@@ -47,6 +49,44 @@ class _DummyProcess:
 def tunnel_state_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("ARGUS_TUNNEL_STATE_DIR", str(tmp_path))
     return str(tmp_path)
+
+
+@pytest.fixture
+def atexit_hooks(monkeypatch):
+    """Record only the hooks registered inside the test.
+
+    ``atexit._ncallbacks()`` counts the whole process. A monitor thread left
+    running by another module registers a hook of its own mid-assertion, so a
+    count taken around one ``close()`` measures the wrong thing.
+    """
+    hooks = []
+
+    def register(func, *args, **kwargs):
+        hooks.append(func)
+        return func
+
+    def unregister(func):
+        while func in hooks:
+            hooks.remove(func)
+
+    monkeypatch.setattr(atexit, "register", register)
+    monkeypatch.setattr(atexit, "unregister", unregister)
+    return hooks
+
+
+@pytest.fixture(autouse=True)
+def offline_tunnel_resolver(monkeypatch):
+    """Keep the monitor thread off the network.
+
+    ``TunneledSession`` starts a monitor that tries to register a tunnel as
+    soon as it is constructed. Tests that care about resolution override this
+    with their own ``monkeypatch.setattr`` in the test body.
+    """
+    monkeypatch.setenv("ARGUS_TUNNEL_MIN_REQUESTS", "0")
+    monkeypatch.setattr(
+        "argus.client.session.resolve_tunnel_config_with_reason",
+        lambda **kwargs: (None, "tunnel resolution disabled in tests"),
+    )
 
 
 def test_resolve_tunnel_config_registers_and_caches(tunnel_state_dir, monkeypatch):
@@ -217,6 +257,41 @@ def test_establish_uses_strict_host_options_and_temp_known_hosts(tunnel_state_di
     assert not os.path.exists(known_hosts_path)
 
 
+def test_shutdown_drops_the_atexit_hook_so_reconnects_do_not_accumulate(tunnel_state_dir, monkeypatch, atexit_hooks):
+    """The monitor builds a new SSHTunnel per reconnect.
+
+    A hook that outlives its tunnel keeps that dead tunnel reachable and grows
+    the atexit list once per reconnect for the life of the process.
+    """
+    paths = tunnel_state.get_tunnel_state_paths()
+    _write_text(paths.private_key, "private")
+
+    host_blob = "AQIDBA=="
+    config = TunnelConfig(
+        proxy_host="proxy.example.com",
+        proxy_port=22,
+        proxy_user="argus-proxy",
+        target_host="10.0.0.10",
+        target_port=8080,
+        host_key_fingerprint=tunnel_ssh.derive_fingerprint(f"ssh-ed25519 {host_blob}"),
+    )
+    monkeypatch.setattr(tunnel_ssh.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+    monkeypatch.setattr(tunnel_ssh, "scan_host_keys", lambda host, port: [f"{host} ssh-ed25519 {host_blob}"])
+    monkeypatch.setattr(tunnel_ssh.subprocess, "Popen", lambda command, stdout, stderr, text: _DummyProcess())
+    monkeypatch.setattr(tunnel_ssh.SSHTunnel, "_wait_for_port_ready", staticmethod(lambda process, local_port: (True, "")))
+
+    tunnels = []
+    for _ in range(3):
+        ssh_tunnel = tunnel_ssh.SSHTunnel(key_path=paths.private_key)
+        assert ssh_tunnel.establish(config)[0] is not None
+        assert ssh_tunnel.shutdown in atexit_hooks
+        ssh_tunnel.shutdown()
+        assert ssh_tunnel.shutdown not in atexit_hooks
+        tunnels.append(ssh_tunnel)
+
+    assert not [t for t in tunnels if t.shutdown in atexit_hooks]
+
+
 def test_establish_retries_on_local_bind_conflict(tunnel_state_dir, monkeypatch):
     paths = tunnel_state.get_tunnel_state_paths()
     _write_text(paths.private_key, "private")
@@ -275,21 +350,44 @@ def test_argus_client_warns_and_falls_back_when_tunnel_setup_fails(requests_mock
     assert response.status_code == 200
     assert isinstance(client.session, TunneledSession)
     assert "api unreachable" in caplog.text
-    assert "falling back to direct connection" in caplog.text
+    assert "using a direct connection" in caplog.text
 
 
-def test_argus_client_retries_tunnel_after_cooldown(requests_mock, monkeypatch, tmp_path):
-    requests_mock.get(
-        "https://argus.scylladb.com/api/v1/client/testrun/test-type/test-id/get",
-        json={"status": "ok", "response": {}},
-        status_code=200,
-    )
-    requests_mock.get(
-        "http://127.0.0.1:9191/api/v1/client/testrun/test-type/test-id/get",
-        json={"status": "ok", "response": {}},
-        status_code=200,
-    )
+class _FakeTunnel:
+    """Stand-in for :class:`SSHTunnel` that reports a fixed local port."""
 
+    def __init__(self, local_port: int = 9191):
+        self.local_port = local_port
+        self.shutdown_calls = 0
+
+    def establish(self, cfg):
+        return self.local_port, None
+
+    def is_alive(self):
+        return True
+
+    def shutdown(self):
+        self.shutdown_calls += 1
+
+
+def _wait_until(predicate, timeout: float = 5.0) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.01)
+    return predicate()
+
+
+@pytest.fixture
+def fast_tunnel_retry(monkeypatch):
+    """Collapse the monitor timings so retry behaviour is testable in-process."""
+    monkeypatch.setenv("ARGUS_TUNNEL_MONITOR_INTERVAL", "0.01")
+    monkeypatch.setenv("ARGUS_TUNNEL_RETRY_MIN_SECONDS", "0.01")
+    monkeypatch.setenv("ARGUS_TUNNEL_RETRY_MAX_SECONDS", "0.05")
+
+
+def test_monitor_thread_retries_tunnel_without_a_request(fast_tunnel_retry, monkeypatch):
     config = TunnelConfig(
         proxy_host="proxy.example.com",
         proxy_port=22,
@@ -306,88 +404,279 @@ def test_argus_client_retries_tunnel_after_cooldown(requests_mock, monkeypatch, 
             return None, "first failure"
         return config, None
 
-    class _FakeTunnel:
+    monkeypatch.setattr("argus.client.session.resolve_tunnel_config_with_reason", _resolve)
+    monkeypatch.setattr("argus.client.session.SSHTunnel", _FakeTunnel)
+
+    session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com")
+    try:
+        assert _wait_until(lambda: session._tunnel_port == 9191), "monitor never recovered the tunnel"
+        assert resolve_state["calls"] >= 2
+    finally:
+        session.close()
+
+
+def _api_response_with_proxies() -> dict:
+    return {
+        "proxy_host": "proxy-a.example.com",
+        "proxy_port": 22,
+        "proxy_user": "argus-proxy",
+        "target_host": "10.0.0.10",
+        "target_port": 8080,
+        "host_key_fingerprint": "entry-a ssh-ed25519 AAAA",
+        "tunnel_id": "tun-a",
+        "proxies": [
+            {
+                "proxy_host": "proxy-a.example.com", "proxy_port": 22, "proxy_user": "argus-proxy",
+                "target_host": "10.0.0.10", "target_port": 8080,
+                "host_key_fingerprint": "entry-a ssh-ed25519 AAAA", "tunnel_id": "tun-a",
+            },
+            {
+                "proxy_host": "proxy-b.example.com", "proxy_port": 2222, "proxy_user": "argus-proxy",
+                "target_host": "10.0.0.11", "target_port": 8080,
+                "host_key_fingerprint": "entry-b ssh-ed25519 BBBB", "tunnel_id": "tun-b",
+            },
+        ],
+    }
+
+
+def test_tunnel_config_parses_failover_list_without_duplicating_primary():
+    config = TunnelConfig.from_api_response(_api_response_with_proxies())
+
+    assert config.proxy_host == "proxy-a.example.com"
+    assert len(config.alternates) == 1
+    assert config.alternates[0].proxy_host == "proxy-b.example.com"
+    assert config.alternates[0].proxy_port == 2222
+    assert [c.proxy_host for c in config.candidates()] == ["proxy-a.example.com", "proxy-b.example.com"]
+
+
+def test_candidates_carry_the_key_id_onto_alternates():
+    """Attribution headers must survive a failover; the key is the same either way."""
+    payload = _api_response_with_proxies()
+    payload["key_id"] = "key-uuid-1"
+
+    config = TunnelConfig.from_api_response(payload)
+    alternate = config.candidates()[1]
+
+    assert alternate.proxy_host == "proxy-b.example.com"
+    assert alternate.key_id == "key-uuid-1"
+    # Stored alternates stay bare endpoints; enrichment happens on read.
+    assert config.alternates[0].key_id is None
+
+
+def test_tunnel_config_without_proxies_has_no_alternates():
+    payload = _api_response_with_proxies()
+    del payload["proxies"]
+
+    config = TunnelConfig.from_api_response(payload)
+
+    assert config.alternates == ()
+    assert config.candidates() == (config,)
+
+
+def test_tunnel_config_skips_malformed_alternates():
+    payload = _api_response_with_proxies()
+    payload["proxies"].append({"proxy_host": "broken.example.com"})
+    payload["proxies"].append("not-a-dict")
+
+    config = TunnelConfig.from_api_response(payload)
+
+    assert [c.proxy_host for c in config.alternates] == ["proxy-b.example.com"]
+
+
+def test_tunnel_config_cache_round_trips_alternates():
+    config = TunnelConfig.from_api_response(_api_response_with_proxies())
+
+    restored = TunnelConfig.from_api_response(config.to_cache_payload())
+
+    assert restored == config
+
+
+def test_session_fails_over_to_the_next_proxy(monkeypatch):
+    config = TunnelConfig.from_api_response(_api_response_with_proxies())
+    attempted = []
+
+    class _FailFirstTunnel:
         def __init__(self):
-            self.local_port = 9191
+            self.local_port = None
 
         def establish(self, cfg):
-            return 9191, None
+            attempted.append(cfg.proxy_host)
+            if cfg.proxy_host == "proxy-a.example.com":
+                return None, "connection refused"
+            self.local_port = 9292
+            return 9292, None
 
         def is_alive(self):
-            return True
-
-        def reconnect(self, cfg):
-            return 9191, None
+            return self.local_port is not None
 
         def shutdown(self):
             return None
 
-    monotonic_values = iter([1000.0, 1001.0, 1032.0])
+    monkeypatch.setattr("argus.client.session.resolve_tunnel_config_with_reason", lambda **kwargs: (config, None))
+    monkeypatch.setattr("argus.client.session.SSHTunnel", _FailFirstTunnel)
+
+    session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com")
+    try:
+        assert session._first_attempt_done.wait(5)
+        assert attempted == ["proxy-a.example.com", "proxy-b.example.com"]
+        assert session._tunnel_port == 9292
+        assert session._tunnel_config.proxy_host == "proxy-b.example.com"
+    finally:
+        session.close()
+
+
+def test_session_gives_up_only_after_every_proxy(monkeypatch, caplog):
+    config = TunnelConfig.from_api_response(_api_response_with_proxies())
+    attempted = []
+
+    class _AllDeadTunnel:
+        local_port = None
+
+        def establish(self, cfg):
+            attempted.append(cfg.proxy_host)
+            return None, "connection refused"
+
+        def is_alive(self):
+            return False
+
+        def shutdown(self):
+            return None
+
+    monkeypatch.setattr("argus.client.session.resolve_tunnel_config_with_reason", lambda **kwargs: (config, None))
+    monkeypatch.setattr("argus.client.session.SSHTunnel", _AllDeadTunnel)
+
+    with caplog.at_level("WARNING"):
+        session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com")
+        try:
+            assert session._first_attempt_done.wait(5)
+        finally:
+            session.close()
+
+    # Every proxy is tried, then the whole list again after the config refresh
+    # that covers a cached config naming a retired proxy.
+    assert attempted == ["proxy-a.example.com", "proxy-b.example.com"] * 2
+    assert session._tunnel_port is None
+    assert "proxy-b.example.com" in caplog.text
+
+
+def test_short_lived_session_never_builds_a_tunnel(requests_mock, monkeypatch, tmp_path):
+    """A one-shot client must not pay a handshake it cannot earn back.
+
+    Standing a tunnel up costs a registration call plus an authorized-keys
+    lookup, both direct. A process that submits once and exits would add public
+    traffic instead of removing it.
+    """
+    monkeypatch.setenv("ARGUS_TUNNEL_MIN_REQUESTS", "10")
+    monkeypatch.setenv("ARGUS_TUNNEL_MONITOR_INTERVAL", "0.01")
+    requests_mock.get(
+        "https://argus.scylladb.com/api/v1/client/testrun/test-type/test-id/get",
+        json={"status": "ok", "response": {}},
+        status_code=200,
+    )
+    resolved = {"calls": 0}
+
+    def _resolve(**kwargs):
+        resolved["calls"] += 1
+        return None, "should not be reached"
 
     monkeypatch.setattr("argus.client.session.resolve_tunnel_config_with_reason", _resolve)
-    monkeypatch.setattr("argus.client.session.SSHTunnel", _FakeTunnel)
-    monkeypatch.setattr("argus.client.session.time.monotonic", lambda: next(monotonic_values))
 
     client = ArgusClient(auth_token="token", base_url="https://argus.scylladb.com", log_dir=tmp_path, use_tunnel=True)
+    try:
+        for _ in range(3):
+            client.get(endpoint=ArgusClient.Routes.GET, location_params={"type": "test-type", "id": "test-id"})
+        time.sleep(0.1)
+        assert resolved["calls"] == 0, "handshake ran for a session that made 3 requests"
+        assert client.session._tunnel_port is None
+    finally:
+        client.session.close()
 
-    client.get(endpoint=ArgusClient.Routes.GET, location_params={"type": "test-type", "id": "test-id"})
-    assert client.session._tunnel_port is None
-    assert client._base_url == "https://argus.scylladb.com"
 
-    client.get(endpoint=ArgusClient.Routes.GET, location_params={"type": "test-type", "id": "test-id"})
-    assert client.session._tunnel_port == 9191
-
-
-def test_request_level_recovery_reconnects_and_retries_once(requests_mock, monkeypatch, tmp_path):
-    old_tunnel_url = "http://127.0.0.1:9191/api/v1/client/testrun/test-type/test-id/get"
-    new_tunnel_url = "http://127.0.0.1:9292/api/v1/client/testrun/test-type/test-id/get"
-
-    requests_mock.get(old_tunnel_url, exc=tunnel_api.requests.ConnectionError("old tunnel is down"))
-    requests_mock.get(new_tunnel_url, json={"status": "ok", "response": {}}, status_code=200)
-
-    client = ArgusClient(auth_token="token", base_url="https://argus.scylladb.com", log_dir=tmp_path, use_tunnel=True)
-    client.session._tunnel_port = 9191
-
-    ensure_state = {"calls": 0}
-
-    def _fake_ensure_tunnel():
-        ensure_state["calls"] += 1
-        if ensure_state["calls"] >= 2:
-            client.session._tunnel_port = 9292
-
-    monkeypatch.setattr(client.session, "_ensure_tunnel", _fake_ensure_tunnel)
-
-    response = client.get(
-        endpoint=ArgusClient.Routes.GET,
-        location_params={"type": "test-type", "id": "test-id"},
+def test_busy_session_builds_a_tunnel_once_it_crosses_the_threshold(requests_mock, monkeypatch, tmp_path):
+    monkeypatch.setenv("ARGUS_TUNNEL_MIN_REQUESTS", "5")
+    monkeypatch.setenv("ARGUS_TUNNEL_MONITOR_INTERVAL", "0.01")
+    direct = "https://argus.scylladb.com/api/v1/client/testrun/test-type/test-id/get"
+    requests_mock.get(direct, json={"status": "ok", "response": {}}, status_code=200)
+    requests_mock.get(
+        "http://127.0.0.1:9191/api/v1/client/testrun/test-type/test-id/get",
+        json={"status": "ok", "response": {}},
+        status_code=200,
     )
 
-    assert response.status_code == 200
-    assert ensure_state["calls"] == 2
-    assert client.session._tunnel_port == 9292
+    config = TunnelConfig.from_api_response(_api_response_with_proxies())
+    monkeypatch.setattr("argus.client.session.resolve_tunnel_config_with_reason", lambda **kwargs: (config, None))
+    monkeypatch.setattr("argus.client.session.SSHTunnel", _FakeTunnel)
+
+    client = ArgusClient(auth_token="token", base_url="https://argus.scylladb.com", log_dir=tmp_path, use_tunnel=True)
+    try:
+        for _ in range(4):
+            client.get(endpoint=ArgusClient.Routes.GET, location_params={"type": "test-type", "id": "test-id"})
+        assert client.session._tunnel_port is None, "tunnelled before earning it"
+
+        client.get(endpoint=ArgusClient.Routes.GET, location_params={"type": "test-type", "id": "test-id"})
+        assert _wait_until(lambda: client.session._tunnel_port == 9191), "never tunnelled after the threshold"
+    finally:
+        client.session.close()
 
 
-def test_request_level_recovery_falls_back_to_direct_when_retry_fails(requests_mock, monkeypatch, tmp_path):
+def test_crossing_the_threshold_wakes_the_monitor(requests_mock, monkeypatch):
+    """The threshold request must not wait a monitor interval to start tunnelling."""
+    monkeypatch.setenv("ARGUS_TUNNEL_MIN_REQUESTS", "2")
+    url = "https://argus.scylladb.com/ping"
+    requests_mock.get(url, json={}, status_code=200)
+
+    session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com")
+    # Stop the monitor first, so nothing clears the event under the assertion.
+    session._monitor_stop.set()
+    session._wake.set()
+    session._monitor_thread.join(timeout=5)
+    try:
+        session._wake.clear()
+        session.get(url)
+        assert not session._worth_tunnelling()
+        assert not session._wake.is_set()
+
+        session.get(url)
+        assert session._worth_tunnelling()
+        assert session._wake.is_set()
+    finally:
+        session.close()
+
+
+def test_retry_delay_escalates_and_caps(monkeypatch):
+    monkeypatch.setenv("ARGUS_TUNNEL_RETRY_MIN_SECONDS", "30")
+    monkeypatch.setenv("ARGUS_TUNNEL_RETRY_MAX_SECONDS", "120")
+    monkeypatch.setattr("argus.client.session.resolve_tunnel_config_with_reason", lambda **kwargs: (None, "down"))
+
+    session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com")
+    try:
+        session._retry_delay = 30.0
+        delays = []
+        for _ in range(5):
+            before = time.monotonic()
+            session._schedule_retry()
+            delays.append(session._next_retry_at - before)
+
+        assert 24.0 <= delays[0] <= 36.0
+        assert 48.0 <= delays[1] <= 72.0
+        assert 96.0 <= delays[2] <= 144.0
+        # Capped from here on, jitter aside.
+        assert 96.0 <= delays[3] <= 144.0
+        assert 96.0 <= delays[4] <= 144.0
+    finally:
+        session.close()
+
+
+def test_request_falls_back_to_direct_without_blocking(requests_mock, monkeypatch, tmp_path):
     direct_url = "https://argus.scylladb.com/api/v1/client/testrun/test-type/test-id/get"
     tunnel_url = "http://127.0.0.1:9191/api/v1/client/testrun/test-type/test-id/get"
 
     requests_mock.get(tunnel_url, exc=tunnel_api.requests.ConnectionError("tunnel is dead"))
     requests_mock.get(direct_url, json={"status": "ok", "response": {}}, status_code=200)
+    monkeypatch.setattr("argus.client.session.resolve_tunnel_config_with_reason", lambda **kwargs: (None, "down"))
 
     client = ArgusClient(auth_token="token", base_url="https://argus.scylladb.com", log_dir=tmp_path, use_tunnel=True)
     client.session._tunnel_port = 9191
-
-    def _ensure_keeps_tunnel():
-        client.session._tunnel_port = 9191
-
-    backoff_calls = {"count": 0}
-
-    def _fake_backoff(reason):
-        backoff_calls["count"] += 1
-        client.session._tunnel_port = None
-
-    monkeypatch.setattr(client.session, "_ensure_tunnel", _ensure_keeps_tunnel)
-    monkeypatch.setattr(client.session, "_backoff", _fake_backoff)
 
     response = client.get(
         endpoint=ArgusClient.Routes.GET,
@@ -395,8 +684,183 @@ def test_request_level_recovery_falls_back_to_direct_when_retry_fails(requests_m
     )
 
     assert response.status_code == 200
-    assert backoff_calls["count"] == 1
+    # The request served itself directly and handed recovery to the monitor
+    # instead of spawning SSH on the caller's thread.
     assert client.session._tunnel_port is None
+
+
+def test_request_does_not_mutate_caller_headers(requests_mock, monkeypatch):
+    direct_url = "https://argus.scylladb.com/api/v1/client/testrun/test-type/test-id/get"
+    tunnel_url = "http://127.0.0.1:9191/api/v1/client/testrun/test-type/test-id/get"
+    requests_mock.get(tunnel_url, json={"status": "ok", "response": {}}, status_code=200)
+    monkeypatch.setattr("argus.client.session.resolve_tunnel_config_with_reason", lambda **kwargs: (None, "down"))
+
+    session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com")
+    try:
+        session._tunnel_port = 9191
+        caller_headers = {"X-Caller": "keepme"}
+        session.get(direct_url, headers=caller_headers)
+        assert caller_headers == {"X-Caller": "keepme"}
+    finally:
+        session.close()
+
+
+def test_monitor_tears_down_a_suspect_tunnel(fast_tunnel_retry, monkeypatch):
+    monkeypatch.setattr("argus.client.session.resolve_tunnel_config_with_reason", lambda **kwargs: (None, "down"))
+
+    session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com")
+    try:
+        fake = _FakeTunnel()
+        session._tunnel = fake
+        session._tunnel_port = 9191
+        session._report_tunnel_failure()
+
+        assert _wait_until(lambda: fake.shutdown_calls > 0), "monitor never tore the tunnel down"
+        assert session._tunnel is None
+        assert session._tunnel_port is None
+    finally:
+        session.close()
+
+
+class _MortalTunnel:
+    """SSHTunnel stand-in whose process can be killed from the test body.
+
+    Every instance takes the next port from ``ports`` and appends itself to
+    ``created``, so a test can tell one generation of tunnel from the next.
+    """
+
+    ports: list[int] = []
+    created: list["_MortalTunnel"] = []
+
+    def __init__(self):
+        self.local_port = None
+        self.alive = False
+        self.shutdown_calls = 0
+        type(self).created.append(self)
+
+    def establish(self, cfg):
+        self.local_port = type(self).ports.pop(0)
+        self.alive = True
+        return self.local_port, None
+
+    def is_alive(self):
+        return self.alive
+
+    def die(self):
+        self.alive = False
+
+    def shutdown(self):
+        self.alive = False
+        self.local_port = None
+        self.shutdown_calls += 1
+
+
+@pytest.fixture
+def mortal_tunnel(monkeypatch):
+    monkeypatch.setattr(_MortalTunnel, "ports", [9191, 9292, 9393], raising=False)
+    monkeypatch.setattr(_MortalTunnel, "created", [], raising=False)
+    monkeypatch.setattr("argus.client.session.SSHTunnel", _MortalTunnel)
+    return _MortalTunnel
+
+
+def test_monitor_reestablishes_the_tunnel_after_the_process_dies(fast_tunnel_retry, mortal_tunnel, monkeypatch):
+    """A tunnel that dies mid-session is torn down and replaced by the monitor."""
+    config = TunnelConfig(
+        proxy_host="proxy.example.com",
+        proxy_port=22,
+        proxy_user="argus-proxy",
+        target_host="10.0.0.10",
+        target_port=8080,
+        host_key_fingerprint="SHA256:test",
+    )
+    monkeypatch.setattr("argus.client.session.resolve_tunnel_config_with_reason", lambda **kwargs: (config, None))
+
+    session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com")
+    try:
+        assert _wait_until(lambda: session._tunnel_port == 9191), "monitor never built the first tunnel"
+        first = mortal_tunnel.created[0]
+
+        first.die()
+
+        assert _wait_until(lambda: session._tunnel_port == 9292), "monitor never rebuilt the tunnel"
+        assert first.shutdown_calls > 0, "the dead tunnel was never shut down"
+        assert session._tunnel is mortal_tunnel.created[-1]
+        assert session._tunnel_suspect is False
+    finally:
+        session.close()
+
+
+def test_reconnect_is_immediate_and_does_not_wait_out_the_backoff(mortal_tunnel, monkeypatch):
+    """A tunnel that was working earns a fresh ladder, not the escalated delay.
+
+    ``_monitor_tick`` must reset ``_next_retry_at`` after ``_teardown`` has run
+    its ``_schedule_retry``. Reset it first and the reconnect waits a full
+    retry window instead of happening in the same tick.
+    """
+    monkeypatch.setenv("ARGUS_TUNNEL_MONITOR_INTERVAL", "0.01")
+    monkeypatch.setenv("ARGUS_TUNNEL_RETRY_MIN_SECONDS", "300")
+    monkeypatch.setenv("ARGUS_TUNNEL_RETRY_MAX_SECONDS", "600")
+    config = TunnelConfig(
+        proxy_host="proxy.example.com",
+        proxy_port=22,
+        proxy_user="argus-proxy",
+        target_host="10.0.0.10",
+        target_port=8080,
+        host_key_fingerprint="SHA256:test",
+    )
+    monkeypatch.setattr("argus.client.session.resolve_tunnel_config_with_reason", lambda **kwargs: (config, None))
+
+    session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com")
+    try:
+        assert _wait_until(lambda: session._tunnel_port == 9191)
+        mortal_tunnel.created[0].die()
+
+        assert _wait_until(lambda: session._tunnel_port == 9292, timeout=3.0), (
+            "reconnect waited for the 300s backoff instead of retrying at once"
+        )
+    finally:
+        session.close()
+
+
+def test_request_failure_makes_the_monitor_rebuild_the_tunnel(requests_mock, mortal_tunnel, fast_tunnel_retry, monkeypatch):
+    """A ConnectionError on a request thread routes that call direct, then reconnects."""
+    direct_url = "https://argus.scylladb.com/api/v1/client/testrun/test-type/test-id/get"
+    requests_mock.get(direct_url, json={"status": "ok", "response": {}}, status_code=200)
+    requests_mock.get(
+        "http://127.0.0.1:9191/api/v1/client/testrun/test-type/test-id/get",
+        exc=tunnel_api.requests.ConnectionError("tunnel is dead"),
+    )
+    requests_mock.get(
+        "http://127.0.0.1:9292/api/v1/client/testrun/test-type/test-id/get",
+        json={"status": "ok", "response": {"via": "second tunnel"}},
+        status_code=200,
+    )
+    config = TunnelConfig(
+        proxy_host="proxy.example.com",
+        proxy_port=22,
+        proxy_user="argus-proxy",
+        target_host="10.0.0.10",
+        target_port=8080,
+        host_key_fingerprint="SHA256:test",
+    )
+    monkeypatch.setattr("argus.client.session.resolve_tunnel_config_with_reason", lambda **kwargs: (config, None))
+
+    session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com")
+    try:
+        assert _wait_until(lambda: session._tunnel_port == 9191)
+        # The live tunnel object stays healthy, so only the request-thread
+        # report can trigger the rebuild.
+        response = session.get(direct_url)
+        assert response.status_code == 200
+        assert response.json()["response"] == {}, "the failed request did not fall back to a direct call"
+
+        assert _wait_until(lambda: session._tunnel_port == 9292), "reported failure never produced a new tunnel"
+        assert mortal_tunnel.created[0].shutdown_calls > 0
+
+        response = session.get(direct_url)
+        assert response.json()["response"] == {"via": "second tunnel"}, "traffic did not return to the tunnel"
+    finally:
+        session.close()
 
 
 def test_tunneled_session_starts_and_stops_monitor_thread():
@@ -410,16 +874,51 @@ def test_tunneled_session_starts_and_stops_monitor_thread():
     assert not session._monitor_thread.is_alive()
 
 
-def test_tunneled_session_close_unregisters_atexit():
-    import atexit as _atexit
-
+def test_tunneled_session_close_unregisters_atexit(atexit_hooks):
     session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com")
     callback = session._atexit_close
     ref = session._atexit_ref
+    assert session._atexit_callback in atexit_hooks
+
     session.close()
+
+    assert session._atexit_callback not in atexit_hooks
     # After close(), invoking the atexit callback must be a no-op (the session
     # was unregistered, and even if called manually it should not blow up).
     callback(ref)
+
+
+def test_closing_one_session_keeps_the_atexit_hook_of_another(atexit_hooks):
+    first = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com")
+    second = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com")
+    try:
+        first.close()
+        assert second._atexit_callback in atexit_hooks, "close() dropped another session's exit hook"
+    finally:
+        second.close()
+
+
+def test_monitor_sleeps_the_full_interval_until_the_session_earns_a_tunnel(monkeypatch):
+    """Below the request threshold the monitor has nothing to do.
+
+    ``_next_retry_at`` stays at 0, so a retry-driven wait would collapse to the
+    0.1s floor and wake the thread ten times a second for the whole process.
+    """
+    monkeypatch.setenv("ARGUS_TUNNEL_MIN_REQUESTS", "10")
+
+    session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com")
+    # Stop the monitor first, so no tick moves _next_retry_at under the assertions.
+    session._monitor_stop.set()
+    session._wake.set()
+    session._monitor_thread.join(timeout=5)
+    try:
+        assert session._next_retry_at == 0.0
+        assert session._next_wait(5.0) == 5.0
+
+        session._request_count = 10
+        assert session._next_wait(5.0) == pytest.approx(0.1)
+    finally:
+        session.close()
 
 
 def _prime_tunnel_state(session):
@@ -515,9 +1014,9 @@ def test_backoff_does_not_wipe_cached_tunnel_state(tunnel_state_dir, monkeypatch
 
     session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com")
     try:
-        session._ensure_tunnel()
+        assert session._first_attempt_done.wait(5)
         # Transient establish failure must NOT wipe the cached keypair —
-        # otherwise every cooldown forces a fresh registration round-trip.
+        # otherwise every retry forces a fresh registration round-trip.
         assert os.path.exists(paths.private_key)
         assert os.path.exists(paths.public_key)
         assert os.path.exists(paths.config_cache)

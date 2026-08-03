@@ -235,7 +235,7 @@ func TestListAuthorizedKeys_ReturnsRawBody(t *testing.T) {
 	require.NoError(t, err)
 	svc := services.NewSSHService(client)
 
-	got, err := svc.ListAuthorizedKeys(context.Background(), "")
+	got, err := svc.ListAuthorizedKeys(context.Background(), "", "")
 	require.NoError(t, err)
 	assert.Equal(t, keys, got)
 }
@@ -256,6 +256,33 @@ func TestBuildSSHConnectArgs_EnablesStrictHostKeyChecking(t *testing.T) {
 	assert.Contains(t, joined, "UserKnownHostsFile=/tmp/argus-known-hosts")
 	assert.Contains(t, joined, "-L 127.0.0.1:43210:10.0.0.5:8080")
 	assert.Contains(t, joined, "argus-proxy@proxy.example.com")
+	// Without these, ssh offers every agent and default identity first, and
+	// each rejected offer costs the proxy host another authorized_keys lookup.
+	assert.Contains(t, joined, "IdentitiesOnly=yes")
+	assert.NotContains(t, joined, "StrictHostKeyChecking=no")
+	// PubkeyAcceptedAlgorithms needs OpenSSH 8.5. The CLI runs on developer
+	// machines, and an unknown option makes ssh exit 255 instead of connecting.
+	assert.NotContains(t, joined, "PubkeyAcceptedAlgorithms")
+}
+
+func TestListAuthorizedKeys_SendsFingerprintQuery(t *testing.T) {
+	t.Parallel()
+
+	var gotRawQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotRawQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write([]byte("ssh-ed25519 AAAA key1\n"))
+	}))
+	t.Cleanup(srv.Close)
+
+	client, err := api.New(srv.URL, api.WithHTTPClient(srv.Client()))
+	require.NoError(t, err)
+	svc := services.NewSSHService(client)
+
+	_, err = svc.ListAuthorizedKeys(context.Background(), "", "SHA256:abc123")
+	require.NoError(t, err)
+	assert.Equal(t, "fingerprint=SHA256%3Aabc123", gotRawQuery)
 }
 
 func TestPrepareKnownHostsFile_WritesMatchingKey(t *testing.T) {
@@ -284,23 +311,43 @@ func TestPrepareKnownHostsFile_WritesMatchingKey(t *testing.T) {
 	assert.Equal(t, os.FileMode(0o600), stat.Mode().Perm())
 }
 
-func TestPrepareKnownHostsFile_ReturnsEmptyPathForMissingFingerprint(t *testing.T) {
+func TestPrepareKnownHostsFile_KeysEntryOnTheConnectAddress(t *testing.T) {
 	t.Parallel()
 
 	client, err := api.New("https://argus.scylladb.com")
 	require.NoError(t, err)
 
 	svc := services.NewSSHService(client)
+	// The backend stores the ssh-keyscan line with a bare host token, but ssh
+	// looks the entry up as "[host]:port" whenever -p names a non-default port.
+	stored := "proxy.example.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMockKey"
 
-	// Empty / missing entry falls back gracefully (StrictHostKeyChecking=no).
-	path, err := svc.PrepareKnownHostsFile(context.Background(), models.SSHTunnelConfig{
-		HostKnownHostsEntry: "   ",
-	})
-	require.NoError(t, err)
-	assert.Empty(t, path)
+	for name, tc := range map[string]struct {
+		port int
+		want string
+	}{
+		"non-default port": {2222, "[proxy.example.com]:2222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMockKey\n"},
+		"default port":     {22, "proxy.example.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMockKey\n"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			path, err := svc.PrepareKnownHostsFile(context.Background(), models.SSHTunnelConfig{
+				ProxyHost:           "proxy.example.com",
+				ProxyPort:           tc.port,
+				HostKnownHostsEntry: stored,
+			})
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				_ = os.Remove(path)
+			})
+
+			raw, err := os.ReadFile(path)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, string(raw))
+		})
+	}
 }
 
-func TestPrepareKnownHostsFile_ReturnsEmptyPathForRawSHA256Fingerprint(t *testing.T) {
+func TestPrepareKnownHostsFile_FailsClosed(t *testing.T) {
 	t.Parallel()
 
 	client, err := api.New("https://argus.scylladb.com")
@@ -308,12 +355,20 @@ func TestPrepareKnownHostsFile_ReturnsEmptyPathForRawSHA256Fingerprint(t *testin
 
 	svc := services.NewSSHService(client)
 
-	// Raw SHA256 fingerprint (old backend) falls back gracefully.
-	path, err := svc.PrepareKnownHostsFile(context.Background(), models.SSHTunnelConfig{
-		HostKnownHostsEntry: "SHA256:abc123",
-	})
-	require.NoError(t, err)
-	assert.Empty(t, path)
+	for name, entry := range map[string]string{
+		"missing entry":          "   ",
+		"raw SHA256 fingerprint": "SHA256:abc123",
+		"truncated entry":        "proxy.example.com ssh-ed25519",
+	} {
+		t.Run(name, func(t *testing.T) {
+			path, err := svc.PrepareKnownHostsFile(context.Background(), models.SSHTunnelConfig{
+				HostKnownHostsEntry: entry,
+			})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "refusing to connect without host verification")
+			assert.Empty(t, path)
+		})
+	}
 }
 
 func TestFindFreeLocalPortAndWaitForLocalPort(t *testing.T) {

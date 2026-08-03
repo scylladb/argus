@@ -12,8 +12,7 @@ from uuid import UUID, uuid4
 from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives.serialization import load_ssh_public_key
 
-from argus.backend.models.runtime_store import RuntimeStore
-from argus.backend.models.ssh_key import ProxyTunnelConfig, SSHTunnelKey
+from argus.backend.models.ssh_key import ProxyTunnelConfig, SSHTunnelKey, SSHTunnelKeyByFingerprint
 from argus.backend.models.web import User, UserRoles
 from argus.backend.service.user import UserService
 
@@ -23,7 +22,9 @@ DEFAULT_TTL_SECONDS = 86400  # 24 hours
 MIN_TTL_SECONDS = 3600  # 1 hour
 MAX_TTL_SECONDS = 2592000  # 30 days
 DEFAULT_KEYS_LIST_LIMIT = 5000
-PROXY_RR_INDEX_KEY = "ssh_tunnel_proxy_rr_index"
+_FINGERPRINT_PREFIX = "SHA256:"
+# SHA-256 digest is 32 bytes, base64 without the trailing '=' pad.
+_FINGERPRINT_BODY_LENGTH = 43
 
 
 class TunnelServiceException(Exception):
@@ -39,18 +40,28 @@ class TunnelCommonFieldsDTO:
 
 
 @dataclass(frozen=True, slots=True)
+class TunnelEndpointDTO(TunnelCommonFieldsDTO):
+    """One reachable proxy. Clients fail over down the list before giving up."""
+    tunnel_id: UUID
+    proxy_host: str
+    proxy_port: int
+
+
+@dataclass(frozen=True, slots=True)
 class TunnelRegistrationResponseDTO(TunnelCommonFieldsDTO):
     key_id: UUID
     tunnel_id: UUID
     proxy_host: str
     proxy_port: int
     expires_at: datetime
+    proxies: list[TunnelEndpointDTO]
 
 
 @dataclass(frozen=True, slots=True)
 class TunnelConnectionResponseDTO(TunnelCommonFieldsDTO):
     proxy_host: str
     proxy_port: int
+    proxies: list[TunnelEndpointDTO]
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +124,32 @@ def _derive_fingerprint(public_key_str: str) -> str:
         raise TunnelServiceException(f"Invalid SSH public key: {exc}") from exc
 
 
+def _normalise_fingerprint(raw: str) -> str:
+    """
+    Validate an OpenSSH SHA-256 fingerprint supplied by the proxy host.
+
+    sshd expands ``%f`` to ``SHA256:<unpadded-base64>``, the same shape that
+    :func:`_derive_fingerprint` stores. The value reaches us from a query
+    string, so check it before it goes into a query.
+
+    Raises ``TunnelServiceException`` if the value has another shape.
+    """
+    candidate = raw.strip()
+    if not candidate.startswith(_FINGERPRINT_PREFIX):
+        raise TunnelServiceException("Fingerprint must start with 'SHA256:'")
+
+    body = candidate[len(_FINGERPRINT_PREFIX):]
+    if len(body) != _FINGERPRINT_BODY_LENGTH:
+        raise TunnelServiceException("Fingerprint has an unexpected length")
+
+    try:
+        base64.b64decode(f"{body}=".encode("ascii"), validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise TunnelServiceException(f"Fingerprint is not valid base64: {exc}") from exc
+
+    return candidate
+
+
 class TunnelService:
     """
     Business logic for SSH tunnel key registration and proxy tunnel config
@@ -120,10 +157,11 @@ class TunnelService:
 
     Key registration flow (called from ``POST /client/ssh/tunnel``):
     1. Validate and fingerprint the supplied public key.
-    2. Select one active ``ProxyTunnelConfig`` using round-robin.
+    2. Order the active ``ProxyTunnelConfig`` rows for this user and take the
+       first as the primary.
     3. Insert ``SSHTunnelKey`` with a ScyllaDB TTL so ScyllaDB auto-expires it.
-    4. Return the proxy connection parameters plus ``expires_at`` so the client
-       knows when to re-register.
+    4. Return the primary proxy parameters, the full ``proxies`` failover list,
+       and ``expires_at`` so the client knows when to re-register.
 
     Authorised-keys flow (called from ``GET /client/ssh/keys`` by the proxy
     host via ``AuthorizedKeysCommand``):
@@ -167,7 +205,9 @@ class TunnelService:
 
         fingerprint = _derive_fingerprint(public_key)
 
-        config = self._get_active_config_round_robin()
+        configs = self._ordered_active_configs(user.id)
+        config = configs[0]
+        proxies = [self._to_endpoint(cfg) for cfg in configs]
 
         if ttl_seconds is None:
             ttl = DEFAULT_TTL_SECONDS
@@ -194,6 +234,21 @@ class TunnelService:
             None,
         )
         if existing:
+            # Re-registration repairs a lookup row that a partial write, or a
+            # deploy that predates this table, left missing.
+            self._index_key_by_fingerprint(
+                fingerprint=fingerprint,
+                key_id=existing.id,
+                user_id=user.id,
+                tunnel_id=config.id,
+                public_key=existing.public_key,
+                created_at=existing.created_at,
+                expires_at=existing.expires_at,
+                # The base row keeps the TTL it was created with. Reusing the
+                # newly requested one would let the lookup row outlive it, and
+                # the key would keep authenticating after it expired.
+                ttl=int((existing.expires_at - now_utc).total_seconds()),
+            )
             return TunnelRegistrationResponseDTO(
                 key_id=existing.id,
                 tunnel_id=config.id,
@@ -204,6 +259,7 @@ class TunnelService:
                 target_port=config.target_port,
                 host_key_fingerprint=config.host_key_fingerprint,
                 expires_at=existing.expires_at,
+                proxies=proxies,
             )
 
         key = SSHTunnelKey.objects.ttl(ttl).create(
@@ -214,6 +270,16 @@ class TunnelService:
             fingerprint=fingerprint,
             created_at=now_utc,
             expires_at=expires_at,
+        )
+        self._index_key_by_fingerprint(
+            fingerprint=fingerprint,
+            key_id=key.id,
+            user_id=user.id,
+            tunnel_id=config.id,
+            public_key=key.public_key,
+            created_at=now_utc,
+            expires_at=expires_at,
+            ttl=ttl,
         )
 
         return TunnelRegistrationResponseDTO(
@@ -226,19 +292,30 @@ class TunnelService:
             target_port=config.target_port,
             host_key_fingerprint=config.host_key_fingerprint,
             expires_at=expires_at,
+            proxies=proxies,
         )
 
-    def get_tunnel_connection(self, proxy_host: str | None = None) -> TunnelConnectionResponseDTO:
+    def get_tunnel_connection(
+        self,
+        user_id: UUID | str,
+        proxy_host: str | None = None,
+    ) -> TunnelConnectionResponseDTO:
         """
         Return active proxy tunnel connection details for tunnel clients.
 
-        If ``proxy_host`` is provided, return that active host.
-        Otherwise, select one deterministically.
+        ``proxies`` lists every active proxy, best choice for this user first,
+        so a client can fail over locally instead of dropping back to the
+        public endpoint when its primary proxy is down.
+
+        If ``proxy_host`` is given, that host becomes the primary. The rest of
+        the list still follows, so failover keeps working.
         """
+        configs = self._ordered_active_configs(user_id)
         if proxy_host:
-            config = self._get_active_config(proxy_host=proxy_host)
-        else:
-            config = self._get_active_config_round_robin()
+            pinned = self._get_active_config(proxy_host=proxy_host)
+            configs = [pinned] + [cfg for cfg in configs if cfg.id != pinned.id]
+
+        config = configs[0]
         return TunnelConnectionResponseDTO(
             proxy_host=config.host,
             proxy_port=config.port,
@@ -246,22 +323,68 @@ class TunnelService:
             target_host=config.target_host,
             target_port=config.target_port,
             host_key_fingerprint=config.host_key_fingerprint,
+            proxies=[self._to_endpoint(cfg) for cfg in configs],
         )
 
     # ------------------------------------------------------------------
     # Authorised keys (used by the proxy host AuthorizedKeysCommand)
     # ------------------------------------------------------------------
 
-    def get_authorized_keys(self) -> str:
+    @staticmethod
+    def _index_key_by_fingerprint(
+        fingerprint: str,
+        key_id: UUID,
+        user_id: UUID,
+        tunnel_id: UUID,
+        public_key: str,
+        created_at: datetime,
+        expires_at: datetime,
+        ttl: int,
+    ) -> None:
+        """Write the fingerprint lookup row that ``get_authorized_keys`` reads."""
+        if ttl <= 0:
+            return
+        SSHTunnelKeyByFingerprint.objects.ttl(ttl).create(
+            fingerprint=fingerprint,
+            key_id=key_id,
+            user_id=user_id,
+            tunnel_id=tunnel_id,
+            public_key=public_key,
+            created_at=created_at,
+            expires_at=expires_at,
+        )
+
+    def get_authorized_keys(self, fingerprint: str | None = None) -> str:
         """
-        Return all non-expired public keys in OpenSSH ``authorized_keys``
-        format (one key per line).
+        Return non-expired public keys in OpenSSH ``authorized_keys`` format
+        (one key per line).
+
+        When ``fingerprint`` is given, only the key with that fingerprint is
+        returned. The proxy host gets it from the sshd ``%f`` token, so each
+        SSH authentication attempt transfers one key instead of the whole
+        table. An unknown fingerprint returns an empty string, which sshd
+        reads as "no authorized key".
+
+        The read is a partition-key lookup on ``SSHTunnelKeyByFingerprint``,
+        not a secondary index, so a key registered a moment ago authenticates
+        on the first attempt.
+
+        Without ``fingerprint`` the full table is returned. That path only
+        exists for proxy hosts that still run the old provisioning wrapper.
 
         ScyllaDB TTL guarantees that expired rows are already gone by the time
-        this is called, so a plain table scan is sufficient.
-
+        this is called, so no expiry filter is needed.
         """
-        rows = SSHTunnelKey.objects.all()
+        if fingerprint is not None:
+            normalised = _normalise_fingerprint(fingerprint)
+            rows = SSHTunnelKeyByFingerprint.objects.filter(fingerprint=normalised)
+        else:
+            LOGGER.warning(
+                "authorized_keys requested without a fingerprint; the proxy host still runs the "
+                "old wrapper. Re-run the argus_tunnel role in qatools-deployments to scope "
+                "the lookup to one key."
+            )
+            rows = SSHTunnelKey.objects.all()
 
         seen: set[str] = set()
         keys: list[str] = []
@@ -310,14 +433,22 @@ class TunnelService:
         return [self._to_ssh_tunnel_key_dto(row) for row in rows]
 
     def delete_key(self, key_id: UUID | str) -> None:
-        """Delete a single ``SSHTunnelKey`` row."""
+        """Delete a key and the fingerprint lookup row that points at it."""
         if not isinstance(key_id, UUID):
             key_id = UUID(str(key_id))
         try:
             key = SSHTunnelKey.get(id=key_id)
-            key.delete()
         except SSHTunnelKey.DoesNotExist:
             LOGGER.info("SSH key %s was already deleted or TTL-expired", key_id)
+            return
+
+        # The lookup row first. A revoked key that still authenticates is worse
+        # than a lookup row with no key behind it.
+        SSHTunnelKeyByFingerprint.objects.filter(
+            fingerprint=key.fingerprint,
+            key_id=key_id,
+        ).delete()
+        key.delete()
 
     # ------------------------------------------------------------------
     # Proxy tunnel config management
@@ -554,32 +685,44 @@ class TunnelService:
 
         return sorted(configs, key=lambda cfg: (cfg.host or "", str(cfg.id)))[0]
 
-    def _get_active_config_round_robin(self) -> ProxyTunnelConfig:
-        configs = sorted(self._get_active_configs(), key=lambda cfg: (cfg.host or "", str(cfg.id)))
+    def _ordered_active_configs(self, user_id: UUID | str) -> list[ProxyTunnelConfig]:
+        """
+        Return every active proxy, ordered for ``user_id``, best choice first.
+
+        Rendezvous hashing: score each proxy against the user and sort by
+        score. Three properties matter.
+
+        - No shared state, so registration does not contend on one row.
+        - Stable per user, so a cached config and a fresh lookup name the same
+          primary instead of drifting apart.
+        - Minimal churn. Adding or retiring a proxy only moves the users that
+          proxy owns. Rotating by ``hash % len`` would reassign everyone.
+        """
+        configs = self._get_active_configs()
         if not configs:
             raise TunnelServiceException(
                 "No active proxy tunnel configuration found. "
                 "An admin must configure a proxy host before tunnel registration is possible."
             )
 
-        current_index = 0
-        store = None
-        try:
-            store = RuntimeStore.get(key=PROXY_RR_INDEX_KEY)
-            if isinstance(store.value, int):
-                current_index = store.value
-        except RuntimeStore.DoesNotExist:
-            pass
+        def score(config: ProxyTunnelConfig) -> tuple[bytes, str]:
+            digest = hashlib.sha256(f"{user_id}:{config.id}".encode("utf-8")).digest()
+            # config.id breaks ties so the order is total even on a collision.
+            return digest, str(config.id)
 
-        selected = configs[current_index % len(configs)]
-        next_index = (current_index + 1) % len(configs)
+        return sorted(configs, key=score)
 
-        if store is None:
-            store = RuntimeStore(key=PROXY_RR_INDEX_KEY)
-        store.value = next_index
-        store.save()
-
-        return selected
+    @staticmethod
+    def _to_endpoint(config: ProxyTunnelConfig) -> TunnelEndpointDTO:
+        return TunnelEndpointDTO(
+            tunnel_id=config.id,
+            proxy_host=config.host,
+            proxy_port=config.port,
+            proxy_user=config.proxy_user,
+            target_host=config.target_host,
+            target_port=config.target_port,
+            host_key_fingerprint=config.host_key_fingerprint,
+        )
 
     @staticmethod
     def _create_proxy_service_user(host: str) -> tuple[User, str]:
