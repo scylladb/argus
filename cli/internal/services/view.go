@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -225,18 +226,11 @@ func (s *ViewService) resolveFilterRefs(ctx context.Context, refs []string) ([]s
 	return ids, warnings, nil
 }
 
-// isNotFound reports whether err is (wraps) [ErrEntityNotFound] or is a
-// release/user "no ... named" miss, all of which are treated as a warn-and-skip
-// condition for view items.
+// isNotFound reports whether err wraps [ErrEntityNotFound] — a missing test,
+// group, or release reference — which is treated as a warn-and-skip condition
+// for view items and widget filters.
 func isNotFound(err error) bool {
-	if err == nil {
-		return false
-	}
-	if strings.Contains(err.Error(), ErrEntityNotFound.Error()) {
-		return true
-	}
-	// ResolveReleaseID reports a missing release without wrapping the sentinel.
-	return strings.HasPrefix(err.Error(), "no release named ")
+	return errors.Is(err, ErrEntityNotFound)
 }
 
 // buildWidgetSettings fills in each widget type's default settings for any
