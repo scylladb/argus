@@ -207,9 +207,13 @@ func (s *ViewService) resolveItemRefs(ctx context.Context, refs []string) ([]str
 }
 
 // resolveFilterRefs resolves a widget filter (a list of build_system_id
-// references) to bare entity UUIDs. As with items, an unresolved reference warns
-// and is skipped.
-func (s *ViewService) resolveFilterRefs(ctx context.Context, refs []string) ([]string, []string, error) {
+// references) to bare entity UUIDs, keeping only those that are also view items.
+// A widget filter is always a subset of the view's items — the dashboard editor
+// only offers the current items as filter options — so a reference that resolves
+// to an entity which is not in itemIDs (e.g. an item dropped in this same update)
+// is pruned with a warning. As with items, an unresolved reference also warns and
+// is skipped.
+func (s *ViewService) resolveFilterRefs(ctx context.Context, refs []string, itemIDs map[string]struct{}) ([]string, []string, error) {
 	var ids []string
 	var warnings []string
 	for _, ref := range refs {
@@ -221,9 +225,27 @@ func (s *ViewService) resolveFilterRefs(ctx context.Context, refs []string) ([]s
 			}
 			return nil, warnings, err
 		}
+		if _, ok := itemIDs[id]; !ok {
+			warnings = append(warnings, fmt.Sprintf("widget filter %q is not a view item — omitted", ref))
+			continue
+		}
 		ids = append(ids, id)
 	}
 	return ids, warnings, nil
+}
+
+// itemUUIDSet extracts the bare entity UUIDs from resolved view items (each
+// stored as "kind:uuid") for membership checks against widget filters.
+func itemUUIDSet(itemIDs []string) map[string]struct{} {
+	set := make(map[string]struct{}, len(itemIDs))
+	for _, it := range itemIDs {
+		if _, id, ok := strings.Cut(it, ":"); ok {
+			set[id] = struct{}{}
+		} else {
+			set[it] = struct{}{}
+		}
+	}
+	return set
 }
 
 // isNotFound reports whether err wraps [ErrEntityNotFound] — a missing test,
@@ -234,20 +256,23 @@ func isNotFound(err error) bool {
 }
 
 // buildWidgetSettings fills in each widget type's default settings for any
-// missing keys, resolves filter references to bare UUIDs, and reflows positions
-// to a 1-based sequence — mirroring the dashboard editor — then returns the
-// widget_settings JSON array string the backend stores. An empty widget list
-// yields "[]" (the backend requires a non-empty string).
+// missing keys, resolves filter references to bare UUIDs (pruning any that are
+// not among itemIDs, since a widget filter must be a subset of the view's
+// items), and reflows positions to a 1-based sequence — mirroring the dashboard
+// editor — then returns the widget_settings JSON array string the backend
+// stores. An empty widget list yields "[]" (the backend requires a non-empty
+// string).
 //
 // An unrecognised widget type is not an error here: it is stored verbatim (no
 // default settings are known) and reported as a warning, so a view built with a
 // newer widget catalog than this CLI knows still round-trips through an update.
 // User-supplied widget types (--widget / --file) are validated separately at the
 // command boundary via [models.ValidateWidgetType].
-func (s *ViewService) buildWidgetSettings(ctx context.Context, widgets []models.ViewWidget) (string, []string, error) {
+func (s *ViewService) buildWidgetSettings(ctx context.Context, widgets []models.ViewWidget, itemIDs []string) (string, []string, error) {
 	if len(widgets) == 0 {
 		return "[]", nil, nil
 	}
+	allowed := itemUUIDSet(itemIDs)
 	var warnings []string
 	out := make([]models.ViewWidget, 0, len(widgets))
 	for i, w := range widgets {
@@ -261,7 +286,7 @@ func (s *ViewService) buildWidgetSettings(ctx context.Context, widgets []models.
 			warnings = append(warnings, fmt.Sprintf("widget type %q is not recognised by this CLI version — stored as-is", w.Type))
 		}
 
-		ids, warns, err := s.resolveFilterRefs(ctx, w.Filter)
+		ids, warns, err := s.resolveFilterRefs(ctx, w.Filter, allowed)
 		if err != nil {
 			return "", warnings, err
 		}
@@ -316,7 +341,7 @@ func (s *ViewService) BuildCreateRequest(ctx context.Context, tmpl models.ViewTe
 	if err != nil {
 		return models.ViewCreateRequest{}, warnings, err
 	}
-	settings, wWarn, err := s.buildWidgetSettings(ctx, tmpl.Widgets)
+	settings, wWarn, err := s.buildWidgetSettings(ctx, tmpl.Widgets, items)
 	if err != nil {
 		return models.ViewCreateRequest{}, warnings, err
 	}
@@ -344,7 +369,7 @@ func (s *ViewService) BuildUpdateRequest(ctx context.Context, viewID string, tmp
 	if err != nil {
 		return models.ViewUpdateRequest{}, warnings, err
 	}
-	settings, wWarn, err := s.buildWidgetSettings(ctx, tmpl.Widgets)
+	settings, wWarn, err := s.buildWidgetSettings(ctx, tmpl.Widgets, items)
 	if err != nil {
 		return models.ViewUpdateRequest{}, warnings, err
 	}
@@ -370,9 +395,10 @@ func (s *ViewService) BuildUpdateRequest(ctx context.Context, viewID string, tmp
 // [models.ViewTemplate] suitable for `view get` output and `view update --file`
 // round-tripping. Membership is reverse-mapped via the view's resolve endpoint
 // (whose items carry build_system_id / name); widget filter UUIDs are mapped
-// back to references where possible. A filter UUID that cannot be mapped (e.g. a
-// test inside a release/group item, not itself a standalone item) is kept as the
-// raw UUID and reported as a warning.
+// back to their item references. A widget filter is always a subset of the
+// view's items, so every filter UUID is expected to map; a UUID that does not
+// (a stale reference to a since-removed item) is kept as the raw UUID and
+// reported as a warning.
 func (s *ViewService) ViewToTemplate(ctx context.Context, view models.View) (models.ViewTemplate, []string, error) {
 	resolved, err := s.getResolvedView(ctx, view.ID)
 	if err != nil {
@@ -429,8 +455,9 @@ func itemRef(it models.ResolvedViewItem) string {
 }
 
 // widgetsToTemplate parses a view's widget_settings JSON array and reverse-maps
-// each widget's filter UUIDs to references via refByID. An unmapped UUID is kept
-// verbatim and reported as a warning.
+// each widget's filter UUIDs to their item references via refByID. Because a
+// filter is a subset of the view's items, every UUID should map; a stale UUID
+// (a since-removed item) is kept verbatim and reported as a warning.
 func (s *ViewService) widgetsToTemplate(widgetSettings string, refByID map[string]string) ([]models.ViewWidget, []string, error) {
 	if strings.TrimSpace(widgetSettings) == "" {
 		return nil, nil, nil

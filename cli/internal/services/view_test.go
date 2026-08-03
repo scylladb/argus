@@ -329,7 +329,7 @@ func TestViewService_BuildCreateRequest(t *testing.T) {
 		DisplayName: "Dash A",
 		Items:       []string{"scylla-2026.2/tier1/longevity-100gb", "scylla-2026.2/tier2"},
 		Widgets: []models.ViewWidget{
-			{Position: 0, Type: "summary", Filter: []string{"scylla-2026.2/tier1/longevity-200gb"}},
+			{Position: 0, Type: "summary", Filter: []string{"scylla-2026.2/tier2"}},
 		},
 	}
 	req, warnings, err := svc.BuildCreateRequest(context.Background(), tmpl)
@@ -339,8 +339,8 @@ func TestViewService_BuildCreateRequest(t *testing.T) {
 	// Items become "type:uuid" strings, order preserved.
 	assert.Equal(t, []string{"test:t1", "group:g2"}, req.Items)
 
-	// Widget filters resolved to bare UUIDs inside the settings string.
-	assert.Contains(t, req.Settings, `"filter":["t2"]`)
+	// A widget filter referencing a view item resolves to that item's bare UUID.
+	assert.Contains(t, req.Settings, `"filter":["g2"]`)
 
 	// The create payload uses camelCase displayName and a settings string.
 	raw, err := json.Marshal(req)
@@ -497,6 +497,37 @@ func TestViewService_BuildUpdateRequest(t *testing.T) {
 	assert.Contains(t, m.UpdateData, "display_name")
 	assert.Contains(t, m.UpdateData, "items")
 	assert.NotContains(t, m.UpdateData, "plan_id", "plan_id must be omitted to preserve it")
+}
+
+// A widget filter must stay a subset of the view's items. When an update drops
+// an item, any widget filter that still references it is pruned (with a warning)
+// so the stored filter never dangles.
+func TestViewService_BuildUpdateRequest_DropsFilterForRemovedItem(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	registerResolveEndpoints(t, mux)
+	svc := newViewSvc(t, mux)
+
+	// The view keeps item t1 but drops the tier2 group; a widget still filters on
+	// both the surviving item and the removed one.
+	tmpl := models.ViewTemplate{
+		Name:  "dash-a",
+		Items: []string{"scylla-2026.2/tier1/longevity-100gb"},
+		Widgets: []models.ViewWidget{
+			{Position: 0, Type: "summary", Filter: []string{
+				"scylla-2026.2/tier1/longevity-100gb", // kept — still an item
+				"scylla-2026.2/tier2",                 // dropped — no longer an item
+			}},
+		},
+	}
+	req, warnings, err := svc.BuildUpdateRequest(context.Background(), "v1", tmpl)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"test:t1"}, req.UpdateData.Items)
+	// Only the surviving item's UUID remains in the filter.
+	assert.Contains(t, req.UpdateData.WidgetSettings, `"filter":["t1"]`)
+	assert.NotContains(t, req.UpdateData.WidgetSettings, "g2")
+	assert.NotEmpty(t, warnings, "dropping the removed item's filter should warn")
 }
 
 // --------------------------------------------------------------------------
