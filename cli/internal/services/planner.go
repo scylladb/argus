@@ -221,7 +221,7 @@ func (s *PlannerService) ResolveReleaseID(ctx context.Context, ref string) (stri
 	case 1:
 		return matches[0].ID, nil
 	case 0:
-		return "", fmt.Errorf("no release named %q (use the exact release name, e.g. scylla-2026.2)", ref)
+		return "", fmt.Errorf("%w: no release named %q (use the exact release name, e.g. scylla-2026.2)", ErrEntityNotFound, ref)
 	default:
 		return "", fmt.Errorf("ambiguous release name %q (%d matches)", ref, len(matches))
 	}

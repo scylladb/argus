@@ -154,6 +154,8 @@ func TestPlannerService_ResolveReleaseID_NoMatch(t *testing.T) {
 
 	_, err := svc.ResolveReleaseID(context.Background(), "scylla-9999")
 	require.Error(t, err)
+	// A missing release wraps the sentinel so view callers warn-and-skip it.
+	require.ErrorIs(t, err, services.ErrEntityNotFound)
 }
 
 func TestPlannerService_ResolveReleaseID_RawUUIDRejected(t *testing.T) {
