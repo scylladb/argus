@@ -11,6 +11,8 @@ from flask import current_app, g
 from jira import JIRA
 
 from argus.backend.models.jira import JiraIssue
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.models.runtime_store import RuntimeStore
 from argus.backend.models.web import ArgusEventTypes, ArgusTest, ArgusUserView, invalidate_release_snapshots
 from argus.backend.models.github_issue import IssueLink, IssueLabel
@@ -47,9 +49,8 @@ class JiraService:
     def refresh_stale_issues(self):
         try:
             last_ran = RuntimeStore.get(key=self.LAST_RAN_KEY)
-        except RuntimeStore.DoesNotExist:
-            last_ran = RuntimeStore()
-            last_ran.key = self.LAST_RAN_KEY
+        except DocumentNotFound:
+            last_ran = RuntimeStore(key=self.LAST_RAN_KEY)
             last_ran.value = datetime(year=2025, month=1, day=1, hour=0, minute=0, tzinfo=UTC)
             last_ran.save()
 
