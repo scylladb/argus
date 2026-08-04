@@ -14,6 +14,8 @@ from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.pytest import PytestResultTable, PytestResultTableOld, PytestUserField
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ArgusBestResultData, ArgusGraphView
 from argus.backend.models.run_config import RunConfigParam, RunConfiguration
+from coodie.sync import Document
+
 from argus.backend.models.runtime_store import RuntimeStore
 from argus.backend.models.view_widgets import WidgetHighlights, WidgetComment
 from argus.backend.models.argus_ai import ErrorEventEmbeddings, CriticalEventEmbeddings, SCTErrorEventEmbedding, \
@@ -443,7 +445,6 @@ def invalidate_release_snapshots(release_id: UUID) -> None:
 
 
 USED_MODELS: list[Model] = [
-    RuntimeStore,
     User,
     UserOauthToken,
     Team,
@@ -488,4 +489,9 @@ USED_MODELS: list[Model] = [
 
 USED_TYPES: list[UserType] = [
 
+]
+
+# Models already ported from cqlengine to coodie; synced via Document.sync_table()
+USED_COODIE_MODELS: list[type[Document]] = [
+    RuntimeStore,
 ]

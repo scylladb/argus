@@ -10,11 +10,32 @@ from cassandra.cqlengine.management import sync_table, sync_type
 from cassandra.cqlengine import connection
 from cassandra.query import dict_factory
 from cassandra.auth import PlainTextAuthProvider
+from coodie.drivers import register_driver
+from coodie.drivers.cassandra import CassandraDriver
 from argus.backend.util.config import Config
 
-from argus.backend.models.web import USED_MODELS, USED_TYPES
+from argus.backend.models.web import USED_MODELS, USED_TYPES, USED_COODIE_MODELS
 
 LOGGER = logging.getLogger(__name__)
+
+
+class ArgusCoodieDriver(CassandraDriver):
+    """CassandraDriver for sessions whose cluster uses execution profiles.
+
+    The upstream constructor assigns ``session.row_factory``, which the
+    cassandra driver forbids on profile-configured clusters (ValueError).
+    Rows already come back as dicts here: cqlengine's ``setup_session``
+    sets ``dict_factory`` on the default execution profile.
+    """
+
+    def __init__(self, session, default_keyspace: str | None = None):
+        try:
+            super().__init__(session, default_keyspace=default_keyspace)
+        except ValueError:
+            if getattr(self, "_session", None) is not session:
+                # row_factory assignment moved before attribute setup in a
+                # future coodie version; the instance is unusable.
+                raise
 
 
 class ScyllaCluster:
@@ -47,6 +68,13 @@ class ScyllaCluster:
         )
         self.cluster.add_execution_profile("read_fast", self.read_exec_profile)
         self.cluster.add_execution_profile("read_fast_named_tuple", self.read_named_tuple_exec_profile)
+        # Reuse cqlengine's already-open session: opening a new one here would
+        # replay registered UDTs against a possibly not-yet-synced schema
+        # (Cluster._session_register_user_types raises on fresh databases).
+        self.coodie_driver = ArgusCoodieDriver(
+            session=connection.get_session(connection='default'),
+            default_keyspace=self.config["SCYLLA_KEYSPACE_NAME"])
+        register_driver("default", self.coodie_driver, default=True)
 
     @cached_property
     def session(self):
@@ -97,6 +125,10 @@ class ScyllaCluster:
             LOGGER.info("Syncing model: %s..", model.__name__)
             ks = model.__keyspace__ or self.config["SCYLLA_KEYSPACE_NAME"]
             sync_table(model, keyspaces=[ks])
+
+        for document in USED_COODIE_MODELS:
+            LOGGER.info("Syncing coodie document: %s..", document.__name__)
+            document.sync_table()
 
         LOGGER.info("Core Models synchronized.")
 

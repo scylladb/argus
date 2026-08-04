@@ -1,9 +1,11 @@
 from datetime import datetime, time
-from cassandra.cqlengine.models import Model
-from cassandra.cqlengine import columns
+from typing import Annotated, ClassVar, Optional
+
+from coodie import Ascii, Double, PrimaryKey
+from coodie.sync import Document
 
 
-class RuntimeStore(Model):
+class RuntimeStore(Document):
     """
         This model provides a way for the application to store configuration
         data inside its database. Supports time, datetime, int, float, str, boolean values
@@ -11,13 +13,12 @@ class RuntimeStore(Model):
 
         Example:
 
-        prop = RuntimeStore()
-        prop.key = "my_property_value"
+        prop = RuntimeStore(key="my_property_value")
         prop.value = 0
         prop.save()
 
     """
-    _type_map = {
+    _type_map: ClassVar[dict[type, str]] = {
         float: "float",
         bool: "boolean",
         time: "time",
@@ -25,14 +26,17 @@ class RuntimeStore(Model):
         str: "text",
         datetime: "datetime",
     }
-    key = columns.Text(primary_key=True, partition_key=True, required=True)
-    value_type = columns.Ascii(required=True)
-    value_int = columns.Integer()
-    value_text = columns.Text()
-    value_ts = columns.Time()
-    value_date = columns.DateTime()
-    value_float = columns.Double()
-    value_boolean = columns.Boolean()
+    key: Annotated[str, PrimaryKey()]
+    value_type: Annotated[Optional[str], Ascii()] = None
+    value_int: Optional[int] = None
+    value_text: Optional[str] = None
+    value_ts: Optional[time] = None
+    value_date: Optional[datetime] = None
+    value_float: Annotated[Optional[float], Double()] = None
+    value_boolean: Optional[bool] = None
+
+    class Settings:
+        name = "runtime_store"
 
     @property
     def value(self) -> int | str | float | datetime:
