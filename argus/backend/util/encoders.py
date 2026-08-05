@@ -4,6 +4,7 @@ from json.encoder import JSONEncoder
 from uuid import UUID
 
 from flask.json.provider import DefaultJSONProvider
+from pydantic import BaseModel
 import cassandra.cqlengine.usertype as ut
 import cassandra.cqlengine.models as m
 from cassandra.util import OrderedMapSerializedKey
@@ -21,6 +22,8 @@ class ArgusJSONEncoder(JSONEncoder):
                 return dict(o.items())
             case m.Model():
                 return dict(o.items())
+            case BaseModel():
+                return o.model_dump()
             case datetime():
                 return o.strftime("%Y-%m-%dT%H:%M:%S.%fZ")[:-4] + "Z"  # Include milliseconds, trim to 3 decimal places
             case bytes():
@@ -51,6 +54,10 @@ class ArgusJSONProvider(DefaultJSONProvider):
                 return o
             case m.Model():
                 o = {str(k): v for k, v in o.items()}
+                o = cls.process_nested_dicts(o)
+                return o
+            case BaseModel():
+                o = {str(k): v for k, v in o.model_dump().items()}
                 o = cls.process_nested_dicts(o)
                 return o
             case dict():

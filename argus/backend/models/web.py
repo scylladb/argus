@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import Annotated, Optional
 from uuid import UUID, uuid1, uuid4
 from datetime import datetime
 from enum import Enum, IntEnum, auto
@@ -7,6 +7,9 @@ from cassandra.cqlengine.models import Model
 from cassandra.cqlengine.usertype import UserType
 from cassandra.cqlengine import columns
 from cassandra.util import uuid_from_time, unix_time_from_uuid1
+from pydantic import Field
+from coodie import Indexed, PrimaryKey
+from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.jira import JiraIssue
@@ -38,17 +41,20 @@ class UserRoles(str, Enum):
     SSHTunnelServer = "ROLE_SSH_TUNNEL_SERVER"
 
 
-class User(Model):
-    id = columns.UUID(primary_key=True, default=uuid4)
-    username = columns.Text(index=True)
-    full_name = columns.Text()
-    password = columns.Text()
-    email = columns.Text(index=True)
-    registration_date = columns.DateTime()
-    roles = columns.List(value_type=columns.Text)
-    picture_id = columns.UUID(default=None)
-    api_token = columns.Text(index=True)
-    service_user = columns.Boolean(default=lambda: False)
+class User(Document):
+    id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
+    username: Annotated[Optional[str], Indexed()] = None
+    full_name: Optional[str] = None
+    password: Optional[str] = None
+    email: Annotated[Optional[str], Indexed()] = None
+    registration_date: Optional[datetime] = None
+    roles: list[str] = Field(default_factory=list)
+    picture_id: Optional[UUID] = None
+    api_token: Annotated[Optional[str], Indexed()] = None
+    service_user: Optional[bool] = False
+
+    class Settings:
+        name = "user"
 
     def __hash__(self) -> int:
         return hash(self.id)
@@ -87,7 +93,7 @@ class User(Model):
             user = cls.get(id=user_id)
             if user:
                 return user
-        except cls.DoesNotExist:
+        except DocumentNotFound:
             pass
         return None
 
@@ -97,7 +103,7 @@ class User(Model):
             user = cls.get(username=name)
             if user:
                 return user
-        except cls.DoesNotExist:
+        except DocumentNotFound:
             pass
         return None
 
@@ -107,7 +113,7 @@ class User(Model):
             user = cls.get(email=email)
             if user:
                 return user
-        except cls.DoesNotExist:
+        except DocumentNotFound:
             pass
         return None
 
@@ -132,11 +138,14 @@ class Team(Model):
     motd = columns.Text()
 
 
-class UserOauthToken(Model):
-    id = columns.UUID(primary_key=True, default=uuid4)
-    user_id = columns.UUID(index=True, required=True)
-    kind = columns.Text(required=True, index=True)
-    token = columns.Text(required=True)
+class UserOauthToken(Document):
+    id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
+    user_id: Annotated[Optional[UUID], Indexed()] = None
+    kind: Annotated[Optional[str], Indexed()] = None
+    token: Optional[str] = None
+
+    class Settings:
+        name = "user_oauth_token"
 
 
 class ArgusRelease(Model):
@@ -394,10 +403,13 @@ class ReleasePlannerComment(Model):
     comment = columns.Text(default=lambda: "")
 
 
-class WebFileStorage(Model):
-    id = columns.UUID(primary_key=True, default=uuid4)
-    filepath = columns.Text(min_length=1)
-    filename = columns.Text(min_length=1)
+class WebFileStorage(Document):
+    id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
+    filepath: Optional[str] = Field(default=None, min_length=1)
+    filename: Optional[str] = Field(default=None, min_length=1)
+
+    class Settings:
+        name = "web_file_storage"
 
 
 class ReleaseStatsSnapshot(Model):
@@ -445,10 +457,7 @@ def invalidate_release_snapshots(release_id: UUID) -> None:
 
 
 USED_MODELS: list[Model] = [
-    User,
-    UserOauthToken,
     Team,
-    WebFileStorage,
     ArgusRelease,
     ArgusUserView,
     ArgusGroup,
@@ -494,4 +503,7 @@ USED_TYPES: list[UserType] = [
 # Models already ported from cqlengine to coodie; synced via Document.sync_table()
 USED_COODIE_MODELS: list[type[Document]] = [
     RuntimeStore,
+    User,
+    UserOauthToken,
+    WebFileStorage,
 ]

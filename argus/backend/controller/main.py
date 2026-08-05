@@ -249,7 +249,7 @@ def profile_oauth_github_callback():
 def get_picture(picture_id: str):
     res = make_response()
     try:
-        picture = WebFileStorage.get(id=picture_id)
+        picture = WebFileStorage.get(id=UUID(picture_id))
         with open(picture.filepath, "rb") as file:
             res.set_data(file.read())
         res.content_type = "image/*"

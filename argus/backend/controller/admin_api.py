@@ -333,7 +333,7 @@ def user_info():
 def user_change_email(user_id: str):
     payload = get_payload(request)
 
-    user = User.get(id=user_id)
+    user = User.get(id=UUID(user_id))
     result = UserService().update_email(user=user, new_email=payload["newEmail"])
 
     return {
@@ -360,7 +360,7 @@ def user_delete(user_id: str):
 def user_change_password(user_id: str):
     payload = get_payload(request)
 
-    user = User.get(id=user_id)
+    user = User.get(id=UUID(user_id))
     result = UserService().update_password(user=user, old_password="", new_password=payload["newPassword"], force=True)
 
     return {

@@ -17,6 +17,8 @@ from botocore.exceptions import ClientError
 from cassandra.util import uuid_from_time
 from cassandra.query import BatchStatement, ConsistencyLevel
 from cassandra.cqlengine.query import BatchQuery
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.db import ScyllaCluster
 
 from argus.backend.models.pytest import PytestResultTable, PytestUserField
@@ -316,7 +318,7 @@ class TestRunService:
         if old_assignee:
             try:
                 old_assignee_user = User.get(id=old_assignee)
-            except User.DoesNotExist:
+            except DocumentNotFound:
                 LOGGER.warning("Non existent assignee was present on the run %s for test %s: %s",
                                run_id, test_id, old_assignee)
                 old_assignee = None

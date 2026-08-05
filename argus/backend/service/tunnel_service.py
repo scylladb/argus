@@ -12,6 +12,8 @@ from uuid import UUID, uuid4
 from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives.serialization import load_ssh_public_key
 
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.models.ssh_key import ProxyTunnelConfig, SSHTunnelKey
 from argus.backend.models.web import User, UserRoles
 from argus.backend.service.user import UserService
@@ -517,7 +519,7 @@ class TunnelService:
         if config.service_user_id:
             try:
                 service_user = User.get(id=config.service_user_id)
-            except User.DoesNotExist:
+            except DocumentNotFound:
                 service_user = None
             if service_user is not None:
                 if delete_user:

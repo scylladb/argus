@@ -81,7 +81,7 @@ def get_view():
 def get_all_views():
     user_id = request.args.get("userId")
     if user_id:
-        user = User.get(id=user_id)
+        user = User.get(id=UUID(user_id))
     else:
         user = None
     service = UserViewService()

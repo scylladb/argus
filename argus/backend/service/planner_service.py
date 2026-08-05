@@ -381,7 +381,7 @@ class PlanningService:
         return view
 
     def change_plan_owner(self, plan_id: UUID | str, new_owner: UUID | str) -> bool:
-        user: User = User.get(id=new_owner)
+        user: User = User.get(id=UUID(str(new_owner)))
         plan: ArgusReleasePlan = self._resolve_plan(plan_id)
 
         plan.owner = user.id
