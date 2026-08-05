@@ -2,6 +2,8 @@ import logging
 from typing import Any
 from uuid import UUID
 from flask import current_app, render_template
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.models.web import ArgusNotification, ArgusNotificationSourceTypes, ArgusNotificationTypes, ArgusNotificationState, User
 from argus.backend.util.send_email import Email
 
@@ -69,7 +71,7 @@ class NotificationSenderBase:
             user = User.get(id=user_id)
             if user.id == user_id:
                 return True
-        except User.DoesNotExist:
+        except DocumentNotFound:
             return False
 
     def _get_title_for_notification_type(self, notification_type: ArgusNotificationTypes) -> str:

@@ -18,7 +18,7 @@ def from_timestamp_filter(timestamp: int):
 
 @is_filter("safe_user")
 def safe_user(user: User):
-    user_dict = dict(user.items())
+    user_dict = user.model_dump()
     del user_dict["password"]
     return user_dict
 

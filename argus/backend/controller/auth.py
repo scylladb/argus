@@ -4,6 +4,8 @@ from flask import (
     Blueprint, flash, g, redirect, render_template, request, session, url_for, current_app
 )
 from werkzeug.security import check_password_hash
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.error_handlers import handle_profile_exception
 from argus.backend.models.web import User, UserRoles
 from argus.backend.service.user import (
@@ -42,7 +44,7 @@ def login():
 
             try:
                 user: User = User.get(username=username)
-            except User.DoesNotExist:
+            except DocumentNotFound:
                 raise UserServiceException("User not found")
 
             if not check_password_hash(user.password, password):

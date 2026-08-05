@@ -10,6 +10,7 @@ from uuid import UUID
 from time import time
 from hashlib import sha384
 
+from coodie.exceptions import DocumentNotFound
 from flask import current_app, flash, g, redirect, request, session, url_for
 import magic
 import requests
@@ -102,7 +103,7 @@ class UserService:
 
         try:
             user = User.get(username=user_info.get("login"))
-        except User.DoesNotExist:
+        except DocumentNotFound:
             user = User()
             user.username = user_info.get("login")
             # pick only scylladb.com emails
@@ -130,12 +131,12 @@ class UserService:
             user.save()
 
         try:
-            tokens = list(UserOauthToken.filter(user_id=user.id).all())
+            tokens = UserOauthToken.find(user_id=user.id).all()
             github_token = [
-                token for token in tokens if token["kind"] == "github"][0]
+                token for token in tokens if token.kind == "github"][0]
             github_token.token = oauth_data.get('access_token')
             github_token.save()
-        except (UserOauthToken.DoesNotExist, IndexError):
+        except IndexError:
             github_token = UserOauthToken()
             github_token.kind = "github"
             github_token.user_id = user.id
@@ -194,14 +195,14 @@ class UserService:
         }
 
     def get_users(self) -> dict:
-        users = User.all()
+        users = User.find().all()
         return {str(user.id): user.to_json() for user in users}
 
     def get_users_privileged(self, service_only: bool = False) -> dict:
-        users: list[User] = User.all()
+        users: list[User] = User.find().all()
         if service_only:
             users = [u for u in users if u.is_service_user()]
-        users = {str(user.id): dict(user.items()) for user in sorted(users, key=lambda u: u.username)}
+        users = {str(user.id): user.model_dump() for user in sorted(users, key=lambda u: u.username)}
         for user in users.values():
             user.pop("password")
             user.pop("api_token")
@@ -212,7 +213,7 @@ class UserService:
         if session.get("original_user"):
             raise UserServiceException("Cannot impersonate while already impersonating a user.")
 
-        user = User.get(id=user_id)
+        user = User.get(id=UUID(user_id))
         session["original_user"] = str(g.user.id)
         g.user = user
         session["user_id"] = str(user.id)
@@ -222,7 +223,7 @@ class UserService:
             raise UserServiceException("No impersonation in progress.")
 
         user_id = session.pop("original_user")
-        g.user = User.get(id=user_id)
+        g.user = User.get(id=UUID(user_id))
         session["user_id"] = str(g.user.id)
 
     def generate_token(self, user: User):
@@ -249,7 +250,7 @@ class UserService:
         return True
 
     def toggle_admin(self, user_id: str):
-        user: User = User.get(id=user_id)
+        user: User = User.get(id=UUID(user_id))
 
         if user.id == g.user.id:
             raise UserServiceException("Cannot toggle admin role from yourself.")
@@ -335,7 +336,7 @@ class UserService:
         return result
 
     def delete_user(self, user_id: str):
-        user: User = User.get(id=user_id)
+        user: User = User.get(id=UUID(user_id))
         if user.id == g.user.id:
             raise UserServiceException("Cannot delete user that you are logged in as.")
 
@@ -466,14 +467,14 @@ def load_logged_in_user():
                 return
         except IndexError as exception:
             raise APIException("Malformed authorization header") from exception
-        except User.DoesNotExist as exception:
+        except DocumentNotFound as exception:
             raise APIException("User not found for supplied token") from exception
 
     if user_id := session.get('user_id'):
         try:
             g.user = User.get(id=UUID(user_id))
             return
-        except User.DoesNotExist:
+        except DocumentNotFound:
             session.clear()
     g.user = None
 
@@ -556,7 +557,7 @@ def _get_user_from_cf_access(token: str) -> dict:
             "payload": payload,
             "exists": True,
         }
-    except User.DoesNotExist:
+    except DocumentNotFound:
         return {
             "user": None,
             "payload": payload,

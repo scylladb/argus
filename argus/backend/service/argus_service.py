@@ -9,6 +9,8 @@ from uuid import UUID
 from cassandra.util import uuid_from_time
 from cassandra.cqlengine.models import Model
 from flask import current_app
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.plugins.core import PluginModelBase
@@ -508,7 +510,7 @@ class ArgusService:
         if len(assignees) > 0:
             try:
                 schedule_user = User.get(id=assignees[0].assignee)
-            except User.DoesNotExist:
+            except DocumentNotFound:
                 schedule_user = User()
                 schedule_user.id = assignees[0].assignee
                 LOGGER.warning("Deleting orphaned user assignments")
