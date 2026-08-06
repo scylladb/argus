@@ -21,7 +21,7 @@ def build_version_map(links: list[IssueLink]) -> dict[UUID, str | None]:
     unique_test_ids = {link.test_id for link in links}
     test_plugin_map: dict[UUID, str] = {}
     for batch in chunk(unique_test_ids):
-        for test in ArgusTest.filter(id__in=batch).only(["id", "plugin_name"]).all():
+        for test in ArgusTest.find(id__in=batch).only("id", "plugin_name").all():
             test_plugin_map[test.id] = test.plugin_name
 
     # run_id → plugin model, grouped (deduplicated)

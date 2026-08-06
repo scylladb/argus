@@ -204,20 +204,20 @@ class ClientService:
                 group = ArgusGroup.get(id=test.group_id)
                 release = ArgusRelease.get(id=test.release_id)
                 test_info = {
-                    "test": dict(test.items()),
-                    "group": dict(group.items()),
-                    "release": dict(release.items()),
+                    "test": test.model_dump(),
+                    "group": group.model_dump(),
+                    "release": release.model_dump(),
                 }
             except Exception:
                 LOGGER.warning("Failed to fetch test info for run %s (test_id=%s)", run_id, run.test_id)
 
-        comments = sorted(ArgusTestRunComment.filter(test_run_id=run_uuid).all(), key=lambda c: c.posted_at)
-        comments_data = [dict(c.items()) for c in comments]
+        comments = sorted(ArgusTestRunComment.find(test_run_id=run_uuid).all(), key=lambda c: c.posted_at)
+        comments_data = [c.model_dump() for c in comments]
 
-        all_events = sorted(ArgusEvent.filter(run_id=run_uuid).all(), key=lambda ev: ev.created_at)
+        all_events = sorted(ArgusEvent.find(run_id=run_uuid).all(), key=lambda ev: ev.created_at)
         activity = {
             "run_id": run_uuid,
-            "raw_events": [dict(event.items()) for event in all_events],
+            "raw_events": [event.model_dump() for event in all_events],
             "events": {
                 str(event.id): EVENT_PROCESSORS.get(event.kind)(json.loads(event.body))
                 for event in all_events

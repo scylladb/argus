@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import logging
 
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.models.web import (
     ArgusRelease,
     ArgusGroup,
@@ -74,7 +76,7 @@ def parse_build_id(build_id: str) -> tuple[str, str, str]:
 def _get_or_create_release(name: str) -> ArgusRelease:
     try:
         return ArgusRelease.get(name=name)
-    except ArgusRelease.DoesNotExist:
+    except DocumentNotFound:
         release = ArgusRelease()
         release.name = name
         release.save()
@@ -85,7 +87,7 @@ def _get_or_create_release(name: str) -> ArgusRelease:
 def _get_or_create_group(release: ArgusRelease, name: str, build_system_id: str) -> ArgusGroup:
     # ArgusGroup has no unique constraint on (release_id, name), so we look up
     # by build_system_id which is the stable identifier from Jenkins.
-    for g in ArgusGroup.filter(release_id=release.id).all():
+    for g in ArgusGroup.find(release_id=release.id).all():
         if g.build_system_id == build_system_id:
             return g
     group = ArgusGroup()
@@ -107,7 +109,7 @@ def _get_or_create_test(
 ) -> ArgusTest:
     try:
         return ArgusTest.get(build_system_id=build_system_id)
-    except ArgusTest.DoesNotExist:
+    except DocumentNotFound:
         test = ArgusTest()
         test.name = name
         test.group_id = group.id

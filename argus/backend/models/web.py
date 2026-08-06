@@ -8,7 +8,7 @@ from cassandra.cqlengine.usertype import UserType
 from cassandra.cqlengine import columns
 from cassandra.util import uuid_from_time, unix_time_from_uuid1
 from pydantic import Field
-from coodie import Indexed, PrimaryKey
+from coodie import ClusteringKey, Indexed, PrimaryKey
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.github_issue import GithubIssue, IssueLink
@@ -148,19 +148,21 @@ class UserOauthToken(Document):
         name = "user_oauth_token"
 
 
-class ArgusRelease(Model):
-    __table_name__ = "argus_release_v2"
-    id = columns.UUID(primary_key=True, default=uuid4)
-    name = columns.Text(index=True, required=True)
-    pretty_name = columns.Text()
-    description = columns.Text()
-    github_repo_url = columns.Text()
-    valid_version_regex = columns.Text()
-    assignee = columns.List(value_type=columns.UUID)
-    picture_id = columns.UUID()
-    enabled = columns.Boolean(default=lambda: True)
-    perpetual = columns.Boolean(default=lambda: False)
-    dormant = columns.Boolean(default=lambda: False)
+class ArgusRelease(Document):
+    id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
+    name: Annotated[Optional[str], Indexed()] = None
+    pretty_name: Optional[str] = None
+    description: Optional[str] = None
+    github_repo_url: Optional[str] = None
+    valid_version_regex: Optional[str] = None
+    assignee: list[UUID] = Field(default_factory=list)
+    picture_id: Optional[UUID] = None
+    enabled: Optional[bool] = True
+    perpetual: Optional[bool] = False
+    dormant: Optional[bool] = False
+
+    class Settings:
+        name = "argus_release_v2"
 
     def __eq__(self, other):
         if isinstance(other, ArgusRelease):
@@ -169,16 +171,18 @@ class ArgusRelease(Model):
             return super().__eq__(other)
 
 
-class ArgusGroup(Model):
-    __table_name__ = "argus_group_v2"
-    id = columns.UUID(primary_key=True, default=uuid4)
-    release_id = columns.UUID(required=True, index=True)
-    name = columns.Text(required=True, index=True)
-    pretty_name = columns.Text()
-    description = columns.Text()
-    assignee = columns.List(value_type=columns.UUID)
-    build_system_id = columns.Text()
-    enabled = columns.Boolean(default=lambda: True)
+class ArgusGroup(Document):
+    id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
+    release_id: Annotated[Optional[UUID], Indexed()] = None
+    name: Annotated[Optional[str], Indexed()] = None
+    pretty_name: Optional[str] = None
+    description: Optional[str] = None
+    assignee: list[UUID] = Field(default_factory=list)
+    build_system_id: Optional[str] = None
+    enabled: Optional[bool] = True
+
+    class Settings:
+        name = "argus_group_v2"
 
     def __hash__(self) -> int:
         return hash((self.id, self.release_id))
@@ -205,20 +209,22 @@ class ArgusUserView(Model):
     widget_settings = columns.Text(required=True)
 
 
-class ArgusTest(Model):
-    __table_name__ = "argus_test_v2"
-    id = columns.UUID(primary_key=True, default=uuid4)
-    group_id = columns.UUID(required=True, index=True)
-    release_id = columns.UUID(required=True, index=True)
-    name = columns.Text(required=True, index=True)
-    pretty_name = columns.Text()
-    description = columns.Text()
-    assignee = columns.List(value_type=columns.UUID)
-    build_system_id = columns.Text(index=True)
-    enabled = columns.Boolean(default=lambda: True)
-    build_system_url = columns.Text()
-    plugin_name = columns.Text()
-    plugin_subtype = columns.Text()
+class ArgusTest(Document):
+    id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
+    group_id: Annotated[Optional[UUID], Indexed()] = None
+    release_id: Annotated[Optional[UUID], Indexed()] = None
+    name: Annotated[Optional[str], Indexed()] = None
+    pretty_name: Optional[str] = None
+    description: Optional[str] = None
+    assignee: list[UUID] = Field(default_factory=list)
+    build_system_id: Annotated[Optional[str], Indexed()] = None
+    enabled: Optional[bool] = True
+    build_system_url: Optional[str] = None
+    plugin_name: Optional[str] = None
+    plugin_subtype: Optional[str] = None
+
+    class Settings:
+        name = "argus_test_v2"
 
     def __eq__(self, other):
         if isinstance(other, ArgusTest):
@@ -231,21 +237,23 @@ class ArgusTest(Model):
             t = ArgusTest.get(build_system_id=self.build_system_id)
             if t.id != self.id:
                 raise ArgusTestException("Build Id is already used by another test", t.id, self.id)
-        except ArgusTest.DoesNotExist:
+        except DocumentNotFound:
             pass
 
 
-class ArgusTestRunComment(Model):
-    id = columns.UUID(primary_key=True, default=uuid4, partition_key=True)
-    test_run_id = columns.UUID(required=True, index=True)
-    user_id = columns.UUID(required=True, index=True)
-    release_id = columns.UUID(required=True, index=True)
-    test_id = columns.UUID(required=True, index=True)
-    posted_at = columns.Integer(
-        required=True, clustering_order="desc", primary_key=True)
-    message = columns.Text(min_length=1, max_length=65535)
-    mentions = columns.List(value_type=columns.UUID, default=[])
-    reactions = columns.Map(key_type=columns.Text, value_type=columns.Integer)
+class ArgusTestRunComment(Document):
+    id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
+    posted_at: Annotated[Optional[int], ClusteringKey(order="DESC")] = None
+    test_run_id: Annotated[Optional[UUID], Indexed()] = None
+    user_id: Annotated[Optional[UUID], Indexed()] = None
+    release_id: Annotated[Optional[UUID], Indexed()] = None
+    test_id: Annotated[Optional[UUID], Indexed()] = None
+    message: Optional[str] = Field(default=None, min_length=1, max_length=65535)
+    mentions: list[UUID] = Field(default_factory=list)
+    reactions: dict[str, int] = Field(default_factory=dict)
+
+    class Settings:
+        name = "argus_test_run_comment"
 
 
 class ArgusEventTypes(str, Enum):
@@ -260,16 +268,19 @@ class ArgusEventTypes(str, Enum):
     TestRunIssueRemoved = "ARGUS_TEST_RUN_ISSUE_REMOVED"
 
 
-class ArgusEvent(Model):
-    id = columns.UUID(primary_key=True, default=uuid4, partition_key=True)
-    release_id = columns.UUID(index=True)
-    group_id = columns.UUID(index=True)
-    test_id = columns.UUID(index=True)
-    run_id = columns.UUID(index=True)
-    user_id = columns.UUID(index=True)
-    kind = columns.Text(required=True, index=True)
-    body = columns.Text(required=True)
-    created_at = columns.DateTime(required=True)
+class ArgusEvent(Document):
+    id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
+    release_id: Annotated[Optional[UUID], Indexed()] = None
+    group_id: Annotated[Optional[UUID], Indexed()] = None
+    test_id: Annotated[Optional[UUID], Indexed()] = None
+    run_id: Annotated[Optional[UUID], Indexed()] = None
+    user_id: Annotated[Optional[UUID], Indexed()] = None
+    kind: Annotated[Optional[str], Indexed()] = None
+    body: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    class Settings:
+        name = "argus_event"
 
 
 class ArgusNotificationTypes(str, Enum):
@@ -395,12 +406,14 @@ class ArgusScheduleGroup(Model):
     release_id = columns.UUID(partition_key=True)
 
 
-class ReleasePlannerComment(Model):
-    __table_name__ = "argus_planner_comment_v2"
-    release = columns.UUID(primary_key=True)
-    group = columns.UUID(primary_key=True)
-    test = columns.UUID(primary_key=True)
-    comment = columns.Text(default=lambda: "")
+class ReleasePlannerComment(Document):
+    release: Annotated[UUID, PrimaryKey()]
+    group: Annotated[UUID, ClusteringKey(clustering_key_index=0)]
+    test: Annotated[UUID, ClusteringKey(clustering_key_index=1)]
+    comment: str = ""
+
+    class Settings:
+        name = "argus_planner_comment_v2"
 
 
 class WebFileStorage(Document):
@@ -458,13 +471,7 @@ def invalidate_release_snapshots(release_id: UUID) -> None:
 
 USED_MODELS: list[Model] = [
     Team,
-    ArgusRelease,
     ArgusUserView,
-    ArgusGroup,
-    ArgusTest,
-    ArgusTestRunComment,
-    ArgusEvent,
-    ReleasePlannerComment,
     ArgusNotification,
     ArgusSchedule,
     ArgusScheduleAssignee,
@@ -506,4 +513,10 @@ USED_COODIE_MODELS: list[type[Document]] = [
     User,
     UserOauthToken,
     WebFileStorage,
+    ArgusRelease,
+    ArgusGroup,
+    ArgusTest,
+    ArgusTestRunComment,
+    ArgusEvent,
+    ReleasePlannerComment,
 ]

@@ -1,6 +1,8 @@
 import logging
 from typing import TypedDict
 from uuid import UUID
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.db import ScyllaCluster
 from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, ReleaseDistinctVersions, ReleaseDistinctImages, ReleaseStatsSnapshot, invalidate_release_snapshots
@@ -36,15 +38,16 @@ class ReleaseManagerService:
         )
 
     def get_releases(self) -> list[ArgusRelease]:
-        return list(ArgusRelease.all())
+        return list(ArgusRelease.find().all())
 
     def get_groups(self, release_id: UUID) -> list[ArgusGroup]:
-        return list(ArgusGroup.filter(release_id=release_id).all())
+        return list(ArgusGroup.find(release_id=release_id).all())
 
     def get_tests(self, group_id: UUID) -> list[ArgusTest]:
-        return list(ArgusTest.filter(group_id=group_id).all())
+        return list(ArgusTest.find(group_id=group_id).all())
 
     def toggle_test_enabled(self, test_id: UUID, new_state: bool) -> bool:
+        test_id = UUID(test_id) if isinstance(test_id, str) else test_id
         test: ArgusTest = ArgusTest.get(id=test_id)
         test.enabled = new_state
         test.save()
@@ -52,6 +55,7 @@ class ReleaseManagerService:
         return test
 
     def toggle_group_enabled(self, group_id: UUID, new_state: bool) -> bool:
+        group_id = UUID(group_id) if isinstance(group_id, str) else group_id
         test: ArgusGroup = ArgusGroup.get(id=group_id)
         test.enabled = new_state
         test.save()
@@ -61,7 +65,7 @@ class ReleaseManagerService:
     def create_release(self, release_name: str, pretty_name: str, perpetual: bool) -> ArgusRelease:
         try:
             release = ArgusRelease.get(name=release_name)
-        except ArgusRelease.DoesNotExist:
+        except DocumentNotFound:
             release = ArgusRelease()
             release.name = release_name
             release.pretty_name = pretty_name
@@ -108,7 +112,7 @@ class ReleaseManagerService:
     def delete_group(self, group_id: str, delete_tests: bool = True, new_group_id: str = "") -> bool:
         group_to_delete = ArgusGroup.get(id=UUID(group_id))
 
-        tests_to_change = ArgusTest.filter(
+        tests_to_change = ArgusTest.find(
             group_id=group_to_delete.id)
         if delete_tests:
             for test in tests_to_change.all():
@@ -124,7 +128,7 @@ class ReleaseManagerService:
         return True
 
     def delete_test(self, test_id: str) -> bool:
-        test_to_delete = ArgusTest.get(id=test_id)
+        test_to_delete = ArgusTest.get(id=UUID(test_id) if isinstance(test_id, str) else test_id)
         test_to_delete.delete()
         invalidate_release_snapshots(test_to_delete.release_id)
         return True
@@ -185,7 +189,7 @@ class ReleaseManagerService:
 
     def edit_release(self, payload: ReleaseEditPayload) -> bool:
 
-        release: ArgusRelease = ArgusRelease.get(id=payload["id"])
+        release: ArgusRelease = ArgusRelease.get(id=UUID(payload["id"]) if isinstance(payload["id"], str) else payload["id"])
         release.pretty_name = payload["pretty_name"]
         release.perpetual = payload["perpetual"]
         release.enabled = payload["enabled"]
@@ -199,10 +203,10 @@ class ReleaseManagerService:
 
     def delete_release(self, release_id: str) -> bool:
 
-        release: ArgusRelease = ArgusRelease.get(id=release_id)
+        release: ArgusRelease = ArgusRelease.get(id=UUID(release_id) if isinstance(release_id, str) else release_id)
 
-        release_groups = ArgusGroup.filter(release_id=release.id)
-        release_tests = ArgusTest.filter(release_id=release.id)
+        release_groups = ArgusGroup.find(release_id=release.id)
+        release_tests = ArgusTest.find(release_id=release.id)
 
         for entity in [*release_groups.all(), *release_tests.all()]:
             entity.delete()

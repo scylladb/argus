@@ -9,6 +9,8 @@ from flask import (
 )
 import magic
 
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.error_handlers import handle_api_exception
 from argus.backend.models.web import ArgusTest
 from argus.backend.service.github_service import GithubService
@@ -386,7 +388,7 @@ def ignore_jobs():
     payload = get_payload(request)
     service = TestRunService()
 
-    result = service.ignore_jobs(test_id=payload["testId"], reason=payload["reason"])
+    result = service.ignore_jobs(test_id=UUID(payload["testId"]), reason=payload["reason"])
 
     return {
         "status": "ok",
@@ -446,7 +448,7 @@ def build_jenkins_job():
     # when the test/plugin can't be resolved (e.g. a brand-new job).
     try:
         test = ArgusTest.get(build_system_id=payload["buildId"])
-    except ArgusTest.DoesNotExist:
+    except DocumentNotFound:
         test = None
     if test and test.plugin_name == "scylla-cluster-tests":
         JenkinsService.validate_sct_version_source(payload["parameters"])

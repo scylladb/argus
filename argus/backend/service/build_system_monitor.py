@@ -6,6 +6,8 @@ import re
 from flask import current_app
 from flask.cli import with_appcontext
 
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, ArgusTestException
 from argus.backend.service.release_manager import ReleaseManagerService
@@ -20,9 +22,9 @@ class ArgusTestsMonitor(ABC):
 
     def __init__(self) -> None:
         self._cluster = ScyllaCluster.get()
-        self._existing_releases = list(ArgusRelease.objects().limit(None))
-        self._existing_groups = list(ArgusGroup.objects().limit(None))
-        self._existing_tests = list(ArgusTest.objects().limit(None))
+        self._existing_releases = list(ArgusRelease.find())
+        self._existing_groups = list(ArgusGroup.find())
+        self._existing_tests = list(ArgusTest.find())
         self._filtered_groups: list[str] = self.BUILD_SYSTEM_FILTERED_PREFIXES
 
     def create_release(self, release_name: str):
@@ -113,7 +115,7 @@ class JenkinsMonitor(ArgusTestsMonitor):
             try:
                 saved_release = ArgusRelease.get(name=release["fullname"])
                 LOGGER.info("Release %s exists", release["fullname"])
-            except ArgusRelease.DoesNotExist:
+            except DocumentNotFound:
                 LOGGER.warning("Release %s does not exist, creating...", release["fullname"])
                 saved_release = self.create_release(release["fullname"])
                 self._existing_releases.append(saved_release)

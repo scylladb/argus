@@ -7,6 +7,8 @@ from typing import Any, Callable
 from uuid import UUID
 
 from cassandra.cqlengine.models import Model
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.loader import all_plugin_models
@@ -17,15 +19,16 @@ class TestLookup:
 
     @classmethod
     def index_mapper(cls, item: Model, type="test"):
-        mapped = dict(item)
+        mapped = item.model_dump()
         mapped["type"] = type
         return mapped
 
     @classmethod
     def explode_group(cls, group_id: UUID | str):
+        group_id = UUID(group_id) if isinstance(group_id, str) else group_id
         group = ArgusGroup.get(id=group_id)
         release = ArgusRelease.get(id=group.release_id)
-        tests = ArgusTest.filter(group_id=group.id).all()
+        tests = ArgusTest.find(group_id=group.id).all()
 
         exploded = []
         for test in tests:
@@ -59,7 +62,7 @@ class TestLookup:
         try:
             test = ArgusTest.get(id=test_id)
             return test
-        except ArgusTest.DoesNotExist:
+        except DocumentNotFound:
             return None
 
     @classmethod
@@ -67,7 +70,7 @@ class TestLookup:
         try:
             group = ArgusGroup.get(id=group_id)
             return group
-        except ArgusGroup.DoesNotExist:
+        except DocumentNotFound:
             return None
 
     @classmethod
@@ -75,7 +78,7 @@ class TestLookup:
         try:
             release = ArgusRelease.get(id=run_test_id)
             return release
-        except ArgusRelease.DoesNotExist:
+        except DocumentNotFound:
             return None
 
     @classmethod
@@ -84,11 +87,11 @@ class TestLookup:
         if run:
             run = dict(run.items())
             run["type"] = "run"
-            run["test"] = dict(cls.resolve_run_test(run["test_id"]).items()) if run["test_id"] else None
+            run["test"] = cls.resolve_run_test(run["test_id"]).model_dump() if run["test_id"] else None
             if run["test"]:
                 name = run["test"]["name"]
-            run["group"] = dict(cls.resolve_run_group(run["group_id"]).items())if run["group_id"] else None
-            run["release"] = dict(cls.resolve_run_release(run["release_id"]).items()) if run["release_id"] else None
+            run["group"] = cls.resolve_run_group(run["group_id"]).model_dump()if run["group_id"] else None
+            run["release"] = cls.resolve_run_release(run["release_id"]).model_dump() if run["release_id"] else None
             run["name"] = f"{name}#{run['build_number']}"
 
             return [run]
@@ -97,6 +100,7 @@ class TestLookup:
 
     @classmethod
     def test_lookup(cls, query: str, release_id: UUID | str = None):
+        release_id = UUID(release_id) if isinstance(release_id, str) else release_id
         if uuid := cls.query_to_uuid(query):
             return cls.make_single_run_response(uuid)
 
@@ -151,9 +155,9 @@ class TestLookup:
         if release_id:
             all_releases = [ArgusRelease.get(id=release_id)]
         else:
-            all_releases = ArgusRelease.objects().limit(None)
-        all_tests = ArgusTest.objects().limit(None)
-        all_groups = ArgusGroup.objects().limit(None)
+            all_releases = ArgusRelease.find()
+        all_tests = ArgusTest.find()
+        all_groups = ArgusGroup.find()
         if release_id:
             all_tests = all_tests.filter(release_id=release_id)
             all_groups = all_groups.filter(release_id=release_id)

@@ -20,6 +20,8 @@ from uuid import UUID, uuid4
 
 import pytest
 
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.models.web import ArgusTest, ArgusTestRunComment, User, UserRoles
 
 
@@ -282,7 +284,7 @@ def test_delete_run_comment_removes_record(flask_client, submitted_run, fake_tes
     assert resp.json["status"] == "ok"
     messages = [c["message"] for c in resp.json["response"]]
     assert "to be deleted" not in messages
-    with pytest.raises(ArgusTestRunComment.DoesNotExist):
+    with pytest.raises(DocumentNotFound):
         ArgusTestRunComment.get(id=UUID(target["id"]))
 
 

@@ -16,7 +16,7 @@ from flask import current_app, g
 from botocore.exceptions import ClientError
 from cassandra.util import uuid_from_time
 from cassandra.query import BatchStatement, ConsistencyLevel
-from cassandra.cqlengine.query import BatchQuery
+from coodie.sync import BatchQuery
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.db import ScyllaCluster
@@ -88,7 +88,7 @@ class TestRunService:
         """
         try:
             test: ArgusTest = ArgusTest.get(build_system_id=build_id)
-        except ArgusTest.DoesNotExist:
+        except DocumentNotFound:
             return None
         plugin = self.get_plugin(plugin_name=test.plugin_name)
         if not plugin:
@@ -165,7 +165,7 @@ class TestRunService:
     def change_run_status(self, test_id: UUID, run_id: UUID, new_status: TestStatus):
         try:
             test = ArgusTest.get(id=test_id)
-        except ArgusTest.DoesNotExist as exc:
+        except DocumentNotFound as exc:
             raise TestRunServiceException("Test entity does not exist for provided test_id", test_id) from exc
         plugin = self.get_plugin(plugin_name=test.plugin_name)
         run: PluginModelBase = plugin.model.get(id=run_id)
@@ -361,11 +361,11 @@ class TestRunService:
     def get_run_comment(self, comment_id: UUID):
         try:
             return ArgusTestRunComment.get(id=comment_id)
-        except ArgusTestRunComment.DoesNotExist:
+        except DocumentNotFound:
             return None
 
     def get_run_comments(self, run_id: UUID):
-        return sorted(ArgusTestRunComment.filter(test_run_id=run_id).all(), key=lambda c: c.posted_at)
+        return sorted(ArgusTestRunComment.find(test_run_id=run_id).all(), key=lambda c: c.posted_at)
 
     def post_run_comment(self, test_id: UUID, run_id: UUID, message: str, reactions: dict, mentions: list[str]):
         message_stripped = strip_html_tags(message)
@@ -386,7 +386,7 @@ class TestRunService:
         comment.test_run_id = run_id
         comment.release_id = release.id
         comment.user_id = g.user.id
-        comment.posted_at = time.time()
+        comment.posted_at = int(time.time())
         comment.save()
 
         run: PluginModelBase = plugin.model.get(id=run_id)
@@ -450,10 +450,10 @@ class TestRunService:
 
     def get_run_events(self, run_id: UUID):
         response = {}
-        all_events = ArgusEvent.filter(run_id=run_id).all()
+        all_events = ArgusEvent.find(run_id=run_id).all()
         all_events = sorted(all_events, key=lambda ev: ev.created_at)
         response["run_id"] = run_id
-        response["raw_events"] = [dict(event.items()) for event in all_events]
+        response["raw_events"] = [event.model_dump() for event in all_events]
         response["events"] = {
             str(event.id): EVENT_PROCESSORS.get(event.kind)(json.loads(event.body))
             for event in all_events
@@ -461,13 +461,13 @@ class TestRunService:
         return response
 
     def resolve_run_build_id_and_number_multiple(self, runs: list[tuple[UUID, UUID]]) -> dict[UUID, dict[str, Any]]:
-        test_ids = [r[0] for r in runs]
+        test_ids = [UUID(r[0]) if isinstance(r[0], str) else r[0] for r in runs]
         all_tests: list = []
         for id_slice in chunk(test_ids):
-            all_tests.extend(ArgusTest.filter(id__in=id_slice).all())
+            all_tests.extend(ArgusTest.find(id__in=id_slice).all())
 
         tests: dict[str, ArgusTest] = {str(t.id): t for t in all_tests}
-        runs_by_plugin = reduce(lambda acc, val: acc[tests[val[0]].plugin_name].append(
+        runs_by_plugin = reduce(lambda acc, val: acc[tests[str(val[0])].plugin_name].append(
             val[1]) or acc, runs, defaultdict(list))
         all_runs = {}
         for plugin, run_ids in runs_by_plugin.items():
@@ -538,7 +538,7 @@ class TestRunService:
                     )
                 )
 
-                ArgusEvent.batch(event_batch).create(
+                ArgusEvent(
                     release_id=job["release_id"],
                     group_id=job["group_id"],
                     test_id=test_id,
@@ -551,7 +551,7 @@ class TestRunService:
                     }, ensure_ascii=True, separators=(',', ':')),
                     kind=ArgusEventTypes.TestRunBatchInvestigationStatusChange.value,
                     created_at=datetime.now(UTC),
-                )
+                ).save(batch=event_batch)
 
                 jobs_affected += 1
 

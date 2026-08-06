@@ -137,9 +137,9 @@ def release_dashboard(release_name: str):
     release, release_groups, release_tests = service.get_data_for_release_dashboard(
         release_name=release_name)
     data_json = {
-        "release": dict(release.items()),
-        "groups": [dict(group.items()) for group in release_groups],
-        "tests": [dict(test.items()) for test in release_tests],
+        "release": release.model_dump(),
+        "groups": [group.model_dump() for group in release_groups],
+        "tests": [test.model_dump() for test in release_tests],
     }
     return render_template("release_dashboard.html.j2", release_name=release_name, data=data_json)
 
@@ -151,9 +151,9 @@ def release_scheduler(name: str):
     release, release_groups, release_tests = service.get_data_for_release_dashboard(
         release_name=name)
     data_json = {
-        "release": dict(release.items()),
-        "groups": [dict(group.items()) for group in release_groups],
-        "tests": [dict(test.items()) for test in release_tests],
+        "release": release.model_dump(),
+        "groups": [group.model_dump() for group in release_groups],
+        "tests": [test.model_dump() for test in release_tests],
     }
     return render_template("release_schedule.html.j2", release_name=name, data=data_json)
 
@@ -161,7 +161,7 @@ def release_scheduler(name: str):
 @bp.route("/release/by-id/<string:id>/planner")
 @login_required
 def release_planner_by_id(id: str):
-    release = ArgusRelease.get(id=id)
+    release = ArgusRelease.get(id=UUID(id))
     return redirect(url_for("main.release_planner", name=release.name))
 
 
@@ -180,9 +180,9 @@ def duty_planner(name: str):
     release, release_groups, release_tests = service.get_data_for_release_dashboard(
         release_name=name)
     data_json = {
-        "release": dict(release.items()),
-        "groups": [dict(group.items()) for group in release_groups],
-        "tests": [dict(test.items()) for test in release_tests],
+        "release": release.model_dump(),
+        "groups": [group.model_dump() for group in release_groups],
+        "tests": [test.model_dump() for test in release_tests],
     }
     return render_template("duty_planner.html.j2", release_name=name, data=data_json)
 

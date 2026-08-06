@@ -217,12 +217,12 @@ class JenkinsService:
         # TODO: Filtering based on origin location / user preferences
         _: ArgusTest = ArgusTest.get(id=test_id)
 
-        releases = list(ArgusRelease.all())
+        releases = list(ArgusRelease.find().all())
 
         return sorted(releases, key=lambda r: r.pretty_name if r.pretty_name else r.name)
 
     def get_groups_for_release(self, release_id: str):
-        groups = list(ArgusGroup.filter(release_id=release_id).all())
+        groups = list(ArgusGroup.find(release_id=release_id).all())
 
         return sorted(groups, key=lambda g: g.pretty_name if g.pretty_name else g.name)
 
@@ -308,9 +308,9 @@ class JenkinsService:
         self._jenkins.reconfig_job(name=build_id, config_xml=adjusted_config)
 
     def clone_job(self, current_test_id: str, new_name: str, target: str, group: str, advanced_settings: bool | dict[str, str]):
-        cloned_test: ArgusTest = ArgusTest.get(id=current_test_id)
-        target_release: ArgusRelease = ArgusRelease.get(id=target)
-        target_group: ArgusGroup = ArgusGroup.get(id=group)
+        cloned_test: ArgusTest = ArgusTest.get(id=UUID(current_test_id))
+        target_release: ArgusRelease = ArgusRelease.get(id=UUID(target))
+        target_group: ArgusGroup = ArgusGroup.get(id=UUID(group))
 
         if target_group.id == cloned_test.id and new_name == cloned_test.name:
             raise JenkinsServiceError("Unable to clone: source and destination are the same")
