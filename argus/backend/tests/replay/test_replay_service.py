@@ -18,6 +18,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 import zstandard as zstd
 
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.service.replay_service import (
     CLIENT_ROUTE_PREFIX,
     FINALIZE_ENDPOINT,
@@ -751,26 +753,26 @@ def _patch_hierarchy_models(*, test_exists: bool,
         pass
 
     test_mock = MagicMock()
-    test_mock.DoesNotExist = web.ArgusTest.DoesNotExist
+    test_mock.DoesNotExist = web.DocumentNotFound
     if test_exists:
         test_mock.get.return_value = MagicMock()
     else:
-        test_mock.get.side_effect = web.ArgusTest.DoesNotExist
+        test_mock.get.side_effect = web.DocumentNotFound
 
     release_mock = MagicMock()
-    release_mock.DoesNotExist = web.ArgusRelease.DoesNotExist
+    release_mock.DoesNotExist = web.DocumentNotFound
     if release_exists:
         rel = MagicMock(id="rel-id")
         release_mock.get.return_value = rel
     else:
-        release_mock.get.side_effect = web.ArgusRelease.DoesNotExist
+        release_mock.get.side_effect = web.DocumentNotFound
 
     group_mock = MagicMock()
     if release_exists and group_exists:
         g = MagicMock(build_system_id="scylla-staging/dusan")
-        group_mock.filter.return_value.all.return_value = [g]
+        group_mock.find.return_value.all.return_value = [g]
     else:
-        group_mock.filter.return_value.all.return_value = []
+        group_mock.find.return_value.all.return_value = []
 
     return patch.multiple(
         "argus.backend.models.web",

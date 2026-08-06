@@ -118,61 +118,27 @@ def test_user_planned_jobs_returns_list(flask_client, saved_g_user):
 # /test_runs/poll and /test_run/poll
 # ---------------------------------------------------------------------------
 
-def test_test_runs_poll_returns_recent_runs_for_test(flask_client, fake_test, submitted_sct_run):
+def test_test_runs_poll_is_removed(flask_client, fake_test, submitted_sct_run):
     resp = flask_client.get(
         f"{API_PREFIX}/test_runs/poll",
         query_string={"testId": str(fake_test.id), "limit": 10},
     )
     assert resp.status_code == 200, resp.data
     body = resp.json
-    assert body["status"] == "ok"
-    ids = {str(run["id"]) for run in body["response"]}
-    assert submitted_sct_run in ids
-    # build_number derived from job_url (".../job/42")
-    matching = next(r for r in body["response"] if str(r["id"]) == submitted_sct_run)
-    assert matching["build_number"] == 42
+    assert body["status"] == "error"
+    assert body["response"]["exception"] == "APIException"
+    assert "removed" in body["response"]["message"]
 
 
-def test_test_runs_poll_with_additional_runs(flask_client, fake_test, submitted_sct_run):
-    # Force the run to be returned via additionalRuns even with limit=0 (which
-    # is coerced to 10 by the controller, so this just exercises the merge path).
-    resp = flask_client.get(
-        f"{API_PREFIX}/test_runs/poll"
-        f"?testId={fake_test.id}&limit=10&additionalRuns[]={submitted_sct_run}"
-    )
-    assert resp.status_code == 200, resp.data
-    body = resp.json
-    assert body["status"] == "ok"
-    ids = [str(r["id"]) for r in body["response"]]
-    # Even if it appears via filter, dedup means it's present at most once.
-    assert ids.count(submitted_sct_run) == 1
-
-
-def test_test_run_poll_single_returns_runs_by_id(flask_client, submitted_sct_run):
+def test_test_run_poll_single_is_removed(flask_client, submitted_sct_run):
     resp = flask_client.get(
         f"{API_PREFIX}/test_run/poll", query_string={"runs": submitted_sct_run}
     )
     assert resp.status_code == 200, resp.data
     body = resp.json
-    assert body["status"] == "ok"
-    assert submitted_sct_run in body["response"]
-    assert str(body["response"][submitted_sct_run]["id"]) == submitted_sct_run
-
-
-def test_test_run_poll_single_unknown_id_omitted(flask_client):
-    bogus = str(uuid.uuid4())
-    resp = flask_client.get(f"{API_PREFIX}/test_run/poll", query_string={"runs": bogus})
-    assert resp.status_code == 200, resp.data
-    body = resp.json
-    assert body["status"] == "ok"
-    assert body["response"] == {}
-
-
-def test_test_run_poll_single_empty_input(flask_client):
-    resp = flask_client.get(f"{API_PREFIX}/test_run/poll")
-    assert resp.status_code == 200, resp.data
-    assert resp.json["status"] == "ok"
-    assert resp.json["response"] == {}
+    assert body["status"] == "error"
+    assert body["response"]["exception"] == "APIException"
+    assert "removed" in body["response"]["message"]
 
 
 # ---------------------------------------------------------------------------

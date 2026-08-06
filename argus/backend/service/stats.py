@@ -159,10 +159,11 @@ def _get_image(row: dict):
         return cs.db_node.image_id
 
 
-def _fetch_multiple_release_queries(entity: Model, releases: list[str]):
+def _fetch_multiple_release_queries(entity, releases: list[str]):
     result_set = []
+    query = entity.find if hasattr(entity, "find") else entity.filter
     for release_id in releases:
-        result_set.extend(entity.filter(release_id=release_id).all())
+        result_set.extend(query(release_id=release_id).all())
     return result_set
 
 
@@ -269,17 +270,17 @@ class ViewStats:
                 defaultdict(list)
             )
             self.comments = reduce(
-                lambda acc, row: acc[row["test_run_id"]].append(row) or acc,
+                lambda acc, row: acc[row.test_run_id].append(row) or acc,
                 _fetch_multiple_release_queries(ArgusTestRunComment, all_release_ids),
                 defaultdict(list)
             )
         self.all_tests = tests
         groups = []
         for slice in chunk(list({t.release_id for t in tests})):
-            self.releases.update({str(release.id): release for release in ArgusRelease.filter(id__in=slice).all()})
+            self.releases.update({str(release.id): release for release in ArgusRelease.find(id__in=slice).all()})
 
         for slice in chunk(list({t.group_id for t in tests})):
-            groups.extend(ArgusGroup.filter(id__in=slice).all())
+            groups.extend(ArgusGroup.find(id__in=slice).all())
         for group in groups:
             if group.enabled:
                 stats = GroupStats(group=group, parent_release=self)
@@ -323,7 +324,7 @@ class ReleaseStats:
                 aggregated_investigation_status[investigation_status.value] = result
 
         return {
-            "release": dict(self.release.items()),
+            "release": self.release.model_dump(),
             "groups": converted_groups,
             "total": self.total_tests,
             **self.status_map,
@@ -358,12 +359,12 @@ class ReleaseStats:
                 defaultdict(list)
             )
             self.comments = reduce(
-                lambda acc, row: acc[row["test_run_id"]].append(row) or acc,
-                ArgusTestRunComment.filter(release_id=self.release.id).all(),
+                lambda acc, row: acc[row.test_run_id].append(row) or acc,
+                ArgusTestRunComment.find(release_id=self.release.id).all(),
                 defaultdict(list)
             )
-        self.all_tests = ArgusTest.filter(release_id=self.release.id).all() if not tests else tests
-        groups: list[ArgusGroup] = ArgusGroup.filter(release_id=self.release.id).all()
+        self.all_tests = ArgusTest.find(release_id=self.release.id).all() if not tests else tests
+        groups: list[ArgusGroup] = ArgusGroup.find(release_id=self.release.id).all()
         for group in groups:
             if group.enabled:
                 stats = GroupStats(group=group, parent_release=self)
@@ -398,7 +399,7 @@ class GroupStats:
             investigation_progress[test["investigation_status"]] = progress_for_status
 
         return {
-            "group": dict(self.group.items()),
+            "group": self.group.model_dump(),
             "total": self.total_tests,
             **self.status_map,
             "lastStatus": self.last_status,
@@ -460,7 +461,7 @@ class TestStats:
 
     def to_dict(self) -> dict:
         return {
-            "test": dict(self.test.items()),
+            "test": self.test.model_dump(),
             "status": self.status,
             "investigation_status": self.investigation_status,
             "last_runs": self.last_runs,
@@ -510,7 +511,7 @@ class TestStats:
                 "nemesis_stats": run.get("nemesis_stats", {}),
                 "assignee": run["assignee"],
                 "issues": [dict(issue.items()) for issue in self.parent_group.parent_release.issues[run["id"]]],
-                "comments": [dict(comment.items()) for comment in self.parent_group.parent_release.comments[run["id"]]],
+                "comments": [comment.model_dump() for comment in self.parent_group.parent_release.comments[run["id"]]],
             }
             for run in last_runs
         ]
@@ -520,7 +521,7 @@ class TestStats:
             target_run = worst_case[1]
             target_run["issues"] = [dict(issue.items())
                                     for issue in self.parent_group.parent_release.issues[target_run["id"]]]
-            target_run["comments"] = [dict(comment.items())
+            target_run["comments"] = [comment.model_dump()
                                       for comment in self.parent_group.parent_release.comments[target_run["id"]]]
         self.has_bug_report = len(target_run["issues"]) > 0
         self.parent_group.parent_release.has_bug_report = self.has_bug_report or self.parent_group.parent_release.has_bug_report
@@ -550,7 +551,7 @@ class ReleaseStatsCollector:
             except ReleaseStatsSnapshot.DoesNotExist:
                 pass
 
-        all_tests: list[ArgusTest] = list(ArgusTest.filter(release_id=self.release.id).all())
+        all_tests: list[ArgusTest] = list(ArgusTest.find(release_id=self.release.id).all())
         build_ids = reduce(lambda acc, test: acc[test.plugin_name or "unknown"].append(
             test.build_system_id) or acc, all_tests, defaultdict(list))
         self.release_rows = [futures for plugin in all_plugin_models()
@@ -630,7 +631,7 @@ class ViewStatsCollector:
             widget = next((widget for widget in settings if widget["position"] == widget_id), None)
         all_tests: list[ArgusTest] = []
         for slice in chunk(self.view.tests):
-            all_tests.extend(ArgusTest.filter(id__in=slice).all())
+            all_tests.extend(ArgusTest.find(id__in=slice).all())
 
         if widget and widget.get("filter"):
             all_tests = [test for test in all_tests if any(str(test[key]) in widget["filter"] for key in ["id", "group_id", "release_id"])]

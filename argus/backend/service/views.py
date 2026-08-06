@@ -63,10 +63,10 @@ class UserViewService:
             entity_type, entity_id = entity.split(":")
             match (entity_type):
                 case "release":
-                    entities["tests"].extend(t.id for t in ArgusTest.filter(release_id=entity_id).all())
+                    entities["tests"].extend(t.id for t in ArgusTest.find(release_id=UUID(entity_id)).all())
                     entities["release"].append(entity_id)
                 case "group":
-                    entities["tests"].extend(t.id for t in ArgusTest.filter(group_id=entity_id).all())
+                    entities["tests"].extend(t.id for t in ArgusTest.find(group_id=UUID(entity_id)).all())
                     entities["group"].append(entity_id)
                 case "test":
                     entities["tests"].append(entity_id)
@@ -91,10 +91,10 @@ class UserViewService:
             entity_type, entity_id = entity.split(":")
             match (entity_type):
                 case "release":
-                    view.tests.extend(t.id for t in ArgusTest.filter(release_id=entity_id).all())
+                    view.tests.extend(t.id for t in ArgusTest.find(release_id=UUID(entity_id)).all())
                     view.release_ids.append(entity_id)
                 case "group":
-                    view.tests.extend(t.id for t in ArgusTest.filter(group_id=entity_id).all())
+                    view.tests.extend(t.id for t in ArgusTest.find(group_id=UUID(entity_id)).all())
                     view.group_ids.append(entity_id)
                 case "test":
                     view.tests.append(entity_id)
@@ -143,14 +143,14 @@ class UserViewService:
     def resolve_tests_by_id(self, test_ids: list[str | UUID]) -> list[ArgusTest]:
         tests = []
         for batch in chunk(test_ids):
-            tests.extend(ArgusTest.filter(id__in=batch).all())
+            tests.extend(ArgusTest.find(id__in=batch).all())
 
         return tests
 
-    def batch_resolve_entity(self, entity: Model, param_name: str, entity_ids: list[UUID]) -> list[Model]:
+    def batch_resolve_entity(self, entity, param_name: str, entity_ids: list[UUID]) -> list:
         result = []
         for batch in chunk(entity_ids):
-            result.extend(entity.filter(**{f"{param_name}__in": batch}).allow_filtering().all())
+            result.extend(entity.find(**{f"{param_name}__in": batch}).allow_filtering().all())
         return result
 
     def refresh_stale_view(self, view: ArgusUserView):
@@ -176,7 +176,7 @@ class UserViewService:
         releases = []
         unique_release_ids = reduce(lambda releases, test: releases.add(test.release_id) or releases, tests, set())
         for batch in chunk(unique_release_ids):
-            releases.extend(ArgusRelease.filter(id__in=batch).all())
+            releases.extend(ArgusRelease.find(id__in=batch).all())
 
         return releases
 
@@ -184,7 +184,7 @@ class UserViewService:
         releases = []
         unique_release_ids = reduce(lambda groups, test: groups.add(test.group_id) or groups, tests, set())
         for batch in chunk(unique_release_ids):
-            releases.extend(ArgusGroup.filter(id__in=batch).all())
+            releases.extend(ArgusGroup.find(id__in=batch).all())
 
         return releases
 
@@ -193,7 +193,7 @@ class UserViewService:
         view: ArgusUserView = ArgusUserView.get(id=view_id)
         tests: list[ArgusTest] = []
         for batch in chunk(view.tests):
-            tests.extend(ArgusTest.filter(id__in=batch).all())
+            tests.extend(ArgusTest.find(id__in=batch).all())
         tests = [test for test in tests if test.plugin_name == "generic"]
         results = []
         for batch in chunk(tests):
@@ -234,7 +234,7 @@ class UserViewService:
         items = []
         for test in view_tests:
             if not (entities_by_id.get(test.group_id) or entities_by_id.get(test.release_id)):
-                item = dict(test)
+                item = test.model_dump()
                 item["type"] = "test"
                 items.append(item)
 

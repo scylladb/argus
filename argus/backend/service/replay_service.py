@@ -64,6 +64,8 @@ from typing import Iterable
 import zstandard as zstd
 from flask import current_app
 
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.error_handlers import APIException
 
 LOGGER = logging.getLogger(__name__)
@@ -465,7 +467,7 @@ class ReplayService:
         try:
             ArgusTest.get(build_system_id=build_id)
             return None
-        except ArgusTest.DoesNotExist:
+        except DocumentNotFound:
             pass
 
         release_name, group_name, test_name = parse_build_id(build_id)
@@ -476,13 +478,13 @@ class ReplayService:
         missing: list[str] = []
         try:
             release = ArgusRelease.get(name=release_name)
-        except ArgusRelease.DoesNotExist:
+        except DocumentNotFound:
             release = None
             missing.append("release")
 
         group_found = False
         if release is not None:
-            for g in ArgusGroup.filter(release_id=release.id).all():
+            for g in ArgusGroup.find(release_id=release.id).all():
                 if g.build_system_id == group_build_id:
                     group_found = True
                     break

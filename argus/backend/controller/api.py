@@ -11,7 +11,7 @@ from flask import (
     url_for,
 )
 from flask.json import jsonify
-from argus.backend.error_handlers import handle_api_exception
+from argus.backend.error_handlers import APIException, handle_api_exception
 from argus.backend.controller.notification_api import bp as notifications_bp
 from argus.backend.controller.client_api import bp as client_bp
 from argus.backend.controller.testrun_api import bp as testrun_bp
@@ -75,7 +75,7 @@ def releases():
     all_releases = service.get_releases()
     response = jsonify({
         "status": "ok",
-        "response": [dict(d.items()) for d in all_releases if d.enabled or force_all]
+        "response": [d.model_dump() for d in all_releases if d.enabled or force_all]
     })
 
     response.cache_control.max_age = 60
@@ -321,7 +321,7 @@ def argus_groups():
     force_all = request.args.get("all", False)
     service = ArgusService()
     groups = service.get_groups(UUID(release_id))
-    result_groups = [dict(g.items()) for g in groups if g.enabled or force_all]
+    result_groups = [g.model_dump() for g in groups if g.enabled or force_all]
 
     response = jsonify({
         "status": "ok",
@@ -339,8 +339,8 @@ def argus_tests():
         raise Exception("No groupId provided")
     force_all = request.args.get("all", False)
     service = ArgusService()
-    tests = service.get_tests(group_id=group_id)
-    result_tests = [dict(t.items()) for t in tests if t.enabled or force_all]
+    tests = service.get_tests(group_id=UUID(group_id))
+    result_tests = [t.model_dump() for t in tests if t.enabled or force_all]
 
     response = jsonify({
         "status": "ok",
@@ -532,34 +532,13 @@ def release_stats_v2():
 @bp.route("/test_runs/poll", methods=["GET"])
 @api_login_required
 def test_runs_poll():
-    limit = request.args.get("limit")
-    if not limit:
-        limit = 10
-    else:
-        limit = int(limit)
-    test_id = UUID(request.args.get('testId'))
-    additional_runs = [UUID(run) for run in request.args.getlist('additionalRuns[]')]
-    service = ArgusService()
-    runs = service.poll_test_runs(test_id=test_id, additional_runs=additional_runs, limit=limit)
-
-    return jsonify({
-        "status": "ok",
-        "response": runs
-    })
+    raise APIException("This endpoint has been removed")
 
 
 @bp.route("/test_run/poll", methods=["GET"])
 @api_login_required
 def test_run_poll_single():
-    runs = request.args.get("runs", "")
-    runs = [UUID(r) for r in runs.split(",") if r]
-    service = ArgusService()
-    test_runs = service.poll_test_runs_single(runs=runs)
-
-    return jsonify({
-        "status": "ok",
-        "response": test_runs
-    })
+    raise APIException("This endpoint has been removed")
 
 
 @bp.route("/release/create", methods=["POST"])

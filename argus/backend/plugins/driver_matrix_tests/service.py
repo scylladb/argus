@@ -1,6 +1,8 @@
 import base64
 import logging
 from uuid import UUID
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import ArgusRelease, ArgusTest
 from argus.backend.plugins.driver_matrix_tests.model import DriverTestRun
@@ -23,7 +25,7 @@ class DriverMatrixService:
         try:
             test: ArgusTest = ArgusTest.get(id=latest["test_id"])
             release: ArgusRelease = ArgusRelease.get(id=latest["release_id"])
-        except (ArgusTest.DoesNotExist, ArgusRelease.DoesNotExist):
+        except DocumentNotFound:
             raise Exception(
                 f"Unable to find release and test information for build_id {build_id} and run_id {latest['id']}", build_id, latest["id"])
 

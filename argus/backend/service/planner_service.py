@@ -155,6 +155,7 @@ class PlanningService:
         return "v1"
 
     def _generate_plan_key(self, release_id: UUID | str) -> str:
+        release_id = UUID(release_id) if isinstance(release_id, str) else release_id
         release: ArgusRelease = ArgusRelease.get(id=release_id)
         candidate = f"{release.name}#1"
         release_plans = list(ArgusReleasePlan.filter(release_id=release.id).allow_filtering().all())
@@ -394,12 +395,13 @@ class PlanningService:
         return self._resolve_plan(plan_id)
 
     def get_gridview_for_release(self, release_id: str | UUID) -> dict[str, dict]:
+        release_id = UUID(release_id) if isinstance(release_id, str) else release_id
         release = ArgusRelease.get(id=release_id)
         release = TestLookup.index_mapper(release, "release")
         groups: list[ArgusGroup] = list(
-            ArgusGroup.filter(release_id=release_id).all())
+            ArgusGroup.find(release_id=release_id).all())
         tests: list[ArgusTest] = list(
-            ArgusTest.filter(release_id=release_id).all())
+            ArgusTest.find(release_id=release_id).all())
 
         groups = {str(g.id): TestLookup.index_mapper(g, "group")
                   for g in groups if g.enabled}
@@ -436,17 +438,17 @@ class PlanningService:
 
         original_plan: ArgusReleasePlan = self._resolve_plan(payload.plan.id)
         target_release: ArgusRelease = ArgusRelease.get(
-            id=payload.targetReleaseId)
+            id=UUID(payload.targetReleaseId) if isinstance(payload.targetReleaseId, str) else payload.targetReleaseId)
         original_release: ArgusRelease = ArgusRelease.get(
             id=original_plan.release_id)
 
-        original_tests: list[ArgusTest] = ArgusTest.filter(
+        original_tests: list[ArgusTest] = ArgusTest.find(
             id__in=original_plan.tests).all()
-        original_groups: list[ArgusGroup] = ArgusGroup.filter(
+        original_groups: list[ArgusGroup] = ArgusGroup.find(
             id__in=original_plan.groups).all()
-        target_tests: list[ArgusTest] = ArgusTest.filter(
+        target_tests: list[ArgusTest] = ArgusTest.find(
             release_id=target_release.id).all()
-        target_groups: list[ArgusGroup] = ArgusGroup.filter(
+        target_groups: list[ArgusGroup] = ArgusGroup.find(
             release_id=target_release.id).all()
 
         tests_by_build_id = {t.build_system_id: t for t in target_tests}
@@ -509,18 +511,19 @@ class PlanningService:
         return new_plan
 
     def check_plan_copy_eligibility(self, plan_id: str | UUID, target_release_id: str | UUID) -> dict:
+        target_release_id = UUID(target_release_id) if isinstance(target_release_id, str) else target_release_id
         target_release: ArgusRelease = ArgusRelease.get(id=target_release_id)
         plan: ArgusReleasePlan = self._resolve_plan(plan_id)
         original_release: ArgusRelease = ArgusRelease.get(id=plan.release_id)
 
-        original_tests: list[ArgusTest] = ArgusTest.filter(
+        original_tests: list[ArgusTest] = ArgusTest.find(
             id__in=plan.tests).all()
-        original_groups: list[ArgusGroup] = ArgusGroup.filter(
+        original_groups: list[ArgusGroup] = ArgusGroup.find(
             id__in=plan.groups).all()
 
-        target_tests: list[ArgusTest] = ArgusTest.filter(
+        target_tests: list[ArgusTest] = ArgusTest.find(
             release_id=target_release.id).all()
-        target_groups: list[ArgusGroup] = ArgusGroup.filter(
+        target_groups: list[ArgusGroup] = ArgusGroup.find(
             release_id=target_release.id).all()
 
         tests_by_build_id = {t.build_system_id: t for t in target_tests}
@@ -609,6 +612,7 @@ class PlanningService:
         return None
 
     def get_assignments_for_groups(self, release_id: str | UUID, version: str = None, plan_id: UUID = None) -> dict[str, UUID]:
+        release_id = UUID(release_id) if isinstance(release_id, str) else release_id
         release: ArgusRelease = ArgusRelease.get(id=release_id)
         if not plan_id:
             plans: list[ArgusReleasePlan] = list(
@@ -627,6 +631,7 @@ class PlanningService:
         return all_assignments
 
     def get_assignments_for_tests(self, group_id: str | UUID, version: str = None, plan_id: UUID | str = None) -> dict[str, UUID]:
+        group_id = UUID(group_id) if isinstance(group_id, str) else group_id
         group: ArgusGroup = ArgusGroup.get(id=group_id)
         release: ArgusRelease = ArgusRelease.get(id=group.release_id)
         if not plan_id:
@@ -664,12 +669,12 @@ class PlanningService:
         release: ArgusRelease = ArgusRelease.get(id=plan.release_id)
         tests: list[ArgusTest] = []
         for batch in chunk(plan.tests):
-            tests.extend(ArgusTest.filter(id__in=batch).all())
-        test_groups: list[ArgusGroup] = ArgusGroup.filter(
+            tests.extend(ArgusTest.find(id__in=batch).all())
+        test_groups: list[ArgusGroup] = ArgusGroup.find(
             id__in=list({t.group_id for t in tests})).all()
         test_groups = {g.id: g for g in test_groups}
         groups: list[ArgusGroup] = list(
-            ArgusGroup.filter(id__in=plan.groups).all())
+            ArgusGroup.find(id__in=plan.groups).all())
 
         mapped = [TestLookup.index_mapper(entity, "group" if isinstance(
             entity, ArgusGroup) else "test") for entity in [*tests, *groups]]
@@ -719,10 +724,10 @@ class PlanningService:
 
         tests = []
         for batch in chunk(test_ids):
-            tests.extend(ArgusTest.filter(id__in=batch).all())
+            tests.extend(ArgusTest.find(id__in=batch).all())
 
         for batch in (chunk(group_ids)):
-            tests.extend(ArgusTest.filter(
+            tests.extend(ArgusTest.find(
                 group_id__in=batch).allow_filtering().all())
 
         tests = list({test for test in tests})

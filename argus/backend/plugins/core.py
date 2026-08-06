@@ -9,6 +9,8 @@ from cassandra.cqlengine.models import Model
 from cassandra.cqlengine.usertype import UserType
 from cassandra.concurrent import execute_concurrent_with_args
 from flask import Blueprint
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.web import (
@@ -69,7 +71,7 @@ class PluginModelBase(Model):
             if not test.plugin_name or test.plugin_name != self._plugin_name:
                 test.plugin_name = self._plugin_name
                 test.save()
-        except ArgusTest.DoesNotExist:
+        except DocumentNotFound:
             LOGGER.warning("Test entity missing for key \"%s\", run won't be visible until this is corrected", key)
 
     def get_assignment(self, version: str | None = None) -> UUID | None:
