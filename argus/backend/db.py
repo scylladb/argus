@@ -14,7 +14,9 @@ from coodie.drivers import register_driver
 from coodie.drivers.cassandra import CassandraDriver
 from argus.backend.util.config import Config
 
-from argus.backend.models.web import USED_MODELS, USED_TYPES, USED_COODIE_MODELS
+from cassandra.cluster import UserTypeDoesNotExist
+
+from argus.backend.models.web import USED_MODELS, USED_TYPES, USED_COODIE_MODELS, USED_COODIE_TYPES
 
 LOGGER = logging.getLogger(__name__)
 
@@ -75,6 +77,21 @@ class ScyllaCluster:
             session=connection.get_session(connection='default'),
             default_keyspace=self.config["SCYLLA_KEYSPACE_NAME"])
         register_driver("default", self.coodie_driver, default=True)
+        self.register_coodie_udts()
+
+    def register_coodie_udts(self):
+        """Map coodie UserType classes to their CQL types so the driver
+        materializes UDT values as model instances on read.
+
+        Types missing from schema metadata (fresh database, before sync)
+        are skipped; sync_core_tables re-registers after creating them.
+        """
+        for udt in USED_COODIE_TYPES:
+            ks = getattr(udt.Settings, "keyspace", "") or self.config["SCYLLA_KEYSPACE_NAME"]
+            try:
+                self.cluster.register_user_type(ks, udt.type_name(), udt)
+            except UserTypeDoesNotExist:
+                LOGGER.info("UDT %s not in schema yet, deferring registration", udt.type_name())
 
     @cached_property
     def session(self):
@@ -125,6 +142,11 @@ class ScyllaCluster:
             LOGGER.info("Syncing model: %s..", model.__name__)
             ks = model.__keyspace__ or self.config["SCYLLA_KEYSPACE_NAME"]
             sync_table(model, keyspaces=[ks])
+
+        for udt_type in USED_COODIE_TYPES:
+            LOGGER.info("Syncing coodie type: %s..", udt_type.__name__)
+            udt_type.sync_type()
+        self.register_coodie_udts()
 
         for document in USED_COODIE_MODELS:
             LOGGER.info("Syncing coodie document: %s..", document.__name__)

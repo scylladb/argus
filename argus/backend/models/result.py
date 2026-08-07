@@ -1,47 +1,49 @@
 from datetime import datetime, timezone
+from typing import Annotated, Optional
+from uuid import UUID
 
-from cassandra.cqlengine import columns
-from cassandra.cqlengine.models import Model
-from cassandra.cqlengine.usertype import UserType
+from pydantic import Field
+from coodie import Ascii, ClusteringKey, Double, Frozen, Indexed, PrimaryKey
+from coodie.sync import Document
+from coodie.usertype import UserType
 
 
 class ValidationRules(UserType):
-    valid_from = columns.DateTime()
-    best_pct = columns.Double()  # max value limit relative to best result in percent unit
-    best_abs = columns.Double()  # max value limit relative to best result in absolute unit
-    fixed_limit = columns.Double()  # fixed limit
+    valid_from: Optional[datetime] = None
+    best_pct: Annotated[Optional[float], Double()] = None  # max value limit relative to best result in percent unit
+    best_abs: Annotated[Optional[float], Double()] = None  # max value limit relative to best result in absolute unit
+    fixed_limit: Annotated[Optional[float], Double()] = None  # fixed limit
 
 
 class ColumnMetadata(UserType):
-    name = columns.Ascii()
-    unit = columns.Text()
-    type = columns.Ascii()
-    higher_is_better = columns.Boolean()  # used for tracking best results, if None - no tracking
-    visible = columns.Boolean(default=True)  # controls visibility in UI, True by default
+    name: Annotated[Optional[str], Ascii()] = None
+    unit: Optional[str] = None
+    type: Annotated[Optional[str], Ascii()] = None
+    higher_is_better: Optional[bool] = None  # used for tracking best results, if None - no tracking
+    visible: Optional[bool] = True  # controls visibility in UI, True by default
 
 
-class ArgusGenericResultMetadata(Model):
-    __table_name__ = "generic_result_metadata_v1"
-    test_id = columns.UUID(partition_key=True)
-    name = columns.Text(required=True, primary_key=True)
-    description = columns.Text()
-    columns_meta = columns.List(value_type=columns.UserDefinedType(ColumnMetadata))
-    validation_rules = columns.Map(key_type=columns.Ascii(
-    ), value_type=columns.List(columns.UserDefinedType(ValidationRules)))
-    rows_meta = columns.List(value_type=columns.Ascii())
-    sut_package_name = columns.Ascii()
+class ArgusGenericResultMetadata(Document):
+    test_id: Annotated[Optional[UUID], PrimaryKey()] = None
+    name: Annotated[Optional[str], ClusteringKey()] = None
+    description: Optional[str] = None
+    columns_meta: list[ColumnMetadata] = Field(default_factory=list)
+    validation_rules: dict[Annotated[str, Ascii()], Annotated[list[ValidationRules], Frozen()]] = Field(
+        default_factory=dict)
+    rows_meta: list[Annotated[str, Ascii()]] = Field(default_factory=list)
+    sut_package_name: Annotated[Optional[str], Ascii()] = None
+
+    class Settings:
+        name = "generic_result_metadata_v1"
 
     def __init__(self, **kwargs):
-        kwargs["columns_meta"] = [ColumnMetadata(**col) for col in kwargs.pop('columns_meta', [])]
-        validation_rules = kwargs.pop('validation_rules', {})
-
-        if validation_rules:
-            for column, rule in validation_rules.items():
-                if not isinstance(rule, list):
-                    rule['valid_from'] = datetime.now(timezone.utc)
-                    validation_rules[column] = [rule]
-            kwargs["validation_rules"] = {k: [ValidationRules(**rules)
-                                              for rules in v] for k, v in validation_rules.items()}
+        # raw driver rows carry NULL collections as None; let defaults apply
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        validation_rules = kwargs.get("validation_rules") or {}
+        for column, rule in list(validation_rules.items()):
+            if not isinstance(rule, list):
+                rule["valid_from"] = datetime.now(timezone.utc)
+                validation_rules[column] = [rule]
         super().__init__(**kwargs)
 
     def update_validation_rules(self, new_rules: dict) -> "ArgusGenericResultMetadata":
@@ -68,7 +70,7 @@ class ArgusGenericResultMetadata(Model):
             rules_list = self.validation_rules.get(key, [])
             most_recent_rule = rules_list[-1] if rules_list else None
 
-            fields_to_compare = [field for field in ValidationRules._fields if field != 'valid_from']
+            fields_to_compare = [field for field in ValidationRules.model_fields if field != 'valid_from']
             rules_match = True
 
             if most_recent_rule:
@@ -98,7 +100,7 @@ class ArgusGenericResultMetadata(Model):
             rules_list = self.validation_rules.get(key, [])
             most_recent_rule = rules_list[-1] if rules_list else None
 
-            fields_to_compare = [field for field in ValidationRules._fields if field != 'valid_from']
+            fields_to_compare = [field for field in ValidationRules.model_fields if field != 'valid_from']
             all_fields_none = True
 
             if most_recent_rule:
@@ -154,34 +156,40 @@ class ArgusGenericResultMetadata(Model):
         return self
 
 
-class ArgusGenericResultData(Model):
-    __table_name__ = "generic_result_data_v1"
-    test_id = columns.UUID(partition_key=True)
-    name = columns.Text(partition_key=True)
-    run_id = columns.UUID(primary_key=True)
-    column = columns.Ascii(primary_key=True, index=True)
-    row = columns.Ascii(primary_key=True, index=True)
-    sut_timestamp = columns.DateTime()  # for sorting
-    value = columns.Double()
-    value_text = columns.Text()
-    status = columns.Ascii()
+class ArgusGenericResultData(Document):
+    test_id: Annotated[Optional[UUID], PrimaryKey(partition_key_index=0)] = None
+    name: Annotated[Optional[str], PrimaryKey(partition_key_index=1)] = None
+    run_id: Annotated[Optional[UUID], ClusteringKey(clustering_key_index=0)] = None
+    column: Annotated[Optional[str], Ascii(), ClusteringKey(clustering_key_index=1), Indexed()] = None
+    row: Annotated[Optional[str], Ascii(), ClusteringKey(clustering_key_index=2), Indexed()] = None
+    sut_timestamp: Optional[datetime] = None  # for sorting
+    value: Annotated[Optional[float], Double()] = None
+    value_text: Optional[str] = None
+    status: Annotated[Optional[str], Ascii()] = None
+
+    class Settings:
+        name = "generic_result_data_v1"
 
 
-class ArgusBestResultData(Model):
-    __table_name__ = "generic_result_best_v2"
-    test_id = columns.UUID(partition_key=True)
-    name = columns.Text(partition_key=True)
-    result_date = columns.DateTime(primary_key=True, clustering_order="DESC")
-    key = columns.Ascii(primary_key=True)  # represents pair column:row
-    value = columns.Double()
-    run_id = columns.UUID()
+class ArgusBestResultData(Document):
+    test_id: Annotated[Optional[UUID], PrimaryKey(partition_key_index=0)] = None
+    name: Annotated[Optional[str], PrimaryKey(partition_key_index=1)] = None
+    result_date: Annotated[Optional[datetime], ClusteringKey(order="DESC", clustering_key_index=0)] = None
+    key: Annotated[Optional[str], Ascii(), ClusteringKey(clustering_key_index=1)] = None  # represents pair column:row
+    value: Annotated[Optional[float], Double()] = None
+    run_id: Optional[UUID] = None
+
+    class Settings:
+        name = "generic_result_best_v2"
 
 
-class ArgusGraphView(Model):
-    __table_name__ = "graph_view_v1"
-    test_id = columns.UUID(partition_key=True)
-    id = columns.UUID(primary_key=True)
-    name = columns.Text()
-    description = columns.Text()
+class ArgusGraphView(Document):
+    test_id: Annotated[Optional[UUID], PrimaryKey()] = None
+    id: Annotated[Optional[UUID], ClusteringKey()] = None
+    name: Optional[str] = None
+    description: Optional[str] = None
     # key: graph name, value: graph properties (e.g. size)
-    graphs = columns.Map(key_type=columns.Text(), value_type=columns.Ascii())
+    graphs: dict[str, Annotated[str, Ascii()]] = Field(default_factory=dict)
+
+    class Settings:
+        name = "graph_view_v1"

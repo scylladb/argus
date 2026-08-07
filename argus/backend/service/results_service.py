@@ -9,6 +9,8 @@ from typing import List, Dict, Any
 from uuid import UUID, uuid4
 
 from dataclasses import dataclass
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ArgusBestResultData, ColumnMetadata, ArgusGraphView
 from argus.backend.plugins.sct.udt import PackageVersion
@@ -552,7 +554,7 @@ class ResultsService:
 
     def is_results_exist(self, test_id: UUID):
         """Verify if results for given test id exist at all."""
-        return bool(ArgusGenericResultMetadata.objects(test_id=test_id).only(["name"]).limit(1))
+        return bool(ArgusGenericResultMetadata.find(test_id=test_id).only("name").limit(1).all())
 
     def get_best_results(self, test_id: UUID, name: str) -> dict[str, List[BestResult]]:
         runs_details = self._get_runs_details(test_id)
@@ -570,7 +572,7 @@ class ResultsService:
     def update_best_results(self, test_id: UUID, table_name: str, cells: list[Cell],
                             table_metadata: ArgusGenericResultMetadata, run_id: str) -> dict[str, List[BestResult]]:
         """update best results for given test_id and table_name based on cells values - if any value is better than current best"""
-        higher_is_better_map = {meta["name"]: meta.higher_is_better for meta in table_metadata.columns_meta}
+        higher_is_better_map = {meta.name: meta.higher_is_better for meta in table_metadata.columns_meta}
         best_results = self.get_best_results(test_id=test_id, name=table_name)
         for cell in cells:
             if cell.value is None:
@@ -667,20 +669,20 @@ class ResultsService:
                                 graphs: dict[str, str]) -> ArgusGraphView:
         try:
             graph_view = ArgusGraphView.get(test_id=test_id, id=view_id)
-        except ArgusGraphView.DoesNotExist:
+        except DocumentNotFound:
             raise ValueError(f"GraphView with id {view_id} does not exist for test {test_id}")
 
         existing_keys = set(graph_view.graphs.keys())
         new_keys = set(graphs.keys())
         keys_to_remove = existing_keys - new_keys
 
-        for key in keys_to_remove:
-            ArgusGraphView.objects(test_id=test_id, id=view_id).update(graphs={key: None})
+        if keys_to_remove:
+            ArgusGraphView.find(test_id=test_id, id=view_id).update(graphs__remove=set(keys_to_remove))
 
         if graphs:
-            ArgusGraphView.objects(test_id=test_id, id=view_id).update(graphs=graphs)
+            ArgusGraphView.find(test_id=test_id, id=view_id).update(graphs__update=graphs)
 
-        ArgusGraphView.objects(test_id=test_id, id=view_id).update(
+        ArgusGraphView.find(test_id=test_id, id=view_id).update(
             name=name,
             description=description
         )
@@ -688,4 +690,4 @@ class ResultsService:
         return ArgusGraphView.get(test_id=test_id, id=view_id)
 
     def get_argus_graph_views(self, test_id: UUID) -> list[ArgusGraphView]:
-        return list(ArgusGraphView.objects(test_id=test_id))
+        return list(ArgusGraphView.find(test_id=test_id))

@@ -15,7 +15,14 @@ from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.jira import JiraIssue
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.pytest import PytestResultTable, PytestResultTableOld, PytestUserField
-from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ArgusBestResultData, ArgusGraphView
+from argus.backend.models.result import (
+    ArgusGenericResultMetadata,
+    ArgusGenericResultData,
+    ArgusBestResultData,
+    ArgusGraphView,
+    ColumnMetadata,
+    ValidationRules,
+)
 from argus.backend.models.run_config import RunConfigParam, RunConfiguration
 from coodie.sync import Document
 
@@ -481,15 +488,11 @@ USED_MODELS: list[Model] = [
     ArgusScheduleAssignee,
     ArgusScheduleGroup,
     ArgusScheduleTest,
-    ArgusGenericResultMetadata,
-    ArgusGenericResultData,
-    ArgusBestResultData,
     ArgusReleasePlan,
     WidgetHighlights,
     ReleaseDistinctVersions,
     ReleaseDistinctImages,
     WidgetComment,
-    ArgusGraphView,
     ErrorEventEmbeddings,  # to be deprecated
     CriticalEventEmbeddings,  # to be deprecated
     SCTErrorEventEmbedding,
@@ -525,4 +528,15 @@ USED_COODIE_MODELS: list[type[Document]] = [
     ReleasePlannerComment,
     Team,
     ArgusNotification,
+    ArgusGenericResultMetadata,
+    ArgusGenericResultData,
+    ArgusBestResultData,
+    ArgusGraphView,
+]
+
+# Coodie user-defined types; synced via UserType.sync_type() and registered
+# with the driver cluster so result rows materialize them as model instances.
+USED_COODIE_TYPES = [
+    ColumnMetadata,
+    ValidationRules,
 ]
