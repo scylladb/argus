@@ -130,12 +130,15 @@ class User(Document):
         }
 
 
-class Team(Model):
-    id = columns.UUID(primary_key=True, default=uuid4)
-    name = columns.Text(required=True)
-    leader = columns.UUID(index=True, required=True)
-    members = columns.List(value_type=columns.UUID)
-    motd = columns.Text()
+class Team(Document):
+    id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
+    name: Optional[str] = None
+    leader: Annotated[Optional[UUID], Indexed()] = None
+    members: list[UUID] = Field(default_factory=list)
+    motd: Optional[str] = None
+
+    class Settings:
+        name = "team"
 
 
 class UserOauthToken(Document):
@@ -470,7 +473,6 @@ def invalidate_release_snapshots(release_id: UUID) -> None:
 
 
 USED_MODELS: list[Model] = [
-    Team,
     ArgusUserView,
     ArgusNotification,
     ArgusSchedule,
@@ -519,4 +521,5 @@ USED_COODIE_MODELS: list[type[Document]] = [
     ArgusTestRunComment,
     ArgusEvent,
     ReleasePlannerComment,
+    Team,
 ]

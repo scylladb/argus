@@ -2,6 +2,8 @@ import logging
 from uuid import UUID
 
 from flask.globals import g
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import Team, User
 
@@ -30,12 +32,12 @@ class TeamManagerService:
         return team
 
     def get_teams_for_user(self, user_id: UUID) -> list[Team]:
-        return list(Team.filter(leader=user_id).all())
+        return list(Team.find(leader=user_id).all())
 
     def get_team_by_id(self, team_id: UUID) -> Team:
         try:
             return Team.get(id=team_id)
-        except Team.DoesNotExist as exc:
+        except DocumentNotFound as exc:
             raise TeamManagerException(f"Team {team_id} does not exist", team_id) from exc
 
     def edit_team(self, team_id: UUID, name: str, members: list[UUID]):
@@ -50,7 +52,7 @@ class TeamManagerService:
             team.save()
 
             return team
-        except Team.DoesNotExist as exc:
+        except DocumentNotFound as exc:
             raise TeamManagerException(f"Team {team_id} doesn't exist!", team_id) from exc
 
     def edit_team_motd(self, team_id: UUID, message: str):
@@ -62,7 +64,7 @@ class TeamManagerService:
             team.motd = message
 
             team.save()
-        except Team.DoesNotExist as exc:
+        except DocumentNotFound as exc:
             raise TeamManagerException(f"Team {team_id} doesn't exist!", team_id) from exc
 
     def delete_team(self, team_id: UUID):
@@ -72,11 +74,11 @@ class TeamManagerService:
             if team.leader != user.id:
                 raise TeamManagerException(f"Cannot delete team \"{team.name}\" as it doesn't belong to the user.")
             team.delete()
-        except Team.DoesNotExist as exc:
+        except DocumentNotFound as exc:
             raise TeamManagerException(f"Team {team_id} doesn't exist!", team_id) from exc
 
     def get_users_teams(self, user_id: UUID) -> list[Team]:
-        teams_containing_user = list(Team.all())
+        teams_containing_user = list(Team.find().all())
         users_teams = self.get_teams_for_user(user_id)
         created_teams_ids = [team.id for team in users_teams]
         return [*users_teams, *[team for team in teams_containing_user if team.id not in created_teams_ids]]
