@@ -3,6 +3,8 @@ import uuid
 import pytest
 from flask import g
 
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.models.web import Team, User, UserRoles
 
 
@@ -49,8 +51,8 @@ def create_team(flask_client):
 
     for team_id in created_ids:
         try:
-            Team.get(id=team_id).delete()
-        except Team.DoesNotExist:
+            Team.get(id=uuid.UUID(team_id)).delete()
+        except DocumentNotFound:
             pass
 
 
