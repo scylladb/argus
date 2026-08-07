@@ -26,7 +26,7 @@ def test_graphed_stats_unknown_view_errors(flask_client):
         f"/api/v1/views/widgets/graphed_stats?view_id={uuid.uuid4()}"
     ).json
     assert res["status"] == "error"
-    assert res["response"]["exception"] == "DoesNotExist"
+    assert res["response"]["exception"] == "DocumentNotFound"
 
 
 def test_runs_details_empty_list(flask_client):

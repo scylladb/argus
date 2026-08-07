@@ -182,7 +182,7 @@ def test_archive_highlight_should_mark_highlight_as_archived(flask_client):
     assert response.status_code == 200
     assert response.json["status"] == "ok"
 
-    archived_entry = WidgetHighlights.objects(view_id=UUID(view_id), index=0, created_at=created_at).first()
+    archived_entry = WidgetHighlights.find(view_id=UUID(view_id), index=0, created_at=created_at).first()
     assert archived_entry.archived_at.replace(tzinfo=UTC) > created_at
 
 
@@ -217,7 +217,7 @@ def test_unarchive_highlight_should_unmark_highlight_from_archived(flask_client)
     assert response.status_code == 200
     assert response.json["status"] == "ok"
 
-    unarchived_entry = WidgetHighlights.objects(view_id=UUID(view_id), index=0, created_at=created_at).first()
+    unarchived_entry = WidgetHighlights.find(view_id=UUID(view_id), index=0, created_at=created_at).first()
     assert unarchived_entry.archived_at.replace(tzinfo=UTC) == datetime.fromtimestamp(0, tz=UTC)
 
 
@@ -255,7 +255,7 @@ def test_update_highlight_should_update_content_for_creator(notifications, flask
     assert response.json["status"] == "ok"
     assert response.json["response"]["content"] == updated_content
 
-    updated_entry = WidgetHighlights.objects(view_id=UUID(view_id), index=0, created_at=created_at).first()
+    updated_entry = WidgetHighlights.find(view_id=UUID(view_id), index=0, created_at=created_at).first()
     assert updated_entry.content == updated_content
 
 
@@ -292,7 +292,7 @@ def test_update_highlight_should_forbid_non_creator(flask_client):
     assert response.json["status"] == "error"
     assert response.json["response"]["exception"] == "Forbidden"
 
-    unchanged_entry = WidgetHighlights.objects(view_id=UUID(view_id), index=0, created_at=created_at).first()
+    unchanged_entry = WidgetHighlights.find(view_id=UUID(view_id), index=0, created_at=created_at).first()
     assert unchanged_entry.content == original_content
 
 
@@ -401,7 +401,7 @@ def test_set_assignee_should_set_assignee_for_action_item(notification, flask_cl
     assert response.json["response"]["assignee_id"] == new_assignee_id
     assert notification.call_count == 1
 
-    updated_entry = WidgetHighlights.objects(view_id=UUID(view_id), index=0, created_at=created_at).first()
+    updated_entry = WidgetHighlights.find(view_id=UUID(view_id), index=0, created_at=created_at).first()
     assert str(updated_entry.assignee_id) == new_assignee_id
 
 
@@ -465,7 +465,7 @@ def test_create_comment_should_increment_comments_count(notification, flask_clie
     assert response.json["status"] == "ok"
     assert response.json["response"]["content"] == "Test comment"
 
-    updated_highlight = WidgetHighlights.objects(view_id=UUID(
+    updated_highlight = WidgetHighlights.find(view_id=UUID(
         view_id), index=0, created_at=highlight_created_at).first()
     assert updated_highlight.comments_count == 1
 
@@ -507,7 +507,7 @@ def test_delete_comment_should_decrement_comments_count(flask_client):
     assert response.status_code == 200
     assert response.json["status"] == "ok"
 
-    updated_highlight = WidgetHighlights.objects(view_id=UUID(
+    updated_highlight = WidgetHighlights.find(view_id=UUID(
         view_id), index=0, created_at=highlight_created_at).first()
     assert updated_highlight.comments_count == 0
 

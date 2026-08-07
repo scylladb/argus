@@ -5,6 +5,8 @@ import uuid
 import pytest
 from flask import g
 
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.web import ArgusUserView, User, UserRoles
 
@@ -30,7 +32,7 @@ def cleanup_plans():
         if plan.view_id:
             try:
                 ArgusUserView.get(id=plan.view_id).delete()
-            except ArgusUserView.DoesNotExist:
+            except DocumentNotFound:
                 pass
         plan.delete()
 

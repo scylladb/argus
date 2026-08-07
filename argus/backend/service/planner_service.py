@@ -11,6 +11,8 @@ from uuid import UUID
 from flask import g
 from slugify import slugify
 
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, ArgusUserView, User, invalidate_release_snapshots
 from argus.backend.service.jenkins_service import JenkinsService
@@ -303,7 +305,7 @@ class PlanningService:
                             id=plan.view_id)
                         old_view.plan_id = None
                         old_view.save()
-                    except ArgusUserView.DoesNotExist:
+                    except DocumentNotFound:
                         pass
                 plan.view_id = plan_request.view_id
             self.update_view_for_plan(plan, existing=True)

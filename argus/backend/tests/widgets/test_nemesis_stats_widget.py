@@ -26,7 +26,7 @@ def test_nemesis_data_unknown_view_errors(flask_client):
         f"/api/v1/views/widgets/nemesis_data?view_id={uuid.uuid4()}"
     ).json
     assert res["status"] == "error"
-    assert res["response"]["exception"] == "DoesNotExist"
+    assert res["response"]["exception"] == "DocumentNotFound"
 
 
 def test_nemesis_data_missing_view_id_errors(flask_client):

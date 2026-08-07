@@ -165,7 +165,7 @@ def test_delete_view_success(flask_client, view_name):
 def test_delete_view_unknown_id_errors(flask_client):
     res = flask_client.post("/api/v1/views/delete", json={"viewId": str(uuid.uuid4())}).json
     assert res["status"] == "error"
-    assert res["response"]["exception"] == "DoesNotExist"
+    assert res["response"]["exception"] == "DocumentNotFound"
 
 
 def test_search_no_query(flask_client):
