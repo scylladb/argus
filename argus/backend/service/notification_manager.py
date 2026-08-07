@@ -36,22 +36,26 @@ class NotificationManagerService:
                                       source_id, title, source_message, content_params)
 
     def get_notificaton(self, receiver: UUID, notification_id: UUID) -> ArgusNotification:
+        notification_id = UUID(notification_id) if isinstance(notification_id, str) else notification_id
         return ArgusNotification.get(receiver=receiver, id=notification_id)
 
     def get_unread_count(self, receiver: UUID) -> int:
-        query = ArgusNotification.filter(
-            receiver=receiver, state__eq=ArgusNotificationState.UNREAD.value).allow_filtering().all()
+        query = ArgusNotification.find(
+            receiver=receiver, state=ArgusNotificationState.UNREAD.value).allow_filtering().all()
         return len(query)
 
     def read_notification(self, receiver: UUID, notification_id: UUID) -> ArgusNotification:
+        notification_id = UUID(notification_id) if isinstance(notification_id, str) else notification_id
         notification = ArgusNotification.get(receiver=receiver, id=notification_id)
         notification.state = ArgusNotificationState.READ
-        return bool(notification.save().state)
+        notification.save()
+        return bool(notification.state)
 
     def get_notifications(self, receiver: UUID, limit: int = 20, after: UUID | None = None) -> list[ArgusNotification]:
         if after:
-            return ArgusNotification.filter(receiver=receiver, id__lte=after).all().limit(limit)
-        return ArgusNotification.filter(receiver=receiver).all().limit(limit)
+            after = UUID(after) if isinstance(after, str) else after
+            return ArgusNotification.find(receiver=receiver, id__lte=after).limit(limit).all()
+        return ArgusNotification.find(receiver=receiver).limit(limit).all()
 
 
 class NotificationSenderBase:
@@ -121,7 +125,8 @@ class ArgusDBNotificationSaver(NotificationSenderBase):
         new_notification.title = title if title else self._get_title_for_notification_type(notification_type)
         new_notification.content = content if not content_params else self._render_content(
             notification_type, content_params)
-        return new_notification.save()
+        new_notification.save()
+        return new_notification
 
 
 class EmailNotificationServiceSender(NotificationSenderBase):
