@@ -17,6 +17,8 @@ from typing import NamedTuple
 
 import pytest
 
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.result import (
     ArgusGenericResultData,
@@ -130,8 +132,8 @@ def seeded_view_with_run(flask_client, sct_run: SctRun) -> SeededView:
     yield SeededView(view_id=view_id, test_id=sct_run.test_id, run_id=sct_run.run_id)
 
     try:
-        ArgusUserView.get(id=view_id).delete()
-    except ArgusUserView.DoesNotExist:
+        ArgusUserView.get(id=uuid.UUID(view_id)).delete()
+    except DocumentNotFound:
         pass
 
 

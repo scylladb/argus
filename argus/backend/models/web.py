@@ -204,19 +204,22 @@ class ArgusGroup(Document):
             return super().__eq__(other)
 
 
-class ArgusUserView(Model):
-    id = columns.UUID(primary_key=True, partition_key=True, default=uuid4)
-    name = columns.Text(required=True, index=True)
-    display_name = columns.Text()
-    description = columns.Text()
-    user_id = columns.UUID(required=True, index=True)
-    plan_id = columns.UUID(index=True)
-    tests = columns.List(value_type=columns.UUID, default=lambda: [])
-    release_ids = columns.List(value_type=columns.UUID, default=lambda: [])
-    group_ids = columns.List(value_type=columns.UUID, default=lambda: [])
-    created = columns.DateTime(default=datetime.utcnow)
-    last_updated = columns.DateTime(default=datetime.utcnow)
-    widget_settings = columns.Text(required=True)
+class ArgusUserView(Document):
+    id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
+    name: Annotated[Optional[str], Indexed()] = None
+    display_name: Optional[str] = None
+    description: Optional[str] = None
+    user_id: Annotated[Optional[UUID], Indexed()] = None
+    plan_id: Annotated[Optional[UUID], Indexed()] = None
+    tests: list[UUID] = Field(default_factory=list)
+    release_ids: list[UUID] = Field(default_factory=list)
+    group_ids: list[UUID] = Field(default_factory=list)
+    created: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    last_updated: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    widget_settings: Optional[str] = None
+
+    class Settings:
+        name = "argus_user_view"
 
 
 class ArgusTest(Document):
@@ -483,16 +486,13 @@ def invalidate_release_snapshots(release_id: UUID) -> None:
 
 
 USED_MODELS: list[Model] = [
-    ArgusUserView,
     ArgusSchedule,
     ArgusScheduleAssignee,
     ArgusScheduleGroup,
     ArgusScheduleTest,
     ArgusReleasePlan,
-    WidgetHighlights,
     ReleaseDistinctVersions,
     ReleaseDistinctImages,
-    WidgetComment,
     ErrorEventEmbeddings,  # to be deprecated
     CriticalEventEmbeddings,  # to be deprecated
     SCTErrorEventEmbedding,
@@ -532,6 +532,9 @@ USED_COODIE_MODELS: list[type[Document]] = [
     ArgusGenericResultData,
     ArgusBestResultData,
     ArgusGraphView,
+    ArgusUserView,
+    WidgetHighlights,
+    WidgetComment,
 ]
 
 # Coodie user-defined types; synced via UserType.sync_type() and registered

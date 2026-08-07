@@ -228,7 +228,7 @@ class ViewStats:
                 aggregated_investigation_status[investigation_status.value] = result
 
         return {
-            "release": dict(self.release.items()),
+            "release": self.release.model_dump(),
             "releases": self.releases,
             "groups": converted_groups,
             "total": self.total_tests,
@@ -620,7 +620,7 @@ class ViewStatsCollector:
         self.view_stats = None
         self.view_rows = []
         self.runs_by_build_id = {}
-        self.view_id = view_id
+        self.view_id = UUID(view_id) if isinstance(view_id, str) else view_id
         self.filter = filter
 
     def collect(self, limited=False, force=False, include_no_version = False, widget_id: int = None, image_id: str = None) -> dict:

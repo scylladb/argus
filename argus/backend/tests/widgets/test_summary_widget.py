@@ -27,7 +27,7 @@ def test_summary_versioned_runs_unknown_view_errors(flask_client):
         f"/api/v1/views/widgets/summary/versioned_runs?view_id={uuid.uuid4()}"
     ).json
     assert res["status"] == "error"
-    assert res["response"]["exception"] == "DoesNotExist"
+    assert res["response"]["exception"] == "DocumentNotFound"
 
 
 def test_summary_runs_results_empty_payload(flask_client):

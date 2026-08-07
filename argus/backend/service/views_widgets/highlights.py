@@ -71,12 +71,20 @@ class ActionItem(Highlight):
         )
 
 
+def _coerce_uuid(value: UUID | str | None) -> UUID | None:
+    return UUID(value) if isinstance(value, str) else value
+
+
 @dataclass
 class CommentCreate:
     view_id: UUID
     index: int
     highlight_created_at: float
     content: str
+
+    def __post_init__(self):
+        self.view_id = _coerce_uuid(self.view_id)
+        self.index = int(self.index)
 
 
 @dataclass
@@ -87,6 +95,10 @@ class CommentUpdate:
     created_at: float
     content: str
 
+    def __post_init__(self):
+        self.view_id = _coerce_uuid(self.view_id)
+        self.index = int(self.index)
+
 
 @dataclass
 class CommentDelete:
@@ -94,6 +106,9 @@ class CommentDelete:
     index: int
     highlight_created_at: float
     created_at: float
+
+    def __post_init__(self):
+        self.view_id = _coerce_uuid(self.view_id)
 
 
 @dataclass
@@ -127,6 +142,10 @@ class HighlightCreate:
     is_task: bool
     group: str | None = None
 
+    def __post_init__(self):
+        self.view_id = _coerce_uuid(self.view_id)
+        self.index = int(self.index)
+
 
 @dataclass
 class HighlightGroupCreate:
@@ -135,12 +154,20 @@ class HighlightGroupCreate:
     name: str
     items: list[str]
 
+    def __post_init__(self):
+        self.view_id = _coerce_uuid(self.view_id)
+        self.index = int(self.index)
+
 
 @dataclass
 class HighlightArchive:
     view_id: UUID
     index: int
     created_at: float
+
+    def __post_init__(self):
+        self.view_id = _coerce_uuid(self.view_id)
+        self.index = int(self.index)
 
 
 @dataclass
@@ -149,6 +176,10 @@ class HighlightUpdate:
     index: int
     created_at: float
     content: str
+
+    def __post_init__(self):
+        self.view_id = _coerce_uuid(self.view_id)
+        self.index = int(self.index)
 
 
 @dataclass
@@ -159,6 +190,8 @@ class HighlightSetAssignee:
     assignee_id: UUID | None = None
 
     def __post_init__(self):
+        self.view_id = _coerce_uuid(self.view_id)
+        self.index = int(self.index)
         if self.assignee_id and not isinstance(self.assignee_id, UUID):
             self.assignee_id = UUID(self.assignee_id)
 
@@ -169,6 +202,10 @@ class HighlightSetCompleted:
     index: int
     created_at: float
     completed: bool
+
+    def __post_init__(self):
+        self.view_id = _coerce_uuid(self.view_id)
+        self.index = int(self.index)
 
 
 class HighlightsService:
@@ -271,7 +308,7 @@ class HighlightsService:
         return created_items
 
     def archive_highlight(self, payload: HighlightArchive):
-        entry = WidgetHighlights.objects(
+        entry = WidgetHighlights.find(
             view_id=payload.view_id, index=payload.index, created_at=datetime.fromtimestamp(payload.created_at, tz=UTC)
         ).first()
         if entry:
@@ -279,7 +316,7 @@ class HighlightsService:
             entry.save()
 
     def unarchive_highlight(self, payload: HighlightArchive):
-        entry = WidgetHighlights.objects(
+        entry = WidgetHighlights.find(
             view_id=payload.view_id,
             index=payload.index,
             created_at=datetime.fromtimestamp(payload.created_at, tz=UTC)
@@ -289,7 +326,7 @@ class HighlightsService:
             entry.save()
 
     def update_highlight(self, user_id: UUID, payload: HighlightUpdate) -> Highlight | ActionItem:
-        entry = WidgetHighlights.objects(
+        entry = WidgetHighlights.find(
             view_id=payload.view_id,
             index=payload.index,
             created_at=datetime.fromtimestamp(payload.created_at, tz=UTC)
@@ -312,7 +349,7 @@ class HighlightsService:
             return ActionItem.from_db_model(entry)
 
     def set_assignee(self, payload: HighlightSetAssignee) -> ActionItem:
-        entry = WidgetHighlights.objects(
+        entry = WidgetHighlights.find(
             view_id=payload.view_id,
             index=payload.index,
             created_at=datetime.fromtimestamp(payload.created_at, tz=UTC)
@@ -327,7 +364,7 @@ class HighlightsService:
         return ActionItem.from_db_model(entry)
 
     def set_completed(self, payload: HighlightSetCompleted) -> ActionItem:
-        entry = WidgetHighlights.objects(
+        entry = WidgetHighlights.find(
             view_id=payload.view_id,
             index=payload.index,
             created_at=datetime.fromtimestamp(payload.created_at, tz=UTC)
@@ -339,14 +376,14 @@ class HighlightsService:
         return ActionItem.from_db_model(entry)
 
     def get_highlights(self, view_id: UUID, index: int) -> tuple[list[Highlight], list[ActionItem]]:
-        entries = WidgetHighlights.objects(view_id=view_id, index=index)
+        entries = WidgetHighlights.find(view_id=view_id, index=index)
         highlights = [Highlight.from_db_model(entry) for entry in entries if entry.completed is None]
         action_items = [ActionItem.from_db_model(entry) for entry in entries if entry.completed is not None]
         return highlights, action_items
 
     def create_comment(self, creator_id: UUID, payload: CommentCreate) -> Comment:
         highlight_created_at = datetime.fromtimestamp(payload.highlight_created_at, tz=UTC)
-        highlight = WidgetHighlights.objects(
+        highlight = WidgetHighlights.find(
             view_id=payload.view_id, index=payload.index, created_at=highlight_created_at).first()
         if not highlight:
             raise NotFound("Highlight not found")
@@ -370,7 +407,7 @@ class HighlightsService:
     def update_comment(self, user_id: UUID, payload: CommentUpdate) -> Comment:
         highlight_created_at = datetime.fromtimestamp(payload.highlight_created_at, tz=UTC)
         created_at = datetime.fromtimestamp(payload.created_at, tz=UTC)
-        comment = WidgetComment.objects(
+        comment = WidgetComment.find(
             view_id=payload.view_id,
             index=payload.index,
             highlight_at=highlight_created_at,
@@ -383,7 +420,7 @@ class HighlightsService:
         mentions, content_stripped = self._process_mentions(payload.content)
         comment.content = payload.content
         comment.save()
-        self._send_highlight_notifications(mentions, content_stripped, payload.view_id, user_id, WidgetHighlights.objects(
+        self._send_highlight_notifications(mentions, content_stripped, payload.view_id, user_id, WidgetHighlights.find(
             view_id=payload.view_id, index=payload.index, created_at=highlight_created_at).first().completed is not None, is_comment=True)
         return Comment.from_db_model(comment)
 
@@ -391,7 +428,7 @@ class HighlightsService:
         index = int(payload.index)
         highlight_created_at = datetime.fromtimestamp(payload.highlight_created_at, tz=UTC)
         created_at = datetime.fromtimestamp(payload.created_at, tz=UTC)
-        comment = WidgetComment.objects(
+        comment = WidgetComment.find(
             view_id=payload.view_id,
             index=index,
             highlight_at=highlight_created_at,
@@ -402,7 +439,7 @@ class HighlightsService:
         if comment.creator_id != user_id:
             raise Forbidden("Not authorized to delete comment")
         comment.delete()
-        highlight = WidgetHighlights.objects(view_id=payload.view_id, index=index,
+        highlight = WidgetHighlights.find(view_id=payload.view_id, index=index,
                                              created_at=highlight_created_at).first()
         if not highlight:
             raise NotFound("Highlight not found")
@@ -411,7 +448,7 @@ class HighlightsService:
 
     def get_comments(self, view_id: UUID, index: int, highlight_created_at: float) -> list[Comment]:
         highlight_created_at = datetime.fromtimestamp(highlight_created_at, tz=UTC)
-        comments = WidgetComment.objects(view_id=view_id, index=index, highlight_at=highlight_created_at)
+        comments = WidgetComment.find(view_id=view_id, index=index, highlight_at=highlight_created_at)
         return [Comment.from_db_model(c) for c in comments]
 
     def send_action_notification(self, sender_id: UUID, username: str, view_id: UUID, assignee_id: UUID, action: str):

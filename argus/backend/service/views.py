@@ -5,6 +5,8 @@ from typing import TypedDict
 from uuid import UUID
 
 from cassandra.cqlengine.models import Model
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.error_handlers import APIException
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.pytest import PytestResultTable
@@ -35,7 +37,7 @@ class UserViewService:
             name_check = ArgusUserView.get(name=name)
             raise UserViewException(
                 f"View with name {name} already exists: {name_check.id}", name, name_check, name_check.id)
-        except ArgusUserView.DoesNotExist:
+        except DocumentNotFound:
             pass
         view = ArgusUserView()
         view.name = name
@@ -64,18 +66,19 @@ class UserViewService:
             match (entity_type):
                 case "release":
                     entities["tests"].extend(t.id for t in ArgusTest.find(release_id=UUID(entity_id)).all())
-                    entities["release"].append(entity_id)
+                    entities["release"].append(UUID(entity_id))
                 case "group":
                     entities["tests"].extend(t.id for t in ArgusTest.find(group_id=UUID(entity_id)).all())
-                    entities["group"].append(entity_id)
+                    entities["group"].append(UUID(entity_id))
                 case "test":
-                    entities["tests"].append(entity_id)
+                    entities["tests"].append(UUID(entity_id))
         return entities
 
     def test_lookup(self, query: str):
         return TestLookup.test_lookup(query)
 
     def update_view(self, view_id: str | UUID, update_data: ViewUpdateRequest) -> bool:
+        view_id = UUID(view_id) if isinstance(view_id, str) else view_id
         view: ArgusUserView = ArgusUserView.get(id=view_id)
         if view.user_id != current_user().id and not current_user().is_admin():
             raise UserViewException("Unable to modify other users' views")
@@ -83,7 +86,7 @@ class UserViewService:
             update_data.pop(key, None)
         items = update_data.pop("items")
         for k, value in update_data.items():
-            view[k] = value
+            setattr(view, k, value)
         view.tests = []
         view.release_ids = []
         view.group_ids = []
@@ -92,17 +95,18 @@ class UserViewService:
             match (entity_type):
                 case "release":
                     view.tests.extend(t.id for t in ArgusTest.find(release_id=UUID(entity_id)).all())
-                    view.release_ids.append(entity_id)
+                    view.release_ids.append(UUID(entity_id))
                 case "group":
                     view.tests.extend(t.id for t in ArgusTest.find(group_id=UUID(entity_id)).all())
-                    view.group_ids.append(entity_id)
+                    view.group_ids.append(UUID(entity_id))
                 case "test":
-                    view.tests.append(entity_id)
+                    view.tests.append(UUID(entity_id))
         view.last_updated = datetime.datetime.utcnow()
         view.save()
         return True
 
     def delete_view(self, view_id: str | UUID) -> bool:
+        view_id = UUID(view_id) if isinstance(view_id, str) else view_id
         view = ArgusUserView.get(id=view_id)
         if view.user_id != current_user().id and not current_user().is_admin():
             raise UserViewException("Unable to modify other users' views")
@@ -111,9 +115,10 @@ class UserViewService:
         return True
 
     def get_view(self, view_id: str | UUID) -> ArgusUserView:
+        view_id = UUID(view_id) if isinstance(view_id, str) else view_id
         try:
             view: ArgusUserView = ArgusUserView.get(id=view_id)
-        except ArgusUserView.DoesNotExist as exc:
+        except DocumentNotFound as exc:
             raise UserViewException(f"View {view_id} does not exist") from exc
         if datetime.datetime.utcnow() - (view.last_updated or datetime.datetime.fromtimestamp(0)) > datetime.timedelta(hours=1):
             self.refresh_stale_view(view)
@@ -122,7 +127,7 @@ class UserViewService:
     def get_view_by_name(self, view_name: str) -> ArgusUserView:
         try:
             view: ArgusUserView = ArgusUserView.get(name=view_name)
-        except ArgusUserView.DoesNotExist as exc:
+        except DocumentNotFound as exc:
             raise UserViewException(f'View "{view_name}" does not exist') from exc
         if datetime.datetime.utcnow() - (view.last_updated or datetime.datetime.fromtimestamp(0)) > datetime.timedelta(hours=1):
             self.refresh_stale_view(view)
@@ -130,13 +135,14 @@ class UserViewService:
 
     def get_all_views(self, user: User | None = None) -> list[ArgusUserView]:
         if user:
-            return list(ArgusUserView.filter(user_id=user.id).all())
-        return list(ArgusUserView.filter().all())
+            return list(ArgusUserView.find(user_id=user.id).all())
+        return list(ArgusUserView.find().all())
 
     def resolve_view_tests(self, view_id: str | UUID) -> list[ArgusTest]:
+        view_id = UUID(view_id) if isinstance(view_id, str) else view_id
         try:
             view = ArgusUserView.get(id=view_id)
-        except ArgusUserView.DoesNotExist as exc:
+        except DocumentNotFound as exc:
             raise UserViewException(f"View {view_id} does not exist") from exc
         return self.resolve_tests_by_id(view.tests)
 
@@ -189,6 +195,7 @@ class UserViewService:
         return releases
 
     def get_pytest_view_results(self, view_id: str | UUID) -> list[PytestResultTable]:
+        view_id = UUID(view_id) if isinstance(view_id, str) else view_id
 
         view: ArgusUserView = ArgusUserView.get(id=view_id)
         tests: list[ArgusTest] = []
@@ -215,8 +222,9 @@ class UserViewService:
         return images
 
     def resolve_view_for_edit(self, view_id: str | UUID) -> dict:
+        view_id = UUID(view_id) if isinstance(view_id, str) else view_id
         view: ArgusUserView = ArgusUserView.get(id=view_id)
-        resolved = dict(view)
+        resolved = view.model_dump()
         view_groups = self.batch_resolve_entity(ArgusGroup, "id", view.group_ids)
         view_releases = self.batch_resolve_entity(ArgusRelease, "id", view.release_ids)
         view_tests = self.resolve_view_tests(view.id)

@@ -187,6 +187,7 @@ class GithubService:
         return response
 
     def _get_github_issues_for_view(self, view_id: UUID | str) -> list[IssueLink]:
+        view_id = UUID(view_id) if isinstance(view_id, str) else view_id
         view: ArgusUserView = ArgusUserView.get(id=view_id)
         links = []
         for batch in chunk(view.tests):

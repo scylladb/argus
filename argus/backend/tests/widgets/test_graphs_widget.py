@@ -42,7 +42,7 @@ def test_graph_views_unknown_view_errors(flask_client):
         f"/api/v1/views/widgets/graphs/graph_views?view_id={uuid.uuid4()}"
     ).json
     assert res["status"] == "error"
-    assert res["response"]["exception"] == "DoesNotExist"
+    assert res["response"]["exception"] == "DocumentNotFound"
 
 
 def test_graph_views_with_seeded_graph_view(flask_client, seeded_view_with_run, graph_view_for_test):
