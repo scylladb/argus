@@ -79,7 +79,7 @@ def test_no_update_on_same_data():
         "validation_rules": {"col1": {"valid_from": datetime.now(timezone.utc), "best_pct": 90.0, "best_abs": 100.0, "fixed_limit": 50.0}},
         "rows_meta": ["row1", "row2"]
     }
-    with patch.object(metadata, 'save', wraps=metadata.save) as mock_save:
+    with patch.object(ArgusGenericResultMetadata, 'save', autospec=True) as mock_save:
         metadata.update_if_changed(new_data)
         assert not mock_save.called
 
