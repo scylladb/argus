@@ -29,7 +29,8 @@ def make_notification():
             source_id=source_id or uuid.uuid4(),
             title=title,
             content=content,
-        ).save()
+        )
+        notification.save()
         created.append(notification)
         return notification
 
@@ -122,7 +123,7 @@ def test_get_notification_unknown_id_errors(flask_client):
     bogus = uuid.uuid1()
     res = flask_client.get(f"/api/v1/notifications/get?id={bogus}").json
     assert res["status"] == "error"
-    assert res["response"]["exception"] == "DoesNotExist"
+    assert res["response"]["exception"] == "DocumentNotFound"
 
 
 def test_read_notification_marks_read_and_decrements_unread(flask_client, make_notification):
@@ -156,4 +157,4 @@ def test_read_notification_unknown_id_errors(flask_client):
         json={"id": str(bogus)},
     ).json
     assert res["status"] == "error"
-    assert res["response"]["exception"] == "DoesNotExist"
+    assert res["response"]["exception"] == "DocumentNotFound"

@@ -8,7 +8,7 @@ from cassandra.cqlengine.usertype import UserType
 from cassandra.cqlengine import columns
 from cassandra.util import uuid_from_time, unix_time_from_uuid1
 from pydantic import Field
-from coodie import ClusteringKey, Indexed, PrimaryKey
+from coodie import ClusteringKey, Indexed, PrimaryKey, SmallInt, TimeUUID
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.github_issue import GithubIssue, IssueLink
@@ -308,16 +308,19 @@ class ArgusNotificationState(IntEnum):
     READ = auto()
 
 
-class ArgusNotification(Model):
-    receiver = columns.UUID(primary_key=True, partition_key=True)
-    id = columns.TimeUUID(primary_key=True, clustering_order="DESC", default=uuid_now)
-    type = columns.Text(required=True)
-    state = columns.SmallInt(required=True, default=lambda: ArgusNotificationState.UNREAD)
-    sender = columns.UUID(required=True)
-    source_type = columns.Text(required=True)
-    source_id = columns.UUID(required=True)
-    title = columns.Text(required=True, max_length=1024)
-    content = columns.Text(required=True, max_length=65535)
+class ArgusNotification(Document):
+    receiver: Annotated[Optional[UUID], PrimaryKey()] = None
+    id: Annotated[UUID, TimeUUID(), ClusteringKey(order="DESC")] = Field(default_factory=uuid_now)
+    type: Optional[str] = None
+    state: Annotated[Optional[int], SmallInt()] = Field(default=ArgusNotificationState.UNREAD)
+    sender: Optional[UUID] = None
+    source_type: Optional[str] = None
+    source_id: Optional[UUID] = None
+    title: Optional[str] = Field(default=None, max_length=1024)
+    content: Optional[str] = Field(default=None, max_length=65535)
+
+    class Settings:
+        name = "argus_notification"
 
     def to_dict_short_summary(self) -> dict:
         return {
@@ -474,7 +477,6 @@ def invalidate_release_snapshots(release_id: UUID) -> None:
 
 USED_MODELS: list[Model] = [
     ArgusUserView,
-    ArgusNotification,
     ArgusSchedule,
     ArgusScheduleAssignee,
     ArgusScheduleGroup,
@@ -522,4 +524,5 @@ USED_COODIE_MODELS: list[type[Document]] = [
     ArgusEvent,
     ReleasePlannerComment,
     Team,
+    ArgusNotification,
 ]
