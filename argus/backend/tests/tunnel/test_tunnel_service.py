@@ -15,7 +15,7 @@ from uuid import uuid4
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
-from argus.backend.models.ssh_key import ProxyTunnelConfig, SSHTunnelKey, SSHTunnelKeyByFingerprint
+from argus.backend.models.ssh_key import ProxyTunnelConfig, SSHTunnelKey
 from argus.backend.models.web import User, UserRoles
 from argus.backend.service.tunnel_service import TunnelService, TunnelServiceException, _derive_fingerprint
 
@@ -312,11 +312,10 @@ def test_get_authorized_keys_by_unknown_fingerprint_is_empty(argus_db, tunnel_us
 
 @pytest.mark.docker_required
 def test_a_key_authenticates_on_the_attempt_that_follows_registration(argus_db, tunnel_user, active_config):
-    """No secondary-index lag between registering a key and using it.
+    """A registered key is readable through the fingerprint view.
 
-    The client registers and connects immediately. A secondary index propagates
-    asynchronously, so that first attempt could be denied. The lookup table is
-    written on the registration path, so it cannot be.
+    ScyllaDB applies the view update on the base replica, so a single-node test
+    cluster answers the first authentication attempt.
     """
     public_key = _make_public_key()
     svc = TunnelService()
@@ -328,19 +327,18 @@ def test_a_key_authenticates_on_the_attempt_that_follows_registration(argus_db, 
 
 
 @pytest.mark.docker_required
-def test_registering_again_repairs_a_missing_lookup_row(argus_db, tunnel_user, active_config):
-    """A key stored before the lookup table existed authenticates after a re-register."""
+def test_registering_the_same_key_again_reuses_the_row(argus_db, tunnel_user, active_config):
+    """A repeat registration returns the existing key id and does not duplicate it."""
     public_key = _make_public_key()
     svc = TunnelService()
     result = svc.register_tunnel(user=tunnel_user, public_key=public_key)
     fingerprint = _derive_fingerprint(public_key)
 
-    SSHTunnelKeyByFingerprint.objects.filter(fingerprint=fingerprint, key_id=result.key_id).delete()
-    assert svc.get_authorized_keys(fingerprint=fingerprint) == ""
-
     again = svc.register_tunnel(user=tunnel_user, public_key=public_key)
 
     assert again.key_id == result.key_id
+    rows = [row for row in SSHTunnelKey.objects.filter(user_id=tunnel_user.id) if row.fingerprint == fingerprint]
+    assert len(rows) == 1
     assert public_key.strip() in svc.get_authorized_keys(fingerprint=fingerprint)
 
 
@@ -429,7 +427,7 @@ def test_delete_key_removes_row(argus_db, tunnel_user, active_config):
 
 @pytest.mark.docker_required
 def test_deleted_key_stops_authenticating(argus_db, tunnel_user, active_config):
-    """A revoked key must not survive in the fingerprint lookup table."""
+    """A revoked key must not survive in the fingerprint view."""
     pub_key = _make_public_key()
     svc = TunnelService()
     result = svc.register_tunnel(user=tunnel_user, public_key=pub_key)

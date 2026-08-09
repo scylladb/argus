@@ -19,7 +19,7 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from flask import g
 from flask.testing import FlaskClient
 
-from argus.backend.models.ssh_key import ProxyTunnelConfig, SSHTunnelKey, SSHTunnelKeyByFingerprint
+from argus.backend.models.ssh_key import ProxyTunnelConfig, SSHTunnelKey
 from argus.backend.service.tunnel_service import TunnelService, _derive_fingerprint
 
 API_PREFIX = "/api/v1/client/ssh"
@@ -37,15 +37,14 @@ def _make_public_key() -> str:
 
 
 def _seed_key(user_id, tunnel_id, public_key: str, fingerprint: str, ttl: int = 86400) -> SSHTunnelKey:
-    """Insert a key the way ``register_tunnel`` does, both tables at once.
+    """Insert a key the way ``register_tunnel`` does.
 
     The scoped proxy-host role cannot call the register endpoint, so these
-    tests seed the database directly. Writing only the base table leaves the
-    fingerprint lookup empty and every ``?fingerprint=`` read returns nothing.
+    tests seed the database directly. ScyllaDB maintains the fingerprint view.
     """
     now_utc = datetime.now(tz=UTC).replace(tzinfo=None)
     expires_at = now_utc + timedelta(seconds=ttl)
-    key = SSHTunnelKey.objects.ttl(ttl).create(
+    return SSHTunnelKey.objects.ttl(ttl).create(
         id=uuid4(),
         user_id=user_id,
         tunnel_id=tunnel_id,
@@ -54,16 +53,6 @@ def _seed_key(user_id, tunnel_id, public_key: str, fingerprint: str, ttl: int = 
         created_at=now_utc,
         expires_at=expires_at,
     )
-    SSHTunnelKeyByFingerprint.objects.ttl(ttl).create(
-        fingerprint=fingerprint,
-        key_id=key.id,
-        user_id=user_id,
-        tunnel_id=tunnel_id,
-        public_key=public_key,
-        created_at=now_utc,
-        expires_at=expires_at,
-    )
-    return key
 
 
 def _make_active_config(**overrides) -> ProxyTunnelConfig:

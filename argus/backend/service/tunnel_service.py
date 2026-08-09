@@ -234,21 +234,6 @@ class TunnelService:
             None,
         )
         if existing:
-            # Re-registration repairs a lookup row that a partial write, or a
-            # deploy that predates this table, left missing.
-            self._index_key_by_fingerprint(
-                fingerprint=fingerprint,
-                key_id=existing.id,
-                user_id=user.id,
-                tunnel_id=config.id,
-                public_key=existing.public_key,
-                created_at=existing.created_at,
-                expires_at=existing.expires_at,
-                # The base row keeps the TTL it was created with. Reusing the
-                # newly requested one would let the lookup row outlive it, and
-                # the key would keep authenticating after it expired.
-                ttl=int((existing.expires_at - now_utc).total_seconds()),
-            )
             return TunnelRegistrationResponseDTO(
                 key_id=existing.id,
                 tunnel_id=config.id,
@@ -270,16 +255,6 @@ class TunnelService:
             fingerprint=fingerprint,
             created_at=now_utc,
             expires_at=expires_at,
-        )
-        self._index_key_by_fingerprint(
-            fingerprint=fingerprint,
-            key_id=key.id,
-            user_id=user.id,
-            tunnel_id=config.id,
-            public_key=key.public_key,
-            created_at=now_utc,
-            expires_at=expires_at,
-            ttl=ttl,
         )
 
         return TunnelRegistrationResponseDTO(
@@ -330,30 +305,6 @@ class TunnelService:
     # Authorised keys (used by the proxy host AuthorizedKeysCommand)
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _index_key_by_fingerprint(
-        fingerprint: str,
-        key_id: UUID,
-        user_id: UUID,
-        tunnel_id: UUID,
-        public_key: str,
-        created_at: datetime,
-        expires_at: datetime,
-        ttl: int,
-    ) -> None:
-        """Write the fingerprint lookup row that ``get_authorized_keys`` reads."""
-        if ttl <= 0:
-            return
-        SSHTunnelKeyByFingerprint.objects.ttl(ttl).create(
-            fingerprint=fingerprint,
-            key_id=key_id,
-            user_id=user_id,
-            tunnel_id=tunnel_id,
-            public_key=public_key,
-            created_at=created_at,
-            expires_at=expires_at,
-        )
-
     def get_authorized_keys(self, fingerprint: str | None = None) -> str:
         """
         Return non-expired public keys in OpenSSH ``authorized_keys`` format
@@ -365,9 +316,9 @@ class TunnelService:
         table. An unknown fingerprint returns an empty string, which sshd
         reads as "no authorized key".
 
-        The read is a partition-key lookup on ``SSHTunnelKeyByFingerprint``,
-        not a secondary index, so a key registered a moment ago authenticates
-        on the first attempt.
+        The read is a single-partition lookup on the
+        ``ssh_tunnel_key_by_fingerprint`` materialized view, so the proxy host
+        never scans the base table.
 
         Without ``fingerprint`` the full table is returned. That path only
         exists for proxy hosts that still run the old provisioning wrapper.
@@ -433,7 +384,7 @@ class TunnelService:
         return [self._to_ssh_tunnel_key_dto(row) for row in rows]
 
     def delete_key(self, key_id: UUID | str) -> None:
-        """Delete a key and the fingerprint lookup row that points at it."""
+        """Delete a key. ScyllaDB removes the matching view row."""
         if not isinstance(key_id, UUID):
             key_id = UUID(str(key_id))
         try:
@@ -442,12 +393,6 @@ class TunnelService:
             LOGGER.info("SSH key %s was already deleted or TTL-expired", key_id)
             return
 
-        # The lookup row first. A revoked key that still authenticates is worse
-        # than a lookup row with no key behind it.
-        SSHTunnelKeyByFingerprint.objects.filter(
-            fingerprint=key.fingerprint,
-            key_id=key_id,
-        ).delete()
         key.delete()
 
     # ------------------------------------------------------------------

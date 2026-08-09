@@ -1,8 +1,11 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from cassandra.cluster import Session
 from cassandra.cqlengine import columns
 from cassandra.cqlengine.models import Model
+
+SSH_TUNNEL_KEY_BY_FINGERPRINT_VIEW = "ssh_tunnel_key_by_fingerprint"
 
 
 def _utcnow_naive() -> datetime:
@@ -26,29 +29,38 @@ class SSHTunnelKey(Model):
     created_at = columns.DateTime(required=True, default=_utcnow_naive)
     expires_at = columns.DateTime(required=True)
 
+    @classmethod
+    def _sync_additional_rules(cls, session: Session):
+        # public_key is selected into the view, so the proxy host reads one
+        # partition. A secondary index would add a second hop to the base table.
+        session.execute(
+            f"CREATE MATERIALIZED VIEW IF NOT EXISTS {SSH_TUNNEL_KEY_BY_FINGERPRINT_VIEW} AS "
+            f"SELECT id, user_id, tunnel_id, public_key, fingerprint, created_at, expires_at "
+            f"FROM {cls.column_family_name(include_keyspace=False)} "
+            f"WHERE fingerprint IS NOT NULL AND id IS NOT NULL "
+            f"PRIMARY KEY (fingerprint, id)"
+        )
+
 
 class SSHTunnelKeyByFingerprint(Model):
     """
-    Fingerprint-keyed view of :class:`SSHTunnelKey`, read by the proxy host on
-    every SSH authentication attempt.
+    Read-only handle on the ``ssh_tunnel_key_by_fingerprint`` materialized view,
+    queried by the proxy host on every SSH authentication attempt.
 
-    A secondary index propagates asynchronously, so a client that registers a
-    key and connects immediately can be denied while the index catches up. This
-    is a plain table on the same write path as the key itself, so the QUORUM
-    read that follows a QUORUM write always sees the row.
-
-    ``key_id`` clusters the partition. Two users cannot hold the same key
-    without also holding the same private key, but a duplicate fingerprint must
-    add a row instead of overwriting one.
+    ScyllaDB maintains the view from :class:`SSHTunnelKey`, TTL included, so
+    nothing writes here. The class is deliberately absent from ``USED_MODELS``:
+    ``sync_table`` would create a plain table and shadow the view.
     """
 
+    __table_name__ = SSH_TUNNEL_KEY_BY_FINGERPRINT_VIEW
+
     fingerprint = columns.Text(partition_key=True)
-    key_id = columns.UUID(primary_key=True, default=uuid4)
-    user_id = columns.UUID(required=True)
-    tunnel_id = columns.UUID(required=True)
-    public_key = columns.Text(required=True)
-    created_at = columns.DateTime(required=True, default=_utcnow_naive)
-    expires_at = columns.DateTime(required=True)
+    id = columns.UUID(primary_key=True)
+    user_id = columns.UUID()
+    tunnel_id = columns.UUID()
+    public_key = columns.Text()
+    created_at = columns.DateTime()
+    expires_at = columns.DateTime()
 
 
 class ProxyTunnelConfig(Model):

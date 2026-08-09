@@ -229,9 +229,9 @@ grew with the size of the fleet.
 
 Three parts fixed it:
 
-1. `SSHTunnelKeyByFingerprint` keys the fingerprint as the partition key, so the
-   lookup is an exact match instead of a table scan. See "Why a table, not a
-   secondary index" below.
+1. The `ssh_tunnel_key_by_fingerprint` materialized view keys the fingerprint as
+   the partition key, so the lookup is an exact match instead of a table scan.
+   See "Why a materialized view, not a secondary index" below.
 2. `get_authorized_keys(fingerprint=...)` returns only the matching key. An
    unknown fingerprint returns an empty body, which sshd reads as a denial. A
    malformed fingerprint gets a plain-text 400, never a JSON error body.
@@ -252,35 +252,47 @@ log. That path exists only for proxy hosts that still run the old wrapper.
 Re-apply the `argus_tunnel` role from `qatools-deployments` on those hosts, then
 remove the path.
 
-### Why a table, not a secondary index
+### Why a materialized view, not a secondary index
 
-A secondary index on `SSHTunnelKey.fingerprint` is a materialized view.
-ScyllaDB applies the view update after it acknowledges the base write, so a
-read through the index can miss a row that the base table already holds.
+Both options are views in ScyllaDB, so both share the same propagation delay.
+The difference is the read.
 
-That window sits on the authentication path. A client registers a key and
-connects at once, and the SSH attempt is the request right after the write. An
-index miss reads as "no authorized key", so the client is denied. Client retry
-hides it, but every denial costs an SSH round trip and one `MaxAuthTries` slot,
-and hundreds of CI runners registering together widen the window.
+A global secondary index on `SSHTunnelKey.fingerprint` stores only the base
+primary key. A lookup reads the index partition, then reads the base table for
+`public_key`. That is two round trips on every SSH authentication attempt.
 
-`SSHTunnelKeyByFingerprint` is a plain table with `fingerprint` as the partition
-key and `key_id` as the clustering key. Argus writes it on the registration path
-and reads it by partition key. Both operations run at `QUORUM`, so the read that
-follows the write always sees the row.
+The `ssh_tunnel_key_by_fingerprint` view selects `public_key` into itself, so the
+proxy host reads one partition and gets the key. Definition:
 
-The cost is manual consistency:
+```cql
+CREATE MATERIALIZED VIEW IF NOT EXISTS ssh_tunnel_key_by_fingerprint AS
+    SELECT id, user_id, tunnel_id, public_key, fingerprint, created_at, expires_at
+    FROM sshtunnel_key
+    WHERE fingerprint IS NOT NULL AND id IS NOT NULL
+    PRIMARY KEY (fingerprint, id)
+```
 
-1. `register_tunnel` writes both tables. It also repairs a missing lookup row
-   when a client registers a key it already holds.
-2. `delete_key` removes the lookup row first, then the key. A revoked key that
-   still authenticates is worse than a lookup row with no key behind it.
-3. Both rows carry the same TTL, so ScyllaDB expires them together.
+`SSHTunnelKey._sync_additional_rules` creates it, so `flask cli sync-models`
+keeps it in step with the base table. The `SSHTunnelKeyByFingerprint` model is a
+read-only handle on the view. It stays out of `USED_MODELS`, because
+`sync_table` would create a plain table with the same name.
 
-Keys registered before the table existed have no lookup row. Run
-`scripts/migration/migration_2026-08-03.py` after `flask cli sync-models` and
-before the new backend takes traffic. Then drop the now-unused secondary index
-on `ssh_tunnel_key.fingerprint`.
+ScyllaDB owns consistency here:
+
+1. `register_tunnel` writes the base row only.
+2. `delete_key` deletes the base row only.
+3. The view row inherits the TTL of the base row, so both expire together.
+
+The view propagates asynchronously, so a client that registers a key and
+connects in the same instant can meet a denial on its first attempt. The
+client already retries. The earlier hand-written lookup table removed that
+window, at the price of a duplicate write path that could drift.
+
+`flask cli sync-models` creates the view and ScyllaDB backfills it from the
+existing rows, so no data migration is needed. Run
+`scripts/migration/migration_2026-08-03.py` first if a deploy of an earlier
+build of this branch left a `sshtunnel_key_by_fingerprint` table behind. Then
+drop the now-unused secondary index on `sshtunnel_key.fingerprint`.
 
 **Proxy host provisioning lives in `qatools-deployments`, not in this repository.**
 
@@ -392,7 +404,7 @@ Class `TunnelService`:
     2. `proxy_host` pins a specific primary; the rest of the list still follows so failover keeps working
 
 - `get_authorized_keys(fingerprint: str | None = None) -> str`:
-    1. With a fingerprint: validate the `SHA256:<43-char base64>` shape, then fetch the single matching `SSHTunnelKey` by indexed lookup
+    1. With a fingerprint: validate the `SHA256:<43-char base64>` shape, then fetch the single matching key from the `ssh_tunnel_key_by_fingerprint` view
     2. Without one: fetch all records and log a deprecation warning (old proxy wrappers only)
     3. Return newline-separated public keys in OpenSSH `authorized_keys` format
     4. Called by proxy host via `AuthorizedKeysCommand` → argus-cli → this API
