@@ -28,7 +28,7 @@ def planner_user():
 @pytest.fixture
 def cleanup_plans():
     yield
-    for plan in list(ArgusReleasePlan.all()):
+    for plan in list(ArgusReleasePlan.find().all()):
         if plan.view_id:
             try:
                 ArgusUserView.get(id=plan.view_id).delete()
@@ -85,7 +85,7 @@ def test_create_plan_duplicate_name_version_errors(flask_client, release, fake_t
 def test_get_plan_unknown_id_errors(flask_client):
     res = flask_client.get(f"/api/v1/planning/plan/{uuid.uuid1()}/get").json
     assert res["status"] == "error"
-    assert res["response"]["exception"] == "DoesNotExist"
+    assert res["response"]["exception"] == "DocumentNotFound"
 
 
 def test_plans_for_release(flask_client, release, fake_test, cleanup_plans):
@@ -245,7 +245,7 @@ def test_copy_plan_creates_plan_in_target_release(
     ).json["response"]["id"]
     # copy_plan resolves the source plan by its real key/id; the service mints a
     # fresh key for the copy, so the payload key is echoed back from the source.
-    source_key = ArgusReleasePlan.get(id=plan_id).key
+    source_key = ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).key
 
     target_release = release_manager_service.create_release(
         f"copy_target_{uuid.uuid4().hex[:8]}", "Copy Target", False
@@ -306,8 +306,8 @@ def test_create_plan_generates_sequential_keys_per_release(
     first_id = _create_plan(flask_client, rel, fake_test, tests=[])["response"]["id"]
     second_id = _create_plan(flask_client, rel, fake_test, tests=[])["response"]["id"]
 
-    assert ArgusReleasePlan.get(id=first_id).key == f"{rel.name}#1"
-    assert ArgusReleasePlan.get(id=second_id).key == f"{rel.name}#2"
+    assert ArgusReleasePlan.get(id=uuid.UUID(str(first_id))).key == f"{rel.name}#1"
+    assert ArgusReleasePlan.get(id=uuid.UUID(str(second_id))).key == f"{rel.name}#2"
 
 
 def test_copy_plan_generates_fresh_key_for_target_release(
@@ -329,7 +329,7 @@ def test_copy_plan_generates_fresh_key_for_target_release(
     src_id = flask_client.post(
         "/api/v1/planning/plan/create", json=source_payload
     ).json["response"]["id"]
-    src_key = ArgusReleasePlan.get(id=src_id).key
+    src_key = ArgusReleasePlan.get(id=uuid.UUID(str(src_id))).key
 
     target_release = release_manager_service.create_release(
         f"copykey_{uuid.uuid4().hex[:8]}", "Copy Key Target", False
@@ -362,7 +362,7 @@ def test_copy_plan_generates_fresh_key_for_target_release(
     res = flask_client.post("/api/v1/planning/plan/copy", json=payload).json
     assert res["status"] == "ok", res
 
-    new_key = ArgusReleasePlan.get(id=res["response"]["id"]).key
+    new_key = ArgusReleasePlan.get(id=uuid.UUID(str(res["response"]["id"]))).key
     assert new_key == f"{target_release.name}#1"
     assert new_key != src_key
 
@@ -377,7 +377,7 @@ def test_update_plan_resolves_source_by_key(
         f"reskey_{uuid.uuid4().hex[:8]}", "Resolve Key Release", False
     )
     plan_id = _create_plan(flask_client, rel, fake_test, tests=[])["response"]["id"]
-    plan_key = ArgusReleasePlan.get(id=plan_id).key
+    plan_key = ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).key
 
     res = flask_client.post(
         "/api/v1/planning/plan/update",
@@ -386,7 +386,7 @@ def test_update_plan_resolves_source_by_key(
     assert res["status"] == "ok"
     assert res["response"] is True
 
-    assert ArgusReleasePlan.get(id=plan_id).description == "updated via key"
+    assert ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).description == "updated via key"
 
 
 def test_update_plan_leaves_omitted_scalars_unchanged(
@@ -396,7 +396,7 @@ def test_update_plan_leaves_omitted_scalars_unchanged(
     the payload are applied, the rest are left untouched (last-edit-wins)."""
     created = _create_plan(flask_client, release, fake_test, target_version="7.7")["response"]
     plan_id = created["id"]
-    original = ArgusReleasePlan.get(id=plan_id)
+    original = ArgusReleasePlan.get(id=uuid.UUID(str(plan_id)))
     orig_name, orig_owner = original.name, original.owner
 
     res = flask_client.post(
@@ -405,7 +405,7 @@ def test_update_plan_leaves_omitted_scalars_unchanged(
     ).json
     assert res["status"] == "ok"
 
-    updated = ArgusReleasePlan.get(id=plan_id)
+    updated = ArgusReleasePlan.get(id=uuid.UUID(str(plan_id)))
     assert updated.description == "only desc changed"
     assert updated.name == orig_name
     assert updated.owner == orig_owner
@@ -415,13 +415,13 @@ def test_update_plan_leaves_omitted_scalars_unchanged(
 def test_update_plan_toggles_completed(flask_client, release, fake_test, cleanup_plans):
     """The ``completed`` scalar diff flips the plan's boolean flag."""
     plan_id = _create_plan(flask_client, release, fake_test)["response"]["id"]
-    assert ArgusReleasePlan.get(id=plan_id).completed is False
+    assert ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).completed is False
 
     flask_client.post(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "completed": True},
     )
-    assert ArgusReleasePlan.get(id=plan_id).completed is True
+    assert ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).completed is True
 
 
 def test_update_plan_adds_and_removes_tests(
@@ -440,13 +440,13 @@ def test_update_plan_adds_and_removes_tests(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "tests_add": [str(second_test.id)]},
     )
-    assert set(ArgusReleasePlan.get(id=plan_id).tests) == {fake_test.id, second_test.id}
+    assert set(ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).tests) == {fake_test.id, second_test.id}
 
     flask_client.post(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "tests_remove": [str(fake_test.id)]},
     )
-    assert set(ArgusReleasePlan.get(id=plan_id).tests) == {second_test.id}
+    assert set(ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).tests) == {second_test.id}
 
 
 def test_update_plan_add_tests_is_idempotent(
@@ -459,7 +459,7 @@ def test_update_plan_add_tests_is_idempotent(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "tests_add": [str(fake_test.id)]},
     )
-    assert ArgusReleasePlan.get(id=plan_id).tests == [fake_test.id]
+    assert ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).tests == [fake_test.id]
 
 
 def test_update_plan_adds_and_removes_groups(
@@ -476,13 +476,13 @@ def test_update_plan_adds_and_removes_groups(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "groups_add": [str(new_group.id)]},
     )
-    assert set(ArgusReleasePlan.get(id=plan_id).groups) == {new_group.id}
+    assert set(ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).groups) == {new_group.id}
 
     flask_client.post(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "groups_remove": [str(new_group.id)]},
     )
-    assert ArgusReleasePlan.get(id=plan_id).groups == []
+    assert ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).groups == []
 
 
 def test_update_plan_adds_and_removes_participants(
@@ -496,13 +496,13 @@ def test_update_plan_adds_and_removes_participants(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "participants_add": [p1, p2]},
     )
-    assert set(ArgusReleasePlan.get(id=plan_id).participants) == {uuid.UUID(p1), uuid.UUID(p2)}
+    assert set(ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).participants) == {uuid.UUID(p1), uuid.UUID(p2)}
 
     flask_client.post(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "participants_remove": [p1]},
     )
-    assert set(ArgusReleasePlan.get(id=plan_id).participants) == {uuid.UUID(p2)}
+    assert set(ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).participants) == {uuid.UUID(p2)}
 
 
 def test_update_plan_sets_and_removes_assignee_mapping(
@@ -516,13 +516,13 @@ def test_update_plan_sets_and_removes_assignee_mapping(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "assignee_mapping_set": {str(fake_test.id): str(planner_user.id)}},
     )
-    assert ArgusReleasePlan.get(id=plan_id).assignee_mapping == {fake_test.id: planner_user.id}
+    assert ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).assignee_mapping == {fake_test.id: planner_user.id}
 
     flask_client.post(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "assignee_mapping_remove": [str(fake_test.id)]},
     )
-    assert ArgusReleasePlan.get(id=plan_id).assignee_mapping == {}
+    assert ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).assignee_mapping == {}
 
 
 def test_update_plan_prunes_assignee_mapping_for_removed_test(
@@ -534,13 +534,13 @@ def test_update_plan_prunes_assignee_mapping_for_removed_test(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "assignee_mapping_set": {str(fake_test.id): str(planner_user.id)}},
     )
-    assert ArgusReleasePlan.get(id=plan_id).assignee_mapping == {fake_test.id: planner_user.id}
+    assert ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).assignee_mapping == {fake_test.id: planner_user.id}
 
     flask_client.post(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "tests_remove": [str(fake_test.id)]},
     )
-    assert ArgusReleasePlan.get(id=plan_id).assignee_mapping == {}
+    assert ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).assignee_mapping == {}
 
 
 def test_trigger_jobs_no_plans_returns_falsy(flask_client, mock_jenkins_service):

@@ -164,7 +164,7 @@ class UserViewService:
             try:
                 view.tests = [test.id for test in self.resolve_tests_by_id(ArgusReleasePlan.get(id=view.plan_id).tests)]
                 view.group_ids = ArgusReleasePlan.get(id=view.plan_id).groups
-            except ArgusReleasePlan.DoesNotExist:
+            except DocumentNotFound:
                 LOGGER.warning("Dangling view %s from non-existent release plan %s", view.id, view.plan_id)
                 return view
         else:

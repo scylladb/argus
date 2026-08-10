@@ -490,7 +490,6 @@ USED_MODELS: list[Model] = [
     ArgusScheduleAssignee,
     ArgusScheduleGroup,
     ArgusScheduleTest,
-    ArgusReleasePlan,
     ReleaseDistinctVersions,
     ReleaseDistinctImages,
     ErrorEventEmbeddings,  # to be deprecated
@@ -535,6 +534,7 @@ USED_COODIE_MODELS: list[type[Document]] = [
     ArgusUserView,
     WidgetHighlights,
     WidgetComment,
+    ArgusReleasePlan,
 ]
 
 # Coodie user-defined types; synced via UserType.sync_type() and registered

@@ -50,7 +50,7 @@ def test_create_plan_persists_options(planning_service, release, fake_test):
     plan = planning_service.create_plan(
         _create_payload(release, tests=[fake_test.id], options=labels))
 
-    stored = ArgusReleasePlan.get(id=plan.id)
+    stored = ArgusReleasePlan.get(id=uuid.UUID(str(plan.id)))
     assert json.loads(stored.options) == labels
 
 
@@ -58,7 +58,7 @@ def test_create_plan_persists_options(planning_service, release, fake_test):
 def test_create_plan_defaults_to_empty_options(planning_service, release, fake_test):
     plan = planning_service.create_plan(_create_payload(release, tests=[fake_test.id]))
 
-    stored = ArgusReleasePlan.get(id=plan.id)
+    stored = ArgusReleasePlan.get(id=uuid.UUID(str(plan.id)))
     assert json.loads(stored.options) == {}
 
 
@@ -75,7 +75,7 @@ def test_update_plan_sets_and_removes_options(planning_service, release, fake_te
             str(group.id): {"labels": ["group-wide"]},
         },
     })
-    stored = ArgusReleasePlan.get(id=plan.id)
+    stored = ArgusReleasePlan.get(id=uuid.UUID(str(plan.id)))
     assert json.loads(stored.options) == {
         str(fake_test.id): {"labels": ["needs-triage"]},
         str(group.id): {"labels": ["group-wide"]},
@@ -86,7 +86,7 @@ def test_update_plan_sets_and_removes_options(planning_service, release, fake_te
         "id": str(plan.id),
         "options_remove": [str(fake_test.id)],
     })
-    stored = ArgusReleasePlan.get(id=plan.id)
+    stored = ArgusReleasePlan.get(id=uuid.UUID(str(plan.id)))
     assert json.loads(stored.options) == {str(group.id): {"labels": ["group-wide"]}}
 
 
@@ -108,7 +108,7 @@ def test_update_plan_prunes_options_for_removed_entities(planning_service, relea
         "id": str(plan.id),
         "tests_remove": [str(fake_test.id)],
     })
-    stored = ArgusReleasePlan.get(id=plan.id)
+    stored = ArgusReleasePlan.get(id=uuid.UUID(str(plan.id)))
     assert json.loads(stored.options) == {str(group.id): {"labels": ["g"]}}
 
     # Dropping the group prunes the remaining entry.
@@ -116,7 +116,7 @@ def test_update_plan_prunes_options_for_removed_entities(planning_service, relea
         "id": str(plan.id),
         "groups_remove": [str(group.id)],
     })
-    stored = ArgusReleasePlan.get(id=plan.id)
+    stored = ArgusReleasePlan.get(id=uuid.UUID(str(plan.id)))
     assert json.loads(stored.options) == {}
 
 
@@ -176,5 +176,5 @@ def test_copy_plan_remaps_options(planning_service, release_manager_service):
     )
     new_plan = planning_service.copy_plan(payload)
 
-    stored = ArgusReleasePlan.get(id=new_plan.id)
+    stored = ArgusReleasePlan.get(id=uuid.UUID(str(new_plan.id)))
     assert json.loads(stored.options) == {str(target_test.id): {"labels": ["carry-me"]}}

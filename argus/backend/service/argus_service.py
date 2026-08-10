@@ -649,8 +649,8 @@ class ArgusService:
                     yield run
 
     def get_planned_jobs_for_user(self, user: User):
-        owned_plans = list(ArgusReleasePlan.filter(owner=user.id).allow_filtering().all())
-        participating_plans = list(ArgusReleasePlan.filter(participants__contains=user.id).allow_filtering().all())
+        owned_plans = list(ArgusReleasePlan.find(owner=user.id).allow_filtering().all())
+        participating_plans = list(ArgusReleasePlan.find(participants__contains=user.id).allow_filtering().all())
         unique_plans: list[ArgusReleasePlan] = list({plan for plan in [*owned_plans, *participating_plans]})
 
         user_jobs = []
