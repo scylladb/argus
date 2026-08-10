@@ -169,26 +169,26 @@ def _fetch_multiple_release_queries(entity, releases: list[str]):
 
 def fetch_issues(release: list[UUID] | UUID):
     if isinstance(release, UUID):
-        links = IssueLink.filter(release_id=release)
+        links = IssueLink.find(release_id=release)
     else:
         links = _fetch_multiple_release_queries(IssueLink, release)
 
     unique_issues = {link.issue_id for link in links}
     resolved_issues = {}
     for batch in chunk(unique_issues):
-        for issue in GithubIssue.filter(id__in=batch).all():
+        for issue in GithubIssue.find(id__in=batch).all():
             resolved_issues[issue.id] = ("github", issue)
-        for issue in JiraIssue.filter(id__in=batch).all():
+        for issue in JiraIssue.find(id__in=batch).all():
             resolved_issues[issue.id] = ("jira", issue)
     linked_issues = []
     for link in links:
-        linked = dict(link.items())
+        linked = link.model_dump()
         resolved = resolved_issues.get(link.issue_id)
         if resolved:
             subtype, issue = resolved
             linked = {
                 **linked,
-                **dict(issue.items()),
+                **issue.model_dump(),
                 "subtype": subtype,
             }
         linked_issues.append(linked)

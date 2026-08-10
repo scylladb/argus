@@ -1,16 +1,19 @@
 from enum import Enum, unique
-from uuid import uuid4
+from typing import Annotated, Optional
+from uuid import UUID, uuid4
 from datetime import UTC, datetime
-from cassandra.cqlengine.models import Model
-from cassandra.cqlengine.usertype import UserType
-from cassandra.cqlengine import columns
+
+from pydantic import Field
+from coodie import BigInt, ClusteringKey, Indexed, PrimaryKey
+from coodie.sync import Document
+from coodie.usertype import UserType
 
 
 class IssueLabel(UserType):
-    id = columns.BigInt()
-    name = columns.Text()
-    color = columns.Text()
-    description = columns.Text()
+    id: Annotated[Optional[int], BigInt()] = None
+    name: Optional[str] = None
+    color: Optional[str] = None
+    description: Optional[str] = None
 
     def __hash__(self) -> int:
         return hash((self.name, self.color, self.description))
@@ -22,23 +25,26 @@ class IssueLabel(UserType):
 
 
 class IssueAssignee(UserType):
-    login = columns.Text()
-    html_url = columns.Text()
+    login: Optional[str] = None
+    html_url: Optional[str] = None
 
 
-class GithubIssue(Model):
-    id = columns.UUID(primary_key=True, default=uuid4, partition_key=True)
-    user_id = columns.UUID(index=True)  # Internal Argus UserId
-    type = columns.Text()  # Can be: issues, pulls
-    owner = columns.Text()  # Org or the user to which the repo belongs to
-    repo = columns.Text()
-    number = columns.Integer()
-    state = columns.Text()  # Possible states: open, closed
-    title = columns.Text()
-    labels = columns.List(value_type=columns.UserDefinedType(user_type=IssueLabel))
-    assignees = columns.List(value_type=columns.UserDefinedType(user_type=IssueAssignee))
-    url = columns.Text(index=True)
-    added_on = columns.DateTime(default=lambda: datetime.now(tz=UTC))
+class GithubIssue(Document):
+    id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
+    user_id: Annotated[Optional[UUID], Indexed()] = None  # Internal Argus UserId
+    type: Optional[str] = None  # Can be: issues, pulls
+    owner: Optional[str] = None  # Org or the user to which the repo belongs to
+    repo: Optional[str] = None
+    number: Optional[int] = None
+    state: Optional[str] = None  # Possible states: open, closed
+    title: Optional[str] = None
+    labels: list[IssueLabel] = Field(default_factory=list)
+    assignees: list[IssueAssignee] = Field(default_factory=list)
+    url: Annotated[Optional[str], Indexed()] = None
+    added_on: Optional[datetime] = Field(default_factory=lambda: datetime.now(tz=UTC))
+
+    class Settings:
+        name = "github_issue"
 
     def __hash__(self) -> int:
         return hash((self.owner, self.repo, self.number))
@@ -52,13 +58,16 @@ class GithubIssue(Model):
         return not self == other
 
 
-class IssueLink(Model):
-    run_id = columns.UUID(primary_key=True, required=True, partition_key=True)
-    issue_id = columns.UUID(primary_key=True, required=True)
-    release_id = columns.UUID(index=True)
-    group_id = columns.UUID(index=True)
-    test_id = columns.UUID(index=True)
-    user_id = columns.UUID(index=True)
-    event_id = columns.UUID(index=True)
-    added_on = columns.DateTime(default=lambda: datetime.now(tz=UTC))
-    type = columns.Text()
+class IssueLink(Document):
+    run_id: Annotated[Optional[UUID], PrimaryKey()] = None
+    issue_id: Annotated[Optional[UUID], ClusteringKey()] = None
+    release_id: Annotated[Optional[UUID], Indexed()] = None
+    group_id: Annotated[Optional[UUID], Indexed()] = None
+    test_id: Annotated[Optional[UUID], Indexed()] = None
+    user_id: Annotated[Optional[UUID], Indexed()] = None
+    event_id: Annotated[Optional[UUID], Indexed()] = None
+    added_on: Optional[datetime] = Field(default_factory=lambda: datetime.now(tz=UTC))
+    type: Optional[str] = None
+
+    class Settings:
+        name = "issue_link"

@@ -99,10 +99,12 @@ class GraphedStatsService:
         if not run_ids:
             return result
 
+        run_ids = [UUID(r) if isinstance(r, str) else r for r in run_ids]
+
         # Step 1: Get issue links for all run_ids in batches
         all_issue_links = {}
         for batch_run_ids in chunk(run_ids):
-            batch_links = IssueLink.objects.filter(run_id__in=batch_run_ids).only(["run_id", "issue_id"]).all()
+            batch_links = IssueLink.find(run_id__in=batch_run_ids).only("run_id", "issue_id").all()
 
             for link in batch_links:
                 run_id_str = str(link.run_id)
@@ -118,15 +120,15 @@ class GraphedStatsService:
         issues_by_id = {}
         if all_issue_ids:
             for batch_issue_ids in chunk(list(all_issue_ids)):
-                for issue in GithubIssue.filter(id__in=batch_issue_ids).only(
-                        ["id", "state", "title", "number", "url"]).all():
+                for issue in GithubIssue.find(id__in=batch_issue_ids).only(
+                        "id", "state", "title", "number", "url").all():
                     issues_by_id[issue.id] = issue
 
             missing_ids = [id for id in all_issue_ids if id not in issues_by_id]
             if missing_ids:
                 for batch_issue_ids in chunk(missing_ids):
-                    for issue in JiraIssue.filter(id__in=batch_issue_ids).only(
-                            ["id", "state", "summary", "key", "permalink"]).all():
+                    for issue in JiraIssue.find(id__in=batch_issue_ids).only(
+                            "id", "state", "summary", "key", "permalink").all():
                         issues_by_id[issue.id] = issue
 
         # Step 3: Fetch test runs for all provided run_ids
@@ -144,7 +146,7 @@ class GraphedStatsService:
             try:
                 test_run = test_runs.get(run_id)
                 if not test_run:
-                    result[run_id] = {
+                    result[str(run_id)] = {
                         "build_id": None,
                         "start_time": None,
                         "assignee": None,
@@ -153,7 +155,7 @@ class GraphedStatsService:
                     }
                     continue
 
-                links = all_issue_links.get(run_id, [])
+                links = all_issue_links.get(str(run_id), [])
                 issues = [issues_by_id[issue_id] for issue_id in links if issue_id in issues_by_id]
 
                 build_number = test_run.build_number
@@ -167,7 +169,7 @@ class GraphedStatsService:
                 else:
                     sut_version = "unknown"
 
-                result[run_id] = {
+                result[str(run_id)] = {
                     "build_id": f"{test_run.build_id}#{build_number}",
                     "status": test_run.status,
                     "start_time": test_run.start_time.isoformat(),
