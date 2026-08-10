@@ -160,7 +160,7 @@ class PlanningService:
         release_id = UUID(release_id) if isinstance(release_id, str) else release_id
         release: ArgusRelease = ArgusRelease.get(id=release_id)
         candidate = f"{release.name}#1"
-        release_plans = list(ArgusReleasePlan.filter(release_id=release.id).allow_filtering().all())
+        release_plans = list(ArgusReleasePlan.find(release_id=release.id).allow_filtering().all())
         if len(release_plans) == 0:
             return candidate
         existing_keys = [int(p.key.split("#")[1]) for p in release_plans]
@@ -171,20 +171,20 @@ class PlanningService:
     def _resolve_plan(self, ref: str | UUID) -> ArgusReleasePlan:
         try:
             return ArgusReleasePlan.get(id=UUID(str(ref)))
-        except (ValueError, ArgusReleasePlan.DoesNotExist):
-            return ArgusReleasePlan.filter(key=str(ref)).allow_filtering().get()
+        except (ValueError, DocumentNotFound):
+            plan = ArgusReleasePlan.find(key=str(ref)).allow_filtering().first()
+            if not plan:
+                raise DocumentNotFound(f"Plan {ref} not found")
+            return plan
 
     def create_plan(self, payload: dict[str, Any]) -> ArgusReleasePlan:
         plan_request = CreatePlanPayload(**payload)
 
-        try:
-            existing = ArgusReleasePlan.filter(
-                name=plan_request.name, target_version=plan_request.target_version).allow_filtering().get()
-            if existing:
-                raise PlannerServiceException(
-                    f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing, plan_request)
-        except ArgusReleasePlan.DoesNotExist:
-            pass
+        existing = ArgusReleasePlan.find(
+            name=plan_request.name, target_version=plan_request.target_version).allow_filtering().first()
+        if existing:
+            raise PlannerServiceException(
+                f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing, plan_request)
 
         plan = ArgusReleasePlan()
         plan.name = plan_request.name
@@ -192,19 +192,20 @@ class PlanningService:
         plan.owner = UUID(plan_request.owner)
         plan.target_version = plan_request.target_version
         plan.release_id = UUID(plan_request.release_id)
-        plan.participants = plan_request.participants
+        plan.participants = [UUID(p) if isinstance(p, str) else p for p in plan_request.participants or []]
         plan.assignee_mapping = {UUID(entity_id): UUID(user_id)
                                  for entity_id, user_id in plan_request.assignments.items()}
-        plan.groups = plan_request.groups
-        plan.tests = plan_request.tests
+        plan.groups = [UUID(g) if isinstance(g, str) else g for g in plan_request.groups or []]
+        plan.tests = [UUID(t) if isinstance(t, str) else t for t in plan_request.tests or []]
         plan.options = json.dumps(plan_request.options or {})
         if plan_request.created_from:
-            plan.created_from = plan_request.created_from
+            plan.created_from = UUID(plan_request.created_from) if isinstance(
+                plan_request.created_from, str) else plan_request.created_from
         if not plan_request.view_id:
             view = self.create_view_for_plan(plan)
             plan.view_id = view.id
         else:
-            plan.view_id = plan_request.view_id
+            plan.view_id = UUID(plan_request.view_id) if isinstance(plan_request.view_id, str) else plan_request.view_id
             view = self.update_view_for_plan(plan, existing=True)
 
         plan.key = self._generate_plan_key(plan.release_id)
@@ -230,14 +231,11 @@ class PlanningService:
         if plan_request.ends_at is not None:
             plan.ends_at = plan_request.ends_at
 
-        try:
-            existing = ArgusReleasePlan.filter(
-                name=plan.name, target_version=plan.target_version).allow_filtering().get()
-            if existing and existing.id != plan.id:
-                raise PlannerServiceException(
-                    f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing, plan_request)
-        except ArgusReleasePlan.DoesNotExist:
-            pass
+        existing = ArgusReleasePlan.find(
+            name=plan.name, target_version=plan.target_version).allow_filtering().first()
+        if existing and existing.id != plan.id:
+            raise PlannerServiceException(
+                f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing, plan_request)
 
         # Apply list diffs (remove first, then add - remove wins over concurrent edits)
         current_tests = list(plan.tests or [])
@@ -307,7 +305,7 @@ class PlanningService:
                         old_view.save()
                     except DocumentNotFound:
                         pass
-                plan.view_id = plan_request.view_id
+                plan.view_id = UUID(plan_request.view_id) if isinstance(plan_request.view_id, str) else plan_request.view_id
             self.update_view_for_plan(plan, existing=True)
         else:
             if plan.view_id:
@@ -429,14 +427,11 @@ class PlanningService:
 
     def copy_plan(self, payload: CopyPlanPayload) -> ArgusReleasePlan:
 
-        try:
-            existing = ArgusReleasePlan.filter(
-                name=payload.plan.name, target_version=payload.plan.target_version).allow_filtering().get()
-            if existing:
-                raise PlannerServiceException(
-                    f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing, payload)
-        except ArgusReleasePlan.DoesNotExist:
-            pass
+        existing = ArgusReleasePlan.find(
+            name=payload.plan.name, target_version=payload.plan.target_version).allow_filtering().first()
+        if existing:
+            raise PlannerServiceException(
+                f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing, payload)
 
         original_plan: ArgusReleasePlan = self._resolve_plan(payload.plan.id)
         target_release: ArgusRelease = ArgusRelease.get(
@@ -469,6 +464,8 @@ class PlanningService:
             new_test = tests_by_build_id.get(new_build_id)
             new_test_id = new_test.id if new_test else payload.replacements.get(
                 test.id)
+            if isinstance(new_test_id, str):
+                new_test_id = UUID(new_test_id)
             if new_test_id:
                 new_tests.append(new_test_id)
                 if original_assignee and payload.keepParticipants:
@@ -484,6 +481,8 @@ class PlanningService:
             new_group = groups_by_build_id.get(new_build_id)
             new_group_id = new_group.id if new_group else payload.replacements.get(
                 group.id)
+            if isinstance(new_group_id, str):
+                new_group_id = UUID(new_group_id)
             if new_group_id:
                 new_groups.append(new_group_id)
                 if original_assignee and payload.keepParticipants:
@@ -494,11 +493,12 @@ class PlanningService:
 
         new_plan = ArgusReleasePlan()
         new_plan.release_id = target_release.id
-        new_plan.owner = payload.plan.owner
+        new_plan.owner = UUID(payload.plan.owner) if isinstance(payload.plan.owner, str) else payload.plan.owner
         new_plan.name = payload.plan.name
         new_plan.description = payload.plan.description
         if payload.keepParticipants:
-            new_plan.participants = payload.plan.participants
+            new_plan.participants = [UUID(p) if isinstance(p, str) else p
+                                     for p in payload.plan.participants or []]
         new_plan.assignee_mapping = new_assignee_mapping
         new_plan.tests = new_tests
         new_plan.groups = new_groups
@@ -576,7 +576,8 @@ class PlanningService:
         }
 
     def get_plans_for_release(self, release_id: str | UUID) -> list[ArgusReleasePlan]:
-        return list(ArgusReleasePlan.filter(release_id=release_id).all())
+        release_id = UUID(release_id) if isinstance(release_id, str) else release_id
+        return list(ArgusReleasePlan.find(release_id=release_id).all())
 
     def delete_plan(self, plan_id: str | UUID, delete_view: bool = True):
         plan: ArgusReleasePlan = self._resolve_plan(plan_id)
@@ -593,7 +594,7 @@ class PlanningService:
         return True
 
     def get_assignee_for_test(self, test_id: str | UUID, target_version: str = None) -> UUID | None:
-        dml = ArgusReleasePlan.filter(tests__contains=test_id, complete=False)
+        dml = ArgusReleasePlan.find(tests__contains=test_id, completed=False)
         if target_version:
             dml.filter(target_version=target_version)
         potential_plans: list[ArgusReleasePlan] = dml.allow_filtering().all()
@@ -603,8 +604,8 @@ class PlanningService:
         return None
 
     def get_assignee_for_group(self, group_id: str | UUID, target_version: str = None) -> UUID | None:
-        dml = ArgusReleasePlan.filter(
-            groups__contains=group_id, complete=False)
+        dml = ArgusReleasePlan.find(
+            groups__contains=group_id, completed=False)
         if target_version:
             dml.filter(target_version=target_version)
         potential_plans: list[ArgusReleasePlan] = dml.allow_filtering().all()
@@ -618,11 +619,11 @@ class PlanningService:
         release: ArgusRelease = ArgusRelease.get(id=release_id)
         if not plan_id:
             plans: list[ArgusReleasePlan] = list(
-                ArgusReleasePlan.filter(release_id=release.id).all())
+                ArgusReleasePlan.find(release_id=release.id).all())
             plans = plans if not version else [
                 plan for plan in plans if plan.target_version == version]
         else:
-            plans = [ArgusReleasePlan.get(id=plan_id)]
+            plans = [ArgusReleasePlan.get(id=UUID(plan_id) if isinstance(plan_id, str) else plan_id)]
 
         all_assignments = {}
         for plan in reversed(plans):
@@ -638,11 +639,11 @@ class PlanningService:
         release: ArgusRelease = ArgusRelease.get(id=group.release_id)
         if not plan_id:
             plans: list[ArgusReleasePlan] = list(
-                ArgusReleasePlan.filter(release_id=release.id).all())
+                ArgusReleasePlan.find(release_id=release.id).all())
             plans = plans if not version else [
                 plan for plan in plans if plan.target_version == version]
         else:
-            plans = [ArgusReleasePlan.get(id=plan_id)]
+            plans = [ArgusReleasePlan.get(id=UUID(plan_id) if isinstance(plan_id, str) else plan_id)]
 
         all_assignments = {}
 
@@ -658,7 +659,7 @@ class PlanningService:
         return all_assignments
 
     def complete_plan(self, plan_id: str | UUID) -> bool:
-        plan: ArgusReleasePlan = ArgusReleasePlan(id=plan_id).get()
+        plan: ArgusReleasePlan = ArgusReleasePlan.get(id=UUID(str(plan_id)))
         plan.completed = True
 
         plan.save()
@@ -700,21 +701,21 @@ class PlanningService:
         match condition_set:
             case (True, False, False):
                 release = ArgusRelease.get(name=release_name)
-                filter_expr = {"release_id__eq": release.id}
+                filter_expr = {"release_id": release.id}
             case (False, True, False):
-                filter_expr = {"id__eq": plan_id}
+                filter_expr = {"id": UUID(plan_id) if isinstance(plan_id, str) else plan_id}
             case (False, False, True):
-                filter_expr = {"target_version__eq": version}
+                filter_expr = {"target_version": version}
             case (True, False, True):
                 release = ArgusRelease.get(name=release_name)
-                filter_expr = {"target_version__eq": version,
-                               "release_id__eq": release.id}
+                filter_expr = {"target_version": version,
+                               "release_id": release.id}
             case _:
                 raise PlannerServiceException(
                     "No version, release name or plan id specified.", payload)
 
         plans: list[ArgusReleasePlan] = list(
-            ArgusReleasePlan.filter(**filter_expr).allow_filtering().all())
+            ArgusReleasePlan.find(**filter_expr).allow_filtering().all())
 
         if len(plans) == 0:
             return False, "No plans to trigger"

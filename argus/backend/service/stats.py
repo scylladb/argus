@@ -249,7 +249,7 @@ class ViewStats:
                 plan = ArgusReleasePlan.get(id=self.release.plan_id)
                 self.plans = [plan]
             else:
-                plans_by_release = [ArgusReleasePlan.filter(release_id=release_id).all()
+                plans_by_release = [ArgusReleasePlan.find(release_id=release_id).all()
                                     for release_id in all_release_ids]
                 plans: list[ArgusReleasePlan] = [plan for plans in plans_by_release for plan in plans]
                 self.plans = plans if not version_filter else [
@@ -342,7 +342,7 @@ class ReleaseStats:
             return
 
         if not limited:
-            plans: list[ArgusReleasePlan] = list(ArgusReleasePlan.filter(release_id=self.release.id).all())
+            plans: list[ArgusReleasePlan] = list(ArgusReleasePlan.find(release_id=self.release.id).all())
             self.plans = plans if not filter else [plan for plan in plans if version_filter == plan.target_version]
             self.test_schedules = reduce(
                 lambda acc, row: acc[row["test_id"]].append(row) or acc,
