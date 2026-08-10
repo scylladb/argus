@@ -1,5 +1,7 @@
 from uuid import UUID
 from flask import current_app
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.service.github_service import GithubService
 from argus.backend.service.issue_utils import build_version_map, filter_links_by_version
@@ -26,7 +28,7 @@ class IssueService:
             gh_links = list(self.gh._get_github_issues_for_view(filter_id))
             jira_links = list(self.jira._get_jira_issues_for_view(filter_id))
             return gh_links + jira_links
-        return list(IssueLink.filter(**{filter_key: filter_id}).allow_filtering().all())
+        return list(IssueLink.find(**{filter_key: filter_id}).allow_filtering().all())
 
     def get(
         self,
@@ -36,6 +38,7 @@ class IssueService:
         product_version: str | None = None,
         include_no_version: bool = False,
     ):
+        filter_id = UUID(filter_id) if isinstance(filter_id, str) else filter_id
         links = self._get_links(filter_key, filter_id)
 
         if product_version:
@@ -49,13 +52,20 @@ class IssueService:
         return issues
 
     def delete(self, issue_id: UUID | str, run_id: UUID | str):
+        issue_id = UUID(issue_id) if isinstance(issue_id, str) else issue_id
+        run_id = UUID(run_id) if isinstance(run_id, str) else run_id
         try:
             return self.gh.delete_issue(issue_id=issue_id, run_id=run_id)
-        except GithubIssue.DoesNotExist:
+        except DocumentNotFound:
             return self.jira.delete_issue(issue_id=issue_id, run_id=run_id)
 
     def submit(self, issue_url: str, test_id: UUID | str, run_id: UUID | str):
+        test_id = UUID(test_id) if isinstance(test_id, str) else test_id
+        run_id = UUID(run_id) if isinstance(run_id, str) else run_id
         return self._get_service(issue_url).submit_issue(issue_url=issue_url, test_id=test_id, run_id=run_id)
 
     def submit_for_sct_event(self, issue_url: str, test_id: UUID | str, event_id: UUID | str, run_id: UUID | str):
+        test_id = UUID(test_id) if isinstance(test_id, str) else test_id
+        run_id = UUID(run_id) if isinstance(run_id, str) else run_id
+        event_id = UUID(event_id) if isinstance(event_id, str) else event_id
         return self._get_service(issue_url).submit_issue(issue_url=issue_url, test_id=test_id, run_id=run_id, event_id=event_id)

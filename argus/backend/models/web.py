@@ -11,7 +11,7 @@ from pydantic import Field
 from coodie import ClusteringKey, Indexed, PrimaryKey, SmallInt, TimeUUID
 from coodie.exceptions import DocumentNotFound
 
-from argus.backend.models.github_issue import GithubIssue, IssueLink
+from argus.backend.models.github_issue import GithubIssue, IssueAssignee, IssueLabel, IssueLink
 from argus.backend.models.jira import JiraIssue
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.pytest import PytestResultTable, PytestResultTableOld, PytestUserField
@@ -496,9 +496,6 @@ USED_MODELS: list[Model] = [
     CriticalEventEmbeddings,  # to be deprecated
     SCTErrorEventEmbedding,
     SCTCriticalEventEmbedding,
-    JiraIssue,
-    GithubIssue,
-    IssueLink,
     PytestResultTable,
     PytestUserField,
     PytestResultTableOld,
@@ -535,6 +532,9 @@ USED_COODIE_MODELS: list[type[Document]] = [
     WidgetHighlights,
     WidgetComment,
     ArgusReleasePlan,
+    GithubIssue,
+    IssueLink,
+    JiraIssue,
 ]
 
 # Coodie user-defined types; synced via UserType.sync_type() and registered
@@ -542,4 +542,6 @@ USED_COODIE_MODELS: list[type[Document]] = [
 USED_COODIE_TYPES = [
     ColumnMetadata,
     ValidationRules,
+    IssueLabel,
+    IssueAssignee,
 ]

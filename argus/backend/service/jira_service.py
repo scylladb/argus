@@ -57,7 +57,7 @@ class JiraService:
         LOGGER.info("Starting JIRA Issue sync...")
         check_time = datetime.now(tz=UTC)
 
-        all_jira_issues: list[JiraIssue] = list(JiraIssue.all())
+        all_jira_issues: list[JiraIssue] = list(JiraIssue.find().all())
         issue_by_key = { i.key: i for i in all_jira_issues }
         dt = last_ran.value.strftime("%Y-%m-%d %H:%M")
         issues = self.jira.search_issues(f"updated >= \"{dt}\"", maxResults=0)
@@ -91,7 +91,7 @@ class JiraService:
 
         existing = True
         try:
-            issue = list(JiraIssue.filter(permalink=issue_url).all())[0]
+            issue = list(JiraIssue.find(permalink=issue_url).all())[0]
         except:
             issue = None
             existing = False
@@ -159,7 +159,7 @@ class JiraService:
 
         invalidate_release_snapshots(test.release_id)
         response = {
-            **dict(list(issue.items())),
+            **issue.model_dump(),
             "summary": issue.summary,
             "state": issue.state,
         }
@@ -171,7 +171,7 @@ class JiraService:
         view: ArgusUserView = ArgusUserView.get(id=view_id)
         links = []
         for batch in chunk(view.tests):
-            links.extend(IssueLink.filter(test_id__in=batch).allow_filtering().all())
+            links.extend(IssueLink.find(test_id__in=batch).allow_filtering().all())
 
         return links
 
@@ -183,7 +183,7 @@ class JiraService:
         if filter_key == "view_id":
             links = list(self._get_jira_issues_for_view(filter_id))
         else:
-            links = list(IssueLink.filter(**{filter_key: filter_id}).allow_filtering().all())
+            links = list(IssueLink.find(**{filter_key: filter_id}).allow_filtering().all())
         return self.resolve_issues(links, aggregate_by_issue)
 
     def resolve_issues(self, links: list[IssueLink], aggregate_by_issue: bool = False) -> list[dict]:
@@ -191,22 +191,22 @@ class JiraService:
         issues = reduce(lambda acc, link: acc[link.issue_id].append(link) or acc, links, defaultdict(list))
         resolved_issues = []
         for batch in chunk(issues.keys()):
-            resolved_issues.extend(JiraIssue.filter(id__in=batch).all())
+            resolved_issues.extend(JiraIssue.find(id__in=batch).all())
         if aggregate_by_issue:
             response = []
             for issue in resolved_issues:
-                issue_dict = dict(issue.items())
+                issue_dict = issue.model_dump()
                 issue_dict["links"] = issues[issue.id]
                 issue_dict["subtype"] = "jira"
                 response.append(issue_dict)
 
         else:
-            response = [{**dict(issue.items()), **issues[issue.id][0], "subtype": "jira" } for issue in resolved_issues]
+            response = [{**issue.model_dump(), **issues[issue.id][0].model_dump(), "subtype": "jira" } for issue in resolved_issues]
         return response
 
     def delete_issue(self, issue_id: UUID, run_id: UUID) -> dict:
         issue: JiraIssue = JiraIssue.get(id=issue_id)
-        links = list(IssueLink.filter(issue_id=issue_id).allow_filtering().all())
+        links = list(IssueLink.find(issue_id=issue_id).allow_filtering().all())
         link: IssueLink = IssueLink.get(run_id=run_id, issue_id=issue_id)
         remaining_links = len(list(filter(lambda l: l.run_id != link.run_id and link.issue_id != issue_id, links)))
 

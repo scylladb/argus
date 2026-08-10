@@ -748,8 +748,8 @@ class SCTService:
         all_issue_links = {}
 
         for batch_run_ids in chunk(run_ids):
-            batch_links = IssueLink.objects.filter(
-                run_id__in=batch_run_ids).all()
+            batch_links = IssueLink.find(
+                run_id__in=[UUID(r) if isinstance(r, str) else r for r in batch_run_ids]).all()
 
             for link in batch_links:
                 run_id_str = str(link.run_id)
@@ -765,7 +765,7 @@ class SCTService:
         issues_by_id = {}
         if all_issue_ids:
             for batch_issue_ids in chunk(list(all_issue_ids)):
-                batch_issues = GithubIssue.filter(id__in=batch_issue_ids).all()
+                batch_issues = GithubIssue.find(id__in=batch_issue_ids).all()
 
                 for issue in batch_issues:
                     issues_by_id[issue.id] = issue
@@ -773,7 +773,7 @@ class SCTService:
             missing_ids = [id for id in all_issue_ids if id not in issues_by_id]
             if missing_ids:
                 for batch_issue_ids in chunk(missing_ids):
-                    for issue in JiraIssue.filter(id__in=batch_issue_ids).all():
+                    for issue in JiraIssue.find(id__in=batch_issue_ids).all():
                         issues_by_id[issue.id] = issue
 
         # Step 3: Fetch test runs only for run_ids that have issue links (limiting to MAX_SIMILARS runs)
