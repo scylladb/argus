@@ -622,10 +622,11 @@ class SCTService:
         Returns:
             List of dictionaries containing event_index, severity and similars_set for each event
         """
-        error_embeddings = ErrorEventEmbeddings.filter(run_id=run_id).only(
-            ["event_index", "similars_map", "duplicates_list"]).all()
-        critical_embeddings = CriticalEventEmbeddings.filter(run_id=run_id).only(
-            ["event_index", "similars_map", "duplicates_list"]).all()
+        run_id = UUID(run_id) if isinstance(run_id, str) else run_id
+        error_embeddings = ErrorEventEmbeddings.find(run_id=run_id).only(
+            "event_index", "similars_map", "duplicates_list").all()
+        critical_embeddings = CriticalEventEmbeddings.find(run_id=run_id).only(
+            "event_index", "similars_map", "duplicates_list").all()
 
         result = []
         # Process ERROR embeddings
@@ -687,7 +688,7 @@ class SCTService:
                     f"Unsupported severity for similarity search: {severity}")
 
             # Fetch the embedding for the query event
-            query_embedding_result = embedding_model.filter(run_id=UUID(
+            query_embedding_result = embedding_model.find(run_id=UUID(
                 run_id) if isinstance(run_id, str) else run_id, ts=event_ts).first()
 
             if not query_embedding_result:

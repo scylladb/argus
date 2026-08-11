@@ -24,7 +24,6 @@ from flask import g, Flask
 from flask.testing import FlaskClient
 import pytest
 
-from argus.backend.models.argus_ai import Vector
 from argus.backend.plugins.loader import all_plugin_models, all_plugin_types
 from argus.backend.plugins.sct.service import SCTService
 from argus.backend.service.issue_service import IssueService

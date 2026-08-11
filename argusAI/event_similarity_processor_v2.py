@@ -58,8 +58,8 @@ class EventSimilarityProcessorV2:
         self.processed_count = 0
         self.error_count = 0
         self.keyspace = (
-            SCTCriticalEventEmbedding.__keyspace__
-            or SCTErrorEventEmbedding.__keyspace__
+            SCTCriticalEventEmbedding.Settings.keyspace
+            or SCTErrorEventEmbedding.Settings.keyspace
             or self.db.config["SCYLLA_KEYSPACE_NAME"]
         )
         # Best-effort summarization of unique events, dispatched from the per-event pipeline.
@@ -77,9 +77,7 @@ class EventSimilarityProcessorV2:
     def _mark_event_is_duplicate(self, run_id: UUID, ts: datetime, severity: str, embedding: list[float]) -> bool:
         try:
             table_name = (
-                SCTErrorEventEmbedding.__table_name__
-                if severity == "ERROR"
-                else SCTCriticalEventEmbedding.__table_name__
+                SCTErrorEventEmbedding.table_name() if severity == "ERROR" else SCTCriticalEventEmbedding.table_name()
             )
             query_vector = array(embedding, dtype=float)
             dupe = next(
@@ -237,9 +235,9 @@ class EventSimilarityProcessorV2:
         # Step 4: Store embedding in severity-specific table
         try:
             if severity == "ERROR":
-                table_name = SCTErrorEventEmbedding.__table_name__
+                table_name = SCTErrorEventEmbedding.table_name()
             elif severity == "CRITICAL":
-                table_name = SCTCriticalEventEmbedding.__table_name__
+                table_name = SCTCriticalEventEmbedding.table_name()
             else:
                 raise ValueError(f"Unsupported severity: {severity}")
 

@@ -7,6 +7,8 @@ from typing import Any
 from uuid import UUID
 
 
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.db import ScyllaCluster
 from argus.backend.error_handlers import DataValidationError
 from argus.backend.models.pytest import PytestResultTable, PytestSubmitData, PytestUserField
@@ -234,7 +236,7 @@ class ClientService:
 
     @staticmethod
     def get_config_property(name: str, value: Any | str, run_id: str = None) -> list[RunConfigParam]:
-        dml = RunConfigParam.filter(name=name, value=str(value))
+        dml = RunConfigParam.find(name=name, value=str(value))
         if run_id:
             dml.filter(run_id=run_id)
 
@@ -242,9 +244,10 @@ class ClientService:
 
     @staticmethod
     def get_config_store(run_id: str, config_name: str) -> RunConfiguration:
+        run_id = UUID(run_id) if isinstance(run_id, str) else run_id
         try:
             config_store = RunConfiguration.get(run_id=run_id, name=config_name)
-        except RunConfiguration.DoesNotExist:
+        except DocumentNotFound:
             config_store = RunConfiguration()
             config_store.run_id = run_id
             config_store.name = config_name
@@ -253,7 +256,8 @@ class ClientService:
 
     @staticmethod
     def get_all_configs(run_id: str) -> list[RunConfiguration]:
-        config_store = RunConfiguration.filter(run_id=run_id).all()
+        run_id = UUID(run_id) if isinstance(run_id, str) else run_id
+        config_store = RunConfiguration.find(run_id=run_id).all()
         return list(config_store)
 
     @staticmethod
