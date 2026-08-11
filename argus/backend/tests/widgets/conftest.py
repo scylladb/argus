@@ -299,11 +299,11 @@ def seeded_pytest_row(client_service, fake_test):
     # Best-effort cleanup; pytest tables are partition-keyed by name so
     # a delete-by-PK is safe.
     try:
-        PytestResultTable.filter(name=inserted["name"]).delete()
+        PytestResultTable.find(name=inserted["name"]).delete()
     except Exception:
         pass
     try:
-        PytestUserField.filter(name=inserted["name"]).delete()
+        PytestUserField.find(name=inserted["name"]).delete()
     except Exception:
         pass
 

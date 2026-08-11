@@ -561,7 +561,7 @@ class TestRunService:
         return jobs_affected
 
     def get_pytest_test_results(self, test_name: str, before: float = None, after: float = None) -> list[PytestResultTable]:
-        query = PytestResultTable.filter(name=test_name)
+        query = PytestResultTable.find(name=test_name)
         if before:
             query = query.filter(id__lt=uuid_from_time(before))
 
@@ -584,7 +584,7 @@ class TestRunService:
 
         db = ScyllaCluster.get()
         query_values = [test_name]
-        if field_name not in PytestResultTable._columns.keys():
+        if field_name not in PytestResultTable.model_fields.keys():
             raise TestRunServiceException(f"Invalid fixed column: {field_name}", field_name)
         raw_query = f"SELECT {fun}({field_name}) FROM pytest_v2 WHERE name = ?"
 
@@ -622,7 +622,8 @@ class TestRunService:
         """
             Unbound filter function, will return all tests for a specific release
         """
-        results = PytestResultTable.filter(release_id=release_id).all()
+        release_id = UUID(release_id) if isinstance(release_id, str) else release_id
+        results = PytestResultTable.find(release_id=release_id).all()
 
         return list(results)
 
@@ -630,6 +631,7 @@ class TestRunService:
         """
             Unbound filter function, will return all tests for a specific release
         """
-        results = PytestResultTable.filter(run_id=run_id).all()
+        run_id = UUID(run_id) if isinstance(run_id, str) else run_id
+        results = PytestResultTable.find(run_id=run_id).all()
 
         return list(results)

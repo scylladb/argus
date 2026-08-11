@@ -51,7 +51,7 @@ class ClientService:
         new_result.id = datetime.fromtimestamp(request_data["timestamp"], tz=UTC)
         new_result.status = request_data["status"]
         new_result.test_type = request_data["test_type"]
-        new_result.run_id = request_data["run_id"]
+        new_result.run_id = UUID(request_data["run_id"]) if isinstance(request_data["run_id"], str) else request_data["run_id"]
         new_result.message = request_data.get("message", "")
         new_result.duration = request_data.get("duration")
         new_result.test_timestamp = datetime.fromtimestamp(request_data["timestamp"])
