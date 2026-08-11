@@ -1,10 +1,12 @@
 import json
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from flask import g
 from flask.testing import FlaskClient
+
+from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.ssh_key import ProxyTunnelConfig, SSHTunnelKey
 from argus.backend.models.web import User
@@ -18,7 +20,7 @@ def _json_post(client: FlaskClient, url: str, payload: dict) -> object:
 
 
 def _active_config_ids() -> list:
-    return [cfg.id for cfg in ProxyTunnelConfig.objects.all() if cfg.is_active]
+    return [cfg.id for cfg in ProxyTunnelConfig.find().all() if cfg.is_active]
 
 
 def _deactivate_all_configs() -> list:
@@ -99,7 +101,7 @@ def test_admin_can_save_and_get_proxy_tunnel_config(flask_client: FlaskClient, a
     finally:
         if created_config_id:
             try:
-                ProxyTunnelConfig.get(id=created_config_id).delete()
+                ProxyTunnelConfig.get(id=UUID(str(created_config_id))).delete()
             except Exception:
                 pass
         _restore_active_configs(previous_active_ids)
@@ -146,12 +148,12 @@ def test_admin_get_proxy_tunnel_config_without_id_is_non_mutating(flask_client: 
     finally:
         if first_cfg:
             try:
-                ProxyTunnelConfig.get(id=first_cfg).delete()
+                ProxyTunnelConfig.get(id=UUID(str(first_cfg))).delete()
             except Exception:
                 pass
         if second_cfg:
             try:
-                ProxyTunnelConfig.get(id=second_cfg).delete()
+                ProxyTunnelConfig.get(id=UUID(str(second_cfg))).delete()
             except Exception:
                 pass
         _restore_active_configs(previous_active_ids)
@@ -189,7 +191,7 @@ def test_admin_can_list_and_delete_ssh_key(flask_client: FlaskClient, argus_db):
     now_utc = datetime.now(tz=UTC).replace(tzinfo=None)
     pub_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFj+zV+Y9lW7eGLtQ+uY1M4NeC+YABN9nDl2sjp4rU0m"
 
-    SSHTunnelKey.objects.ttl(86400).create(
+    SSHTunnelKey.find().ttl(86400).create(
         id=key_id,
         user_id=g.user.id,
         tunnel_id=tunnel_id,
@@ -210,7 +212,7 @@ def test_admin_can_list_and_delete_ssh_key(flask_client: FlaskClient, argus_db):
     assert delete_resp.json["status"] == "ok"
     assert delete_resp.json["response"]["deleted"] is True
 
-    with pytest.raises(SSHTunnelKey.DoesNotExist):
+    with pytest.raises(DocumentNotFound):
         SSHTunnelKey.get(id=key_id)
 
 
@@ -273,12 +275,12 @@ def test_admin_can_list_and_toggle_proxy_tunnel_configs(flask_client: FlaskClien
     finally:
         if active_id:
             try:
-                ProxyTunnelConfig.get(id=active_id).delete()
+                ProxyTunnelConfig.get(id=UUID(str(active_id))).delete()
             except Exception:
                 pass
         if inactive_id:
             try:
-                ProxyTunnelConfig.get(id=inactive_id).delete()
+                ProxyTunnelConfig.get(id=UUID(str(inactive_id))).delete()
             except Exception:
                 pass
 

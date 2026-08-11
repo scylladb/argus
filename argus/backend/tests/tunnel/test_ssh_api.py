@@ -11,7 +11,7 @@ Run with:
 """
 import json
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -44,7 +44,7 @@ def _seed_key(user_id, tunnel_id, public_key: str, fingerprint: str, ttl: int = 
     """
     now_utc = datetime.now(tz=UTC).replace(tzinfo=None)
     expires_at = now_utc + timedelta(seconds=ttl)
-    return SSHTunnelKey.objects.ttl(ttl).create(
+    key = SSHTunnelKey(
         id=uuid4(),
         user_id=user_id,
         tunnel_id=tunnel_id,
@@ -53,6 +53,8 @@ def _seed_key(user_id, tunnel_id, public_key: str, fingerprint: str, ttl: int = 
         created_at=now_utc,
         expires_at=expires_at,
     )
+    key.save(ttl=ttl)
+    return key
 
 
 def _make_active_config(**overrides) -> ProxyTunnelConfig:
@@ -76,7 +78,7 @@ def _json_post(client: FlaskClient, url: str, payload: dict) -> object:
 
 
 def _active_config_ids() -> list:
-    return [cfg.id for cfg in ProxyTunnelConfig.objects.all() if cfg.is_active]
+    return [cfg.id for cfg in ProxyTunnelConfig.find().all() if cfg.is_active]
 
 
 # ---------------------------------------------------------------------------
@@ -236,7 +238,7 @@ def test_register_tunnel_success(flask_client: FlaskClient, argus_db, active_con
     assert "tunnel_id" in data
 
     # Verify the key was actually persisted in the DB
-    key = SSHTunnelKey.get(id=data["key_id"])
+    key = SSHTunnelKey.get(id=UUID(data["key_id"]))
     assert key.fingerprint.startswith("SHA256:")
 
 
@@ -399,7 +401,7 @@ def test_get_authorized_keys_with_multiple_active_configs(flask_client: FlaskCli
         key_one = _make_public_key()
         key_two = _make_public_key()
         now_utc = datetime.now(tz=UTC).replace(tzinfo=None)
-        SSHTunnelKey.objects.ttl(86400).create(
+        SSHTunnelKey.find().ttl(86400).create(
             id=uuid4(),
             user_id=g.user.id,
             tunnel_id=active_config.id,
@@ -408,7 +410,7 @@ def test_get_authorized_keys_with_multiple_active_configs(flask_client: FlaskCli
             created_at=now_utc,
             expires_at=now_utc,
         )
-        SSHTunnelKey.objects.ttl(86400).create(
+        SSHTunnelKey.find().ttl(86400).create(
             id=uuid4(),
             user_id=g.user.id,
             tunnel_id=second.id,
@@ -433,7 +435,7 @@ def test_get_authorized_keys_with_multiple_active_configs(flask_client: FlaskCli
 @pytest.mark.docker_required
 def test_get_authorized_keys_empty_when_no_keys(flask_client: FlaskClient, argus_db, active_config, ssh_tunnel_server_identity):
     """GET /ssh/keys for an empty database should return empty text."""
-    for row in SSHTunnelKey.objects.all():
+    for row in SSHTunnelKey.find().all():
         row.delete()
     resp = flask_client.get(f"{API_PREFIX}/keys")
     assert resp.status_code == 200
@@ -478,7 +480,7 @@ def test_get_user_keys_returns_only_current_user(flask_client: FlaskClient, argu
 
     foreign_key = _make_public_key()
     now_utc = datetime.now(tz=UTC).replace(tzinfo=None)
-    SSHTunnelKey.objects.ttl(86400).create(
+    SSHTunnelKey.find().ttl(86400).create(
         id=uuid4(),
         user_id=uuid4(),
         tunnel_id=active_config.id,
@@ -509,7 +511,7 @@ def test_get_user_keys_can_filter_by_tunnel(flask_client: FlaskClient, argus_db,
     try:
         other_tunnel_key = _make_public_key()
         now_utc = datetime.now(tz=UTC).replace(tzinfo=None)
-        SSHTunnelKey.objects.ttl(86400).create(
+        SSHTunnelKey.find().ttl(86400).create(
             id=uuid4(),
             user_id=g.user.id,
             tunnel_id=second.id,

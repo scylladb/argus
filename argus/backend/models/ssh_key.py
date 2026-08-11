@@ -1,15 +1,17 @@
 from datetime import UTC, datetime
-from uuid import uuid4
+from typing import Annotated, Optional
+from uuid import UUID, uuid4
 
-from cassandra.cqlengine import columns
-from cassandra.cqlengine.models import Model
+from pydantic import Field
+from coodie import Indexed, PrimaryKey
+from coodie.sync import Document
 
 
 def _utcnow_naive() -> datetime:
     return datetime.now(tz=UTC).replace(tzinfo=None)
 
 
-class SSHTunnelKey(Model):
+class SSHTunnelKey(Document):
     """
     Stores a client-registered SSH public key for a specific (user, tunnel) pair.
 
@@ -18,16 +20,20 @@ class SSHTunnelKey(Model):
     re-register. Actual expiry is handled automatically by ScyllaDB.
     """
 
-    id = columns.UUID(primary_key=True, default=uuid4)
-    user_id = columns.UUID(required=True, index=True)
-    tunnel_id = columns.UUID(required=True, index=True)
-    public_key = columns.Text(required=True)
-    fingerprint = columns.Text(required=True, index=True)
-    created_at = columns.DateTime(required=True, default=_utcnow_naive)
-    expires_at = columns.DateTime(required=True)
+    id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
+    user_id: Annotated[Optional[UUID], Indexed()] = None
+    tunnel_id: Annotated[Optional[UUID], Indexed()] = None
+    public_key: Optional[str] = None
+    fingerprint: Annotated[Optional[str], Indexed()] = None
+    created_at: Optional[datetime] = Field(default_factory=_utcnow_naive)
+    expires_at: Optional[datetime] = None
+
+    class Settings:
+        # cqlengine collapsed the consecutive capitals when deriving the name
+        name = "sshtunnel_key"
 
 
-class ProxyTunnelConfig(Model):
+class ProxyTunnelConfig(Document):
     """
     Stores the configuration of an SSH proxy tunnel server.
 
@@ -40,12 +46,15 @@ class ProxyTunnelConfig(Model):
     own isolated credentials.
     """
 
-    id = columns.UUID(primary_key=True, default=uuid4)
-    host = columns.Text(required=True)
-    port = columns.Integer(required=True)
-    proxy_user = columns.Text(required=True)
-    target_host = columns.Text(required=True)
-    target_port = columns.Integer(required=True)
-    host_key_fingerprint = columns.Text(required=True)
-    service_user_id = columns.UUID()
-    is_active = columns.Boolean(default=True)
+    id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
+    host: Optional[str] = None
+    port: Optional[int] = None
+    proxy_user: Optional[str] = None
+    target_host: Optional[str] = None
+    target_port: Optional[int] = None
+    host_key_fingerprint: Optional[str] = None
+    service_user_id: Optional[UUID] = None
+    is_active: Optional[bool] = True
+
+    class Settings:
+        name = "proxy_tunnel_config"

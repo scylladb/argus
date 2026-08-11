@@ -501,8 +501,6 @@ USED_MODELS: list[Model] = [
     PytestResultTableOld,
     RunConfiguration,
     RunConfigParam,
-    SSHTunnelKey,
-    ProxyTunnelConfig,
     ReleaseStatsSnapshot,
 ]
 
@@ -535,6 +533,8 @@ USED_COODIE_MODELS: list[type[Document]] = [
     GithubIssue,
     IssueLink,
     JiraIssue,
+    SSHTunnelKey,
+    ProxyTunnelConfig,
 ]
 
 # Coodie user-defined types; synced via UserType.sync_type() and registered
