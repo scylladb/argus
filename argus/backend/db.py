@@ -6,7 +6,6 @@ from cassandra.policies import WhiteListRoundRobinPolicy
 from cassandra import ConsistencyLevel
 from cassandra.cluster import ExecutionProfile, EXEC_PROFILE_DEFAULT, Cluster
 from cassandra.cluster import PreparedStatement
-from cassandra.cqlengine.management import sync_table, sync_type
 from cassandra.cqlengine import connection
 from cassandra.query import dict_factory
 from cassandra.auth import PlainTextAuthProvider
@@ -16,7 +15,7 @@ from argus.backend.util.config import Config
 
 from cassandra.cluster import UserTypeDoesNotExist
 
-from argus.backend.models.web import USED_MODELS, USED_TYPES, USED_COODIE_MODELS, USED_COODIE_TYPES
+from argus.backend.models.web import USED_MODELS, USED_TYPES
 
 LOGGER = logging.getLogger(__name__)
 
@@ -86,7 +85,7 @@ class ScyllaCluster:
         Types missing from schema metadata (fresh database, before sync)
         are skipped; sync_core_tables re-registers after creating them.
         """
-        for udt in USED_COODIE_TYPES:
+        for udt in USED_TYPES:
             ks = getattr(udt.Settings, "keyspace", "") or self.config["SCYLLA_KEYSPACE_NAME"]
             try:
                 self.cluster.register_user_type(ks, udt.type_name(), udt)
@@ -133,30 +132,21 @@ class ScyllaCluster:
         return statement
 
     def sync_core_tables(self):
-        for udt in USED_TYPES:
-            LOGGER.info("Syncing type: %s..", udt.__name__)
-            ks = getattr(udt, "__keyspace__" ,self.config["SCYLLA_KEYSPACE_NAME"])
-            sync_type(ks_name=ks, type_model=udt)
-        LOGGER.info("Core Types synchronized.")
-        for model in USED_MODELS:
-            LOGGER.info("Syncing model: %s..", model.__name__)
-            ks = model.__keyspace__ or self.config["SCYLLA_KEYSPACE_NAME"]
-            sync_table(model, keyspaces=[ks])
-
-        for udt_type in USED_COODIE_TYPES:
-            LOGGER.info("Syncing coodie type: %s..", udt_type.__name__)
+        for udt_type in USED_TYPES:
+            LOGGER.info("Syncing type: %s..", udt_type.__name__)
             udt_type.sync_type()
         self.register_coodie_udts()
+        LOGGER.info("Core Types synchronized.")
 
-        for document in USED_COODIE_MODELS:
-            LOGGER.info("Syncing coodie document: %s..", document.__name__)
+        for document in USED_MODELS:
+            LOGGER.info("Syncing model: %s..", document.__name__)
             document.sync_table()
 
         LOGGER.info("Core Models synchronized.")
 
     def sync_additional_schema(self):
         LOGGER.info("Syncing additional rules...")
-        for model in [*USED_MODELS, *USED_COODIE_MODELS]:
+        for model in USED_MODELS:
             if rule_func := getattr(model, "_sync_additional_rules", None):
                 rule_func(self.session)
         LOGGER.info("Syncing additional rules done.")

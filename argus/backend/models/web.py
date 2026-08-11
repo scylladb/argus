@@ -3,9 +3,6 @@ from typing import Annotated, Optional
 from uuid import UUID, uuid1, uuid4
 from datetime import datetime
 from enum import Enum, IntEnum, auto
-from cassandra.cqlengine.models import Model
-from cassandra.cqlengine.usertype import UserType
-from cassandra.cqlengine import columns
 from cassandra.util import uuid_from_time, unix_time_from_uuid1
 from pydantic import Field
 from coodie import ClusteringKey, Indexed, PrimaryKey, SmallInt, TimeUUID
@@ -357,35 +354,6 @@ class ArgusNotification(Document):
         }
 
 
-class ArgusGithubIssue(Model):
-    # FIXME: Deprecated. To be removed.
-    id = columns.UUID(primary_key=True, default=uuid4, partition_key=True)
-    added_on = columns.DateTime(default=datetime.utcnow)
-    release_id = columns.UUID(index=True)
-    group_id = columns.UUID(index=True)
-    test_id = columns.UUID(index=True)
-    run_id = columns.UUID(index=True)
-    user_id = columns.UUID(index=True)
-    type = columns.Text()
-    owner = columns.Text()
-    repo = columns.Text()
-    issue_number = columns.Integer()
-    last_status = columns.Text()
-    title = columns.Text()
-    url = columns.Text()
-
-    def __hash__(self) -> int:
-        return hash((self.owner, self.repo, self.issue_number))
-
-    def __eq__(self, other):
-        if isinstance(other, ArgusGithubIssue):
-            return self.owner == other.owner and self.repo == other.repo and self.issue_number == other.issue_number
-        return super().__eq__(other)
-
-    def __ne__(self, other):
-        return not self == other
-
-
 class ReleasePlannerComment(Document):
     release: Annotated[UUID, PrimaryKey()]
     group: Annotated[UUID, ClusteringKey(clustering_key_index=0)]
@@ -457,15 +425,8 @@ def invalidate_release_snapshots(release_id: UUID) -> None:
         _SNAPSHOT_LOGGER.warning("Failed to invalidate release snapshots for %s", release_id, exc_info=True)
 
 
-USED_MODELS: list[Model] = [
-]
-
-USED_TYPES: list[UserType] = [
-
-]
-
-# Models already ported from cqlengine to coodie; synced via Document.sync_table()
-USED_COODIE_MODELS: list[type[Document]] = [
+# Application models; synced via Document.sync_table()
+USED_MODELS: list[type[Document]] = [
     RuntimeStore,
     User,
     UserOauthToken,
@@ -505,9 +466,9 @@ USED_COODIE_MODELS: list[type[Document]] = [
     SCTCriticalEventEmbedding,
 ]
 
-# Coodie user-defined types; synced via UserType.sync_type() and registered
-# with the driver cluster so result rows materialize them as model instances.
-USED_COODIE_TYPES = [
+# User-defined types; synced via UserType.sync_type() and registered with
+# the driver cluster so rows materialize them as model instances.
+USED_TYPES = [
     ColumnMetadata,
     ValidationRules,
     IssueLabel,
