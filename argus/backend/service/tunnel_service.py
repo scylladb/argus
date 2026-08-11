@@ -230,7 +230,7 @@ class TunnelService:
 
         existing = next(
             (
-                row for row in SSHTunnelKey.objects.filter(user_id=user.id)
+                row for row in SSHTunnelKey.find(user_id=user.id)
                 if row.fingerprint == fingerprint and row.tunnel_id == config.id
             ),
             None,
@@ -249,7 +249,7 @@ class TunnelService:
                 proxies=proxies,
             )
 
-        key = SSHTunnelKey.objects.ttl(ttl).create(
+        key = SSHTunnelKey(
             id=uuid4(),
             user_id=user.id,
             tunnel_id=config.id,
@@ -258,6 +258,7 @@ class TunnelService:
             created_at=now_utc,
             expires_at=expires_at,
         )
+        key.save(ttl=ttl)
 
         return TunnelRegistrationResponseDTO(
             key_id=key.id,
@@ -330,14 +331,14 @@ class TunnelService:
         """
         if fingerprint is not None:
             normalised = _normalise_fingerprint(fingerprint)
-            rows = SSHTunnelKey.objects.filter(fingerprint=normalised)
+            rows = SSHTunnelKey.find(fingerprint=normalised)
         else:
             LOGGER.warning(
                 "authorized_keys requested without a fingerprint; the proxy host still runs the "
                 "old wrapper. Re-run the argus_tunnel role in qatools-deployments to scope "
                 "the lookup to one key."
             )
-            rows = SSHTunnelKey.objects.all()
+            rows = SSHTunnelKey.find().all()
 
         seen: set[str] = set()
         keys: list[str] = []
@@ -362,7 +363,7 @@ class TunnelService:
         user_id:
             When supplied, restrict to keys for that user.
         """
-        query = SSHTunnelKey.objects
+        query = SSHTunnelKey.find()
 
         if tunnel_id is not None:
             if not isinstance(tunnel_id, UUID):
@@ -391,7 +392,7 @@ class TunnelService:
             key_id = UUID(str(key_id))
         try:
             key = SSHTunnelKey.get(id=key_id)
-        except SSHTunnelKey.DoesNotExist:
+        except DocumentNotFound:
             LOGGER.info("SSH key %s was already deleted or TTL-expired", key_id)
             return
 
@@ -420,7 +421,7 @@ class TunnelService:
                 if not config.is_active:
                     return None
                 return self._to_proxy_tunnel_config_dto(config)
-            except ProxyTunnelConfig.DoesNotExist:
+            except DocumentNotFound:
                 return None
 
         try:
@@ -487,7 +488,7 @@ class TunnelService:
 
     def list_proxy_tunnel_configs(self, active_only: bool | None = None) -> list[ProxyTunnelConfigDTO]:
         """Return proxy tunnel configs, optionally filtered by active state."""
-        rows = list(ProxyTunnelConfig.objects.all())
+        rows = list(ProxyTunnelConfig.find().all())
         if active_only is not None:
             rows = [row for row in rows if bool(row.is_active) == active_only]
         rows = sorted(rows, key=lambda row: (row.host or "", str(row.id)))
@@ -513,7 +514,7 @@ class TunnelService:
             tunnel_id = UUID(str(tunnel_id))
         try:
             config = ProxyTunnelConfig.get(id=tunnel_id)
-        except ProxyTunnelConfig.DoesNotExist as exc:
+        except DocumentNotFound as exc:
             raise TunnelServiceException(f"Proxy tunnel config {tunnel_id} not found") from exc
 
         if config.service_user_id:
@@ -541,7 +542,7 @@ class TunnelService:
             tunnel_id = UUID(str(tunnel_id))
         try:
             config = ProxyTunnelConfig.get(id=tunnel_id)
-        except ProxyTunnelConfig.DoesNotExist as exc:
+        except DocumentNotFound as exc:
             raise TunnelServiceException(f"Proxy tunnel config {tunnel_id} not found") from exc
 
         config.update(is_active=is_active)
@@ -554,7 +555,7 @@ class TunnelService:
 
     @staticmethod
     def _get_active_configs() -> list[ProxyTunnelConfig]:
-        return [cfg for cfg in ProxyTunnelConfig.objects.all() if cfg.is_active]
+        return [cfg for cfg in ProxyTunnelConfig.find().all() if cfg.is_active]
 
     @staticmethod
     def _fetch_host_key(host: str, port: int) -> tuple[str, str]:

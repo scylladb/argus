@@ -15,6 +15,8 @@ from uuid import uuid4
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.models.ssh_key import ProxyTunnelConfig, SSHTunnelKey
 from argus.backend.models.web import User, UserRoles
 from argus.backend.service.tunnel_service import TunnelService, TunnelServiceException, _derive_fingerprint
@@ -64,7 +66,7 @@ def _make_active_config(**overrides) -> ProxyTunnelConfig:
 
 
 def _active_config_ids() -> list:
-    return [cfg.id for cfg in ProxyTunnelConfig.objects.all() if cfg.is_active]
+    return [cfg.id for cfg in ProxyTunnelConfig.find().all() if cfg.is_active]
 
 
 def _deactivate_configs(config_ids: list) -> None:
@@ -254,7 +256,7 @@ def test_get_authorized_keys_includes_keys_from_multiple_tunnels(argus_db, tunne
         key_b = _make_public_key()
 
         now_utc = datetime.now(tz=UTC).replace(tzinfo=None)
-        SSHTunnelKey.objects.ttl(86400).create(
+        SSHTunnelKey.find().ttl(86400).create(
             id=uuid4(),
             user_id=tunnel_user.id,
             tunnel_id=active_config.id,
@@ -263,7 +265,7 @@ def test_get_authorized_keys_includes_keys_from_multiple_tunnels(argus_db, tunne
             created_at=now_utc,
             expires_at=now_utc,
         )
-        SSHTunnelKey.objects.ttl(86400).create(
+        SSHTunnelKey.find().ttl(86400).create(
             id=uuid4(),
             user_id=tunnel_user.id,
             tunnel_id=second.id,
@@ -337,7 +339,7 @@ def test_registering_the_same_key_again_reuses_the_row(argus_db, tunnel_user, ac
     again = svc.register_tunnel(user=tunnel_user, public_key=public_key)
 
     assert again.key_id == result.key_id
-    rows = [row for row in SSHTunnelKey.objects.filter(user_id=tunnel_user.id) if row.fingerprint == fingerprint]
+    rows = [row for row in SSHTunnelKey.find(user_id=tunnel_user.id) if row.fingerprint == fingerprint]
     assert len(rows) == 1
     assert public_key.strip() in svc.get_authorized_keys(fingerprint=fingerprint)
 
@@ -421,7 +423,7 @@ def test_delete_key_removes_row(argus_db, tunnel_user, active_config):
 
     svc.delete_key(key_id)
 
-    with pytest.raises(SSHTunnelKey.DoesNotExist):
+    with pytest.raises(DocumentNotFound):
         SSHTunnelKey.get(id=key_id)
 
 
