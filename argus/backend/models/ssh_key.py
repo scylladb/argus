@@ -1,11 +1,8 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from cassandra.cluster import Session
 from cassandra.cqlengine import columns
 from cassandra.cqlengine.models import Model
-
-SSH_TUNNEL_KEY_BY_FINGERPRINT_VIEW = "ssh_tunnel_key_by_fingerprint"
 
 
 def _utcnow_naive() -> datetime:
@@ -25,42 +22,9 @@ class SSHTunnelKey(Model):
     user_id = columns.UUID(required=True, index=True)
     tunnel_id = columns.UUID(required=True, index=True)
     public_key = columns.Text(required=True)
-    fingerprint = columns.Text(required=True)
+    fingerprint = columns.Text(required=True, index=True)
     created_at = columns.DateTime(required=True, default=_utcnow_naive)
     expires_at = columns.DateTime(required=True)
-
-    @classmethod
-    def _sync_additional_rules(cls, session: Session):
-        # public_key is selected into the view, so the proxy host reads one
-        # partition. A secondary index would add a second hop to the base table.
-        session.execute(
-            f"CREATE MATERIALIZED VIEW IF NOT EXISTS {SSH_TUNNEL_KEY_BY_FINGERPRINT_VIEW} AS "
-            f"SELECT id, user_id, tunnel_id, public_key, fingerprint, created_at, expires_at "
-            f"FROM {cls.column_family_name(include_keyspace=False)} "
-            f"WHERE fingerprint IS NOT NULL AND id IS NOT NULL "
-            f"PRIMARY KEY (fingerprint, id)"
-        )
-
-
-class SSHTunnelKeyByFingerprint(Model):
-    """
-    Read-only handle on the ``ssh_tunnel_key_by_fingerprint`` materialized view,
-    queried by the proxy host on every SSH authentication attempt.
-
-    ScyllaDB maintains the view from :class:`SSHTunnelKey`, TTL included, so
-    nothing writes here. The class is deliberately absent from ``USED_MODELS``:
-    ``sync_table`` would create a plain table and shadow the view.
-    """
-
-    __table_name__ = SSH_TUNNEL_KEY_BY_FINGERPRINT_VIEW
-
-    fingerprint = columns.Text(partition_key=True)
-    id = columns.UUID(primary_key=True)
-    user_id = columns.UUID()
-    tunnel_id = columns.UUID()
-    public_key = columns.Text()
-    created_at = columns.DateTime()
-    expires_at = columns.DateTime()
 
 
 class ProxyTunnelConfig(Model):

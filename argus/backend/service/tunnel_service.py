@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives.serialization import load_ssh_public_key
 
-from argus.backend.models.ssh_key import ProxyTunnelConfig, SSHTunnelKey, SSHTunnelKeyByFingerprint
+from argus.backend.models.ssh_key import ProxyTunnelConfig, SSHTunnelKey
 from argus.backend.models.web import User, UserRoles
 from argus.backend.service.user import UserService
 
@@ -328,7 +328,7 @@ class TunnelService:
         """
         if fingerprint is not None:
             normalised = _normalise_fingerprint(fingerprint)
-            rows = SSHTunnelKeyByFingerprint.objects.filter(fingerprint=normalised)
+            rows = SSHTunnelKey.objects.filter(fingerprint=normalised)
         else:
             LOGGER.warning(
                 "authorized_keys requested without a fingerprint; the proxy host still runs the "
