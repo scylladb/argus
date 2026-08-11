@@ -21,10 +21,6 @@ from argus.backend.models.web import (
     ArgusRelease,
     ArgusGroup,
     ArgusTest,
-    ArgusSchedule,
-    ArgusScheduleAssignee,
-    ArgusScheduleGroup,
-    ArgusScheduleTest,
     ArgusTestRunComment,
     ArgusEvent,
     ReleasePlannerComment,
@@ -193,178 +189,30 @@ class ArgusService:
         return response
 
     # TODO: Remove - legacy scheduling, superseded by release planner
-    def assign_runs_for_scheduled_test(self, schedule: ArgusSchedule, test_id: UUID, new_assignee: UUID):
-        test: ArgusTest = ArgusTest.get(id=test_id)
-        affected_rows: list[SCTTestRun] = list(SCTTestRun.filter(
-            build_id=test.build_system_id,
-            start_time__gte=schedule.period_start,
-            start_time__lte=schedule.period_end
-        ).all()
-        )
-        for row in affected_rows:
-            if row.assignee != new_assignee:
-                row.assignee = new_assignee
-                row.save()
+    def assign_runs_for_scheduled_test(self, schedule, test_id: UUID, new_assignee: UUID):
+        """Legacy scheduling removed - kept as a stub for API compatibility."""
+        return None
 
     # TODO: Remove - legacy scheduling, superseded by release planner
-    def assign_runs_for_scheduled_group(self, schedule: ArgusSchedule, group_id: UUID, new_assignee: UUID):
-        tests = ArgusTest.find(group_id=group_id).all()
-        build_ids = [test.build_system_id for test in tests]
-        affected_rows: list[SCTTestRun] = list(SCTTestRun.filter(
-            start_time__gte=schedule.period_start,
-            start_time__lte=schedule.period_end
-        ).all()
-        )
-        for row in affected_rows:
-            if row.build_id in build_ids and row.assignee != new_assignee:
-                row.assignee = new_assignee
-                row.save()
+    def assign_runs_for_scheduled_group(self, schedule, group_id: UUID, new_assignee: UUID):
+        """Legacy scheduling removed - kept as a stub for API compatibility."""
+        return None
 
     # TODO: Remove - legacy scheduling, superseded by release planner
     def submit_new_schedule(self, release: str | UUID, start_time: str, end_time: str, tests: list[str | UUID],
                             groups: list[str | UUID], assignees: list[str | UUID], tag: str, comments: dict[str, str] | None, group_ids: dict[str, str] | None) -> dict:
-        release = UUID(release) if isinstance(release, str) else release
-        if len(assignees) == 0:
-            raise Exception("Assignees not specified in the new schedule")
-
-        if len(tests) == 0 and len(groups) == 0:
-            raise Exception("Schedule does not contain scheduled objects")
-
-        schedule = ArgusSchedule()
-        schedule.release_id = release
-        schedule.period_start = datetime.datetime.fromisoformat(start_time)
-        schedule.period_end = datetime.datetime.fromisoformat(end_time)
-        schedule.id = uuid_from_time(schedule.period_start)
-        schedule.tag = tag
-        schedule.save()
-
-        response = dict(schedule.items())
-        response["assignees"] = []
-        response["tests"] = []
-        response["groups"] = []
-
-        for test_id in tests:
-            test_entity = ArgusScheduleTest()
-            test_entity.id = uuid_from_time(schedule.period_start)
-            test_entity.schedule_id = schedule.id
-            test_entity.test_id = UUID(test_id) if isinstance(test_id, str) else test_id
-            test_entity.release_id = release
-            test_entity.save()
-            self.assign_runs_for_scheduled_test(schedule, test_entity.test_id, UUID(assignees[0]))
-            response["tests"].append(test_id)
-
-        for group_id in groups:
-            group_entity = ArgusScheduleGroup()
-            group_entity.id = uuid_from_time(schedule.period_start)
-            group_entity.schedule_id = schedule.id
-            group_entity.group_id = UUID(group_id) if isinstance(group_id, str) else group_id
-            group_entity.release_id = release
-            group_entity.save()
-            self.assign_runs_for_scheduled_group(schedule, group_entity.group_id, UUID(assignees[0]))
-            response["groups"].append(group_id)
-
-        for assignee_id in assignees:
-            assignee_entity = ArgusScheduleAssignee()
-            assignee_entity.id = uuid_from_time(schedule.period_start)
-            assignee_entity.schedule_id = schedule.id
-            assignee_entity.assignee = UUID(assignee_id) if isinstance(assignee_id, str) else assignee_id
-            assignee_entity.release_id = release
-            assignee_entity.save()
-            response["assignees"].append(assignee_id)
-
-        if comments:
-            for test_id, new_comment in comments.items():
-                test_uuid = UUID(test_id) if isinstance(test_id, str) else test_id
-                group_uuid = UUID(group_ids[test_id]) if isinstance(group_ids[test_id], str) else group_ids[test_id]
-                try:
-                    comment = ReleasePlannerComment.get(release=release, group=group_uuid, test=test_uuid)
-                except DocumentNotFound:
-                    comment = ReleasePlannerComment(release=release, group=group_uuid, test=test_uuid)
-
-                comment.comment = new_comment
-                comment.save()
-
-        return response
+        """Legacy scheduling removed - kept as a stub for API compatibility."""
+        return {}
 
     # TODO: Remove - legacy scheduling, superseded by release planner
     def get_schedules_for_release(self, release_id: str | UUID) -> dict:
-        """
-        {
-            "release": "hex-uuid"
-        }
-        """
-        release_id = UUID(release_id) if isinstance(release_id, str) else release_id
-        release: ArgusRelease = ArgusRelease.get(id=release_id)
-        if release.perpetual:
-            today = datetime.datetime.utcnow()
-            six_months_ago = today - datetime.timedelta(days=180)
-            uuid_six_months = uuid_from_time(six_months_ago)
-            schedules = ArgusSchedule.filter(release_id=release_id, id__gte=uuid_six_months).all()
-        else:
-            schedules = ArgusSchedule.filter(release_id=release_id).all()
-        response = {
-            "schedules": []
-        }
-        for schedule in schedules:
-            serialized_schedule = dict(schedule.items())
-            tests = ArgusScheduleTest.filter(schedule_id=schedule.id).all()
-            serialized_schedule["tests"] = [test.test_id for test in tests]
-            groups = ArgusScheduleGroup.filter(schedule_id=schedule.id).all()
-            serialized_schedule["groups"] = [group.group_id for group in groups]
-            assignees = ArgusScheduleAssignee.filter(schedule_id=schedule.id).all()
-            serialized_schedule["assignees"] = [assignee.assignee for assignee in assignees]
-            response["schedules"].append(serialized_schedule)
-
-        return response
+        """Legacy scheduling removed - kept as a stub for API compatibility."""
+        return {"schedules": []}
 
     # TODO: Remove - legacy scheduling, superseded by release planner
     def update_schedule_assignees(self, payload: dict) -> dict:
-        """
-        {
-            "releaseId": "hex-uuid",
-            "scheduleId": "hex-uuid",
-        }
-        """
-        release_id = payload.get("releaseId")
-        if not release_id:
-            raise Exception("Release name not specified in the request")
-
-        schedule_id = payload.get("scheduleId")
-        if not schedule_id:
-            raise Exception("No schedule Id provided")
-
-        assignees = payload.get("newAssignees")
-        if not assignees:
-            raise Exception("No assignees provided")
-
-        release = ArgusRelease.get(id=UUID(release_id) if isinstance(release_id, str) else release_id)
-        schedule = ArgusSchedule.get(release_id=release.id, id=schedule_id)
-        schedule_tests = ArgusScheduleTest.filter(schedule_id=schedule.id).all()
-        schedule_groups = ArgusScheduleGroup.filter(schedule_id=schedule.id).all()
-        for test in schedule_tests:
-            self.assign_runs_for_scheduled_test(schedule, test.test_id, UUID(assignees[0]))
-
-        for group in schedule_groups:
-            self.assign_runs_for_scheduled_group(schedule, group.group_id, UUID(assignees[0]))
-
-        old_assignees = list(ArgusScheduleAssignee.filter(schedule_id=schedule.id).all())
-        for new_assignee in assignees:
-            assignee = ArgusScheduleAssignee()
-            assignee.release_id = release.id
-            assignee.schedule_id = schedule.id
-            assignee.assignee = UUID(new_assignee)
-            assignee.save()
-
-        for old_assignee in old_assignees:
-            old_assignee.delete()
-
-        response = {
-            "scheduleId": schedule_id,
-            "status": "changed assignees",
-            "newAssignees": assignees,
-        }
-
-        return response
+        """Legacy scheduling removed - kept as a stub for API compatibility."""
+        return {}
 
     # TODO: Remove - legacy scheduling, superseded by release planner
     def update_schedule_comment(self, payload: dict) -> dict:
@@ -403,120 +251,13 @@ class ArgusService:
 
     # TODO: Remove - legacy scheduling, superseded by release planner
     def update_schedule(self, release_id: UUID | str, schedule_id: UUID | str, old_tests: list[UUID | str], new_tests: list[UUID | str], comments: dict[str, str], assignee: UUID | str):
-        schedule: ArgusSchedule = ArgusSchedule.get(release_id=release_id, id=schedule_id)
-        new_tests: set[UUID] = {UUID(id) for id in new_tests}
-        old_tests: set[UUID] = {UUID(id) for id in old_tests}
-
-        all_test_ids = old_tests.union(new_tests)
-        tests = []
-        for batch in chunk(all_test_ids):
-            tests.extend(ArgusTest.find(id__in=batch).all())
-        tests_by_id: dict[UUID, ArgusTest] = {test.id: test for test in tests}
-
-        all_scheduled_tests: list[ArgusScheduleTest] = list(ArgusScheduleTest.filter(schedule_id=schedule_id).all())
-        tests_to_remove = all_test_ids.difference(new_tests)
-        for scheduled_test in all_scheduled_tests:
-            if scheduled_test.test_id in tests_to_remove:
-                test = tests_by_id.get(scheduled_test.test_id)
-                scheduled_test.delete()
-                if test:
-                    self.update_schedule_comment(
-                        {"newComment": "", "releaseId": test.release_id, "groupId": test.group_id, "testId": test.id})
-
-        tests_to_add = new_tests.difference(old_tests)
-        for test_id in tests_to_add:
-            entity = ArgusScheduleTest()
-            entity.id = uuid_from_time(schedule.period_start)
-            entity.schedule_id = schedule.id
-            entity.test_id = UUID(test_id) if isinstance(test_id, str) else test_id
-            entity.release_id = release_id
-            entity.save()
-            self.assign_runs_for_scheduled_test(schedule, entity.test_id, assignee)
-
-        for test_id, comment in comments.items():
-            test = tests_by_id.get(UUID(test_id))
-            if test:
-                self.update_schedule_comment(
-                    {"newComment": comment, "releaseId": test.release_id, "groupId": test.group_id, "testId": test.id})
-
-        schedule_assignee: ArgusScheduleAssignee = ArgusScheduleAssignee.get(schedule_id=schedule_id)
-        new_assignee = ArgusScheduleAssignee()
-        new_assignee.assignee = assignee
-        new_assignee.release_id = schedule_assignee.release_id
-        new_assignee.schedule_id = schedule_assignee.schedule_id
-        new_assignee.save()
-        schedule_assignee.delete()
-
+        """Legacy scheduling removed - kept as a stub for API compatibility."""
         return True
 
     # TODO: Remove - legacy scheduling, superseded by release planner
     def delete_schedule(self, payload: dict) -> dict:
-        """
-        {
-            "release": hex-uuid,
-            "schedule_id": uuid1,
-            "deleteComments": bool
-        }
-        """
-        release_id = payload.get("releaseId")
-        if not release_id:
-            raise Exception("Release name not specified in the request")
-
-        schedule_id = payload.get("scheduleId")
-        if not schedule_id:
-            raise Exception("Schedule id not specified in the request")
-
-        delete_comments = payload.get("deleteComments", False)
-
-        release = ArgusRelease.get(id=UUID(release_id) if isinstance(release_id, str) else release_id)
-        schedule = ArgusSchedule.get(release_id=release.id, id=schedule_id)
-        tests = ArgusScheduleTest.filter(schedule_id=schedule.id).all()
-        groups = ArgusScheduleGroup.filter(schedule_id=schedule.id).all()
-        assignees = ArgusScheduleAssignee.filter(schedule_id=schedule.id).all()
-
-        full_schedule = dict(schedule)
-        full_schedule["tests"] = [test.test_id for test in tests]
-        full_schedule["groups"] = [group.group_id for group in groups]
-        full_schedule["assignees"] = [assignee.assignee for assignee in assignees]
-
-        if len(assignees) > 0:
-            try:
-                schedule_user = User.get(id=assignees[0].assignee)
-            except DocumentNotFound:
-                schedule_user = User()
-                schedule_user.id = assignees[0].assignee
-                LOGGER.warning("Deleting orphaned user assignments")
-            service = TestRunService()
-
-            for model in all_plugin_models():
-                for run in model.get_jobs_assigned_to_user(schedule_user.id):
-                    if run["release_id"] != release.id:
-                        continue
-                    if run["test_id"] not in full_schedule["tests"]:
-                        continue
-                    if schedule.period_start < run["start_time"] < schedule.period_end:
-                        service.change_run_assignee(test_id=run["test_id"], run_id=run["id"], new_assignee=None)
-
-        for entities in [tests, groups, assignees]:
-            for entity in entities:
-                entity.delete()
-
-        schedule.delete()
-
-        if delete_comments:
-            tests = []
-            for batch in chunk(full_schedule["tests"]):
-                tests.extend(ArgusTest.find(id__in=batch).all())
-
-            for test in tests:
-                self.update_schedule_comment({"newComment": "", "releaseId": test.release_id,
-                                             "groupId": test.group_id, "testId": test.id})
-
-        return {
-            "releaseId": release.id,
-            "scheduleId": schedule_id,
-            "result": "deleted"
-        }
+        """Legacy scheduling removed - kept as a stub for API compatibility."""
+        return {}
 
     def get_planner_data(self, release_id: UUID | str) -> dict:
 
@@ -553,14 +294,9 @@ class ArgusService:
         return response
 
     # TODO: Remove - legacy scheduling, superseded by release planner
-    def _batch_get_schedules_from_ids(self, release_id: UUID, schedule_ids: list[UUID]) -> list[ArgusSchedule]:
-        schedules = []
-        step_size = 90
-        for step in range(0, ceil(len(schedule_ids) / step_size)):
-            start_pos = step*step_size
-            next_slice = schedule_ids[start_pos:start_pos+step_size]
-            schedules.extend(ArgusSchedule.filter(release_id=release_id, id__in=next_slice).all())
-        return schedules
+    def _batch_get_schedules_from_ids(self, release_id: UUID, schedule_ids: list[UUID]) -> list:
+        """Legacy scheduling removed - kept as a stub for API compatibility."""
+        return []
 
     def get_groups_assignees(self, release_id: UUID | str, version: str = None, plan_id: UUID = None):
         release_id = UUID(release_id) if isinstance(release_id, str) else release_id
@@ -568,37 +304,8 @@ class ArgusService:
         if assignments := PlanningService().get_assignments_for_groups(release_id, version, plan_id):
             return assignments
 
-        groups = ArgusGroup.find(release_id=release_id).all()
-        group_ids = [group.id for group in groups if group.enabled]
-
-        schedule_ids = set()
-        group_schedules = []
-        step_size = 90
-
-        for step in range(0, ceil(len(group_ids) / step_size)):
-            start_pos = step*step_size
-            next_slice = group_ids[start_pos:start_pos+step_size]
-            group_batch = list(ArgusScheduleGroup.filter(release_id=release.id, group_id__in=next_slice).all())
-            group_schedules.extend(group_batch)
-            batch_ids = {schedule.schedule_id for schedule in group_batch}
-            schedule_ids = schedule_ids.union(batch_ids)
-
-        schedules = self._batch_get_schedules_from_ids(release.id, list(schedule_ids))
-
-        valid_schedules = schedules
-        if release.perpetual:
-            today = datetime.datetime.utcnow()
-            valid_schedules = [s for s in schedules if s.period_start <= today <= s.period_end]
-
-        response = {}
-        for schedule in valid_schedules:
-            assignees = ArgusScheduleAssignee.filter(schedule_id=schedule.id).all()
-            assignees_uuids = [assignee.assignee for assignee in assignees]
-            schedule_groups = filter(lambda g: g.schedule_id == schedule.id, group_schedules)
-            groups = {str(group.group_id): assignees_uuids for group in schedule_groups}
-            response = {**groups, **response}
-
-        return response
+        # Legacy scheduling removed - no fallback source of assignments.
+        return {}
 
     def get_tests_assignees(self, group_id: UUID | str, version: str = None, plan_id: UUID = None):
         group_id = UUID(group_id) if isinstance(group_id, str) else group_id
@@ -608,37 +315,8 @@ class ArgusService:
         if assignments := PlanningService().get_assignments_for_tests(group_id, version, plan_id):
             return assignments
 
-        tests = ArgusTest.find(group_id=group_id).all()
-
-        test_ids = [test.id for test in tests if test.enabled]
-
-        schedule_ids = set()
-        test_schedules = []
-        step_size = 90
-
-        for step in range(0, ceil(len(test_ids) / step_size)):
-            start_pos = step*step_size
-            next_slice = test_ids[start_pos:start_pos+step_size]
-            test_batch = ArgusScheduleTest.filter(release_id=release.id, test_id__in=next_slice).all()
-            test_schedules.extend(test_batch)
-            batch_ids = {schedule.schedule_id for schedule in test_batch}
-            schedule_ids = schedule_ids.union(batch_ids)
-
-        schedules = self._batch_get_schedules_from_ids(release.id, list(schedule_ids))
-
-        if release.perpetual:
-            today = datetime.datetime.utcnow()
-            schedules = list(filter(lambda s: s.period_start <= today <= s.period_end, schedules))
-
-        response = {}
-        for schedule in schedules:
-            assignees = ArgusScheduleAssignee.filter(schedule_id=schedule.id).all()
-            assignees_uuids = [assignee.assignee for assignee in assignees]
-            schedule_tests = filter(lambda t: t.schedule_id == schedule.id, test_schedules)
-            tests = {str(test.test_id): assignees_uuids for test in schedule_tests}
-            response = {**tests, **response}
-
-        return response
+        # Legacy scheduling removed - no fallback source of assignments.
+        return {}
 
     def get_jobs_for_user(self, user: User):
         today = datetime.datetime.now()
@@ -679,26 +357,8 @@ class ArgusService:
 
     # TODO: Remove - legacy scheduling, superseded by release planner
     def get_schedules_for_user(self, user: User) -> list[dict]:
-        all_assigned_schedules = ArgusScheduleAssignee.filter(assignee=user.id).all()
-        schedule_keys = [(schedule_assignee.release_id, schedule_assignee.schedule_id)
-                         for schedule_assignee in all_assigned_schedules]
-        schedules = []
-        today = datetime.datetime.utcnow()
-        for release_id, schedule_id in schedule_keys:
-            try:
-                schedule = dict(ArgusSchedule.get(release_id=release_id, id=schedule_id).items())
-            except ArgusSchedule.DoesNotExist:
-                continue
-            if schedule["period_start"] <= today <= schedule["period_end"]:
-                tests = ArgusScheduleTest.filter(schedule_id=schedule_id).all()
-                schedule["tests"] = [test.test_id for test in tests]
-                groups = ArgusScheduleGroup.filter(schedule_id=schedule_id).all()
-                schedule["groups"] = [group.group_id for group in groups]
-                assignees = ArgusScheduleAssignee.filter(schedule_id=schedule_id).all()
-                schedule["assignees"] = [assignee.assignee for assignee in assignees]
-                schedules.append(schedule)
-
-        return schedules
+        """Legacy scheduling removed - kept as a stub for API compatibility."""
+        return []
 
     def get_planner_comment_by_test(self, test_id):
         try:

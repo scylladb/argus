@@ -17,10 +17,6 @@ from argus.backend.models.web import (
     ArgusTest,
     ArgusGroup,
     ArgusRelease,
-    ArgusScheduleGroup,
-    ArgusSchedule,
-    ArgusScheduleTest,
-    ArgusScheduleAssignee,
     ReleaseStatsSnapshot,
     ReleaseDistinctVersions,
 )
@@ -96,49 +92,8 @@ class PluginModelBase(Model):
         return self.get_assignment()
 
     def _legacy_get_scheduled_assignee(self, associated_test: ArgusTest, associated_release: ArgusRelease) -> UUID:
-        """
-            Iterate over all schedules (groups and tests) and return first available assignee
-        """
-        associated_group = ArgusGroup.get(id=associated_test.group_id)
-
-        scheduled_groups = ArgusScheduleGroup.filter(
-            release_id=associated_release.id,
-            group_id=associated_group.id,
-        ).all()
-
-        scheduled_tests = ArgusScheduleTest.filter(
-            release_id=associated_release.id,
-            test_id=associated_test.id
-        ).all()
-
-        unique_schedule_ids = {scheduled_obj.schedule_id for scheduled_obj in [
-            *scheduled_tests, *scheduled_groups]}
-
-        schedules = ArgusSchedule.filter(
-            release_id=associated_release.id,
-            id__in=tuple(unique_schedule_ids),
-        ).all()
-
-        today = datetime.now(UTC)
-
-        valid_schedules = []
-        for schedule in schedules:
-            # Normalize schedule datetimes to UTC-aware if they are naive
-            ps = schedule.period_start
-            pe = schedule.period_end
-            ps = ps.replace(tzinfo=UTC)
-            pe = pe.replace(tzinfo=UTC)
-            if ps <= today <= pe:
-                valid_schedules.append(schedule)
-
-        assignees_uuids = []
-        for schedule in valid_schedules:
-            assignees = ArgusScheduleAssignee.filter(
-                schedule_id=schedule.id
-            ).all()
-            assignees_uuids.extend([assignee.assignee for assignee in assignees])
-
-        return assignees_uuids[0] if len(assignees_uuids) > 0 else None
+        """Legacy scheduling removed - schedules no longer exist."""
+        return None
 
     @classmethod
     def get_jobs_assigned_to_user(cls, user_id: str | UUID):
