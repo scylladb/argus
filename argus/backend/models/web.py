@@ -498,12 +498,6 @@ USED_MODELS: list[Model] = [
     ArgusScheduleAssignee,
     ArgusScheduleGroup,
     ArgusScheduleTest,
-    ErrorEventEmbeddings,  # to be deprecated
-    CriticalEventEmbeddings,  # to be deprecated
-    SCTErrorEventEmbedding,
-    SCTCriticalEventEmbedding,
-    RunConfiguration,
-    RunConfigParam,
 ]
 
 USED_TYPES: list[UserType] = [
@@ -543,6 +537,12 @@ USED_COODIE_MODELS: list[type[Document]] = [
     ReleaseStatsSnapshot,
     ReleaseDistinctVersions,
     ReleaseDistinctImages,
+    RunConfiguration,
+    RunConfigParam,
+    ErrorEventEmbeddings,  # to be deprecated
+    CriticalEventEmbeddings,  # to be deprecated
+    SCTErrorEventEmbedding,
+    SCTCriticalEventEmbedding,
 ]
 
 # Coodie user-defined types; synced via UserType.sync_type() and registered

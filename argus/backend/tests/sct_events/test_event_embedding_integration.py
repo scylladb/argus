@@ -6,7 +6,7 @@ These tests verify the complete flow from event creation to embedding storage.
 
 from dataclasses import asdict
 from datetime import datetime, timedelta, UTC
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from argus.backend.models.argus_ai import SCTErrorEventEmbedding, SCTCriticalEventEmbedding
 from argus.backend.models.web import ArgusTest
@@ -82,13 +82,13 @@ def test_event_to_embedding_flow_should_create_embedding_for_error_event(
         raise AssertionError(f"Failed to process this test's event after {max_attempts} attempts")
 
     # Step 6: Verify embedding was stored in ERROR table for THIS test run
-    embeddings = SCTErrorEventEmbedding.filter(run_id=run_req.run_id).all()
+    embeddings = SCTErrorEventEmbedding.find(run_id=UUID(str(run_req.run_id))).all()
     embedding_list = list(embeddings)
     assert len(embedding_list) == 1, "Embedding should be stored in ERROR table"
     assert len(embedding_list[0].embedding) > 0, "Embedding should have values"
 
     # Step 7: Verify no embedding in CRITICAL table for THIS test run
-    critical_embeddings = SCTCriticalEventEmbedding.filter(run_id=run_req.run_id).all()
+    critical_embeddings = SCTCriticalEventEmbedding.find(run_id=UUID(str(run_req.run_id))).all()
     assert len(list(critical_embeddings)) == 0, "No embedding should be in CRITICAL table"
 
     # Step 8: Verify unprocessed event was removed for THIS test run
@@ -149,13 +149,13 @@ def test_event_to_embedding_flow_should_create_embedding_for_critical_event(
         raise AssertionError(f"Failed to process this test's event after {max_attempts} attempts")
 
     # Step 5: Verify embedding was stored in CRITICAL table for THIS test run
-    embeddings = SCTCriticalEventEmbedding.filter(run_id=run_req.run_id).all()
+    embeddings = SCTCriticalEventEmbedding.find(run_id=UUID(str(run_req.run_id))).all()
     embedding_list = list(embeddings)
     assert len(embedding_list) == 1, "Embedding should be stored in CRITICAL table"
     assert len(embedding_list[0].embedding) > 0, "Embedding should have values"
 
     # Step 6: Verify no embedding in ERROR table for THIS test run
-    error_embeddings = SCTErrorEventEmbedding.filter(run_id=run_req.run_id).all()
+    error_embeddings = SCTErrorEventEmbedding.find(run_id=UUID(str(run_req.run_id))).all()
     assert len(list(error_embeddings)) == 0, "No embedding should be in ERROR table"
 
 
@@ -249,8 +249,8 @@ def test_event_to_embedding_flow_should_process_multiple_events_into_separate_ta
         raise AssertionError(f"Failed to process all of this test's events after {max_attempts} attempts")
 
     # Step 6: Verify embeddings were stored in correct tables for THIS test run
-    error_embeddings = list(SCTErrorEventEmbedding.filter(run_id=run_req.run_id).all())
-    critical_embeddings = list(SCTCriticalEventEmbedding.filter(run_id=run_req.run_id).all())
+    error_embeddings = list(SCTErrorEventEmbedding.find(run_id=UUID(str(run_req.run_id))).all())
+    critical_embeddings = list(SCTCriticalEventEmbedding.find(run_id=UUID(str(run_req.run_id))).all())
 
     assert len(error_embeddings) == 3, "Should have 3 ERROR embeddings in ERROR table"
     assert len(critical_embeddings) == 2, "Should have 2 CRITICAL embeddings in CRITICAL table"
@@ -285,9 +285,9 @@ def test_dedup_marks_same_run_twin_despite_large_other_run_population(
 
     # Seed a large population of OTHER-run embeddings (> the old ANN LIMIT of 1000) identical to the
     # query vector — the exact condition that used to crowd out the same-run twin.
-    keyspace = SCTErrorEventEmbedding.__keyspace__
+    keyspace = SCTErrorEventEmbedding.Settings.keyspace
     insert = processor.db.session.prepare(
-        f"INSERT INTO {keyspace}.{SCTErrorEventEmbedding.__table_name__} (run_id, ts, embedding) VALUES (?, ?, ?)"
+        f"INSERT INTO {keyspace}.{SCTErrorEventEmbedding.table_name()} (run_id, ts, embedding) VALUES (?, ?, ?)"
     )
     base_ts = datetime.now(tz=UTC)
     for i in range(1100):
@@ -332,7 +332,7 @@ def test_dedup_marks_same_run_twin_despite_large_other_run_population(
     assert duplicates[0].duplicate_id == canonical[0].event_id, "duplicate_id must point at the canonical event"
 
     # Only the canonical event is embedded for this run; the duplicate is not stored.
-    run_embeddings = list(SCTErrorEventEmbedding.filter(run_id=run_req.run_id).all())
+    run_embeddings = list(SCTErrorEventEmbedding.find(run_id=UUID(str(run_req.run_id))).all())
     assert len(run_embeddings) == 1, "Only one embedding should be stored for the run (duplicate skipped)"
 
 

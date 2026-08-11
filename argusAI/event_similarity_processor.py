@@ -137,7 +137,7 @@ class EventSimilarityProcessor:
         table = ErrorEventEmbeddings if event_type == EventType.ERROR else CriticalEventEmbeddings
         try:
             self._db.execute(
-                f"UPDATE {table.__table_name__} SET similars_map = ?, duplicates_list = ? WHERE run_id = ? AND event_index = ?",
+                f"UPDATE {table.table_name()} SET similars_map = ?, duplicates_list = ? WHERE run_id = ? AND event_index = ?",
                 (similar_map, duplicate_list, run_id, event_index),
             )
             LOGGER.info(
@@ -171,7 +171,7 @@ class EventSimilarityProcessor:
             LOGGER.info(f"Skipping loading of {event_type} events due to RECREATE_EMBEDDINGS setting")
             return processed_runs, similars_to_update
         LOGGER.info(f"Loading processed {event_type} events...")
-        query: str = f"SELECT * FROM {table.__table_name__} WHERE start_time > ? ALLOW FILTERING BYPASS CACHE"
+        query: str = f"SELECT * FROM {table.table_name()} WHERE start_time > ? ALLOW FILTERING BYPASS CACHE"
         rows = self._db.execute(query, (cutoff_time,))
         iterator = iter(rows)
 
@@ -269,7 +269,7 @@ class EventSimilarityProcessor:
                                 metadatas=[metadata],
                             )
 
-                            query: str = f"INSERT INTO {table.__table_name__} (run_id, event_index, embedding, start_time) VALUES (?, ?, ?, ?)"
+                            query: str = f"INSERT INTO {table.table_name()} (run_id, event_index, embedding, start_time) VALUES (?, ?, ?, ?)"
                             embedding_list: List[float] = (
                                 list(embedding) if not isinstance(embedding, list) else embedding
                             )

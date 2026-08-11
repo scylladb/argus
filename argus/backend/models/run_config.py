@@ -1,15 +1,23 @@
-from cassandra.cqlengine.models import Model
-from cassandra.cqlengine import columns
+from typing import Annotated, Optional
+from uuid import UUID
+
+from coodie import ClusteringKey, PrimaryKey
+from coodie.sync import Document
 
 
+class RunConfiguration(Document):
+    run_id: Annotated[Optional[UUID], PrimaryKey()] = None
+    name: Annotated[Optional[str], ClusteringKey()] = None
+    content: Optional[str] = None
 
-class RunConfiguration(Model):
-    run_id = columns.UUID(primary_key=True, partition_key=True, required=True)
-    name = columns.Text(primary_key=True, required=True)
-    content = columns.Text(required=True)
+    class Settings:
+        name = "run_configuration"
 
 
-class RunConfigParam(Model):
-    name = columns.Text(partition_key=True, primary_key=True, required=True)
-    value = columns.Text(partition_key=True, primary_key=True, required=True)
-    run_id = columns.Text(primary_key=True, required=True)
+class RunConfigParam(Document):
+    name: Annotated[Optional[str], PrimaryKey(partition_key_index=0)] = None
+    value: Annotated[Optional[str], PrimaryKey(partition_key_index=1)] = None
+    run_id: Annotated[Optional[str], ClusteringKey()] = None
+
+    class Settings:
+        name = "run_config_param"
