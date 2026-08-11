@@ -17,7 +17,7 @@ from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.plugins.loader import all_plugin_models
 from argus.backend.util.common import chunk, get_build_number, check_version
 from argus.common.enums import TestStatus, TestInvestigationStatus
-from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusScheduleTest, ArgusTest, \
+from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, \
     ArgusTestRunComment, ArgusUserView, ReleaseStatsSnapshot
 from argus.backend.db import ScyllaCluster
 
@@ -256,12 +256,8 @@ class ViewStats:
                 plans: list[ArgusReleasePlan] = [plan for plans in plans_by_release for plan in plans]
                 self.plans = plans if not version_filter else [
                     plan for plan in plans if version_filter == plan.target_version]
-            # TODO: Legacy and unconditional, will show extra data.
-            self.test_schedules = reduce(
-                lambda acc, row: acc[row["test_id"]].append(row) or acc,
-                _fetch_multiple_release_queries(ArgusScheduleTest, all_release_ids),
-                defaultdict(list)
-            )
+            # Legacy scheduling removed - no schedule rows to aggregate.
+            self.test_schedules = defaultdict(list)
 
         self.rows = rows
         self.dict = dict
@@ -346,11 +342,8 @@ class ReleaseStats:
         if not limited:
             plans: list[ArgusReleasePlan] = list(ArgusReleasePlan.find(release_id=self.release.id).all())
             self.plans = plans if not filter else [plan for plan in plans if version_filter == plan.target_version]
-            self.test_schedules = reduce(
-                lambda acc, row: acc[row["test_id"]].append(row) or acc,
-                ArgusScheduleTest.filter(release_id=self.release.id).all(),
-                defaultdict(list)
-            )
+            # Legacy scheduling removed - no schedule rows to aggregate.
+            self.test_schedules = defaultdict(list)
 
         self.rows = rows
         self.dict = dict
@@ -446,7 +439,7 @@ class TestStats:
         test: ArgusTest,
         parent_group: GroupStats,
         scheduled: bool = False,
-        schedules: list[ArgusScheduleTest] | None = None,
+        schedules: list | None = None,
     ) -> None:
         self.test = test
         self.parent_group = parent_group

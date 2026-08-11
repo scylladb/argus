@@ -386,42 +386,6 @@ class ArgusGithubIssue(Model):
         return not self == other
 
 
-class ArgusSchedule(Model):
-    __table_name__ = "argus_schedule_v4"
-    release_id = columns.UUID(primary_key=True, required=True)
-    id = columns.TimeUUID(primary_key=True, default=uuid1, clustering_order="DESC")
-    period_start = columns.DateTime(required=True, default=datetime.utcnow)
-    period_end = columns.DateTime(required=True, primary_key=True, clustering_order="DESC")
-    tag = columns.Text(default="")
-
-
-class ArgusScheduleAssignee(Model):
-    __table_name__ = "argus_schedule_user_v3"
-    assignee = columns.UUID(primary_key=True)
-    id = columns.TimeUUID(primary_key=True, default=uuid1,
-                          clustering_order="DESC")
-    schedule_id = columns.TimeUUID(required=True, index=True)
-    release_id = columns.UUID(required=True)
-
-
-class ArgusScheduleTest(Model):
-    __table_name__ = "argus_schedule_test_v5"
-    test_id = columns.UUID(primary_key=True, required=True)
-    id = columns.TimeUUID(primary_key=True, default=uuid1,
-                          clustering_order="DESC")
-    schedule_id = columns.TimeUUID(required=True, index=True)
-    release_id = columns.UUID(partition_key=True)
-
-
-class ArgusScheduleGroup(Model):
-    __table_name__ = "argus_schedule_group_v3"
-    group_id = columns.UUID(partition_key=True, required=True)
-    id = columns.TimeUUID(primary_key=True, default=uuid1,
-                          clustering_order="DESC")
-    schedule_id = columns.TimeUUID(required=True, index=True)
-    release_id = columns.UUID(partition_key=True)
-
-
 class ReleasePlannerComment(Document):
     release: Annotated[UUID, PrimaryKey()]
     group: Annotated[UUID, ClusteringKey(clustering_key_index=0)]
@@ -494,10 +458,6 @@ def invalidate_release_snapshots(release_id: UUID) -> None:
 
 
 USED_MODELS: list[Model] = [
-    ArgusSchedule,
-    ArgusScheduleAssignee,
-    ArgusScheduleGroup,
-    ArgusScheduleTest,
 ]
 
 USED_TYPES: list[UserType] = [
