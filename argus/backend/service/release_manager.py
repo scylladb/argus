@@ -212,11 +212,11 @@ class ReleaseManagerService:
             entity.delete()
 
         # Clean up denormalized index tables so no orphaned rows remain
-        for row in ReleaseDistinctVersions.filter(release_id=release.id).all():
+        for row in ReleaseDistinctVersions.find(release_id=release.id).all():
             row.delete()
-        for row in ReleaseDistinctImages.filter(release_id=release.id).all():
+        for row in ReleaseDistinctImages.find(release_id=release.id).all():
             row.delete()
-        for row in ReleaseStatsSnapshot.filter(release_id=release.id).all():
+        for row in ReleaseStatsSnapshot.find(release_id=release.id).all():
             row.delete()
 
         release.delete()

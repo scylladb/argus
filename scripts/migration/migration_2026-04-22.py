@@ -14,14 +14,14 @@ DB = ScyllaCluster.get()
 def migrate():
     # Idempotency check: if any row exists in ReleaseDistinctVersions the
     # backfill has already run — skip entirely.
-    existing = ReleaseDistinctVersions.objects.limit(1).all()
+    existing = ReleaseDistinctVersions.find().limit(1).all()
     if list(existing):
         LOGGER.info("ReleaseDistinctVersions already populated — skipping migration.")
         return
 
     sct_model = AVAILABLE_PLUGINS["scylla-cluster-tests"].model
     table = sct_model.table_name()
-    releases = list(ArgusRelease.objects.all())
+    releases = list(ArgusRelease.find().all())
     LOGGER.info("Backfilling release indexes for %d release(s)...", len(releases))
 
     for release in releases:

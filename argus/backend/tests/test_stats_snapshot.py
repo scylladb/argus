@@ -42,7 +42,7 @@ from argus.backend.tests.conftest import get_fake_test_run
 # ---------------------------------------------------------------------------
 
 def get_snapshots(release_id) -> list[ReleaseStatsSnapshot]:
-    return list(ReleaseStatsSnapshot.filter(release_id=release_id).all())
+    return list(ReleaseStatsSnapshot.find(release_id=release_id).all())
 
 
 def write_snapshot(release_id, filter_key: str, payload: str = '{"dummy": true}'):
@@ -130,7 +130,7 @@ def test_invalidate_release_snapshot_deletes_matching_version_and_aggregate(argu
         make_mock_snapshot("v=::img=::nov=1::lim=0"),       # all-versions aggregate
         make_mock_snapshot("v=5.7.0::img=::nov=1::lim=0"),  # unrelated version
     ]
-    with patch("argus.backend.models.web.ReleaseStatsSnapshot.filter") as mock_filter:
+    with patch("argus.backend.models.web.ReleaseStatsSnapshot.find") as mock_filter:
         mock_filter.return_value.all.return_value = snapshots
         plugin_run_stub(uuid.uuid4(), "5.6.1").invalidate_release_snapshot()
 
@@ -147,7 +147,7 @@ def test_invalidate_release_snapshot_versionless_run_only_wipes_aggregate(argus_
         make_mock_snapshot("v=::img=::nov=1::lim=0"),
         make_mock_snapshot("v=5.7.0::img=::nov=1::lim=0"),
     ]
-    with patch("argus.backend.models.web.ReleaseStatsSnapshot.filter") as mock_filter:
+    with patch("argus.backend.models.web.ReleaseStatsSnapshot.find") as mock_filter:
         mock_filter.return_value.all.return_value = snapshots
         plugin_run_stub(uuid.uuid4(), None).invalidate_release_snapshot()
 
@@ -160,13 +160,13 @@ def test_invalidate_release_snapshot_versionless_run_only_wipes_aggregate(argus_
     (None,        "5.6.1"),  # no release_id — nothing to invalidate
 ])
 def test_invalidate_release_snapshot_skips_without_release_id(argus_db, release_id, version):
-    with patch("argus.backend.models.web.ReleaseStatsSnapshot.filter") as mock_filter:
+    with patch("argus.backend.models.web.ReleaseStatsSnapshot.find") as mock_filter:
         plugin_run_stub(release_id, version).invalidate_release_snapshot()
         mock_filter.assert_not_called()
 
 
 def test_invalidate_release_snapshot_swallows_db_exception(argus_db):
-    with patch("argus.backend.models.web.ReleaseStatsSnapshot.filter", side_effect=Exception("db error")):
+    with patch("argus.backend.models.web.ReleaseStatsSnapshot.find", side_effect=Exception("db error")):
         plugin_run_stub(uuid.uuid4(), "5.6.1").invalidate_release_snapshot()  # must not raise
 
 
@@ -180,7 +180,7 @@ def test_index_version_written_on_submit_product_version(argus_db, fake_test, cl
     client_service.submit_run(run_type, asdict(run_req))
     client_service.submit_product_version(run_type, run_req.run_id, "9.9.9-test")
 
-    versions = [r.version for r in ReleaseDistinctVersions.filter(release_id=release.id).all()]
+    versions = [r.version for r in ReleaseDistinctVersions.find(release_id=release.id).all()]
     assert "9.9.9-test" in versions
 
 
@@ -191,7 +191,7 @@ def test_index_version_written_on_finish_run(argus_db, fake_test, client_service
     client_service.submit_product_version(run_type, run_req.run_id, "8.8.8-test")
     client_service.finish_run(run_type, run_req.run_id)
 
-    versions = [r.version for r in ReleaseDistinctVersions.filter(release_id=release.id).all()]
+    versions = [r.version for r in ReleaseDistinctVersions.find(release_id=release.id).all()]
     assert "8.8.8-test" in versions
 
 
@@ -457,10 +457,10 @@ def test_backfill_migration_is_idempotent(argus_db, fake_test, client_service, r
     client_service.finish_run(run_type, run_req.run_id)
 
     migration.migrate()
-    count_first = len(list(ReleaseDistinctVersions.filter(release_id=release.id).all()))
+    count_first = len(list(ReleaseDistinctVersions.find(release_id=release.id).all()))
 
     migration.migrate()
-    count_second = len(list(ReleaseDistinctVersions.filter(release_id=release.id).all()))
+    count_second = len(list(ReleaseDistinctVersions.find(release_id=release.id).all()))
 
     assert count_first == count_second
 
@@ -476,6 +476,6 @@ def test_delete_release_removes_indexes_and_snapshots(argus_db, release_manager_
 
     release_manager_service.delete_release(str(rid))
 
-    assert list(ReleaseDistinctVersions.filter(release_id=rid).all()) == []
-    assert list(ReleaseDistinctImages.filter(release_id=rid).all()) == []
+    assert list(ReleaseDistinctVersions.find(release_id=rid).all()) == []
+    assert list(ReleaseDistinctImages.find(release_id=rid).all()) == []
     assert get_snapshots(rid) == []

@@ -441,30 +441,38 @@ class WebFileStorage(Document):
         name = "web_file_storage"
 
 
-class ReleaseStatsSnapshot(Model):
-    __table_name__ = "argus_release_stats_snapshot"
-    release_id = columns.UUID(partition_key=True)
-    filter_key = columns.Text(primary_key=True)
-    payload = columns.Text()
-    generated_at = columns.DateTime()
+class ReleaseStatsSnapshot(Document):
+    release_id: Annotated[Optional[UUID], PrimaryKey()] = None
+    filter_key: Annotated[Optional[str], ClusteringKey()] = None
+    payload: Optional[str] = None
+    generated_at: Optional[datetime] = None
+
+    class Settings:
+        name = "argus_release_stats_snapshot"
 
 
-class ReleaseDistinctVersions(Model):
+class ReleaseDistinctVersions(Document):
     """Denormalized index: distinct scylla_version values seen for a release.
     Replaces the expensive GSI scan in get_distinct_product_versions.
     Keyed by release_id (partition) + version (clustering) for O(1) reads.
     """
-    release_id = columns.UUID(partition_key=True)
-    version = columns.Text(primary_key=True)
+    release_id: Annotated[Optional[UUID], PrimaryKey()] = None
+    version: Annotated[Optional[str], ClusteringKey()] = None
+
+    class Settings:
+        name = "release_distinct_versions"
 
 
-class ReleaseDistinctImages(Model):
+class ReleaseDistinctImages(Document):
     """Denormalized index: distinct cloud image IDs seen for a release.
     Replaces the expensive GSI scan + UDT deserialization in get_distinct_cloud_images_for_release.
     Keyed by release_id (partition) + image_id (clustering) for O(1) reads.
     """
-    release_id = columns.UUID(partition_key=True)
-    image_id = columns.Text(primary_key=True)
+    release_id: Annotated[Optional[UUID], PrimaryKey()] = None
+    image_id: Annotated[Optional[str], ClusteringKey()] = None
+
+    class Settings:
+        name = "release_distinct_images"
 
 
 _SNAPSHOT_LOGGER = logging.getLogger(__name__)
@@ -480,7 +488,7 @@ def invalidate_release_snapshots(release_id: UUID) -> None:
     is used only for run lifecycle events (submit/finish).
     """
     try:
-        ReleaseStatsSnapshot.filter(release_id=release_id).delete()
+        ReleaseStatsSnapshot.find(release_id=release_id).delete()
     except Exception:  # pylint: disable=broad-except
         _SNAPSHOT_LOGGER.warning("Failed to invalidate release snapshots for %s", release_id, exc_info=True)
 
@@ -490,15 +498,12 @@ USED_MODELS: list[Model] = [
     ArgusScheduleAssignee,
     ArgusScheduleGroup,
     ArgusScheduleTest,
-    ReleaseDistinctVersions,
-    ReleaseDistinctImages,
     ErrorEventEmbeddings,  # to be deprecated
     CriticalEventEmbeddings,  # to be deprecated
     SCTErrorEventEmbedding,
     SCTCriticalEventEmbedding,
     RunConfiguration,
     RunConfigParam,
-    ReleaseStatsSnapshot,
 ]
 
 USED_TYPES: list[UserType] = [
@@ -535,6 +540,9 @@ USED_COODIE_MODELS: list[type[Document]] = [
     PytestResultTable,
     PytestResultTableOld,
     PytestUserField,
+    ReleaseStatsSnapshot,
+    ReleaseDistinctVersions,
+    ReleaseDistinctImages,
 ]
 
 # Coodie user-defined types; synced via UserType.sync_type() and registered
