@@ -204,7 +204,7 @@ class UserViewService:
         tests = [test for test in tests if test.plugin_name == "generic"]
         results = []
         for batch in chunk(tests):
-            results.extend(PytestResultTable.filter(test_id__in=[t.id for t in batch]).allow_filtering().all())
+            results.extend(PytestResultTable.find(test_id__in=[t.id for t in batch]).allow_filtering().all())
 
         return results
 

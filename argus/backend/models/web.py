@@ -496,9 +496,6 @@ USED_MODELS: list[Model] = [
     CriticalEventEmbeddings,  # to be deprecated
     SCTErrorEventEmbedding,
     SCTCriticalEventEmbedding,
-    PytestResultTable,
-    PytestUserField,
-    PytestResultTableOld,
     RunConfiguration,
     RunConfigParam,
     ReleaseStatsSnapshot,
@@ -535,6 +532,9 @@ USED_COODIE_MODELS: list[type[Document]] = [
     JiraIssue,
     SSHTunnelKey,
     ProxyTunnelConfig,
+    PytestResultTable,
+    PytestResultTableOld,
+    PytestUserField,
 ]
 
 # Coodie user-defined types; synced via UserType.sync_type() and registered

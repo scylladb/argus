@@ -41,9 +41,9 @@ class PytestViewService:
             raise exc
 
     def get_user_fields_for_result(self, name: str, id: str):
-        field_rows = PytestUserField.filter(
+        field_rows = PytestUserField.find(
             name=name,  id=datetime.fromisoformat(id)).all()
-        result = {row["field_name"]: row["field_value"] for row in field_rows}
+        result = {row.field_name: row.field_value for row in field_rows}
 
         return result
 

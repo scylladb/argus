@@ -1,9 +1,12 @@
-from typing import Any, TypedDict
+from typing import Annotated, Any, Optional, TypedDict
 from datetime import UTC, datetime
-from cassandra.cqlengine.models import Model
-from cassandra.cqlengine import columns
+from uuid import UUID
+
+from pydantic import Field
 from cassandra.util import uuid_from_time
 from cassandra.cluster import Session
+from coodie import ClusteringKey, Double, Indexed, PrimaryKey, TimeUUID
+from coodie.sync import Document
 
 from argus.common.enums import PytestStatus
 
@@ -20,25 +23,27 @@ class PytestSubmitData(TypedDict):
     user_fields: dict[str, Any]
 
 
-class PytestResultTableOld(Model):
-    __table_name__ = "pytest_result_table"
-    name = columns.Text(primary_key=True, partition_key=True)
-    id = columns.TimeUUID(primary_key=True, clustering_order="DESC",
-                          default=lambda: uuid_from_time(datetime.now(tz=UTC)))
-    test_type = columns.Text(required=True)
-    run_id = columns.UUID(index=True, required=True)
-    release_id = columns.UUID(index=True)
-    test_id = columns.UUID(index=True)
-    duration = columns.Double()
-    message = columns.Text()
-    status = columns.Text(default=lambda: PytestStatus.PASSED.value)
-    test_timestamp = columns.DateTime() # timestamp for the submitted test
-    session_timestamp = columns.DateTime() # timestamp of the test session
-    markers = columns.List(value_type=columns.Text())
+class PytestResultTableOld(Document):
+    name: Annotated[Optional[str], PrimaryKey()] = None
+    id: Annotated[UUID, TimeUUID(), ClusteringKey(order="DESC")] = Field(
+        default_factory=lambda: uuid_from_time(datetime.now(tz=UTC)))
+    test_type: Optional[str] = None
+    run_id: Annotated[Optional[UUID], Indexed()] = None
+    release_id: Annotated[Optional[UUID], Indexed()] = None
+    test_id: Annotated[Optional[UUID], Indexed()] = None
+    duration: Annotated[Optional[float], Double()] = None
+    message: Optional[str] = None
+    status: Optional[str] = Field(default=PytestStatus.PASSED.value)
+    test_timestamp: Optional[datetime] = None  # timestamp for the submitted test
+    session_timestamp: Optional[datetime] = None  # timestamp of the test session
+    markers: list[str] = Field(default_factory=list)
 
     # User fields map remaining user-specified fields into a simple string:string mapping
     # Example: SCYLLA_MODE = release
-    user_fields = columns.Map(key_type=columns.Text(), value_type=columns.Text())
+    user_fields: dict[str, str] = Field(default_factory=dict)
+
+    class Settings:
+        name = "pytest_result_table"
 
     @classmethod
     def _sync_additional_rules(cls, session: Session):
@@ -50,25 +55,31 @@ class PytestResultTableOld(Model):
             "CREATE INDEX IF NOT EXISTS pytest_result_table_user_value_idx ON pytest_result_table (VALUES(user_fields))")
 
 
-class PytestResultTable(Model):
-    __table_name__ = "pytest_v2"
-    name = columns.Text(partition_key=True, primary_key=True)
-    status = columns.Text(primary_key=True, default=lambda: PytestStatus.PASSED.value)
-    id = columns.DateTime(primary_key=True, default=lambda: datetime.now(tz=UTC))
-    test_type = columns.Text(required=True)
-    run_id = columns.UUID(index=True, required=True)
-    test_id = columns.UUID(index=True)
-    release_id = columns.UUID(index=True)
-    duration = columns.Double()
-    message = columns.Text()
-    test_timestamp = columns.DateTime() # timestamp for the submitted test
-    session_timestamp = columns.DateTime() # timestamp of the test session
-    markers = columns.List(value_type=columns.Text())
+class PytestResultTable(Document):
+    name: Annotated[Optional[str], PrimaryKey()] = None
+    status: Annotated[Optional[str], ClusteringKey(clustering_key_index=0)] = Field(
+        default=PytestStatus.PASSED.value)
+    id: Annotated[Optional[datetime], ClusteringKey(clustering_key_index=1)] = Field(
+        default_factory=lambda: datetime.now(tz=UTC))
+    test_type: Optional[str] = None
+    run_id: Annotated[Optional[UUID], Indexed()] = None
+    test_id: Annotated[Optional[UUID], Indexed()] = None
+    release_id: Annotated[Optional[UUID], Indexed()] = None
+    duration: Annotated[Optional[float], Double()] = None
+    message: Optional[str] = None
+    test_timestamp: Optional[datetime] = None  # timestamp for the submitted test
+    session_timestamp: Optional[datetime] = None  # timestamp of the test session
+    markers: list[str] = Field(default_factory=list)
+
+    class Settings:
+        name = "pytest_v2"
 
 
-class PytestUserField(Model):
-    __table_name__ = "pytest_user_field"
-    name = columns.Text(partition_key=True, primary_key=True)
-    id = columns.DateTime(primary_key=True)
-    field_name = columns.Text(primary_key=True)
-    field_value = columns.Text()
+class PytestUserField(Document):
+    name: Annotated[Optional[str], PrimaryKey()] = None
+    id: Annotated[Optional[datetime], ClusteringKey(clustering_key_index=0)] = None
+    field_name: Annotated[Optional[str], ClusteringKey(clustering_key_index=1)] = None
+    field_value: Optional[str] = None
+
+    class Settings:
+        name = "pytest_user_field"

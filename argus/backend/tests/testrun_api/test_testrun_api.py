@@ -408,11 +408,11 @@ def cleanup_pytest_rows():
     from argus.backend.models.pytest import PytestResultTable, PytestUserField
     for name in names:
         try:
-            PytestResultTable.filter(name=name).delete()
+            PytestResultTable.find(name=name).delete()
         except Exception:
             pass
         try:
-            PytestUserField.filter(name=name).delete()
+            PytestUserField.find(name=name).delete()
         except Exception:
             pass
 

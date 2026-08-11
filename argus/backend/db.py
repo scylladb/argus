@@ -156,7 +156,7 @@ class ScyllaCluster:
 
     def sync_additional_schema(self):
         LOGGER.info("Syncing additional rules...")
-        for model in USED_MODELS:
+        for model in [*USED_MODELS, *USED_COODIE_MODELS]:
             if rule_func := getattr(model, "_sync_additional_rules", None):
                 rule_func(self.session)
         LOGGER.info("Syncing additional rules done.")
