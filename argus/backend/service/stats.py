@@ -9,6 +9,8 @@ from uuid import UUID
 
 from flask import current_app
 from cassandra.cqlengine.models import Model
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.jira import JiraIssue
 from argus.backend.models.plan import ArgusReleasePlan
@@ -548,7 +550,7 @@ class ReleaseStatsCollector:
             try:
                 snapshot = ReleaseStatsSnapshot.get(release_id=self.release.id, filter_key=filter_key)
                 return json.loads(snapshot.payload)
-            except ReleaseStatsSnapshot.DoesNotExist:
+            except DocumentNotFound:
                 pass
 
         all_tests: list[ArgusTest] = list(ArgusTest.find(release_id=self.release.id).all())

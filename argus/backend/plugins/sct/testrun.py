@@ -222,7 +222,7 @@ class SCTTestRun(PluginModelBase):
 
     @classmethod
     def get_distinct_product_versions(cls, release: ArgusRelease) -> list[str]:
-        rows = list(ReleaseDistinctVersions.filter(release_id=release.id).all())
+        rows = list(ReleaseDistinctVersions.find(release_id=release.id).all())
         if rows:
             return sorted([r.version for r in rows], reverse=True)
         # Fallback: index not yet populated — scan GSI directly
@@ -249,7 +249,7 @@ class SCTTestRun(PluginModelBase):
 
     @classmethod
     def get_distinct_cloud_images_for_release(cls, release: ArgusRelease):
-        rows = list(ReleaseDistinctImages.filter(release_id=release.id).all())
+        rows = list(ReleaseDistinctImages.find(release_id=release.id).all())
         if rows:
             return sorted([r.image_id for r in rows], reverse=True)
         # Fallback: index not yet populated — scan GSI + deserialize UDTs directly

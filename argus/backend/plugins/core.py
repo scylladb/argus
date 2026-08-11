@@ -288,7 +288,7 @@ class PluginModelBase(Model):
             version = self.scylla_version or ""
             version_prefix = f"v={version}::"
             all_versions_prefix = "v=::"
-            for snapshot in ReleaseStatsSnapshot.filter(release_id=self.release_id).all():
+            for snapshot in ReleaseStatsSnapshot.find(release_id=self.release_id).all():
                 if snapshot.filter_key.startswith(version_prefix) or snapshot.filter_key.startswith(all_versions_prefix):
                     snapshot.delete()
         except Exception:

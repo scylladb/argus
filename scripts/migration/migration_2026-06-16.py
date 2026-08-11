@@ -1,6 +1,8 @@
 import logging
 from collections import defaultdict
 
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.web import ArgusRelease
@@ -20,7 +22,7 @@ def migrate():
     the migration is safe to re-run.
     """
     plans_by_release: dict = defaultdict(list)
-    for plan in ArgusReleasePlan.objects.all():
+    for plan in ArgusReleasePlan.find().all():
         plans_by_release[plan.release_id].append(plan)
 
     LOGGER.info("Backfilling plan keys across %d release(s)...", len(plans_by_release))
@@ -32,7 +34,7 @@ def migrate():
         if release_id not in release_names:
             try:
                 release_names[release_id] = ArgusRelease.get(id=release_id).name
-            except ArgusRelease.DoesNotExist:
+            except DocumentNotFound:
                 LOGGER.warning("Release %s not found — skipping %d plan(s).", release_id, len(plans))
                 continue
         release_name = release_names[release_id]

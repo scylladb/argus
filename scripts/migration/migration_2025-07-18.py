@@ -1,11 +1,10 @@
 import logging
 
 from cassandra.util import datetime_from_uuid1
-from cassandra.query import ConsistencyLevel
 
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.pytest import PytestResultTable, PytestResultTableOld, PytestUserField
-from cassandra.cqlengine.query import BatchQuery
+from coodie.sync import BatchQuery
 from argus.backend.models.web import ArgusTest
 from argus.backend.util.common import chunk
 from argus.backend.util.logsetup import setup_application_logging
@@ -18,9 +17,7 @@ DB = ScyllaCluster.get()
 
 def migrate():
     LOGGER.warning("Fetching old data...")
-    rows: list[PytestResultTableOld] = (
-        PytestResultTableOld.consistency(ConsistencyLevel.ONE).filter().fetch_size(5000).limit(None).all()
-    )
+    rows: list[PytestResultTableOld] = PytestResultTableOld.find().consistency("ONE").fetch_size(5000).all()
     placeholder_test = ArgusTest.get(build_system_id="scylla-staging/artsiom_mishuta/dtest-release")
     LOGGER.warning("Migrating results...")
 
@@ -29,7 +26,7 @@ def migrate():
         user_fields_to_write: list[PytestUserField] = []
         with BatchQuery() as b:
             for row in batch:
-                old = dict(row)
+                old = row.model_dump()
                 uf = old.pop("user_fields", {})
                 ts = datetime_from_uuid1(old.pop("id"))
                 new = PytestResultTable(**old)
@@ -47,13 +44,13 @@ def migrate():
                     new.test_id = placeholder_test.id
                     new.release_id = placeholder_test.release_id
                 print(".", end="")
-                new.batch(b).save()
+                new.save(batch=b)
         LOGGER.warning("Migrating user fields... Total to migrate: %s", len(user_fields_to_write))
         for uf_batch in chunk(user_fields_to_write, 100):
             print("Batch", end="")
             with BatchQuery() as b:
                 for uf in uf_batch:
-                    uf.batch(b).save()
+                    uf.save(batch=b)
                     print(".", end="")
 
     LOGGER.warning("Results migrated.")
