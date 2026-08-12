@@ -108,7 +108,7 @@ def view_dashboard(view_name: str):
     service = UserViewService()
     view = service.get_view_by_name(view_name=view_name)
     data_json = view
-    view["widget_settings"] = json.loads(view["widget_settings"])
+    view.widget_settings = json.loads(view.widget_settings)
     return render_template("view_dashboard.html.j2", data=data_json)
 
 
@@ -170,7 +170,7 @@ def release_planner_by_id(id: str):
 def release_planner(name: str):
     service = PlanningService()
     planner_data = service.release_planner(name)
-    return render_template("release_planner.html.j2", release_name=planner_data["release"]["name"], planner_data=planner_data)
+    return render_template("release_planner.html.j2", release_name=planner_data["release"].name, planner_data=planner_data)
 
 
 @bp.route("/release/<string:name>/duty")

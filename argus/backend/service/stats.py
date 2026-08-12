@@ -557,16 +557,16 @@ class ReleaseStatsCollector:
             }
         if self.release_version:
             if include_no_version:
-                expr = lambda row: check_version(self.release_version, row["scylla_version"]) or not row["scylla_version"]
+                def expr(row): return check_version(self.release_version, row["scylla_version"]) or not row["scylla_version"]
             elif self.release_version == "!noVersion":
-                expr = lambda row: not row["scylla_version"]
+                def expr(row): return not row["scylla_version"]
             else:
-                expr = lambda row: check_version(self.release_version, row["scylla_version"])
+                def expr(row): return check_version(self.release_version, row["scylla_version"])
         else:
             if include_no_version:
-                expr = lambda row: row
+                def expr(row): return row
             else:
-                expr = lambda row: row["scylla_version"]
+                def expr(row): return row["scylla_version"]
         self.release_rows = list(filter(expr, self.release_rows))
         if image_id:
             def filter_for_image(row: dict):
@@ -617,7 +617,7 @@ class ViewStatsCollector:
         self.view_id = UUID(view_id) if isinstance(view_id, str) else view_id
         self.filter = filter
 
-    def collect(self, limited=False, force=False, include_no_version = False, widget_id: int = None, image_id: str = None) -> dict:
+    def collect(self, limited=False, force=False, include_no_version=False, widget_id: int = None, image_id: str = None) -> dict:
         self.view: ArgusUserView = ArgusUserView.get(id=self.view_id)
         widget: dict[str, Any] | None = None
         if isinstance(widget_id, int):
@@ -628,7 +628,7 @@ class ViewStatsCollector:
             all_tests.extend(ArgusTest.find(id__in=slice).all())
 
         if widget and widget.get("filter"):
-            all_tests = [test for test in all_tests if any(str(test[key]) in widget["filter"] for key in ["id", "group_id", "release_id"])]
+            all_tests = [test for test in all_tests if any(str(getattr(test, key)) in widget["filter"] for key in ["id", "group_id", "release_id"])]
         build_ids = reduce(lambda acc, test: acc[test.plugin_name or "unknown"].append(test.build_system_id) or acc, all_tests, defaultdict(list))
         self.view_rows = [futures for plugin in all_plugin_models()
                           for futures in plugin.get_stats_for_release(release=self.view, build_ids=build_ids.get(plugin._plugin_name, []))]
@@ -636,16 +636,16 @@ class ViewStatsCollector:
 
         if self.filter:
             if include_no_version:
-                expr = lambda row: check_version(self.filter, row["scylla_version"]) or not row["scylla_version"]
+                def expr(row): return check_version(self.filter, row["scylla_version"]) or not row["scylla_version"]
             elif self.filter == "!noVersion":
-                expr = lambda row: not row["scylla_version"]
+                def expr(row): return not row["scylla_version"]
             else:
-                expr = lambda row: check_version(self.filter, row["scylla_version"])
+                def expr(row): return check_version(self.filter, row["scylla_version"])
         else:
             if include_no_version:
-                expr = lambda row: row
+                def expr(row): return row
             else:
-                expr = lambda row: row["scylla_version"]
+                def expr(row): return row["scylla_version"]
         self.view_rows = list(filter(expr, self.view_rows))
         if image_id:
             self.view_rows = list(filter(lambda row: _get_image(row) == image_id, self.view_rows))

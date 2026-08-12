@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from datetime import datetime
 import logging
 from json.encoder import JSONEncoder
@@ -31,7 +32,7 @@ class ArgusJSONProvider(DefaultJSONProvider):
     @staticmethod
     def process_nested_dicts(o: dict):
         for k, v in o.items():
-            if isinstance(v, dict):
+            if isinstance(v, Mapping):
                 o[k] = {str(key): val for key, val in v.items()}
         return o
 
@@ -41,7 +42,7 @@ class ArgusJSONProvider(DefaultJSONProvider):
             case UUID():
                 return str(o)
             case OrderedMapSerializedKey():
-                return dict(o)
+                return {str(k): v for k, v in o.items()}
             case BaseModel():
                 o = {str(k): v for k, v in o.model_dump().items()}
                 o = cls.process_nested_dicts(o)
