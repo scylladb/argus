@@ -1,6 +1,6 @@
 import logging
 
-from cassandra.cqlengine.query import BatchQuery
+from coodie.sync import BatchQuery
 
 from argus.backend.db import ScyllaCluster
 from argus.backend.plugins.sct.testrun import SCTResource, SCTTestRun
@@ -19,7 +19,7 @@ def migrate():
     total_resources = 0
     skipped_runs = 0
 
-    for run in SCTTestRun.filter().limit(None).only(["id", "allocated_resources"]).all():
+    for run in SCTTestRun.find().only("id", "allocated_resources").all():
         total_runs += 1
         resources = run.allocated_resources
         if not resources:
@@ -28,13 +28,13 @@ def migrate():
 
         with BatchQuery() as b:
             for res in resources:
-                SCTResource.batch(b).create(
+                SCTResource(
                     run_id=run.id,
                     name=res.name,
                     state=res.state,
                     resource_type=res.resource_type,
                     instance_info=res.instance_info,
-                )
+                ).save(batch=b)
                 total_resources += 1
 
         LOGGER.info(

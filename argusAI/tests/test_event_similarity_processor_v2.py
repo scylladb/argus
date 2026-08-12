@@ -142,7 +142,7 @@ class TestEventProcessing:
             call
             for call in processor.db.execute.call_args_list
             if call[0][0].startswith(
-                f"INSERT INTO {SCTErrorEventEmbedding.__keyspace__}.{SCTErrorEventEmbedding.__table_name__}"
+                f"INSERT INTO {SCTErrorEventEmbedding.Settings.keyspace}.{SCTErrorEventEmbedding.table_name()}"
             )
         ]
         assert len(insert_calls) == 1
@@ -151,7 +151,7 @@ class TestEventProcessing:
         delete_calls = [
             call
             for call in processor.db.execute.call_args_list
-            if call[0][0].startswith(f"DELETE FROM {SCTUnprocessedEvent.__table_name__}")
+            if call[0][0].startswith(f"DELETE FROM {SCTUnprocessedEvent.table_name()}")
         ]
         assert len(delete_calls) == 1
         assert delete_calls[0][0][1] == (run_id, severity, ts)
@@ -178,7 +178,7 @@ class TestEventProcessing:
             call
             for call in processor.db.execute.call_args_list
             if call[0][0].startswith(
-                f"INSERT INTO {SCTCriticalEventEmbedding.__keyspace__}.{SCTCriticalEventEmbedding.__table_name__}"
+                f"INSERT INTO {SCTCriticalEventEmbedding.Settings.keyspace}.{SCTCriticalEventEmbedding.table_name()}"
             )
         ]
         assert len(insert_calls) == 1
@@ -574,7 +574,7 @@ class TestDeduplication:
         run_id = uuid4()
         processor.db.session.execute.return_value = []
 
-        processor._get_potential_duplicate_rows(run_id, SCTErrorEventEmbedding.__table_name__)
+        processor._get_potential_duplicate_rows(run_id, SCTErrorEventEmbedding.table_name())
 
         prepared_query = " ".join(processor.db.session.prepare.call_args[0][0].split())
         assert "WHERE run_id = ?" in prepared_query, "candidate fetch must be scoped to the run partition"
@@ -707,7 +707,7 @@ class TestDeduplication:
         delete_calls = [
             call
             for call in processor.db.execute.call_args_list
-            if call[0][0].startswith(f"DELETE FROM {SCTUnprocessedEvent.__table_name__}")
+            if call[0][0].startswith(f"DELETE FROM {SCTUnprocessedEvent.table_name()}")
         ]
         assert len(delete_calls) == 0
 

@@ -77,8 +77,8 @@ def sct_run(request, flask_client, fake_test) -> SctRun:
     # a subsequent seeding step (e.g. the packages POST) fails.
     def _cleanup():
         try:
-            SCTTestRun.get(id=run_id).delete()
-        except SCTTestRun.DoesNotExist:
+            SCTTestRun.get(id=uuid.UUID(str(run_id))).delete()
+        except DocumentNotFound:
             pass
 
     request.addfinalizer(_cleanup)

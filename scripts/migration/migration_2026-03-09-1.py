@@ -20,7 +20,7 @@ def migrate():
         updated = 0
         skipped = 0
 
-        for run in model.filter().limit(None).only(["build_id", "start_time", "build_job_url", "build_number"]).all():
+        for run in model.find().only("build_id", "start_time", "build_job_url", "build_number").all():
             if run.build_number is not None:
                 skipped += 1
                 continue
@@ -37,7 +37,7 @@ def migrate():
                 skipped += 1
                 continue
 
-            model.objects(build_id=run.build_id, start_time=run.start_time).update(build_number=build_number)
+            model.find(build_id=run.build_id, start_time=run.start_time).update(build_number=build_number)
             updated += 1
             LOGGER.info(
                 "Updated %s build_id=%s start_time=%s build_number=%s",

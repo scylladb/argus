@@ -15,7 +15,7 @@ DB = ScyllaCluster.get()
 def migrate():
     LOGGER.warning("Getting events...")
 
-    for event in SCTEvent.all():
+    for event in SCTEvent.find().all():
         event.event_id = uuid4()
         LOGGER.info(
             "Added UUID('%s') for event ('%s', %s, %s).", event.event_id, event.run_id, event.severity, event.ts

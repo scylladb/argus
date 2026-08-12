@@ -18,21 +18,21 @@ class GraphedStatsService:
         self.cluster = ScyllaCluster.get()
 
     def get_graphed_stats(self, test_id: UUID, filters=None):
-        rows = list(SCTTestRun.filter(test_id=test_id).only([
+        rows = list(SCTTestRun.find(test_id=test_id).only(
             "build_id",
             "start_time",
             "end_time",
             "id",
             "investigation_status",
             "packages",
-            "status"
-        ]).all())
+            "status",
+        ).all())
 
         nemesis_rows = []
         for batch in chunk({r.id for r in rows}):
             # Typically this should result in <100 runs per test, but
             # we batch to make sure we don't exceed max cartesian product
-            nemesis_rows.extend(SCTNemesis.filter(run_id__in=batch).all())
+            nemesis_rows.extend(SCTNemesis.find(run_id__in=batch).all())
 
         nemesis_data = defaultdict(list)
         for row in nemesis_rows:
@@ -50,27 +50,27 @@ class GraphedStatsService:
             except (json.JSONDecodeError, re.error) as e:
                 LOGGER.error(f"Error parsing filters: {e}")
 
-        for run in [row for row in rows if row["investigation_status"].lower() != "ignored"]:
+        for run in [row for row in rows if row.investigation_status.lower() != "ignored"]:
             # Skip if build_id matches any filter pattern
-            if filter_patterns and any(pattern.search(run["build_id"]) for pattern in filter_patterns):
+            if filter_patterns and any(pattern.search(run.build_id) for pattern in filter_patterns):
                 continue
             try:
-                version = [package.version for package in run["packages"] if package.name == "scylla-server"][0]
+                version = [package.version for package in run.packages if package.name == "scylla-server"][0]
             except (IndexError, TypeError):
                 version = "unknown"
 
-            duration = (run["end_time"] - run["start_time"]).total_seconds() if run["end_time"] else 0
+            duration = (run.end_time - run.start_time).total_seconds() if run.end_time else 0
             release_data["test_runs"].append({
-                "build_id": run["build_id"],
-                "start_time": run["start_time"].timestamp(),
+                "build_id": run.build_id,
+                "start_time": run.start_time.timestamp(),
                 "duration": duration if duration > 0 else 0,
-                "status": run["status"],
+                "status": run.status,
                 "version": version,
-                "run_id": str(run["id"]),
-                "investigation_status": run["investigation_status"]
+                "run_id": str(run.id),
+                "investigation_status": run.investigation_status
             })
 
-            if nemeses := nemesis_data.get(run["id"]):
+            if nemeses := nemesis_data.get(run.id):
                 for nemesis in [n for n in nemeses if n.status in ("succeeded", "failed")]:
                     release_data["nemesis_data"].append({
                         "version": version,
@@ -78,9 +78,9 @@ class GraphedStatsService:
                         "start_time": nemesis.start_time,
                         "duration": nemesis.end_time - nemesis.start_time,
                         "status": nemesis.status,
-                        "run_id": str(run["id"]),
+                        "run_id": str(run.id),
                         "stack_trace": nemesis.stack_trace,
-                        "build_id": run["build_id"]
+                        "build_id": run.build_id
                     })
 
         return release_data
@@ -135,8 +135,8 @@ class GraphedStatsService:
         test_runs = {}
         for run_id in run_ids:
             try:
-                test_run = SCTTestRun.filter(id=run_id).only(
-                    ["id", "status", "build_id", "start_time", "assignee", "investigation_status", "build_number", "packages", "build_job_url"]).get()
+                test_run = SCTTestRun.find(id=run_id).only(
+                    "id", "status", "build_id", "start_time", "assignee", "investigation_status", "build_number", "packages", "build_job_url").first()
                 test_runs[run_id] = test_run
             except Exception as e:
                 LOGGER.error(f"Failed to fetch test run {run_id}: {str(e)}")

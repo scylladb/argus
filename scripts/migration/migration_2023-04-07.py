@@ -1,5 +1,5 @@
 import logging
-from cassandra.cqlengine.management import sync_table
+
 
 from argus.backend.db import ScyllaCluster
 from argus.backend.util.logsetup import setup_application_logging
@@ -13,8 +13,8 @@ def up():
     db = ScyllaCluster.get()
     db.session.default_timeout = 3600
     old_table_name = "test_runs_v8"
-    new_table_name = SCTTestRun.__table_name__
-    sync_table(SCTTestRun)
+    new_table_name = SCTTestRun.table_name()
+    SCTTestRun.sync_table()
 
     all_ids = [row["id"] for row in list(db.session.execute(f"SELECT id FROM {old_table_name}").all())]
     total_ids = len(all_ids)

@@ -70,11 +70,12 @@ class TestRunService:
         return self.plugins.get(plugin_name)
 
     def get_run(self, run_type: str, run_id: UUID) -> PluginModelBase:
+        run_id = UUID(run_id) if isinstance(run_id, str) else run_id
         plugin = self.plugins.get(run_type)
         if plugin:
             try:
                 return plugin.model.get(id=run_id)
-            except plugin.model.DoesNotExist:
+            except DocumentNotFound:
                 return None
 
     def get_run_by_build_number(self, build_id: str, build_number: int) -> PluginModelBase | None:
@@ -93,16 +94,17 @@ class TestRunService:
         plugin = self.get_plugin(plugin_name=test.plugin_name)
         if not plugin:
             return None
-        runs = list(plugin.model.filter(build_id=build_id, build_number=build_number).allow_filtering().all())
+        runs = list(plugin.model.find(build_id=build_id, build_number=build_number).allow_filtering().all())
         return runs[0] if runs else None
 
     def get_test_type_for_run(self, run_id: str) -> str:
+        run_id = UUID(run_id) if isinstance(run_id, str) else run_id
         for name, plugin in AVAILABLE_PLUGINS.items():
             try:
                 run = plugin.model.get(id=run_id)
                 if run:
                     return name
-            except plugin.model.DoesNotExist:
+            except DocumentNotFound:
                 continue
         return "unknown-does-not-exist"
 
@@ -117,9 +119,9 @@ class TestRunService:
         plugin = self.get_plugin(plugin_name=test.plugin_name)
         if not plugin:
             return []
-        dml = plugin.model.filter(build_id=test.build_system_id).limit(limit)
+        dml = plugin.model.find(build_id=test.build_system_id).limit(limit)
         if not full:
-            dml = dml.only(limited_fields)
+            dml = dml.only(*limited_fields)
         if before:
             try:
                 ts_before = datetime.fromtimestamp(float(before))
@@ -136,12 +138,10 @@ class TestRunService:
         last_runs_ids = [run.id for run in last_runs]
         for added_run in additional_runs:
             if added_run not in last_runs_ids:
-                try:
-                    last_runs.append(plugin.model.filter(id=added_run).get())
-                except plugin.model.DoesNotExist:
-                    pass
+                if (added := plugin.model.find(id=added_run).first()) is not None:
+                    last_runs.append(added)
 
-        last_runs = [dict(run.items()) for run in last_runs]
+        last_runs = [run.model_dump() for run in last_runs]
         last_runs = sorted(last_runs, reverse=True, key=lambda run: (
             run["build_number"] or get_build_number(run["build_job_url"]), ComparableTestStatus(TestStatus(run["status"]))))
 
@@ -156,7 +156,7 @@ class TestRunService:
             try:
                 run: PluginModelBase = plugin.model.get(id=run_id)
                 polled_runs.append(run)
-            except plugin.model.DoesNotExist:
+            except DocumentNotFound:
                 pass
 
         response = {str(run.id): run for run in polled_runs}
@@ -474,10 +474,12 @@ class TestRunService:
             model = AVAILABLE_PLUGINS.get(plugin).model
             model_runs = []
             for run_id in run_ids:
-                model_runs.append(model.filter(id=run_id).only(
-                    ["build_id", "start_time", "build_job_url", "build_number", "id", "test_id"]).get())
+                run_id = UUID(run_id) if isinstance(run_id, str) else run_id
+                if (found := model.find(id=run_id).only(
+                        "build_id", "start_time", "build_job_url", "build_number", "id", "test_id").first()) is not None:
+                    model_runs.append(found)
             all_runs.update(
-                {str(run["id"]): {**run} for run in model_runs})
+                {str(run.id): run.model_dump() for run in model_runs})
 
         return all_runs
 
@@ -485,9 +487,9 @@ class TestRunService:
         sct = AVAILABLE_PLUGINS.get("scylla-cluster-tests").model
         now = datetime.now(UTC)
         stuck_period = now - timedelta(minutes=45)
-        stuck_runs_running = sct.filter(heartbeat__lt=int(
+        stuck_runs_running = sct.find(heartbeat__lt=int(
             stuck_period.timestamp()), status=TestStatus.RUNNING.value).allow_filtering().all()
-        stuck_runs_created = sct.filter(heartbeat__lt=int(
+        stuck_runs_created = sct.find(heartbeat__lt=int(
             stuck_period.timestamp()), status=TestStatus.CREATED.value).allow_filtering().all()
 
         all_stuck_runs = [*stuck_runs_running, *stuck_runs_created]

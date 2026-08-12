@@ -16,8 +16,8 @@ Usage:
 import logging
 from typing import Iterable
 
-from cassandra.query import SimpleStatement, ConsistencyLevel
-from cassandra.cqlengine.query import BatchQuery
+from cassandra.query import SimpleStatement
+from coodie.sync import BatchQuery
 
 from argus.backend.db import ScyllaCluster
 from argus.backend.plugins.sct.testrun import SCTEvent, SCTUnprocessedEvent, SCTEventSeverity
@@ -63,8 +63,8 @@ def migrate():
 
         # Fetch all ERROR and CRITICAL events for this run_id using IN clause
         events = list(
-            SCTEvent.consistency(ConsistencyLevel.ONE)
-            .filter(run_id=run_id, severity__in=[SCTEventSeverity.ERROR.value, SCTEventSeverity.CRITICAL.value])
+            SCTEvent.find(run_id=run_id, severity__in=[SCTEventSeverity.ERROR.value, SCTEventSeverity.CRITICAL.value])
+            .consistency("ONE")
             .all()
         )
 
@@ -84,7 +84,7 @@ def migrate():
                     unprocessed_event.run_id = event.run_id
                     unprocessed_event.severity = event.severity
                     unprocessed_event.ts = event.ts
-                    unprocessed_event.batch(b).save()
+                    unprocessed_event.save(batch=b)
 
             total_events_migrated += len(event_batch)
             LOGGER.debug("Batch %d completed (%d events)", batch_count, len(event_batch))

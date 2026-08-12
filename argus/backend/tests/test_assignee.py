@@ -77,7 +77,7 @@ def test_unassign_testrun(flask_client, sct_run_for_assignee, test_user):
         assert resp.json["response"]["assignee"] == str(test_user.id)
 
     # Verify assignment persisted
-    run = SCTTestRun.get(id=run_id)
+    run = SCTTestRun.get(id=uuid.UUID(run_id))
     assert run.assignee == test_user.id
 
     # Now unassign (this is what was causing the error)
@@ -96,7 +96,7 @@ def test_unassign_testrun(flask_client, sct_run_for_assignee, test_user):
         mock_notify.assert_not_called()
 
     # Verify unassignment persisted
-    run = SCTTestRun.get(id=run_id)
+    run = SCTTestRun.get(id=uuid.UUID(run_id))
     assert run.assignee is None
 
 

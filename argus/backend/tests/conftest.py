@@ -9,7 +9,6 @@ from argus.backend.db import ScyllaCluster
 from argus.backend.cli import sync_models
 from docker.errors import NotFound
 from _pytest.fixtures import fixture
-from cassandra.cqlengine.management import sync_type
 import os
 from pathlib import Path
 import time
@@ -162,8 +161,6 @@ def argus_db():
     Config.CONFIG = config
     database = ScyllaCluster.get(config)
     if need_sync_models:
-        for user_type in all_plugin_types():
-            sync_type(ks_name="test_argus", type_model=user_type)
         sync_models("test_argus")
     # Wait a little to let CDC Reader and full scan of Vector Store indices to complete.
     LOGGER.info("Waiting on Vector Store to be ready...")

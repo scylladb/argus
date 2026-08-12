@@ -1,3 +1,4 @@
+from uuid import UUID
 import base64
 from dataclasses import asdict, dataclass
 from io import BytesIO
@@ -165,7 +166,7 @@ class Nemesis(Partial):
     TEMPLATE_PATH = "email/partials/nemesis.html.j2"
     def create_context(self, options: dict[str, Any]):
         status_filter = options.get("status_filter") or ["failed", "succeeded"]
-        nemesis = list(filter(lambda nem: nem.status in status_filter, SCTNemesis.filter(run_id=self.test_run.id).all()))
+        nemesis = list(filter(lambda nem: nem.status in status_filter, SCTNemesis.find(run_id=self.test_run.id).all()))
         return {
             **self.default_options(),
             "run_id": self.test_run.id,
@@ -368,7 +369,7 @@ class EmailService:
         return self.create_report(req)
 
     def create_report(self, request: ReportSendRequest) -> str:
-        run: SCTTestRun = SCTTestRun.get(id=request.run_id)
+        run: SCTTestRun = SCTTestRun.get(id=UUID(request.run_id) if isinstance(request.run_id, str) else request.run_id)
         partials = []
         for section in request.sections if len(request.sections) > 0 else DEFAULT_SECTIONS:
             if isinstance(section, dict):

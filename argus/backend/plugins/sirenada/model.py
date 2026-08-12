@@ -1,8 +1,13 @@
 from datetime import UTC, datetime
 from uuid import UUID
-from cassandra.cqlengine import columns
-from cassandra.cqlengine.usertype import UserType
-from cassandra.cqlengine.models import Model
+from typing import Annotated, ClassVar, Optional
+
+from pydantic import Field
+from coodie import PrimaryKey
+from coodie.exceptions import DocumentNotFound
+from coodie.sync import Document
+from coodie.usertype import UserType
+
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import ArgusRelease
 from argus.backend.plugins.core import PluginModelBase
@@ -12,37 +17,43 @@ from argus.common.enums import TestStatus
 
 
 class SirenadaTest(UserType):
-    test_name = columns.Text()
-    class_name = columns.Text()
-    file_name = columns.Text()
-    browser_type = columns.Text()
-    cluster_type = columns.Text()
-    status = columns.Text()
-    duration = columns.Float()
-    message = columns.Text()
-    start_time = columns.DateTime()
-    stack_trace = columns.Text()
-    screenshot_file = columns.Text()
-    s3_folder_id = columns.Text()
-    requests_file = columns.Text()
-    sirenada_test_id = columns.Text()
-    sirenada_user = columns.Text()
-    sirenada_password = columns.Text()
+    test_name: Optional[str] = None
+    class_name: Optional[str] = None
+    file_name: Optional[str] = None
+    browser_type: Optional[str] = None
+    cluster_type: Optional[str] = None
+    status: Optional[str] = None
+    duration: Optional[float] = None
+    message: Optional[str] = None
+    start_time: Optional[datetime] = None
+    stack_trace: Optional[str] = None
+    screenshot_file: Optional[str] = None
+    s3_folder_id: Optional[str] = None
+    requests_file: Optional[str] = None
+    sirenada_test_id: Optional[str] = None
+    sirenada_user: Optional[str] = None
+    sirenada_password: Optional[str] = None
+
+    class Settings:
+        __type_name__ = "sirenada_test"
 
 
 class SirenadaRun(PluginModelBase):
-    _plugin_name = "sirenada"
-    __table_name__ = "sirenada_run"
-    logs = columns.Map(key_type=columns.Text(), value_type=columns.Text())
+    _plugin_name: ClassVar[str] = "sirenada"
+
+    class Settings:
+        name = "sirenada_run"
+
+    logs: dict[str, str] = Field(default_factory=dict)
     # TODO: Legacy field name, should be renamed to product_version and abstracted
-    scylla_version = columns.Text()
-    region = columns.Text()
-    sirenada_test_ids = columns.List(value_type=columns.Text())
-    s3_folder_ids = columns.List(value_type=columns.Tuple(columns.Text(), columns.Text()))
-    browsers = columns.List(value_type=columns.Text())
-    clusters = columns.List(value_type=columns.Text())
-    sct_test_id = columns.UUID()
-    results = columns.List(value_type=columns.UserDefinedType(user_type=SirenadaTest))
+    scylla_version: Optional[str] = None
+    region: Optional[str] = None
+    sirenada_test_ids: list[str] = Field(default_factory=list)
+    s3_folder_ids: list[tuple[str, str]] = Field(default_factory=list)
+    browsers: list[str] = Field(default_factory=list)
+    clusters: list[str] = Field(default_factory=list)
+    sct_test_id: Optional[UUID] = None
+    results: list[SirenadaTest] = Field(default_factory=list)
 
     @classmethod
     def _stats_query(cls) -> str:
@@ -63,7 +74,7 @@ class SirenadaRun(PluginModelBase):
         self.scylla_version = version
         try:
             new_assignee = self.get_assignment(version)
-        except Model.DoesNotExist:
+        except DocumentNotFound:
             new_assignee = None
         if new_assignee:
             self.assignee = new_assignee
@@ -82,9 +93,9 @@ class SirenadaRun(PluginModelBase):
     def submit_run(cls, request_data: RawSirenadaRequest) -> 'SirenadaRun':
         try:
             run = cls.get(id=UUID(request_data["run_id"]))
-        except cls.DoesNotExist:
+        except DocumentNotFound:
             run = cls()
-            run.id = request_data["run_id"]  # FIXME: Validate pls
+            run.id = UUID(request_data["run_id"])
             run.build_id = request_data["build_id"]
             run.start_time = datetime.now(UTC)
             run.assign_categories()
@@ -94,7 +105,7 @@ class SirenadaRun(PluginModelBase):
             run.status = TestStatus.PASSED.value
             try:
                 run.assignee = run.get_scheduled_assignee()
-            except Model.DoesNotExist:
+            except DocumentNotFound:
                 run.assignee = None
 
         for raw_case in request_data["results"]:

@@ -3,7 +3,7 @@ import re
 from datetime import datetime, UTC
 
 from cassandra import InvalidRequest
-from cassandra.cqlengine.query import BatchQuery
+from coodie.sync import BatchQuery
 
 from argus.backend.db import ScyllaCluster
 from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTTestRun
@@ -102,7 +102,7 @@ def parse_event_message(message: str) -> dict:
 def run_has_events(run_id) -> bool:
     """Check if the run already has events in the SCTEvent table."""
     results = (
-        SCTEvent.filter(
+        SCTEvent.find(
             run_id=run_id,
             severity__in=[s.value for s in SCTEventSeverity],
         )
@@ -120,7 +120,7 @@ def migrate():
     total_events = 0
     parse_failures = 0
 
-    for run in SCTTestRun.filter().limit(None).only(["id", "events"]).all():
+    for run in SCTTestRun.find().only("id", "events").all():
         total_runs += 1
         events = run.events
         if not events:
@@ -142,7 +142,7 @@ def migrate():
             for message in event_group.last_events:
                 parsed = parse_event_message(message)
                 event_ts = parsed.get("ts") or fallback_ts
-                SCTEvent.batch(b).create(
+                SCTEvent(
                     run_id=run.id,
                     severity=severity,
                     ts=event_ts,
@@ -155,7 +155,7 @@ def migrate():
                     nemesis_name=parsed.get("nemesis_name"),
                     duration=parsed.get("duration"),
                     nemesis_status=parsed.get("nemesis_status"),
-                )
+                ).save(batch=b)
                 if parsed.get("ts") is None:
                     parse_failures += 1
                 run_event_count += 1

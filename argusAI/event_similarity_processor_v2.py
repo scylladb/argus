@@ -91,14 +91,14 @@ class EventSimilarityProcessorV2:
             )
             if not dupe:
                 return False
-            q = f"SELECT event_id FROM {SCTEvent.__table_name__} WHERE run_id = ? AND severity = ? AND ts = ?"
+            q = f"SELECT event_id FROM {SCTEvent.table_name()} WHERE run_id = ? AND severity = ? AND ts = ?"
             bound_q = self.db.session.prepare(q)
             dupe_event = self.db.session.execute(bound_q, parameters=(run_id, severity, dupe.ts)).one()
             if dupe_event is None:
                 return False
-            self._clear_unprocessed_event(SCTUnprocessedEvent.__table_name__, run_id, severity, ts)
+            self._clear_unprocessed_event(SCTUnprocessedEvent.table_name(), run_id, severity, ts)
             update_query = (
-                f"UPDATE {SCTEvent.__table_name__} SET duplicate_id = ? WHERE run_id = ? AND severity = ? AND ts = ?"
+                f"UPDATE {SCTEvent.table_name()} SET duplicate_id = ? WHERE run_id = ? AND severity = ? AND ts = ?"
             )
             self.db.execute(update_query, (dupe_event.event_id, run_id, severity, ts))
             return True
@@ -141,7 +141,7 @@ class EventSimilarityProcessorV2:
             Number of events processed in this batch
         """
         # Fetch unprocessed events using raw query
-        query = f"SELECT run_id, severity, ts FROM {SCTUnprocessedEvent.__table_name__} LIMIT {batch_size}"
+        query = f"SELECT run_id, severity, ts FROM {SCTUnprocessedEvent.table_name()} LIMIT {batch_size}"
         try:
             rows = self.db.execute(query)
             unprocessed_events = list(rows)
@@ -168,7 +168,7 @@ class EventSimilarityProcessorV2:
                 self.error_count += 1
                 # Still delete the unprocessed event to avoid infinite retries
                 delete_query = (
-                    f"DELETE FROM {SCTUnprocessedEvent.__table_name__} WHERE run_id = ? AND severity = ? AND ts = ?"
+                    f"DELETE FROM {SCTUnprocessedEvent.table_name()} WHERE run_id = ? AND severity = ? AND ts = ?"
                 )
                 self.db.execute(delete_query, (event_row.run_id, event_row.severity, event_row.ts))
         return processed_in_batch
@@ -189,7 +189,7 @@ class EventSimilarityProcessorV2:
 
         # Step 1: Read event message from SCTEvent table
         try:
-            query = f"SELECT message FROM {SCTEvent.__table_name__} WHERE run_id = ? AND severity = ? AND ts = ?"
+            query = f"SELECT message FROM {SCTEvent.table_name()} WHERE run_id = ? AND severity = ? AND ts = ?"
             result = self.db.execute(query, (run_id, severity, ts))
             event = result.one()
             if not event:
@@ -250,7 +250,7 @@ class EventSimilarityProcessorV2:
 
         # Step 5: Remove entry from unprocessed_events table
         try:
-            self._clear_unprocessed_event(SCTUnprocessedEvent.__table_name__, run_id, severity, ts)
+            self._clear_unprocessed_event(SCTUnprocessedEvent.table_name(), run_id, severity, ts)
             LOGGER.debug(f"Removed unprocessed event: run_id={run_id}, severity={severity}, ts={ts}")
         except Exception as e:
             LOGGER.error(f"Failed to delete unprocessed event (run_id={run_id}): {e}", exc_info=True)
