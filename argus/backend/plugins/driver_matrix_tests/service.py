@@ -32,7 +32,7 @@ class DriverMatrixService:
         version_map = {}
 
         for row in rows:
-            driver_versions = [(col["name"], col["driver"]) for col in row["test_collection"]]
+            driver_versions = [(col.name, col.driver) for col in row["test_collection"]]
             for version, driver_type in driver_versions:
                 driver_type = driver_type if driver_type else "Unknown"
                 versions: list = version_map.get(driver_type, [])

@@ -1,7 +1,7 @@
 import datetime
 import json
 import time
-from uuid import uuid4
+from uuid import UUID, uuid4
 import pytest
 
 from argus.backend.plugins.sct.testrun import SCTResource, SCTNemesis, SCTTestRun
@@ -57,7 +57,7 @@ def test_submit_packages(flask_client, sct_run_id):
     assert resp.json["status"] == "ok"
 
     # Verify model updated
-    run = SCTTestRun.get(id=sct_run_id)
+    run = SCTTestRun.get(id=UUID(sct_run_id))
     assert any(p.name == "scylla-server" and p.version ==
                "6.0.0" for p in run.packages)
 
@@ -76,7 +76,7 @@ def test_submit_screenshots(flask_client, sct_run_id):
     assert resp.json["status"] == "ok"
 
     # Verify screenshots stored
-    run = SCTTestRun.get(id=sct_run_id)
+    run = SCTTestRun.get(id=UUID(sct_run_id))
     assert "https://grafana/snap/1" in run.screenshots
     assert "https://grafana/snap/2" in run.screenshots
 
@@ -99,12 +99,12 @@ def test_set_runner(flask_client, sct_run_id):
     assert resp.json["status"] == "ok"
 
     # Verify runner details persisted
-    run = SCTTestRun.get(id=sct_run_id)
+    run = SCTTestRun.get(id=UUID(sct_run_id))
     assert run.sct_runner_host is not None
     assert run.sct_runner_host.provider == "aws"
     assert run.sct_runner_host.public_ip == "1.2.3.4"
     assert any(res.resource_type == "sct-runner" and res.name ==
-               "runner-1" for res in SCTResource.filter(run_id=sct_run_id).all())
+               "runner-1" for res in SCTResource.find(run_id=UUID(sct_run_id)).all())
 
 
 def _create_resource(flask_client, sct_run_id, resource_name="node-1"):
@@ -139,7 +139,7 @@ def test_resource_create(flask_client, sct_run_id):
     assert resp.json["status"] == "ok"
 
     # Verify resource persisted
-    res = SCTResource.get(run_id=sct_run_id, name="node-1")
+    res = SCTResource.get(run_id=UUID(sct_run_id), name="node-1")
     assert res.resource_type == "db_node"
     assert res.instance_info.shards_amount == 8
     assert res.state == "running"
@@ -161,7 +161,7 @@ def test_resource_update_shards(flask_client, sct_run_id):
     assert resp.json["status"] == "ok"
 
     # Verify shards updated
-    res = SCTResource.get(run_id=sct_run_id, name="node-2")
+    res = SCTResource.get(run_id=UUID(sct_run_id), name="node-2")
     assert res.instance_info.shards_amount == 16
 
 
@@ -179,7 +179,7 @@ def test_resource_update(flask_client, sct_run_id):
     assert resp.json["status"] == "ok"
 
     # Verify update applied
-    res = SCTResource.get(run_id=sct_run_id, name="node-3")
+    res = SCTResource.get(run_id=UUID(sct_run_id), name="node-3")
     assert res.instance_info.shards_amount == 12
 
 
@@ -196,7 +196,7 @@ def test_resource_terminate(flask_client, sct_run_id):
     assert resp.json["status"] == "ok"
 
     # Verify termination reflected in model
-    res = SCTResource.get(run_id=sct_run_id, name="node-4")
+    res = SCTResource.get(run_id=UUID(sct_run_id), name="node-4")
     assert res.state == "terminated"
     assert res.instance_info.termination_reason == "test-complete"
     assert res.instance_info.termination_time and res.instance_info.termination_time > 0
@@ -224,8 +224,8 @@ def test_nemesis_submit_and_finalize(flask_client, sct_run_id):
     assert resp.json["status"] == "ok"
 
     # Verify nemesis created
-    run = SCTTestRun.get(id=sct_run_id)
-    nemesis_data = SCTNemesis.filter(run_id=run.id).all()
+    run = SCTTestRun.get(id=UUID(sct_run_id))
+    nemesis_data = SCTNemesis.find(run_id=run.id).all()
     nem = next(n for n in nemesis_data if n.name ==
                "ChaosMonkey" and n.start_time == 123456)
     assert nem.status == "running"
@@ -247,8 +247,8 @@ def test_nemesis_submit_and_finalize(flask_client, sct_run_id):
     assert resp.json["status"] == "ok"
 
     # Verify nemesis finalized
-    run = SCTTestRun.get(id=sct_run_id)
-    nemesis_data = SCTNemesis.filter(run_id=run.id).all()
+    run = SCTTestRun.get(id=UUID(sct_run_id))
+    nemesis_data = SCTNemesis.find(run_id=run.id).all()
     nem = next(n for n in nemesis_data if n.name ==
                "ChaosMonkey" and n.start_time == 123456)
     assert nem.status == "succeeded"
@@ -265,8 +265,8 @@ def test_nemesis_submit_and_finalize(flask_client, sct_run_id):
     assert resp.status_code == 200
     assert resp.json["status"] == "ok"
 
-    run = SCTTestRun.get(id=sct_run_id)
-    nemesis_data = SCTNemesis.filter(run_id=run.id).all()
+    run = SCTTestRun.get(id=UUID(sct_run_id))
+    nemesis_data = SCTNemesis.find(run_id=run.id).all()
     nem = next(n for n in nemesis_data if n.name ==
                "ChaosMonkey" and n.start_time == 123456)
     assert nem.status == "succeeded"
@@ -290,7 +290,7 @@ def test_stress_commands(flask_client, sct_run_id):
     assert resp.status_code == 200
     assert resp.json["status"] == "ok"
 
-    run: SCTTestRun = SCTTestRun.get(id=sct_run_id)
+    run: SCTTestRun = SCTTestRun.get(id=UUID(sct_run_id))
     stress_cmds = run.get_stress_commands(run.id)
     assert len(stress_cmds) == 1
     assert stress_cmds[0].cmd == payload["cmd"]
@@ -326,7 +326,7 @@ def test_submit_gemini_results(flask_client, sct_run_id):
     assert resp.json["status"] == "ok"
 
     # Verify gemini fields persisted
-    run = SCTTestRun.get(id=sct_run_id)
+    run = SCTTestRun.get(id=UUID(sct_run_id))
     assert run.subtest_name == "gemini"
     assert run.gemini_command == "gemini run"
     assert run.gemini_status == "PASSED"

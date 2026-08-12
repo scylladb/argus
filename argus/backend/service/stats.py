@@ -8,7 +8,6 @@ from typing import Any, TypedDict
 from uuid import UUID
 
 from flask import current_app
-from cassandra.cqlengine.models import Model
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.github_issue import GithubIssue, IssueLink

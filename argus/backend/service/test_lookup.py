@@ -6,7 +6,7 @@ from urllib.parse import unquote
 from typing import Any, Callable
 from uuid import UUID
 
-from cassandra.cqlengine.models import Model
+from coodie.sync import Document
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest
@@ -18,7 +18,7 @@ class TestLookup:
     ADD_ALL_ID = UUID("db6f33b2-660b-4639-ba7f-79725ef96616")
 
     @classmethod
-    def index_mapper(cls, item: Model, type="test"):
+    def index_mapper(cls, item: Document, type="test"):
         mapped = item.model_dump()
         mapped["type"] = type
         return mapped
@@ -45,7 +45,7 @@ class TestLookup:
         for model in all_plugin_models():
             try:
                 return model.get(id=run_id)
-            except model.DoesNotExist:
+            except DocumentNotFound:
                 pass
         return None
 
@@ -85,7 +85,7 @@ class TestLookup:
     def make_single_run_response(cls, run_id: UUID) -> list[dict[str, Any]]:
         run = cls.find_run(run_id)
         if run:
-            run = dict(run.items())
+            run = run.model_dump()
             run["type"] = "run"
             run["test"] = cls.resolve_run_test(run["test_id"]).model_dump() if run["test_id"] else None
             if run["test"]:

@@ -2,7 +2,6 @@ import logging
 import click
 from flask import Blueprint, current_app
 from flask.cli import with_appcontext
-from cassandra.cqlengine.management import sync_table, sync_type
 from argus.backend.db import ScyllaCluster
 from argus.backend.plugins.loader import all_plugin_models, all_plugin_types
 from argus.backend.service.build_system_monitor import JenkinsMonitor
@@ -27,13 +26,12 @@ def sync_models(main_ks: str):
     LOGGER.info("Synchronizing plugin types...")
     for user_type in all_plugin_types():
         LOGGER.info("Synchronizing plugin type %s...", user_type.__name__)
-        ks = getattr(user_type, "__keyspace__" , main_ks)
-        sync_type(ks_name=ks, type_model=user_type)
+        user_type.sync_type()
+    cluster.register_coodie_udts()
     LOGGER.info("Synchronizing plugin models...")
     for model in all_plugin_models(True):
         LOGGER.info("Synchronizing plugin model %s...", model.__name__)
-        ks = getattr(model, "__keyspace__" , main_ks)
-        sync_table(model=model, keyspaces=[ks])
+        model.sync_table()
 
     LOGGER.info("Plugins ready.")
     cluster.sync_additional_schema()

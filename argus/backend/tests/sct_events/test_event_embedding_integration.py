@@ -50,12 +50,12 @@ def test_event_to_embedding_flow_should_create_embedding_for_error_event(
     sct_service.submit_event(str(run_req.run_id), event_data)
 
     # Step 3: Verify event was created in SCTEvent table
-    events = SCTEvent.filter(run_id=run_req.run_id, severity=SCTEventSeverity.ERROR.value).all()
+    events = SCTEvent.find(run_id=UUID(str(run_req.run_id)), severity=SCTEventSeverity.ERROR.value).all()
     assert len(list(events)) == 1, "Event should be created in SCTEvent table"
 
     # Step 4: Verify unprocessed event was created
-    unprocessed_events = SCTUnprocessedEvent.filter(
-        run_id=run_req.run_id,
+    unprocessed_events = SCTUnprocessedEvent.find(
+        run_id=UUID(str(run_req.run_id)),
         severity=SCTEventSeverity.ERROR.value
     ).all()
     unprocessed_list = list(unprocessed_events)
@@ -71,8 +71,8 @@ def test_event_to_embedding_flow_should_create_embedding_for_error_event(
         processor._process_batch()
 
         # Check if our specific event has been processed
-        remaining = list(SCTUnprocessedEvent.filter(
-            run_id=run_req.run_id,
+        remaining = list(SCTUnprocessedEvent.find(
+            run_id=UUID(str(run_req.run_id)),
             severity=SCTEventSeverity.ERROR.value
         ).all())
 
@@ -92,8 +92,8 @@ def test_event_to_embedding_flow_should_create_embedding_for_error_event(
     assert len(list(critical_embeddings)) == 0, "No embedding should be in CRITICAL table"
 
     # Step 8: Verify unprocessed event was removed for THIS test run
-    unprocessed_events_after = SCTUnprocessedEvent.filter(
-        run_id=run_req.run_id,
+    unprocessed_events_after = SCTUnprocessedEvent.find(
+        run_id=UUID(str(run_req.run_id)),
         severity=SCTEventSeverity.ERROR.value
     ).all()
     assert len(list(unprocessed_events_after)) == 0, "Unprocessed event should be removed"
@@ -123,8 +123,8 @@ def test_event_to_embedding_flow_should_create_embedding_for_critical_event(
     sct_service.submit_event(str(run_req.run_id), event_data)
 
     # Step 3: Verify unprocessed event was created
-    unprocessed_events = SCTUnprocessedEvent.filter(
-        run_id=run_req.run_id,
+    unprocessed_events = SCTUnprocessedEvent.find(
+        run_id=UUID(str(run_req.run_id)),
         severity=SCTEventSeverity.CRITICAL.value
     ).all()
     assert len(list(unprocessed_events)) == 1, "Unprocessed event should be created"
@@ -138,8 +138,8 @@ def test_event_to_embedding_flow_should_create_embedding_for_critical_event(
         processor._process_batch()
 
         # Check if our specific event has been processed
-        remaining = list(SCTUnprocessedEvent.filter(
-            run_id=run_req.run_id,
+        remaining = list(SCTUnprocessedEvent.find(
+            run_id=UUID(str(run_req.run_id)),
             severity=SCTEventSeverity.CRITICAL.value
         ).all())
 
@@ -183,12 +183,12 @@ def test_event_to_embedding_flow_should_not_create_unprocessed_for_warning_event
     sct_service.submit_event(str(run_req.run_id), event_data)
 
     # Step 3: Verify event was created in SCTEvent table
-    events = SCTEvent.filter(run_id=run_req.run_id, severity=SCTEventSeverity.WARNING.value).all()
+    events = SCTEvent.find(run_id=UUID(str(run_req.run_id)), severity=SCTEventSeverity.WARNING.value).all()
     assert len(list(events)) == 1, "Event should be created in SCTEvent table"
 
     # Step 4: Verify NO unprocessed event was created
-    unprocessed_events = SCTUnprocessedEvent.filter(
-        run_id=run_req.run_id,
+    unprocessed_events = SCTUnprocessedEvent.find(
+        run_id=UUID(str(run_req.run_id)),
         severity=SCTEventSeverity.WARNING.value
     ).all()
     assert len(list(unprocessed_events)) == 0, "Unprocessed event should NOT be created for WARNING"
@@ -229,7 +229,7 @@ def test_event_to_embedding_flow_should_process_multiple_events_into_separate_ta
         sct_service.submit_event(str(run_req.run_id), event_data)
 
     # Step 4: Verify 5 unprocessed events were created
-    all_unprocessed = list(SCTUnprocessedEvent.filter(run_id=run_req.run_id).all())
+    all_unprocessed = list(SCTUnprocessedEvent.find(run_id=UUID(str(run_req.run_id))).all())
     assert len(all_unprocessed) == 5, "Should have 5 unprocessed events"
 
     # Step 5: Run processor to process all events
@@ -241,7 +241,7 @@ def test_event_to_embedding_flow_should_process_multiple_events_into_separate_ta
         processor._process_batch(batch_size=100)
 
         # Check if our specific events have been processed
-        remaining = list(SCTUnprocessedEvent.filter(run_id=run_req.run_id).all())
+        remaining = list(SCTUnprocessedEvent.find(run_id=UUID(str(run_req.run_id))).all())
 
         if len(remaining) == 0:
             break
@@ -256,7 +256,7 @@ def test_event_to_embedding_flow_should_process_multiple_events_into_separate_ta
     assert len(critical_embeddings) == 2, "Should have 2 CRITICAL embeddings in CRITICAL table"
 
     # Step 7: Verify all unprocessed events were removed for THIS test run
-    remaining_unprocessed = list(SCTUnprocessedEvent.filter(run_id=run_req.run_id).all())
+    remaining_unprocessed = list(SCTUnprocessedEvent.find(run_id=UUID(str(run_req.run_id))).all())
     assert len(remaining_unprocessed) == 0, "All unprocessed events should be removed"
 
 
@@ -315,7 +315,7 @@ def test_dedup_marks_same_run_twin_despite_large_other_run_population(
     for _ in range(max_attempts):
         processor._process_batch(batch_size=100)
         remaining = list(
-            SCTUnprocessedEvent.filter(run_id=run_req.run_id, severity=SCTEventSeverity.ERROR.value).all()
+            SCTUnprocessedEvent.find(run_id=UUID(str(run_req.run_id)), severity=SCTEventSeverity.ERROR.value).all()
         )
         if len(remaining) == 0:
             break
@@ -323,7 +323,7 @@ def test_dedup_marks_same_run_twin_despite_large_other_run_population(
         raise AssertionError(f"Failed to process this test's events after {max_attempts} attempts")
 
     # Exactly one event is canonical; the other points to it via duplicate_id (order-independent).
-    events = list(SCTEvent.filter(run_id=run_req.run_id, severity=SCTEventSeverity.ERROR.value).all())
+    events = list(SCTEvent.find(run_id=UUID(str(run_req.run_id)), severity=SCTEventSeverity.ERROR.value).all())
     assert len(events) == 2, "Both ERROR events should exist in SCTEvent"
     canonical = [e for e in events if e.duplicate_id is None]
     duplicates = [e for e in events if e.duplicate_id is not None]
@@ -375,7 +375,7 @@ def test_event_to_embedding_flow_should_handle_processing_errors_gracefully(
     assert processor.error_count >= 1, "Should have at least one error"
 
     # Step 5: Verify the fake unprocessed event was still removed (to avoid infinite retries)
-    fake_unprocessed_after = list(SCTUnprocessedEvent.filter(
+    fake_unprocessed_after = list(SCTUnprocessedEvent.find(
         run_id=fake_run_id,
         severity=SCTEventSeverity.ERROR.value
     ).all())

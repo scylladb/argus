@@ -1,18 +1,22 @@
-from datetime import UTC, datetime
 from time import time
-from cassandra.cqlengine.usertype import UserType
-from cassandra.cqlengine import columns
+from typing import Optional
+
+from pydantic import Field
+
+from coodie.usertype import UserType
 
 from argus.common.enums import ResourceState
 
 
 class PackageVersion(UserType):
-    __type_name__ = "PackageVersion_v2"
-    name = columns.Text()
-    version = columns.Text()
-    date = columns.Text()
-    revision_id = columns.Text()
-    build_id = columns.Text()
+    name: Optional[str] = None
+    version: Optional[str] = None
+    date: Optional[str] = None
+    revision_id: Optional[str] = None
+    build_id: Optional[str] = None
+
+    class Settings:
+        __type_name__ = "packageversion_v2"
 
     def __eq__(self, other):
         if isinstance(other, PackageVersion):
@@ -21,82 +25,99 @@ class PackageVersion(UserType):
 
 
 class CloudInstanceDetails(UserType):
-    __type_name__ = "CloudInstanceDetails_v3"
-    provider = columns.Text()
-    instance_type = columns.Text()
-    region = columns.Text()
-    public_ip = columns.Text()
-    private_ip = columns.Text()
-    dc_name = columns.Text()
-    rack_name = columns.Text()
-    creation_time = columns.Integer(default=lambda: int(time()))
-    termination_time = columns.Integer(default=lambda: 0)
-    termination_reason = columns.Text(default=lambda: "")
-    shards_amount = columns.Integer(default=lambda: 0)
+    provider: Optional[str] = None
+    instance_type: Optional[str] = None
+    region: Optional[str] = None
+    public_ip: Optional[str] = None
+    private_ip: Optional[str] = None
+    dc_name: Optional[str] = None
+    rack_name: Optional[str] = None
+    creation_time: Optional[int] = Field(default_factory=lambda: int(time()))
+    termination_time: Optional[int] = 0
+    termination_reason: Optional[str] = ""
+    shards_amount: Optional[int] = 0
+
+    class Settings:
+        __type_name__ = "cloudinstancedetails_v3"
 
 
 class CloudNodesInfo(UserType):
-    __type_name__ = "CloudNodesInfo"
-    image_id = columns.Text()
-    instance_type = columns.Text()
-    node_amount = columns.Integer()
-    post_behaviour = columns.Text()
+    image_id: Optional[str] = None
+    instance_type: Optional[str] = None
+    node_amount: Optional[int] = None
+    post_behaviour: Optional[str] = None
+
+    class Settings:
+        __type_name__ = "cloudnodesinfo"
 
 
 class CloudSetupDetails(UserType):
-    __type_name__ = "CloudSetupDetails"
-    db_node = columns.UserDefinedType(user_type=CloudNodesInfo)
-    loader_node = columns.UserDefinedType(user_type=CloudNodesInfo)
-    monitor_node = columns.UserDefinedType(user_type=CloudNodesInfo)
-    backend = columns.Text()
+    db_node: Optional[CloudNodesInfo] = None
+    loader_node: Optional[CloudNodesInfo] = None
+    monitor_node: Optional[CloudNodesInfo] = None
+    backend: Optional[str] = None
+
+    class Settings:
+        __type_name__ = "cloudsetupdetails"
 
 
 class CloudResource(UserType):
-    __type_name__ = "CloudResource_v3"
-    name = columns.Text()
-    state = columns.Text(default=lambda: ResourceState.RUNNING.value)
-    resource_type = columns.Text()
-    instance_info = columns.UserDefinedType(user_type=CloudInstanceDetails)
+    name: Optional[str] = None
+    state: Optional[str] = Field(default=ResourceState.RUNNING.value)
+    resource_type: Optional[str] = None
+    instance_info: Optional[CloudInstanceDetails] = None
+
+    class Settings:
+        __type_name__ = "cloudresource_v3"
 
     def get_instance_info(self) -> CloudInstanceDetails:
         return self.instance_info
 
 
 class EventsBySeverity(UserType):
-    __type_name__ = "EventsBySeverity"
-    severity = columns.Text()
-    event_amount = columns.Integer()
-    last_events = columns.List(value_type=columns.Text())
+    severity: Optional[str] = None
+    event_amount: Optional[int] = None
+    last_events: list[str] = Field(default_factory=list)
+
+    class Settings:
+        __type_name__ = "eventsbyseverity"
 
 
 class NodeDescription(UserType):
-    __type_name__ = "NodeDescription"
-    name = columns.Text()
-    ip = columns.Text()
-    shards = columns.Integer()
+    name: Optional[str] = None
+    ip: Optional[str] = None
+    shards: Optional[int] = None
+
+    class Settings:
+        __type_name__ = "nodedescription"
 
 
 class NemesisRunInfo(UserType):
-    __type_name__ = "NemesisRunInfo"
+    class_name: Optional[str] = None
+    name: Optional[str] = None
+    duration: Optional[int] = None
+    target_node: Optional[NodeDescription] = None
+    status: Optional[str] = None
+    start_time: Optional[int] = None
+    end_time: Optional[int] = None
+    stack_trace: Optional[str] = None
 
-    class_name = columns.Text()
-    name = columns.Text()
-    duration = columns.Integer()
-    target_node = columns.UserDefinedType(user_type=NodeDescription)
-    status = columns.Text()
-    start_time = columns.Integer()
-    end_time = columns.Integer()
-    stack_trace = columns.Text()
+    class Settings:
+        __type_name__ = "nemesisruninfo"
 
 
 class PerformanceHDRHistogram(UserType):
-    start_time = columns.Integer()
-    percentile_90 = columns.Float()
-    percentile_50 = columns.Float()
-    percentile_99_999 = columns.Float()
-    percentile_95 = columns.Float()
-    end_time = columns.Float()
-    percentile_99_99 = columns.Float()
-    percentile_99 = columns.Float()
-    stddev = columns.Float()
-    percentile_99_9 = columns.Float()
+    start_time: Optional[int] = None
+    percentile_90: Optional[float] = None
+    percentile_50: Optional[float] = None
+    percentile_99_999: Optional[float] = None
+    percentile_95: Optional[float] = None
+    end_time: Optional[float] = None
+    percentile_99_99: Optional[float] = None
+    percentile_99: Optional[float] = None
+    stddev: Optional[float] = None
+    percentile_99_9: Optional[float] = None
+
+    class Settings:
+        # cqlengine derived this name without the HDR/Histogram word split
+        __type_name__ = "performance_hdrhistogram"

@@ -2,13 +2,15 @@ import logging
 from collections.abc import Iterable
 from datetime import datetime, UTC
 from math import ceil
+from typing import Annotated, ClassVar, Optional
 from uuid import UUID
 from time import time
-from cassandra.cqlengine import columns
-from cassandra.cqlengine.models import Model
-from cassandra.cqlengine.usertype import UserType
 from cassandra.concurrent import execute_concurrent_with_args
 from flask import Blueprint
+from pydantic import Field
+from coodie import ClusteringKey, Indexed, PrimaryKey
+from coodie.sync import Document
+from coodie.usertype import UserType
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.db import ScyllaCluster
@@ -26,32 +28,31 @@ from argus.common.enums import TestInvestigationStatus, TestStatus
 LOGGER = logging.getLogger(__name__)
 
 
-class PluginModelBase(Model):
-    _plugin_name = "unknown"
+class PluginModelBase(Document):
+    class Settings:
+        __abstract__ = True
+
+    _plugin_name: ClassVar[str] = "unknown"
     # Metadata
-    build_id = columns.Text(required=True, partition_key=True)
-    start_time = columns.DateTime(required=True, primary_key=True, clustering_order="DESC",
-                                  default=lambda: datetime.now(UTC), custom_index=True)
-    id = columns.UUID(index=True, required=True)
-    release_id = columns.UUID(index=True)
-    group_id = columns.UUID(index=True)
-    test_id = columns.UUID(index=True)
-    assignee = columns.UUID(index=True)
-    status = columns.Text(default=lambda: TestStatus.CREATED.value)
-    investigation_status = columns.Text(default=lambda: TestInvestigationStatus.NOT_INVESTIGATED.value)
-    heartbeat = columns.Integer(default=lambda: int(time()))
-    end_time = columns.DateTime(default=lambda: datetime.fromtimestamp(0, UTC))
-    build_job_url = columns.Text()
-    build_number = columns.Integer()
-    product_version = columns.Text(index=True)
-    scylla_version = columns.Text()
+    build_id: Annotated[Optional[str], PrimaryKey()] = None
+    start_time: Annotated[Optional[datetime], ClusteringKey(order="DESC")] = Field(
+        default_factory=lambda: datetime.now(UTC))
+    id: Annotated[Optional[UUID], Indexed()] = None
+    release_id: Annotated[Optional[UUID], Indexed()] = None
+    group_id: Annotated[Optional[UUID], Indexed()] = None
+    test_id: Annotated[Optional[UUID], Indexed()] = None
+    assignee: Annotated[Optional[UUID], Indexed()] = None
+    status: Optional[str] = Field(default=TestStatus.CREATED.value)
+    investigation_status: Optional[str] = Field(default=TestInvestigationStatus.NOT_INVESTIGATED.value)
+    heartbeat: Optional[int] = Field(default_factory=lambda: int(time()))
+    end_time: Optional[datetime] = Field(default_factory=lambda: datetime.fromtimestamp(0, UTC))
+    build_job_url: Optional[str] = None
+    build_number: Optional[int] = None
+    product_version: Annotated[Optional[str], Indexed()] = None
+    scylla_version: Optional[str] = None
 
     # Test Logs Collection
-    logs = columns.List(value_type=columns.Tuple(columns.Text(), columns.Text()))
-
-    @classmethod
-    def table_name(cls) -> str:
-        return cls.__table_name__
+    logs: list[tuple[str, str]] = Field(default_factory=list)
 
     @classmethod
     def _stats_query(cls) -> str:
@@ -172,9 +173,9 @@ class PluginModelBase(Model):
     def get_run_response(cls, run_id: UUID) -> dict | None:
         try:
             run = cls.get(id=run_id)
-        except cls.DoesNotExist:
+        except DocumentNotFound:
             return None
-        return dict(run.items())
+        return run.model_dump()
 
     @classmethod
     def load_test_run(cls, run_id: UUID) -> 'PluginModelBase':
@@ -262,5 +263,5 @@ class PluginInfoBase:
     name: str
     controller: Blueprint
     model: PluginModelBase
-    all_models: list[Model]
-    all_types: list[UserType]
+    all_models: list[type[Document]]
+    all_types: list[type[UserType]]

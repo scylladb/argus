@@ -4,11 +4,12 @@ from functools import reduce
 import logging
 from pprint import pformat
 import re
-from typing import Literal, TypedDict
+from typing import ClassVar, Literal, Optional, TypedDict
 from uuid import UUID
 from xml.etree import ElementTree
-from cassandra.cqlengine import columns
-from cassandra.cqlengine.models import Model
+from pydantic import Field
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import ArgusRelease, ReleaseDistinctVersions
 from argus.backend.plugins.core import PluginModelBase
@@ -96,10 +97,13 @@ def generic_adapter(xml: ElementTree.ElementTree) -> AdaptedXUnitData:
 
 
 class DriverTestRun(PluginModelBase):
-    _plugin_name = "driver-matrix-tests"
-    __table_name__ = "driver_test_run"
-    test_collection = columns.List(value_type=columns.UserDefinedType(user_type=TestCollection))
-    environment_info = columns.List(value_type=columns.UserDefinedType(user_type=EnvironmentInfo))
+    _plugin_name: ClassVar[str] = "driver-matrix-tests"
+
+    class Settings:
+        name = "driver_test_run"
+
+    test_collection: list[TestCollection] = Field(default_factory=list)
+    environment_info: list[EnvironmentInfo] = Field(default_factory=list)
 
     _no_upstream = ["rust"]
 
@@ -153,8 +157,8 @@ class DriverTestRun(PluginModelBase):
     @classmethod
     def submit_run(cls, request_data: dict) -> 'DriverTestRun':
         try:
-            return cls.get(id=request_data["run_id"])
-        except cls.DoesNotExist:
+            return cls.get(id=UUID(request_data["run_id"]) if isinstance(request_data["run_id"], str) else request_data["run_id"])
+        except DocumentNotFound:
             pass
 
         if request_data["schema_version"] == "v2":
@@ -163,7 +167,7 @@ class DriverTestRun(PluginModelBase):
             return cls.submit_matrix_run(request_data)
 
         run = cls()
-        run.id = req.run_id
+        run.id = UUID(req.run_id) if isinstance(req.run_id, str) else req.run_id
         run.build_id = req.job_name
         run.build_job_url = req.job_url
         run.build_number = get_build_number(req.job_url)
@@ -181,7 +185,7 @@ class DriverTestRun(PluginModelBase):
 
     @classmethod
     def submit_driver_result(cls, run_id: UUID, driver_name: str, driver_type: TestTypeType, xml_data: str):
-        run: DriverTestRun = cls.get(id=run_id)
+        run: DriverTestRun = cls.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
 
         if any(c.name == driver_name for c in run.test_collection):
             return run
@@ -197,7 +201,7 @@ class DriverTestRun(PluginModelBase):
 
     @classmethod
     def submit_driver_failure(cls, run_id: UUID, driver_name: str, driver_type: TestTypeType, fail_message: str):
-        run: DriverTestRun = cls.get(id=run_id)
+        run: DriverTestRun = cls.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
 
         if any(c.name == driver_name for c in run.test_collection):
             return run
@@ -219,7 +223,7 @@ class DriverTestRun(PluginModelBase):
 
     @classmethod
     def submit_env_info(cls, run_id: UUID, env_data: str):
-        run: DriverTestRun = cls.get(id=run_id)
+        run: DriverTestRun = cls.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
         env = run.parse_build_environment(env_data)
 
         existing_keys = {ei.key for ei in run.environment_info}
@@ -345,7 +349,7 @@ class DriverTestRun(PluginModelBase):
         # Legacy method
         req = DriverMatrixRunSubmissionRequest(**request_data)
         run = cls()
-        run.id = req.run_id
+        run.id = UUID(req.run_id) if isinstance(req.run_id, str) else req.run_id
         run.build_id = req.job_name
         run.build_job_url = req.job_url
         run.assign_categories()
@@ -439,7 +443,7 @@ class DriverTestRun(PluginModelBase):
         self.scylla_version = version
         try:
             new_assignee = self.get_assignment(version)
-        except Model.DoesNotExist:
+        except DocumentNotFound:
             new_assignee = None
         if new_assignee:
             self.assignee = new_assignee

@@ -1,8 +1,11 @@
 from datetime import UTC, datetime
 import re
 from uuid import UUID
-from cassandra.cqlengine import columns
-from cassandra.cqlengine.models import Model
+from typing import ClassVar, Optional
+
+from pydantic import Field
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import ArgusRelease
 from argus.backend.plugins.core import PluginModelBase
@@ -15,11 +18,14 @@ class GenericPluginException(Exception):
 
 
 class GenericRun(PluginModelBase):
-    _plugin_name = "generic"
-    __table_name__ = "generic_run"
-    logs = columns.Map(key_type=columns.Text(), value_type=columns.Text())
-    started_by = columns.Text()
-    sub_type = columns.Text() # Used to tell which framework the GenericRun belongs to
+    _plugin_name: ClassVar[str] = "generic"
+
+    class Settings:
+        name = "generic_run"
+
+    logs: dict[str, str] = Field(default_factory=dict)
+    started_by: Optional[str] = None
+    sub_type: Optional[str] = None  # Used to tell which framework the GenericRun belongs to
 
     @classmethod
     def _stats_query(cls) -> str:
@@ -42,7 +48,7 @@ class GenericRun(PluginModelBase):
             self.scylla_version = match.group("short")
             try:
                 new_assignee = self.get_assignment(match.group("short"))
-            except Model.DoesNotExist:
+            except DocumentNotFound:
                 new_assignee = None
             if new_assignee:
                 self.assignee = new_assignee
@@ -56,21 +62,21 @@ class GenericRun(PluginModelBase):
     @classmethod
     def submit_run(cls, request_data: GenericRunSubmitRequest) -> 'GenericRun':
         try:
-            return cls.get(id=request_data["run_id"])
-        except cls.DoesNotExist:
+            return cls.get(id=UUID(request_data["run_id"]) if isinstance(request_data["run_id"], str) else request_data["run_id"])
+        except DocumentNotFound:
             pass
         run = cls()
         run.start_time = datetime.now(UTC)
         run.build_id = request_data["build_id"]
         run.started_by = request_data["started_by"]
-        run.id = request_data["run_id"]
+        run.id = UUID(request_data["run_id"]) if isinstance(request_data["run_id"], str) else request_data["run_id"]
         run.build_job_url = request_data["build_url"]
         run.build_number = get_build_number(request_data["build_url"])
         run.sub_type = request_data.get("sub_type")
         run.assign_categories()
         try:
             run.assignee = run.get_scheduled_assignee()
-        except Model.DoesNotExist:
+        except DocumentNotFound:
             run.assignee = None
         if version := request_data.get("scylla_version"):
             run.submit_product_version(version)

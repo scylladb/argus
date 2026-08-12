@@ -17,7 +17,7 @@ from .summarizer import DEFAULT_PROMPT, Summarizer, SummarizerError
 
 LOGGER = logging.getLogger(__name__)
 
-_SCT_EVENT_TABLE = SCTEvent.__table_name__
+_SCT_EVENT_TABLE = SCTEvent.table_name()
 # Data-backed floor: events under ~250 tokens (≈800 chars for SCT event bodies) expand rather
 # than compress, so summarizing them wastes tokens (argusAI/eval §7). Operators override via
 # EVENT_SUMMARIZATION_MIN_TOKENS; set 0 to summarize everything.

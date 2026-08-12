@@ -3,11 +3,14 @@ import logging
 from datetime import UTC, datetime, timezone
 from dataclasses import dataclass, field
 from threading import Lock
-from typing import Optional
+from typing import Annotated, ClassVar, Optional
 from uuid import UUID, uuid4
 
-from cassandra.cqlengine import columns
-from cassandra.cqlengine.models import _DoesNotExist, Model
+from pydantic import Field
+from coodie import Ascii, ClusteringKey, Double, Frozen, Indexed, PrimaryKey
+from coodie.exceptions import DocumentNotFound
+from coodie.sync import Document
+
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import ArgusRelease, ArgusTest, ReleaseDistinctVersions, ReleaseDistinctImages
 from argus.backend.plugins.core import PluginModelBase
@@ -67,141 +70,140 @@ class SCTEventSeverity(str, Enum):
     DEBUG = "DEBUG"
 
 
-class StressCommand(Model):
-    run_id = columns.UUID(primary_key=True, partition_key=True)
-    ts = columns.DateTime(
-        primary_key=True, clustering_order="DESC", default=lambda: datetime.now(tz=UTC))
-    cmd = columns.Text()
-    log_name = columns.Text()
-    node_name = columns.Text()
+class StressCommand(Document):
+    run_id: Annotated[Optional[UUID], PrimaryKey()] = None
+    ts: Annotated[Optional[datetime], ClusteringKey(order="DESC")] = Field(
+        default_factory=lambda: datetime.now(tz=UTC))
+    cmd: Optional[str] = None
+    log_name: Optional[str] = None
+    node_name: Optional[str] = None
+
+    class Settings:
+        name = "stress_command"
 
 
-class SCTEvent(Model):
-    __table_name__ = "sct_event"
-
-    run_id = columns.UUID(partition_key=True, primary_key=True)
-    severity = columns.Text(partition_key=True, primary_key=True)
-    ts = columns.DateTime(primary_key=True, clustering_order="ASC")
-    event_id = columns.UUID(index=True, default=uuid4)
-    event_type = columns.Text()
-    message = columns.Text(required=True)
-    duplicate_id = columns.UUID()
-    summary = columns.Text()  # LLM-generated summary; null until/unless summarized (see argusAI)
+class SCTEvent(Document):
+    run_id: Annotated[Optional[UUID], PrimaryKey(partition_key_index=0)] = None
+    severity: Annotated[Optional[str], PrimaryKey(partition_key_index=1)] = None
+    ts: Annotated[Optional[datetime], ClusteringKey()] = None
+    event_id: Annotated[Optional[UUID], Indexed()] = Field(default_factory=uuid4)
+    event_type: Optional[str] = None
+    message: Optional[str] = None
+    duplicate_id: Optional[UUID] = None
+    summary: Optional[str] = None  # LLM-generated summary; null until/unless summarized (see argusAI)
 
     # DB Log columns
-    node = columns.Text()
-    received_timestamp = columns.DateTime()  # SCT DB message timestamp
+    node: Optional[str] = None
+    received_timestamp: Optional[datetime] = None  # SCT DB message timestamp
 
     # Nemesis columns
-    nemesis_name = columns.Text()
-    duration = columns.Float()
-    target_node = columns.Text()
-    nemesis_status = columns.Text()
+    nemesis_name: Optional[str] = None
+    duration: Optional[float] = None
+    target_node: Optional[str] = None
+    nemesis_status: Optional[str] = None
 
     # Misc
-    known_issue = columns.Text()
+    known_issue: Optional[str] = None
 
-    @classmethod
-    def table_name(cls):
-        return cls.__table_name__
+    class Settings:
+        name = "sct_event"
 
 
-class SCTUnprocessedEvent(Model):
+class SCTUnprocessedEvent(Document):
     """Table to track events that need embedding generation."""
-    __table_name__ = "sct_unprocessed_events"
+    run_id: Annotated[Optional[UUID], PrimaryKey()] = None
+    severity: Annotated[Optional[str], ClusteringKey(clustering_key_index=0)] = None
+    ts: Annotated[Optional[datetime], ClusteringKey(order="DESC", clustering_key_index=1)] = None
 
-    run_id = columns.UUID(partition_key=True)
-    severity = columns.Text(primary_key=True, clustering_order="ASC")
-    ts = columns.DateTime(primary_key=True, clustering_order="DESC")
-
-
-class SCTNemesis(Model):
-    __table_name__ = "sct_nemesis"
-
-    run_id = columns.UUID(partition_key=True)
-    start_time = columns.Integer(primary_key=True, clustering_order="ASC")
-    class_name = columns.Text()
-    name = columns.Text()
-    duration = columns.Integer()
-    target_node = columns.UserDefinedType(user_type=NodeDescription)
-    status = columns.Text()
-    end_time = columns.Integer()
-    stack_trace = columns.Text()
+    class Settings:
+        name = "sct_unprocessed_events"
 
 
-class SCTResource(Model):
-    __table_name__ = "sct_resource"
+class SCTNemesis(Document):
+    run_id: Annotated[Optional[UUID], PrimaryKey()] = None
+    start_time: Annotated[Optional[int], ClusteringKey()] = None
+    class_name: Optional[str] = None
+    name: Optional[str] = None
+    duration: Optional[int] = None
+    target_node: Optional[NodeDescription] = None
+    status: Optional[str] = None
+    end_time: Optional[int] = None
+    stack_trace: Optional[str] = None
 
-    run_id = columns.UUID(primary_key=True, partition_key=True)
-    name = columns.Text(primary_key=True)
-    state = columns.Text(default=lambda: ResourceState.RUNNING.value)
-    resource_type = columns.Text()
-    instance_info = columns.UserDefinedType(user_type=CloudInstanceDetails)
+    class Settings:
+        name = "sct_nemesis"
+
+
+class SCTResource(Document):
+    run_id: Annotated[Optional[UUID], PrimaryKey()] = None
+    name: Annotated[Optional[str], ClusteringKey()] = None
+    state: Optional[str] = Field(default=ResourceState.RUNNING.value)
+    resource_type: Optional[str] = None
+    instance_info: Optional[CloudInstanceDetails] = None
+
+    class Settings:
+        name = "sct_resource"
 
 
 class SCTTestRun(PluginModelBase):
-    __table_name__ = "sct_test_run"
-    _plugin_name = "scylla-cluster-tests"
+    _plugin_name: ClassVar[str] = "scylla-cluster-tests"
+
+    class Settings:
+        name = "sct_test_run"
 
     # Test Details
-    test_name = columns.Text()
-    stress_duration = columns.Float()
-    scm_revision_id = columns.Text()
-    branch_name = columns.Text()
-    origin_url = columns.Text()
-    started_by = columns.Text()
-    config_files = columns.List(value_type=columns.Text())
-    packages = columns.List(
-        value_type=columns.UserDefinedType(user_type=PackageVersion))
-    version_source = columns.Text()
-    yaml_test_duration = columns.Integer()
+    test_name: Optional[str] = None
+    stress_duration: Optional[float] = None
+    scm_revision_id: Optional[str] = None
+    branch_name: Optional[str] = None
+    origin_url: Optional[str] = None
+    started_by: Optional[str] = None
+    config_files: list[str] = Field(default_factory=list)
+    packages: list[PackageVersion] = Field(default_factory=list)
+    version_source: Optional[str] = None
+    yaml_test_duration: Optional[int] = None
 
     # Test Preset Resources
-    sct_runner_host = columns.UserDefinedType(user_type=CloudInstanceDetails)
-    region_name = columns.List(value_type=columns.Text())
-    cloud_setup = columns.UserDefinedType(user_type=CloudSetupDetails)
+    sct_runner_host: Optional[CloudInstanceDetails] = None
+    region_name: list[str] = Field(default_factory=list)
+    cloud_setup: Optional[CloudSetupDetails] = None
 
     # Test Runtime Resources
-    allocated_resources = columns.List(
-        value_type=columns.UserDefinedType(user_type=CloudResource))
+    allocated_resources: list[CloudResource] = Field(default_factory=list)
 
     # Test Results
-    events = columns.List(
-        value_type=columns.UserDefinedType(user_type=EventsBySeverity))
-    nemesis_data = columns.List(
-        value_type=columns.UserDefinedType(user_type=NemesisRunInfo))
-    nemesis_stats = columns.Map(
-        key_type=columns.Text(), value_type=columns.Integer())
-    screenshots = columns.List(value_type=columns.Text())
+    events: list[EventsBySeverity] = Field(default_factory=list)
+    nemesis_data: list[NemesisRunInfo] = Field(default_factory=list)
+    nemesis_stats: dict[str, int] = Field(default_factory=dict)
+    screenshots: list[str] = Field(default_factory=list)
 
     # Subtest
-    subtest_name = columns.Text()
+    subtest_name: Optional[str] = None
 
     # Gemini-related fields
-    oracle_nodes_count = columns.Integer()
-    oracle_node_ami_id = columns.Text()
-    oracle_node_instance_type = columns.Text()
-    oracle_node_scylla_version = columns.Text()
-    gemini_command = columns.Text()
-    gemini_version = columns.Text()
-    gemini_status = columns.Text()
-    gemini_seed = columns.Text()
-    gemini_write_ops = columns.Integer()
-    gemini_write_errors = columns.Integer()
-    gemini_read_ops = columns.Integer()
-    gemini_read_errors = columns.Integer()
+    oracle_nodes_count: Optional[int] = None
+    oracle_node_ami_id: Optional[str] = None
+    oracle_node_instance_type: Optional[str] = None
+    oracle_node_scylla_version: Optional[str] = None
+    gemini_command: Optional[str] = None
+    gemini_version: Optional[str] = None
+    gemini_status: Optional[str] = None
+    gemini_seed: Optional[str] = None
+    gemini_write_ops: Optional[int] = None
+    gemini_write_errors: Optional[int] = None
+    gemini_read_ops: Optional[int] = None
+    gemini_read_errors: Optional[int] = None
 
     # Performance fields
-    perf_op_rate_average = columns.Double()
-    perf_op_rate_total = columns.Double()
-    perf_avg_latency_99th = columns.Double()
-    perf_avg_latency_mean = columns.Double()
-    perf_total_errors = columns.Double()
-    stress_cmd = columns.Text()
+    perf_op_rate_average: Annotated[Optional[float], Double()] = None
+    perf_op_rate_total: Annotated[Optional[float], Double()] = None
+    perf_avg_latency_99th: Annotated[Optional[float], Double()] = None
+    perf_avg_latency_mean: Annotated[Optional[float], Double()] = None
+    perf_total_errors: Annotated[Optional[float], Double()] = None
+    stress_cmd: Optional[str] = None
 
-    histograms = columns.List(value_type=columns.Map(key_type=columns.Text(
-    ), value_type=columns.UserDefinedType(user_type=PerformanceHDRHistogram)))
-    test_method = columns.Ascii()
+    histograms: list[Annotated[dict[str, PerformanceHDRHistogram], Frozen()]] = Field(default_factory=list)
+    test_method: Annotated[Optional[str], Ascii()] = None
 
     @classmethod
     def _stats_query(cls) -> str:
@@ -294,7 +296,7 @@ class SCTTestRun(PluginModelBase):
         run.assign_categories()
         try:
             run.assignee = run.get_scheduled_assignee()
-        except _DoesNotExist:
+        except DocumentNotFound:
             run.assignee = None
         run.start_time = datetime.now(timezone.utc)
         run.id = UUID(req.run_id)
@@ -311,8 +313,8 @@ class SCTTestRun(PluginModelBase):
     @classmethod
     def from_sct_config(cls, req: SCTTestRunSubmissionRequest):
         try:
-            run = cls.get(id=req.run_id)
-        except cls.DoesNotExist:
+            run = cls.get(id=UUID(req.run_id) if isinstance(req.run_id, str) else req.run_id)
+        except DocumentNotFound:
             run = cls.init_sct_run(req)
             run.save()
 
@@ -343,14 +345,14 @@ class SCTTestRun(PluginModelBase):
         return run
 
     def get_resources(self) -> list[SCTResource]:
-        return list(SCTResource.filter(run_id=self.id).all())
+        return list(SCTResource.find(run_id=self.id).all())
 
     def get_nemeses(self) -> list[SCTNemesis]:
-        return list(SCTNemesis.filter(run_id=self.id).all())
+        return list(SCTNemesis.find(run_id=self.id).all())
 
     @classmethod
     def get_stress_commands(cls, run_id: str) -> list[StressCommand]:
-        return list(StressCommand.filter(run_id=run_id).all())
+        return list(StressCommand.find(run_id=UUID(run_id) if isinstance(run_id, str) else run_id).all())
 
     def add_stress_command(self, cmd: str, ts: float, log_name: str, loader_name: str):
         s = StressCommand()
@@ -398,20 +400,20 @@ class SCTTestRun(PluginModelBase):
         return sorted(list(result), key=lambda evt: evt["ts"])
 
     def get_all_events(self):
-        return SCTEvent.filter(run_id=self.id, severity__in=[s.value for s in list(SCTEventSeverity)]).all()
+        return SCTEvent.find(run_id=self.id, severity__in=[s.value for s in list(SCTEventSeverity)]).all()
 
     def get_events_by_severity(self, severity: SCTEventSeverity | list[SCTEventSeverity]):
         if isinstance(severity, list):
-            return SCTEvent.filter(run_id=self.id, severity__in=[s.value for s in severity]).all()
+            return SCTEvent.find(run_id=self.id, severity__in=[s.value for s in severity]).all()
         else:
-            return SCTEvent.filter(run_id=self.id, severity=severity.value).all()
+            return SCTEvent.find(run_id=self.id, severity=severity.value).all()
 
     def submit_product_version(self, version: str):
         if not self.version_source:
             self.scylla_version = version
         try:
             new_assignee = self.get_assignment(version)
-        except Model.DoesNotExist:
+        except DocumentNotFound:
             new_assignee = None
         if new_assignee:
             self.assignee = new_assignee
@@ -437,7 +439,7 @@ class SCTTestRun(PluginModelBase):
         self.screenshots.append(screenshot_link)
 
     def update_nemesis_stats(self, key: str):
-        stats = self.nemesis_stats if self.nemesis_stats else {}
+        stats = dict(self.nemesis_stats) if self.nemesis_stats else {}
         val = stats.get(key, 0)
         val += 1
         stats[key] = val
@@ -489,14 +491,14 @@ class SCTTestRun(PluginModelBase):
     def get_run_response(cls, run_id: UUID) -> dict | None:
         try:
             run = cls.get(id=run_id)
-        except cls.DoesNotExist:
+        except DocumentNotFound:
             return None
-        response = dict(run.items())
+        response = run.model_dump()
         response["junit_reports"] = list(
-            SCTJunitReports.filter(test_id=run_id).all())
-        response["nemesis_data"] = list(SCTNemesis.filter(run_id=run.id).all())
+            SCTJunitReports.find(test_id=run_id).all())
+        response["nemesis_data"] = list(SCTNemesis.find(run_id=run.id).all())
         response["allocated_resources"] = list(
-            SCTResource.filter(run_id=run_id).all())
+            SCTResource.find(run_id=run_id).all())
         return response
 
     @staticmethod
@@ -512,7 +514,11 @@ class SCTTestRun(PluginModelBase):
             LOGGER.warning("Failed to index image for release %s", run.release_id, exc_info=True)
 
 
-class SCTJunitReports(Model):
-    test_id = columns.UUID(primary_key=True, partition_key=True, required=True)
-    file_name = columns.Text(primary_key=True, required=True)
-    report = columns.Text(required=True)
+class SCTJunitReports(Document):
+    test_id: Annotated[Optional[UUID], PrimaryKey()] = None
+    file_name: Annotated[Optional[str], ClusteringKey()] = None
+    report: Optional[str] = None
+
+    class Settings:
+        # cqlengine collapsed the consecutive capitals when deriving the name
+        name = "sctjunit_reports"

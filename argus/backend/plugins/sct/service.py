@@ -10,6 +10,8 @@ from uuid import UUID
 from xml.etree import ElementTree
 from flask import current_app, g
 from cassandra.util import uuid_from_time
+from coodie.exceptions import DocumentNotFound
+
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.jira import JiraIssue
@@ -90,7 +92,7 @@ class SCTService:
     @staticmethod
     def submit_packages(run_id: str, packages: list[dict]) -> str:
         try:
-            run: SCTTestRun = SCTTestRun.get(id=run_id)
+            run: SCTTestRun = SCTTestRun.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
             for package_dict in packages:
                 package = PackageVersion(**package_dict)
                 if "target" in package.name:
@@ -98,7 +100,7 @@ class SCTService:
                 if package not in run.packages:
                     run.packages.append(package)
             run.save()
-        except SCTTestRun.DoesNotExist as exception:
+        except DocumentNotFound as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
             raise SCTServiceException("Run not found", run_id) from exception
 
@@ -114,7 +116,7 @@ class SCTService:
     @staticmethod
     def set_sct_runner(run_id: str, public_ip: str, private_ip: str, region: str, backend: str, name: str = None):
         try:
-            run: SCTTestRun = SCTTestRun.get(id=run_id)
+            run: SCTTestRun = SCTTestRun.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
             details = CloudInstanceDetails(
                 public_ip=public_ip,
                 private_ip=private_ip,
@@ -124,14 +126,14 @@ class SCTService:
             run.sct_runner_host = details
             run.save()
             resource_name = name or "sct-runner"
-            if not SCTResource.objects(run_id=UUID(run_id), name=resource_name).count():
+            if not SCTResource.find(run_id=UUID(run_id), name=resource_name).count():
                 SCTResource.create(
                     run_id=UUID(run_id),
                     name=resource_name,
                     resource_type="sct-runner",
                     instance_info=details,
                 )
-        except SCTTestRun.DoesNotExist as exception:
+        except DocumentNotFound as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
             raise SCTServiceException("Run not found", run_id) from exception
 
@@ -140,12 +142,12 @@ class SCTService:
     @staticmethod
     def submit_screenshots(run_id: str, screenshot_links: list[str]) -> str:
         try:
-            run: SCTTestRun = SCTTestRun.get(id=run_id)
+            run: SCTTestRun = SCTTestRun.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
             for link in screenshot_links:
                 if link not in run.screenshots:
                     run.add_screenshot(link)
             run.save()
-        except SCTTestRun.DoesNotExist as exception:
+        except DocumentNotFound as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
             raise SCTServiceException("Run not found", run_id) from exception
 
@@ -154,7 +156,7 @@ class SCTService:
     @staticmethod
     def submit_gemini_results(run_id: str, gemini_data: GeminiResultsRequest) -> str:
         try:
-            run: SCTTestRun = SCTTestRun.get(id=run_id)
+            run: SCTTestRun = SCTTestRun.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
             run.subtest_name = SubtestType.GEMINI.value
             run.oracle_nodes_count = gemini_data.get("oracle_nodes_count")
             run.oracle_node_ami_id = gemini_data.get("oracle_node_ami_id")
@@ -181,7 +183,7 @@ class SCTService:
                     "gemini_status": run.gemini_status,
                 }, user_id=g.user.id, run_id=run_id, release_id=run.release_id, test_id=run.test_id)
                 run.save()
-        except SCTTestRun.DoesNotExist as exception:
+        except DocumentNotFound as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
             raise SCTServiceException("Run not found", run_id) from exception
 
@@ -190,7 +192,7 @@ class SCTService:
     @staticmethod
     def submit_performance_results(run_id: str, performance_results: PerformanceResultsRequest):
         try:
-            run: SCTTestRun = SCTTestRun.get(id=run_id)
+            run: SCTTestRun = SCTTestRun.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
             run.subtest_name = SubtestType.PERFORMANCE.value
             run.perf_op_rate_average = performance_results.get(
                 "perf_op_rate_average")
@@ -295,7 +297,7 @@ class SCTService:
                 run.status = TestStatus.PASSED.value
                 run.save()
 
-        except SCTTestRun.DoesNotExist as exception:
+        except DocumentNotFound as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
             raise SCTServiceException("Run not found", run_id) from exception
 
@@ -304,21 +306,21 @@ class SCTService:
     @staticmethod
     def get_performance_history_for_test(run_id: str):
         try:
-            run: SCTTestRun = SCTTestRun.get(id=run_id)
+            run: SCTTestRun = SCTTestRun.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
             rows = run.get_perf_results_for_test_name(
                 build_id=run.build_id, start_time=run.start_time, test_name=run.test_name)
             return rows
-        except SCTTestRun.DoesNotExist as exception:
+        except DocumentNotFound as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
             raise SCTServiceException("Run not found", run_id) from exception
 
     @staticmethod
     def get_resources(run_id: str):
-        return list(SCTResource.filter(run_id=run_id).all())
+        return list(SCTResource.find(run_id=UUID(run_id) if isinstance(run_id, str) else run_id).all())
 
     @staticmethod
     def get_resource(run_id: str, name: str):
-        return SCTResource.get(run_id=run_id, name=name)
+        return SCTResource.get(run_id=UUID(run_id) if isinstance(run_id, str) else run_id, name=name)
 
     @staticmethod
     def create_resource(run_id: str, resource_details: dict) -> str:
@@ -326,8 +328,8 @@ class SCTService:
             **resource_details.pop("instance_details"))
         resource_name = resource_details.get("name")
         try:
-            SCTTestRun.get(id=run_id)
-            if not SCTResource.objects(run_id=UUID(run_id), name=resource_name).count():
+            SCTTestRun.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
+            if not SCTResource.find(run_id=UUID(run_id), name=resource_name).count():
                 SCTResource.create(
                     run_id=UUID(run_id),
                     name=resource_name,
@@ -336,7 +338,7 @@ class SCTService:
                     resource_type=resource_details.get("resource_type"),
                     instance_info=instance_details,
                 )
-        except SCTTestRun.DoesNotExist as exception:
+        except DocumentNotFound as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
             raise SCTServiceException("Run not found", run_id) from exception
 
@@ -346,13 +348,11 @@ class SCTService:
     def update_resource_shards(run_id: str, resource_name: str, new_shards: int) -> str:
         try:
             resource = SCTResource.get(run_id=UUID(run_id), name=resource_name)
-            info = CloudInstanceDetails(**resource.instance_info)
-            if not info:
-                info = CloudInstanceDetails()
+            info = resource.instance_info.model_copy() if resource.instance_info else CloudInstanceDetails()
             info.shards_amount = new_shards
             resource.instance_info = info
             resource.save()
-        except SCTResource.DoesNotExist as exception:
+        except DocumentNotFound as exception:
             LOGGER.error("Resource %s not found in run %s",
                          resource_name, run_id)
             raise SCTServiceException(
@@ -369,15 +369,15 @@ class SCTService:
             resource.state = ResourceState(
                 update_data.get("state", resource.state)).value
             if instance_info:
-                resource_instance_info = CloudInstanceDetails(
-                    **resource.instance_info)
+                resource_instance_info = (resource.instance_info.model_copy()
+                                          if resource.instance_info else CloudInstanceDetails())
                 for k, v in instance_info.items():
-                    if k in resource_instance_info.keys():
-                        resource_instance_info[k] = v
+                    if k in CloudInstanceDetails.model_fields:
+                        setattr(resource_instance_info, k, v)
                         fields_updated[k] = v
                 resource.update(instance_info=resource_instance_info)
             resource.save()
-        except SCTResource.DoesNotExist as exception:
+        except DocumentNotFound as exception:
             LOGGER.error("Resource %s not found in run %s",
                          resource_name, run_id)
             raise SCTServiceException(
@@ -392,19 +392,19 @@ class SCTService:
     def terminate_resource(run_id: str, resource_name: str, reason: str) -> str:
         try:
             if "sct-runner" in resource_name:  # FIXME: Temp solution until sct-runner name is propagated on submit
-                resources = list(SCTResource.filter(run_id=UUID(run_id)).all())
+                resources = list(SCTResource.find(run_id=UUID(run_id)).all())
                 resource = next(
                     res for res in resources if "sct-runner" in res.name)
             else:
                 resource = SCTResource.get(
                     run_id=UUID(run_id), name=resource_name)
-            info = CloudInstanceDetails(**resource.instance_info)
+            info = resource.instance_info.model_copy() if resource.instance_info else CloudInstanceDetails()
             info.termination_reason = reason
             info.termination_time = int(time())
             resource.state = ResourceState.TERMINATED.value
             resource.update(instance_info=info)
             resource.save()
-        except (StopIteration, SCTResource.DoesNotExist) as exception:
+        except (StopIteration, DocumentNotFound) as exception:
             LOGGER.error("Resource %s not found in run %s",
                          resource_name, run_id)
             raise SCTServiceException(
@@ -414,17 +414,14 @@ class SCTService:
 
     @staticmethod
     def get_nemesis(run_id: str) -> list:
-        return list(SCTNemesis.filter(run_id=run_id).all())
+        return list(SCTNemesis.find(run_id=run_id).all())
 
     @staticmethod
     def submit_nemesis(run_id: str, nemesis_details: dict) -> str:
         nem_req = NemesisSubmissionRequest(**nemesis_details)
-        try:
-            _ = SCTNemesis.filter(
-                run_id=run_id, start_time=int(nem_req.start_time)).get()
+        run_uuid = UUID(run_id) if isinstance(run_id, str) else run_id
+        if SCTNemesis.find(run_id=run_uuid, start_time=int(nem_req.start_time)).first() is not None:
             return "created"
-        except SCTNemesis.DoesNotExist:
-            pass
         node_desc = NodeDescription(
             name=nem_req.node_name, ip=nem_req.node_ip, shards=nem_req.node_shards)
         nemesis_info = SCTNemesis(
@@ -439,11 +436,11 @@ class SCTService:
             target_node=node_desc,
         )
         try:
-            run: SCTTestRun = SCTTestRun.get(id=run_id)
+            run: SCTTestRun = SCTTestRun.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
             nemesis_info.save()
             run.update_nemesis_stats("total")
             run.save()
-        except SCTTestRun.DoesNotExist as exception:
+        except DocumentNotFound as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
             raise SCTServiceException("Run not found", run_id) from exception
 
@@ -453,7 +450,7 @@ class SCTService:
     def finalize_nemesis(run_id: str, nemesis_details: dict) -> str:
         nem_req = NemesisFinalizationRequest(**nemesis_details)
         try:
-            run: SCTTestRun = SCTTestRun.get(id=run_id)
+            run: SCTTestRun = SCTTestRun.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
             nemesis = SCTNemesis.get(
                 run_id=run.id, start_time=int(nem_req.start_time))
             # Idempotency (e.g. the same replay archive uploaded twice): once a
@@ -469,12 +466,12 @@ class SCTService:
             nemesis.save()
             run.update_nemesis_stats(NemesisStatus(nem_req.status).value)
             run.save()
-        except SCTNemesis.DoesNotExist as exception:
+        except DocumentNotFound as exception:
             LOGGER.error("Nemesis %s (%s) not found for run %s",
                          nem_req.name, nem_req.start_time, run_id)
             raise SCTServiceException(
                 "Nemesis not found", (nem_req.name, nem_req.start_time)) from exception
-        except SCTTestRun.DoesNotExist as exception:
+        except DocumentNotFound as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
             raise SCTServiceException("Run not found", run_id) from exception
 
@@ -670,7 +667,7 @@ class SCTService:
             # Convert timestamp to datetime if needed
             event_ts = datetime.fromisoformat(ts)
             event: SCTEvent = SCTEvent.get(
-                run_id=run_id, severity=severity, ts=event_ts)
+                run_id=UUID(run_id) if isinstance(run_id, str) else run_id, severity=severity, ts=event_ts)
             if event.duplicate_id:
                 real_event: SCTEvent = SCTEvent.get(
                     event_id=event.duplicate_id)
@@ -699,8 +696,8 @@ class SCTService:
             query_embedding = query_embedding_result.embedding
 
             db = ScyllaCluster.get()
-            table_name = embedding_model.__table_name__
-            keyspace = embedding_model.__keyspace__ or current_app.config["SCYLLA_KEYSPACE_NAME"]
+            table_name = embedding_model.table_name()
+            keyspace = embedding_model.Settings.keyspace or current_app.config["SCYLLA_KEYSPACE_NAME"]
 
             query = f"""
                 SELECT run_id, ts
@@ -784,7 +781,7 @@ class SCTService:
         if runs_with_issues:
             for run_id in runs_with_issues[:MAX_SIMILARS]:
                 try:
-                    test_run = SCTTestRun.get(id=run_id)
+                    test_run = SCTTestRun.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
                     test_runs[run_id] = test_run
                 except Exception as e:
                     LOGGER.debug(f"Failed to fetch test run {
@@ -857,7 +854,7 @@ class SCTService:
                 additional_test_runs = {}
                 for run_id in additional_run_ids:
                     try:
-                        test_run = SCTTestRun.get(id=run_id)
+                        test_run = SCTTestRun.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
                         additional_test_runs[run_id] = test_run
                     except Exception as e:
                         LOGGER.debug(f"Failed to fetch additional test run {
@@ -950,10 +947,10 @@ class SCTService:
             raise SCTServiceException(f"Malformed JUnit report submitted")
 
         try:
-            report = SCTJunitReports.get(test_id=run_id, file_name=file_name)
-        except SCTJunitReports.DoesNotExist:
+            report = SCTJunitReports.get(test_id=UUID(run_id) if isinstance(run_id, str) else run_id, file_name=file_name)
+        except DocumentNotFound:
             report = SCTJunitReports()
-            report.test_id = run_id
+            report.test_id = UUID(run_id) if isinstance(run_id, str) else run_id
             report.file_name = file_name
 
         report.report = xml_content
@@ -968,11 +965,11 @@ class SCTService:
     @staticmethod
     def add_stress_command(run_id: str, cmd: str, ts: float, loader_name: str, log_name: str):
         try:
-            run: SCTTestRun = SCTTestRun.get(id=run_id)
+            run: SCTTestRun = SCTTestRun.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
             run.add_stress_command(cmd=cmd, ts=clamp_ts_to_milliseconds(
                 ts), loader_name=loader_name, log_name=log_name)
             run.save()
-        except SCTTestRun.DoesNotExist as exception:
+        except DocumentNotFound as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
             raise SCTServiceException("Run not found", run_id) from exception
 

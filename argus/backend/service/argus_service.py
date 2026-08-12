@@ -7,7 +7,6 @@ import datetime
 from types import NoneType
 from uuid import UUID
 from cassandra.util import uuid_from_time
-from cassandra.cqlengine.models import Model
 from flask import current_app
 from coodie.exceptions import DocumentNotFound
 
@@ -343,14 +342,14 @@ class ArgusService:
         for batch in chunk(set(user_jobs)):
             resolved.extend(ArgusTest.find(id__in=batch).all())
 
-        last_runs: dict[UUID, Model] = {}
+        last_runs: dict[UUID, PluginModelBase] = {}
         for test in resolved:
             try:
                 if not test.plugin_name:
                     last_runs[test.id] = None
                     continue
-                last_runs[test.id] = AVAILABLE_PLUGINS[test.plugin_name].model.filter(build_id=test.build_system_id).limit(1).get()
-            except PluginModelBase.DoesNotExist:
+                last_runs[test.id] = AVAILABLE_PLUGINS[test.plugin_name].model.find(build_id=test.build_system_id).limit(1).first()
+            except DocumentNotFound:
                 last_runs[test.id] = None
 
         return [{**test.model_dump(), "last_run": last_runs.get(test.id) } for test in resolved if test.enabled]

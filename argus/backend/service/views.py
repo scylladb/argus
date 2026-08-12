@@ -4,7 +4,6 @@ from functools import partial, reduce
 from typing import TypedDict
 from uuid import UUID
 
-from cassandra.cqlengine.models import Model
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.error_handlers import APIException

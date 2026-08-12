@@ -13,7 +13,7 @@ DB = ScyllaCluster.get()
 
 def migrate():
     run_count = DB.session.execute("SELECT count(*) FROM sct_test_run", timeout=30.0).one()["count"]
-    runs = SCTTestRun.filter().limit(None).only(["id", "nemesis_data", "build_id", "start_time"]).all()
+    runs = SCTTestRun.find().only("id", "nemesis_data", "build_id", "start_time").all()
     for idx, run in enumerate(runs):
         nemesis_stats = defaultdict(lambda: 0)
         LOGGER.info("[%s/%s] Migrating nemeses from run %s...", idx + 1, run_count, run.id)
@@ -32,7 +32,7 @@ def migrate():
             nemesis_stats[nem.status] += 1
             nem.save()
 
-        SCTTestRun.objects(build_id=run.build_id, start_time=run.start_time).update(nemesis_stats=nemesis_stats)
+        SCTTestRun.find(build_id=run.build_id, start_time=run.start_time).update(nemesis_stats=nemesis_stats)
         LOGGER.info("[%s/%s] Migrated nemeses for run %s.", idx + 1, run_count, run.id)
 
 

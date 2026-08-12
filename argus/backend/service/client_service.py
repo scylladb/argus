@@ -69,10 +69,12 @@ class ClientService:
             fields.append(f)
 
         try:
-            run: GenericRun = AVAILABLE_PLUGINS.get("generic").model.filter(id=new_result.run_id).only(["id", "release_id", "test_id"]).get()
+            run: GenericRun = AVAILABLE_PLUGINS.get("generic").model.find(id=new_result.run_id).only("id", "release_id", "test_id").first()
+            if run is None:
+                raise DocumentNotFound(f"Run {new_result.run_id} not found")
             new_result.release_id = run.release_id
             new_result.test_id = run.test_id
-        except GenericRun.DoesNotExist:
+        except DocumentNotFound:
             LOGGER.warning("RunId %s does not exist - result will be not be indexed for a release/view", new_result.run_id)
 
         new_result.save()
@@ -83,10 +85,11 @@ class ClientService:
         }
 
     def get_run(self, run_type: str, run_id: str):
+        run_id = UUID(run_id) if isinstance(run_id, str) else run_id
         model = self.get_model(run_type)
         try:
             run = model.get(id=run_id)
-        except model.DoesNotExist:
+        except DocumentNotFound:
             return None
         return run
 
@@ -139,7 +142,7 @@ class ClientService:
         model = self.get_model(run_type)
         try:
             run = model.load_test_run(UUID(run_id))
-        except model.DoesNotExist:
+        except DocumentNotFound:
             return {"status": "error", "response": {
                 "exception": "DoesNotExist",
                 "arguments": [run_id]
@@ -191,13 +194,13 @@ class ClientService:
                 run = model.get(id=run_uuid)
                 plugin_name = name
                 break
-            except model.DoesNotExist:
+            except DocumentNotFound:
                 continue
 
         if not run:
             raise ClientException(f"Test run {run_id} not found in any plugin model")
 
-        run_data = dict(run.items())
+        run_data = run.model_dump()
 
         test_info = {}
         if run.test_id:

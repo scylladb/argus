@@ -1,3 +1,4 @@
+from uuid import UUID
 import logging
 from dataclasses import asdict, dataclass
 from typing import Any
@@ -166,7 +167,7 @@ def test_ignored_runs_are_not_considered_in_best_results(fake_test, client_servi
         client_service.submit_results(run_type, run2.run_id, results.as_dict())
 
     # ignore the second run
-    run_model = SCTTestRun.get(id=run2.run_id)
+    run_model = SCTTestRun.get(id=UUID(str(run2.run_id)))
     run_model.investigation_status = TestInvestigationStatus.IGNORED.value
     run_model.save()
 

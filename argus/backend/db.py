@@ -85,7 +85,9 @@ class ScyllaCluster:
         Types missing from schema metadata (fresh database, before sync)
         are skipped; sync_core_tables re-registers after creating them.
         """
-        for udt in USED_TYPES:
+        from argus.backend.plugins.loader import all_plugin_types
+
+        for udt in [*USED_TYPES, *all_plugin_types()]:
             ks = getattr(udt.Settings, "keyspace", "") or self.config["SCYLLA_KEYSPACE_NAME"]
             try:
                 self.cluster.register_user_type(ks, udt.type_name(), udt)

@@ -174,7 +174,7 @@ def test_submit_event_ordering(client_service: ClientService, sct_service: SCTSe
 
 
     all_events = run.get_all_events()
-    assert len(all_events) > 0 and all_events[0]["message"] == "This is event 0", "Incorrect event in set! Expected oldest event first with ASC ordering."
+    assert len(all_events) > 0 and all_events[0].message == "This is event 0", "Incorrect event in set! Expected oldest event first with ASC ordering."
 
     # Insert more events with later timestamps
     later_ts = base_ts + 1.0  # 1 second later
@@ -185,7 +185,7 @@ def test_submit_event_ordering(client_service: ClientService, sct_service: SCTSe
         _ = sct_service.submit_event(str(run.id), event_data)
 
     all_events = run.get_all_events()
-    assert len(all_events) > 0 and all_events[0]["message"] == "This is event 0", "Incorrect event in set! Expected oldest event first with ASC ordering."
+    assert len(all_events) > 0 and all_events[0].message == "This is event 0", "Incorrect event in set! Expected oldest event first with ASC ordering."
 
 
 def test_fetch_partition_limit(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
