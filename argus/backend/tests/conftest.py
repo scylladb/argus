@@ -135,6 +135,7 @@ def argus_db():
               "EMAIL_SENDER": "unit tester", "EMAIL_SENDER_PASS": "pass", "EMAIL_SENDER_USER": "qa",
               "EMAIL_SERVER": "fake", "EMAIL_SERVER_PORT": 25,
               "GITHUB_ACCESS_TOKEN": "test_token",
+              "SECRET_KEY": "test-secret-key",
               # External-service config keys: set so service constructors don't crash
               # in tests. Real network calls are blocked by per-test mocks (see
               # argus/backend/tests/_helpers/external_mocks.py).
@@ -192,18 +193,45 @@ def argus_app():
         yield argus_app
 
 
+@fixture(scope='session')
+def logged_in_user() -> User:
+    return User(id=uuid.uuid4(), username='test_user', full_name='Test User',
+                email="tester@scylladb.com",
+                roles=[UserRoles.User, UserRoles.Admin, UserRoles.Manager])
+
+
 @fixture(scope='session', autouse=True)
-def app_context(argus_db, argus_app):
+def app_context(argus_db, argus_app, logged_in_user):
     with argus_app.app_context():
-        g.user = User(id=uuid.uuid4(), username='test_user', full_name='Test User',
-                      email="tester@scylladb.com",
-                      roles=[UserRoles.User, UserRoles.Admin, UserRoles.Manager])
+        g.user = logged_in_user
         yield
 
 
 @fixture(scope='session')
 def flask_client(argus_app: Flask) -> FlaskClient:
     return argus_app.test_client()
+
+
+@fixture(scope='session')
+def api_client(argus_app, logged_in_user):
+    """TestClient over the combined FastAPI+Flask app, logged in as logged_in_user.
+
+    Migrated (FastAPI-served) routes authenticate through the load_user
+    dependency override below; not-yet-migrated Flask routes should keep
+    using flask_client (their auth relies on the ambient app context).
+    """
+    from starlette.testclient import TestClient
+    from fastapi import Request
+    import argus_asgi
+    from argus.backend.asgi.auth import load_user
+
+    def _logged_in_user_override(request: Request) -> User:
+        request.state.user = logged_in_user
+        return logged_in_user
+
+    argus_asgi.app.dependency_overrides[load_user] = _logged_in_user_override
+    yield TestClient(argus_asgi.app, raise_server_exceptions=False)
+    argus_asgi.app.dependency_overrides.pop(load_user, None)
 
 
 @fixture(scope='session')
