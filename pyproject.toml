@@ -1,28 +1,18 @@
 [build-system]
-requires = [
-    "setuptools >= 40.0.4",
-    "wheel >= 0.29.0",
-    "setuptools-scm>=8",
-]
+requires = ["setuptools >= 40.0.4", "wheel >= 0.29.0", "setuptools-scm>=8"]
 build-backend = 'setuptools.build_meta'
 
 [project]
 name = "argus-alm"
 description = "Argus"
 authors = [
-    {name = "Alexey Kartashov", email = "alexey.kartashov@scylladb.com"},
-    {name = "Łukasz Sójka", email = "lukasz.sojka@scylladb.com"},
+  { name = "Alexey Kartashov", email = "alexey.kartashov@scylladb.com" },
+  { name = "Łukasz Sójka", email = "lukasz.sojka@scylladb.com" },
 ]
 license = "Apache-2.0"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = [
-    "requests >= 2.26.0",
-    "click >= 8.1.3",
-    "lz4>=4.4.4",
-    "coodie>=1.7.3",
-    "acsylla>=1.1.0",
-]
+dependencies = ["requests >= 2.26.0", "click >= 8.1.3", "lz4>=4.4.4"]
 dynamic = ["version"]
 
 [project.urls]
@@ -42,63 +32,68 @@ argus-driver-matrix-client = 'argus.client.driver_matrix_tests.cli:cli'
 
 [project.optional-dependencies]
 web-backend = [
-    "PyYAML ~= 6.0.0",
-    "scylla-driver >= 3.29.4",
-    "Flask ~= 3.0.0",
-    "Flask-WTF ~= 1.0.0",
-    "Flask-Login ~= 0.5.0",
-    "humanize ~= 3.13.1",
-    "PyJWT[crypto] >= 2.10.0",
-    "python-magic ~= 0.4.24",
-    "uwsgi ~= 2.0.20",
-    "python-jenkins >= 1.7.0",
-    "python-slugify ~= 6.1.1",
-    "pygithub >= 2.6.1",
-    "boto3 ~= 1.38.9",
-    "jira>=3.10.5",
-    "prometheus-flask-exporter>=0.23.2",
-    "zstandard >= 0.22.0",
+  "PyYAML ~= 6.0.0",
+  "scylla-driver >= 3.29.4",
+  "Flask ~= 3.0.0",
+  "Flask-WTF ~= 1.0.0",
+  "Flask-Login ~= 0.5.0",
+  "humanize ~= 3.13.1",
+  "PyJWT[crypto] >= 2.10.0",
+  "python-magic ~= 0.4.24",
+  "uwsgi ~= 2.0.20",
+  "python-jenkins >= 1.7.0",
+  "python-slugify ~= 6.1.1",
+  "pygithub >= 2.6.1",
+  "boto3 ~= 1.38.9",
+  "jira>=3.10.5",
+  "prometheus-flask-exporter>=0.23.2",
+  "zstandard >= 0.22.0",
+  "coodie>=1.7.3",
 ]
-docker-image = [
-    "supervisor ~= 4.2.4",
-]
+docker-image = ["supervisor ~= 4.2.4"]
 dev = [
-    "pytest == 8.3.5",
-    "coverage == 7.8.2",
-    "docker == 7.1.0",
-    "ipython ~= 8.36.0",
-    "pre-commit >= 4.2.0",
-    "ruff ~= 0.11.11",
-    "autopep8 >= 2.3.2",
-    "requests-mock ~= 1.12.1",
-    "codecov ~= 2.1.12",
-    "pytest-cov ~= 6.1.1",
-    "nox ~= 2025.5.1",
-    "pytest-xdist ~= 3.7.0",
-    "pytest-subtests ~= 0.14.1",
-    "boto3-stubs ~= 1.38.9",
+  "pytest == 8.3.5",
+  "coverage == 7.8.2",
+  "docker == 7.1.0",
+  "ipython ~= 8.36.0",
+  "pre-commit >= 4.2.0",
+  "ruff ~= 0.11.11",
+  "autopep8 >= 2.3.2",
+  "requests-mock ~= 1.12.1",
+  "codecov ~= 2.1.12",
+  "pytest-cov ~= 6.1.1",
+  "nox ~= 2025.5.1",
+  "pytest-xdist ~= 3.7.0",
+  "pytest-subtests ~= 0.14.1",
+  "boto3-stubs ~= 1.38.9",
 ]
 ai = [
-    "chromadb >= 1.0.15",
-    "openai >= 1.60.0",
-    "tiktoken >= 0.7.0",  # token-count gate for the summarization worker (EVENT_SUMMARIZATION_MIN_TOKENS)
+  "chromadb >= 1.0.15",
+  "openai >= 1.60.0",
+  "tiktoken >= 0.7.0",  # token-count gate for the summarization worker (EVENT_SUMMARIZATION_MIN_TOKENS)
 ]
 ai-eval = [
-    "openai >= 1.60.0",
-    "PyYAML ~= 6.0.0",
-    "tiktoken >= 0.7.0",
-    "chromadb >= 1.0.15",  # BGE embeddings for optional similarity dedup (mirrors the worker)
+  "openai >= 1.60.0",
+  "PyYAML ~= 6.0.0",
+  "tiktoken >= 0.7.0",
+  "chromadb >= 1.0.15", # BGE embeddings for optional similarity dedup (mirrors the worker)
 ]
 
 [tool.ruff]
 lint.select = [
-    "BLE",
-    "F401", "F821", "F823", "F841",
-    "PL", "PLR0913","PLR0914", "PLR0916",
-    "YTT",
-    "F541",
-    "PIE",
-    "B006",
+  "BLE",
+  "F401",
+  "F821",
+  "F823",
+  "F841",
+  "PL",
+  "PLR0913",
+  "PLR0914",
+  "PLR0916",
+  "YTT",
+  "F541",
+  "PIE",
+  "B006",
 ]
 lint.ignore = ["E501", "PLR2004"]
 
@@ -123,13 +118,8 @@ max_line_length = 120
 ignore = "E226,E24,W50,W690,E402,E731"
 
 [tool.pytest.ini_options]
-markers = [
-    "docker_required: this test requires docker and docker-compose",
-]
+markers = ["docker_required: this test requires docker and docker-compose"]
 log_cli = true
 log_cli_level = "INFO"
 
-norecursedirs = [
-    "pytest-argus-reporter/tests",
-    "argus/backend/service",
-]
+norecursedirs = ["pytest-argus-reporter/tests", "argus/backend/service"]
