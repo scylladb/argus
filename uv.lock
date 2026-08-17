@@ -8,43 +8,6 @@ resolution-markers = [
 ]
 
 [[package]]
-name = "acsylla"
-version = "1.1.0"
-source = { registry = "https://pypi.org/simple" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/b3/10/d6b899db6d2687bf163c65beaa1aeb942f113217f94327f200e7ef6a43e8/acsylla-1.1.0-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:e76b4e1b6cb263c05a1a356f62e402c6b425c72bc85b8b260a1b6b1c65f669f2", size = 4024011, upload-time = "2026-07-20T13:02:12.417Z" },
-    { url = "https://files.pythonhosted.org/packages/0f/7e/7fcac6a812d856cbd2793d6e16c9f9147b71d589140087985ae0d30a9884/acsylla-1.1.0-cp310-cp310-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:c094d3c77d1db137e53716957c4dc01b42ab49d4cecda99c4393d223a5ae96e8", size = 6198221, upload-time = "2026-07-20T13:56:35.81Z" },
-    { url = "https://files.pythonhosted.org/packages/d3/41/1aefe14080c4abb701084df6dc1c91a8cc560457d55d4875dc62bcdd1794/acsylla-1.1.0-cp310-cp310-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:fdfe33af69a9dff17ed0fec018a614f4d027e0d74ddaa20b81bdf8beb98db8d4", size = 6522324, upload-time = "2026-07-20T13:02:10.938Z" },
-    { url = "https://files.pythonhosted.org/packages/9b/29/031762af19fe61218facf21ef184995bb7379e2350ca7961cf43413e1a7a/acsylla-1.1.0-cp310-cp310-musllinux_1_2_aarch64.whl", hash = "sha256:0ebc7322afdd08d0fb659af0f4dafd7d855a13740474469e49208bf69e1736e6", size = 8151904, upload-time = "2026-07-20T13:53:59.439Z" },
-    { url = "https://files.pythonhosted.org/packages/d4/fd/d82677169a9aca9f1ef594d4afc0f0514e2cc0a48f8572fd4a8131e5b541/acsylla-1.1.0-cp310-cp310-musllinux_1_2_x86_64.whl", hash = "sha256:9b856e18b5e92f9bc25970fe479a2afe70e01617da49ef095f7c63b283faa8ce", size = 8155256, upload-time = "2026-07-20T12:55:52.408Z" },
-    { url = "https://files.pythonhosted.org/packages/58/3d/1e270e4f92c1358e57ed01d574442d53760ffb3fdfd8578db0f6ffd08f6f/acsylla-1.1.0-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:684cd191f77ce8216f557505ef2902da4e48952d266757b08fb0fab8e48c8d4f", size = 4023967, upload-time = "2026-07-20T13:02:15.59Z" },
-    { url = "https://files.pythonhosted.org/packages/dc/e1/bf5dda88c35a1f346cc0cd89e88ad1d560bc241bcf7ae3a9bf35adf83df9/acsylla-1.1.0-cp311-cp311-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:b7144d57f729866ae270a9ea33e45ac593461fae92c6f6f31250c7f8280f1b75", size = 6264211, upload-time = "2026-07-20T13:56:37.564Z" },
-    { url = "https://files.pythonhosted.org/packages/cb/de/710d1b8470ecc54f504b0b189cce091bbd53c32c9317d199b9d9fde71aea/acsylla-1.1.0-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:85ce8429233698f30906bf84cb12042b0aa6fbfbb6fd36f2bc7385416f19c9df", size = 6589311, upload-time = "2026-07-20T13:02:12.402Z" },
-    { url = "https://files.pythonhosted.org/packages/f6/81/8aca36d023dd508dedd2736fd9374197b4091cf4295ee01c6ec417bc6ecd/acsylla-1.1.0-cp311-cp311-musllinux_1_2_aarch64.whl", hash = "sha256:7d30946c098dc09de3d9fcfa2839d23e4031687a4c1ce741b097b6d2ab2db36e", size = 8208598, upload-time = "2026-07-20T13:54:00.947Z" },
-    { url = "https://files.pythonhosted.org/packages/8c/be/941167e48c990113241bb00af0ac6f0764fd90b67761bca4d3f3bedc5541/acsylla-1.1.0-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:8d4f1e7a60ef97a5cc726cb5e3be48380b1de006f0accf78da020049eaf3fce0", size = 8216852, upload-time = "2026-07-20T12:55:54.582Z" },
-    { url = "https://files.pythonhosted.org/packages/d8/80/6a75a506ec305990b930c314b962ef46c1856a7f78e2f9cb826d59b335d2/acsylla-1.1.0-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:befa21351aa076ea1e9540e4fda93082a62a1b81797a52a913bf530d39731b06", size = 3964095, upload-time = "2026-07-20T13:02:17.407Z" },
-    { url = "https://files.pythonhosted.org/packages/42/12/55ef7a1bf5b5753c5dec20f9499cb3f329d65598c7246f3add562661fb97/acsylla-1.1.0-cp312-cp312-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:493a49ca4629eaf26656d865dad078c26ae65564e65501a5580d50014760d4d3", size = 6196116, upload-time = "2026-07-20T13:56:39.128Z" },
-    { url = "https://files.pythonhosted.org/packages/78/5d/5323f929415fa91fc4f06e988509fce8a62de65b2c0006656a9d113a945f/acsylla-1.1.0-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:666b8ac8a9949af31daa292d9c21b1926a2aff383154077e52da815185894a20", size = 6542515, upload-time = "2026-07-20T13:02:13.636Z" },
-    { url = "https://files.pythonhosted.org/packages/d8/97/6a2a23dcbaab6cee1125d22c0544140738c4c3eb6edaa85649e492365a55/acsylla-1.1.0-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:73a1f79ddb1da494969d1c3b050e746fbc621d8c0f05c16042b2390deddc8a4c", size = 8145675, upload-time = "2026-07-20T13:54:02.856Z" },
-    { url = "https://files.pythonhosted.org/packages/5b/21/8038d434f112fd49c311f86d13f36ef1feafaf8af9fdf44d3cef032c9619/acsylla-1.1.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:2bc5e08b66b18f1d85200c26f9f07afb7cb602ce9b4e53776c767ac4b62c9339", size = 8179724, upload-time = "2026-07-20T12:55:56.772Z" },
-    { url = "https://files.pythonhosted.org/packages/7a/e1/b07978ed0ea3e981085c6c22f0685aec8bee7425f54970334e9ef9cbcd05/acsylla-1.1.0-cp313-cp313-macosx_10_13_universal2.whl", hash = "sha256:8b9a346bab287dcd73300b000377d678fe04e48bada26d35b2899a75286952ff", size = 3964408, upload-time = "2026-07-20T13:02:19.802Z" },
-    { url = "https://files.pythonhosted.org/packages/e9/bc/d670dec29ebc17e430e29807ab6e5203a3b4d6373b857a123f863c90017a/acsylla-1.1.0-cp313-cp313-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:b5010746dfc59f29daac041d73fb4bcb275869768a7a0992bb2008fb7eabb94c", size = 6198115, upload-time = "2026-07-20T13:56:41.433Z" },
-    { url = "https://files.pythonhosted.org/packages/69/c5/bc3cd8533e3d3a7495dde6b37490cbf9de3434153997c67199c4196f9d3a/acsylla-1.1.0-cp313-cp313-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:2a7e673e01919d046ef5f7b90508cf804f8eb3a7bb473ea1bbaba8a39ba9b4af", size = 6544346, upload-time = "2026-07-20T13:02:16.033Z" },
-    { url = "https://files.pythonhosted.org/packages/a2/6a/1907657dd017d45e4bdcc1647c2f58d63fc74da382013df38e56e56a2304/acsylla-1.1.0-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:c462d518352f9362bab6de48f2407ba12aefabd14c274759fa0e165ac43687ec", size = 8143185, upload-time = "2026-07-20T13:54:04.303Z" },
-    { url = "https://files.pythonhosted.org/packages/7b/40/a68dee51ef442cc07f58e8675bccfb7fad435bdbd5582fc34ea373a66a13/acsylla-1.1.0-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:3e55af5c9715f13ba48f1efb9775be90cdafffd53df98378b8a6010c423c62e8", size = 8176984, upload-time = "2026-07-20T12:55:58.845Z" },
-    { url = "https://files.pythonhosted.org/packages/4f/a2/14e1e6d47aaff896940795063d1c8a37fef46de4a008409a9c2bbdcfbb21/acsylla-1.1.0-cp314-cp314-macosx_10_15_universal2.whl", hash = "sha256:889e27657a9aaf89c83f1f296a1d18899bafec666b73c351cdd7ff8a05a1485d", size = 3969535, upload-time = "2026-07-20T13:02:22.275Z" },
-    { url = "https://files.pythonhosted.org/packages/ed/c3/c4d16ec38cd2fd703e82cb87acc8c89487a7976d1385284c7d6ee38e6fef/acsylla-1.1.0-cp314-cp314-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:86c95252642c441ebd014d314686590342bd3f32d90aeb2680113acff7514fc9", size = 6189656, upload-time = "2026-07-20T13:56:43.011Z" },
-    { url = "https://files.pythonhosted.org/packages/af/b1/442a2beb6681bed837156200c3ffd8abab1d0b25e39973c676c85dba57a9/acsylla-1.1.0-cp314-cp314-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:d661ae05af074712d584eccb8b4376b4907965b1e85af71775cdd7555b67dea2", size = 6516530, upload-time = "2026-07-20T13:02:18.359Z" },
-    { url = "https://files.pythonhosted.org/packages/b9/5f/656faa65eaea2cd6822e7504ee92124c83439a043b12e21ece495badb106/acsylla-1.1.0-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:8d6ced1abd840518c8c0bcf3930c09f7cfc3155c526bc445d00fb131a3a685ec", size = 8139719, upload-time = "2026-07-20T13:54:05.754Z" },
-    { url = "https://files.pythonhosted.org/packages/ae/55/1ee83160224f622a6d77286f2c1358837855b21d881317f4613962308d41/acsylla-1.1.0-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:71f2e8ec8aadd0941c59f482c9d16b9fa574b57bf8983d09f320b4a32c77843a", size = 8156234, upload-time = "2026-07-20T12:56:01.458Z" },
-    { url = "https://files.pythonhosted.org/packages/be/ca/6615e3d95bcb679abd250408c1c931c59a99a01ade75c2a8ae8c72fb2de0/acsylla-1.1.0-cp314-cp314t-macosx_10_15_universal2.whl", hash = "sha256:8f8981a2245004775b0e3bbf76c714175c0b628fd3a251b0787779cc2fa78216", size = 4005628, upload-time = "2026-07-20T13:02:24.155Z" },
-    { url = "https://files.pythonhosted.org/packages/2b/c5/c33411e425d39b58e16e560ec4688551c93683be3d87c6cc69ee0569b543/acsylla-1.1.0-cp314-cp314t-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:0715980597a989f6f6000e0dfc50f889f9adfc52ec592108ed842f0962354a89", size = 6251613, upload-time = "2026-07-20T13:56:44.883Z" },
-    { url = "https://files.pythonhosted.org/packages/19/aa/02ef8d9510f38d1ac587b2fab2cd571669e9b0e681c21f84bc03ec9e4a31/acsylla-1.1.0-cp314-cp314t-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:ce5686c20a6629653d63bb515e34cae1c983a578cf738b509b22f33e21d082a6", size = 6563124, upload-time = "2026-07-20T13:02:20.736Z" },
-    { url = "https://files.pythonhosted.org/packages/a3/47/36739497d55613256e12c95ce9ef2b68de1f79dead04aee4eb5b07c5899d/acsylla-1.1.0-cp314-cp314t-musllinux_1_2_aarch64.whl", hash = "sha256:db1958ead284812eea738beaed7210bd92d974310313f36b2fbef9c6db0e824b", size = 8196122, upload-time = "2026-07-20T13:54:07.235Z" },
-    { url = "https://files.pythonhosted.org/packages/42/e6/94dfc8581230aa3f6ef076112e606cb8993092b415cbd07e1776bfc56368/acsylla-1.1.0-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:189d790dd27268ee4d3109ce55b06ace487b02067943e7760148eead2e346c7f", size = 8187077, upload-time = "2026-07-20T12:56:03.642Z" },
-]
-
-[[package]]
 name = "annotated-types"
 version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -80,9 +43,7 @@ wheels = [
 name = "argus-alm"
 source = { editable = "." }
 dependencies = [
-    { name = "acsylla" },
     { name = "click" },
-    { name = "coodie" },
     { name = "lz4" },
     { name = "requests" },
 ]
@@ -120,6 +81,7 @@ docker-image = [
 ]
 web-backend = [
     { name = "boto3" },
+    { name = "coodie" },
     { name = "flask" },
     { name = "flask-login" },
     { name = "flask-wtf" },
@@ -139,7 +101,6 @@ web-backend = [
 
 [package.metadata]
 requires-dist = [
-    { name = "acsylla", specifier = ">=1.1.0" },
     { name = "autopep8", marker = "extra == 'dev'", specifier = ">=2.3.2" },
     { name = "boto3", marker = "extra == 'web-backend'", specifier = "~=1.38.9" },
     { name = "boto3-stubs", marker = "extra == 'dev'", specifier = "~=1.38.9" },
@@ -147,7 +108,7 @@ requires-dist = [
     { name = "chromadb", marker = "extra == 'ai-eval'", specifier = ">=1.0.15" },
     { name = "click", specifier = ">=8.1.3" },
     { name = "codecov", marker = "extra == 'dev'", specifier = "~=2.1.12" },
-    { name = "coodie", specifier = ">=1.7.3" },
+    { name = "coodie", marker = "extra == 'web-backend'", specifier = ">=1.7.3" },
     { name = "coverage", marker = "extra == 'dev'", specifier = "==7.8.2" },
     { name = "docker", marker = "extra == 'dev'", specifier = "==7.1.0" },
     { name = "flask", marker = "extra == 'web-backend'", specifier = "~=3.0.0" },
