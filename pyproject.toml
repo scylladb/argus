@@ -49,6 +49,10 @@ web-backend = [
   "prometheus-flask-exporter>=0.23.2",
   "zstandard >= 0.22.0",
   "coodie>=1.7.3",
+  "fastapi>=0.141.1",
+  "gunicorn>=26.0.0",
+  "uvicorn>=0.40.0",
+  "a2wsgi>=1.10.10",
 ]
 docker-image = ["supervisor ~= 4.2.4"]
 dev = [
