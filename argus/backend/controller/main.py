@@ -7,8 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from flask import Blueprint
 from starlette.responses import RedirectResponse, Response
 
-from argus.backend.controller.notifications import bp as notifications_bp
-from argus.backend.controller.team_ui import bp as teams_bp
+from argus.backend.controller import notifications, team_ui
 from argus.backend.error_handlers import handle_profile_exception, handle_view_not_found
 from argus.backend.models.web import ArgusRelease, User, WebFileStorage
 from argus.backend.rendering import flash, render_template, url_for
@@ -21,6 +20,8 @@ from argus.backend.service.views import UserViewException, UserViewService
 LOGGER = logging.getLogger(__name__)
 
 router = APIRouter()
+router.include_router(notifications.router)
+router.include_router(team_ui.router)
 
 
 def _profile_redirect(asgi_request: Request) -> RedirectResponse:
@@ -367,8 +368,8 @@ def profile_schedules(asgi_request: Request, user: User = Depends(ui_current_use
 bp = Blueprint('main', __name__)
 bp.register_error_handler(UserServiceException, handle_profile_exception)
 bp.register_error_handler(UserViewException, handle_view_not_found)
-bp.register_blueprint(notifications_bp)
-bp.register_blueprint(teams_bp)
+bp.register_blueprint(notifications.bp)
+bp.register_blueprint(team_ui.bp)
 
 for _rule, _endpoint in (
     ("/test_runs", "test_runs"),

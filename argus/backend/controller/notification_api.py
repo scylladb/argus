@@ -1,72 +1,83 @@
 import logging
-from flask import (
-    Blueprint,
-    g,
-    request,
-)
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, Query
+from flask import Blueprint
+from pydantic import BaseModel
+
 from argus.backend.error_handlers import handle_api_exception
+from argus.backend.models.web import User
 from argus.backend.service.notification_manager import NotificationManagerService
-from argus.backend.service.user import api_login_required
-from argus.backend.util.common import get_payload
+from argus.backend.service.user import api_current_user
+from argus.backend.util.encoders import ArgusJSONResponse
 
-bp = Blueprint('notifications', __name__, url_prefix='/notifications')
 LOGGER = logging.getLogger(__name__)
-bp.register_error_handler(Exception, handle_api_exception)
+
+router = APIRouter(prefix="/notifications")
 
 
-@bp.route("/get")
-@api_login_required
-def get_notification():
-    notification_id = request.args.get("id")
-    if not notification_id:
-        raise Exception("No notification id provided")
+class ReadNotificationRequest(BaseModel):
+    id: UUID
+
+
+@router.get("/get", name="api.notifications.get_notification")
+def get_notification(notification_id: UUID = Query(..., alias="id"),
+                     user: User = Depends(api_current_user)):
     service = NotificationManagerService()
     notification = service.get_notificaton(
-        receiver=g.user.id, notification_id=notification_id)
-    return {
+        receiver=user.id, notification_id=notification_id)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": notification.to_dict()
-    }
+    })
 
 
-@bp.route("/get_unread")
-@api_login_required
-def get_unread_count():
+@router.get("/get_unread", name="api.notifications.get_unread_count")
+def get_unread_count(user: User = Depends(api_current_user)):
     service = NotificationManagerService()
-    unread_count = service.get_unread_count(receiver=g.user.id)
-    return {
+    unread_count = service.get_unread_count(receiver=user.id)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": unread_count
-    }
+    })
 
 
-@bp.route("/summary")
-@api_login_required
-def get_summary():
-    after = request.args.get("afterId")
-    limit = request.args.get("limit")
-    limit = int(limit) if limit else 20
+@router.get("/summary", name="api.notifications.get_summary")
+def get_summary(after: str | None = Query(None, alias="afterId"),
+                limit: int = Query(20),
+                user: User = Depends(api_current_user)):
     service = NotificationManagerService()
     notifications = service.get_notifications(
-        receiver=g.user.id,
+        receiver=user.id,
         limit=limit,
         after=after
     )
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": [n.to_dict_short_summary() for n in notifications]
-    }
+    })
 
 
-@bp.route("/read", methods=["POST"])
-@api_login_required
-def read_notification():
-    payload = get_payload(request)
+@router.post("/read", name="api.notifications.read_notification")
+def read_notification(payload: ReadNotificationRequest, user: User = Depends(api_current_user)):
     service = NotificationManagerService()
     status = service.read_notification(
-        receiver=g.user.id, notification_id=payload["id"])
+        receiver=user.id, notification_id=payload.id)
 
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": status
-    }
+    })
+
+
+# The routes above are served by FastAPI; these view-less rules keep the
+# endpoints buildable through Flask's url_for until the Flask app is retired.
+bp = Blueprint('notifications', __name__, url_prefix='/notifications')
+bp.register_error_handler(Exception, handle_api_exception)
+for _rule, _endpoint in (
+    ("/get", "get_notification"),
+    ("/get_unread", "get_unread_count"),
+    ("/summary", "get_summary"),
+    ("/read", "read_notification"),
+):
+    bp.add_url_rule(_rule, _endpoint, None)

@@ -1,3 +1,4 @@
+import logging
 import smtplib
 from io import BytesIO
 from typing import List, Set, TypedDict
@@ -6,8 +7,9 @@ from smtplib import SMTPException
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
 from email.mime.text import MIMEText
-from flask import current_app
-from flask import render_template
+from argus.backend.util.config import Config
+
+LOGGER = logging.getLogger(__name__)
 
 
 class Attachment(TypedDict):
@@ -33,11 +35,12 @@ class Email:
             self._connect()
 
     def _retrieve_credentials(self):
-        self.sender = current_app.config["EMAIL_SENDER"]
-        self._password = current_app.config["EMAIL_SENDER_PASS"]
-        self._user = current_app.config["EMAIL_SENDER_USER"]
-        self._server_host = current_app.config["EMAIL_SERVER"]
-        self._server_port = int(current_app.config["EMAIL_SERVER_PORT"])
+        config = Config.load_yaml_config()
+        self.sender = config["EMAIL_SENDER"]
+        self._password = config["EMAIL_SENDER_PASS"]
+        self._user = config["EMAIL_SENDER_USER"]
+        self._server_host = config["EMAIL_SERVER"]
+        self._server_port = int(config["EMAIL_SERVER_PORT"])
 
     def _connect(self):
         self._retrieve_credentials()
@@ -47,7 +50,7 @@ class Email:
             self._connection.starttls()
             self._connection.login(user=self._user, password=self._password)
         except SMTPException as details:
-            current_app.logger.error("Failed to initialize smtp session %s", details)
+            LOGGER.error("Failed to initialize smtp session %s", details)
 
     def _is_connection_open(self):
         if not self._connection:

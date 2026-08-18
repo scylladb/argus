@@ -23,6 +23,7 @@ from argus.backend.error_handlers import (
     ui_redirect_handler,
 )
 from argus.backend.metrics import build_instrumentator, init_flask_metrics
+from argus.backend.rendering import register_flask_app
 from argus.backend.service.user import UserServiceException, cache_ssh_tunnel_server_allowed_endpoints
 from argus.backend.service.views import UserViewException
 from argus.backend.session import FlaskSessionMiddleware
@@ -62,6 +63,8 @@ def start_server(config=None) -> Flask:
     app.register_error_handler(cassandra.cluster.NoConnectionsAvailable, DBErrorHandler.handle_db_errors)
     ScyllaCluster.get(app.config)
     ScyllaCluster.attach_to_app(app)
+
+    register_flask_app(app)
 
     app.logger.info("Loading filters...")
     for filter_func in export_filters():

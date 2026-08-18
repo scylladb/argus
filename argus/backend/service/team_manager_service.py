@@ -1,7 +1,6 @@
 import logging
 from uuid import UUID
 
-from flask.globals import g
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.db import ScyllaCluster
@@ -40,8 +39,7 @@ class TeamManagerService:
         except DocumentNotFound as exc:
             raise TeamManagerException(f"Team {team_id} does not exist", team_id) from exc
 
-    def edit_team(self, team_id: UUID, name: str, members: list[UUID]):
-        user: User = g.user
+    def edit_team(self, team_id: UUID, name: str, members: list[UUID], user: User):
         try:
             team: Team = Team.get(id=team_id)
             if team.leader != user.id:
@@ -55,8 +53,7 @@ class TeamManagerService:
         except DocumentNotFound as exc:
             raise TeamManagerException(f"Team {team_id} doesn't exist!", team_id) from exc
 
-    def edit_team_motd(self, team_id: UUID, message: str):
-        user: User = g.user
+    def edit_team_motd(self, team_id: UUID, message: str, user: User):
         try:
             team: Team = Team.get(id=team_id)
             if team.leader != user.id:
@@ -67,8 +64,7 @@ class TeamManagerService:
         except DocumentNotFound as exc:
             raise TeamManagerException(f"Team {team_id} doesn't exist!", team_id) from exc
 
-    def delete_team(self, team_id: UUID):
-        user: User = g.user
+    def delete_team(self, team_id: UUID, user: User):
         try:
             team: Team = Team.get(id=team_id)
             if team.leader != user.id:

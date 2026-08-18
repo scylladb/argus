@@ -16,12 +16,36 @@ from starlette.responses import HTMLResponse
 
 FLASHES_SESSION_KEY = "_flashes"
 
+_flask_app: Flask | None = None
+
+
+def register_flask_app(flask_app: Flask) -> None:
+    """Called by start_server: makes the app available to code that renders
+    outside any request (notification/email templates, background jobs)."""
+    global _flask_app
+    _flask_app = flask_app
+
+
+def build_url(flask_app: Flask, endpoint: str, **values) -> str:
+    adapter = flask_app.url_map.bind("localhost")
+    return adapter.build(endpoint, values, append_unknown=True)
+
 
 def url_for(asgi_request: Request, endpoint: str, **values) -> str:
     """Build a URL for any endpoint — migrated or not — from the Flask url_map."""
-    flask_app: Flask = asgi_request.app.state.flask_app
-    adapter = flask_app.url_map.bind("localhost")
-    return adapter.build(endpoint, values, append_unknown=True)
+    return build_url(asgi_request.app.state.flask_app, endpoint, **values)
+
+
+def render_background_template(template_name: str, **context) -> str:
+    """Render a template outside any request context (notification and email
+    bodies). Provides only url_for — these templates use no other globals."""
+    if _flask_app is None:
+        raise RuntimeError("register_flask_app was not called — no template environment available")
+    template = _flask_app.jinja_env.get_template(template_name)
+    return template.render(
+        url_for=lambda endpoint, **values: build_url(_flask_app, endpoint, **values),
+        **context,
+    )
 
 
 def flash(asgi_request: Request, message: str, category: str = "message") -> None:
