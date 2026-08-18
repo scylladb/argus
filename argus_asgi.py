@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from argus_backend import argus_app as flask_app
 from argus.backend.asgi.auth import AuthorizationError, authorization_error_handler
 from argus.backend.asgi.errors import api_exception_handler
+from argus.backend.asgi.metrics import MetricsMiddleware
 from argus.backend.asgi.session import FlaskSessionMiddleware
 from argus.backend.db import ScyllaCluster
 from argus.backend.error_handlers import APIException
@@ -41,7 +42,10 @@ def create_app() -> FastAPI:
         docs_url=None,
         redoc_url=None,
     )
+    wsgi_fallback = WSGIMiddleware(flask_app)
     app.add_middleware(FlaskSessionMiddleware, flask_app=flask_app)
+    # Fall-through requests are recorded by the Flask hooks, not here.
+    app.add_middleware(MetricsMiddleware, skip_endpoints=(wsgi_fallback,))
     app.add_exception_handler(AuthorizationError, authorization_error_handler)
     app.add_exception_handler(APIException, api_exception_handler)
     app.add_exception_handler(Exception, api_exception_handler)
@@ -51,7 +55,7 @@ def create_app() -> FastAPI:
 
     app.mount("/s", StaticFiles(directory="public"), name="static")
     # Everything not handled above falls through to Flask.
-    app.mount("/", WSGIMiddleware(flask_app))
+    app.mount("/", wsgi_fallback)
     return app
 
 

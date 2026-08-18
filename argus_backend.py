@@ -1,11 +1,8 @@
 import logging
-import os
 import cassandra.cluster
-from flask import Flask, request
-from prometheus_flask_exporter import NO_PREFIX
+from flask import Flask
 from argus.backend.error_handlers import DBErrorHandler
-from argus.backend.metrics import METRICS
-from argus.backend import metrics_labels
+from argus.backend.metrics import init_flask_metrics
 from argus.backend.template_filters import export_filters
 from argus.backend.controller import admin, api, main
 from argus.backend.cli import cli_bp
@@ -20,90 +17,9 @@ from argus.backend.service.user import cache_ssh_tunnel_server_allowed_endpoints
 LOGGER = logging.getLogger(__name__)
 
 
-def register_metrics():
-    METRICS.export_defaults(group_by="endpoint", prefix=NO_PREFIX)
-    METRICS.register_default(
-        METRICS.counter(
-            "http_request_by_endpoint_total",
-            "Total Requests made",
-            labels={
-                "endpoint": lambda: request.endpoint,
-                "method": lambda: request.method,
-                "status": lambda response: response.status,
-            },
-        )
-    )
-    METRICS.register_default(
-        METRICS.counter(
-            "http_request_by_ip_total",
-            "Total requests by source IP",
-            labels={
-                "ip": lambda: request.remote_addr,
-                "endpoint": lambda: request.endpoint,
-            },
-        )
-    )
-    METRICS.register_default(
-        METRICS.counter(
-            "http_request_ssh_tunnel_total",
-            "Total requests by SSH tunnel presence",
-            labels={
-                "ssh_tunnel": metrics_labels.ssh_tunnel,
-                "tunnel_established": lambda: "yes" if request.headers.get("X-Tunnel-Established-At") else "no",
-                "endpoint": lambda: request.endpoint,
-            },
-        )
-    )
-    # The metric that answers "which jobs are not using the tunnel". The
-    # per-build counter cannot: it mints a series per build, which rules out
-    # keeping the long ranges that adoption has to be measured over.
-    METRICS.register_default(
-        METRICS.counter(
-            "http_request_job_tunnel_total",
-            "Requests by Jenkins job, release line, client version and SSH tunnel state",
-            labels={
-                "job_name": metrics_labels.job_name,
-                "branch": metrics_labels.branch,
-                "client_version": metrics_labels.client_version,
-                "ssh_tunnel": metrics_labels.ssh_tunnel,
-            },
-        )
-    )
-    METRICS.register_default(
-        METRICS.counter(
-            "http_request_by_user_agent_total",
-            "Total requests by user agent category and client version",
-            labels={
-                "user_agent_category": lambda: metrics_labels.categorize_user_agent(
-                    request.headers.get("User-Agent", "")
-                ),
-                # A client too old to send X-Argus-Build-Id is also too old to
-                # appear in http_request_job_tunnel_total under its own job. Here
-                # it still counts, as an argus-client of version "unknown".
-                "client_version": metrics_labels.client_version,
-                "endpoint": lambda: request.endpoint,
-            },
-        )
-    )
-    METRICS.register_default(
-        METRICS.counter(
-            "http_request_tunnel_build_total",
-            "Requests by Jenkins build id (X-Argus-Build-Id) and SSH tunnel state",
-            labels={
-                "build_id": metrics_labels.build_id,
-                "build_url": lambda: request.headers.get("X-Argus-Build-Url") or "",
-                "ssh_tunnel": metrics_labels.ssh_tunnel,
-            },
-        )
-    )
-
-
 def start_server(config=None) -> Flask:
     app = Flask(__name__, static_url_path="/s/", static_folder="public")
-    METRICS.init_app(app)
-    if os.environ.get("PROMETHEUS_MULTIPROC_DIR"):
-        with app.app_context():
-            METRICS.register_endpoint("/metrics")
+    init_flask_metrics(app)
     app.json_provider_class = ArgusJSONProvider
     app.json = ArgusJSONProvider(app)
     app.jinja_env.policies["json.dumps_kwargs"]["default"] = app.json.default
@@ -141,11 +57,6 @@ def start_server(config=None) -> Flask:
     app.register_blueprint(admin.bp)
     app.register_blueprint(cli_bp)
     cache_ssh_tunnel_server_allowed_endpoints(app)
-    with app.app_context():
-        try:
-            register_metrics()
-        except ValueError:
-            pass
 
     app.logger.info("Ready.")
     return app
