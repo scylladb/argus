@@ -250,10 +250,10 @@ class UserService:
 
         return True
 
-    def toggle_admin(self, user_id: str):
+    def toggle_admin(self, user_id: str, current_user: User):
         user: User = User.get(id=UUID(user_id))
 
-        if user.id == g.user.id:
+        if user.id == current_user.id:
             raise UserServiceException("Cannot toggle admin role from yourself.")
 
         is_admin = UserService.check_roles(UserRoles.Admin, user)
@@ -337,9 +337,9 @@ class UserService:
 
         return result
 
-    def delete_user(self, user_id: str):
+    def delete_user(self, user_id: str, current_user: User):
         user: User = User.get(id=UUID(user_id))
-        if user.id == g.user.id:
+        if user.id == current_user.id:
             raise UserServiceException("Cannot delete user that you are logged in as.")
 
         if user.is_admin():

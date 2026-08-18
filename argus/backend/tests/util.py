@@ -1,5 +1,5 @@
 import json
 
 
-def client_post(flask_client, path: str, payload: dict | None = None):
-    return flask_client.post(path, data=json.dumps(payload or {}), content_type="application/json")
+def client_post(api_client, path: str, payload: dict | None = None):
+    return api_client.post(path, json=payload or {})
