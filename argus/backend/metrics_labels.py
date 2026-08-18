@@ -1,14 +1,12 @@
-"""Label callbacks for the Prometheus counters registered in ``argus_backend``.
+"""Label helpers for the Prometheus request metrics (see metrics.py).
 
-They live here rather than next to ``start_server()`` so a test can import them
-without opening a Scylla connection. Every function reads the live request and
-returns a label value, so each one must return a bounded set of strings: an
-unbounded label value is a new time series per request.
+Pure functions over a case-insensitive header mapping, so both the Flask hook
+and the FastAPI middleware can share them. Every function must return a
+bounded set of strings: an unbounded label value is a new time series per
+request.
 """
 
 import re
-
-from flask import request
 
 # The client caps this too, but the header is client-controlled and a label
 # value that long is a memory problem in Prometheus, not a display problem.
@@ -39,28 +37,28 @@ def categorize_user_agent(ua: str) -> str:  # noqa: PLR0911
     return "other"
 
 
-def ssh_tunnel() -> str:
-    return "yes" if request.headers.get("X-SSH-Tunnel-Origin") else "no"
+def ssh_tunnel(headers) -> str:
+    return "yes" if headers.get("X-SSH-Tunnel-Origin") else "no"
 
 
-def build_id() -> str:
-    value = request.headers.get("X-Argus-Build-Id", "").strip()
+def build_id(headers) -> str:
+    value = (headers.get("X-Argus-Build-Id") or "").strip()
     if not value or len(value) > MAX_BUILD_ID_LEN:
         return "unknown"
     return value
 
 
-def job_name() -> str:
+def job_name(headers) -> str:
     """The Jenkins job path with the build number removed.
 
     ``http_request_tunnel_build_total`` mints a series per build and grows
     without bound. This label is bounded by the number of jobs, which is what
     makes per-job tunnel adoption cheap enough to keep on a dashboard.
     """
-    return _BUILD_NUMBER_SUFFIX.sub("", build_id())
+    return _BUILD_NUMBER_SUFFIX.sub("", build_id(headers))
 
 
-def branch() -> str:
+def branch(headers) -> str:
     """The release line a job belongs to: the first segment of the job path.
 
     SCT and dtest pin their own copy of this client per release line, so the
@@ -68,13 +66,13 @@ def branch() -> str:
     "adoption is low" into "these release lines still run a client without
     tunnel support".
     """
-    segment = job_name().split("/", 1)[0]
+    segment = job_name(headers).split("/", 1)[0]
     if not _BRANCH_SEGMENT.match(segment):
         return "unknown"
     return segment
 
 
-def client_version() -> str:
+def client_version(headers) -> str:
     """The argus-alm version behind the request.
 
     Tunnel support starts at 0.16.0, so a job that reports an older version, or
@@ -82,7 +80,7 @@ def client_version() -> str:
     Telling those two cases apart is the difference between "backport the
     client" and "debug the tunnel".
     """
-    value = request.headers.get("X-Argus-Client-Version", "").strip()
+    value = (headers.get("X-Argus-Client-Version") or "").strip()
     if not _CLIENT_VERSION.match(value):
         return "unknown"
     return value

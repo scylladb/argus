@@ -46,13 +46,13 @@ web-backend = [
   "pygithub >= 2.6.1",
   "boto3 ~= 1.38.9",
   "jira>=3.10.5",
-  "prometheus-flask-exporter>=0.23.2",
   "zstandard >= 0.22.0",
   "coodie>=1.7.3",
   "fastapi>=0.141.1",
   "gunicorn>=26.0.0",
   "uvicorn>=0.40.0",
   "a2wsgi>=1.10.10",
+  "prometheus-client>=0.26.0",
 ]
 docker-image = ["supervisor ~= 4.2.4"]
 dev = [
