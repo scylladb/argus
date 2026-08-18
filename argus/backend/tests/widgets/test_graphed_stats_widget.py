@@ -4,45 +4,45 @@ import pytest
 
 
 @pytest.fixture
-def empty_view(flask_client):
+def empty_view(api_client):
     name = f"gs_view_{uuid.uuid4().hex[:8]}"
-    res = flask_client.post(
+    res = api_client.post(
         "/api/v1/views/create",
         json={"name": name, "items": [], "settings": "{}"},
-    ).json
+    ).json()
     return res["response"]
 
 
-def test_graphed_stats_empty_view(flask_client, empty_view):
-    res = flask_client.get(
+def test_graphed_stats_empty_view(api_client, empty_view):
+    res = api_client.get(
         f"/api/v1/views/widgets/graphed_stats?view_id={empty_view['id']}"
-    ).json
+    ).json()
     assert res["status"] == "ok"
     assert res["response"] == {"test_runs": [], "nemesis_data": []}
 
 
-def test_graphed_stats_unknown_view_errors(flask_client):
-    res = flask_client.get(
+def test_graphed_stats_unknown_view_errors(api_client):
+    res = api_client.get(
         f"/api/v1/views/widgets/graphed_stats?view_id={uuid.uuid4()}"
-    ).json
+    ).json()
     assert res["status"] == "error"
     assert res["response"]["exception"] == "DocumentNotFound"
 
 
-def test_runs_details_empty_list(flask_client):
-    res = flask_client.post(
+def test_runs_details_empty_list(api_client):
+    res = api_client.post(
         "/api/v1/views/widgets/runs_details", json={"run_ids": []}
-    ).json
+    ).json()
     assert res["status"] == "ok"
     assert res["response"] == {}
 
 
-def test_runs_details_unknown_run_ids(flask_client):
+def test_runs_details_unknown_run_ids(api_client):
     run_ids = [str(uuid.uuid4()), str(uuid.uuid4())]
-    res = flask_client.post(
+    res = api_client.post(
         "/api/v1/views/widgets/runs_details",
         json={"run_ids": run_ids},
-    ).json
+    ).json()
     assert res["status"] == "ok"
     assert set(res["response"].keys()) == set(run_ids)
     for entry in res["response"].values():
@@ -55,26 +55,26 @@ def test_runs_details_unknown_run_ids(flask_client):
         }
 
 
-def test_runs_details_missing_run_ids_errors(flask_client):
-    res = flask_client.post("/api/v1/views/widgets/runs_details", json={}).json
+def test_runs_details_missing_run_ids_errors(api_client):
+    res = api_client.post("/api/v1/views/widgets/runs_details", json={}).json()
     assert res["status"] == "error"
-    assert "Missing run_ids" in res["response"]["arguments"][0]
+    assert res["response"]["exception"] == "RequestValidationError"
 
 
-def test_runs_details_run_ids_not_list_errors(flask_client):
-    res = flask_client.post(
+def test_runs_details_run_ids_not_list_errors(api_client):
+    res = api_client.post(
         "/api/v1/views/widgets/runs_details",
         json={"run_ids": "not-a-list"},
-    ).json
+    ).json()
     assert res["status"] == "error"
-    assert "must be a list" in res["response"]["arguments"][0]
+    assert res["response"]["exception"] == "RequestValidationError"
 
 
-def test_graphed_stats_with_seeded_view(flask_client, seeded_view_with_run, sct_run):
+def test_graphed_stats_with_seeded_view(api_client, seeded_view_with_run, sct_run):
     """Seeded SCT run appears in the graphed_stats response."""
-    res = flask_client.get(
+    res = api_client.get(
         f"/api/v1/views/widgets/graphed_stats?view_id={seeded_view_with_run.view_id}"
-    ).json
+    ).json()
     assert res["status"] == "ok"
     body = res["response"]
     assert body["nemesis_data"] == []
@@ -84,11 +84,11 @@ def test_graphed_stats_with_seeded_view(flask_client, seeded_view_with_run, sct_
     assert run["version"] == sct_run.package_version
 
 
-def test_graphed_stats_with_nemesis(flask_client, seeded_view_with_run, sct_run_with_nemesis):
+def test_graphed_stats_with_nemesis(api_client, seeded_view_with_run, sct_run_with_nemesis):
     """A finalized nemesis on the seeded run shows up in nemesis_data."""
-    res = flask_client.get(
+    res = api_client.get(
         f"/api/v1/views/widgets/graphed_stats?view_id={seeded_view_with_run.view_id}"
-    ).json
+    ).json()
     assert res["status"] == "ok"
     nemeses = res["response"]["nemesis_data"]
     assert len(nemeses) == 1
@@ -96,12 +96,12 @@ def test_graphed_stats_with_nemesis(flask_client, seeded_view_with_run, sct_run_
     assert nemeses[0]["run_id"] == sct_run_with_nemesis.run_id
 
 
-def test_runs_details_with_linked_issue(flask_client, linked_github_issue, sct_run):
+def test_runs_details_with_linked_issue(api_client, linked_github_issue, sct_run):
     """runs_details returns build_id/version and surfaces linked GitHub issues."""
-    res = flask_client.post(
+    res = api_client.post(
         "/api/v1/views/widgets/runs_details",
         json={"run_ids": [sct_run.run_id]},
-    ).json
+    ).json()
     assert res["status"] == "ok"
     entry = res["response"][sct_run.run_id]
     expected_version = f"{sct_run.package_version}-{sct_run.package_date}"

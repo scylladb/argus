@@ -12,7 +12,7 @@ from argus.backend.models.pytest import PytestResultTable
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, ArgusUserView, User
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS, all_plugin_models
 from argus.backend.service.test_lookup import TestLookup
-from argus.backend.util.common import chunk, current_user
+from argus.backend.util.common import chunk
 
 LOGGER = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class ViewUpdateRequest(TypedDict):
 
 
 class UserViewService:
-    def create_view(self, name: str, items: list[str], widget_settings: str, description: str = None, display_name: str = None, plan_id: UUID = None) -> ArgusUserView:
+    def create_view(self, name: str, items: list[str], widget_settings: str, user: User, description: str = None, display_name: str = None, plan_id: UUID = None) -> ArgusUserView:
         try:
             name_check = ArgusUserView.get(name=name)
             raise UserViewException(
@@ -49,7 +49,7 @@ class UserViewService:
         view.tests = entities["tests"]
         view.release_ids = entities["release"]
         view.group_ids = entities["group"]
-        view.user_id = current_user().id
+        view.user_id = user.id
 
         view.save()
         return view
@@ -76,10 +76,10 @@ class UserViewService:
     def test_lookup(self, query: str):
         return TestLookup.test_lookup(query)
 
-    def update_view(self, view_id: str | UUID, update_data: ViewUpdateRequest) -> bool:
+    def update_view(self, view_id: str | UUID, update_data: ViewUpdateRequest, user: User) -> bool:
         view_id = UUID(view_id) if isinstance(view_id, str) else view_id
         view: ArgusUserView = ArgusUserView.get(id=view_id)
-        if view.user_id != current_user().id and not current_user().is_admin():
+        if view.user_id != user.id and not user.is_admin():
             raise UserViewException("Unable to modify other users' views")
         for key in ["user_id", "id"]:
             update_data.pop(key, None)
@@ -104,10 +104,10 @@ class UserViewService:
         view.save()
         return True
 
-    def delete_view(self, view_id: str | UUID) -> bool:
+    def delete_view(self, view_id: str | UUID, user: User) -> bool:
         view_id = UUID(view_id) if isinstance(view_id, str) else view_id
         view = ArgusUserView.get(id=view_id)
-        if view.user_id != current_user().id and not current_user().is_admin():
+        if view.user_id != user.id and not user.is_admin():
             raise UserViewException("Unable to modify other users' views")
         view.delete()
 

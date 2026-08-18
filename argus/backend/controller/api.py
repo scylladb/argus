@@ -8,12 +8,11 @@ from flask import Blueprint
 from pydantic import BaseModel
 from starlette.responses import RedirectResponse, Response
 
+from argus.backend.controller import planner_api, view_api
 from argus.backend.controller.client_api import bp as client_bp
 from argus.backend.controller.notification_api import bp as notifications_bp
-from argus.backend.controller.planner_api import bp as planner_bp
 from argus.backend.controller.team import bp as team_bp
 from argus.backend.controller.testrun_api import bp as testrun_bp
-from argus.backend.controller.view_api import bp as view_bp
 from argus.backend.error_handlers import APIException, handle_api_exception
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, User
 from argus.backend.rendering import url_for
@@ -27,6 +26,8 @@ from argus.backend.util.encoders import ArgusJSONResponse
 LOGGER = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1")
+router.include_router(planner_api.router)
+router.include_router(view_api.router)
 
 CACHEABLE = {"Cache-Control": "max-age=60"}
 
@@ -566,8 +567,8 @@ bp.register_blueprint(notifications_bp)
 bp.register_blueprint(client_bp)
 bp.register_blueprint(testrun_bp)
 bp.register_blueprint(team_bp)
-bp.register_blueprint(view_bp)
-bp.register_blueprint(planner_bp)
+bp.register_blueprint(view_api.bp)
+bp.register_blueprint(planner_api.bp)
 bp.register_error_handler(Exception, handle_api_exception)
 
 for _rule, _endpoint in (

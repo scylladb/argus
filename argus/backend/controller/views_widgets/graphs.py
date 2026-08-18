@@ -1,21 +1,23 @@
-from uuid import UUID
 from datetime import datetime, timezone
+from uuid import UUID
 
-from flask import Blueprint, request
+from fastapi import APIRouter, Depends, Query
+from flask import Blueprint
 
-from argus.backend.models.web import ArgusUserView, ArgusTest
+from argus.backend.models.web import ArgusTest, ArgusUserView, User
 from argus.backend.service.results_service import ResultsService
-from argus.backend.service.user import api_login_required
-bp = Blueprint("graphs", __name__, url_prefix="/widgets")
+from argus.backend.service.user import api_current_user
+from argus.backend.util.encoders import ArgusJSONResponse
+
+router = APIRouter(prefix="/widgets")
 
 
-@bp.route("/graphs/graph_views", methods=["GET"])
-@api_login_required
-def get_graph_views():
-    view_id = UUID(request.args.get("view_id"))
+@router.get("/graphs/graph_views", name="api.view_api.graphs.get_graph_views")
+def get_graph_views(view_id: UUID = Query(...),
+                    start_date: datetime | None = Query(None),
+                    end_date: datetime | None = Query(None),
+                    user: User = Depends(api_current_user)):
     view: ArgusUserView = ArgusUserView.get(id=view_id)
-    start_date = request.args.get("start_date")
-    end_date = request.args.get("end_date")
     service = ResultsService()
     response = {}
     tests_details = {}
@@ -36,8 +38,8 @@ def get_graph_views():
                 table_names.add(table_name)
 
             # Get graphs data for these tables
-            start_dt = datetime.fromisoformat(start_date).astimezone(timezone.utc) if start_date else None
-            end_dt = datetime.fromisoformat(end_date).astimezone(timezone.utc) if end_date else None
+            start_dt = start_date.astimezone(timezone.utc) if start_date else None
+            end_dt = end_date.astimezone(timezone.utc) if end_date else None
             graphs, ticks, releases_filters = service.get_test_graphs(
                 test_id=test_uuid,
                 start_date=start_dt,
@@ -61,8 +63,14 @@ def get_graph_views():
 
         response[str(test_id)] = view_data
 
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": response,
         "tests_details": tests_details
-    }
+    })
+
+
+# The route above is served by FastAPI; this view-less rule keeps the
+# endpoint buildable through Flask's url_for until the Flask app is retired.
+bp = Blueprint("graphs", __name__, url_prefix="/widgets")
+bp.add_url_rule("/graphs/graph_views", "get_graph_views", None)

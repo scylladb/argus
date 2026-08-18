@@ -47,7 +47,7 @@ class SeededView(NamedTuple):
 
 
 @pytest.fixture
-def sct_run(request, flask_client, fake_test) -> SctRun:
+def sct_run(request, api_client, fake_test) -> SctRun:
     """Submit a single SCT run + scylla-server package version.
 
     Mirrors the canonical seeding sequence used by ``tests/sct_api/test_sct_api.py``:
@@ -67,7 +67,7 @@ def sct_run(request, flask_client, fake_test) -> SctRun:
         "sct_config": {"cluster_backend": "aws", "test_method": "widget_seed_module.WidgetSeedTest.test_widget"},
         "schema_version": "v8",
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         "/api/v1/client/testrun/scylla-cluster-tests/submit",
         json=submit_payload,
     )
@@ -95,7 +95,7 @@ def sct_run(request, flask_client, fake_test) -> SctRun:
         ],
         "schema_version": "v8",
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         f"/api/v1/client/sct/{run_id}/packages/submit",
         json=package_payload,
     )
@@ -113,19 +113,19 @@ def sct_run(request, flask_client, fake_test) -> SctRun:
 
 
 @pytest.fixture
-def seeded_view_with_run(flask_client, sct_run: SctRun) -> SeededView:
+def seeded_view_with_run(api_client, sct_run: SctRun) -> SeededView:
     """Create an ``ArgusUserView`` that points at the seeded SCT run's test.
 
     Uses the public ``/api/v1/views/create`` endpoint so the view is built the
     same way the UI builds it.
     """
     name = f"widget_view_{uuid.uuid4().hex[:8]}"
-    resp = flask_client.post(
+    resp = api_client.post(
         "/api/v1/views/create",
         json={"name": name, "items": [f"test:{sct_run.test_id}"], "settings": "{}"},
     )
     assert resp.status_code == 200, resp.text
-    body = resp.json
+    body = resp.json()
     assert body["status"] == "ok", body
     view_id = body["response"]["id"]
 
@@ -138,7 +138,7 @@ def seeded_view_with_run(flask_client, sct_run: SctRun) -> SeededView:
 
 
 @pytest.fixture
-def sct_run_with_nemesis(flask_client, sct_run: SctRun) -> SctRun:
+def sct_run_with_nemesis(api_client, sct_run: SctRun) -> SctRun:
     """Extend ``sct_run`` with a finalized ``SCTNemesis`` row.
 
     Uses the canonical submit -> finalize sequence; nemesis name is one that
@@ -156,7 +156,7 @@ def sct_run_with_nemesis(flask_client, sct_run: SctRun) -> SctRun:
         },
         "schema_version": "v8",
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         f"/api/v1/client/sct/{sct_run.run_id}/nemesis/submit",
         json=submit_payload,
     )
@@ -170,7 +170,7 @@ def sct_run_with_nemesis(flask_client, sct_run: SctRun) -> SctRun:
             "message": "done",
         }
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         f"/api/v1/client/sct/{sct_run.run_id}/nemesis/finalize",
         json=finalize_payload,
     )
