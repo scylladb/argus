@@ -2,137 +2,138 @@ import datetime
 import json
 import logging
 from uuid import UUID
-from flask import (
-    Blueprint, flash, g, redirect, render_template, request, session, url_for, make_response
-)
+
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
+from flask import Blueprint
+from starlette.responses import RedirectResponse, Response
+
 from argus.backend.controller.notifications import bp as notifications_bp
 from argus.backend.controller.team_ui import bp as teams_bp
 from argus.backend.error_handlers import handle_profile_exception, handle_view_not_found
+from argus.backend.models.web import ArgusRelease, User, WebFileStorage
+from argus.backend.rendering import flash, render_template, url_for
 from argus.backend.service.argus_service import ArgusService
-from argus.backend.models.web import ArgusRelease, WebFileStorage
-from argus.backend.service.testrun import TestRunService
 from argus.backend.service.planner_service import PlanningService
-from argus.backend.service.user import UserService, UserServiceException, login_required
+from argus.backend.service.testrun import TestRunService
+from argus.backend.service.user import UserService, UserServiceException, ui_current_user
 from argus.backend.service.views import UserViewException, UserViewService
 
 LOGGER = logging.getLogger(__name__)
 
-bp = Blueprint('main', __name__)
-bp.register_error_handler(UserServiceException, handle_profile_exception)
-bp.register_error_handler(UserViewException, handle_view_not_found)
-bp.register_blueprint(notifications_bp)
-bp.register_blueprint(teams_bp)
+router = APIRouter()
 
 
-@bp.route("/test_runs")
-@login_required
-def test_runs():
-    return render_template("test_runs.html.j2")
+def _profile_redirect(asgi_request: Request) -> RedirectResponse:
+    return RedirectResponse(url_for(asgi_request, "main.profile"), status_code=302)
 
 
-@bp.route("/test_run/<string:run_id>")
-@login_required
-def test_run(run_id: UUID):
-    return render_template("test_run.html.j2", id=run_id)
+def _error_redirect(asgi_request: Request, error_type: int) -> RedirectResponse:
+    return RedirectResponse(url_for(asgi_request, "main.error", type=error_type), status_code=302)
 
 
-@bp.route("/test/<string:test_id>/runs")
-@login_required
-def runs(test_id: UUID):
-    additional_runs = request.args.getlist("additionalRuns[]")
-    return render_template("standalone_test_with_runs.html.j2", test_id=test_id, additional_runs=additional_runs)
+@router.get("/test_runs", name="main.test_runs")
+def test_runs(asgi_request: Request, user: User = Depends(ui_current_user)):
+    return render_template(asgi_request, "test_runs.html.j2")
 
 
-@bp.route("/tests/<string:plugin_name>/<string:run_id>", defaults={"tab": "details"})
-@bp.route("/tests/<string:plugin_name>/<string:run_id>/<string:tab>")
-@login_required
-def get_run_by_plugin(plugin_name: str, run_id: UUID | str, tab: str):
+@router.get("/test_run/{run_id}", name="main.test_run")
+def test_run(asgi_request: Request, run_id: UUID, user: User = Depends(ui_current_user)):
+    return render_template(asgi_request, "test_run.html.j2", id=run_id)
+
+
+@router.get("/test/{test_id}/runs", name="main.runs")
+def runs(asgi_request: Request, test_id: UUID,
+         additional_runs: list[str] = Query(default=[], alias="additionalRuns[]"),
+         user: User = Depends(ui_current_user)):
+    return render_template(asgi_request, "standalone_test_with_runs.html.j2",
+                           test_id=test_id, additional_runs=additional_runs)
+
+
+@router.get("/tests/{plugin_name}/{run_id}", name="main.get_run_by_plugin")
+@router.get("/tests/{plugin_name}/{run_id}/{tab}", name="main.get_run_by_plugin")
+def get_run_by_plugin(asgi_request: Request, plugin_name: str, run_id: str, tab: str = "details",
+                      user: User = Depends(ui_current_user)):
     try:
         run_id = UUID(run_id)
     except ValueError:
-        flash(message=f"Invalid UUID: {run_id}", category="error")
-        return redirect(url_for("main.error", type=404))
+        flash(asgi_request, message=f"Invalid UUID: {run_id}", category="error")
+        return _error_redirect(asgi_request, 404)
     run = TestRunService().get_run(plugin_name, run_id)
     if not run:
-        flash(f"Run {plugin_name}/{run_id} not found.", "error")
-        return redirect(url_for("main.error", type=404))
-    return render_template("run_view_by_plugin.html.j2", run=run, tab=tab)
+        flash(asgi_request, f"Run {plugin_name}/{run_id} not found.", "error")
+        return _error_redirect(asgi_request, 404)
+    return render_template(asgi_request, "run_view_by_plugin.html.j2", run=run, tab=tab)
 
 
-@bp.route("/test/<path:build_id>/<int:build_number>", defaults={"tab": "details"})
-@bp.route("/test/<path:build_id>/<int:build_number>/<string:tab>")
-@login_required
-def get_run_by_build(build_id: str, build_number: int, tab: str):
+@router.get("/test/{build_id:path}/{build_number}/{tab}", name="main.get_run_by_build")
+@router.get("/test/{build_id:path}/{build_number}", name="main.get_run_by_build")
+def get_run_by_build(asgi_request: Request, build_id: str, build_number: int, tab: str = "details",
+                     user: User = Depends(ui_current_user)):
     # Resolve a run from its build_system_id + Jenkins build number. This gives
     # a stable, clickable link that can be produced the moment a build starts —
     # even during the brief window before its run_id exists — and resolves once
     # the run has been reported to Argus.
     run = TestRunService().get_run_by_build_number(build_id, build_number)
     if not run:
-        flash(f"Run {build_id} #{build_number} not found.", "error")
-        return redirect(url_for("main.error", type=404))
-    return render_template("run_view_by_plugin.html.j2", run=run, tab=tab)
+        flash(asgi_request, f"Run {build_id} #{build_number} not found.", "error")
+        return _error_redirect(asgi_request, 404)
+    return render_template(asgi_request, "run_view_by_plugin.html.j2", run=run, tab=tab)
 
 
-@bp.route("/")
-def home():
-    return redirect(url_for("main.run_dashboard"))
+@router.get("/", name="main.home")
+def home(asgi_request: Request):
+    return RedirectResponse(url_for(asgi_request, "main.run_dashboard"), status_code=302)
 
 
-@bp.route("/run_dashboard")
-@bp.route("/workspace")
-@login_required
-def run_dashboard():
-    return render_template('dashboard.html.j2')
+@router.get("/run_dashboard", name="main.run_dashboard")
+@router.get("/workspace", name="main.run_dashboard")
+def run_dashboard(asgi_request: Request, user: User = Depends(ui_current_user)):
+    return render_template(asgi_request, "dashboard.html.j2")
 
 
-@bp.route("/releases")
-@login_required
-def releases():
+@router.get("/releases", name="main.releases")
+def releases(asgi_request: Request, user: User = Depends(ui_current_user)):
     service = ArgusService()
     all_releases = service.get_releases()
-    return render_template("releases.html.j2", releases=all_releases)
+    return render_template(asgi_request, "releases.html.j2", releases=all_releases)
 
 
-@bp.route("/views")
-@login_required
-def views():
+@router.get("/views", name="main.views")
+def views(asgi_request: Request, user: User = Depends(ui_current_user)):
     service = UserViewService()
     all_views = service.get_all_views()
-    return render_template("views.html.j2", views=sorted(all_views, key=lambda view: view.created or datetime.datetime.fromtimestamp(0), reverse=True))
+    return render_template(asgi_request, "views.html.j2",
+                           views=sorted(all_views, key=lambda view: view.created or datetime.datetime.fromtimestamp(0),
+                                        reverse=True))
 
 
-@bp.route("/view/<string:view_name>")
-@login_required
-def view_dashboard(view_name: str):
+@router.get("/view/{view_name}", name="main.view_dashboard")
+def view_dashboard(asgi_request: Request, view_name: str, user: User = Depends(ui_current_user)):
     service = UserViewService()
     view = service.get_view_by_name(view_name=view_name)
     data_json = view
     view.widget_settings = json.loads(view.widget_settings)
-    return render_template("view_dashboard.html.j2", data=data_json)
+    return render_template(asgi_request, "view_dashboard.html.j2", data=data_json)
 
 
-@bp.route("/plan/<string:plan_id>")
-@login_required
-def plan_dashboard(plan_id: str):
+@router.get("/plan/{plan_id}", name="main.plan_dashboard")
+def plan_dashboard(asgi_request: Request, plan_id: str, user: User = Depends(ui_current_user)):
     service = PlanningService()
     plan = service.get_plan(plan_id=plan_id)
     data_json = plan
-    return render_template("plan_dashboard.html.j2", data=data_json)
+    return render_template(asgi_request, "plan_dashboard.html.j2", data=data_json)
 
 
-@bp.route("/alert_debug")
-@login_required
-def alert_debug():
-    alert_type = request.args.get("type", "success")
-    message = request.args.get("message", "No message provided")
-    flash(message=message, category=alert_type)
-    return render_template("flash_debug.html.j2")
+@router.get("/alert_debug", name="main.alert_debug")
+def alert_debug(asgi_request: Request, alert_type: str = Query("success", alias="type"),
+                message: str = Query("No message provided"),
+                user: User = Depends(ui_current_user)):
+    flash(asgi_request, message=message, category=alert_type)
+    return render_template(asgi_request, "flash_debug.html.j2")
 
 
-@bp.route("/dashboard/<path:release_name>")
-@login_required
-def release_dashboard(release_name: str):
+@router.get("/dashboard/{release_name:path}", name="main.release_dashboard")
+def release_dashboard(asgi_request: Request, release_name: str, user: User = Depends(ui_current_user)):
     service = ArgusService()
     release, release_groups, release_tests = service.get_data_for_release_dashboard(
         release_name=release_name)
@@ -141,12 +142,11 @@ def release_dashboard(release_name: str):
         "groups": [group.model_dump() for group in release_groups],
         "tests": [test.model_dump() for test in release_tests],
     }
-    return render_template("release_dashboard.html.j2", release_name=release_name, data=data_json)
+    return render_template(asgi_request, "release_dashboard.html.j2", release_name=release_name, data=data_json)
 
 
-@bp.route("/release/<string:name>/scheduler")
-@login_required
-def release_scheduler(name: str):
+@router.get("/release/{name}/scheduler", name="main.release_scheduler")
+def release_scheduler(asgi_request: Request, name: str, user: User = Depends(ui_current_user)):
     service = ArgusService()
     release, release_groups, release_tests = service.get_data_for_release_dashboard(
         release_name=name)
@@ -155,27 +155,26 @@ def release_scheduler(name: str):
         "groups": [group.model_dump() for group in release_groups],
         "tests": [test.model_dump() for test in release_tests],
     }
-    return render_template("release_schedule.html.j2", release_name=name, data=data_json)
+    return render_template(asgi_request, "release_schedule.html.j2", release_name=name, data=data_json)
 
 
-@bp.route("/release/by-id/<string:id>/planner")
-@login_required
-def release_planner_by_id(id: str):
-    release = ArgusRelease.get(id=UUID(id))
-    return redirect(url_for("main.release_planner", name=release.name))
+@router.get("/release/by-id/{id}/planner", name="main.release_planner_by_id")
+def release_planner_by_id(asgi_request: Request, id: UUID, user: User = Depends(ui_current_user)):
+    release = ArgusRelease.get(id=id)
+    return RedirectResponse(
+        url_for(asgi_request, "main.release_planner", name=release.name), status_code=302)
 
 
-@bp.route("/release/<string:name>/planner")
-@login_required
-def release_planner(name: str):
+@router.get("/release/{name}/planner", name="main.release_planner")
+def release_planner(asgi_request: Request, name: str, user: User = Depends(ui_current_user)):
     service = PlanningService()
     planner_data = service.release_planner(name)
-    return render_template("release_planner.html.j2", release_name=planner_data["release"].name, planner_data=planner_data)
+    return render_template(asgi_request, "release_planner.html.j2",
+                           release_name=planner_data["release"].name, planner_data=planner_data)
 
 
-@bp.route("/release/<string:name>/duty")
-@login_required
-def duty_planner(name: str):
+@router.get("/release/{name}/duty", name="main.duty_planner")
+def duty_planner(asgi_request: Request, name: str, user: User = Depends(ui_current_user)):
     service = ArgusService()
     release, release_groups, release_tests = service.get_data_for_release_dashboard(
         release_name=name)
@@ -184,188 +183,222 @@ def duty_planner(name: str):
         "groups": [group.model_dump() for group in release_groups],
         "tests": [test.model_dump() for test in release_tests],
     }
-    return render_template("duty_planner.html.j2", release_name=name, data=data_json)
+    return render_template(asgi_request, "duty_planner.html.j2", release_name=name, data=data_json)
 
 
-@bp.route("/error/")
-def error():
-    return render_template("error.html.j2", type=request.args.get("type", 400))
+@router.get("/error/", name="main.error")
+def error(asgi_request: Request, error_type: str = Query("400", alias="type")):
+    return render_template(asgi_request, "error.html.j2", type=error_type)
 
 
-@bp.route("/profile/")
-@login_required
-def profile():
-    first_run = session.pop("first_run_info", None)
-    token_generated = session.pop("token_generated", None)
+@router.get("/profile/", name="main.profile")
+def profile(asgi_request: Request, user: User = Depends(ui_current_user)):
+    first_run = asgi_request.session.pop("first_run_info", None)
+    token_generated = asgi_request.session.pop("token_generated", None)
 
-    return render_template("profile.html.j2", first_run=first_run, token_generated=token_generated)
+    return render_template(asgi_request, "profile.html.j2", first_run=first_run,
+                           token_generated=token_generated)
 
 
-@bp.route("/profile/create", methods=("GET", "POST"))
-def profile_user_create():
+@router.get("/profile/create", name="main.profile_user_create")
+def profile_user_create(asgi_request: Request):
+    if not asgi_request.session.get("registration_allowed", False):
+        raise UserServiceException("Registration is not allowed at the moment.")
+    return render_template(asgi_request, "create_user.html.j2", feedback={})
+
+
+@router.post("/profile/create", name="main.profile_user_create")
+def profile_user_create_post(asgi_request: Request, username: str = Form(...),
+                             email: str = Form(...), full_name: str = Form(...),
+                             avatar: UploadFile | None = File(None)):
+    session = asgi_request.session
     if not session.get("registration_allowed", False):
         raise UserServiceException("Registration is not allowed at the moment.")
-    result = {}
-    if request.method == "POST":
-        if session.get("lock_user_email") and request.form.get("email") != session.get("oauth_email"):
-            raise UserServiceException("Email changed while being locked to oauth one.")
-        result = UserService().create_user(username=request.form["username"], email=request.form["email"], full_name=request.form["full_name"])
-        if result["created"]:
-            session.clear()
-            session["user_id"] = str(result["user"].id)
-            session["first_run_info"] = {
-                "password": result["temp_password"],
-                "first_login": True
-            }
-            return redirect(url_for("main.profile"))
+    if session.get("lock_user_email") and email != session.get("oauth_email"):
+        raise UserServiceException("Email changed while being locked to oauth one.")
+    result = UserService().create_user(
+        username=username, email=email, full_name=full_name,
+        avatar=(avatar.filename, avatar.file.read()) if avatar else None)
+    if result["created"]:
+        session.clear()
+        session["user_id"] = str(result["user"].id)
+        session["first_run_info"] = {
+            "password": result["temp_password"],
+            "first_login": True
+        }
+        return _profile_redirect(asgi_request)
 
-    return render_template("create_user.html.j2", feedback=result.get("form_feedback", {}))
+    return render_template(asgi_request, "create_user.html.j2", feedback=result.get("form_feedback", {}))
 
 
-@bp.route("/profile/oauth/github", methods=["GET"])
-def profile_oauth_github_callback():
-    req_state = request.args.get('state', '')
-    if req_state != session["csrf_token"]:
-        return redirect(url_for("main.error", type=403))
+@router.get("/profile/oauth/github", name="main.profile_oauth_github_callback")
+def profile_oauth_github_callback(asgi_request: Request, state: str = Query(""),
+                                  code: str = Query("WTF")):
+    if state != asgi_request.session.get("csrf_token"):
+        return _error_redirect(asgi_request, 403)
 
-    req_code = request.args.get("code", "WTF")
     service = UserService()
     try:
-        first_run_info = service.github_callback(req_code)
+        first_run_info = service.github_callback(code, asgi_request.app.state.flask_app.config)
     except Exception as exc:
         LOGGER.error("An error occured in callback", exc_info=True)
-        flash(message=exc.args[0], category="error")
-        return redirect(url_for("main.error", type=403))
+        flash(asgi_request, message=exc.args[0], category="error")
+        return _error_redirect(asgi_request, 403)
     if first_run_info:
-        session["first_run_info"] = first_run_info
+        asgi_request.session["first_run_info"] = first_run_info
 
-    if path := session.pop("redirect_target"):
-        return redirect(path)
-    return redirect(url_for("main.profile"))
+    if path := asgi_request.session.pop("redirect_target", None):
+        return RedirectResponse(path, status_code=302)
+    return _profile_redirect(asgi_request)
 
 
-@bp.route("/storage/picture/<string:picture_id>")
-@login_required
-def get_picture(picture_id: str):
-    res = make_response()
+@router.get("/storage/picture/{picture_id}", name="main.get_picture")
+def get_picture(asgi_request: Request, picture_id: UUID, user: User = Depends(ui_current_user)):
+    headers = {"Cache-Control": "public, max-age=86400"}
     try:
-        picture = WebFileStorage.get(id=UUID(picture_id))
+        picture = WebFileStorage.get(id=picture_id)
         with open(picture.filepath, "rb") as file:
-            res.set_data(file.read())
-        res.content_type = "image/*"
-        res.status = 200
+            return Response(file.read(), status_code=200, media_type="image/*", headers=headers)
     except FileNotFoundError:
-        res.status = 404
-        res.content_type = "text/plain"
-        res.set_data("404 NOT FOUND")
-
-    res.cache_control.max_age = 86400
-    res.cache_control.public = True
-    return res
+        return Response("404 NOT FOUND", status_code=404, media_type="text/plain", headers=headers)
 
 
-@bp.route("/profile/update/picture", methods=["POST"])
-@login_required
-def upload_file():
-    req_file = request.files.get("filedata")
-    picture_data = req_file.stream.read()
-    picture_name = req_file.filename
-    if not req_file.content_type.startswith("image/"):
-        flash(
-            message=f"Expected image/*, got {req_file.content_type}", category="error")
-        return redirect(url_for("main.profile"))
+@router.post("/profile/update/picture", name="main.upload_file")
+def upload_file(asgi_request: Request, filedata: UploadFile | None = File(None),
+                user: User = Depends(ui_current_user)):
+    if not filedata or not filedata.content_type.startswith("image/"):
+        flash(asgi_request,
+              message=f"Expected image/*, got {filedata.content_type if filedata else 'nothing'}",
+              category="error")
+        return _profile_redirect(asgi_request)
+    picture_data = filedata.file.read()
     if not picture_data:
-        flash(message="No picture provided", category="error")
-        return redirect(url_for("main.profile"))
+        flash(asgi_request, message="No picture provided", category="error")
+        return _profile_redirect(asgi_request)
 
     service = UserService()
     filename, filepath = service.save_profile_picture_to_disk(
-        picture_name, picture_data, g.user.username)
-    service.update_profile_picture(filename, filepath)
+        filedata.filename, picture_data, user.username)
+    service.update_profile_picture(filename, filepath, user)
 
-    return redirect(url_for("main.profile"))
+    return _profile_redirect(asgi_request)
 
 
-@bp.route("/profile/update/name", methods=["POST"])
-@login_required
-def update_full_name():
-    new_name = request.values.get("new_name")
+@router.post("/profile/update/name", name="main.update_full_name")
+def update_full_name(asgi_request: Request, new_name: str | None = Form(None),
+                     user: User = Depends(ui_current_user)):
     if not new_name:
-        flash(message="Incorrect new name", category="error")
+        flash(asgi_request, message="Incorrect new name", category="error")
     else:
         service = UserService()
-        service.update_name(g.user, new_name)
-        flash("Successfully changed name!", category="success")
-    return redirect(url_for("main.profile"))
+        service.update_name(user, new_name)
+        flash(asgi_request, "Successfully changed name!", category="success")
+    return _profile_redirect(asgi_request)
 
 
-@bp.route("/profile/update/username", methods=["POST"])
-@login_required
-def update_user_name():
-    new_username = request.values.get("new_username")
+@router.post("/profile/update/username", name="main.update_user_name")
+def update_user_name(asgi_request: Request, new_username: str | None = Form(None),
+                     user: User = Depends(ui_current_user)):
     if not new_username:
-        flash(message="Missing username in payload", category="error")
+        flash(asgi_request, message="Missing username in payload", category="error")
     else:
         service = UserService()
-        service.change_username(g.user, new_username)
-        flash("Successfully changed username!", category="success")
-    return redirect(url_for("main.profile"))
+        service.change_username(user, new_username)
+        flash(asgi_request, "Successfully changed username!", category="success")
+    return _profile_redirect(asgi_request)
 
 
-@bp.route("/profile/update/email", methods=["POST"])
-@login_required
-def update_email():
-    new_email = request.values.get("new_email")
-    if not session.get("original_user") and not g.user.is_admin():
-        flash("Not authorized to change email.")
-        return redirect(url_for("main.profile"))
+@router.post("/profile/update/email", name="main.update_email")
+def update_email(asgi_request: Request, new_email: str | None = Form(None),
+                 user: User = Depends(ui_current_user)):
+    if not asgi_request.session.get("original_user") and not user.is_admin():
+        flash(asgi_request, "Not authorized to change email.")
+        return _profile_redirect(asgi_request)
     if not new_email:
-        flash("Incorrect new email", category="error")
+        flash(asgi_request, "Incorrect new email", category="error")
     else:
         service = UserService()
-        service.update_email(g.user, new_email)
-        flash("Successfully changed email!", category="success")
-    return redirect(url_for("main.profile"))
+        service.update_email(user, new_email)
+        flash(asgi_request, "Successfully changed email!", category="success")
+    return _profile_redirect(asgi_request)
 
 
-@bp.route("/profile/update/password", methods=["POST"])
-@login_required
-def update_password():
-    old_password = request.values.get("old_password")
-    new_password = request.values.get("new_password")
-    new_password_confirm = request.values.get("new_password_confirm")
+@router.post("/profile/update/password", name="main.update_password")
+def update_password(asgi_request: Request, old_password: str | None = Form(None),
+                    new_password: str | None = Form(None),
+                    new_password_confirm: str | None = Form(None),
+                    user: User = Depends(ui_current_user)):
     if not old_password:
-        flash("Old password wasn't provided", category="error")
-        return redirect(url_for("main.profile"))
+        flash(asgi_request, "Old password wasn't provided", category="error")
+        return _profile_redirect(asgi_request)
     if not new_password:
-        flash("New password wasn't provided", category="error")
-        return redirect(url_for("main.profile"))
+        flash(asgi_request, "New password wasn't provided", category="error")
+        return _profile_redirect(asgi_request)
 
     if not new_password == new_password_confirm:
-        flash("New password doesn't match confirmation!", category="error")
-        return redirect(url_for("main.profile"))
+        flash(asgi_request, "New password doesn't match confirmation!", category="error")
+        return _profile_redirect(asgi_request)
 
     service = UserService()
     try:
-        service.update_password(
-            g.user, old_password=old_password, new_password=new_password)
+        service.update_password(user, old_password=old_password, new_password=new_password)
     except Exception:
-        flash("Old password is incorrect", category="error")
-        return redirect(url_for("main.profile"))
+        flash(asgi_request, "Old password is incorrect", category="error")
+        return _profile_redirect(asgi_request)
 
-    flash("Successfully changed password!")
-    return redirect(url_for("main.profile"))
-
-
-@bp.route("/profile/jobs", methods=["GET"])
-@login_required
-def profile_jobs():
-    return render_template("profile_jobs.html.j2")
+    flash(asgi_request, "Successfully changed password!")
+    return _profile_redirect(asgi_request)
 
 
-@bp.route("/profile/schedules", methods=["GET"])
-@login_required
-def profile_schedules():
+@router.get("/profile/jobs", name="main.profile_jobs")
+def profile_jobs(asgi_request: Request, user: User = Depends(ui_current_user)):
+    return render_template(asgi_request, "profile_jobs.html.j2")
+
+
+@router.get("/profile/schedules", name="main.profile_schedules")
+def profile_schedules(asgi_request: Request, user: User = Depends(ui_current_user)):
     service = ArgusService()
-    schedules = service.get_schedules_for_user(g.user)
-    return render_template("profile_schedules.html.j2", schedules=schedules)
+    schedules = service.get_schedules_for_user(user)
+    return render_template(asgi_request, "profile_schedules.html.j2", schedules=schedules)
+
+
+# The routes above are served by FastAPI; these view-less rules keep the
+# endpoints buildable through Flask's url_for until the Flask app is retired.
+bp = Blueprint('main', __name__)
+bp.register_error_handler(UserServiceException, handle_profile_exception)
+bp.register_error_handler(UserViewException, handle_view_not_found)
+bp.register_blueprint(notifications_bp)
+bp.register_blueprint(teams_bp)
+
+for _rule, _endpoint in (
+    ("/test_runs", "test_runs"),
+    ("/test_run/<string:run_id>", "test_run"),
+    ("/test/<string:test_id>/runs", "runs"),
+    ("/tests/<string:plugin_name>/<string:run_id>", "get_run_by_plugin"),
+    ("/test/<path:build_id>/<int:build_number>", "get_run_by_build"),
+    ("/", "home"),
+    ("/workspace", "run_dashboard"),
+    ("/releases", "releases"),
+    ("/views", "views"),
+    ("/view/<string:view_name>", "view_dashboard"),
+    ("/plan/<string:plan_id>", "plan_dashboard"),
+    ("/alert_debug", "alert_debug"),
+    ("/dashboard/<path:release_name>", "release_dashboard"),
+    ("/release/<string:name>/scheduler", "release_scheduler"),
+    ("/release/by-id/<string:id>/planner", "release_planner_by_id"),
+    ("/release/<string:name>/planner", "release_planner"),
+    ("/release/<string:name>/duty", "duty_planner"),
+    ("/error/", "error"),
+    ("/profile/", "profile"),
+    ("/profile/create", "profile_user_create"),
+    ("/profile/oauth/github", "profile_oauth_github_callback"),
+    ("/storage/picture/<string:picture_id>", "get_picture"),
+    ("/profile/update/picture", "upload_file"),
+    ("/profile/update/name", "update_full_name"),
+    ("/profile/update/username", "update_user_name"),
+    ("/profile/update/email", "update_email"),
+    ("/profile/update/password", "update_password"),
+    ("/profile/jobs", "profile_jobs"),
+    ("/profile/schedules", "profile_schedules"),
+):
+    bp.add_url_rule(_rule, _endpoint, None)

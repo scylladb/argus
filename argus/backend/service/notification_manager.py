@@ -1,9 +1,10 @@
 import logging
 from typing import Any
 from uuid import UUID
-from flask import current_app, render_template
+from flask import render_template
 from coodie.exceptions import DocumentNotFound
 
+from argus.backend.util.config import Config
 from argus.backend.models.web import ArgusNotification, ArgusNotificationSourceTypes, ArgusNotificationTypes, ArgusNotificationState, User
 from argus.backend.util.send_email import Email
 
@@ -20,7 +21,7 @@ class NotificationManagerService:
         self.notification_services: list["NotificationSenderBase"] = [
             ArgusDBNotificationSaver(),
         ]
-        if current_app.config.get("EMAIL_ENABLED", True):
+        if Config.load_yaml_config().get("EMAIL_ENABLED", True):
             self.notification_services.append(EmailNotificationServiceSender())
         if notification_senders:
             self.notification_services.extend(notification_senders)
@@ -164,4 +165,4 @@ class EmailNotificationServiceSender(NotificationSenderBase):
                             content=email_content,
                             recipients=[receiver_user.email])
         except Exception as details:
-            current_app.logger.error("Failed to send email: %s", details)
+            LOGGER.error("Failed to send email: %s", details)

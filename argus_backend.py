@@ -24,6 +24,7 @@ from argus.backend.error_handlers import (
 )
 from argus.backend.metrics import build_instrumentator, init_flask_metrics
 from argus.backend.service.user import UserServiceException, cache_ssh_tunnel_server_allowed_endpoints
+from argus.backend.service.views import UserViewException
 from argus.backend.session import FlaskSessionMiddleware
 from argus.backend.template_filters import export_filters
 from argus.backend.util.config import Config
@@ -106,11 +107,13 @@ def create_app() -> FastAPI:
     app.add_exception_handler(RequestValidationError, api_exception_handler)
     app.add_exception_handler(UIRedirect, ui_redirect_handler)
     app.add_exception_handler(UserServiceException, redirecting_exception_handler("main.profile"))
+    app.add_exception_handler(UserViewException, redirecting_exception_handler("main.views"))
     app.add_exception_handler(Exception, api_exception_handler)
 
     # Migrated APIRouters are included here, before the mounts, so they take
     # precedence over the Flask fall-through.
     app.include_router(auth.router)
+    app.include_router(main.router)
 
     app.mount("/s", StaticFiles(directory="public"), name="static")
     # Everything not handled above falls through to Flask.
