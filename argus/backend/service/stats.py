@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from typing import Any, TypedDict
 from uuid import UUID
 
-from flask import current_app
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.github_issue import GithubIssue, IssueLink
@@ -19,6 +18,7 @@ from argus.common.enums import TestStatus, TestInvestigationStatus
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, \
     ArgusTestRunComment, ArgusUserView, ReleaseStatsSnapshot
 from argus.backend.db import ScyllaCluster
+from argus.backend.util.encoders import ArgusJSONProvider
 
 LOGGER = logging.getLogger(__name__)
 
@@ -597,7 +597,7 @@ class ReleaseStatsCollector:
             ReleaseStatsSnapshot.create(
                 release_id=self.release.id,
                 filter_key=filter_key,
-                payload=current_app.json.dumps(result),
+                payload=json.dumps(result, default=ArgusJSONProvider.default),
                 generated_at=datetime.now(UTC),
             )
         except Exception:

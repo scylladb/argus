@@ -67,10 +67,10 @@ def submitted_sct_run(flask_client, fake_test):
 # /users
 # ---------------------------------------------------------------------------
 
-def test_list_users_returns_dict(flask_client, saved_g_user):
-    resp = flask_client.get(f"{API_PREFIX}/users")
-    assert resp.status_code == 200, resp.data
-    body = resp.json
+def test_list_users_returns_dict(api_client, saved_g_user):
+    resp = api_client.get(f"{API_PREFIX}/users")
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
     assert body["status"] == "ok"
     assert isinstance(body["response"], dict)
     assert str(saved_g_user.id) in body["response"]
@@ -82,34 +82,34 @@ def test_list_users_returns_dict(flask_client, saved_g_user):
 # /user/token
 # ---------------------------------------------------------------------------
 
-def test_user_token_is_stable_across_calls(flask_client, saved_g_user):
-    first = flask_client.get(f"{API_PREFIX}/user/token")
-    assert first.status_code == 200, first.data
-    body = first.json
+def test_user_token_is_stable_across_calls(api_client, saved_g_user):
+    first = api_client.get(f"{API_PREFIX}/user/token")
+    assert first.status_code == 200, first.content
+    body = first.json()
     assert body["status"] == "ok"
     token = body["response"]["token"]
     assert isinstance(token, str) and token
 
-    second = flask_client.get(f"{API_PREFIX}/user/token")
-    assert second.json["response"]["token"] == token
+    second = api_client.get(f"{API_PREFIX}/user/token")
+    assert second.json()["response"]["token"] == token
 
 
 # ---------------------------------------------------------------------------
 # /user/jobs and /user/planned_jobs
 # ---------------------------------------------------------------------------
 
-def test_user_jobs_returns_list(flask_client, saved_g_user):
-    resp = flask_client.get(f"{API_PREFIX}/user/jobs")
-    assert resp.status_code == 200, resp.data
-    body = resp.json
+def test_user_jobs_returns_list(api_client, saved_g_user):
+    resp = api_client.get(f"{API_PREFIX}/user/jobs")
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
     assert body["status"] == "ok"
     assert isinstance(body["response"], list)
 
 
-def test_user_planned_jobs_returns_list(flask_client, saved_g_user):
-    resp = flask_client.get(f"{API_PREFIX}/user/planned_jobs")
-    assert resp.status_code == 200, resp.data
-    body = resp.json
+def test_user_planned_jobs_returns_list(api_client, saved_g_user):
+    resp = api_client.get(f"{API_PREFIX}/user/planned_jobs")
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
     assert body["status"] == "ok"
     assert isinstance(body["response"], list)
 
@@ -118,24 +118,24 @@ def test_user_planned_jobs_returns_list(flask_client, saved_g_user):
 # /test_runs/poll and /test_run/poll
 # ---------------------------------------------------------------------------
 
-def test_test_runs_poll_is_removed(flask_client, fake_test, submitted_sct_run):
-    resp = flask_client.get(
+def test_test_runs_poll_is_removed(api_client, fake_test, submitted_sct_run):
+    resp = api_client.get(
         f"{API_PREFIX}/test_runs/poll",
-        query_string={"testId": str(fake_test.id), "limit": 10},
+        params={"testId": str(fake_test.id), "limit": 10},
     )
-    assert resp.status_code == 200, resp.data
-    body = resp.json
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
     assert body["status"] == "error"
     assert body["response"]["exception"] == "APIException"
     assert "removed" in body["response"]["message"]
 
 
-def test_test_run_poll_single_is_removed(flask_client, submitted_sct_run):
-    resp = flask_client.get(
-        f"{API_PREFIX}/test_run/poll", query_string={"runs": submitted_sct_run}
+def test_test_run_poll_single_is_removed(api_client, submitted_sct_run):
+    resp = api_client.get(
+        f"{API_PREFIX}/test_run/poll", params={"runs": submitted_sct_run}
     )
-    assert resp.status_code == 200, resp.data
-    body = resp.json
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
     assert body["status"] == "error"
     assert body["response"]["exception"] == "APIException"
     assert "removed" in body["response"]["message"]
@@ -145,60 +145,60 @@ def test_test_run_poll_single_is_removed(flask_client, submitted_sct_run):
 # /artifact/resolveSize  (S3 + plain-HTTP variants)
 # ---------------------------------------------------------------------------
 
-def test_resolve_artifact_size_non_s3_uses_http_head(flask_client):
+def test_resolve_artifact_size_non_s3_uses_http_head(api_client):
     fake_response = MagicMock(status_code=200, headers={"Content-Length": "4242"})
     with patch("argus.backend.service.testrun.requests.head", return_value=fake_response) as mock_head:
-        resp = flask_client.get(
+        resp = api_client.get(
             f"{API_PREFIX}/artifact/resolveSize",
-            query_string={"l": "http://example.com/some/file.tar.gz"},
+            params={"l": "http://example.com/some/file.tar.gz"},
         )
-    assert resp.status_code == 200, resp.data
-    body = resp.json
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
     assert body["status"] == "ok"
     assert body["response"] == {"artifactSize": 4242}
     mock_head.assert_called_once()
 
 
-def test_resolve_artifact_size_missing_link(flask_client):
-    resp = flask_client.get(f"{API_PREFIX}/artifact/resolveSize")
+def test_resolve_artifact_size_missing_link(api_client):
+    resp = api_client.get(f"{API_PREFIX}/artifact/resolveSize")
     assert resp.status_code == 200
-    assert resp.json["status"] == "error"
+    assert resp.json()["status"] == "error"
 
 
-def test_resolve_artifact_size_http_error(flask_client):
+def test_resolve_artifact_size_http_error(api_client):
     fake_response = MagicMock(status_code=500, headers={})
     with patch("argus.backend.service.testrun.requests.head", return_value=fake_response):
-        resp = flask_client.get(
+        resp = api_client.get(
             f"{API_PREFIX}/artifact/resolveSize",
-            query_string={"l": "http://example.com/missing"},
+            params={"l": "http://example.com/missing"},
         )
     assert resp.status_code == 200
-    assert resp.json["status"] == "error"
+    assert resp.json()["status"] == "error"
 
 
 # ---------------------------------------------------------------------------
 # /zeus/<endpoint>  (error path only — no real Zeus target)
 # ---------------------------------------------------------------------------
 
-def test_zeus_proxy_without_host_errors(flask_client, argus_app):
+def test_zeus_proxy_without_host_errors(api_client, argus_app):
     saved_host = argus_app.config.pop("ZEUS_HOST", None)
     try:
-        resp = flask_client.get(f"{API_PREFIX}/zeus/anything")
+        resp = api_client.get(f"{API_PREFIX}/zeus/anything")
         assert resp.status_code == 200
-        assert resp.json["status"] == "error"
+        assert resp.json()["status"] == "error"
     finally:
         if saved_host is not None:
             argus_app.config["ZEUS_HOST"] = saved_host
 
 
-def test_zeus_proxy_without_token_errors(flask_client, argus_app):
+def test_zeus_proxy_without_token_errors(api_client, argus_app):
     saved_host = argus_app.config.get("ZEUS_HOST")
     saved_token = argus_app.config.pop("ZEUS_TOKEN", None)
     argus_app.config["ZEUS_HOST"] = "localhost:9999"
     try:
-        resp = flask_client.get(f"{API_PREFIX}/zeus/anything")
+        resp = api_client.get(f"{API_PREFIX}/zeus/anything")
         assert resp.status_code == 200
-        assert resp.json["status"] == "error"
+        assert resp.json()["status"] == "error"
     finally:
         if saved_token is not None:
             argus_app.config["ZEUS_TOKEN"] = saved_token
@@ -212,23 +212,23 @@ def test_zeus_proxy_without_token_errors(flask_client, argus_app):
 # /test_run/comment/get  (deprecated, lives in api.py — covers happy + miss)
 # ---------------------------------------------------------------------------
 
-def test_get_test_run_comment_unknown_returns_false(flask_client):
-    resp = flask_client.get(
-        f"{API_PREFIX}/test_run/comment/get", query_string={"commentId": str(uuid.uuid4())}
+def test_get_test_run_comment_unknown_returns_false(api_client):
+    resp = api_client.get(
+        f"{API_PREFIX}/test_run/comment/get", params={"commentId": str(uuid.uuid4())}
     )
-    assert resp.status_code == 200, resp.data
-    body = resp.json
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
     assert body["status"] == "ok"
     assert body["response"] is False
 
 
-def test_get_test_run_comment_missing_id(flask_client):
-    resp = flask_client.get(f"{API_PREFIX}/test_run/comment/get")
+def test_get_test_run_comment_missing_id(api_client):
+    resp = api_client.get(f"{API_PREFIX}/test_run/comment/get")
     assert resp.status_code == 200
-    assert resp.json["status"] == "error"
+    assert resp.json()["status"] == "error"
 
 
-def test_get_test_run_comment_existing_round_trip(flask_client, fake_test, submitted_sct_run, saved_g_user):
+def test_get_test_run_comment_existing_round_trip(flask_client, api_client, fake_test, submitted_sct_run, saved_g_user):
     submit_resp = flask_client.post(
         f"{API_PREFIX}/test/{fake_test.id}/run/{submitted_sct_run}/comments/submit",
         data=json.dumps({"message": "iteration6 comment", "mentions": [], "reactions": {}}),
@@ -242,11 +242,11 @@ def test_get_test_run_comment_existing_round_trip(flask_client, fake_test, submi
     assert comments, list_resp.data
     comment_id = str(comments[0]["id"])
 
-    fetch_resp = flask_client.get(
-        f"{API_PREFIX}/test_run/comment/get", query_string={"commentId": comment_id}
+    fetch_resp = api_client.get(
+        f"{API_PREFIX}/test_run/comment/get", params={"commentId": comment_id}
     )
-    assert fetch_resp.status_code == 200, fetch_resp.data
-    body = fetch_resp.json
+    assert fetch_resp.status_code == 200, fetch_resp.content
+    body = fetch_resp.json()
     assert body["status"] == "ok"
     assert str(body["response"]["id"]) == comment_id
     assert body["response"]["message"] == "iteration6 comment"

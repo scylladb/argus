@@ -65,8 +65,8 @@ def get_run_by_plugin(asgi_request: Request, plugin_name: str, run_id: str, tab:
     return render_template(asgi_request, "run_view_by_plugin.html.j2", run=run, tab=tab)
 
 
-@router.get("/test/{build_id:path}/{build_number}/{tab}", name="main.get_run_by_build")
-@router.get("/test/{build_id:path}/{build_number}", name="main.get_run_by_build")
+@router.get("/test/{build_id:path}/{build_number:int}/{tab}", name="main.get_run_by_build")
+@router.get("/test/{build_id:path}/{build_number:int}", name="main.get_run_by_build")
 def get_run_by_build(asgi_request: Request, build_id: str, build_number: int, tab: str = "details",
                      user: User = Depends(ui_current_user)):
     # Resolve a run from its build_system_id + Jenkins build number. This gives

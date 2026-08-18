@@ -457,12 +457,12 @@ def test_get_authorized_keys_unauthenticated(argus_db, active_config, argus_app)
 
 
 @pytest.mark.docker_required
-def test_ssh_tunnel_server_role_cannot_call_other_api(flask_client: FlaskClient, argus_db, ssh_tunnel_server_identity):
+def test_ssh_tunnel_server_role_cannot_call_other_api(api_client, argus_db, ssh_tunnel_server_identity):
     """ROLE_SSH_TUNNEL_SERVER should be hard-scoped to GET /client/ssh/keys only."""
-    resp = flask_client.get("/api/v1/releases")
+    resp = api_client.get("/api/v1/releases")
     assert resp.status_code == 403
-    assert resp.json["status"] == "error"
-    assert resp.json["message"] == "Authorization required"
+    assert resp.json()["status"] == "error"
+    assert resp.json()["message"] == "Authorization required"
 
 
 # ---------------------------------------------------------------------------

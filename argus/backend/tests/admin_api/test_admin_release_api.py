@@ -41,7 +41,7 @@ def admin_release(flask_client):
 # /release/create
 # ---------------------------------------------------------------------------
 
-def test_admin_create_release_round_trip(flask_client):
+def test_admin_create_release_round_trip(flask_client, api_client):
     name = f"create_release_{time.time_ns()}"
     payload = {"release_name": name,
                "pretty_name": "Pretty Name", "perpetual": True}
@@ -54,9 +54,9 @@ def test_admin_create_release_round_trip(flask_client):
     assert new_release["pretty_name"] == "Pretty Name"
     assert new_release["perpetual"] is True
 
-    resp = flask_client.get(f"{API_PREFIX}/release/{new_release['id']}/details")
+    resp = api_client.get(f"{API_PREFIX}/release/{new_release['id']}/details")
     assert resp.status_code == 200
-    body = resp.json
+    body = resp.json()
     assert body["status"] == "ok"
     assert body["response"]["name"] == name
     assert body["response"]["perpetual"] is True
@@ -77,16 +77,16 @@ def test_admin_create_release_duplicate_errors(flask_client, admin_release):
 # /release/set_perpetual, /release/set_state, /release/set_dormant
 # ---------------------------------------------------------------------------
 
-def test_admin_set_release_perpetual(flask_client, admin_release):
+def test_admin_set_release_perpetual(flask_client, admin_release, api_client):
     payload = {"release_id": admin_release["id"], "perpetual": True}
     resp = client_post(flask_client, f"{ADMIN_PREFIX}/release/set_perpetual", payload)
     assert resp.status_code == 200, resp.data
     assert resp.json["status"] == "ok"
 
-    resp = flask_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details")
+    resp = api_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details")
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
-    assert resp.json["response"]["perpetual"] is True
+    assert resp.json()["status"] == "ok"
+    assert resp.json()["response"]["perpetual"] is True
 
     resp = client_post(
         flask_client,
@@ -95,41 +95,41 @@ def test_admin_set_release_perpetual(flask_client, admin_release):
     )
     assert resp.json["status"] == "ok"
 
-    resp = flask_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details")
+    resp = api_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details")
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
-    assert resp.json["response"]["perpetual"] is False
+    assert resp.json()["status"] == "ok"
+    assert resp.json()["response"]["perpetual"] is False
 
 
-def test_admin_set_release_state(flask_client, admin_release):
+def test_admin_set_release_state(flask_client, admin_release, api_client):
     payload = {"release_id": admin_release["id"], "state": False}
     resp = client_post(flask_client, f"{ADMIN_PREFIX}/release/set_state", payload)
     assert resp.status_code == 200, resp.data
     assert resp.json["status"] == "ok"
 
-    resp = flask_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details")
+    resp = api_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details")
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
-    assert resp.json["response"]["enabled"] is False
+    assert resp.json()["status"] == "ok"
+    assert resp.json()["response"]["enabled"] is False
 
 
-def test_admin_set_release_dormant(flask_client, admin_release):
+def test_admin_set_release_dormant(flask_client, admin_release, api_client):
     payload = {"release_id": admin_release["id"], "dormant": True}
     resp = client_post(flask_client, f"{ADMIN_PREFIX}/release/set_dormant", payload)
     assert resp.status_code == 200, resp.data
     assert resp.json["status"] == "ok"
 
-    resp = flask_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details")
+    resp = api_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details")
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
-    assert resp.json["response"]["dormant"] is True
+    assert resp.json()["status"] == "ok"
+    assert resp.json()["response"]["dormant"] is True
 
 
 # ---------------------------------------------------------------------------
 # /release/edit
 # ---------------------------------------------------------------------------
 
-def test_admin_edit_release(flask_client, admin_release):
+def test_admin_edit_release(flask_client, admin_release, api_client):
     payload = {
         "id": admin_release["id"],
         "pretty_name": "edited-pretty",
@@ -145,9 +145,9 @@ def test_admin_edit_release(flask_client, admin_release):
     assert body["status"] == "ok"
     assert body["response"]["updated"] is True
 
-    resp = flask_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details")
+    resp = api_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details")
     assert resp.status_code == 200
-    body = resp.json
+    body = resp.json()
     assert body["status"] == "ok"
     assert body["response"]["pretty_name"] == "edited-pretty"
     assert body["response"]["description"] == "edited-desc"
@@ -172,7 +172,7 @@ def test_admin_edit_release_unknown_id_errors(flask_client):
 # /release/delete
 # ---------------------------------------------------------------------------
 
-def test_admin_delete_release(flask_client, admin_release):
+def test_admin_delete_release(flask_client, admin_release, api_client):
     resp = client_post(flask_client, f"{ADMIN_PREFIX}/release/delete",
                        {"releaseId": admin_release["id"]})
     assert resp.status_code == 200, resp.data
@@ -181,9 +181,9 @@ def test_admin_delete_release(flask_client, admin_release):
     assert body["response"]["deleted"] is True
 
     # Verify gone via details endpoint (raises DoesNotExist → error envelope)
-    miss = flask_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details")
+    miss = api_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details")
     assert miss.status_code == 200
-    assert miss.json["status"] == "error"
+    assert miss.json()["status"] == "error"
 
 
 def test_admin_delete_release_unknown_id_errors(flask_client):
