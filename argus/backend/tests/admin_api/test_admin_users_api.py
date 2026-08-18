@@ -52,10 +52,10 @@ def regular_user():
 # /users (privileged listing)
 # ---------------------------------------------------------------------------
 
-def test_admin_users_returns_dict_without_password(flask_client, regular_user):
-    resp = flask_client.get(f"{ADMIN_PREFIX}/users")
-    assert resp.status_code == 200, resp.data
-    body = resp.json
+def test_admin_users_returns_dict_without_password(api_client, regular_user):
+    resp = api_client.get(f"{ADMIN_PREFIX}/users")
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
     assert body["status"] == "ok"
     assert isinstance(body["response"], dict)
     assert str(regular_user.id) in body["response"]
@@ -70,146 +70,146 @@ def test_admin_users_returns_dict_without_password(flask_client, regular_user):
 # /user/<id>/email/set
 # ---------------------------------------------------------------------------
 
-def test_admin_user_change_email(flask_client, regular_user):
+def test_admin_user_change_email(api_client, regular_user):
     new_email = f"new_{uuid.uuid4().hex[:8]}@scylladb.com"
     resp = client_post(
-        flask_client,
+        api_client,
         f"{ADMIN_PREFIX}/user/{regular_user.id}/email/set",
         {"newEmail": new_email},
     )
-    assert resp.status_code == 200, resp.data
-    body = resp.json
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
     assert body["status"] == "ok"
     assert body["response"] is True
 
-    resp = flask_client.get(f"{ADMIN_PREFIX}/users")
+    resp = api_client.get(f"{ADMIN_PREFIX}/users")
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
-    assert resp.json["response"][str(regular_user.id)]["email"] == new_email
+    assert resp.json()["status"] == "ok"
+    assert resp.json()["response"][str(regular_user.id)]["email"] == new_email
 
 
-def test_admin_user_change_email_invalid_format_errors(flask_client, regular_user):
+def test_admin_user_change_email_invalid_format_errors(api_client, regular_user):
     resp = client_post(
-        flask_client,
+        api_client,
         f"{ADMIN_PREFIX}/user/{regular_user.id}/email/set",
         {"newEmail": "not-a-valid-email"},
     )
     assert resp.status_code == 200
-    assert resp.json["status"] == "error"
+    assert resp.json()["status"] == "error"
 
 
-def test_admin_user_change_email_duplicate_errors(flask_client, regular_user, saved_g_user):
+def test_admin_user_change_email_duplicate_errors(api_client, regular_user, saved_g_user):
     resp = client_post(
-        flask_client,
+        api_client,
         f"{ADMIN_PREFIX}/user/{regular_user.id}/email/set",
         {"newEmail": saved_g_user.email},
     )
     assert resp.status_code == 200
-    assert resp.json["status"] == "error"
+    assert resp.json()["status"] == "error"
 
 
 # ---------------------------------------------------------------------------
 # /user/<id>/password/set
 # ---------------------------------------------------------------------------
 
-def test_admin_user_change_password(flask_client, regular_user):
+def test_admin_user_change_password(api_client, regular_user):
     resp = client_post(
-        flask_client,
+        api_client,
         f"{ADMIN_PREFIX}/user/{regular_user.id}/password/set",
         {"newPassword": "newSecret123"},
     )
-    assert resp.status_code == 200, resp.data
-    body = resp.json
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
     assert body["status"] == "ok"
     assert body["response"] is True
 
 
-def test_admin_user_change_password_too_short_errors(flask_client, regular_user):
+def test_admin_user_change_password_too_short_errors(api_client, regular_user):
     resp = client_post(
-        flask_client,
+        api_client,
         f"{ADMIN_PREFIX}/user/{regular_user.id}/password/set",
         {"newPassword": "abc"},
     )
     assert resp.status_code == 200
-    assert resp.json["status"] == "error"
+    assert resp.json()["status"] == "error"
 
 
-def test_admin_user_change_password_empty_errors(flask_client, regular_user):
+def test_admin_user_change_password_empty_errors(api_client, regular_user):
     resp = client_post(
-        flask_client,
+        api_client,
         f"{ADMIN_PREFIX}/user/{regular_user.id}/password/set",
         {"newPassword": ""},
     )
     assert resp.status_code == 200
-    assert resp.json["status"] == "error"
+    assert resp.json()["status"] == "error"
 
 
 # ---------------------------------------------------------------------------
 # /user/<id>/admin/toggle
 # ---------------------------------------------------------------------------
 
-def test_admin_toggle_admin_grants_then_revokes(flask_client, regular_user):
-    resp = client_post(flask_client, f"{ADMIN_PREFIX}/user/{regular_user.id}/admin/toggle")
-    assert resp.status_code == 200, resp.data
-    assert resp.json["status"] == "ok"
+def test_admin_toggle_admin_grants_then_revokes(api_client, regular_user):
+    resp = client_post(api_client, f"{ADMIN_PREFIX}/user/{regular_user.id}/admin/toggle")
+    assert resp.status_code == 200, resp.content
+    assert resp.json()["status"] == "ok"
 
-    resp = flask_client.get(f"{ADMIN_PREFIX}/users")
+    resp = api_client.get(f"{ADMIN_PREFIX}/users")
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
-    assert UserRoles.Admin.value in resp.json["response"][str(regular_user.id)]["roles"]
+    assert resp.json()["status"] == "ok"
+    assert UserRoles.Admin.value in resp.json()["response"][str(regular_user.id)]["roles"]
 
-    resp = client_post(flask_client, f"{ADMIN_PREFIX}/user/{regular_user.id}/admin/toggle")
-    assert resp.status_code == 200, resp.data
-    assert resp.json["status"] == "ok"
+    resp = client_post(api_client, f"{ADMIN_PREFIX}/user/{regular_user.id}/admin/toggle")
+    assert resp.status_code == 200, resp.content
+    assert resp.json()["status"] == "ok"
 
-    resp = flask_client.get(f"{ADMIN_PREFIX}/users")
+    resp = api_client.get(f"{ADMIN_PREFIX}/users")
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
-    assert UserRoles.Admin.value not in resp.json["response"][str(regular_user.id)]["roles"]
+    assert resp.json()["status"] == "ok"
+    assert UserRoles.Admin.value not in resp.json()["response"][str(regular_user.id)]["roles"]
 
 
-def test_admin_toggle_admin_self_forbidden(flask_client, saved_g_user):
-    resp = client_post(flask_client, f"{ADMIN_PREFIX}/user/{saved_g_user.id}/admin/toggle")
+def test_admin_toggle_admin_self_forbidden(api_client, saved_g_user):
+    resp = client_post(api_client, f"{ADMIN_PREFIX}/user/{saved_g_user.id}/admin/toggle")
     assert resp.status_code == 200
-    assert resp.json["status"] == "error"
+    assert resp.json()["status"] == "error"
 
 
 # ---------------------------------------------------------------------------
 # /user/<id>/delete
 # ---------------------------------------------------------------------------
 
-def test_admin_delete_user(flask_client, regular_user):
+def test_admin_delete_user(api_client, regular_user):
     resp = client_post(
-        flask_client, f"{ADMIN_PREFIX}/user/{regular_user.id}/delete")
-    assert resp.status_code == 200, resp.data
-    body = resp.json
+        api_client, f"{ADMIN_PREFIX}/user/{regular_user.id}/delete")
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
     assert body["status"] == "ok"
     assert body["response"] is True
 
-    resp = flask_client.get(f"{ADMIN_PREFIX}/users")
+    resp = api_client.get(f"{ADMIN_PREFIX}/users")
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
-    assert str(regular_user.id) not in resp.json["response"]
+    assert resp.json()["status"] == "ok"
+    assert str(regular_user.id) not in resp.json()["response"]
 
 
-def test_admin_delete_user_self_forbidden(flask_client, saved_g_user):
+def test_admin_delete_user_self_forbidden(api_client, saved_g_user):
     resp = client_post(
-        flask_client, f"{ADMIN_PREFIX}/user/{saved_g_user.id}/delete")
+        api_client, f"{ADMIN_PREFIX}/user/{saved_g_user.id}/delete")
     assert resp.status_code == 200
-    assert resp.json["status"] == "error"
+    assert resp.json()["status"] == "error"
 
 
-def test_admin_delete_admin_user_forbidden(flask_client, regular_user):
+def test_admin_delete_admin_user_forbidden(api_client, regular_user):
     # Promote, then try to delete — must error per service rule.
-    client_post(flask_client, f"{ADMIN_PREFIX}/user/{regular_user.id}/admin/toggle")
+    client_post(api_client, f"{ADMIN_PREFIX}/user/{regular_user.id}/admin/toggle")
     resp = client_post(
-        flask_client, f"{ADMIN_PREFIX}/user/{regular_user.id}/delete")
+        api_client, f"{ADMIN_PREFIX}/user/{regular_user.id}/delete")
     assert resp.status_code == 200
-    assert resp.json["status"] == "error"
+    assert resp.json()["status"] == "error"
 
 
-def test_admin_delete_user_unknown_id_errors(flask_client):
+def test_admin_delete_user_unknown_id_errors(api_client):
     resp = client_post(
-        flask_client, f"{ADMIN_PREFIX}/user/{uuid.uuid4()}/delete")
+        api_client, f"{ADMIN_PREFIX}/user/{uuid.uuid4()}/delete")
     assert resp.status_code == 200
-    assert resp.json["status"] == "error"
+    assert resp.json()["status"] == "error"

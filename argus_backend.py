@@ -115,6 +115,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(main.router)
     app.include_router(api.router)
+    app.include_router(admin.router)
 
     app.mount("/s", StaticFiles(directory="public"), name="static")
     # Everything not handled above falls through to Flask.

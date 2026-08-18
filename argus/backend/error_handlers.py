@@ -45,9 +45,15 @@ def ui_redirect_handler(asgi_request: Request, exc: UIRedirect) -> RedirectRespo
 
 def redirecting_exception_handler(endpoint: str):
     """FastAPI counterpart of handle_profile_exception/handle_view_not_found:
-    flash the exception message and redirect to *endpoint*."""
+    flash the exception message and redirect to *endpoint*.
 
-    def handler(asgi_request: Request, exc: Exception) -> RedirectResponse:
+    Flask registered these handlers on the UI blueprints only, while the API
+    blueprints kept the JSON contract — mirror that split by path: API routes
+    get the api_exception_handler response instead of a redirect."""
+
+    async def handler(asgi_request: Request, exc: Exception):
+        if asgi_request.url.path.startswith(("/api/", "/admin/api/")):
+            return await api_exception_handler(asgi_request, exc)
         asgi_flash(asgi_request, " ".join(str(arg) for arg in exc.args), category="error")
         return RedirectResponse(asgi_url_for(asgi_request, endpoint), status_code=302)
 
