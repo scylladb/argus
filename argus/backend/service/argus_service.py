@@ -7,10 +7,10 @@ import datetime
 from types import NoneType
 from uuid import UUID
 from cassandra.util import uuid_from_time
-from flask import current_app
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.db import ScyllaCluster
+from argus.backend.util.config import Config
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS, all_plugin_models
@@ -319,7 +319,7 @@ class ArgusService:
 
     def get_jobs_for_user(self, user: User):
         today = datetime.datetime.now()
-        validity_period = today - datetime.timedelta(days=current_app.config.get("JOB_VALIDITY_PERIOD_DAYS", 30))
+        validity_period = today - datetime.timedelta(days=Config.load_yaml_config().get("JOB_VALIDITY_PERIOD_DAYS", 30))
         for plugin in all_plugin_models():
             for run in plugin.get_jobs_assigned_to_user(user_id=user.id):
                 if run["start_time"] >= validity_period:

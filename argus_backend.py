@@ -114,6 +114,7 @@ def create_app() -> FastAPI:
     # precedence over the Flask fall-through.
     app.include_router(auth.router)
     app.include_router(main.router)
+    app.include_router(api.router)
 
     app.mount("/s", StaticFiles(directory="public"), name="static")
     # Everything not handled above falls through to Flask.
