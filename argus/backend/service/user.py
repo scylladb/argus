@@ -1,3 +1,4 @@
+from collections.abc import Mapping, MutableMapping
 from datetime import UTC, datetime
 import functools
 import hashlib
@@ -19,7 +20,7 @@ import jwt
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from argus.backend.db import ScyllaCluster
-from argus.backend.error_handlers import APIException, AuthorizationError
+from argus.backend.error_handlers import APIException, AuthorizationError, UIRedirect
 from argus.backend.models.web import User, UserOauthToken, UserRoles, WebFileStorage
 from argus.backend.util.common import FlaskView, gen_pass
 
@@ -155,12 +156,10 @@ class UserService:
             }
         return None
 
-    def cf_login_or_register(self):
-        cf_access_jwt = request.headers.get("Cf-Access-Jwt-Assertion")
-
-        if cf_access_jwt and "cf" in current_app.config.get("LOGIN_METHODS", []):
+    def cf_login_or_register(self, cf_access_jwt: str | None, session: MutableMapping, config: Mapping):
+        if cf_access_jwt and "cf" in config.get("LOGIN_METHODS", []):
             try:
-                res = _get_user_from_cf_access(cf_access_jwt)
+                res = _get_user_from_cf_access(cf_access_jwt, config)
             except UserServiceException as exc:
                 session["manual_logout"] = True
                 raise exc
@@ -210,22 +209,23 @@ class UserService:
 
         return users
 
-    def set_user_impersonation(self, user_id: str):
+    def set_user_impersonation(self, user_id: str, session: MutableMapping, current_user: User) -> User:
         if session.get("original_user"):
             raise UserServiceException("Cannot impersonate while already impersonating a user.")
 
         user = User.get(id=UUID(user_id))
-        session["original_user"] = str(g.user.id)
-        g.user = user
+        session["original_user"] = str(current_user.id)
         session["user_id"] = str(user.id)
+        return user
 
-    def stop_user_impersonation(self):
+    def stop_user_impersonation(self, session: MutableMapping) -> User:
         if not session.get("original_user"):
             raise UserServiceException("No impersonation in progress.")
 
         user_id = session.pop("original_user")
-        g.user = User.get(id=UUID(user_id))
-        session["user_id"] = str(g.user.id)
+        user = User.get(id=UUID(user_id))
+        session["user_id"] = str(user.id)
+        return user
 
     def generate_token(self, user: User):
         token_digest = f"{user.username}-{int(time())}-{base64.encodebytes(os.urandom(128)).decode(encoding='utf-8')}"
@@ -526,6 +526,31 @@ def require_roles(needed_roles: list[UserRoles] | UserRoles):
     return dependency
 
 
+def ui_current_user(asgi_request: Request, user: User | None = Depends(load_user)) -> User:
+    """FastAPI counterpart of @login_required for UI pages: anonymous users
+    are flash-redirected to the login page with the original target saved."""
+    if user is None:
+        target = asgi_request.url.path
+        if asgi_request.url.query:
+            target = f"{target}?{asgi_request.url.query}"
+        asgi_request.session["redirect_target"] = target
+        raise UIRedirect("auth.login", flash_message=("error", "Unauthorized, please login"))
+    if is_ssh_tunnel_server_user(user) and not is_ssh_tunnel_server_asgi_request_allowed(asgi_request):
+        raise UIRedirect("main.home", flash_message=("error", "Not authorized to access this area"))
+    return user
+
+
+def ui_require_roles(needed_roles: list[UserRoles] | UserRoles):
+    """FastAPI counterpart of @check_roles for UI pages."""
+
+    def dependency(user: User = Depends(ui_current_user)) -> User:
+        if not UserService.check_roles(needed_roles, user):
+            raise UIRedirect("main.home", flash_message=("error", "Not authorized to access this area"))
+        return user
+
+    return dependency
+
+
 def is_ssh_tunnel_server_user(user: User | None) -> bool:
     if not user:
         return False
@@ -565,14 +590,14 @@ def is_scoped_ssh_tunnel_server_blocked(user: User | None) -> bool:
     return is_ssh_tunnel_server_user(user) and not is_ssh_tunnel_server_request_allowed()
 
 
-def _get_cf_access_payload(token: str) -> dict | None:
-    cf_domain = current_app.config.get("CLOUDFLARE_ACCESS_TEAM_DOMAIN")
-    cf_aud = current_app.config.get("CLOUDFLARE_ACCESS_AUD")
+def _get_cf_access_payload(token: str, config: Mapping) -> dict | None:
+    cf_domain = config.get("CLOUDFLARE_ACCESS_TEAM_DOMAIN")
+    cf_aud = config.get("CLOUDFLARE_ACCESS_AUD")
     if not cf_domain or not cf_aud:
         LOGGER.warning("Cloudflare Access config missing: domain or audience")
         raise UserServiceException("Cloudflare Access config missing: domain or audience")
 
-    jwk_client = current_app.config.get("CLOUDFLARE_ACCESS_JWK_CLIENT")
+    jwk_client = config.get("CLOUDFLARE_ACCESS_JWK_CLIENT")
     if not jwk_client:
         LOGGER.warning("Cloudflare Access JWK client is not configured")
         raise UserServiceException("Cloudflare Access JWK client is not configured")
@@ -596,8 +621,8 @@ def _get_cf_access_payload(token: str) -> dict | None:
     return payload
 
 
-def _get_user_from_cf_access(token: str) -> dict:
-    payload = _get_cf_access_payload(token)
+def _get_user_from_cf_access(token: str, config: Mapping) -> dict:
+    payload = _get_cf_access_payload(token, config)
     if not payload:
         raise UserServiceException("Invalid Cloudflare Access Payload")
     email = payload.get("email")

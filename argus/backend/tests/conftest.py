@@ -31,6 +31,7 @@ from argus.backend.service.issue_service import IssueService
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.views_widgets.pytest import PytestViewService
 from argus.backend.service.user import load_user
+from flask.sessions import SecureCookieSessionInterface
 from argus.backend.util.config import Config
 
 
@@ -238,6 +239,45 @@ def api_client(asgi_app, logged_in_user):
     asgi_app.dependency_overrides[load_user] = _logged_in_user_override
     yield TestClient(asgi_app, raise_server_exceptions=False)
     asgi_app.dependency_overrides.pop(load_user, None)
+
+
+@fixture
+def anon_client(asgi_app):
+    """TestClient without dependency overrides — exercises real auth.
+
+    api_client's session-scoped load_user override lives on the shared app
+    object, so it is stashed away for the duration of the test.
+    """
+    saved = dict(asgi_app.dependency_overrides)
+    asgi_app.dependency_overrides.clear()
+    yield TestClient(asgi_app, raise_server_exceptions=False)
+    asgi_app.dependency_overrides.update(saved)
+
+
+@fixture(scope='session')
+def session_serializer(argus_app):
+    """The Flask session-cookie serializer — mint and read session cookies
+    for TestClient-based tests (the ASGI counterpart of session_transaction)."""
+    return SecureCookieSessionInterface().get_signing_serializer(argus_app)
+
+
+@fixture
+def make_session_cookie(session_serializer):
+    def make(**values) -> str:
+        return session_serializer.dumps(dict(values))
+    return make
+
+
+@fixture
+def read_session(session_serializer):
+    def read(client) -> dict:
+        jar_cookies = [c for c in client.cookies.jar if c.name == "session"]
+        if not jar_cookies:
+            return {}
+        # prefer the host cookie the server set over a test-minted one
+        cookie = next((c for c in jar_cookies if c.domain == "testserver"), jar_cookies[-1])
+        return dict(session_serializer.loads(cookie.value))
+    return read
 
 
 @fixture(scope='session')

@@ -1,4 +1,5 @@
 import logging
+from copy import deepcopy
 
 from flask import Flask
 from flask.sessions import SecureCookieSessionInterface
@@ -49,7 +50,9 @@ class FlaskSessionMiddleware:
             return
 
         initial = self._load(scope)
-        scope["session"] = dict(initial)
+        # deep copy: nested mutations (e.g. appending to the flash list) must
+        # be visible in the comparison below or the cookie is never rewritten
+        scope["session"] = deepcopy(initial)
 
         async def send_wrapper(message):
             if message["type"] == "http.response.start" and scope["session"] != initial:
