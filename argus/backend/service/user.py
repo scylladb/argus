@@ -11,6 +11,7 @@ from time import time
 from hashlib import sha384
 
 from coodie.exceptions import DocumentNotFound
+from fastapi import Depends, Request
 from flask import current_app, flash, g, redirect, request, session, url_for
 import magic
 import requests
@@ -18,7 +19,7 @@ import jwt
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from argus.backend.db import ScyllaCluster
-from argus.backend.error_handlers import APIException
+from argus.backend.error_handlers import APIException, AuthorizationError
 from argus.backend.models.web import User, UserOauthToken, UserRoles, WebFileStorage
 from argus.backend.util.common import FlaskView, gen_pass
 
@@ -479,6 +480,52 @@ def load_logged_in_user():
     g.user = None
 
 
+def load_user(asgi_request: Request) -> User | None:
+    """FastAPI counterpart of load_logged_in_user: resolves the request's
+    user in the same order (token header, session user_id, anonymous) and
+    sets request.state.user as a side effect."""
+    user = None
+    auth_header = asgi_request.headers.get("Authorization")
+    if auth_header:
+        try:
+            auth_schema, *auth_data = auth_header.split()
+            if auth_schema == "token":
+                user = User.get(api_token=auth_data[0])
+        except IndexError as exception:
+            raise APIException("Malformed authorization header") from exception
+        except DocumentNotFound as exception:
+            raise APIException("User not found for supplied token") from exception
+
+    if not user and (user_id := asgi_request.session.get("user_id")):
+        try:
+            user = User.get(id=UUID(user_id))
+        except DocumentNotFound:
+            asgi_request.session.clear()
+
+    asgi_request.state.user = user
+    return user
+
+
+def api_current_user(asgi_request: Request, user: User | None = Depends(load_user)) -> User:
+    """FastAPI counterpart of @api_login_required."""
+    if user is None:
+        raise AuthorizationError("Authorization required")
+    if is_ssh_tunnel_server_user(user) and not is_ssh_tunnel_server_asgi_request_allowed(asgi_request):
+        raise AuthorizationError("Authorization required")
+    return user
+
+
+def require_roles(needed_roles: list[UserRoles] | UserRoles):
+    """FastAPI counterpart of @check_roles for API views."""
+
+    def dependency(user: User = Depends(api_current_user)) -> User:
+        if not UserService.check_roles(needed_roles, user):
+            raise AuthorizationError("Forbidden")
+        return user
+
+    return dependency
+
+
 def is_ssh_tunnel_server_user(user: User | None) -> bool:
     if not user:
         return False
@@ -493,6 +540,14 @@ def is_ssh_tunnel_server_request_allowed() -> bool:
     allowed_endpoint_methods = current_app.extensions.get(SSH_TUNNEL_SERVER_ALLOWED_ENDPOINTS_KEY, set())
 
     return (endpoint, request.method) in allowed_endpoint_methods
+
+
+def is_ssh_tunnel_server_asgi_request_allowed(asgi_request: Request) -> bool:
+    """ASGI counterpart of is_ssh_tunnel_server_request_allowed: FastAPI
+    routes opt in with the same @allow_ssh_tunnel_server_scope marker
+    instead of the url_map scan."""
+    endpoint = asgi_request.scope.get("endpoint")
+    return bool(getattr(endpoint, "allow_ssh_tunnel_server_scope", False))
 
 
 def cache_ssh_tunnel_server_allowed_endpoints(app):

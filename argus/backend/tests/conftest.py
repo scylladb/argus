@@ -9,6 +9,8 @@ from argus.backend.db import ScyllaCluster
 from argus.backend.cli import sync_models
 from docker.errors import NotFound
 from _pytest.fixtures import fixture
+from fastapi import Request as FastAPIRequest
+from starlette.testclient import TestClient
 import os
 from pathlib import Path
 import time
@@ -28,6 +30,7 @@ from argus.backend.plugins.sct.service import SCTService
 from argus.backend.service.issue_service import IssueService
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.views_widgets.pytest import PytestViewService
+from argus.backend.service.user import load_user
 from argus.backend.util.config import Config
 
 
@@ -185,12 +188,13 @@ def argus_db():
 
 
 @fixture(scope='session')
-def argus_app():
+def asgi_app(argus_db):
+    """The combined FastAPI+Flask app, built once for the whole session."""
     with patch('argus.backend.service.user.load_logged_in_user') as mock_load:
         # Make the function do nothing so test can override user
         mock_load.return_value = None
-        from argus_backend import argus_app
-        yield argus_app
+        import argus_backend
+        yield argus_backend.create_app()
 
 
 @fixture(scope='session')
@@ -213,25 +217,27 @@ def flask_client(argus_app: Flask) -> FlaskClient:
 
 
 @fixture(scope='session')
-def api_client(argus_app, logged_in_user):
+def argus_app(asgi_app) -> Flask:
+    """The Flask app wrapped by the ASGI app — the same instance the
+    fall-through serves."""
+    return asgi_app.state.flask_app
+
+
+@fixture(scope='session')
+def api_client(asgi_app, logged_in_user):
     """TestClient over the combined FastAPI+Flask app, logged in as logged_in_user.
 
     Migrated (FastAPI-served) routes authenticate through the load_user
     dependency override below; not-yet-migrated Flask routes should keep
     using flask_client (their auth relies on the ambient app context).
     """
-    from starlette.testclient import TestClient
-    from fastapi import Request
-    import argus_asgi
-    from argus.backend.asgi.auth import load_user
-
-    def _logged_in_user_override(request: Request) -> User:
+    def _logged_in_user_override(request: FastAPIRequest) -> User:
         request.state.user = logged_in_user
         return logged_in_user
 
-    argus_asgi.app.dependency_overrides[load_user] = _logged_in_user_override
-    yield TestClient(argus_asgi.app, raise_server_exceptions=False)
-    argus_asgi.app.dependency_overrides.pop(load_user, None)
+    asgi_app.dependency_overrides[load_user] = _logged_in_user_override
+    yield TestClient(asgi_app, raise_server_exceptions=False)
+    asgi_app.dependency_overrides.pop(load_user, None)
 
 
 @fixture(scope='session')

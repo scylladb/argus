@@ -293,9 +293,8 @@ def test_register_tunnel_invalid_public_key(flask_client: FlaskClient, argus_db,
 
 
 @pytest.mark.docker_required
-def test_register_tunnel_unauthenticated(argus_db, active_config):
+def test_register_tunnel_unauthenticated(argus_db, active_config, argus_app):
     """Requests without a valid auth token should be rejected with 403."""
-    from argus_backend import argus_app
 
     previous_user = g.user
     try:
@@ -443,9 +442,8 @@ def test_get_authorized_keys_empty_when_no_keys(flask_client: FlaskClient, argus
 
 
 @pytest.mark.docker_required
-def test_get_authorized_keys_unauthenticated(argus_db, active_config):
+def test_get_authorized_keys_unauthenticated(argus_db, active_config, argus_app):
     """GET /ssh/keys without auth should return 403."""
-    from argus_backend import argus_app
 
     previous_user = g.user
     try:

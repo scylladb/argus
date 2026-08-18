@@ -1,16 +1,3 @@
-"""Flask-compatible session support for the FastAPI side of the strangler.
-
-During the migration both frameworks serve routes in the same browsing
-session, so they must share one session cookie. This middleware reuses
-Flask's own SecureCookieSessionInterface serializer (same SECRET_KEY, salt
-and payload format), making the cookie byte-compatible in both directions:
-sessions created by the Flask login flow are readable here, and vice versa.
-
-The session dict is exposed as ``request.scope["session"]`` / Starlette's
-``request.session``. The cookie is only (re)written when a handler actually
-mutates the session, so requests that fall through to the Flask mount keep
-Flask in charge of its own cookie handling.
-"""
 import logging
 
 from flask import Flask

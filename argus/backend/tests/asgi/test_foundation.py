@@ -11,9 +11,8 @@ from flask.sessions import SecureCookieSessionInterface
 from pytest import fixture
 from starlette.testclient import TestClient
 
-from argus.backend.asgi import include_router_before_fallback
-from argus.backend.asgi.auth import api_current_user, load_user, require_roles
 from argus.backend.error_handlers import APIException
+from argus.backend.service.user import api_current_user, require_roles
 from argus.backend.models.web import User, UserRoles
 
 probe = APIRouter(prefix="/asgi-probe")
@@ -41,27 +40,25 @@ def probe_session_write(request: Request):
 
 
 @fixture(scope="module", autouse=True)
-def probe_routes(argus_app):
-    import argus_asgi
-    include_router_before_fallback(argus_asgi.app, probe)
+def probe_routes(asgi_app, include_router_before_fallback):
+    include_router_before_fallback(asgi_app, probe)
     yield
-    argus_asgi.app.router.routes = [
-        route for route in argus_asgi.app.routes if not getattr(route, "path", "").startswith("/asgi-probe")
+    asgi_app.router.routes = [
+        route for route in asgi_app.routes if not getattr(route, "path", "").startswith("/asgi-probe")
     ]
 
 
 @fixture
-def raw_client(argus_app):
+def raw_client(asgi_app):
     """TestClient without dependency overrides — exercises real auth.
 
     api_client's session-scoped load_user override lives on the shared app
     object, so it is stashed away for the duration of each raw test.
     """
-    import argus_asgi
-    saved = dict(argus_asgi.app.dependency_overrides)
-    argus_asgi.app.dependency_overrides.clear()
-    yield TestClient(argus_asgi.app, raise_server_exceptions=False)
-    argus_asgi.app.dependency_overrides.update(saved)
+    saved = dict(asgi_app.dependency_overrides)
+    asgi_app.dependency_overrides.clear()
+    yield TestClient(asgi_app, raise_server_exceptions=False)
+    asgi_app.dependency_overrides.update(saved)
 
 
 @fixture(scope="module")
