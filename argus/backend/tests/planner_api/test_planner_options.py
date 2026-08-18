@@ -45,27 +45,27 @@ def _create_payload(release, tests=None, groups=None, options=None):
 
 
 @pytest.mark.docker_required
-def test_create_plan_persists_options(planning_service, release, fake_test):
+def test_create_plan_persists_options(planning_service, release, fake_test, logged_in_user):
     labels = {str(fake_test.id): {"labels": ["alpha", "beta"]}}
     plan = planning_service.create_plan(
-        _create_payload(release, tests=[fake_test.id], options=labels))
+        _create_payload(release, tests=[fake_test.id], options=labels), logged_in_user)
 
     stored = ArgusReleasePlan.get(id=uuid.UUID(str(plan.id)))
     assert json.loads(stored.options) == labels
 
 
 @pytest.mark.docker_required
-def test_create_plan_defaults_to_empty_options(planning_service, release, fake_test):
-    plan = planning_service.create_plan(_create_payload(release, tests=[fake_test.id]))
+def test_create_plan_defaults_to_empty_options(planning_service, release, fake_test, logged_in_user):
+    plan = planning_service.create_plan(_create_payload(release, tests=[fake_test.id]), logged_in_user)
 
     stored = ArgusReleasePlan.get(id=uuid.UUID(str(plan.id)))
     assert json.loads(stored.options) == {}
 
 
 @pytest.mark.docker_required
-def test_update_plan_sets_and_removes_options(planning_service, release, fake_test, group):
+def test_update_plan_sets_and_removes_options(planning_service, release, fake_test, group, logged_in_user):
     plan = planning_service.create_plan(
-        _create_payload(release, tests=[fake_test.id], groups=[group.id]))
+        _create_payload(release, tests=[fake_test.id], groups=[group.id]), logged_in_user)
 
     # Set options for both a test and a group (collision-free shared keyspace).
     planning_service.update_plan({
@@ -74,7 +74,7 @@ def test_update_plan_sets_and_removes_options(planning_service, release, fake_te
             str(fake_test.id): {"labels": ["needs-triage"]},
             str(group.id): {"labels": ["group-wide"]},
         },
-    })
+    }, logged_in_user)
     stored = ArgusReleasePlan.get(id=uuid.UUID(str(plan.id)))
     assert json.loads(stored.options) == {
         str(fake_test.id): {"labels": ["needs-triage"]},
@@ -85,13 +85,13 @@ def test_update_plan_sets_and_removes_options(planning_service, release, fake_te
     planning_service.update_plan({
         "id": str(plan.id),
         "options_remove": [str(fake_test.id)],
-    })
+    }, logged_in_user)
     stored = ArgusReleasePlan.get(id=uuid.UUID(str(plan.id)))
     assert json.loads(stored.options) == {str(group.id): {"labels": ["group-wide"]}}
 
 
 @pytest.mark.docker_required
-def test_update_plan_prunes_options_for_removed_entities(planning_service, release, fake_test, group):
+def test_update_plan_prunes_options_for_removed_entities(planning_service, release, fake_test, group, logged_in_user):
     plan = planning_service.create_plan(
         _create_payload(
             release,
@@ -101,13 +101,13 @@ def test_update_plan_prunes_options_for_removed_entities(planning_service, relea
                 str(fake_test.id): {"labels": ["t"]},
                 str(group.id): {"labels": ["g"]},
             },
-        ))
+        ), logged_in_user)
 
     # Dropping the test from the plan prunes its options entry.
     planning_service.update_plan({
         "id": str(plan.id),
         "tests_remove": [str(fake_test.id)],
-    })
+    }, logged_in_user)
     stored = ArgusReleasePlan.get(id=uuid.UUID(str(plan.id)))
     assert json.loads(stored.options) == {str(group.id): {"labels": ["g"]}}
 
@@ -115,13 +115,13 @@ def test_update_plan_prunes_options_for_removed_entities(planning_service, relea
     planning_service.update_plan({
         "id": str(plan.id),
         "groups_remove": [str(group.id)],
-    })
+    }, logged_in_user)
     stored = ArgusReleasePlan.get(id=uuid.UUID(str(plan.id)))
     assert json.loads(stored.options) == {}
 
 
 @pytest.mark.docker_required
-def test_copy_plan_remaps_options(planning_service, release_manager_service):
+def test_copy_plan_remaps_options(planning_service, release_manager_service, logged_in_user):
     ns = time.time_ns()
     # Source release/group/test with build ids that embed the release name, so
     # copy_plan can remap them onto the target release by substring replacement.
@@ -135,7 +135,7 @@ def test_copy_plan_remaps_options(planning_service, release_manager_service):
 
     source_options = {str(src_test.id): {"labels": ["carry-me"]}}
     plan = planning_service.create_plan(
-        _create_payload(src_release, tests=[src_test.id], options=source_options))
+        _create_payload(src_release, tests=[src_test.id], options=source_options), logged_in_user)
 
     target_release = release_manager_service.create_release(f"opt_dst_{ns}", f"opt_dst_{ns}", False)
     target_group = release_manager_service.create_group(
@@ -174,7 +174,7 @@ def test_copy_plan_remaps_options(planning_service, release_manager_service):
         targetReleaseId=str(target_release.id),
         targetReleaseName=target_release.name,
     )
-    new_plan = planning_service.copy_plan(payload)
+    new_plan = planning_service.copy_plan(payload, logged_in_user)
 
     stored = ArgusReleasePlan.get(id=uuid.UUID(str(new_plan.id)))
     assert json.loads(stored.options) == {str(target_test.id): {"labels": ["carry-me"]}}

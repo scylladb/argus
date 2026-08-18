@@ -8,7 +8,6 @@ from dataclasses import dataclass, field
 from functools import reduce
 from typing import Any, Optional, TypedDict
 from uuid import UUID
-from flask import g
 from slugify import slugify
 
 from coodie.exceptions import DocumentNotFound
@@ -177,7 +176,7 @@ class PlanningService:
                 raise DocumentNotFound(f"Plan {ref} not found")
             return plan
 
-    def create_plan(self, payload: dict[str, Any]) -> ArgusReleasePlan:
+    def create_plan(self, payload: dict[str, Any], user: User) -> ArgusReleasePlan:
         plan_request = CreatePlanPayload(**payload)
 
         existing = ArgusReleasePlan.find(
@@ -202,7 +201,7 @@ class PlanningService:
             plan.created_from = UUID(plan_request.created_from) if isinstance(
                 plan_request.created_from, str) else plan_request.created_from
         if not plan_request.view_id:
-            view = self.create_view_for_plan(plan)
+            view = self.create_view_for_plan(plan, user)
             plan.view_id = view.id
         else:
             plan.view_id = UUID(plan_request.view_id) if isinstance(plan_request.view_id, str) else plan_request.view_id
@@ -213,7 +212,7 @@ class PlanningService:
         invalidate_release_snapshots(plan.release_id)
         return plan
 
-    def update_plan(self, payload: dict[str, Any]) -> bool:
+    def update_plan(self, payload: dict[str, Any], user: User) -> bool:
         plan_request = PlanDiffPayload(**payload)
 
         plan: ArgusReleasePlan = self._resolve_plan(plan_request.id)
@@ -311,7 +310,7 @@ class PlanningService:
             if plan.view_id:
                 self.update_view_for_plan(plan, existing=True)
             else:
-                view = self.create_view_for_plan(plan)
+                view = self.create_view_for_plan(plan, user)
                 plan.view_id = view.id
 
         plan.save()
@@ -354,7 +353,7 @@ class PlanningService:
         service.refresh_stale_view(view)
         return view
 
-    def create_view_for_plan(self, plan: ArgusReleasePlan) -> ArgusUserView:
+    def create_view_for_plan(self, plan: ArgusReleasePlan, user: User) -> ArgusUserView:
         service = UserViewService()
         release: ArgusRelease = ArgusRelease.get(id=plan.release_id)
         items = [f"test:{tid}" for tid in plan.tests]
@@ -368,6 +367,7 @@ class PlanningService:
         else:
             settings[2]["settings"]["targetVersion"] = False
         view = service.create_view(
+            user=user,
             name=slugify(view_name),
             display_name=view_name,
             description=f"{plan.target_version or ''} Automatic view for the release plan \"{
@@ -425,7 +425,7 @@ class PlanningService:
 
         return res
 
-    def copy_plan(self, payload: CopyPlanPayload) -> ArgusReleasePlan:
+    def copy_plan(self, payload: CopyPlanPayload, user: User) -> ArgusReleasePlan:
 
         existing = ArgusReleasePlan.find(
             name=payload.plan.name, target_version=payload.plan.target_version).allow_filtering().first()
@@ -504,7 +504,7 @@ class PlanningService:
         new_plan.groups = new_groups
         new_plan.options = json.dumps(new_options)
         new_plan.target_version = payload.plan.target_version
-        view = self.create_view_for_plan(new_plan)
+        view = self.create_view_for_plan(new_plan, user)
         new_plan.view_id = view.id
 
         new_plan.key = self._generate_plan_key(target_release.id)
@@ -690,7 +690,7 @@ class PlanningService:
 
         return mapped
 
-    def trigger_jobs(self, payload: PlanTriggerPayload) -> bool:
+    def trigger_jobs(self, payload: PlanTriggerPayload, username: str) -> bool:
 
         release_name = payload.get("release")
         plan_id = payload.get("plan_id")
@@ -778,7 +778,7 @@ class PlanningService:
                         f"Parameters not found for job {test.build_system_id}", test.build_system_id)
                 final_params = {**job_params, **common_params, **job_params}
                 queue_item = service.build_job(
-                    test.build_system_id, final_params, g.user.username)
+                    test.build_system_id, final_params, username)
                 info = service.get_queue_info(queue_item)
                 url = info.get("url", info.get("taskUrl", ""))
                 successes.append(url)

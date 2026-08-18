@@ -1,213 +1,234 @@
+import importlib
 import logging
+import pkgutil
+from types import ModuleType
 from uuid import UUID
-from flask import (
-    Blueprint,
-    jsonify,
-    request,
-)
-from argus.backend.controller.views_widgets.highlights import bp as highlights_bp
-from argus.backend.controller.views_widgets.summary import bp as summary_bp
-from argus.backend.controller.views_widgets.graphs import bp as graphs_bp
-from argus.backend.controller.views_widgets.nemesis_stats import bp as nemesis_stats_bp
-from argus.backend.controller.views_widgets.graphed_stats import bp as graphed_stats_bp
-from argus.backend.controller.views_widgets.pytest import bp as pytest_bp
+
+from fastapi import APIRouter, Depends, Query
+from flask import Blueprint
+from pydantic import BaseModel
+
+from argus.backend.controller import views_widgets
 from argus.backend.error_handlers import APIException, handle_api_exception
 from argus.backend.models.web import User
 from argus.backend.service.stats import ViewStatsCollector
-from argus.backend.service.user import api_login_required
+from argus.backend.service.user import api_current_user
 from argus.backend.service.views import UserViewService
-from argus.backend.util.common import get_payload
+from argus.backend.util.encoders import ArgusJSONResponse
 
-bp = Blueprint('view_api', __name__, url_prefix='/views')
 LOGGER = logging.getLogger(__name__)
-bp.register_blueprint(highlights_bp)
-bp.register_blueprint(summary_bp)
-bp.register_blueprint(graphs_bp)
-bp.register_blueprint(graphed_stats_bp)
-bp.register_blueprint(nemesis_stats_bp)
-bp.register_blueprint(pytest_bp)
-bp.register_error_handler(Exception, handle_api_exception)
+
+router = APIRouter(prefix="/views")
 
 
 class ViewApiException(APIException):
     pass
 
 
-@bp.route("/", methods=["GET"])
-@api_login_required
-def index():
-    return {
+class CreateViewRequest(BaseModel):
+    name: str
+    items: list[str]
+    settings: str
+    description: str | None = None
+    displayName: str | None = None
+
+
+class UpdateViewRequest(BaseModel):
+    viewId: str
+    updateData: dict
+
+
+class DeleteViewRequest(BaseModel):
+    viewId: str
+
+
+@router.get("/", name="api.view_api.index")
+def index(user: User = Depends(api_current_user)):
+    return ArgusJSONResponse({
         "status": "ok",
         "response": {
             "version": "v1",
         }
-    }
+    })
 
 
-@bp.route("/create", methods=["POST"])
-@api_login_required
-def create_view():
-    payload = get_payload(request)
+@router.post("/create", name="api.view_api.create_view")
+def create_view(payload: CreateViewRequest, user: User = Depends(api_current_user)):
     service = UserViewService()
     view = service.create_view(
-        name=payload["name"],
-        items=payload["items"],
-        widget_settings=payload["settings"],
-        description=payload.get("description"),
-        display_name=payload.get("displayName")
+        name=payload.name,
+        items=payload.items,
+        widget_settings=payload.settings,
+        user=user,
+        description=payload.description,
+        display_name=payload.displayName
     )
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": view
-    }
+    })
 
 
-@bp.route("/get", methods=["GET"])
-@api_login_required
-def get_view():
-    view_id = request.args.get("viewId")
-    if not view_id:
-        raise ViewApiException("No viewId provided.")
+@router.get("/get", name="api.view_api.get_view")
+def get_view(view_id: UUID = Query(..., alias="viewId"), user: User = Depends(api_current_user)):
     service = UserViewService()
-    view = service.get_view(UUID(view_id))
-    return {
+    view = service.get_view(view_id)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": view
-    }
+    })
 
 
-@bp.route("/all", methods=["GET"])
-@api_login_required
-def get_all_views():
-    user_id = request.args.get("userId")
-    if user_id:
-        user = User.get(id=UUID(user_id))
-    else:
-        user = None
+@router.get("/all", name="api.view_api.get_all_views")
+def get_all_views(user_id: UUID | None = Query(None, alias="userId"),
+                  user: User = Depends(api_current_user)):
+    view_user = User.get(id=user_id) if user_id else None
     service = UserViewService()
-    views = service.get_all_views(user)
-    return {
+    views = service.get_all_views(view_user)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": views
-    }
+    })
 
 
-@bp.route("/update", methods=["POST"])
-@api_login_required
-def update_view():
-    payload = get_payload(request)
+@router.post("/update", name="api.view_api.update_view")
+def update_view(payload: UpdateViewRequest, user: User = Depends(api_current_user)):
     service = UserViewService()
-    res = service.update_view(view_id=payload["viewId"], update_data=payload["updateData"])
-    return {
+    res = service.update_view(view_id=payload.viewId, update_data=payload.updateData, user=user)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": res
-    }
+    })
 
 
-@bp.route("/delete", methods=["POST"])
-@api_login_required
-def delete_view():
-    payload = get_payload(request)
+@router.post("/delete", name="api.view_api.delete_view")
+def delete_view(payload: DeleteViewRequest, user: User = Depends(api_current_user)):
     service = UserViewService()
-    res = service.delete_view(payload["viewId"])
-    return {
+    res = service.delete_view(payload.viewId, user=user)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": res
-    }
+    })
 
 
-@bp.route("/search", methods=["GET"])
-@api_login_required
-def search_tests():
-    query = request.args.get("query")
+@router.get("/search", name="api.view_api.search_tests")
+def search_tests(query: str | None = Query(None), user: User = Depends(api_current_user)):
     service = UserViewService()
     if query:
         res = service.test_lookup(query)
     else:
         res = []
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": {
             "hits": res,
             "total": len(res)
         }
-    }
+    })
 
 
-@bp.route("/stats", methods=["GET"])
-@api_login_required
-def view_stats():
-    view_id = request.args.get("viewId")
-    if not view_id:
-        raise ViewApiException("No view id provided.")
-    limited = bool(int(request.args.get("limited", 0)))
-    version = request.args.get("productVersion", None)
-    include_no_version = bool(int(request.args.get("includeNoVersion", True)))
-    image_id = request.args.get("imageId", None)
-    force = bool(int(request.args.get("force",  0)))
-    widget_id = request.args.get("widgetId", None)
-    if widget_id:
-        widget_id = int(widget_id)
+@router.get("/stats", name="api.view_api.view_stats")
+def view_stats(view_id: str = Query(..., alias="viewId"), limited: bool = Query(False),
+               version: str | None = Query(None, alias="productVersion"),
+               include_no_version: bool = Query(True, alias="includeNoVersion"),
+               image_id: str | None = Query(None, alias="imageId"),
+               force: bool = Query(False), widget_id: int | None = Query(None, alias="widgetId"),
+               user: User = Depends(api_current_user)):
     collector = ViewStatsCollector(view_id=view_id, filter=version)
-    stats = collector.collect(limited=limited, force=force, include_no_version=include_no_version, widget_id=widget_id, image_id=image_id)
+    stats = collector.collect(limited=limited, force=force, include_no_version=include_no_version,
+                              widget_id=widget_id, image_id=image_id)
 
-    res = jsonify({
+    return ArgusJSONResponse({
         "status": "ok",
         "response": stats
     })
-    return res
 
 
-@bp.route("/<string:view_id>/versions", methods=["GET"])
-@api_login_required
-def view_versions(view_id: str):
+@router.get("/{view_id}/versions", name="api.view_api.view_versions")
+def view_versions(view_id: str, user: User = Depends(api_current_user)):
     service = UserViewService()
     res = service.get_versions_for_view(view_id)
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": res
-    }
+    })
 
 
-@bp.route("/<string:view_id>/images", methods=["GET"])
-@api_login_required
-def view_images(view_id: str):
+@router.get("/{view_id}/images", name="api.view_api.view_images")
+def view_images(view_id: str, user: User = Depends(api_current_user)):
     service = UserViewService()
     res = service.get_images_for_view(view_id)
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": res
-    }
+    })
 
 
-@bp.route("/<string:view_id>/resolve", methods=["GET"])
-@api_login_required
-def view_resolve(view_id: str):
+@router.get("/{view_id}/resolve", name="api.view_api.view_resolve")
+def view_resolve(view_id: str, user: User = Depends(api_current_user)):
     service = UserViewService()
     res = service.resolve_view_for_edit(view_id)
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": res
-    }
+    })
 
 
-@bp.route("/<string:view_id>/resolve/tests", methods=["GET"])
-@api_login_required
-def view_resolve_tests(view_id: str):
+@router.get("/{view_id}/resolve/tests", name="api.view_api.view_resolve_tests")
+def view_resolve_tests(view_id: str, user: User = Depends(api_current_user)):
     service = UserViewService()
     res = service.resolve_view_tests(view_id)
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": res
-    }
+    })
 
 
-@bp.route("/<string:view_id>/pytest/results", methods=["GET"])
-@api_login_required
-def view_get_pytest_results(view_id: str):
+@router.get("/{view_id}/pytest/results", name="api.view_api.view_get_pytest_results")
+def view_get_pytest_results(view_id: str, user: User = Depends(api_current_user)):
     service = UserViewService()
     res = service.get_pytest_view_results(view_id)
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": res
-    }
+    })
+
+
+# The routes above are served by FastAPI; these view-less rules keep the
+# endpoints buildable through Flask's url_for until the Flask app is retired.
+bp = Blueprint('view_api', __name__, url_prefix='/views')
+bp.register_error_handler(Exception, handle_api_exception)
+
+for _rule, _endpoint in (
+    ("/", "index"),
+    ("/create", "create_view"),
+    ("/get", "get_view"),
+    ("/all", "get_all_views"),
+    ("/update", "update_view"),
+    ("/delete", "delete_view"),
+    ("/search", "search_tests"),
+    ("/stats", "view_stats"),
+    ("/<string:view_id>/versions", "view_versions"),
+    ("/<string:view_id>/images", "view_images"),
+    ("/<string:view_id>/resolve", "view_resolve"),
+    ("/<string:view_id>/resolve/tests", "view_resolve_tests"),
+    ("/<string:view_id>/pytest/results", "view_get_pytest_results"),
+):
+    bp.add_url_rule(_rule, _endpoint, None)
+
+
+def _widget_modules() -> list[ModuleType]:
+    """Discover the view widget controllers: every module in views_widgets
+    that exports a FastAPI ``router``."""
+    modules = []
+    for module_info in pkgutil.iter_modules(views_widgets.__path__):
+        module = importlib.import_module(f"{views_widgets.__package__}.{module_info.name}")
+        if getattr(module, "router", None) is not None:
+            modules.append(module)
+    return modules
+
+
+for _module in _widget_modules():
+    router.include_router(_module.router)
+    if (widget_bp := getattr(_module, "bp", None)) is not None:
+        bp.register_blueprint(widget_bp)
