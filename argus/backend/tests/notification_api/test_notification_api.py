@@ -43,28 +43,28 @@ def make_notification():
             pass
 
 
-def test_get_unread_count_zero(flask_client):
-    res = flask_client.get("/api/v1/notifications/get_unread").json
+def test_get_unread_count_zero(api_client):
+    res = api_client.get("/api/v1/notifications/get_unread").json()
     assert res["status"] == "ok"
     assert res["response"] == 0
 
 
-def test_get_unread_count_counts_unread(flask_client, make_notification):
+def test_get_unread_count_counts_unread(api_client, make_notification):
     for _ in range(3):
         make_notification(g.user.id)
 
 
-def test_get_unread_count_excludes_read(flask_client, make_notification):
+def test_get_unread_count_excludes_read(api_client, make_notification):
     make_notification(g.user.id, state=ArgusNotificationState.UNREAD)
     make_notification(g.user.id, state=ArgusNotificationState.READ)
     make_notification(g.user.id, state=ArgusNotificationState.READ)
-    res = flask_client.get("/api/v1/notifications/get_unread").json
+    res = api_client.get("/api/v1/notifications/get_unread").json()
     assert res["response"] == 1
 
 
-def test_get_summary_returns_short_summaries(flask_client, make_notification):
+def test_get_summary_returns_short_summaries(api_client, make_notification):
     created = [make_notification(g.user.id, title=f"title-{i}") for i in range(3)]
-    res = flask_client.get("/api/v1/notifications/summary").json
+    res = api_client.get("/api/v1/notifications/summary").json()
     assert res["status"] == "ok"
     assert len(res["response"]) == 3
     titles = {item["title"] for item in res["response"]}
@@ -74,36 +74,36 @@ def test_get_summary_returns_short_summaries(flask_client, make_notification):
     assert set(sample.keys()) == {"receiver", "sender", "id", "created", "title", "state"}
 
 
-def test_get_summary_respects_limit(flask_client, make_notification):
+def test_get_summary_respects_limit(api_client, make_notification):
     for i in range(5):
         make_notification(g.user.id, title=f"t-{i}")
-    res = flask_client.get("/api/v1/notifications/summary?limit=2").json
+    res = api_client.get("/api/v1/notifications/summary?limit=2").json()
     assert len(res["response"]) == 2
 
 
-def test_get_summary_default_limit(flask_client, make_notification):
+def test_get_summary_default_limit(api_client, make_notification):
     for i in range(25):
         make_notification(g.user.id, title=f"t-{i}")
-    res = flask_client.get("/api/v1/notifications/summary").json
+    res = api_client.get("/api/v1/notifications/summary").json()
     assert len(res["response"]) == 20
 
 
-def test_get_summary_after_id_paginates(flask_client, make_notification):
+def test_get_summary_after_id_paginates(api_client, make_notification):
     for i in range(5):
         make_notification(g.user.id, title=f"t-{i}")
-    full = flask_client.get("/api/v1/notifications/summary").json["response"]
+    full = api_client.get("/api/v1/notifications/summary").json()["response"]
     assert len(full) == 5
     # Clustering DESC, id__lte filters to newer-or-equal? id__lte means id <= after.
     # Picking the third newest notification id and asking for after=that should return items <= it (older or same).
     pivot = full[2]["id"]
-    page = flask_client.get(f"/api/v1/notifications/summary?afterId={pivot}").json["response"]
+    page = api_client.get(f"/api/v1/notifications/summary?afterId={pivot}").json()["response"]
     assert len(page) == 3
     assert page[0]["id"] == pivot
 
 
-def test_get_notification_returns_full_dict(flask_client, make_notification):
+def test_get_notification_returns_full_dict(api_client, make_notification):
     n = make_notification(g.user.id, title="full", content="body")
-    res = flask_client.get(f"/api/v1/notifications/get?id={n.id}").json
+    res = api_client.get(f"/api/v1/notifications/get?id={n.id}").json()
     assert res["status"] == "ok"
     body = res["response"]
     assert body["title"] == "full"
@@ -113,48 +113,48 @@ def test_get_notification_returns_full_dict(flask_client, make_notification):
     assert body["state"] == ArgusNotificationState.UNREAD
 
 
-def test_get_notification_missing_id_errors(flask_client):
-    res = flask_client.get("/api/v1/notifications/get").json
+def test_get_notification_missing_id_errors(api_client):
+    res = api_client.get("/api/v1/notifications/get").json()
     assert res["status"] == "error"
-    assert "No notification id provided" in res["response"]["arguments"][0]
+    assert res["response"]["exception"] == "RequestValidationError"
 
 
-def test_get_notification_unknown_id_errors(flask_client):
+def test_get_notification_unknown_id_errors(api_client):
     bogus = uuid.uuid1()
-    res = flask_client.get(f"/api/v1/notifications/get?id={bogus}").json
+    res = api_client.get(f"/api/v1/notifications/get?id={bogus}").json()
     assert res["status"] == "error"
     assert res["response"]["exception"] == "DocumentNotFound"
 
 
-def test_read_notification_marks_read_and_decrements_unread(flask_client, make_notification):
+def test_read_notification_marks_read_and_decrements_unread(api_client, make_notification):
     n = make_notification(g.user.id)
     other = make_notification(g.user.id)
 
-    pre = flask_client.get("/api/v1/notifications/get_unread").json["response"]
+    pre = api_client.get("/api/v1/notifications/get_unread").json()["response"]
     assert pre == 2
 
-    res = flask_client.post(
+    res = api_client.post(
         "/api/v1/notifications/read",
         json={"id": str(n.id)},
-    ).json
+    ).json()
     assert res["status"] == "ok"
     assert res["response"] is True
 
-    post = flask_client.get("/api/v1/notifications/get_unread").json["response"]
+    post = api_client.get("/api/v1/notifications/get_unread").json()["response"]
     assert post == 1
 
     # Confirm via get endpoint
-    fetched = flask_client.get(f"/api/v1/notifications/get?id={n.id}").json["response"]
+    fetched = api_client.get(f"/api/v1/notifications/get?id={n.id}").json()["response"]
     assert fetched["state"] == ArgusNotificationState.READ
-    other_fetched = flask_client.get(f"/api/v1/notifications/get?id={other.id}").json["response"]
+    other_fetched = api_client.get(f"/api/v1/notifications/get?id={other.id}").json()["response"]
     assert other_fetched["state"] == ArgusNotificationState.UNREAD
 
 
-def test_read_notification_unknown_id_errors(flask_client):
+def test_read_notification_unknown_id_errors(api_client):
     bogus = uuid.uuid1()
-    res = flask_client.post(
+    res = api_client.post(
         "/api/v1/notifications/read",
         json={"id": str(bogus)},
-    ).json
+    ).json()
     assert res["status"] == "error"
     assert res["response"]["exception"] == "DocumentNotFound"
