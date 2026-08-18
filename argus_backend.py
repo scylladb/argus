@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 import cassandra.cluster
 from a2wsgi import WSGIMiddleware
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from flask import Flask
 from jwt import PyJWKClient
@@ -15,11 +16,14 @@ from argus.backend.error_handlers import (
     APIException,
     AuthorizationError,
     DBErrorHandler,
+    UIRedirect,
     api_exception_handler,
     authorization_error_handler,
+    redirecting_exception_handler,
+    ui_redirect_handler,
 )
 from argus.backend.metrics import build_instrumentator, init_flask_metrics
-from argus.backend.service.user import cache_ssh_tunnel_server_allowed_endpoints
+from argus.backend.service.user import UserServiceException, cache_ssh_tunnel_server_allowed_endpoints
 from argus.backend.session import FlaskSessionMiddleware
 from argus.backend.template_filters import export_filters
 from argus.backend.util.config import Config
@@ -99,10 +103,14 @@ def create_app() -> FastAPI:
     build_instrumentator(skip_endpoints=(wsgi_fallback,)).instrument(app)
     app.add_exception_handler(AuthorizationError, authorization_error_handler)
     app.add_exception_handler(APIException, api_exception_handler)
+    app.add_exception_handler(RequestValidationError, api_exception_handler)
+    app.add_exception_handler(UIRedirect, ui_redirect_handler)
+    app.add_exception_handler(UserServiceException, redirecting_exception_handler("main.profile"))
     app.add_exception_handler(Exception, api_exception_handler)
 
     # Migrated APIRouters are included here, before the mounts, so they take
     # precedence over the Flask fall-through.
+    app.include_router(auth.router)
 
     app.mount("/s", StaticFiles(directory="public"), name="static")
     # Everything not handled above falls through to Flask.

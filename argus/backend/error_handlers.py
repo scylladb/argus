@@ -6,9 +6,10 @@ from threading import Lock
 from traceback import format_exception
 from fastapi import Request
 from flask import flash, redirect, request, url_for
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, RedirectResponse
 
 from argus.backend.db import ScyllaCluster
+from argus.backend.rendering import flash as asgi_flash, url_for as asgi_url_for
 from argus.backend.util.encoders import ArgusJSONResponse
 
 LOGGER = logging.getLogger(__name__)
@@ -20,6 +21,37 @@ class APIException(Exception):
 
 class DataValidationError(APIException):
     pass
+
+
+class UIRedirect(Exception):
+    """Raised by the FastAPI UI auth dependencies: redirect to *endpoint*,
+    optionally flashing a message first — the counterpart of the
+    flash-and-redirect branches in the Flask login_required decorator."""
+
+    def __init__(self, endpoint: str, flash_message: tuple[str, str] | None = None, **values):
+        self.endpoint = endpoint
+        self.flash_message = flash_message
+        self.values = values
+        super().__init__(endpoint)
+
+
+def ui_redirect_handler(asgi_request: Request, exc: UIRedirect) -> RedirectResponse:
+    if exc.flash_message:
+        category, message = exc.flash_message
+        asgi_flash(asgi_request, message, category=category)
+    return RedirectResponse(
+        asgi_url_for(asgi_request, exc.endpoint, **exc.values), status_code=302)
+
+
+def redirecting_exception_handler(endpoint: str):
+    """FastAPI counterpart of handle_profile_exception/handle_view_not_found:
+    flash the exception message and redirect to *endpoint*."""
+
+    def handler(asgi_request: Request, exc: Exception) -> RedirectResponse:
+        asgi_flash(asgi_request, " ".join(str(arg) for arg in exc.args), category="error")
+        return RedirectResponse(asgi_url_for(asgi_request, endpoint), status_code=302)
+
+    return handler
 
 
 class AuthorizationError(Exception):

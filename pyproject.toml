@@ -54,6 +54,7 @@ web-backend = [
   "a2wsgi>=1.10.10",
   "prometheus-client>=0.26.0",
   "prometheus-fastapi-instrumentator>=8.1.0",
+  "python-multipart>=0.0.32",
 ]
 docker-image = ["supervisor ~= 4.2.4"]
 dev = [
