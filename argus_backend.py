@@ -1,18 +1,30 @@
 import logging
+from contextlib import asynccontextmanager
+
 import cassandra.cluster
+from a2wsgi import WSGIMiddleware
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from flask import Flask
-from argus.backend.error_handlers import DBErrorHandler
-from argus.backend.metrics import init_flask_metrics
-from argus.backend.template_filters import export_filters
-from argus.backend.controller import admin, api, main
-from argus.backend.cli import cli_bp
-from argus.backend.util.logsetup import setup_application_logging
-from argus.backend.util.encoders import ArgusJSONProvider
-from argus.backend.db import ScyllaCluster
-from argus.backend.controller import auth
-from argus.backend.util.config import Config
 from jwt import PyJWKClient
+
+from argus.backend.cli import cli_bp
+from argus.backend.controller import admin, api, auth, main
+from argus.backend.db import ScyllaCluster
+from argus.backend.error_handlers import (
+    APIException,
+    AuthorizationError,
+    DBErrorHandler,
+    api_exception_handler,
+    authorization_error_handler,
+)
+from argus.backend.metrics import build_instrumentator, init_flask_metrics
 from argus.backend.service.user import cache_ssh_tunnel_server_allowed_endpoints
+from argus.backend.session import FlaskSessionMiddleware
+from argus.backend.template_filters import export_filters
+from argus.backend.util.config import Config
+from argus.backend.util.encoders import ArgusJSONProvider
+from argus.backend.util.logsetup import setup_application_logging
 
 LOGGER = logging.getLogger(__name__)
 
@@ -62,4 +74,37 @@ def start_server(config=None) -> Flask:
     return app
 
 
-argus_app = start_server()
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # The Scylla connection is established when the Flask app is built above;
+    # closing it here lets gunicorn recycle workers cleanly.
+    yield
+    ScyllaCluster.shutdown()
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title="Argus",
+        lifespan=lifespan,
+        # UI parity with the Flask app: no schema/docs endpoints (yet)
+        openapi_url=None,
+        docs_url=None,
+        redoc_url=None,
+    )
+    flask_app = start_server()
+    app.state.flask_app = flask_app
+    wsgi_fallback = WSGIMiddleware(flask_app)
+    app.add_middleware(FlaskSessionMiddleware, flask_app=flask_app)
+    # Fall-through requests are recorded by the Flask hooks, not here.
+    build_instrumentator(skip_endpoints=(wsgi_fallback,)).instrument(app)
+    app.add_exception_handler(AuthorizationError, authorization_error_handler)
+    app.add_exception_handler(APIException, api_exception_handler)
+    app.add_exception_handler(Exception, api_exception_handler)
+
+    # Migrated APIRouters are included here, before the mounts, so they take
+    # precedence over the Flask fall-through.
+
+    app.mount("/s", StaticFiles(directory="public"), name="static")
+    # Everything not handled above falls through to Flask.
+    app.mount("/", wsgi_fallback)
+    return app

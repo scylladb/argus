@@ -8,7 +8,6 @@ from fastapi import APIRouter
 from prometheus_client import REGISTRY
 from pytest import fixture
 
-from argus.backend.asgi import include_router_before_fallback
 
 probe = APIRouter()
 
@@ -19,12 +18,11 @@ def metrics_probe():
 
 
 @fixture(scope="module", autouse=True)
-def probe_routes(argus_app):
-    import argus_asgi
-    include_router_before_fallback(argus_asgi.app, probe)
+def probe_routes(asgi_app, include_router_before_fallback):
+    include_router_before_fallback(asgi_app, probe)
     yield
-    argus_asgi.app.router.routes = [
-        route for route in argus_asgi.app.routes if getattr(route, "path", "") != "/metrics-probe"
+    asgi_app.router.routes = [
+        route for route in asgi_app.routes if getattr(route, "path", "") != "/metrics-probe"
     ]
 
 

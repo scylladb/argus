@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 from werkzeug.middleware.profiler import ProfilerMiddleware
-from argus_backend import argus_app
+from argus_backend import start_server
 
 
+argus_app = start_server()
 argus_app.wsgi_app = ProfilerMiddleware(
     app=argus_app.wsgi_app,
     profile_dir="profile",

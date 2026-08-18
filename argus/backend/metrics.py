@@ -1,27 +1,10 @@
-"""Prometheus metrics shared by the Flask and FastAPI sides of the strangler.
-
-Replaces prometheus_flask_exporter with plain prometheus_client metrics so
-both frameworks can increment the same series (two registrations of the same
-metric name in one registry would collide). Series names and labels are
-unchanged, so existing dashboards keep working:
-
-- the six custom counters registered in argus_backend historically,
-- the exporter's default http_request_duration_seconds histogram and
-  http_request_total counter (previously exported with NO_PREFIX and
-  group_by="endpoint").
-
-Flask increments through the before/after_request hooks installed by
-init_flask_metrics; FastAPI increments through asgi/metrics.py. Requests that
-fall through the WSGI mount are recorded by the Flask hooks only.
-
-Multiprocess mode is driven by PROMETHEUS_MULTIPROC_DIR exactly as before
-(gunicorn's child_exit hook calls multiprocess.mark_process_dead).
-"""
 import os
 import time
 from http import HTTPStatus
 
 from flask import Flask, Response, request
+from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_fastapi_instrumentator.metrics import Info
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
     CollectorRegistry,
@@ -33,6 +16,7 @@ from prometheus_client import (
 )
 
 from argus.backend import metrics_labels
+from argus.backend.service.user import api_login_required
 
 REQUEST_DURATION = Histogram(
     "http_request_duration_seconds",
@@ -136,8 +120,6 @@ METRICS_ENDPOINT_NAME = "prometheus_metrics"
 
 def init_flask_metrics(app: Flask) -> None:
     """Install the request hooks and the /metrics endpoint on the Flask app."""
-    from argus.backend.service.user import api_login_required
-
     @app.before_request
     def _start_timer():
         request.environ["argus.metrics_start"] = time.perf_counter()
@@ -166,3 +148,41 @@ def init_flask_metrics(app: Flask) -> None:
         # production (multiproc) mode and is open in development.
         metrics_view = api_login_required(metrics_view)
     app.add_url_rule("/metrics", METRICS_ENDPOINT_NAME, metrics_view)
+
+
+def build_instrumentator(skip_endpoints: tuple = ()) -> Instrumentator:
+    """Request metrics for the FastAPI side, via prometheus-fastapi-instrumentator.
+
+    One custom instrumentation function increments the shared series above —
+    no default library metrics, so the series stay exactly the ones the
+    dashboards already use. Requests that fall through the WSGI mount are
+    skipped (the Flask hooks record those), as is /metrics itself, which is
+    served by Flask through the fall-through.
+
+    The endpoint label uses the matched route's name; migrated routes are
+    named after their Flask endpoints (e.g. "api.client_api.submit_run") to
+    keep the label values, and thus the dashboards, stable.
+    """
+    instrumentator = Instrumentator(
+        should_group_status_codes=False,
+        should_ignore_untemplated=False,
+    )
+
+    def argus_request_metrics(info: Info) -> None:
+        scope = info.request.scope
+        if scope.get("endpoint") in skip_endpoints:
+            return
+        route = scope.get("route")
+        endpoint = getattr(route, "name", None) or info.modified_handler
+        client = scope.get("client")
+        record_request(
+            endpoint=endpoint,
+            method=info.request.method,
+            status=status_line(info.response.status_code) if info.response else status_line(500),
+            remote_addr=client[0] if client else None,
+            headers=info.request.headers,
+            duration=info.modified_duration,
+        )
+
+    instrumentator.add(argus_request_metrics)
+    return instrumentator
