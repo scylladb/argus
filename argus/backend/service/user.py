@@ -54,8 +54,8 @@ class UserService:
                     return True
         return False
 
-    def github_callback(self, req_code: str) -> dict | None:
-        if "gh" not in current_app.config.get("LOGIN_METHODS", []):
+    def github_callback(self, req_code: str, config: Mapping) -> dict | None:
+        if "gh" not in config.get("LOGIN_METHODS", []):
             raise UserServiceException("Github Login is disabled")
         oauth_response = requests.post(
             "https://github.com/login/oauth/access_token",
@@ -64,8 +64,8 @@ class UserService:
             },
             params={
                 "code": req_code,
-                "client_id": current_app.config.get("GITHUB_CLIENT_ID"),
-                "client_secret": current_app.config.get("GITHUB_CLIENT_SECRET"),
+                "client_id": config.get("GITHUB_CLIENT_ID"),
+                "client_secret": config.get("GITHUB_CLIENT_SECRET"),
             }
         )
 
@@ -95,7 +95,7 @@ class UserService:
         ).json()
 
         temp_password = None
-        required_organizations = current_app.config.get("GITHUB_REQUIRED_ORGANIZATIONS")
+        required_organizations = config.get("GITHUB_REQUIRED_ORGANIZATIONS")
         if required_organizations:
             logins = set([org["login"] for org in organizations])
             required_organizations = set(required_organizations)
@@ -267,7 +267,8 @@ class UserService:
         return True
 
 
-    def create_user(self, username: str, email: str, full_name: str) -> dict:
+    def create_user(self, username: str, email: str, full_name: str,
+                    avatar: tuple[str, bytes] | None = None) -> dict:
 
         result = {
             "created": False,
@@ -310,8 +311,8 @@ class UserService:
         user.registration_date = datetime.now(tz=UTC)
         user.roles = ["ROLE_USER"]
 
-        if avatar := request.files.get("avatar"):
-            content = avatar.stream.read()
+        if avatar:
+            _, content = avatar
             avatar_mime = magic.from_buffer(content, mime=True)
             if not re.match(r"^image/.*", avatar_mime, re.IGNORECASE):
                 raise UserServiceException(f"Expected image/*, got {avatar_mime} for user avatar.")
@@ -384,22 +385,22 @@ class UserService:
 
         return original_filename, filepath
 
-    def update_profile_picture(self, filename: str, filepath: str):
+    def update_profile_picture(self, filename: str, filepath: str, user: User):
         web_file = WebFileStorage()
         web_file.filename = filename
         web_file.filepath = filepath
         web_file.save()
 
         try:
-            if old_picture_id := g.user.picture_id:
+            if old_picture_id := user.picture_id:
                 old_file = WebFileStorage.get(id=old_picture_id)
                 os.unlink(old_file.filepath)
                 old_file.delete()
         except Exception as exc:
             print(exc)
 
-        g.user.picture_id = web_file.id
-        g.user.save()
+        user.picture_id = web_file.id
+        user.save()
 
 
 def login_required(view: FlaskView):

@@ -155,10 +155,7 @@ class ScyllaCluster:
 
     @classmethod
     def get_session(cls):
-        cluster = cls.get()
-        if 'scylla_session' not in g:
-            g.scylla_session = cluster.session
-        return g.scylla_session
+        return cls.get().session
 
     @classmethod
     def close_session(cls, error=None):

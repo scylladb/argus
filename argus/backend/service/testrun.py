@@ -20,6 +20,7 @@ from coodie.sync import BatchQuery
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.db import ScyllaCluster
+from argus.backend.util.config import Config
 
 from argus.backend.models.pytest import PytestResultTable, PytestUserField
 from argus.backend.models.web import (
@@ -63,8 +64,9 @@ class TestRunService:
 
     def __init__(self) -> None:
         self.notification_manager = NotificationManagerService()
-        self.s3 = boto3.client(service_name="s3", aws_access_key_id=current_app.config.get(
-            "AWS_CLIENT_ID"), aws_secret_access_key=current_app.config.get("AWS_CLIENT_SECRET"))
+        config = Config.load_yaml_config()
+        self.s3 = boto3.client(service_name="s3", aws_access_key_id=config.get(
+            "AWS_CLIENT_ID"), aws_secret_access_key=config.get("AWS_CLIENT_SECRET"))
 
     def get_plugin(self, plugin_name: str) -> PluginInfoBase | None:
         return self.plugins.get(plugin_name)
