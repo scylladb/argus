@@ -6,10 +6,9 @@ import xml.etree.ElementTree as ET
 import jenkins
 import logging
 
-from flask import current_app, g
 
 from argus.backend.error_handlers import DataValidationError
-from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, UserOauthToken
+from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, User, UserOauthToken
 
 LOGGER = logging.getLogger(__name__)
 GITHUB_REPO_RE = r"(?P<http>^https?:\/\/(www\.)?github\.com\/(?P<user>[\w\d\-]+)\/(?P<repo>[\w\d\-]+)(\.git)?$)|(?P<ssh>git@github\.com:(?P<ssh_user>[\w\d\-]+)\/(?P<ssh_repo>[\w\d\-]+)(\.git)?)"
@@ -64,9 +63,10 @@ class JenkinsService:
     }
 
     def __init__(self) -> None:
-        self._jenkins = jenkins.Jenkins(url=current_app.config["JENKINS_URL"],
-                                        username=current_app.config["JENKINS_USER"],
-                                        password=current_app.config["JENKINS_API_TOKEN"])
+        config = Config.load_yaml_config()
+        self._jenkins = jenkins.Jenkins(url=config["JENKINS_URL"],
+                                        username=config["JENKINS_USER"],
+                                        password=config["JENKINS_API_TOKEN"])
 
     @staticmethod
     def _extract_choice_parameters(config: ET.Element) -> dict[str, list[str]]:
@@ -238,7 +238,7 @@ class JenkinsService:
             repo = git_info["repo"]
             user = git_info["user"]
 
-        token = current_app.config.get("GITHUB_ACCESS_TOKEN")
+        token = Config.load_yaml_config().get("GITHUB_ACCESS_TOKEN")
         response = requests.get(
             url=f"https://api.github.com/repos/{user}/{repo}/contents/{new_settings['pipelineFile']}?ref={new_settings['gitBranch']}",
             headers={
@@ -348,18 +348,18 @@ class JenkinsService:
             "new_entity": new_test,
         }
 
-    def clone_build_job(self, build_id: str, params: dict[str, str]):
-        queue_item = self.build_job(build_id=build_id, params=params)
+    def clone_build_job(self, build_id: str, params: dict[str, str], requested_by: User | None = None):
+        queue_item = self.build_job(build_id=build_id, params=params, requested_by=requested_by)
         return {
             "queueItem": queue_item,
         }
 
-    def build_job(self, build_id: str, params: dict, user_override: str = None):
+    def build_job(self, build_id: str, params: dict, user_override: str = None, requested_by: User | None = None):
         queue_number = self._jenkins.build_job(build_id, {
             **params,
             # use the user's email as the default value for the requested by user parameter,
             # so it would align with how SCT default works, on runs not trigger by argus
-            self.RESERVED_PARAMETER_NAME: g.user.email.split('@')[0] if not user_override else user_override
+            self.RESERVED_PARAMETER_NAME: requested_by.email.split('@')[0] if not user_override else user_override
         })
         return queue_number
 

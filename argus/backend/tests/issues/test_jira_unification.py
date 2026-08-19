@@ -10,7 +10,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from flask import current_app
+from argus.backend.util.config import Config
 
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.jira import JiraIssue
@@ -77,7 +77,7 @@ def _link_issue_to_run(run, issue) -> IssueLink:
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def jira_service_factory(app_context):
+def jira_service_factory(app_context, logged_in_user):
     """Return a callable that creates a dry-run JiraService for a given server URL.
 
     The returned service is valid for the lifetime of the test; callers must
@@ -85,13 +85,13 @@ def jira_service_factory(app_context):
     so the fixture yields a context-manager-aware factory:
 
         with jira_service_factory("https://example.atlassian.net") as svc:
-            svc.get_issue(url)
+            svc.get_issue(url, logged_in_user)
     """
     from contextlib import contextmanager
 
     @contextmanager
     def _make(jira_server: str):
-        with patch.dict(current_app.config, {"JIRA_SERVER": jira_server}):
+        with patch.dict(Config.load_yaml_config(), {"JIRA_SERVER": jira_server}):
             yield JiraService(dry_run=True)
 
     return _make
@@ -111,11 +111,11 @@ def jira_service_factory(app_context):
         "http://jira.internal.corp/browse/INTERNAL-7",
     ),
 ])
-def test_jira_url_accepted_for_configured_server(jira_server, issue_url, jira_service_factory):
+def test_jira_url_accepted_for_configured_server(jira_server, issue_url, jira_service_factory, logged_in_user):
     """URL matching the configured server must not raise a 'no match' exception."""
     with jira_service_factory(jira_server) as svc:
         with pytest.raises(JiraServiceException, match="Jira remote is disabled"):
-            svc.get_issue(issue_url)
+            svc.get_issue(issue_url, logged_in_user)
 
 
 @pytest.mark.parametrize("jira_server,issue_url,expected_key", [
@@ -130,11 +130,11 @@ def test_jira_url_accepted_for_configured_server(jira_server, issue_url, jira_se
         "AB-1",
     ),
 ])
-def test_jira_url_extracts_correct_key(jira_server, issue_url, expected_key, jira_service_factory):
+def test_jira_url_extracts_correct_key(jira_server, issue_url, expected_key, jira_service_factory, logged_in_user):
     """get_issue() must not reject a valid URL; failure must be 'remote disabled', not 'no match'."""
     with jira_service_factory(jira_server) as svc:
         with pytest.raises(JiraServiceException, match="Jira remote is disabled"):
-            svc.get_issue(issue_url)
+            svc.get_issue(issue_url, logged_in_user)
 
 
 @pytest.mark.parametrize("jira_server,issue_url", [
@@ -160,11 +160,11 @@ def test_jira_url_extracts_correct_key(jira_server, issue_url, expected_key, jir
         "https://example.atlassian.net/browse/FROBNICATOR-1",
     ),
 ])
-def test_jira_url_rejected(jira_server, issue_url, jira_service_factory):
+def test_jira_url_rejected(jira_server, issue_url, jira_service_factory, logged_in_user):
     """URL not matching the configured server must raise 'URL doesn't match' exception."""
     with jira_service_factory(jira_server) as svc:
         with pytest.raises(JiraServiceException, match="URL doesn't match configured Jira server"):
-            svc.get_issue(issue_url)
+            svc.get_issue(issue_url, logged_in_user)
 
 
 # ---------------------------------------------------------------------------

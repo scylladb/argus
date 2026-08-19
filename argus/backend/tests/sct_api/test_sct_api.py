@@ -332,7 +332,7 @@ def test_submit_gemini_results(flask_client, sct_run_id):
     assert run.gemini_status == "PASSED"
 
 
-def test_submit_and_get_junit_report(flask_client, sct_run_id):
+def test_submit_and_get_junit_report(flask_client, api_client, sct_run_id):
     payload = {"file_name": "report.xml",
                "content": "PGp1bml0PjwvanVuaXQ+", "schema_version": "v8"}
     resp = flask_client.post(
@@ -343,11 +343,11 @@ def test_submit_and_get_junit_report(flask_client, sct_run_id):
     assert resp.status_code == 200
     assert resp.json["status"] == "ok"
 
-    resp = flask_client.get(f"/api/v1/run/scylla-cluster-tests/{sct_run_id}")
+    resp = api_client.get(f"/api/v1/run/scylla-cluster-tests/{sct_run_id}")
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
-    assert isinstance(resp.json["response"]["junit_reports"], list)
-    assert any(item.get("file_name") == "report.xml" for item in resp.json["response"]["junit_reports"])
+    assert resp.json()["status"] == "ok"
+    assert isinstance(resp.json()["response"]["junit_reports"], list)
+    assert any(item.get("file_name") == "report.xml" for item in resp.json()["response"]["junit_reports"])
 
 
 # ---------------------------------------------------------------------------

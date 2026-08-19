@@ -36,7 +36,7 @@ def saved_g_user():
 
 
 @pytest.fixture
-def sct_run_for_assignee(flask_client, fake_test):
+def sct_run_for_assignee(api_client, fake_test):
     """Create an SCT run that can be used for assignee tests"""
     run_id = str(uuid.uuid4())
     payload = {
@@ -50,31 +50,29 @@ def sct_run_for_assignee(flask_client, fake_test):
         "sct_config": {"cluster_backend": "aws"},
         "schema_version": "v8",
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         "/api/v1/client/testrun/scylla-cluster-tests/submit",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
+    assert resp.json()["status"] == "ok"
     return run_id, fake_test.id
 
 
-def test_unassign_testrun(flask_client, sct_run_for_assignee, test_user):
+def test_unassign_testrun(api_client, sct_run_for_assignee, test_user):
     """Test that unassigning a testrun works without error"""
     run_id, test_id = sct_run_for_assignee
 
     # First, assign to a user
     with patch('argus.backend.service.notification_manager.NotificationManagerService.send_notification'):
         assign_payload = {"assignee": str(test_user.id)}
-        resp = flask_client.post(
+        resp = api_client.post(
             f"/api/v1/test/{test_id}/run/{run_id}/assignee/set",
-            data=json.dumps(assign_payload),
-            content_type="application/json",
+            json=assign_payload,
         )
-        assert resp.status_code == 200, f"Assign failed: {resp.json}"
-        assert resp.json["status"] == "ok"
-        assert resp.json["response"]["assignee"] == str(test_user.id)
+        assert resp.status_code == 200, f"Assign failed: {resp.json()}"
+        assert resp.json()["status"] == "ok"
+        assert resp.json()["response"]["assignee"] == str(test_user.id)
 
     # Verify assignment persisted
     run = SCTTestRun.get(id=uuid.UUID(run_id))
@@ -83,14 +81,13 @@ def test_unassign_testrun(flask_client, sct_run_for_assignee, test_user):
     # Now unassign (this is what was causing the error)
     with patch('argus.backend.service.notification_manager.NotificationManagerService.send_notification') as mock_notify:
         unassign_payload = {"assignee": TestRunService.ASSIGNEE_PLACEHOLDER}
-        resp = flask_client.post(
+        resp = api_client.post(
             f"/api/v1/test/{test_id}/run/{run_id}/assignee/set",
-            data=json.dumps(unassign_payload),
-            content_type="application/json",
+            json=unassign_payload,
         )
-        assert resp.status_code == 200, f"Unassign failed: {resp.json}"
-        assert resp.json["status"] == "ok"
-        assert resp.json["response"]["assignee"] is None
+        assert resp.status_code == 200, f"Unassign failed: {resp.json()}"
+        assert resp.json()["status"] == "ok"
+        assert resp.json()["response"]["assignee"] is None
 
         # Verify no notification was sent when unassigning
         mock_notify.assert_not_called()
@@ -100,40 +97,38 @@ def test_unassign_testrun(flask_client, sct_run_for_assignee, test_user):
     assert run.assignee is None
 
 
-def test_assign_testrun_to_self(flask_client, sct_run_for_assignee, saved_g_user):
+def test_assign_testrun_to_self(api_client, sct_run_for_assignee, saved_g_user):
     """Test that assigning a testrun to yourself doesn't send notification"""
     run_id, test_id = sct_run_for_assignee
 
     # Assign to self (g.user from conftest)
     with patch('argus.backend.service.notification_manager.NotificationManagerService.send_notification') as mock_notify:
         assign_payload = {"assignee": str(g.user.id)}
-        resp = flask_client.post(
+        resp = api_client.post(
             f"/api/v1/test/{test_id}/run/{run_id}/assignee/set",
-            data=json.dumps(assign_payload),
-            content_type="application/json",
+            json=assign_payload,
         )
-        assert resp.status_code == 200, f"Assign to self failed: {resp.json}"
-        assert resp.json["status"] == "ok"
+        assert resp.status_code == 200, f"Assign to self failed: {resp.json()}"
+        assert resp.json()["status"] == "ok"
 
         # Verify no notification was sent when assigning to self
         mock_notify.assert_not_called()
 
 
-def test_assign_testrun_to_other(flask_client, sct_run_for_assignee, test_user, saved_g_user):
+def test_assign_testrun_to_other(api_client, sct_run_for_assignee, test_user, saved_g_user):
     """Test that assigning a testrun to someone else sends notification"""
     run_id, test_id = sct_run_for_assignee
 
     # Assign to another user
     with patch('argus.backend.service.notification_manager.NotificationManagerService.send_notification') as mock_notify:
         assign_payload = {"assignee": str(test_user.id)}
-        resp = flask_client.post(
+        resp = api_client.post(
             f"/api/v1/test/{test_id}/run/{run_id}/assignee/set",
-            data=json.dumps(assign_payload),
-            content_type="application/json",
+            json=assign_payload,
         )
-        assert resp.status_code == 200, f"Assign to other failed: {resp.json}"
-        assert resp.json["status"] == "ok"
-        assert resp.json["response"]["assignee"] == str(test_user.id)
+        assert resp.status_code == 200, f"Assign to other failed: {resp.json()}"
+        assert resp.json()["status"] == "ok"
+        assert resp.json()["response"]["assignee"] == str(test_user.id)
 
         # Verify notification was sent when assigning to someone else
         mock_notify.assert_called_once()
