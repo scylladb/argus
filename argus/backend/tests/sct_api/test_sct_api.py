@@ -11,7 +11,7 @@ API_PREFIX = "/api/v1/client/sct"
 
 
 @pytest.fixture
-def sct_run_id(flask_client, fake_test):
+def sct_run_id(api_client, fake_test):
     # Create an SCT run that other tests can use
     run_id = str(uuid4())
     payload = {
@@ -25,17 +25,16 @@ def sct_run_id(flask_client, fake_test):
         "sct_config": {"cluster_backend": "aws"},
         "schema_version": "v8",
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         "/api/v1/client/testrun/scylla-cluster-tests/submit",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json["status"] == "ok"
+    assert resp.json()["status"] == "ok"
     return run_id
 
 
-def test_submit_packages(flask_client, sct_run_id):
+def test_submit_packages(api_client, sct_run_id):
     payload = {
         "packages": [
             {
@@ -47,14 +46,13 @@ def test_submit_packages(flask_client, sct_run_id):
         ],
         "schema_version": "v8",
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{API_PREFIX}/{sct_run_id}/packages/submit",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
 
     )
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
+    assert resp.json()["status"] == "ok"
 
     # Verify model updated
     run = SCTTestRun.get(id=UUID(sct_run_id))
@@ -62,18 +60,17 @@ def test_submit_packages(flask_client, sct_run_id):
                "6.0.0" for p in run.packages)
 
 
-def test_submit_screenshots(flask_client, sct_run_id):
+def test_submit_screenshots(api_client, sct_run_id):
     payload = {
         "screenshot_links": ["https://grafana/snap/1", "https://grafana/snap/2"],
         "schema_version": "v8",
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{API_PREFIX}/{sct_run_id}/screenshots/submit",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
+    assert resp.json()["status"] == "ok"
 
     # Verify screenshots stored
     run = SCTTestRun.get(id=UUID(sct_run_id))
@@ -81,7 +78,7 @@ def test_submit_screenshots(flask_client, sct_run_id):
     assert "https://grafana/snap/2" in run.screenshots
 
 
-def test_set_runner(flask_client, sct_run_id):
+def test_set_runner(api_client, sct_run_id):
     payload = {
         "public_ip": "1.2.3.4",
         "private_ip": "10.0.0.1",
@@ -90,13 +87,12 @@ def test_set_runner(flask_client, sct_run_id):
         "name": "runner-1",
         "schema_version": "v8",
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{API_PREFIX}/{sct_run_id}/sct_runner/set",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
+    assert resp.json()["status"] == "ok"
 
     # Verify runner details persisted
     run = SCTTestRun.get(id=UUID(sct_run_id))
@@ -107,7 +103,7 @@ def test_set_runner(flask_client, sct_run_id):
                "runner-1" for res in SCTResource.find(run_id=UUID(sct_run_id)).all())
 
 
-def _create_resource(flask_client, sct_run_id, resource_name="node-1"):
+def _create_resource(api_client, sct_run_id, resource_name="node-1"):
     payload = {
         "resource": {
             "name": resource_name,
@@ -126,17 +122,16 @@ def _create_resource(flask_client, sct_run_id, resource_name="node-1"):
         },
         "schema_version": "v8",
     }
-    return flask_client.post(
+    return api_client.post(
         f"{API_PREFIX}/{sct_run_id}/resource/create",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
 
 
-def test_resource_create(flask_client, sct_run_id):
-    resp = _create_resource(flask_client, sct_run_id)
+def test_resource_create(api_client, sct_run_id):
+    resp = _create_resource(api_client, sct_run_id)
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
+    assert resp.json()["status"] == "ok"
 
     # Verify resource persisted
     res = SCTResource.get(run_id=UUID(sct_run_id), name="node-1")
@@ -145,55 +140,52 @@ def test_resource_create(flask_client, sct_run_id):
     assert res.state == "running"
 
 
-def test_resource_update_shards(flask_client, sct_run_id):
+def test_resource_update_shards(api_client, sct_run_id):
     # Ensure resource exists
-    _create_resource(flask_client, sct_run_id, resource_name="node-2")
+    _create_resource(api_client, sct_run_id, resource_name="node-2")
     payload = {
         "shards": 16,
         "schema_version": "v8"
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{API_PREFIX}/{sct_run_id}/resource/node-2/shards",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
+    assert resp.json()["status"] == "ok"
 
     # Verify shards updated
     res = SCTResource.get(run_id=UUID(sct_run_id), name="node-2")
     assert res.instance_info.shards_amount == 16
 
 
-def test_resource_update(flask_client, sct_run_id):
+def test_resource_update(api_client, sct_run_id):
     # Ensure resource exists
-    _create_resource(flask_client, sct_run_id, resource_name="node-3")
+    _create_resource(api_client, sct_run_id, resource_name="node-3")
     payload = {"update_data": {"instance_info": {
         "shards_amount": 12}}, "schema_version": "v8"}
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{API_PREFIX}/{sct_run_id}/resource/node-3/update",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
+    assert resp.json()["status"] == "ok"
 
     # Verify update applied
     res = SCTResource.get(run_id=UUID(sct_run_id), name="node-3")
     assert res.instance_info.shards_amount == 12
 
 
-def test_resource_terminate(flask_client, sct_run_id):
+def test_resource_terminate(api_client, sct_run_id):
     # Ensure resource exists
-    _create_resource(flask_client, sct_run_id, resource_name="node-4")
+    _create_resource(api_client, sct_run_id, resource_name="node-4")
     payload = {"reason": "test-complete", "schema_version": "v8"}
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{API_PREFIX}/{sct_run_id}/resource/node-4/terminate",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
+    assert resp.json()["status"] == "ok"
 
     # Verify termination reflected in model
     res = SCTResource.get(run_id=UUID(sct_run_id), name="node-4")
@@ -202,7 +194,7 @@ def test_resource_terminate(flask_client, sct_run_id):
     assert res.instance_info.termination_time and res.instance_info.termination_time > 0
 
 
-def test_nemesis_submit_and_finalize(flask_client, sct_run_id):
+def test_nemesis_submit_and_finalize(api_client, sct_run_id):
     submit_payload = {
         "nemesis": {
             "name": "ChaosMonkey",
@@ -215,13 +207,12 @@ def test_nemesis_submit_and_finalize(flask_client, sct_run_id):
         },
         "schema_version": "v8"
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{API_PREFIX}/{sct_run_id}/nemesis/submit",
-        data=json.dumps(submit_payload),
-        content_type="application/json",
+        json=submit_payload,
     )
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
+    assert resp.json()["status"] == "ok"
 
     # Verify nemesis created
     run = SCTTestRun.get(id=UUID(sct_run_id))
@@ -238,13 +229,12 @@ def test_nemesis_submit_and_finalize(flask_client, sct_run_id):
             "message": "done",
         }
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{API_PREFIX}/{sct_run_id}/nemesis/finalize",
-        data=json.dumps(finalize_payload),
-        content_type="application/json",
+        json=finalize_payload,
     )
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
+    assert resp.json()["status"] == "ok"
 
     # Verify nemesis finalized
     run = SCTTestRun.get(id=UUID(sct_run_id))
@@ -257,13 +247,12 @@ def test_nemesis_submit_and_finalize(flask_client, sct_run_id):
     stats_after_first = dict(run.nemesis_stats or {})
     end_time_after_first = nem.end_time
 
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{API_PREFIX}/{sct_run_id}/nemesis/finalize",
-        data=json.dumps(finalize_payload),
-        content_type="application/json",
+        json=finalize_payload,
     )
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
+    assert resp.json()["status"] == "ok"
 
     run = SCTTestRun.get(id=UUID(sct_run_id))
     nemesis_data = SCTNemesis.find(run_id=run.id).all()
@@ -274,7 +263,7 @@ def test_nemesis_submit_and_finalize(flask_client, sct_run_id):
     assert dict(run.nemesis_stats or {}) == stats_after_first
 
 
-def test_stress_commands(flask_client, sct_run_id):
+def test_stress_commands(api_client, sct_run_id):
     payload = {
         "log_name": "example.log",
         "ts": clamp_ts_to_milliseconds(datetime.datetime.now(tz=datetime.UTC).timestamp()),
@@ -282,13 +271,12 @@ def test_stress_commands(flask_client, sct_run_id):
         "loader_name": "loader-node-1",
         "schema_version": "v8"
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{API_PREFIX}/{sct_run_id}/stress_cmd/submit",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
+    assert resp.json()["status"] == "ok"
 
     run: SCTTestRun = SCTTestRun.get(id=UUID(sct_run_id))
     stress_cmds = run.get_stress_commands(run.id)
@@ -299,7 +287,7 @@ def test_stress_commands(flask_client, sct_run_id):
     assert stress_cmds[0].node_name == payload["loader_name"]
 
 
-def test_submit_gemini_results(flask_client, sct_run_id):
+def test_submit_gemini_results(api_client, sct_run_id):
     payload = {
         "gemini_data": {
             "oracle_nodes_count": 1,
@@ -317,13 +305,12 @@ def test_submit_gemini_results(flask_client, sct_run_id):
         },
         "schema_version": "v8"
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{API_PREFIX}/{sct_run_id}/gemini/submit",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
+    assert resp.json()["status"] == "ok"
 
     # Verify gemini fields persisted
     run = SCTTestRun.get(id=UUID(sct_run_id))
@@ -332,16 +319,15 @@ def test_submit_gemini_results(flask_client, sct_run_id):
     assert run.gemini_status == "PASSED"
 
 
-def test_submit_and_get_junit_report(flask_client, api_client, sct_run_id):
+def test_submit_and_get_junit_report(api_client, sct_run_id):
     payload = {"file_name": "report.xml",
                "content": "PGp1bml0PjwvanVuaXQ+", "schema_version": "v8"}
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{API_PREFIX}/{sct_run_id}/junit/submit",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
+    assert resp.json()["status"] == "ok"
 
     resp = api_client.get(f"/api/v1/run/scylla-cluster-tests/{sct_run_id}")
     assert resp.status_code == 200
@@ -369,8 +355,7 @@ def test_submit_and_get_junit_report(flask_client, api_client, sct_run_id):
 # being expanded in this coverage push.
 
 
-def _submit_event(flask_client, run_id: str, severity: str, message: str,
-                  ts: float, event_type: str = "DatabaseLogEvent", **extra) -> None:
+def _submit_event(api_client, run_id: str, severity: str, message: str, ts: float, event_type: str = "DatabaseLogEvent", **extra) -> None:
     """Submit a single new-style event via /event/submit and assert success."""
     payload = {
         "data": {
@@ -383,28 +368,27 @@ def _submit_event(flask_client, run_id: str, severity: str, message: str,
         },
         "schema_version": "v8",
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{API_PREFIX}/{run_id}/event/submit",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json["status"] == "ok"
-    assert resp.json["response"] is True
+    assert resp.json()["status"] == "ok"
+    assert resp.json()["response"] is True
 
 
-def test_submit_single_event(flask_client, sct_run_id):
+def test_submit_single_event(api_client, sct_run_id):
     ts = clamp_ts_to_milliseconds(datetime.datetime.now(tz=datetime.UTC).timestamp())
     _submit_event(
-        flask_client, sct_run_id,
+        api_client, sct_run_id,
         severity="ERROR", message="Something went wrong on node-1", ts=ts,
         node="node-1",
     )
 
     # Verify via paired GET endpoint.
-    resp = flask_client.get(f"{API_PREFIX}/{sct_run_id}/events/get")
+    resp = api_client.get(f"{API_PREFIX}/{sct_run_id}/events/get")
     assert resp.status_code == 200, resp.text
-    body = resp.json
+    body = resp.json()
     assert body["status"] == "ok"
     events = body["response"]
     assert isinstance(events, list)
@@ -418,7 +402,7 @@ def test_submit_single_event(flask_client, sct_run_id):
     }
 
 
-def test_submit_event_batch(flask_client, sct_run_id):
+def test_submit_event_batch(api_client, sct_run_id):
     base_ts = clamp_ts_to_milliseconds(datetime.datetime.now(tz=datetime.UTC).timestamp())
     payload = {
         "data": [
@@ -441,66 +425,65 @@ def test_submit_event_batch(flask_client, sct_run_id):
         ],
         "schema_version": "v8",
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{API_PREFIX}/{sct_run_id}/event/submit",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json["status"] == "ok"
-    assert resp.json["response"] is True
+    assert resp.json()["status"] == "ok"
+    assert resp.json()["response"] is True
 
     # Both events should be visible via the unfiltered GET.
-    resp = flask_client.get(f"{API_PREFIX}/{sct_run_id}/events/get")
+    resp = api_client.get(f"{API_PREFIX}/{sct_run_id}/events/get")
     assert resp.status_code == 200
-    severities = sorted(e["severity"] for e in resp.json["response"])
+    severities = sorted(e["severity"] for e in resp.json()["response"])
     assert severities == ["CRITICAL", "WARNING"]
 
 
-def test_get_events_by_severity(flask_client, sct_run_id):
+def test_get_events_by_severity(api_client, sct_run_id):
     base_ts = clamp_ts_to_milliseconds(datetime.datetime.now(tz=datetime.UTC).timestamp())
-    _submit_event(flask_client, sct_run_id, "ERROR", "err-A", base_ts)
-    _submit_event(flask_client, sct_run_id, "ERROR", "err-B", base_ts + 1)
-    _submit_event(flask_client, sct_run_id, "WARNING", "warn-A", base_ts + 2)
+    _submit_event(api_client, sct_run_id, "ERROR", "err-A", base_ts)
+    _submit_event(api_client, sct_run_id, "ERROR", "err-B", base_ts + 1)
+    _submit_event(api_client, sct_run_id, "WARNING", "warn-A", base_ts + 2)
 
-    resp = flask_client.get(f"{API_PREFIX}/{sct_run_id}/events/ERROR/get")
+    resp = api_client.get(f"{API_PREFIX}/{sct_run_id}/events/ERROR/get")
     assert resp.status_code == 200, resp.text
-    body = resp.json
+    body = resp.json()
     assert body["status"] == "ok"
     events = body["response"]
     assert len(events) == 2
     assert {e["message"] for e in events} == {"err-A", "err-B"}
     assert all(e["severity"] == "ERROR" for e in events)
 
-    resp = flask_client.get(f"{API_PREFIX}/{sct_run_id}/events/WARNING/get")
+    resp = api_client.get(f"{API_PREFIX}/{sct_run_id}/events/WARNING/get")
     assert resp.status_code == 200
-    assert [e["message"] for e in resp.json["response"]] == ["warn-A"]
+    assert [e["message"] for e in resp.json()["response"]] == ["warn-A"]
 
 
-def test_count_events_by_severity(flask_client, sct_run_id):
+def test_count_events_by_severity(api_client, sct_run_id):
     base_ts = clamp_ts_to_milliseconds(datetime.datetime.now(tz=datetime.UTC).timestamp())
-    _submit_event(flask_client, sct_run_id, "CRITICAL", "boom-1", base_ts)
-    _submit_event(flask_client, sct_run_id, "CRITICAL", "boom-2", base_ts + 1)
-    _submit_event(flask_client, sct_run_id, "CRITICAL", "boom-3", base_ts + 2)
-    _submit_event(flask_client, sct_run_id, "ERROR", "err", base_ts + 3)
+    _submit_event(api_client, sct_run_id, "CRITICAL", "boom-1", base_ts)
+    _submit_event(api_client, sct_run_id, "CRITICAL", "boom-2", base_ts + 1)
+    _submit_event(api_client, sct_run_id, "CRITICAL", "boom-3", base_ts + 2)
+    _submit_event(api_client, sct_run_id, "ERROR", "err", base_ts + 3)
 
-    resp = flask_client.get(f"{API_PREFIX}/{sct_run_id}/events/CRITICAL/count")
+    resp = api_client.get(f"{API_PREFIX}/{sct_run_id}/events/CRITICAL/count")
     assert resp.status_code == 200, resp.text
-    body = resp.json
+    body = resp.json()
     assert body["status"] == "ok"
     assert body["response"] == 3
 
-    resp = flask_client.get(f"{API_PREFIX}/{sct_run_id}/events/ERROR/count")
+    resp = api_client.get(f"{API_PREFIX}/{sct_run_id}/events/ERROR/count")
     assert resp.status_code == 200
-    assert resp.json["response"] == 1
+    assert resp.json()["response"] == 1
 
     # Severity with zero submitted events.
-    resp = flask_client.get(f"{API_PREFIX}/{sct_run_id}/events/DEBUG/count")
+    resp = api_client.get(f"{API_PREFIX}/{sct_run_id}/events/DEBUG/count")
     assert resp.status_code == 200
-    assert resp.json["response"] == 0
+    assert resp.json()["response"] == 0
 
 
-def test_get_stress_commands(flask_client, sct_run_id):
+def test_get_stress_commands(api_client, sct_run_id):
     payloads = [
         {
             "log_name": "loader-A.log",
@@ -518,16 +501,15 @@ def test_get_stress_commands(flask_client, sct_run_id):
         },
     ]
     for p in payloads:
-        resp = flask_client.post(
+        resp = api_client.post(
             f"{API_PREFIX}/{sct_run_id}/stress_cmd/submit",
-            data=json.dumps(p),
-            content_type="application/json",
+            json=p,
         )
-        assert resp.status_code == 200 and resp.json["status"] == "ok"
+        assert resp.status_code == 200 and resp.json()["status"] == "ok"
 
-    resp = flask_client.get(f"{API_PREFIX}/{sct_run_id}/stress_cmd/get")
+    resp = api_client.get(f"{API_PREFIX}/{sct_run_id}/stress_cmd/get")
     assert resp.status_code == 200, resp.text
-    body = resp.json
+    body = resp.json()
     assert body["status"] == "ok"
     cmds = body["response"]
     assert isinstance(cmds, list)
@@ -539,26 +521,25 @@ def test_get_stress_commands(flask_client, sct_run_id):
     assert by_loader["loader-1"]["log_name"] == "loader-A.log"
 
 
-def test_get_similar_events_empty_for_fresh_run(flask_client, sct_run_id):
+def test_get_similar_events_empty_for_fresh_run(api_client, sct_run_id):
     """A run with no embeddings yields an empty similars list (happy path)."""
-    resp = flask_client.get(f"{API_PREFIX}/{sct_run_id}/similar_events")
+    resp = api_client.get(f"{API_PREFIX}/{sct_run_id}/similar_events")
     assert resp.status_code == 200, resp.text
-    body = resp.json
+    body = resp.json()
     assert body["status"] == "ok"
     assert body["response"] == []
 
 
-def test_similar_runs_info_for_run_without_issues(flask_client, sct_run_id):
+def test_similar_runs_info_for_run_without_issues(api_client, sct_run_id):
     """Without any IssueLink rows the endpoint still returns a populated entry
     (build_id, start_time, version) for every requested run id."""
     payload = {"run_ids": [sct_run_id]}
-    resp = flask_client.post(
+    resp = api_client.post(
         "/api/v1/client/sct/similar_runs_info",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
     assert resp.status_code == 200, resp.text
-    body = resp.json
+    body = resp.json()
     assert body["status"] == "ok"
     assert sct_run_id in body["response"]
     info = body["response"][sct_run_id]
@@ -567,23 +548,21 @@ def test_similar_runs_info_for_run_without_issues(flask_client, sct_run_id):
     assert info["issues"] == []
 
 
-def test_similar_runs_info_missing_run_ids(flask_client):
-    resp = flask_client.post(
+def test_similar_runs_info_missing_run_ids(api_client):
+    resp = api_client.post(
         "/api/v1/client/sct/similar_runs_info",
-        data=json.dumps({}),
-        content_type="application/json",
+        json={},
     )
-    assert resp.status_code == 400
-    assert resp.json["status"] == "error"
-    assert "run_ids" in resp.json["response"]
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "error"
+    assert resp.json()["response"]["exception"] == "RequestValidationError"
 
 
-def test_similar_runs_info_invalid_run_ids_type(flask_client):
-    resp = flask_client.post(
+def test_similar_runs_info_invalid_run_ids_type(api_client):
+    resp = api_client.post(
         "/api/v1/client/sct/similar_runs_info",
-        data=json.dumps({"run_ids": "not-a-list"}),
-        content_type="application/json",
+        json={"run_ids": "not-a-list"},
     )
-    assert resp.status_code == 400
-    assert resp.json["status"] == "error"
-    assert "must be a list" in resp.json["response"]
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "error"
+    assert resp.json()["response"]["exception"] == "RequestValidationError"

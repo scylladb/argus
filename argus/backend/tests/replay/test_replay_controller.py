@@ -1,6 +1,6 @@
 """Controller-level tests for :mod:`argus.backend.controller.replay_api`.
 
-Stands up a minimal Flask app with only the replay blueprint registered so we
+Stands up a minimal FastAPI app with only the replay router included so we
 don't need the heavyweight Docker/ScyllaDB fixture. The ReplayService is
 patched out -- the dispatch logic itself is covered by
 ``test_replay_service``.
@@ -14,31 +14,30 @@ from unittest.mock import patch
 
 import pytest
 import zstandard as zstd
-from flask import Flask
+from fastapi import FastAPI
+from starlette.testclient import TestClient
+
+from argus.backend.controller import replay_api
+from argus.backend.error_handlers import APIException, api_exception_handler
+from argus.backend.models.web import User
+from argus.backend.service.user import load_user
 
 
 @pytest.fixture
-def app(monkeypatch):
+def app():
+    app = FastAPI()
+    app.include_router(replay_api.router, prefix="/api/v1/client")
+    app.add_exception_handler(APIException, api_exception_handler)
     # No-op the auth pipeline so the test client can hit the endpoint.
-    monkeypatch.setattr(
-        "argus.backend.service.user.api_login_required",
-        lambda view: view,
-    )
-    # Re-import the blueprint after patching so the decorator above takes
-    # effect, since ``@api_login_required`` runs at module-import time.
-    import importlib
-    import argus.backend.controller.replay_api as replay_api
-    importlib.reload(replay_api)
-
-    app = Flask(__name__)
-    app.register_blueprint(replay_api.bp, url_prefix="/api/v1/client/replay")
-    yield app
-    importlib.reload(replay_api)  # restore the real decorator for other tests
+    import uuid
+    test_user = User(id=uuid.uuid4(), username="replay-test", roles=["ROLE_USER"])
+    app.dependency_overrides[load_user] = lambda: test_user
+    return app
 
 
 @pytest.fixture
 def client(app):
-    return app.test_client()
+    return TestClient(app, raise_server_exceptions=False)
 
 
 def _make_archive(records: list[dict]) -> bytes:
@@ -55,24 +54,24 @@ def test_replay_ingest_rejects_unsupported_content_type(client):
     response = client.post(
         "/api/v1/client/replay/ingest",
         data=b"...",
-        content_type="text/plain",
+        headers={"content-type": "text/plain"},
     )
     # ``handle_api_exception`` returns HTTP 200 with the standard error
     # envelope for every APIException subclass.
     assert response.status_code == 200
-    assert response.json["status"] == "error"
-    assert response.json["response"]["exception"] == "UnsupportedMediaType"
+    assert response.json()["status"] == "error"
+    assert response.json()["response"]["exception"] == "UnsupportedMediaType"
 
 
 def test_replay_ingest_rejects_empty_body(client):
     response = client.post(
         "/api/v1/client/replay/ingest",
         data=b"",
-        content_type="application/x-tar-zstd",
+        headers={"content-type": "application/x-tar-zstd"},
     )
     assert response.status_code == 200
-    assert response.json["status"] == "error"
-    assert response.json["response"]["exception"] == "EmptyRequest"
+    assert response.json()["status"] == "error"
+    assert response.json()["response"]["exception"] == "EmptyRequest"
 
 
 def test_replay_ingest_returns_summary_for_valid_archive(client):
@@ -98,13 +97,13 @@ def test_replay_ingest_returns_summary_for_valid_archive(client):
         }
         response = client.post(
             "/api/v1/client/replay/ingest",
-            data=archive,
-            content_type="application/x-tar-zstd",
+            content=archive,
+            headers={"content-type": "application/x-tar-zstd"},
         )
 
     assert response.status_code == 200
-    assert response.json["status"] == "ok"
-    assert response.json["response"]["total"] == 1
+    assert response.json()["status"] == "ok"
+    assert response.json()["response"]["total"] == 1
     instance.ingest.assert_called_once()
     _, kwargs = instance.ingest.call_args
     assert kwargs["dry_run"] is False
@@ -122,8 +121,8 @@ def test_replay_ingest_dry_run_flag_forwarded(client):
         }
         client.post(
             "/api/v1/client/replay/ingest?dry_run=true",
-            data=archive,
-            content_type="application/x-tar-zstd",
+            content=archive,
+            headers={"content-type": "application/x-tar-zstd"},
         )
         _, kwargs = instance.ingest.call_args
         assert kwargs["dry_run"] is True
@@ -139,11 +138,11 @@ def test_replay_ingest_forwards_service_error_through_handler(client):
         )
         response = client.post(
             "/api/v1/client/replay/ingest",
-            data=b"garbage",
-            content_type="application/x-tar-zstd",
+            content=b"garbage",
+            headers={"content-type": "application/x-tar-zstd"},
         )
     # Same handler path as the other validation errors -- 200 + envelope.
     assert response.status_code == 200
-    assert response.json["status"] == "error"
-    assert response.json["response"]["exception"] == "ReplayServiceError"
-    assert "Failed to decode archive" in response.json["response"]["message"]
+    assert response.json()["status"] == "error"
+    assert response.json()["response"]["exception"] == "ReplayServiceError"
+    assert "Failed to decode archive" in response.json()["response"]["message"]

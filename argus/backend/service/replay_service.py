@@ -62,11 +62,13 @@ from dataclasses import dataclass, field
 from typing import Iterable
 
 import zstandard as zstd
-from flask import current_app
 
 from coodie.exceptions import DocumentNotFound
 
+from starlette.testclient import TestClient
+
 from argus.backend.error_handlers import APIException
+from argus.backend.util.config import Config
 
 LOGGER = logging.getLogger(__name__)
 
@@ -173,12 +175,14 @@ class ReplayService:
         self,
         *,
         app=None,
+        client=None,
         auth_header: str | None = None,
         create_missing_tests: bool = False,
         backfill_logs: bool = False,
         s3_client=None,
     ) -> None:
         self._app = app
+        self._client = client
         self._auth_header = auth_header
         self._create_missing_tests = create_missing_tests
         self._backfill_logs = backfill_logs
@@ -220,14 +224,16 @@ class ReplayService:
         return summary
 
     def _test_client(self):
-        """Resolve the Flask test client to dispatch through.
+        """Build the in-process TestClient to dispatch through.
 
-        Prefers an explicitly-injected app (used by unit tests); falls back
-        to :py:obj:`flask.current_app` so the controller doesn't need to
-        thread the app through.
+        The controller injects the running ASGI application; unit tests can
+        inject a ready-made client instead.
         """
-        app = self._app or current_app._get_current_object()  # type: ignore[attr-defined]
-        return app.test_client()
+        if self._client is not None:
+            return self._client
+        if self._app is None:
+            raise ReplayServiceError("No application injected for replay dispatch")
+        return TestClient(self._app, raise_server_exceptions=False)
 
     # ------------------------------------------------------------------
     # Archive handling
@@ -581,8 +587,8 @@ class ReplayService:
             import boto3
             self._s3 = boto3.client(
                 service_name="s3",
-                aws_access_key_id=current_app.config.get("AWS_CLIENT_ID"),
-                aws_secret_access_key=current_app.config.get("AWS_CLIENT_SECRET"),
+                aws_access_key_id=Config.load_yaml_config().get("AWS_CLIENT_ID"),
+                aws_secret_access_key=Config.load_yaml_config().get("AWS_CLIENT_SECRET"),
             )
         return self._s3
 
@@ -616,11 +622,7 @@ class ReplayService:
             match = _S3_LINK_RE.match(link or "")
             if match:
                 return match.group("bucket")
-        try:
-            configured = current_app.config.get("REPLAY_LOG_BACKFILL_BUCKET")
-        except RuntimeError:
-            # No application context (e.g. unit tests): no configured override.
-            configured = None
+        configured = Config.load_yaml_config().get("REPLAY_LOG_BACKFILL_BUCKET")
         return configured or _DEFAULT_LOG_BACKFILL_BUCKET
 
     def _list_s3_run_objects(self, bucket: str, prefix: str) -> list[str]:
@@ -800,10 +802,10 @@ class ReplayService:
             headers["Authorization"] = self._auth_header
 
         try:
-            response = client.open(
+            response = client.request(
+                method,
                 url,
-                method=method,
-                query_string=params or None,
+                params=params or None,
                 json=body if body is not None else None,
                 headers=headers,
             )
@@ -839,7 +841,7 @@ class ReplayService:
             summary.succeeded += 1
             return
 
-        body_text = response.get_data(as_text=True)
+        body_text = response.text
         summary.failed += 1
         summary.errors.append({
             "ts": ts,
@@ -853,7 +855,7 @@ class ReplayService:
         envelope, return a one-line description; otherwise return None.
         """
         try:
-            data = response.get_json(silent=True)
+            data = response.json()
         except Exception:  # noqa: BLE001
             return None
         if not isinstance(data, dict):

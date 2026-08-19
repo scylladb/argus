@@ -9,7 +9,7 @@ from argus.backend.models.web import ArgusTest
 API_PREFIX = "/api/v1"
 
 
-def _submit_run(flask_client: FlaskClient, fake_test: ArgusTest, *, run_id: str | None = None, build_number: int = 1) -> str:
+def _submit_run(api_client, fake_test: ArgusTest, *, run_id: str | None = None, build_number: int = 1) -> str:
     """Submit a single SCT run against `fake_test` and return its run_id."""
     run_id = run_id or str(uuid4())
     payload = {
@@ -23,19 +23,19 @@ def _submit_run(flask_client: FlaskClient, fake_test: ArgusTest, *, run_id: str 
         "sct_config": {"cluster_backend": "aws"},
         "schema_version": "v8",
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{API_PREFIX}/client/testrun/scylla-cluster-tests/submit",
         json=payload,
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json["status"] == "ok"
+    assert resp.json()["status"] == "ok"
     return run_id
 
 
 @pytest.mark.docker_required
-def test_get_run_by_build_resolves_run(flask_client: FlaskClient, api_client, fake_test: ArgusTest) -> None:
+def test_get_run_by_build_resolves_run(api_client, fake_test: ArgusTest) -> None:
     """The build_id + build_number pair resolves to the submitted run."""
-    run_id = _submit_run(flask_client, fake_test, build_number=77)
+    run_id = _submit_run(api_client, fake_test, build_number=77)
 
     resp = api_client.get(f"{API_PREFIX}/test/{fake_test.build_system_id}/77")
 
@@ -49,9 +49,9 @@ def test_get_run_by_build_resolves_run(flask_client: FlaskClient, api_client, fa
 
 
 @pytest.mark.docker_required
-def test_get_run_by_build_unknown_build_number_errors(flask_client: FlaskClient, api_client, fake_test: ArgusTest) -> None:
+def test_get_run_by_build_unknown_build_number_errors(api_client, fake_test: ArgusTest) -> None:
     """A build number with no matching run yields an error response."""
-    _submit_run(flask_client, fake_test, build_number=1)
+    _submit_run(api_client, fake_test, build_number=1)
 
     resp = api_client.get(f"{API_PREFIX}/test/{fake_test.build_system_id}/999999")
 

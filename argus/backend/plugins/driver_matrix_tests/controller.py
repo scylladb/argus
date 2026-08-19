@@ -1,66 +1,69 @@
-from flask import Blueprint, request
+from fastapi import APIRouter, Depends, Query
+from flask import Blueprint
 
-from argus.backend.error_handlers import handle_api_exception
-from argus.backend.plugins.driver_matrix_tests.raw_types import DriverMatrixSubmitEnvRequest, DriverMatrixSubmitFailureRequest, DriverMatrixSubmitResultRequest
-from argus.backend.service.user import api_login_required
+from argus.backend.models.web import User
+from argus.backend.plugins.driver_matrix_tests.raw_types import (
+    DriverMatrixSubmitEnvRequest,
+    DriverMatrixSubmitFailureRequest,
+    DriverMatrixSubmitResultRequest,
+)
 from argus.backend.plugins.driver_matrix_tests.service import DriverMatrixService
-from argus.backend.util.common import get_payload
+from argus.backend.service.user import api_current_user
+from argus.backend.util.encoders import ArgusJSONResponse
 
-bp = Blueprint("driver_matrix_api", __name__, url_prefix="/driver_matrix")
-bp.register_error_handler(Exception, handle_api_exception)
+router = APIRouter(prefix="/driver_matrix")
 
 
-@bp.route("/test_report", methods=["GET"])
-@api_login_required
-def driver_matrix_test_report():
-
-    build_id = request.args.get("buildId")
-    if not build_id:
-        raise Exception("No build id provided")
-
+@router.get("/test_report", name="api.client_api.driver_matrix_api.driver_matrix_test_report")
+def driver_matrix_test_report(build_id: str = Query(..., alias="buildId"),
+                              user: User = Depends(api_current_user)):
     result = DriverMatrixService().tested_versions_report(build_id=build_id)
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/result/submit", methods=["POST"])
-@api_login_required
-def submit_result():
-    payload = get_payload(request)
-    request_data = DriverMatrixSubmitResultRequest(**payload)
-
-    result = DriverMatrixService().submit_driver_result(driver_name=request_data.driver_name,
-                                                        driver_type=request_data.driver_type, run_id=request_data.run_id, raw_xml=request_data.raw_xml)
-    return {
+@router.post("/result/submit", name="api.client_api.driver_matrix_api.submit_result")
+def submit_result(payload: DriverMatrixSubmitResultRequest,
+                  user: User = Depends(api_current_user)):
+    result = DriverMatrixService().submit_driver_result(
+        driver_name=payload.driver_name, driver_type=payload.driver_type,
+        run_id=payload.run_id, raw_xml=payload.raw_xml)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/result/fail", methods=["POST"])
-@api_login_required
-def submit_failure():
-    payload = get_payload(request)
-    request_data = DriverMatrixSubmitFailureRequest(**payload)
-
-    result = DriverMatrixService().submit_driver_failure(driver_name=request_data.driver_name,
-                                                         driver_type=request_data.driver_type, run_id=request_data.run_id, failure_reason=request_data.failure_reason)
-    return {
+@router.post("/result/fail", name="api.client_api.driver_matrix_api.submit_failure")
+def submit_failure(payload: DriverMatrixSubmitFailureRequest,
+                   user: User = Depends(api_current_user)):
+    result = DriverMatrixService().submit_driver_failure(
+        driver_name=payload.driver_name, driver_type=payload.driver_type,
+        run_id=payload.run_id, failure_reason=payload.failure_reason)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/env/submit", methods=["POST"])
-@api_login_required
-def submit_env():
-    payload = get_payload(request)
-    request_data = DriverMatrixSubmitEnvRequest(**payload)
-
-    result = DriverMatrixService().submit_env_info(run_id=request_data.run_id, raw_env=request_data.raw_env)
-    return {
+@router.post("/env/submit", name="api.client_api.driver_matrix_api.submit_env")
+def submit_env(payload: DriverMatrixSubmitEnvRequest, user: User = Depends(api_current_user)):
+    result = DriverMatrixService().submit_env_info(run_id=payload.run_id, raw_env=payload.raw_env)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
+
+
+# The routes above are served by FastAPI; these view-less rules keep the
+# endpoints buildable through Flask's url_for until the Flask app is retired.
+bp = Blueprint("driver_matrix_api", __name__, url_prefix="/driver_matrix")
+for _rule, _endpoint in (
+    ("/test_report", "driver_matrix_test_report"),
+    ("/result/submit", "submit_result"),
+    ("/result/fail", "submit_failure"),
+    ("/env/submit", "submit_env"),
+):
+    bp.add_url_rule(_rule, _endpoint, None)

@@ -34,7 +34,7 @@ RUN_TYPE = "scylla-cluster-tests"
 
 
 @pytest.fixture
-def submitted_run_id(flask_client, fake_test) -> str:
+def submitted_run_id(api_client, fake_test) -> str:
     run_id = str(uuid4())
     payload = {
         "run_id": run_id,
@@ -47,41 +47,40 @@ def submitted_run_id(flask_client, fake_test) -> str:
         "sct_config": {"cluster_backend": "aws"},
         "schema_version": "v8",
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{API_PREFIX}/testrun/{RUN_TYPE}/submit",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json["status"] == "ok"
+    assert resp.json()["status"] == "ok"
     return run_id
 
 
-def _get_run_info(flask_client, run_id: str) -> dict:
-    resp = flask_client.get(f"{API_PREFIX}/testrun/{run_id}/info")
+def _get_run_info(api_client, run_id: str) -> dict:
+    resp = api_client.get(f"{API_PREFIX}/testrun/{run_id}/info")
     assert resp.status_code == 200, resp.text
-    assert resp.json["status"] == "ok", resp.json
-    return resp.json["response"]
+    assert resp.json()["status"] == "ok", resp.json()
+    return resp.json()["response"]
 
 
-def test_submit_run_then_get_run_returns_payload(flask_client, submitted_run_id):
-    resp = flask_client.get(f"{API_PREFIX}/testrun/{RUN_TYPE}/{submitted_run_id}/get")
+def test_submit_run_then_get_run_returns_payload(api_client, submitted_run_id):
+    resp = api_client.get(f"{API_PREFIX}/testrun/{RUN_TYPE}/{submitted_run_id}/get")
     assert resp.status_code == 200, resp.text
-    assert resp.json["status"] == "ok"
-    body = resp.json["response"]
+    assert resp.json()["status"] == "ok"
+    body = resp.json()["response"]
     assert body is not None
     assert str(body["id"]) == submitted_run_id
 
 
-def test_get_run_returns_null_for_unknown_run(flask_client):
-    resp = flask_client.get(f"{API_PREFIX}/testrun/{RUN_TYPE}/{uuid4()}/get")
+def test_get_run_returns_null_for_unknown_run(api_client):
+    resp = api_client.get(f"{API_PREFIX}/testrun/{RUN_TYPE}/{uuid4()}/get")
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
-    assert resp.json["response"] is None
+    assert resp.json()["status"] == "ok"
+    assert resp.json()["response"] is None
 
 
-def test_get_run_info_returns_full_details(flask_client, submitted_run_id, fake_test):
-    info = _get_run_info(flask_client, submitted_run_id)
+def test_get_run_info_returns_full_details(api_client, submitted_run_id, fake_test):
+    info = _get_run_info(api_client, submitted_run_id)
     assert info["plugin_name"] == RUN_TYPE
     assert str(info["test_run"]["id"]) == submitted_run_id
     assert info["test_info"]["test"]["name"] == fake_test.name
@@ -89,63 +88,61 @@ def test_get_run_info_returns_full_details(flask_client, submitted_run_id, fake_
     assert info["activity"]["raw_events"] == []
 
 
-def test_get_run_info_unknown_run_returns_error(flask_client):
-    resp = flask_client.get(f"{API_PREFIX}/testrun/{uuid4()}/info")
+def test_get_run_info_unknown_run_returns_error(api_client):
+    resp = api_client.get(f"{API_PREFIX}/testrun/{uuid4()}/info")
     assert resp.status_code == 200
-    assert resp.json["status"] == "error"
-    assert resp.json["response"]["exception"] == "ClientException"
+    assert resp.json()["status"] == "error"
+    assert resp.json()["response"]["exception"] == "ClientException"
 
 
-def test_heartbeat_sets_recent_timestamp(flask_client, submitted_run_id):
+def test_heartbeat_sets_recent_timestamp(api_client, submitted_run_id):
     before = int(time.time())
-    resp = flask_client.post(f"{API_PREFIX}/testrun/{RUN_TYPE}/{submitted_run_id}/heartbeat")
+    resp = api_client.post(f"{API_PREFIX}/testrun/{RUN_TYPE}/{submitted_run_id}/heartbeat")
     after = int(time.time())
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
-    hb = resp.json["response"]
+    assert resp.json()["status"] == "ok"
+    hb = resp.json()["response"]
     assert isinstance(hb, int)
     assert before <= hb <= after
 
-    info = _get_run_info(flask_client, submitted_run_id)
+    info = _get_run_info(api_client, submitted_run_id)
     assert info["test_run"]["heartbeat"] == hb
 
 
-def test_get_status_returns_initial_created(flask_client, submitted_run_id):
-    resp = flask_client.get(f"{API_PREFIX}/testrun/{RUN_TYPE}/{submitted_run_id}/get_status")
+def test_get_status_returns_initial_created(api_client, submitted_run_id):
+    resp = api_client.get(f"{API_PREFIX}/testrun/{RUN_TYPE}/{submitted_run_id}/get_status")
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
-    assert resp.json["response"] == "created"
+    assert resp.json()["status"] == "ok"
+    assert resp.json()["response"] == "created"
 
 
-def test_set_status_updates_run(flask_client, submitted_run_id):
-    resp = flask_client.post(
+def test_set_status_updates_run(api_client, submitted_run_id):
+    resp = api_client.post(
         f"{API_PREFIX}/testrun/{RUN_TYPE}/{submitted_run_id}/set_status",
-        data=json.dumps({"new_status": "running"}),
-        content_type="application/json",
+        json={"new_status": "running"},
     )
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
-    assert resp.json["response"] == "running"
+    assert resp.json()["status"] == "ok"
+    assert resp.json()["response"] == "running"
 
-    follow_up = flask_client.get(f"{API_PREFIX}/testrun/{RUN_TYPE}/{submitted_run_id}/get_status")
-    assert follow_up.json["response"] == "running"
+    follow_up = api_client.get(f"{API_PREFIX}/testrun/{RUN_TYPE}/{submitted_run_id}/get_status")
+    assert follow_up.json()["response"] == "running"
 
 
-def test_update_product_version_persists_value(flask_client, submitted_run_id):
-    resp = flask_client.post(
+def test_update_product_version_persists_value(api_client, submitted_run_id):
+    resp = api_client.post(
         f"{API_PREFIX}/testrun/{RUN_TYPE}/{submitted_run_id}/update_product_version",
-        data=json.dumps({"product_version": "6.1.0"}),
-        content_type="application/json",
+        json={"product_version": "6.1.0"},
     )
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
-    assert resp.json["response"] == "Submitted"
+    assert resp.json()["status"] == "ok"
+    assert resp.json()["response"] == "Submitted"
 
-    info = _get_run_info(flask_client, submitted_run_id)
+    info = _get_run_info(api_client, submitted_run_id)
     assert info["test_run"]["scylla_version"] == "6.1.0"
 
 
-def test_submit_logs_appends_unique_logs(flask_client, submitted_run_id):
+def test_submit_logs_appends_unique_logs(api_client, submitted_run_id):
     payload = {
         "logs": [
             {"log_name": "monitor.log", "log_link": "http://example.com/m.log"},
@@ -154,27 +151,26 @@ def test_submit_logs_appends_unique_logs(flask_client, submitted_run_id):
             {"log_name": "monitor.log", "log_link": "http://example.com/dup.log"},
         ],
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{API_PREFIX}/testrun/{RUN_TYPE}/{submitted_run_id}/logs/submit",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
-    assert resp.json["response"] == "Submitted"
+    assert resp.json()["status"] == "ok"
+    assert resp.json()["response"] == "Submitted"
 
-    info = _get_run_info(flask_client, submitted_run_id)
+    info = _get_run_info(api_client, submitted_run_id)
     log_names = {entry[0] for entry in info["test_run"]["logs"]}
     assert log_names == {"monitor.log", "loader.log"}
 
 
-def test_finalize_run_records_end_time(flask_client, submitted_run_id):
-    resp = flask_client.post(f"{API_PREFIX}/testrun/{RUN_TYPE}/{submitted_run_id}/finalize")
+def test_finalize_run_records_end_time(api_client, submitted_run_id):
+    resp = api_client.post(f"{API_PREFIX}/testrun/{RUN_TYPE}/{submitted_run_id}/finalize")
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
-    assert resp.json["response"] == "Finalized"
+    assert resp.json()["status"] == "ok"
+    assert resp.json()["response"] == "Finalized"
 
-    info = _get_run_info(flask_client, submitted_run_id)
+    info = _get_run_info(api_client, submitted_run_id)
     assert info["test_run"]["end_time"] is not None
 
 
@@ -193,21 +189,20 @@ def _pytest_payload(test_name: str, status: str = "passed", duration: float = 0.
     }
 
 
-def test_submit_pytest_result_via_endpoint(flask_client):
+def test_submit_pytest_result_via_endpoint(api_client):
     payload = _pytest_payload(f"client_api_pytest::test_{uuid4().hex}")
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{API_PREFIX}/testrun/pytest/result/submit",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json["status"] == "ok"
-    body = resp.json["response"]
+    assert resp.json()["status"] == "ok"
+    body = resp.json()["response"]
     assert body["name"] == payload["name"]
     assert body["id"] is not None
 
 
-def test_pytest_field_stats_returns_avg_duration(flask_client):
+def test_pytest_field_stats_returns_avg_duration(api_client):
     test_name = f"client_api_pytest::test_avg_{uuid4().hex}"
     durations = [1.0, 2.0, 3.0]
     for d in durations:
@@ -215,22 +210,21 @@ def test_pytest_field_stats_returns_avg_duration(flask_client):
         # Force unique timestamps so each row is a distinct primary key.
         payload["timestamp"] = time.time() + d
         payload["session_timestamp"] = payload["timestamp"]
-        resp = flask_client.post(
+        resp = api_client.post(
             f"{API_PREFIX}/testrun/pytest/result/submit",
-            data=json.dumps(payload),
-            content_type="application/json",
+            json=payload,
         )
         assert resp.status_code == 200, resp.text
-        assert resp.json["status"] == "ok"
+        assert resp.json()["status"] == "ok"
 
-    resp = flask_client.get(f"{API_PREFIX}/testrun/pytest/{test_name}/stats/duration/avg")
+    resp = api_client.get(f"{API_PREFIX}/testrun/pytest/{test_name}/stats/duration/avg")
     assert resp.status_code == 200, resp.text
-    assert resp.json["status"] == "ok"
-    avg = resp.json["response"][test_name]["duration"]["avg"]
+    assert resp.json()["status"] == "ok"
+    avg = resp.json()["response"][test_name]["duration"]["avg"]
     assert avg == pytest.approx(sum(durations) / len(durations), rel=1e-3)
 
 
-def test_render_email_report_returns_html(flask_client, submitted_run_id):
+def test_render_email_report_returns_html(api_client, submitted_run_id):
     EmailService.set_sender(EmailListener())
     try:
         payload = {
@@ -241,13 +235,12 @@ def test_render_email_report_returns_html(flask_client, submitted_run_id):
             "attachments": [],
             "schema_version": "v8",
         }
-        resp = flask_client.post(
+        resp = api_client.post(
             f"{API_PREFIX}/testrun/report",
-            data=json.dumps(payload),
-            content_type="application/json",
+            json=payload,
         )
         assert resp.status_code == 200, resp.text
-        body = resp.get_data(as_text=True)
+        body = resp.text
         # render_email_report returns the html body directly (no JSON envelope).
         assert "<html" in body.lower() or "<table" in body.lower()
         assert submitted_run_id in body or "client_api_user" in body

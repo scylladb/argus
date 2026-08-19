@@ -414,7 +414,7 @@ class SCTService:
 
     @staticmethod
     def get_nemesis(run_id: str) -> list:
-        return list(SCTNemesis.find(run_id=run_id).all())
+        return list(SCTNemesis.find(run_id=UUID(run_id) if isinstance(run_id, str) else run_id).all())
 
     @staticmethod
     def submit_nemesis(run_id: str, nemesis_details: dict) -> str:

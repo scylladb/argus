@@ -6,6 +6,7 @@ from typing import Annotated, ClassVar, Optional
 from uuid import UUID
 from time import time
 from cassandra.concurrent import execute_concurrent_with_args
+from fastapi import APIRouter
 from flask import Blueprint
 from pydantic import Field
 from coodie import ClusteringKey, Indexed, PrimaryKey
@@ -261,7 +262,8 @@ class PluginModelBase(Document):
 
 class PluginInfoBase:
     name: str
-    controller: Blueprint
+    controller: APIRouter | None
+    controller_bp: Blueprint | None
     model: PluginModelBase
     all_models: list[type[Document]]
     all_types: list[type[UserType]]

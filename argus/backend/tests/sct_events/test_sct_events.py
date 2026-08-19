@@ -294,7 +294,7 @@ def test_submit_event_db_event(client_service: ClientService, sct_service: SCTSe
     assert len(all_events) == 1, "Event not found"
 
 
-def test_controller_submit_event(flask_client: FlaskClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService):
+def test_controller_submit_event(api_client: FlaskClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService):
     run_type, run_req = get_fake_test_run(fake_test)
     client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
@@ -310,23 +310,22 @@ def test_controller_submit_event(flask_client: FlaskClient, fake_test: ArgusTest
         "ts": datetime.now(tz=UTC).timestamp()
     }
 
-    response = flask_client.post(
+    response = api_client.post(
         f"/api/v1/client/sct/{run.id}/event/submit",
-        data=json.dumps({
+        content=json.dumps({
             "data": body,
             "schema_version": "v8",
-        }, cls=ArgusJSONEncoder),
-        content_type="application/json",
+        }, cls=ArgusJSONEncoder), headers={"content-type": "application/json"},
     )
 
     assert response.status_code == 200
-    assert response.content_type == "application/json"
-    assert response.json["status"] == "ok"
-    assert response.json["response"]
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json()["status"] == "ok"
+    assert response.json()["response"]
 
 
 
-def test_controller_submit_multiple_events(flask_client: FlaskClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService):
+def test_controller_submit_multiple_events(api_client: FlaskClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService):
     run_type, run_req = get_fake_test_run(fake_test)
     client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
@@ -348,23 +347,22 @@ def test_controller_submit_multiple_events(flask_client: FlaskClient, fake_test:
         event["ts"] += i
         events.append(event)
 
-    response = flask_client.post(
+    response = api_client.post(
         f"/api/v1/client/sct/{run.id}/event/submit",
-        data=json.dumps({
+        content=json.dumps({
             "data": events,
             "schema_version": "v8",
-        }, cls=ArgusJSONEncoder),
-        content_type="application/json",
+        }, cls=ArgusJSONEncoder), headers={"content-type": "application/json"},
     )
 
     assert response.status_code == 200
-    assert response.content_type == "application/json"
-    assert response.json["status"] == "ok"
-    assert response.json["response"]
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json()["status"] == "ok"
+    assert response.json()["response"]
 
 
 
-def test_controller_submit_events_and_get_by_severity(flask_client: FlaskClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService):
+def test_controller_submit_events_and_get_by_severity(api_client: FlaskClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService):
     run_type, run_req = get_fake_test_run(fake_test)
     client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
@@ -395,38 +393,37 @@ def test_controller_submit_events_and_get_by_severity(flask_client: FlaskClient,
         events.append(event)
 
 
-    response = flask_client.post(
+    response = api_client.post(
         f"/api/v1/client/sct/{run.id}/event/submit",
-        data=json.dumps({
+        content=json.dumps({
             "data": events,
             "schema_version": "v8",
-        }, cls=ArgusJSONEncoder),
-        content_type="application/json",
+        }, cls=ArgusJSONEncoder), headers={"content-type": "application/json"},
     )
 
     assert response.status_code == 200
-    assert response.content_type == "application/json"
-    assert response.json["status"] == "ok"
-    assert response.json["response"]
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json()["status"] == "ok"
+    assert response.json()["response"]
 
 
-    response = flask_client.get(
+    response = api_client.get(
         f"/api/v1/client/sct/{run.id}/events/{SCTEventSeverity.NORMAL.value}/get?limit=50",
     )
 
     assert response.status_code == 200
-    assert response.content_type == "application/json"
-    assert response.json["status"] == "ok"
-    assert len(response.json["response"]) == 50
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json()["status"] == "ok"
+    assert len(response.json()["response"]) == 50
 
 
     only_normal = [e for e in events if e["severity"] == "NORMAL"]
     ev = only_normal[25]
-    response = flask_client.get(
+    response = api_client.get(
         f"/api/v1/client/sct/{run.id}/events/{SCTEventSeverity.NORMAL.value}/get?limit=50&before={int(ev["ts"])}",
     )
 
     assert response.status_code == 200
-    assert response.content_type == "application/json"
-    assert response.json["status"] == "ok"
-    assert len(response.json["response"]) == 25
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json()["status"] == "ok"
+    assert len(response.json()["response"]) == 25
