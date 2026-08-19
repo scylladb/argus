@@ -25,8 +25,7 @@ def _submit_run(flask_client: FlaskClient, fake_test: ArgusTest, *, run_id: str 
     }
     resp = flask_client.post(
         f"{API_PREFIX}/client/testrun/scylla-cluster-tests/submit",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
     assert resp.status_code == 200, resp.text
     assert resp.json["status"] == "ok"

@@ -37,7 +37,7 @@ FULL_ONLY_FIELD = "packages"
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _submit_run(flask_client: FlaskClient, fake_test: ArgusTest, *, run_id: str | None = None, build_number: int = 1) -> str:
+def _submit_run(api_client: FlaskClient, fake_test: ArgusTest, *, run_id: str | None = None, build_number: int = 1) -> str:
     """Submit a single SCT run against `fake_test` and return its run_id.
 
     `build_number` is embedded in the job URL so that `get_build_number()` can
@@ -55,17 +55,16 @@ def _submit_run(flask_client: FlaskClient, fake_test: ArgusTest, *, run_id: str 
         "sct_config": {"cluster_backend": "aws"},
         "schema_version": "v8",
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{API_PREFIX}/client/testrun/scylla-cluster-tests/submit",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json["status"] == "ok"
+    assert resp.json()["status"] == "ok"
     return run_id
 
 
-def _submit_package(flask_client: FlaskClient, run_id: str) -> None:
+def _submit_package(api_client: FlaskClient, run_id: str) -> None:
     """Submit one package entry to an existing SCT run.
 
     This ensures the `packages` list column has real data, making it possible
@@ -83,20 +82,19 @@ def _submit_package(flask_client: FlaskClient, run_id: str) -> None:
         ],
         "schema_version": "v8",
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{API_PREFIX}/client/sct/{run_id}/packages/submit",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json["status"] == "ok"
+    assert resp.json()["status"] == "ok"
 
 
-def _get_runs(flask_client: FlaskClient, test_id: UUID, **params) -> Response:
+def _get_runs(api_client: FlaskClient, test_id: UUID, **params) -> Response:
     """GET /api/v1/test/{test_id}/runs with optional query parameters."""
-    return flask_client.get(
+    return api_client.get(
         f"{API_PREFIX}/test/{test_id}/runs",
-        query_string=params,
+        params=params,
     )
 
 
@@ -105,23 +103,23 @@ def _get_runs(flask_client: FlaskClient, test_id: UUID, **params) -> Response:
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def run_id(flask_client: FlaskClient, fake_test: ArgusTest) -> str:
+def run_id(api_client: FlaskClient, fake_test: ArgusTest) -> str:
     """Submit a single run and return its UUID string."""
-    return _submit_run(flask_client, fake_test)
+    return _submit_run(api_client, fake_test)
 
 
 @pytest.fixture
-def run_id_with_package(flask_client: FlaskClient, fake_test: ArgusTest) -> str:
+def run_id_with_package(api_client: FlaskClient, fake_test: ArgusTest) -> str:
     """Submit a run with one package entry so `packages` is non-empty when fully fetched."""
-    rid = _submit_run(flask_client, fake_test)
-    _submit_package(flask_client, rid)
+    rid = _submit_run(api_client, fake_test)
+    _submit_package(api_client, rid)
     return rid
 
 
 @pytest.fixture
-def run_ids(flask_client: FlaskClient, fake_test: ArgusTest) -> list[str]:
+def run_ids(api_client: FlaskClient, fake_test: ArgusTest) -> list[str]:
     """Submit three runs against the same test.  Returns the list of run UUIDs."""
-    return [_submit_run(flask_client, fake_test, build_number=i + 1) for i in range(3)]
+    return [_submit_run(api_client, fake_test, build_number=i + 1) for i in range(3)]
 
 
 # ---------------------------------------------------------------------------
@@ -129,32 +127,32 @@ def run_ids(flask_client: FlaskClient, fake_test: ArgusTest) -> list[str]:
 # ---------------------------------------------------------------------------
 
 @pytest.mark.docker_required
-def test_get_runs_no_params_returns_ok(flask_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
+def test_get_runs_no_params_returns_ok(api_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
     """Basic smoke: the endpoint returns status=ok and a list."""
-    resp = _get_runs(flask_client, fake_test.id)
+    resp = _get_runs(api_client, fake_test.id)
 
     assert resp.status_code == 200
-    assert resp.json["status"] == "ok"
-    assert isinstance(resp.json["response"], list)
+    assert resp.json()["status"] == "ok"
+    assert isinstance(resp.json()["response"], list)
 
 
 @pytest.mark.docker_required
-def test_get_runs_no_params_contains_submitted_run(flask_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
+def test_get_runs_no_params_contains_submitted_run(api_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
     """Without any filters the submitted run must appear in the response."""
-    resp = _get_runs(flask_client, fake_test.id)
+    resp = _get_runs(api_client, fake_test.id)
 
     assert resp.status_code == 200
-    returned_ids = [r["id"] for r in resp.json["response"]]
+    returned_ids = [r["id"] for r in resp.json()["response"]]
     assert run_id in returned_ids
 
 
 @pytest.mark.docker_required
-def test_get_runs_response_has_meta_fields(flask_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
+def test_get_runs_response_has_meta_fields(api_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
     """Each entry in the default (non-full) response must contain all expected meta fields."""
-    resp = _get_runs(flask_client, fake_test.id)
+    resp = _get_runs(api_client, fake_test.id)
 
     assert resp.status_code == 200
-    runs = resp.json["response"]
+    runs = resp.json()["response"]
     assert len(runs) > 0
 
     for run in runs:
@@ -167,34 +165,34 @@ def test_get_runs_response_has_meta_fields(flask_client: FlaskClient, run_id: st
 # ---------------------------------------------------------------------------
 
 @pytest.mark.docker_required
-def test_get_runs_default_limit_is_ten(flask_client: FlaskClient, fake_test: ArgusTest) -> None:
+def test_get_runs_default_limit_is_ten(api_client: FlaskClient, fake_test: ArgusTest) -> None:
     """When `limit` is omitted, at most 10 runs are returned by default."""
     # Submit 12 runs with distinct build numbers so there is something to limit
     for i in range(12):
-        _submit_run(flask_client, fake_test, build_number=i + 100)
+        _submit_run(api_client, fake_test, build_number=i + 100)
 
-    resp = _get_runs(flask_client, fake_test.id)
+    resp = _get_runs(api_client, fake_test.id)
 
     assert resp.status_code == 200
-    assert len(resp.json["response"]) <= 10
+    assert len(resp.json()["response"]) <= 10
 
 
 @pytest.mark.docker_required
-def test_get_runs_explicit_limit_respected(flask_client: FlaskClient, run_ids: list[str], fake_test: ArgusTest) -> None:
+def test_get_runs_explicit_limit_respected(api_client: FlaskClient, run_ids: list[str], fake_test: ArgusTest) -> None:
     """Passing `limit=1` must return at most 1 run even when more exist."""
-    resp = _get_runs(flask_client, fake_test.id, limit=1)
+    resp = _get_runs(api_client, fake_test.id, limit=1)
 
     assert resp.status_code == 200
-    assert len(resp.json["response"]) <= 1
+    assert len(resp.json()["response"]) <= 1
 
 
 @pytest.mark.docker_required
-def test_get_runs_limit_larger_than_total(flask_client: FlaskClient, run_ids: list[str], fake_test: ArgusTest) -> None:
+def test_get_runs_limit_larger_than_total(api_client: FlaskClient, run_ids: list[str], fake_test: ArgusTest) -> None:
     """When `limit` exceeds the total number of runs, all runs are returned."""
-    resp = _get_runs(flask_client, fake_test.id, limit=1000)
+    resp = _get_runs(api_client, fake_test.id, limit=1000)
 
     assert resp.status_code == 200
-    returned_ids = {r["id"] for r in resp.json["response"]}
+    returned_ids = {r["id"] for r in resp.json()["response"]}
     # All three runs submitted by the `run_ids` fixture must be present
     for rid in run_ids:
         assert rid in returned_ids
@@ -205,33 +203,33 @@ def test_get_runs_limit_larger_than_total(flask_client: FlaskClient, run_ids: li
 # ---------------------------------------------------------------------------
 
 @pytest.mark.docker_required
-def test_get_runs_before_far_past_returns_empty(flask_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
+def test_get_runs_before_far_past_returns_empty(api_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
     """before=1.0 (Unix epoch) must exclude all freshly-submitted runs."""
-    resp = _get_runs(flask_client, fake_test.id, before=1.0)
+    resp = _get_runs(api_client, fake_test.id, before=1.0)
 
     assert resp.status_code == 200
-    assert resp.json["response"] == []
+    assert resp.json()["response"] == []
 
 
 @pytest.mark.docker_required
-def test_get_runs_before_far_future_includes_runs(flask_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
+def test_get_runs_before_far_future_includes_runs(api_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
     """before set to a timestamp far in the future must include current runs."""
     far_future = time.time() + 10 * 365 * 24 * 3600  # ~10 years from now
 
-    resp = _get_runs(flask_client, fake_test.id, before=far_future)
+    resp = _get_runs(api_client, fake_test.id, before=far_future)
 
     assert resp.status_code == 200
-    returned_ids = [r["id"] for r in resp.json["response"]]
+    returned_ids = [r["id"] for r in resp.json()["response"]]
     assert run_id in returned_ids
 
 
 @pytest.mark.docker_required
-def test_get_runs_before_invalid_format_returns_error(flask_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
+def test_get_runs_before_invalid_format_returns_error(api_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
     """Passing a non-numeric `before` value must result in a non-ok response."""
-    resp = _get_runs(flask_client, fake_test.id, before="not_a_timestamp")
+    resp = _get_runs(api_client, fake_test.id, before="not_a_timestamp")
 
     # The service raises TestRunServiceException which the error handler serialises to JSON
-    assert resp.json["status"] != "ok"
+    assert resp.json()["status"] != "ok"
 
 
 # ---------------------------------------------------------------------------
@@ -239,32 +237,32 @@ def test_get_runs_before_invalid_format_returns_error(flask_client: FlaskClient,
 # ---------------------------------------------------------------------------
 
 @pytest.mark.docker_required
-def test_get_runs_after_far_future_returns_empty(flask_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
+def test_get_runs_after_far_future_returns_empty(api_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
     """after set to a timestamp far in the future must exclude all current runs."""
     far_future = time.time() + 10 * 365 * 24 * 3600
 
-    resp = _get_runs(flask_client, fake_test.id, after=far_future)
+    resp = _get_runs(api_client, fake_test.id, after=far_future)
 
     assert resp.status_code == 200
-    assert resp.json["response"] == []
+    assert resp.json()["response"] == []
 
 
 @pytest.mark.docker_required
-def test_get_runs_after_far_past_includes_runs(flask_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
+def test_get_runs_after_far_past_includes_runs(api_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
     """after=1.0 (Unix epoch) must include all freshly-submitted runs."""
-    resp = _get_runs(flask_client, fake_test.id, after=1.0)
+    resp = _get_runs(api_client, fake_test.id, after=1.0)
 
     assert resp.status_code == 200
-    returned_ids = [r["id"] for r in resp.json["response"]]
+    returned_ids = [r["id"] for r in resp.json()["response"]]
     assert run_id in returned_ids
 
 
 @pytest.mark.docker_required
-def test_get_runs_after_invalid_format_returns_error(flask_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
+def test_get_runs_after_invalid_format_returns_error(api_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
     """Passing a non-numeric `after` value must result in a non-ok response."""
-    resp = _get_runs(flask_client, fake_test.id, after="not_a_timestamp")
+    resp = _get_runs(api_client, fake_test.id, after="not_a_timestamp")
 
-    assert resp.json["status"] != "ok"
+    assert resp.json()["status"] != "ok"
 
 
 # ---------------------------------------------------------------------------
@@ -272,28 +270,28 @@ def test_get_runs_after_invalid_format_returns_error(flask_client: FlaskClient, 
 # ---------------------------------------------------------------------------
 
 @pytest.mark.docker_required
-def test_get_runs_before_and_after_both_far_includes_runs(flask_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
+def test_get_runs_before_and_after_both_far_includes_runs(api_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
     """before (far future) and after (far past) together must still include current runs."""
     far_future = time.time() + 10 * 365 * 24 * 3600
 
-    resp = _get_runs(flask_client, fake_test.id, before=far_future, after=1.0)
+    resp = _get_runs(api_client, fake_test.id, before=far_future, after=1.0)
 
     assert resp.status_code == 200
-    returned_ids = [r["id"] for r in resp.json["response"]]
+    returned_ids = [r["id"] for r in resp.json()["response"]]
     assert run_id in returned_ids
 
 
 @pytest.mark.docker_required
-def test_get_runs_before_and_after_exclusive_returns_empty(flask_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
+def test_get_runs_before_and_after_exclusive_returns_empty(api_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
     """A window that does not contain any run's start_time must return an empty list.
 
     We use before=2.0 and after=1.0.  All real runs have start_time in the current
     epoch (>1_700_000_000), so the resulting 1-second window in 1970 is always empty.
     """
-    resp = _get_runs(flask_client, fake_test.id, before=2.0, after=1.0)
+    resp = _get_runs(api_client, fake_test.id, before=2.0, after=1.0)
 
     assert resp.status_code == 200
-    assert resp.json["response"] == []
+    assert resp.json()["response"] == []
 
 
 # ---------------------------------------------------------------------------
@@ -301,17 +299,17 @@ def test_get_runs_before_and_after_exclusive_returns_empty(flask_client: FlaskCl
 # ---------------------------------------------------------------------------
 
 @pytest.mark.docker_required
-def test_get_runs_without_full_extra_fields_are_empty(flask_client: FlaskClient, run_id_with_package: str, fake_test: ArgusTest) -> None:
+def test_get_runs_without_full_extra_fields_are_empty(api_client: FlaskClient, run_id_with_package: str, fake_test: ArgusTest) -> None:
     """Without `full`, CQLEngine returns an empty list for unfetched list columns.
 
     We submit a package so the column has real data on disk.  The meta-only
     response must still return an empty list for `packages` because the column
     is excluded via `.only(limited_fields)`.  This distinguishes the two modes.
     """
-    resp = _get_runs(flask_client, fake_test.id)
+    resp = _get_runs(api_client, fake_test.id)
 
     assert resp.status_code == 200
-    runs = resp.json["response"]
+    runs = resp.json()["response"]
     target_run = next((r for r in runs if r["id"] == run_id_with_package), None)
     assert target_run is not None, f"Run {run_id_with_package} not found in response"
     assert target_run[FULL_ONLY_FIELD] == [], (
@@ -321,17 +319,17 @@ def test_get_runs_without_full_extra_fields_are_empty(flask_client: FlaskClient,
 
 
 @pytest.mark.docker_required
-def test_get_runs_with_full_returns_extra_fields(flask_client: FlaskClient, run_id_with_package: str, fake_test: ArgusTest) -> None:
+def test_get_runs_with_full_returns_extra_fields(api_client: FlaskClient, run_id_with_package: str, fake_test: ArgusTest) -> None:
     """With full=1, full-model-only fields such as 'packages' must be populated.
 
     We submit a package before fetching so the column has real data.  The full
     response must return a non-empty list, distinguishing it from meta-only mode
     which returns an empty list for unfetched list columns.
     """
-    resp = _get_runs(flask_client, fake_test.id, full=1)
+    resp = _get_runs(api_client, fake_test.id, full=1)
 
     assert resp.status_code == 200
-    runs = resp.json["response"]
+    runs = resp.json()["response"]
     target_run = next((r for r in runs if r["id"] == run_id_with_package), None)
     assert target_run is not None, f"Run {run_id_with_package} not found in response"
     assert len(target_run[FULL_ONLY_FIELD]) > 0, (
@@ -340,12 +338,12 @@ def test_get_runs_with_full_returns_extra_fields(flask_client: FlaskClient, run_
 
 
 @pytest.mark.docker_required
-def test_get_runs_full_response_is_superset_of_meta(flask_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
+def test_get_runs_full_response_is_superset_of_meta(api_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
     """full=1 response must still contain all the standard meta fields."""
-    resp = _get_runs(flask_client, fake_test.id, full=1)
+    resp = _get_runs(api_client, fake_test.id, full=1)
 
     assert resp.status_code == 200
-    runs = resp.json["response"]
+    runs = resp.json()["response"]
     assert len(runs) > 0
 
     for run in runs:
@@ -360,76 +358,76 @@ def test_get_runs_full_response_is_superset_of_meta(flask_client: FlaskClient, r
 # ---------------------------------------------------------------------------
 
 @pytest.mark.docker_required
-def test_additional_runs_bypass_before_filter(flask_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
+def test_additional_runs_bypass_before_filter(api_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
     """A run ID in additionalRuns[] must appear even when `before` would exclude it.
 
     Strategy: before=1.0 (Unix epoch) makes the regular filter return nothing.
     Passing run_id in additionalRuns[] must force it to appear in the response.
     """
     resp = _get_runs(
-        flask_client,
+        api_client,
         fake_test.id,
         before=1.0,
         **{"additionalRuns[]": run_id},
     )
 
     assert resp.status_code == 200
-    returned_ids = [r["id"] for r in resp.json["response"]]
+    returned_ids = [r["id"] for r in resp.json()["response"]]
     assert run_id in returned_ids, (
         "additionalRuns[] run must appear even when `before` filter excludes all runs"
     )
 
 
 @pytest.mark.docker_required
-def test_additional_runs_bypass_after_filter(flask_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
+def test_additional_runs_bypass_after_filter(api_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
     """A run ID in additionalRuns[] must appear even when `after` would exclude it."""
     far_future = time.time() + 10 * 365 * 24 * 3600
 
     resp = _get_runs(
-        flask_client,
+        api_client,
         fake_test.id,
         after=far_future,
         **{"additionalRuns[]": run_id},
     )
 
     assert resp.status_code == 200
-    returned_ids = [r["id"] for r in resp.json["response"]]
+    returned_ids = [r["id"] for r in resp.json()["response"]]
     assert run_id in returned_ids, (
         "additionalRuns[] run must appear even when `after` filter excludes all runs"
     )
 
 
 @pytest.mark.docker_required
-def test_additional_runs_multiple_ids(flask_client: FlaskClient, run_ids: list[str], fake_test: ArgusTest) -> None:
+def test_additional_runs_multiple_ids(api_client: FlaskClient, run_ids: list[str], fake_test: ArgusTest) -> None:
     """Multiple run IDs can be passed in additionalRuns[].
 
     We use before=1.0 so the regular filter is empty, then force all three
     previously-submitted runs through additionalRuns[].
     """
-    resp = flask_client.get(
+    resp = api_client.get(
         f"{API_PREFIX}/test/{fake_test.id}/runs",
-        query_string=[("before", "1.0")] + [("additionalRuns[]", rid) for rid in run_ids],
+        params=[("before", "1.0")] + [("additionalRuns[]", rid) for rid in run_ids],
     )
 
     assert resp.status_code == 200
-    returned_ids = {r["id"] for r in resp.json["response"]}
+    returned_ids = {r["id"] for r in resp.json()["response"]}
     for rid in run_ids:
         assert rid in returned_ids, f"additionalRun {rid} missing from response"
 
 
 @pytest.mark.docker_required
-def test_additional_runs_not_duplicated_when_already_in_results(flask_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
+def test_additional_runs_not_duplicated_when_already_in_results(api_client: FlaskClient, run_id: str, fake_test: ArgusTest) -> None:
     """If the run is already in the regular result set, passing it in additionalRuns[]
     must not result in it appearing twice.
     """
     resp = _get_runs(
-        flask_client,
+        api_client,
         fake_test.id,
         **{"additionalRuns[]": run_id},
     )
 
     assert resp.status_code == 200
-    returned_ids = [r["id"] for r in resp.json["response"]]
+    returned_ids = [r["id"] for r in resp.json()["response"]]
     assert returned_ids.count(run_id) == 1, (
         "A run must not appear more than once even when it is in both the filter result and additionalRuns[]"
     )
@@ -440,17 +438,17 @@ def test_additional_runs_not_duplicated_when_already_in_results(flask_client: Fl
 # ---------------------------------------------------------------------------
 
 @pytest.mark.docker_required
-def test_get_runs_nonexistent_test_returns_error(flask_client: FlaskClient) -> None:
+def test_get_runs_nonexistent_test_returns_error(api_client: FlaskClient) -> None:
     """Requesting runs for an unknown test_id must not succeed silently."""
     fake_id = str(uuid4())
-    resp = flask_client.get(f"{API_PREFIX}/test/{fake_id}/runs")
+    resp = api_client.get(f"{API_PREFIX}/test/{fake_id}/runs")
 
     # The service raises an ORM DoesNotExist → serialised as an error response
-    assert resp.json["status"] != "ok"
+    assert resp.json()["status"] != "ok"
 
 
 @pytest.mark.docker_required
-def test_get_runs_response_is_sorted_by_build_number_desc(flask_client: FlaskClient, fake_test: ArgusTest) -> None:
+def test_get_runs_response_is_sorted_by_build_number_desc(api_client: FlaskClient, fake_test: ArgusTest) -> None:
     """Runs must be returned in descending order of build_number (newest first).
 
     We create runs with distinct, parseable build numbers (1, 2, 3) so the
@@ -458,12 +456,12 @@ def test_get_runs_response_is_sorted_by_build_number_desc(flask_client: FlaskCli
     """
     build_numbers_in = [10, 20, 30]
     for bn in build_numbers_in:
-        _submit_run(flask_client, fake_test, build_number=bn)
+        _submit_run(api_client, fake_test, build_number=bn)
 
-    resp = _get_runs(flask_client, fake_test.id, limit=50)
+    resp = _get_runs(api_client, fake_test.id, limit=50)
 
     assert resp.status_code == 200
-    runs = resp.json["response"]
+    runs = resp.json()["response"]
     build_numbers_out = [r["build_number"] for r in runs if r["build_number"] in build_numbers_in]
     assert build_numbers_out == sorted(build_numbers_out, reverse=True), (
         "Runs must be sorted by build_number descending"

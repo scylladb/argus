@@ -5,18 +5,18 @@ from datetime import UTC, datetime
 from functools import reduce
 from unittest.mock import MagicMock
 from uuid import UUID
-from flask import current_app, g
 from github import Github, Auth
 
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.runtime_store import RuntimeStore
-from argus.backend.models.web import ArgusEventTypes, ArgusTest, ArgusUserView, invalidate_release_snapshots
+from argus.backend.models.web import ArgusEventTypes, ArgusTest, ArgusUserView, User, invalidate_release_snapshots
 from argus.backend.models.github_issue import GithubIssue, IssueAssignee, IssueLink, IssueLabel
 from argus.backend.plugins.core import PluginInfoBase
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS
 from argus.backend.service.event_service import EventService
 from argus.backend.util.common import chunk
+from argus.backend.util.config import Config
 
 LOGGER = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class GithubService:
 
     def get_installation_token(self):
         self._refresh_installation_token()
-        return current_app.config.get("GITHUB_ACCESS_TOKEN")
+        return Config.load_yaml_config().get("GITHUB_ACCESS_TOKEN")
 
     def _refresh_installation_token(self):
         # TODO: To be replaced by JWT refreshing logic once we have Github App in place
@@ -95,7 +95,7 @@ class GithubService:
         last_ran.value = check_time
         last_ran.save()
 
-    def get_issue(self, issue_url: str) -> tuple[GithubIssue, bool]:
+    def get_issue(self, issue_url: str, user: User) -> tuple[GithubIssue, bool]:
         match = re.match(
             r"http(s)?://(www\.)?github\.com/(?P<owner>[\w\d]+)/"
             r"(?P<repo>[\w\d\-_]+)/(?P<type>issues|pull)/(?P<issue_number>\d+)(/)?",
@@ -118,7 +118,7 @@ class GithubService:
             remote_issue = remote_repo.get_issue(int(match.group("issue_number")))
 
             issue = GithubIssue()
-            issue.user_id = g.user.id
+            issue.user_id = user.id
             issue.type = match.group("type")
             issue.owner = remote_issue.repository.owner.name
             issue.repo = remote_issue.repository.name
@@ -143,15 +143,15 @@ class GithubService:
             issue.save()
         return issue, existing
 
-    def submit_issue(self, issue_url: str, test_id: UUID, run_id: UUID, event_id: UUID | str = None):
+    def submit_issue(self, issue_url: str, test_id: UUID, run_id: UUID, user: User, event_id: UUID | str = None):
         test: ArgusTest = ArgusTest.get(id=test_id)
         plugin = self.get_plugin(plugin_name=test.plugin_name)
         run = plugin.model.get(id=run_id)
-        issue, state = self.get_issue(issue_url)
+        issue, state = self.get_issue(issue_url, user)
 
         link = IssueLink()
         link.run_id = run.id
-        link.user_id = g.user.id
+        link.user_id = user.id
         link.issue_id = issue.id
         link.release_id = test.release_id
         link.test_id = test.id
@@ -165,12 +165,12 @@ class GithubService:
             kind=ArgusEventTypes.TestRunIssueAdded,
             body={
                 "message": f"An issue titled \"{{title}}\" was {'attached' if state else 'added'} by {{username}}",
-                "username": g.user.username,
+                "username": user.username,
                 "url": issue_url,
                 "title": issue.title,
                 "state": issue.state,
             },
-            user_id=g.user.id,
+            user_id=user.id,
             run_id=link.run_id,
             release_id=link.release_id,
             group_id=link.group_id,
@@ -224,7 +224,7 @@ class GithubService:
             response = [{**issue.model_dump(), **issues[issue.id][0].model_dump(), "subtype": "github" } for issue in resolved_issues]
         return response
 
-    def delete_issue(self, issue_id: UUID, run_id: UUID) -> dict:
+    def delete_issue(self, issue_id: UUID, run_id: UUID, user: User) -> dict:
         issue: GithubIssue = GithubIssue.get(id=issue_id)
         links = list(IssueLink.find(issue_id=issue_id).allow_filtering().all())
         link: IssueLink = IssueLink.get(run_id=run_id, issue_id=issue_id)
@@ -234,13 +234,13 @@ class GithubService:
             kind=ArgusEventTypes.TestRunIssueRemoved,
             body={
                 "message": "An issue titled \"{title}\" was removed by {username} from \"{run_id}\"",
-                "username": g.user.username,
+                "username": user.username,
                 "url": issue.url,
                 "title": issue.title,
                 "state": issue.state,
                 "run_id": run_id,
             },
-            user_id=g.user.id,
+            user_id=user.id,
             run_id=link.run_id,
             release_id=link.release_id,
             group_id=link.group_id,

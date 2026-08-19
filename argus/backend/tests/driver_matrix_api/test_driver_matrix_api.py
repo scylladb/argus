@@ -150,7 +150,7 @@ def test_submit_driver_matrix_result_idempotent_per_driver_name(
     assert versions.count("TEST-dupDriver-2.0.xml") == 1
 
 
-def test_submit_driver_matrix_failure(flask_client, driver_matrix_run_id):
+def test_submit_driver_matrix_failure(flask_client, api_client, driver_matrix_run_id):
     payload = {
         "schema_version": "v8",
         "run_id": driver_matrix_run_id,
@@ -169,17 +169,17 @@ def test_submit_driver_matrix_failure(flask_client, driver_matrix_run_id):
     assert body["response"] is True
 
     # Verify via the generic per-plugin run read endpoint.
-    run_resp = flask_client.get(f"{RUN_PREFIX}/{RUN_TYPE}/{driver_matrix_run_id}")
+    run_resp = api_client.get(f"{RUN_PREFIX}/{RUN_TYPE}/{driver_matrix_run_id}")
     assert run_resp.status_code == 200, run_resp.text
-    assert run_resp.json["status"] == "ok"
-    test_collection = run_resp.json["response"]["test_collection"]
+    assert run_resp.json()["status"] == "ok"
+    test_collection = run_resp.json()["response"]["test_collection"]
     failure = next((c for c in test_collection if c["name"] == "broken-driver"), None)
     assert failure is not None
     assert failure["failure_message"] == "compilation error"
     assert failure["failures"] == 1
 
 
-def test_submit_driver_matrix_env(flask_client, driver_matrix_run_id):
+def test_submit_driver_matrix_env(flask_client, api_client, driver_matrix_run_id):
     raw_env = "scylla-version: 6.0.0\nkernel: 5.15.0"
     payload = {
         "schema_version": "v8",
@@ -197,10 +197,10 @@ def test_submit_driver_matrix_env(flask_client, driver_matrix_run_id):
     assert body["response"] is True
 
     # Verify via the generic per-plugin run read endpoint.
-    run_resp = flask_client.get(f"{RUN_PREFIX}/{RUN_TYPE}/{driver_matrix_run_id}")
+    run_resp = api_client.get(f"{RUN_PREFIX}/{RUN_TYPE}/{driver_matrix_run_id}")
     assert run_resp.status_code == 200, run_resp.text
-    assert run_resp.json["status"] == "ok"
-    response = run_resp.json["response"]
+    assert run_resp.json()["status"] == "ok"
+    response = run_resp.json()["response"]
     assert response["scylla_version"] == "6.0.0"
     env_map = {ei["key"]: ei["value"] for ei in response["environment_info"]}
     assert env_map.get("scylla-version") == "6.0.0"

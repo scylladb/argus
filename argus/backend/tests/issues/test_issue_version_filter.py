@@ -126,26 +126,26 @@ def expected_jira_issue(issue: JiraIssue) -> dict:
 
 
 @pytest.fixture
-def linked_github_issue(client_service, testrun_service, fake_test, issue_service):
+def linked_github_issue(client_service, testrun_service, fake_test, issue_service, logged_in_user):
     """Factory fixture: call with (scylla_version, title) to get (run, issue) with a linked GitHub issue."""
 
     def factory(scylla_version: str | None, title: str) -> tuple[SCTTestRun, GithubIssue]:
         run = submit_run_with_version(client_service, testrun_service, fake_test, scylla_version=scylla_version)
         issue = create_github_issue(title=title)
-        issue_service.submit(issue_url=issue.url, test_id=run.test_id, run_id=run.id)
+        issue_service.submit(issue_url=issue.url, test_id=run.test_id, run_id=run.id, user=logged_in_user)
         return run, issue
 
     return factory
 
 
 @pytest.fixture
-def linked_jira_issue(client_service, testrun_service, fake_test, issue_service):
+def linked_jira_issue(client_service, testrun_service, fake_test, issue_service, logged_in_user):
     """Factory fixture: call with (scylla_version, summary) to get (run, issue) with a linked Jira issue."""
 
     def factory(scylla_version: str | None, summary: str) -> tuple[SCTTestRun, JiraIssue]:
         run = submit_run_with_version(client_service, testrun_service, fake_test, scylla_version=scylla_version)
         issue = create_jira_issue(summary=summary)
-        issue_service.submit(issue_url=issue.permalink, test_id=run.test_id, run_id=run.id)
+        issue_service.submit(issue_url=issue.permalink, test_id=run.test_id, run_id=run.id, user=logged_in_user)
         return run, issue
 
     return factory

@@ -229,17 +229,16 @@ def test_get_test_run_comment_missing_id(api_client):
 
 
 def test_get_test_run_comment_existing_round_trip(flask_client, api_client, fake_test, submitted_sct_run, saved_g_user):
-    submit_resp = flask_client.post(
+    submit_resp = api_client.post(
         f"{API_PREFIX}/test/{fake_test.id}/run/{submitted_sct_run}/comments/submit",
-        data=json.dumps({"message": "iteration6 comment", "mentions": [], "reactions": {}}),
-        content_type="application/json",
+        json={"message": "iteration6 comment", "mentions": [], "reactions": {}},
     )
-    assert submit_resp.status_code == 200, submit_resp.data
-    assert submit_resp.json["status"] == "ok"
+    assert submit_resp.status_code == 200, submit_resp.content
+    assert submit_resp.json()["status"] == "ok"
 
-    list_resp = flask_client.get(f"{API_PREFIX}/run/{submitted_sct_run}/comments")
-    comments = list_resp.json["response"]
-    assert comments, list_resp.data
+    list_resp = api_client.get(f"{API_PREFIX}/run/{submitted_sct_run}/comments")
+    comments = list_resp.json()["response"]
+    assert comments, list_resp.content
     comment_id = str(comments[0]["id"])
 
     fetch_resp = api_client.get(
