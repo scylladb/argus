@@ -42,7 +42,7 @@ def saved_g_user():
 
 
 @pytest.fixture
-def submitted_sct_run(flask_client, fake_test):
+def submitted_sct_run(api_client, fake_test):
     run_id = str(uuid.uuid4())
     payload = {
         "run_id": run_id,
@@ -55,11 +55,11 @@ def submitted_sct_run(flask_client, fake_test):
         "sct_config": {"cluster_backend": "aws"},
         "schema_version": "v8",
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{API_PREFIX}/client/testrun/scylla-cluster-tests/submit",
-        data=json.dumps(payload), content_type="application/json",
+        json=payload,
     )
-    assert resp.status_code == 200, resp.data
+    assert resp.status_code == 200, resp.content
     return run_id
 
 
@@ -228,7 +228,7 @@ def test_get_test_run_comment_missing_id(api_client):
     assert resp.json()["status"] == "error"
 
 
-def test_get_test_run_comment_existing_round_trip(flask_client, api_client, fake_test, submitted_sct_run, saved_g_user):
+def test_get_test_run_comment_existing_round_trip(api_client, fake_test, submitted_sct_run, saved_g_user):
     submit_resp = api_client.post(
         f"{API_PREFIX}/test/{fake_test.id}/run/{submitted_sct_run}/comments/submit",
         json={"message": "iteration6 comment", "mentions": [], "reactions": {}},

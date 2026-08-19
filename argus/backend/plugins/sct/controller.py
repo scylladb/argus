@@ -1,360 +1,436 @@
 from datetime import UTC, datetime
+from typing import Any
+from uuid import UUID
 
-from flask import Blueprint, request
+from fastapi import APIRouter, Body, Depends, Query
+from flask import Blueprint
+from pydantic import BaseModel, Field
 
-from argus.backend.error_handlers import handle_api_exception
-from argus.backend.plugins.sct.testrun import SCTEventSeverity
-from argus.backend.service.user import api_login_required
+from argus.backend.models.web import User
 from argus.backend.plugins.sct.service import SCTService, SCTServiceException
-from argus.backend.util.common import get_payload
+from argus.backend.plugins.sct.testrun import SCTEventSeverity
+from argus.backend.service.user import api_current_user
+from argus.backend.util.encoders import ArgusJSONResponse
 
-bp = Blueprint("sct_api", __name__, url_prefix="/sct")
-bp.register_error_handler(Exception, handle_api_exception)
+router = APIRouter(prefix="/sct")
 
 
-@bp.route("/<string:run_id>/packages/submit", methods=["POST"])
-@api_login_required
-def sct_submit_packages(run_id: str):
-    payload = get_payload(request)
-    result = SCTService.submit_packages(run_id=run_id, packages=payload["packages"])
-    return {
+class PackagesSubmitRequest(BaseModel):
+    packages: list[dict]
+
+
+class ScreenshotsSubmitRequest(BaseModel):
+    screenshot_links: list[str]
+
+
+class SetRunnerRequest(BaseModel):
+    public_ip: str
+    private_ip: str
+    region: str
+    backend: str
+    name: str | None = None
+
+
+class ResourceCreateRequest(BaseModel):
+    resource: dict
+
+
+class ResourceTerminateRequest(BaseModel):
+    reason: str
+
+
+class ResourceShardsRequest(BaseModel):
+    shards: int
+
+
+class ResourceUpdateRequest(BaseModel):
+    update_data: dict
+
+
+class NemesisRequest(BaseModel):
+    nemesis: dict
+
+
+class EventsSubmitRequest(BaseModel):
+    events: list[dict]
+
+
+class EventSubmitRequest(BaseModel):
+    data: dict | list[dict]
+
+
+class GeminiResultsRequest(BaseModel):
+    gemini_data: dict
+
+
+class PerformanceResultsRequest(BaseModel):
+    performance_results: dict
+
+
+class JunitSubmitRequest(BaseModel):
+    file_name: str
+    content: str
+
+
+class StressCommandRequest(BaseModel):
+    cmd: str
+    ts: float = Field(default_factory=lambda: datetime.now(UTC).timestamp())
+    loader_name: str
+    log_name: str
+
+
+class SimilarEventRequest(BaseModel):
+    severity: str | None = None
+    ts: float | None = None
+    limit: int = 100
+
+
+class SimilarRunsInfoRequest(BaseModel):
+    run_ids: list[str]
+
+
+@router.post("/{run_id}/packages/submit", name="api.client_api.sct_api.sct_submit_packages")
+def sct_submit_packages(run_id: str, payload: PackagesSubmitRequest,
+                        user: User = Depends(api_current_user)):
+    result = SCTService.submit_packages(run_id=run_id, packages=payload.packages)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/<string:run_id>/screenshots/submit", methods=["POST"])
-@api_login_required
-def sct_submit_screenshots(run_id: str):
-    payload = get_payload(request)
-    result = SCTService.submit_screenshots(run_id=run_id, screenshot_links=payload["screenshot_links"])
-    return {
+@router.post("/{run_id}/screenshots/submit", name="api.client_api.sct_api.sct_submit_screenshots")
+def sct_submit_screenshots(run_id: str, payload: ScreenshotsSubmitRequest,
+                           user: User = Depends(api_current_user)):
+    result = SCTService.submit_screenshots(run_id=run_id, screenshot_links=payload.screenshot_links)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/<string:run_id>/sct_runner/set", methods=["POST"])
-@api_login_required
-def sct_set_runner(run_id: str):
-    payload = get_payload(request)
+@router.post("/{run_id}/sct_runner/set", name="api.client_api.sct_api.sct_set_runner")
+def sct_set_runner(run_id: str, payload: SetRunnerRequest, user: User = Depends(api_current_user)):
     result = SCTService.set_sct_runner(
         run_id=run_id,
-        public_ip=payload["public_ip"],
-        private_ip=payload["private_ip"],
-        region=payload["region"],
-        backend=payload["backend"],
-        name=payload.get("name")
+        public_ip=payload.public_ip,
+        private_ip=payload.private_ip,
+        region=payload.region,
+        backend=payload.backend,
+        name=payload.name
     )
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-
-@bp.route("/<string:run_id>/resource/all", methods=["GET"])
-@api_login_required
-def sct_resource_all(run_id: str):
+@router.get("/{run_id}/resource/all", name="api.client_api.sct_api.sct_resource_all")
+def sct_resource_all(run_id: str, user: User = Depends(api_current_user)):
     result = SCTService.get_resources(run_id=run_id)
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/<string:run_id>/resource/<string:name>/get", methods=["GET"])
-@api_login_required
-def sct_resource_get(run_id: str, name: str):
+@router.get("/{run_id}/resource/{name}/get", name="api.client_api.sct_api.sct_resource_get")
+def sct_resource_get(run_id: str, name: str, user: User = Depends(api_current_user)):
     result = SCTService.get_resource(run_id=run_id, name=name)
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/<string:run_id>/resource/create", methods=["POST"])
-@api_login_required
-def sct_resource_create(run_id: str):
-    payload = get_payload(request)
-    result = SCTService.create_resource(run_id=run_id, resource_details=payload["resource"])
-    return {
+@router.post("/{run_id}/resource/create", name="api.client_api.sct_api.sct_resource_create")
+def sct_resource_create(run_id: str, payload: ResourceCreateRequest,
+                        user: User = Depends(api_current_user)):
+    result = SCTService.create_resource(run_id=run_id, resource_details=payload.resource)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/<string:run_id>/resource/<string:resource_name>/terminate", methods=["POST"])
-@api_login_required
-def sct_resource_terminate(run_id: str, resource_name: str):
-    payload = get_payload(request)
-    result = SCTService.terminate_resource(run_id=run_id, resource_name=resource_name, reason=payload["reason"])
-    return {
+@router.post("/{run_id}/resource/{resource_name}/terminate",
+             name="api.client_api.sct_api.sct_resource_terminate")
+def sct_resource_terminate(run_id: str, resource_name: str, payload: ResourceTerminateRequest,
+                           user: User = Depends(api_current_user)):
+    result = SCTService.terminate_resource(run_id=run_id, resource_name=resource_name,
+                                           reason=payload.reason)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/<string:run_id>/resource/<string:resource_name>/shards", methods=["POST"])
-@api_login_required
-def sct_resource_update_shards(run_id: str, resource_name: str):
-    payload = get_payload(request)
-    result = SCTService.update_resource_shards(run_id=run_id, resource_name=resource_name, new_shards=payload["shards"])
-    return {
+@router.post("/{run_id}/resource/{resource_name}/shards",
+             name="api.client_api.sct_api.sct_resource_update_shards")
+def sct_resource_update_shards(run_id: str, resource_name: str, payload: ResourceShardsRequest,
+                               user: User = Depends(api_current_user)):
+    result = SCTService.update_resource_shards(run_id=run_id, resource_name=resource_name,
+                                               new_shards=payload.shards)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/<string:run_id>/resource/<string:resource_name>/update", methods=["POST"])
-@api_login_required
-def sct_resource_update(run_id: str, resource_name: str):
-    payload = get_payload(request)
-    result = SCTService.update_resource(run_id=run_id, resource_name=resource_name, update_data=payload["update_data"])
-    return {
+@router.post("/{run_id}/resource/{resource_name}/update",
+             name="api.client_api.sct_api.sct_resource_update")
+def sct_resource_update(run_id: str, resource_name: str, payload: ResourceUpdateRequest,
+                        user: User = Depends(api_current_user)):
+    result = SCTService.update_resource(run_id=run_id, resource_name=resource_name,
+                                        update_data=payload.update_data)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/<string:run_id>/nemesis/submit", methods=["POST"])
-@api_login_required
-def sct_nemesis_submit(run_id: str):
-    payload = get_payload(request)
-    result = SCTService.submit_nemesis(run_id=run_id, nemesis_details=payload["nemesis"])
-    return {
+@router.post("/{run_id}/nemesis/submit", name="api.client_api.sct_api.sct_nemesis_submit")
+def sct_nemesis_submit(run_id: str, payload: NemesisRequest, user: User = Depends(api_current_user)):
+    result = SCTService.submit_nemesis(run_id=run_id, nemesis_details=payload.nemesis)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/<string:run_id>/nemesis/get", methods=["GET"])
-@api_login_required
-def sct_nemesis_get(run_id: str):
+@router.get("/{run_id}/nemesis/get", name="api.client_api.sct_api.sct_nemesis_get")
+def sct_nemesis_get(run_id: str, user: User = Depends(api_current_user)):
     result = SCTService.get_nemesis(run_id=run_id)
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/<string:run_id>/nemesis/finalize", methods=["POST"])
-@api_login_required
-def sct_nemesis_finalize(run_id: str):
-    payload = get_payload(request)
-    result = SCTService.finalize_nemesis(run_id=run_id, nemesis_details=payload["nemesis"])
-    return {
+@router.post("/{run_id}/nemesis/finalize", name="api.client_api.sct_api.sct_nemesis_finalize")
+def sct_nemesis_finalize(run_id: str, payload: NemesisRequest, user: User = Depends(api_current_user)):
+    result = SCTService.finalize_nemesis(run_id=run_id, nemesis_details=payload.nemesis)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/<string:run_id>/events/submit", methods=["POST"])
-@api_login_required
-def sct_events_submit(run_id: str):
+@router.post("/{run_id}/events/submit", name="api.client_api.sct_api.sct_events_submit")
+def sct_events_submit(run_id: str, payload: EventsSubmitRequest,
+                      user: User = Depends(api_current_user)):
     """
         Legacy endpoint. Deprecated
         Submit a structure of EventsBySeverity that will be saved
         onto SCTTestRun
     """
-    payload = get_payload(request)
-    result = SCTService.submit_events(run_id=run_id, events=payload["events"])
-    return {
+    result = SCTService.submit_events(run_id=run_id, events=payload.events)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/<string:run_id>/events/get", methods=["GET"])
-@api_login_required
-def sct_events_get(run_id: str):
-    limit = int(request.args.get("limit", 100))
-    before = request.args.get("before")
-    after = request.args.get("after")
-    severities = request.args.getlist("severity")
-    result = SCTService.get_events(run_id=run_id, limit=limit, before=before, after=after, severities=severities)
-    return {
+@router.get("/{run_id}/events/get", name="api.client_api.sct_api.sct_events_get")
+def sct_events_get(run_id: str, limit: int = Query(100), before: str | None = Query(None),
+                   after: str | None = Query(None),
+                   severities: list[str] = Query(default=[], alias="severity"),
+                   user: User = Depends(api_current_user)):
+    result = SCTService.get_events(run_id=run_id, limit=limit, before=before, after=after,
+                                   severities=severities)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/<string:run_id>/events/<string:severity>/get", methods=["GET"])
-@api_login_required
-def sct_events_get_by_severity(run_id: str, severity: str):
-    limit = int(request.args.get("limit", 100))
-    before = request.args.get("before")
-    after = request.args.get("after")
-    result = SCTService.get_events(run_id=run_id, limit=limit, before=before, after=after, severities=[SCTEventSeverity(severity)])
-    return {
+@router.get("/{run_id}/events/{severity}/get", name="api.client_api.sct_api.sct_events_get_by_severity")
+def sct_events_get_by_severity(run_id: str, severity: SCTEventSeverity, limit: int = Query(100),
+                               before: str | None = Query(None), after: str | None = Query(None),
+                               user: User = Depends(api_current_user)):
+    result = SCTService.get_events(run_id=run_id, limit=limit, before=before, after=after,
+                                   severities=[severity])
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/<string:run_id>/events/<string:severity>/count", methods=["GET"])
-@api_login_required
-def sct_events_count_by_severity(run_id: str, severity: str):
-    result = SCTService.count_events_by_severity(run_id=run_id, severity=SCTEventSeverity(severity))
-    return {
+@router.get("/{run_id}/events/{severity}/count",
+            name="api.client_api.sct_api.sct_events_count_by_severity")
+def sct_events_count_by_severity(run_id: str, severity: SCTEventSeverity,
+                                 user: User = Depends(api_current_user)):
+    result = SCTService.count_events_by_severity(run_id=run_id, severity=severity)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/<string:run_id>/event/submit", methods=["POST"])
-@api_login_required
-def sct_event_submit(run_id: str):
+@router.post("/{run_id}/event/submit", name="api.client_api.sct_api.sct_event_submit")
+def sct_event_submit(run_id: str, payload: EventSubmitRequest,
+                     user: User = Depends(api_current_user)):
     """
         Submit an event or a collection of events
     """
-    payload = get_payload(request)
-    event_data = payload["data"]
+    event_data = payload.data
     if isinstance(event_data, list):
         result = all([SCTService.submit_event(run_id=run_id, raw_event=e) for e in event_data])
     else:
         result = SCTService.submit_event(run_id=run_id, raw_event=event_data)
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/<string:run_id>/gemini/submit", methods=["POST"])
-@api_login_required
-def sct_gemini_results_submit(run_id: str):
-    payload = get_payload(request)
-    result = SCTService.submit_gemini_results(run_id=run_id, gemini_data=payload["gemini_data"])
-    return {
+@router.post("/{run_id}/gemini/submit", name="api.client_api.sct_api.sct_gemini_results_submit")
+def sct_gemini_results_submit(run_id: str, payload: GeminiResultsRequest,
+                              user: User = Depends(api_current_user)):
+    result = SCTService.submit_gemini_results(run_id=run_id, gemini_data=payload.gemini_data)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/<string:run_id>/performance/submit", methods=["POST"])
-@api_login_required
-def sct_performance_results_submit(run_id: str):
-    payload = get_payload(request)
-    result = SCTService.submit_performance_results(run_id=run_id, performance_results=payload["performance_results"])
-    return {
+@router.post("/{run_id}/performance/submit",
+             name="api.client_api.sct_api.sct_performance_results_submit")
+def sct_performance_results_submit(run_id: str, payload: PerformanceResultsRequest,
+                                   user: User = Depends(api_current_user)):
+    result = SCTService.submit_performance_results(run_id=run_id,
+                                                   performance_results=payload.performance_results)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/<string:run_id>/performance/history", methods=["GET"])
-@api_login_required
-def sct_get_performance_history(run_id: str):
+@router.get("/{run_id}/performance/history", name="api.client_api.sct_api.sct_get_performance_history")
+def sct_get_performance_history(run_id: str, user: User = Depends(api_current_user)):
     result = SCTService.get_performance_history_for_test(run_id=run_id)
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/release/<path:release_name>/kernels", methods=["GET"])
-@api_login_required
-def sct_get_kernel_report(release_name: str):
+@router.get("/release/{release_name:path}/kernels", name="api.client_api.sct_api.sct_get_kernel_report")
+def sct_get_kernel_report(release_name: str, user: User = Depends(api_current_user)):
     result = SCTService.get_scylla_version_kernels_report(release_name=release_name)
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/<string:run_id>/junit/submit", methods=["POST"])
-@api_login_required
-def sct_submit_junit_report(run_id: str):
-    payload = get_payload(request)
-    result = SCTService.junit_submit(run_id, payload["file_name"], payload["content"])
-    return {
+@router.post("/{run_id}/junit/submit", name="api.client_api.sct_api.sct_submit_junit_report")
+def sct_submit_junit_report(run_id: str, payload: JunitSubmitRequest,
+                            user: User = Depends(api_current_user)):
+    result = SCTService.junit_submit(run_id, payload.file_name, payload.content)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
-@bp.route("/<string:run_id>/stress_cmd/submit", methods=["POST"])
-@api_login_required
-def sct_add_stress_cmd(run_id: str):
-    payload = get_payload(request)
-    result = SCTService.add_stress_command(run_id, cmd=payload["cmd"], ts=payload.get("ts", datetime.now(UTC).timestamp()), loader_name=payload["loader_name"], log_name=payload["log_name"])
-    return {
+
+@router.post("/{run_id}/stress_cmd/submit", name="api.client_api.sct_api.sct_add_stress_cmd")
+def sct_add_stress_cmd(run_id: str, payload: StressCommandRequest,
+                       user: User = Depends(api_current_user)):
+    result = SCTService.add_stress_command(run_id, cmd=payload.cmd, ts=payload.ts,
+                                           loader_name=payload.loader_name, log_name=payload.log_name)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/<string:run_id>/stress_cmd/get", methods=["GET"])
-@api_login_required
-def sct_get_all_stress_cmds(run_id: str):
+@router.get("/{run_id}/stress_cmd/get", name="api.client_api.sct_api.sct_get_all_stress_cmds")
+def sct_get_all_stress_cmds(run_id: str, user: User = Depends(api_current_user)):
     result = SCTService.get_stress_commands(run_id)
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/<string:run_id>/similar_events", methods=["GET"])
-@api_login_required
-def sct_get_similar_events(run_id: str):
+@router.get("/{run_id}/similar_events", name="api.client_api.sct_api.sct_get_similar_events")
+def sct_get_similar_events(run_id: str, user: User = Depends(api_current_user)):
     result = SCTService.get_similar_events(run_id=run_id)
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/<string:run_id>/event/similar", methods=["POST"])
-@api_login_required
-def sct_get_similar_events_realtime(run_id: str):
+@router.post("/{run_id}/event/similar", name="api.client_api.sct_api.sct_get_similar_events_realtime")
+def sct_get_similar_events_realtime(run_id: str, payload: SimilarEventRequest,
+                                    user: User = Depends(api_current_user)):
     """Get similar events for a specific event using real-time vector search"""
-    payload = get_payload(request)
-    severity = payload.get("severity")
-    ts = payload.get("ts")
-    limit = int(payload.get("limit", 100))
-
     err_message = ""
-    if not severity and not ts:
+    if not payload.severity and not payload.ts:
         err_message = "Missing required parameters: severity and ts"
-    elif not severity:
+    elif not payload.severity:
         err_message = "Missing required parameter: severity"
-    elif not ts:
+    elif not payload.ts:
         err_message = "Missing required parameter: ts"
     if err_message:
         raise SCTServiceException(err_message)
 
-
     result = SCTService.get_similar_events_realtime(
         run_id=run_id,
-        severity=severity,
-        ts=ts,
-        limit=limit
+        severity=payload.severity,
+        ts=payload.ts,
+        limit=payload.limit
     )
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/similar_runs_info", methods=["POST"])
-@api_login_required
-def sct_get_similar_runs_info():
+@router.post("/similar_runs_info", name="api.client_api.sct_api.sct_get_similar_runs_info")
+def sct_get_similar_runs_info(payload: SimilarRunsInfoRequest,
+                              user: User = Depends(api_current_user)):
     """Get build IDs and issues for a list of run IDs"""
-    data = request.get_json()
-    if not data or "run_ids" not in data:
-        return {
-            "status": "error",
-            "response": "Missing run_ids parameter"
-        }, 400
-
-    run_ids = data["run_ids"]
-    if not isinstance(run_ids, list):
-        return {
-            "status": "error",
-            "response": "run_ids must be a list"
-        }, 400
-
-    result = SCTService.get_similar_runs_info(run_ids=run_ids)
-    return {
+    result = SCTService.get_similar_runs_info(run_ids=payload.run_ids)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
+
+
+# The routes above are served by FastAPI; these view-less rules keep the
+# endpoints buildable through Flask's url_for until the Flask app is retired.
+bp = Blueprint("sct_api", __name__, url_prefix="/sct")
+
+for _rule, _endpoint in (
+    ("/<string:run_id>/packages/submit", "sct_submit_packages"),
+    ("/<string:run_id>/screenshots/submit", "sct_submit_screenshots"),
+    ("/<string:run_id>/sct_runner/set", "sct_set_runner"),
+    ("/<string:run_id>/resource/all", "sct_resource_all"),
+    ("/<string:run_id>/resource/<string:name>/get", "sct_resource_get"),
+    ("/<string:run_id>/resource/create", "sct_resource_create"),
+    ("/<string:run_id>/resource/<string:resource_name>/terminate", "sct_resource_terminate"),
+    ("/<string:run_id>/resource/<string:resource_name>/shards", "sct_resource_update_shards"),
+    ("/<string:run_id>/resource/<string:resource_name>/update", "sct_resource_update"),
+    ("/<string:run_id>/nemesis/submit", "sct_nemesis_submit"),
+    ("/<string:run_id>/nemesis/get", "sct_nemesis_get"),
+    ("/<string:run_id>/nemesis/finalize", "sct_nemesis_finalize"),
+    ("/<string:run_id>/events/submit", "sct_events_submit"),
+    ("/<string:run_id>/events/get", "sct_events_get"),
+    ("/<string:run_id>/events/<string:severity>/get", "sct_events_get_by_severity"),
+    ("/<string:run_id>/events/<string:severity>/count", "sct_events_count_by_severity"),
+    ("/<string:run_id>/event/submit", "sct_event_submit"),
+    ("/<string:run_id>/gemini/submit", "sct_gemini_results_submit"),
+    ("/<string:run_id>/performance/submit", "sct_performance_results_submit"),
+    ("/<string:run_id>/performance/history", "sct_get_performance_history"),
+    ("/release/<path:release_name>/kernels", "sct_get_kernel_report"),
+    ("/<string:run_id>/junit/submit", "sct_submit_junit_report"),
+    ("/<string:run_id>/stress_cmd/submit", "sct_add_stress_cmd"),
+    ("/<string:run_id>/stress_cmd/get", "sct_get_all_stress_cmds"),
+    ("/<string:run_id>/similar_events", "sct_get_similar_events"),
+    ("/<string:run_id>/event/similar", "sct_get_similar_events_realtime"),
+    ("/similar_runs_info", "sct_get_similar_runs_info"),
+):
+    bp.add_url_rule(_rule, _endpoint, None)

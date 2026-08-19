@@ -8,8 +8,7 @@ from flask import Blueprint
 from pydantic import BaseModel
 from starlette.responses import RedirectResponse, Response
 
-from argus.backend.controller import notification_api, planner_api, team, testrun_api, view_api
-from argus.backend.controller.client_api import bp as client_bp
+from argus.backend.controller import client_api, notification_api, planner_api, team, testrun_api, view_api
 from argus.backend.error_handlers import APIException, handle_api_exception
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, User
 from argus.backend.rendering import url_for
@@ -23,6 +22,7 @@ from argus.backend.util.encoders import ArgusJSONResponse
 LOGGER = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1")
+router.include_router(client_api.router)
 router.include_router(notification_api.router)
 router.include_router(testrun_api.router)
 router.include_router(planner_api.router)
@@ -564,7 +564,7 @@ def zeus_proxy(asgi_request: Request, endpoint: str, body: bytes = Body(b""),
 # the api.* endpoints buildable through Flask's url_for.
 bp = Blueprint('api', __name__, url_prefix='/api/v1')
 bp.register_blueprint(notification_api.bp)
-bp.register_blueprint(client_bp)
+bp.register_blueprint(client_api.bp)
 bp.register_blueprint(testrun_api.bp)
 bp.register_blueprint(team.bp)
 bp.register_blueprint(view_api.bp)

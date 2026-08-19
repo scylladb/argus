@@ -9,7 +9,7 @@ Endpoints exercised (mounted under ``/api/v1/client/driver_matrix``):
 
 The tests follow the ``test_sct_api`` style:
 
-- Use ``flask_client`` to issue real HTTP calls.
+- Use ``api_client`` to issue real HTTP calls.
 - Verify writes through paired GET endpoints — the per-plugin
   ``GET /api/v1/run/<run_type>/<run_id>`` endpoint exposes every persisted
   field (``test_collection``, ``environment_info``, ``scylla_version``)
@@ -61,7 +61,7 @@ def driver_matrix_test(release_manager_service, group: ArgusGroup, release: Argu
 
 
 @pytest.fixture
-def driver_matrix_run_id(flask_client, driver_matrix_test: ArgusTest) -> str:
+def driver_matrix_run_id(api_client, driver_matrix_test: ArgusTest) -> str:
     """Submit a fresh driver-matrix run via the public submit endpoint and return its id."""
     run_id = str(uuid4())
     payload = {
@@ -70,17 +70,16 @@ def driver_matrix_run_id(flask_client, driver_matrix_test: ArgusTest) -> str:
         "job_name": driver_matrix_test.build_system_id,
         "job_url": "http://example.com/job/42/",
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{CLIENT_PREFIX}/testrun/{RUN_TYPE}/submit",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json["status"] == "ok"
+    assert resp.json()["status"] == "ok"
     return run_id
 
 
-def test_submit_driver_matrix_result(flask_client, release, driver_matrix_test, driver_matrix_run_id):
+def test_submit_driver_matrix_result(api_client, release, driver_matrix_test, driver_matrix_run_id):
     driver_name = "TEST-myDriver-1.0.xml"
     payload = {
         "schema_version": "v8",
@@ -89,23 +88,22 @@ def test_submit_driver_matrix_result(flask_client, release, driver_matrix_test, 
         "driver_name": driver_name,
         "raw_xml": _b64(_build_xml()),
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{DRIVER_MATRIX_PREFIX}/result/submit",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
     assert resp.status_code == 200, resp.text
-    body = resp.json
+    body = resp.json()
     assert body["status"] == "ok"
     assert body["response"] is True
 
     # Verify via the paired test_report read endpoint (JSON-only).
-    report = flask_client.get(
+    report = api_client.get(
         f"{DRIVER_MATRIX_PREFIX}/test_report",
-        query_string={"buildId": driver_matrix_test.build_system_id},
+        params={"buildId": driver_matrix_test.build_system_id},
     )
     assert report.status_code == 200, report.text
-    report_body = report.json
+    report_body = report.json()
     assert report_body["status"] == "ok"
     response = report_body["response"]
     assert response["release"] == release.name
@@ -116,9 +114,7 @@ def test_submit_driver_matrix_result(flask_client, release, driver_matrix_test, 
     assert driver_name in response["versions"]["myDriver"]
 
 
-def test_submit_driver_matrix_result_idempotent_per_driver_name(
-    flask_client, driver_matrix_test, driver_matrix_run_id
-):
+def test_submit_driver_matrix_result_idempotent_per_driver_name(api_client, driver_matrix_test, driver_matrix_run_id):
     """Submitting the same driver_name twice must be a no-op (idempotent)."""
     payload = {
         "schema_version": "v8",
@@ -127,30 +123,28 @@ def test_submit_driver_matrix_result_idempotent_per_driver_name(
         "driver_name": "TEST-dupDriver-2.0.xml",
         "raw_xml": _b64(_build_xml()),
     }
-    first = flask_client.post(
+    first = api_client.post(
         f"{DRIVER_MATRIX_PREFIX}/result/submit",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
-    assert first.status_code == 200 and first.json["status"] == "ok"
+    assert first.status_code == 200 and first.json()["status"] == "ok"
 
-    second = flask_client.post(
+    second = api_client.post(
         f"{DRIVER_MATRIX_PREFIX}/result/submit",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
-    assert second.status_code == 200 and second.json["status"] == "ok"
+    assert second.status_code == 200 and second.json()["status"] == "ok"
 
-    report = flask_client.get(
+    report = api_client.get(
         f"{DRIVER_MATRIX_PREFIX}/test_report",
-        query_string={"buildId": driver_matrix_test.build_system_id},
+        params={"buildId": driver_matrix_test.build_system_id},
     )
     assert report.status_code == 200
-    versions = report.json["response"]["versions"].get("dupDriver", [])
+    versions = report.json()["response"]["versions"].get("dupDriver", [])
     assert versions.count("TEST-dupDriver-2.0.xml") == 1
 
 
-def test_submit_driver_matrix_failure(flask_client, api_client, driver_matrix_run_id):
+def test_submit_driver_matrix_failure(api_client, driver_matrix_run_id):
     payload = {
         "schema_version": "v8",
         "run_id": driver_matrix_run_id,
@@ -158,13 +152,12 @@ def test_submit_driver_matrix_failure(flask_client, api_client, driver_matrix_ru
         "driver_name": "broken-driver",
         "failure_reason": "compilation error",
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{DRIVER_MATRIX_PREFIX}/result/fail",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
     assert resp.status_code == 200, resp.text
-    body = resp.json
+    body = resp.json()
     assert body["status"] == "ok"
     assert body["response"] is True
 
@@ -179,20 +172,19 @@ def test_submit_driver_matrix_failure(flask_client, api_client, driver_matrix_ru
     assert failure["failures"] == 1
 
 
-def test_submit_driver_matrix_env(flask_client, api_client, driver_matrix_run_id):
+def test_submit_driver_matrix_env(api_client, driver_matrix_run_id):
     raw_env = "scylla-version: 6.0.0\nkernel: 5.15.0"
     payload = {
         "schema_version": "v8",
         "run_id": driver_matrix_run_id,
         "raw_env": raw_env,
     }
-    resp = flask_client.post(
+    resp = api_client.post(
         f"{DRIVER_MATRIX_PREFIX}/env/submit",
-        data=json.dumps(payload),
-        content_type="application/json",
+        json=payload,
     )
     assert resp.status_code == 200, resp.text
-    body = resp.json
+    body = resp.json()
     assert body["status"] == "ok"
     assert body["response"] is True
 
@@ -207,20 +199,20 @@ def test_submit_driver_matrix_env(flask_client, api_client, driver_matrix_run_id
     assert env_map.get("kernel") == "5.15.0"
 
 
-def test_get_driver_matrix_test_report_missing_build_id(flask_client):
-    resp = flask_client.get(f"{DRIVER_MATRIX_PREFIX}/test_report")
+def test_get_driver_matrix_test_report_missing_build_id(api_client):
+    resp = api_client.get(f"{DRIVER_MATRIX_PREFIX}/test_report")
     assert resp.status_code == 200
-    body = resp.json
+    body = resp.json()
     assert body["status"] == "error"
-    assert "No build id provided" in body["response"]["message"]
+    assert body["response"]["exception"] == "RequestValidationError"
 
 
-def test_get_driver_matrix_test_report_unknown_build_id(flask_client):
-    resp = flask_client.get(
+def test_get_driver_matrix_test_report_unknown_build_id(api_client):
+    resp = api_client.get(
         f"{DRIVER_MATRIX_PREFIX}/test_report",
-        query_string={"buildId": f"unknown-{uuid4()}"},
+        params={"buildId": f"unknown-{uuid4()}"},
     )
     assert resp.status_code == 200
-    body = resp.json
+    body = resp.json()
     assert body["status"] == "error"
     assert "No results for build_id" in body["response"]["message"]
