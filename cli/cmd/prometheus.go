@@ -569,10 +569,18 @@ func flattenSnapshotDir(dataDir string) error {
 			continue
 		}
 
-		// Move all entries from the snapshot directory up to dataDir
+		// Move all entries from the snapshot directory up to dataDir. TSDB
+		// blocks are identity-addressed by ULID and namespaced per run, so a
+		// pre-existing destination (from an earlier flatten of this same
+		// run, or a leftover from an interrupted one) is safe to replace.
 		for _, sub := range subEntries {
 			src := filepath.Join(candidateDir, sub.Name())
 			dst := filepath.Join(dataDir, sub.Name())
+			if _, err := os.Stat(dst); err == nil {
+				if err := os.RemoveAll(dst); err != nil {
+					return fmt.Errorf("removing existing %s before re-extraction: %w", dst, err)
+				}
+			}
 			if err := os.Rename(src, dst); err != nil {
 				return fmt.Errorf("moving %s to %s: %w", src, dst, err)
 			}
