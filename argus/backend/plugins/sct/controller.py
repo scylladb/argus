@@ -287,7 +287,7 @@ def sct_event_submit(run_id: str, payload: EventSubmitRequest,
 @router.post("/{run_id}/gemini/submit", name="api.client_api.sct_api.sct_gemini_results_submit")
 def sct_gemini_results_submit(run_id: str, payload: GeminiResultsRequest,
                               user: User = Depends(api_current_user)):
-    result = SCTService.submit_gemini_results(run_id=run_id, gemini_data=payload.gemini_data)
+    result = SCTService.submit_gemini_results(run_id=run_id, gemini_data=payload.gemini_data, user=user)
     return ArgusJSONResponse({
         "status": "ok",
         "response": result
@@ -299,7 +299,8 @@ def sct_gemini_results_submit(run_id: str, payload: GeminiResultsRequest,
 def sct_performance_results_submit(run_id: str, payload: PerformanceResultsRequest,
                                    user: User = Depends(api_current_user)):
     result = SCTService.submit_performance_results(run_id=run_id,
-                                                   performance_results=payload.performance_results)
+                                                   performance_results=payload.performance_results,
+                                                   user=user)
     return ArgusJSONResponse({
         "status": "ok",
         "response": result

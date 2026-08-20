@@ -12,13 +12,10 @@ Runs from the repository root so argus_web.yaml is found automatically.
 
 import argparse
 import logging
-import os
 import random
 from datetime import UTC, datetime, timedelta
 from time import time
 from uuid import uuid4
-
-os.environ["CQLENG_ALLOW_SCHEMA_MANAGEMENT"] = "1"
 
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import ArgusRelease, ArgusTest, User
@@ -59,12 +56,12 @@ def setup_db():
 
 
 def bulk_seed(release_name: str, total_runs: int, batch_log: int = 500):
-    tests = list(ArgusTest.filter(release_id=ArgusRelease.filter(name=release_name).get().id).all())
+    tests = list(ArgusTest.find(release_id=ArgusRelease.get(name=release_name).id).all())
     if not tests:
         LOGGER.error("No tests found for release '%s'", release_name)
         return
 
-    admin = list(User.filter(username="admin").limit(1))
+    admin = list(User.find(username="admin").limit(1))
     admin_user = admin[0] if admin else None
 
     LOGGER.info("Found %d tests in release '%s'. Creating %d runs...", len(tests), release_name, total_runs)

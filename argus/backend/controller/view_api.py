@@ -2,6 +2,7 @@ import importlib
 import logging
 import pkgutil
 from types import ModuleType
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -14,6 +15,7 @@ from argus.backend.models.web import User
 from argus.backend.service.stats import ViewStatsCollector
 from argus.backend.service.user import api_current_user
 from argus.backend.service.views import UserViewService
+from argus.backend.util.common import NoneIfEmpty
 from argus.backend.util.encoders import ArgusJSONResponse
 
 LOGGER = logging.getLogger(__name__)
@@ -80,7 +82,7 @@ def get_view(view_id: UUID = Query(..., alias="viewId"), user: User = Depends(ap
 
 
 @router.get("/all", name="api.view_api.get_all_views")
-def get_all_views(user_id: UUID | None = Query(None, alias="userId"),
+def get_all_views(user_id: Annotated[UUID | None, NoneIfEmpty, Query(alias="userId")] = None,
                   user: User = Depends(api_current_user)):
     view_user = User.get(id=user_id) if user_id else None
     service = UserViewService()
@@ -132,7 +134,8 @@ def view_stats(view_id: str = Query(..., alias="viewId"), limited: bool = Query(
                version: str | None = Query(None, alias="productVersion"),
                include_no_version: bool = Query(True, alias="includeNoVersion"),
                image_id: str | None = Query(None, alias="imageId"),
-               force: bool = Query(False), widget_id: int | None = Query(None, alias="widgetId"),
+               force: bool = Query(False),
+               widget_id: Annotated[int | None, NoneIfEmpty, Query(alias="widgetId")] = None,
                user: User = Depends(api_current_user)):
     collector = ViewStatsCollector(view_id=view_id, filter=version)
     stats = collector.collect(limited=limited, force=force, include_no_version=include_no_version,

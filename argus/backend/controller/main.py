@@ -240,7 +240,8 @@ def profile_oauth_github_callback(asgi_request: Request, state: str = Query(""),
 
     service = UserService()
     try:
-        first_run_info = service.github_callback(code, asgi_request.app.state.flask_app.config)
+        first_run_info = service.github_callback(code, asgi_request.session,
+                                                 asgi_request.app.state.flask_app.config)
     except Exception as exc:
         LOGGER.error("An error occured in callback", exc_info=True)
         flash(asgi_request, message=exc.args[0], category="error")

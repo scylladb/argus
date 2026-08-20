@@ -13,19 +13,17 @@ Run from the repository root so that argus_web.yaml is found automatically.
 import argparse
 import json
 import logging
-import os
 import random
 from datetime import UTC, datetime, timedelta
 from time import time
 from uuid import uuid4
 
-# Must be set before any cqlengine import
-os.environ["CQLENG_ALLOW_SCHEMA_MANAGEMENT"] = "1"
-
 from cassandra.auth import PlainTextAuthProvider
 from cassandra.cluster import Cluster
-from argus.backend.cli import sync_models
+from coodie.exceptions import DocumentNotFound
 from werkzeug.security import generate_password_hash
+
+from argus.backend.cli import sync_models
 
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.github_issue import GithubIssue, IssueAssignee, IssueLabel, IssueLink
@@ -283,7 +281,7 @@ def setup_db():
 
 def create_admin_user(username: str, password: str) -> User:
     """Create an admin user with all roles."""
-    existing = list(User.filter(username=username).limit(1))
+    existing = list(User.find(username=username).limit(1))
     if existing:
         LOGGER.info("  User '%s' already exists, skipping.", username)
         return existing[0]
@@ -311,12 +309,12 @@ def create_admin_user(username: str, password: str) -> User:
 def create_release_hierarchy(admin_user: User, content: dict):
     """Create the seed release with groups and tests. Returns (release, groups_dict, tests_list)."""
     release_name = content["release_name"]
-    existing = list(ArgusRelease.filter(name=release_name).limit(1))
+    existing = list(ArgusRelease.find(name=release_name).limit(1))
     if existing:
         LOGGER.info("  Release '%s' already exists, skipping hierarchy creation.", release_name)
         release = existing[0]
-        groups = {g.name: g for g in ArgusGroup.filter(release_id=release.id).all()}
-        tests = list(ArgusTest.filter(release_id=release.id).all())
+        groups = {g.name: g for g in ArgusGroup.find(release_id=release.id).all()}
+        tests = list(ArgusTest.find(release_id=release.id).all())
         return release, groups, tests
 
     release = ArgusRelease.create(
@@ -379,10 +377,10 @@ def create_test_runs(tests: list[ArgusTest], admin_user: User, content: dict):
     now = datetime.now(UTC)
 
     for test in tests:
-        existing = list(SCTTestRun.filter(build_id=test.build_system_id).limit(1))
+        existing = list(SCTTestRun.find(build_id=test.build_system_id).limit(1))
         if existing:
             LOGGER.info("  Runs for test '%s' already exist, skipping.", test.name)
-            runs = list(SCTTestRun.filter(build_id=test.build_system_id).all())
+            runs = list(SCTTestRun.find(build_id=test.build_system_id).all())
             all_runs.extend(runs)
             continue
 
@@ -435,7 +433,7 @@ def create_test_runs(tests: list[ArgusTest], admin_user: User, content: dict):
 def _events_exist_for_run(run_id) -> bool:
     """Check whether any SCT events already exist for a run (across all severities)."""
     for severity in SCTEventSeverity:
-        if list(SCTEvent.filter(run_id=run_id, severity=severity.value).limit(1)):
+        if list(SCTEvent.find(run_id=run_id, severity=severity.value).limit(1)):
             return True
     return False
 
@@ -493,7 +491,7 @@ def create_sct_events(runs: list[SCTTestRun], content: dict):
 def create_argus_events(runs: list[SCTTestRun], admin_user: User):
     """Create 1-2 Argus activity events per run."""
     if runs:
-        sample = list(ArgusEvent.filter(run_id=runs[0].id).limit(1))
+        sample = list(ArgusEvent.find(run_id=runs[0].id).limit(1))
         if sample:
             LOGGER.info("  Argus events already exist, skipping.")
             return
@@ -560,7 +558,7 @@ def _seed_result_table(test: ArgusTest, table_def: dict, test_runs: list[SCTTest
     desc_template = table_def.get("description_template", "Results for {test_pretty_name}")
 
     # Check if metadata already exists
-    if list(ArgusGenericResultMetadata.filter(test_id=test.id, name=table_name).limit(1)):
+    if list(ArgusGenericResultMetadata.find(test_id=test.id, name=table_name).limit(1)):
         LOGGER.info("  Result metadata for test '%s' already exists, skipping.", test.name)
         return
 
@@ -659,7 +657,7 @@ def create_issues(runs: list[SCTTestRun], admin_user: User, content: dict):
 
     # Check if issues already exist for any failed run
     for fr in failed_runs:
-        sample = list(IssueLink.filter(run_id=fr.id).limit(1))
+        sample = list(IssueLink.find(run_id=fr.id).limit(1))
         if sample:
             LOGGER.info("  Issues already exist, skipping.")
             return
@@ -732,38 +730,38 @@ def cleanup_seed_data(content: dict):
     LOGGER.info("Cleaning up previous seed data...")
     release_name = content["release_name"]
 
-    releases = list(ArgusRelease.filter(name=release_name).all())
+    releases = list(ArgusRelease.find(name=release_name).all())
     if not releases:
         LOGGER.info("  No existing seed data found.")
         return
 
     release = releases[0]
-    tests = list(ArgusTest.filter(release_id=release.id).all())
-    groups = list(ArgusGroup.filter(release_id=release.id).all())
+    tests = list(ArgusTest.find(release_id=release.id).all())
+    groups = list(ArgusGroup.find(release_id=release.id).all())
 
     # Collect all result table names from content for cleanup
     result_table_names = [t["name"] for t in content.get("result_tables", [])]
 
     # Delete runs and their events/results
     for test in tests:
-        runs = list(SCTTestRun.filter(build_id=test.build_system_id).all())
+        runs = list(SCTTestRun.find(build_id=test.build_system_id).all())
         for run in runs:
             # SCT events — partition key is (run_id, severity), delete whole partitions
             for severity in SCTEventSeverity:
-                SCTEvent.filter(run_id=run.id, severity=severity.value).delete()
+                SCTEvent.find(run_id=run.id, severity=severity.value).delete()
 
             # Argus events
-            argus_events = list(ArgusEvent.filter(run_id=run.id).all())
+            argus_events = list(ArgusEvent.find(run_id=run.id).all())
             for ev in argus_events:
                 ev.delete()
 
             # Issue links
-            links = list(IssueLink.filter(run_id=run.id).all())
+            links = list(IssueLink.find(run_id=run.id).all())
             for link in links:
                 for model_cls in (GithubIssue, JiraIssue):
                     try:
                         model_cls.get(id=link.issue_id).delete()
-                    except model_cls.DoesNotExist:
+                    except DocumentNotFound:
                         pass
                 link.delete()
 
@@ -771,14 +769,14 @@ def cleanup_seed_data(content: dict):
 
         # Delete result data
         for table_name in result_table_names:
-            for m in ArgusGenericResultMetadata.filter(test_id=test.id, name=table_name).all():
+            for m in ArgusGenericResultMetadata.find(test_id=test.id, name=table_name).all():
                 m.delete()
-            ArgusGenericResultData.filter(test_id=test.id, name=table_name).delete()
-            for b in ArgusBestResultData.filter(test_id=test.id, name=table_name).all():
+            ArgusGenericResultData.find(test_id=test.id, name=table_name).delete()
+            for b in ArgusBestResultData.find(test_id=test.id, name=table_name).all():
                 b.delete()
 
         # Delete graph views
-        for v in ArgusGraphView.filter(test_id=test.id).all():
+        for v in ArgusGraphView.find(test_id=test.id).all():
             v.delete()
 
         test.delete()

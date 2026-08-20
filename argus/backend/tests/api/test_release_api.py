@@ -268,6 +268,21 @@ def test_release_assignees_tests_missing_group(api_client):
     assert resp.json()["status"] == "error"
 
 
+def test_release_assignees_groups_empty_plan_id(api_client, isolated_release):
+    """The dashboard sends ?planId= (bare) when no plan is selected — must mean "no plan"."""
+    resp = _api_get(api_client, f"{API_PREFIX}/release/assignees/groups",
+                    releaseId=str(isolated_release.id), version="", planId="")
+    assert resp.status_code == 200, resp.content
+    assert resp.json()["status"] == "ok"
+
+
+def test_release_assignees_tests_empty_plan_id(api_client, isolated_group):
+    resp = _api_get(api_client, f"{API_PREFIX}/release/assignees/tests",
+                    groupId=str(isolated_group.id), version="", planId="")
+    assert resp.status_code == 200, resp.content
+    assert resp.json()["status"] == "ok"
+
+
 # ---------------------------------------------------------------------------
 # /release/stats/v2
 # ---------------------------------------------------------------------------

@@ -6,6 +6,7 @@ from typing import Callable, Iterable, TypeVar
 from uuid import UUID
 
 from flask import Request, Response, g
+from pydantic import BeforeValidator
 
 from argus.backend.models.web import User
 
@@ -13,6 +14,10 @@ T = TypeVar('T')
 
 LOGGER = logging.getLogger(__name__)
 FlaskView = Callable[..., Response]
+
+# Frontends serialize unset optional query params as bare keys (?planId=),
+# which arrive as "" — treat that as absent, like Flask's request.args did.
+NoneIfEmpty = BeforeValidator(lambda value: None if value == "" else value)
 
 
 def first(iterable, value, key: Callable = None, predicate: Callable = None):
