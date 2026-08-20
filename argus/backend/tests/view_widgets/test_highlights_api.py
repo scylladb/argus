@@ -4,7 +4,7 @@ from datetime import datetime, UTC, timedelta
 from unittest.mock import patch
 from uuid import uuid4, UUID
 
-from flask import g
+from argus.backend.tests.conftest import g
 
 from argus.backend.models.view_widgets import WidgetHighlights, WidgetComment
 

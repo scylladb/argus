@@ -1,7 +1,6 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from flask import Blueprint
 
 from argus.backend.models.web import ArgusUserView, User
 from argus.backend.service.user import api_current_user
@@ -23,9 +22,3 @@ def get_nemesis_data(view_id: UUID = Query(...), user: User = Depends(api_curren
         "status": "ok",
         "response": {"nemesis_data": nemesis_data},
     })
-
-
-# The route above is served by FastAPI; this view-less rule keeps the
-# endpoint buildable through Flask's url_for until the Flask app is retired.
-bp = Blueprint("nemesis_stats", __name__, url_prefix="/widgets")
-bp.add_url_rule("/nemesis_data", "get_nemesis_data", None)

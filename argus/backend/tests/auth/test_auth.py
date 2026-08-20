@@ -95,7 +95,7 @@ def test_stop_impersonation_without_active_session_errors(admin_client):
     assert "/profile" in res.headers["Location"]
 
 
-def test_password_login_success_sets_user_id_in_session(anon_client, argus_app, argus_db, read_session):
+def test_password_login_success_sets_user_id_in_session(anon_client, app_config, argus_db, read_session):
     """Posting valid credentials with password login enabled stores user_id in session."""
     raw_password = "s3cret-pw"
     user = User(id=uuid.uuid4(), username=f"pw-user-{uuid.uuid4().hex[:8]}",
@@ -103,8 +103,8 @@ def test_password_login_success_sets_user_id_in_session(anon_client, argus_app, 
     user.email = f"{user.username}@scylladb.com"
     user.save()
 
-    original_methods = argus_app.config.get("LOGIN_METHODS", [])
-    argus_app.config["LOGIN_METHODS"] = ["password"]
+    original_methods = app_config.get("LOGIN_METHODS", [])
+    app_config["LOGIN_METHODS"] = ["password"]
     try:
         res = anon_client.post(
             "/auth/login",
@@ -115,13 +115,13 @@ def test_password_login_success_sets_user_id_in_session(anon_client, argus_app, 
         assert res.headers["Location"].endswith("/")
         assert read_session(anon_client).get("user_id") == str(user.id)
     finally:
-        argus_app.config["LOGIN_METHODS"] = original_methods
+        app_config["LOGIN_METHODS"] = original_methods
 
 
-def test_password_login_disabled_flashes_error(anon_client, argus_app, read_session):
+def test_password_login_disabled_flashes_error(anon_client, app_config, read_session):
     """Password login posts redirect away without a session when disabled."""
-    original_methods = argus_app.config.get("LOGIN_METHODS", [])
-    argus_app.config["LOGIN_METHODS"] = ["cf"]
+    original_methods = app_config.get("LOGIN_METHODS", [])
+    app_config["LOGIN_METHODS"] = ["cf"]
     try:
         res = anon_client.post(
             "/auth/login",
@@ -131,7 +131,7 @@ def test_password_login_disabled_flashes_error(anon_client, argus_app, read_sess
         assert res.status_code == 302
         assert "user_id" not in read_session(anon_client)
     finally:
-        argus_app.config["LOGIN_METHODS"] = original_methods
+        app_config["LOGIN_METHODS"] = original_methods
 
 
 def test_cf_login_with_valid_jwt_logs_in_existing_user(anon_client, argus_db,

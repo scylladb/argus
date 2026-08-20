@@ -1,7 +1,6 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from flask import Blueprint
 from pydantic import BaseModel
 
 from argus.backend.models.web import ArgusUserView, User
@@ -46,10 +45,3 @@ def get_runs_details(payload: RunsDetailsRequest, user: User = Depends(api_curre
         "status": "ok",
         "response": result
     })
-
-
-# The routes above are served by FastAPI; these view-less rules keep the
-# endpoints buildable through Flask's url_for until the Flask app is retired.
-bp = Blueprint("graphed_stats", __name__, url_prefix="/widgets")
-bp.add_url_rule("/graphed_stats", "get_graphed_stats", None)
-bp.add_url_rule("/runs_details", "get_runs_details", None)

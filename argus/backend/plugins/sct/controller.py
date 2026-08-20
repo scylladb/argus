@@ -3,7 +3,6 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Query
-from flask import Blueprint
 from pydantic import BaseModel, Field
 
 from argus.backend.models.web import User
@@ -399,39 +398,3 @@ def sct_get_similar_runs_info(payload: SimilarRunsInfoRequest,
         "status": "ok",
         "response": result
     })
-
-
-# The routes above are served by FastAPI; these view-less rules keep the
-# endpoints buildable through Flask's url_for until the Flask app is retired.
-bp = Blueprint("sct_api", __name__, url_prefix="/sct")
-
-for _rule, _endpoint in (
-    ("/<string:run_id>/packages/submit", "sct_submit_packages"),
-    ("/<string:run_id>/screenshots/submit", "sct_submit_screenshots"),
-    ("/<string:run_id>/sct_runner/set", "sct_set_runner"),
-    ("/<string:run_id>/resource/all", "sct_resource_all"),
-    ("/<string:run_id>/resource/<string:name>/get", "sct_resource_get"),
-    ("/<string:run_id>/resource/create", "sct_resource_create"),
-    ("/<string:run_id>/resource/<string:resource_name>/terminate", "sct_resource_terminate"),
-    ("/<string:run_id>/resource/<string:resource_name>/shards", "sct_resource_update_shards"),
-    ("/<string:run_id>/resource/<string:resource_name>/update", "sct_resource_update"),
-    ("/<string:run_id>/nemesis/submit", "sct_nemesis_submit"),
-    ("/<string:run_id>/nemesis/get", "sct_nemesis_get"),
-    ("/<string:run_id>/nemesis/finalize", "sct_nemesis_finalize"),
-    ("/<string:run_id>/events/submit", "sct_events_submit"),
-    ("/<string:run_id>/events/get", "sct_events_get"),
-    ("/<string:run_id>/events/<string:severity>/get", "sct_events_get_by_severity"),
-    ("/<string:run_id>/events/<string:severity>/count", "sct_events_count_by_severity"),
-    ("/<string:run_id>/event/submit", "sct_event_submit"),
-    ("/<string:run_id>/gemini/submit", "sct_gemini_results_submit"),
-    ("/<string:run_id>/performance/submit", "sct_performance_results_submit"),
-    ("/<string:run_id>/performance/history", "sct_get_performance_history"),
-    ("/release/<path:release_name>/kernels", "sct_get_kernel_report"),
-    ("/<string:run_id>/junit/submit", "sct_submit_junit_report"),
-    ("/<string:run_id>/stress_cmd/submit", "sct_add_stress_cmd"),
-    ("/<string:run_id>/stress_cmd/get", "sct_get_all_stress_cmds"),
-    ("/<string:run_id>/similar_events", "sct_get_similar_events"),
-    ("/<string:run_id>/event/similar", "sct_get_similar_events_realtime"),
-    ("/similar_runs_info", "sct_get_similar_runs_info"),
-):
-    bp.add_url_rule(_rule, _endpoint, None)

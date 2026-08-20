@@ -3,8 +3,8 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
-from flask import g
-from flask.testing import FlaskClient
+from argus.backend.tests.conftest import g
+from starlette.testclient import TestClient
 
 from coodie.exceptions import DocumentNotFound
 

@@ -4,7 +4,7 @@ import json
 import logging
 from time import sleep
 
-from flask.testing import FlaskClient
+from starlette.testclient import TestClient
 
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest
@@ -294,7 +294,7 @@ def test_submit_event_db_event(client_service: ClientService, sct_service: SCTSe
     assert len(all_events) == 1, "Event not found"
 
 
-def test_controller_submit_event(api_client: FlaskClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService):
+def test_controller_submit_event(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService):
     run_type, run_req = get_fake_test_run(fake_test)
     client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
@@ -325,7 +325,7 @@ def test_controller_submit_event(api_client: FlaskClient, fake_test: ArgusTest, 
 
 
 
-def test_controller_submit_multiple_events(api_client: FlaskClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService):
+def test_controller_submit_multiple_events(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService):
     run_type, run_req = get_fake_test_run(fake_test)
     client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
@@ -362,7 +362,7 @@ def test_controller_submit_multiple_events(api_client: FlaskClient, fake_test: A
 
 
 
-def test_controller_submit_events_and_get_by_severity(api_client: FlaskClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService):
+def test_controller_submit_events_and_get_by_severity(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService):
     run_type, run_req = get_fake_test_run(fake_test)
     client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)

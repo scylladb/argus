@@ -1,8 +1,7 @@
 import logging
 from logging.config import dictConfig
-from flask import has_request_context, request
 
-LOG_FORMAT_REQUEST = "[%(levelcolor)s%(levelname)s%(colorreset)s] %(grey)s<%(remote_addr)s - %(url)s - %(endpoint)s>%(colorreset)s - %(module)s::%(funcName)s - %(message)s"
+LOG_FORMAT_REQUEST = "[%(levelcolor)s%(levelname)s%(colorreset)s] %(grey)s%(colorreset)s - %(module)s::%(funcName)s - %(message)s"
 
 
 class ArgusRequestLogFormatter(logging.Formatter):
@@ -24,14 +23,6 @@ class ArgusRequestLogFormatter(logging.Formatter):
         record.grey = self.grey
         record.colorreset = self.reset
         record.levelcolor = self.color_map.get(record.levelno, self.grey)
-        if has_request_context():
-            record.url = request.url
-            record.remote_addr = request.remote_addr
-            record.endpoint = request.endpoint
-        else:
-            record.url = ''
-            record.remote_addr = ''
-            record.endpoint = ''
         return super().format(record)
 
 
@@ -64,11 +55,11 @@ def setup_application_logging(log_level=logging.INFO):
                 'level': log_level,
                 'handlers': ['main']
             },
-            'werkzeug': {
+            'uvicorn': {
                 'level': log_level,
                 'handlers': ['main']
             },
-            'uwsgi': {
+            'gunicorn': {
                 'level': log_level,
                 'handlers': ['main']
             },

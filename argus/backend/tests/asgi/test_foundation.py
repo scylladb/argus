@@ -1,13 +1,12 @@
-"""Foundation tests for the FastAPI strangler shell.
+"""Foundation tests for the FastAPI app.
 
-Covers the pieces every migrated blueprint will rely on: the shared
-Flask-format session cookie (both directions), the auth dependencies'
-response shapes, the APIException contract, and the Flask fall-through.
+Covers the pieces every controller relies on: the signed session cookie
+(both directions), the auth dependencies' response shapes, and the
+APIException contract.
 """
 import uuid
 
 from fastapi import APIRouter, Depends, Request
-from flask.sessions import SecureCookieSessionInterface
 from pytest import fixture
 from starlette.testclient import TestClient
 
@@ -94,25 +93,20 @@ def test_token_header_authenticates_against_db(anon_client, db_user):
     assert response.json() == {"status": "ok", "response": "asgi_probe_user"}
 
 
-def test_flask_session_cookie_authenticates_fastapi_route(anon_client, flask_client, db_user):
-    with flask_client.session_transaction() as flask_session:
-        flask_session["user_id"] = str(db_user.id)
-    cookie = flask_client.get_cookie("session")
-    anon_client.cookies.set("session", cookie.value)
+def test_session_cookie_authenticates_route(anon_client, db_user, make_session_cookie):
+    anon_client.cookies.set("session", make_session_cookie(user_id=str(db_user.id)))
     response = anon_client.get("/asgi-probe/me")
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "response": "asgi_probe_user"}
 
 
-def test_fastapi_session_writes_are_readable_by_flask(anon_client, argus_app):
+def test_session_writes_produce_a_readable_signed_cookie(anon_client, read_session):
     response = anon_client.get("/asgi-probe/session-write")
     assert response.status_code == 200
-    cookie_value = response.cookies.get("session")
-    assert cookie_value, "session cookie should be set when the session is mutated"
-    serializer = SecureCookieSessionInterface().get_signing_serializer(argus_app)
-    assert serializer.loads(cookie_value) == {"probe": "value"}
+    assert response.cookies.get("session"), "session cookie should be set when the session is mutated"
+    assert read_session(anon_client) == {"probe": "value"}
 
 
-def test_unmigrated_routes_fall_through_to_flask(anon_client):
+def test_unknown_routes_return_404(anon_client):
     response = anon_client.get("/api/v1/definitely-not-a-route")
     assert response.status_code == 404

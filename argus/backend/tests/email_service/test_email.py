@@ -6,7 +6,7 @@ import json
 import logging
 from typing import IO
 
-from flask.testing import FlaskClient
+from starlette.testclient import TestClient
 
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest
 from argus.backend.plugins.sct.testrun import SCTTestRun
@@ -21,7 +21,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 
-def test_send_default_email(api_client: FlaskClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
+def test_send_default_email(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
     run_type, run_req = get_fake_test_run(fake_test)
     client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
@@ -46,7 +46,7 @@ def test_send_default_email(api_client: FlaskClient, fake_test: ArgusTest, clien
     assert ["john.smith@scylladb.com"] == email_listener.recipients
 
 
-def test_send_default_email_empty_sections_not_rendered(api_client: FlaskClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
+def test_send_default_email_empty_sections_not_rendered(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
     run_type, run_req = get_fake_test_run(fake_test)
     client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
@@ -72,7 +72,7 @@ def test_send_default_email_empty_sections_not_rendered(api_client: FlaskClient,
 
 
 
-def test_send_email_custom_html(api_client: FlaskClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
+def test_send_email_custom_html(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
     run_type, run_req = get_fake_test_run(fake_test)
     client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
@@ -104,7 +104,7 @@ def test_send_email_custom_html(api_client: FlaskClient, fake_test: ArgusTest, c
     assert "<p title='my section'>This is a custom section</p>" in email_listener.content
 
 
-def test_send_email_unsupported_section(api_client: FlaskClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
+def test_send_email_unsupported_section(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
     run_type, run_req = get_fake_test_run(fake_test)
     client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
@@ -136,7 +136,7 @@ def test_send_email_unsupported_section(api_client: FlaskClient, fake_test: Argu
     assert "42" in email_listener.content
 
 
-def test_send_email_attachments(api_client: FlaskClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
+def test_send_email_attachments(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
     run_type, run_req = get_fake_test_run(fake_test)
     client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)

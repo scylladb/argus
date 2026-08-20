@@ -1,7 +1,7 @@
 import uuid
 
 import pytest
-from flask import g
+from argus.backend.tests.conftest import g
 
 from coodie.exceptions import DocumentNotFound
 

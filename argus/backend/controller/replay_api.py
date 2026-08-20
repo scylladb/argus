@@ -15,7 +15,6 @@ used to reject obvious mismatches at the door.
 from __future__ import annotations
 
 from fastapi import APIRouter, Body, Depends, Query, Request
-from flask import Blueprint
 
 from argus.backend.error_handlers import APIException
 from argus.backend.models.web import User
@@ -86,9 +85,3 @@ def replay_ingest(asgi_request: Request, archive: bytes = Body(b""),
         "status": "ok",
         "response": summary.as_dict(),
     })
-
-
-# The route above is served by FastAPI; this view-less rule keeps the
-# endpoint buildable through Flask's url_for until the Flask app is retired.
-bp = Blueprint("replay_api", __name__, url_prefix="/replay")
-bp.add_url_rule("/ingest", "replay_ingest", None)

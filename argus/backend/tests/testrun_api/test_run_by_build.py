@@ -2,7 +2,7 @@ import json
 from uuid import uuid4
 
 import pytest
-from flask.testing import FlaskClient
+from starlette.testclient import TestClient
 
 from argus.backend.models.web import ArgusTest
 

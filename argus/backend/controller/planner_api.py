@@ -2,10 +2,8 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Query
-from flask import Blueprint
 from pydantic import BaseModel
 
-from argus.backend.error_handlers import handle_api_exception
 from argus.backend.models.web import User
 from argus.backend.service.planner_service import CopyPlanPayload, PlanningService
 from argus.backend.service.test_lookup import TestLookup
@@ -169,27 +167,3 @@ def trigger_jobs_for_plans(payload: dict = Body(...), user: User = Depends(api_c
         "status": "ok",
         "response": result,
     })
-
-
-# The routes above are served by FastAPI; these view-less rules keep the
-# endpoints buildable through Flask's url_for until the Flask app is retired.
-bp = Blueprint('planning_api', __name__, url_prefix='/planning')
-bp.register_error_handler(Exception, handle_api_exception)
-
-for _rule, _endpoint in (
-    ("/", "version"),
-    ("/plan/<string:plan_id>/copy/check", "is_plan_eligible_for_copy"),
-    ("/release/<string:release_id>/gridview", "grid_view_for_release"),
-    ("/search", "search_tests"),
-    ("/group/<string:group_id>/explode", "explode_group"),
-    ("/plan/<string:plan_id>/get", "get_plan"),
-    ("/release/<string:release_id>/all", "get_plans_for_release"),
-    ("/plan/create", "create_plan"),
-    ("/plan/update", "update_plan"),
-    ("/plan/copy", "copy_plan"),
-    ("/plan/<string:plan_id>/delete", "delete_plan"),
-    ("/plan/<string:plan_id>/owner/set", "change_plan_owner"),
-    ("/plan/<string:plan_id>/resolve_entities", "resolve_plan_entities"),
-    ("/plan/trigger", "trigger_jobs_for_plans"),
-):
-    bp.add_url_rule(_rule, _endpoint, None)

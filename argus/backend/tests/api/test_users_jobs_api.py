@@ -19,7 +19,7 @@ import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
-from flask import g
+from argus.backend.tests.conftest import g
 
 from argus.backend.models.web import User, UserRoles
 
@@ -180,32 +180,32 @@ def test_resolve_artifact_size_http_error(api_client):
 # /zeus/<endpoint>  (error path only — no real Zeus target)
 # ---------------------------------------------------------------------------
 
-def test_zeus_proxy_without_host_errors(api_client, argus_app):
-    saved_host = argus_app.config.pop("ZEUS_HOST", None)
+def test_zeus_proxy_without_host_errors(api_client, app_config):
+    saved_host = app_config.pop("ZEUS_HOST", None)
     try:
         resp = api_client.get(f"{API_PREFIX}/zeus/anything")
         assert resp.status_code == 200
         assert resp.json()["status"] == "error"
     finally:
         if saved_host is not None:
-            argus_app.config["ZEUS_HOST"] = saved_host
+            app_config["ZEUS_HOST"] = saved_host
 
 
-def test_zeus_proxy_without_token_errors(api_client, argus_app):
-    saved_host = argus_app.config.get("ZEUS_HOST")
-    saved_token = argus_app.config.pop("ZEUS_TOKEN", None)
-    argus_app.config["ZEUS_HOST"] = "localhost:9999"
+def test_zeus_proxy_without_token_errors(api_client, app_config):
+    saved_host = app_config.get("ZEUS_HOST")
+    saved_token = app_config.pop("ZEUS_TOKEN", None)
+    app_config["ZEUS_HOST"] = "localhost:9999"
     try:
         resp = api_client.get(f"{API_PREFIX}/zeus/anything")
         assert resp.status_code == 200
         assert resp.json()["status"] == "error"
     finally:
         if saved_token is not None:
-            argus_app.config["ZEUS_TOKEN"] = saved_token
+            app_config["ZEUS_TOKEN"] = saved_token
         if saved_host is None:
-            argus_app.config.pop("ZEUS_HOST", None)
+            app_config.pop("ZEUS_HOST", None)
         else:
-            argus_app.config["ZEUS_HOST"] = saved_host
+            app_config["ZEUS_HOST"] = saved_host
 
 
 # ---------------------------------------------------------------------------

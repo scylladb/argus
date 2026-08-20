@@ -6,11 +6,11 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from flask import Blueprint
+
 from pydantic import BaseModel
 
 from argus.backend.controller import views_widgets
-from argus.backend.error_handlers import APIException, handle_api_exception
+from argus.backend.error_handlers import APIException
 from argus.backend.models.web import User
 from argus.backend.service.stats import ViewStatsCollector
 from argus.backend.service.user import api_current_user
@@ -197,29 +197,6 @@ def view_get_pytest_results(view_id: str, user: User = Depends(api_current_user)
     })
 
 
-# The routes above are served by FastAPI; these view-less rules keep the
-# endpoints buildable through Flask's url_for until the Flask app is retired.
-bp = Blueprint('view_api', __name__, url_prefix='/views')
-bp.register_error_handler(Exception, handle_api_exception)
-
-for _rule, _endpoint in (
-    ("/", "index"),
-    ("/create", "create_view"),
-    ("/get", "get_view"),
-    ("/all", "get_all_views"),
-    ("/update", "update_view"),
-    ("/delete", "delete_view"),
-    ("/search", "search_tests"),
-    ("/stats", "view_stats"),
-    ("/<string:view_id>/versions", "view_versions"),
-    ("/<string:view_id>/images", "view_images"),
-    ("/<string:view_id>/resolve", "view_resolve"),
-    ("/<string:view_id>/resolve/tests", "view_resolve_tests"),
-    ("/<string:view_id>/pytest/results", "view_get_pytest_results"),
-):
-    bp.add_url_rule(_rule, _endpoint, None)
-
-
 def _widget_modules() -> list[ModuleType]:
     """Discover the view widget controllers: every module in views_widgets
     that exports a FastAPI ``router``."""
@@ -233,5 +210,3 @@ def _widget_modules() -> list[ModuleType]:
 
 for _module in _widget_modules():
     router.include_router(_module.router)
-    if (widget_bp := getattr(_module, "bp", None)) is not None:
-        bp.register_blueprint(widget_bp)

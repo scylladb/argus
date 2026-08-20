@@ -2,7 +2,6 @@ from dataclasses import asdict
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from flask import Blueprint
 
 from argus.backend.models.web import User
 from argus.backend.service.user import api_current_user
@@ -117,23 +116,3 @@ def get_comments(view_id: UUID = Query(...), index: int = Query(...),
     service = HighlightsService()
     comments = service.get_comments(view_id, index, created_at)
     return ArgusJSONResponse({"status": "ok", "response": [asdict(c) for c in comments]})
-
-
-# The routes above are served by FastAPI; these view-less rules keep the
-# endpoints buildable through Flask's url_for until the Flask app is retired.
-bp = Blueprint("view_widgets", __name__, url_prefix="/widgets")
-for _rule, _endpoint in (
-    ("/highlights/create", "create_highlight"),
-    ("/highlights/create_group", "create_highlight_group"),
-    ("/highlights", "get_highlights"),
-    ("/highlights/archive", "archive_highlight"),
-    ("/highlights/unarchive", "unarchive_highlight"),
-    ("/highlights/update", "update_highlight"),
-    ("/highlights/set_assignee", "set_assignee"),
-    ("/highlights/set_completed", "set_completed"),
-    ("/highlights/comments/create", "create_comment"),
-    ("/highlights/comments/update", "update_comment"),
-    ("/highlights/comments/delete", "delete_comment"),
-    ("/highlights/comments", "get_comments"),
-):
-    bp.add_url_rule(_rule, _endpoint, None)

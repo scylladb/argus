@@ -1,6 +1,5 @@
 from collections.abc import Mapping, MutableMapping
 from datetime import UTC, datetime
-import functools
 import hashlib
 import mimetypes
 import os
@@ -11,9 +10,10 @@ from uuid import UUID
 from time import time
 from hashlib import sha384
 
+from collections.abc import Callable
+
 from coodie.exceptions import DocumentNotFound
 from fastapi import Depends, Request
-from flask import current_app, flash, g, redirect, request, session, url_for
 import magic
 import requests
 import jwt
@@ -22,11 +22,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from argus.backend.db import ScyllaCluster
 from argus.backend.error_handlers import APIException, AuthorizationError, UIRedirect
 from argus.backend.models.web import User, UserOauthToken, UserRoles, WebFileStorage
-from argus.backend.util.common import FlaskView, gen_pass
+from argus.backend.util.common import gen_pass
 
 LOGGER = logging.getLogger(__name__)
 
-SSH_TUNNEL_SERVER_ALLOWED_ENDPOINTS_KEY = "ssh_tunnel_server_allowed_endpoints"
 
 class UserServiceException(Exception):
     pass
@@ -403,82 +402,9 @@ class UserService:
         user.save()
 
 
-def login_required(view: FlaskView):
-    @functools.wraps(view)
-    def wrapped_view(*args, **kwargs):
-        if g.user is None and not getattr(view, "api_view", False):
-            flash(message='Unauthorized, please login', category='error')
-            session["redirect_target"] = request.full_path
-            return redirect(url_for('auth.login'))
-        elif g.user is None and getattr(view, "api_view", True):
-            return {
-                "status": "error",
-                "message": "Authorization required"
-            }, 403
-
-        if is_scoped_ssh_tunnel_server_blocked(g.user):
-            if getattr(view, "api_view", False):
-                return {
-                    "status": "error",
-                    "message": "Authorization required",
-                }, 403
-
-            flash(message='Not authorized to access this area', category='error')
-            return redirect(url_for('main.home'))
-
-        return view(*args, **kwargs)
-
-    return wrapped_view
-
-
-def api_login_required(view: FlaskView):
-    view.api_view = True
-    return login_required(view)
-
-
-def check_roles(needed_roles: list[str] | str = None):
-    def inner(view: FlaskView):
-        @functools.wraps(view)
-        def wrapped_view(*args, **kwargs):
-            if not UserService.check_roles(needed_roles, g.user):
-                if getattr(view, "api_view", False):
-                    return {"status": "error", "message": "Forbidden"}, 403
-                flash(message='Not authorized to access this area', category='error')
-                return redirect(url_for('main.home'))
-
-            return view(*args, **kwargs)
-
-        return wrapped_view
-    return inner
-
-
-def allow_ssh_tunnel_server_scope(view: FlaskView):
+def allow_ssh_tunnel_server_scope(view: Callable):
     setattr(view, "allow_ssh_tunnel_server_scope", True)
     return view
-
-
-def load_logged_in_user():
-    auth_header = request.headers.get("Authorization")
-
-    if auth_header:
-        try:
-            auth_schema, *auth_data = auth_header.split()
-            if auth_schema == "token":
-                token = auth_data[0]
-                g.user = User.get(api_token=token)
-                return
-        except IndexError as exception:
-            raise APIException("Malformed authorization header") from exception
-        except DocumentNotFound as exception:
-            raise APIException("User not found for supplied token") from exception
-
-    if user_id := session.get('user_id'):
-        try:
-            g.user = User.get(id=UUID(user_id))
-            return
-        except DocumentNotFound:
-            session.clear()
-    g.user = None
 
 
 def load_user(asgi_request: Request) -> User | None:
@@ -558,37 +484,12 @@ def is_ssh_tunnel_server_user(user: User | None) -> bool:
     return UserService.check_roles(UserRoles.SSHTunnelServer, user)
 
 
-def is_ssh_tunnel_server_request_allowed() -> bool:
-    endpoint = request.endpoint
-    if not endpoint:
-        return False
-
-    allowed_endpoint_methods = current_app.extensions.get(SSH_TUNNEL_SERVER_ALLOWED_ENDPOINTS_KEY, set())
-
-    return (endpoint, request.method) in allowed_endpoint_methods
-
-
 def is_ssh_tunnel_server_asgi_request_allowed(asgi_request: Request) -> bool:
     """ASGI counterpart of is_ssh_tunnel_server_request_allowed: FastAPI
     routes opt in with the same @allow_ssh_tunnel_server_scope marker
     instead of the url_map scan."""
     endpoint = asgi_request.scope.get("endpoint")
     return bool(getattr(endpoint, "allow_ssh_tunnel_server_scope", False))
-
-
-def cache_ssh_tunnel_server_allowed_endpoints(app):
-    allowed_endpoint_methods = set()
-    for rule in app.url_map.iter_rules():
-        view = app.view_functions.get(rule.endpoint)
-        if getattr(view, "allow_ssh_tunnel_server_scope", False):
-            for method in rule.methods:
-                allowed_endpoint_methods.add((rule.endpoint, method))
-
-    app.extensions[SSH_TUNNEL_SERVER_ALLOWED_ENDPOINTS_KEY] = allowed_endpoint_methods
-
-
-def is_scoped_ssh_tunnel_server_blocked(user: User | None) -> bool:
-    return is_ssh_tunnel_server_user(user) and not is_ssh_tunnel_server_request_allowed()
 
 
 def _get_cf_access_payload(token: str, config: Mapping) -> dict | None:

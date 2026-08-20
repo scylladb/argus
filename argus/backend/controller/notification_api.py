@@ -2,10 +2,8 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from flask import Blueprint
 from pydantic import BaseModel
 
-from argus.backend.error_handlers import handle_api_exception
 from argus.backend.models.web import User
 from argus.backend.service.notification_manager import NotificationManagerService
 from argus.backend.service.user import api_current_user
@@ -68,16 +66,3 @@ def read_notification(payload: ReadNotificationRequest, user: User = Depends(api
         "status": "ok",
         "response": status
     })
-
-
-# The routes above are served by FastAPI; these view-less rules keep the
-# endpoints buildable through Flask's url_for until the Flask app is retired.
-bp = Blueprint('notifications', __name__, url_prefix='/notifications')
-bp.register_error_handler(Exception, handle_api_exception)
-for _rule, _endpoint in (
-    ("/get", "get_notification"),
-    ("/get_unread", "get_unread_count"),
-    ("/summary", "get_summary"),
-    ("/read", "read_notification"),
-):
-    bp.add_url_rule(_rule, _endpoint, None)

@@ -16,8 +16,8 @@ from uuid import UUID, uuid4
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
-from flask import g
-from flask.testing import FlaskClient
+from argus.backend.tests.conftest import g
+from starlette.testclient import TestClient
 
 from argus.backend.models.ssh_key import ProxyTunnelConfig, SSHTunnelKey
 from argus.backend.service.tunnel_service import TunnelService, _derive_fingerprint
@@ -73,7 +73,7 @@ def _make_active_config(**overrides) -> ProxyTunnelConfig:
     return ProxyTunnelConfig.create(**defaults)
 
 
-def _json_post(client: FlaskClient, url: str, payload: dict) -> object:
+def _json_post(client: TestClient, url: str, payload: dict) -> object:
     return client.post(url, json=payload,)
 
 
@@ -143,7 +143,7 @@ def _restore_active_configs(cfg_ids: list):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.docker_required
-def test_get_tunnel_connection_success(api_client: FlaskClient, argus_db, active_config):
+def test_get_tunnel_connection_success(api_client: TestClient, argus_db, active_config):
     resp = api_client.get(f"{API_PREFIX}/tunnel")
 
     assert resp.status_code == 200
@@ -159,7 +159,7 @@ def test_get_tunnel_connection_success(api_client: FlaskClient, argus_db, active
 
 
 @pytest.mark.docker_required
-def test_get_tunnel_connection_select_specific_host(api_client: FlaskClient, argus_db, active_config):
+def test_get_tunnel_connection_select_specific_host(api_client: TestClient, argus_db, active_config):
     second = _make_active_config(is_active=True)
     try:
         resp = api_client.get(f"{API_PREFIX}/tunnel?proxy_host={second.host}")
@@ -175,7 +175,7 @@ def test_get_tunnel_connection_select_specific_host(api_client: FlaskClient, arg
 
 
 @pytest.mark.docker_required
-def test_get_tunnel_connection_returns_stable_primary_and_failover_list(api_client: FlaskClient, argus_db, active_config):
+def test_get_tunnel_connection_returns_stable_primary_and_failover_list(api_client: TestClient, argus_db, active_config):
     """One user always gets the same primary, plus every proxy for failover."""
     second = _make_active_config(is_active=True)
     try:
@@ -200,7 +200,7 @@ def test_get_tunnel_connection_returns_stable_primary_and_failover_list(api_clie
 
 
 @pytest.mark.docker_required
-def test_get_tunnel_connection_no_active_config_returns_error(api_client: FlaskClient, argus_db):
+def test_get_tunnel_connection_no_active_config_returns_error(api_client: TestClient, argus_db):
     previous_active_ids = _deactivate_all_configs()
     try:
         resp = api_client.get(f"{API_PREFIX}/tunnel")
@@ -216,7 +216,7 @@ def test_get_tunnel_connection_no_active_config_returns_error(api_client: FlaskC
 # ---------------------------------------------------------------------------
 
 @pytest.mark.docker_required
-def test_register_tunnel_success(api_client: FlaskClient, argus_db, active_config):
+def test_register_tunnel_success(api_client: TestClient, argus_db, active_config):
     """A valid POST /ssh/tunnel should return 200 with proxy connection details."""
     payload = {"public_key": _make_public_key()}
     resp = _json_post(api_client, f"{API_PREFIX}/tunnel", payload)
@@ -241,7 +241,7 @@ def test_register_tunnel_success(api_client: FlaskClient, argus_db, active_confi
 
 
 @pytest.mark.docker_required
-def test_register_tunnel_with_ttl_seconds(api_client: FlaskClient, argus_db, active_config):
+def test_register_tunnel_with_ttl_seconds(api_client: TestClient, argus_db, active_config):
     """ttl_seconds should be honoured and reflected in expires_at."""
     from datetime import datetime, timezone
 
@@ -259,7 +259,7 @@ def test_register_tunnel_with_ttl_seconds(api_client: FlaskClient, argus_db, act
 
 
 @pytest.mark.docker_required
-def test_register_tunnel_invalid_ttl(api_client: FlaskClient, argus_db, active_config):
+def test_register_tunnel_invalid_ttl(api_client: TestClient, argus_db, active_config):
     """TTL outside [1h, 30d] should return an error response."""
     for ttl in (0, 3599, 2592001):
         payload = {"public_key": _make_public_key(), "ttl_seconds": ttl}
@@ -271,7 +271,7 @@ def test_register_tunnel_invalid_ttl(api_client: FlaskClient, argus_db, active_c
 
 
 @pytest.mark.docker_required
-def test_register_tunnel_missing_public_key(api_client: FlaskClient, argus_db, active_config):
+def test_register_tunnel_missing_public_key(api_client: TestClient, argus_db, active_config):
     """A request without public_key should return an error response."""
     resp = _json_post(api_client, f"{API_PREFIX}/tunnel", {})
 
@@ -280,7 +280,7 @@ def test_register_tunnel_missing_public_key(api_client: FlaskClient, argus_db, a
 
 
 @pytest.mark.docker_required
-def test_register_tunnel_invalid_public_key(api_client: FlaskClient, argus_db, active_config):
+def test_register_tunnel_invalid_public_key(api_client: TestClient, argus_db, active_config):
     """An unparseable public key should return an error response."""
     payload = {"public_key": "clearly-not-a-key"}
     resp = _json_post(api_client, f"{API_PREFIX}/tunnel", payload)
@@ -306,7 +306,7 @@ def test_register_tunnel_unauthenticated(argus_db, active_config, anon_client):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.docker_required
-def test_get_authorized_keys_success(api_client: FlaskClient, argus_db, active_config, ssh_tunnel_server_identity):
+def test_get_authorized_keys_success(api_client: TestClient, argus_db, active_config, ssh_tunnel_server_identity):
     """GET /ssh/keys should return 200 with plain-text content."""
     pub_key = _make_public_key()
     _seed_key(g.user.id, active_config.id, pub_key, "SHA256:test-one")
@@ -320,7 +320,7 @@ def test_get_authorized_keys_success(api_client: FlaskClient, argus_db, active_c
 
 
 @pytest.mark.docker_required
-def test_get_authorized_keys_fingerprint_param_scopes_response(api_client: FlaskClient, argus_db, active_config, ssh_tunnel_server_identity):
+def test_get_authorized_keys_fingerprint_param_scopes_response(api_client: TestClient, argus_db, active_config, ssh_tunnel_server_identity):
     """The ?fingerprint= query param reaches the service and narrows the result."""
     wanted = _make_public_key()
     other = _make_public_key()
@@ -336,7 +336,7 @@ def test_get_authorized_keys_fingerprint_param_scopes_response(api_client: Flask
 
 
 @pytest.mark.docker_required
-def test_get_authorized_keys_rejects_malformed_fingerprint(api_client: FlaskClient, argus_db, active_config, ssh_tunnel_server_identity):
+def test_get_authorized_keys_rejects_malformed_fingerprint(api_client: TestClient, argus_db, active_config, ssh_tunnel_server_identity):
     """A malformed fingerprint gets a plain-text 400, never a JSON body sshd would parse as keys."""
     resp = api_client.get(f"{API_PREFIX}/keys", params={"fingerprint": "bogus"})
 
@@ -346,7 +346,7 @@ def test_get_authorized_keys_rejects_malformed_fingerprint(api_client: FlaskClie
 
 
 @pytest.mark.docker_required
-def test_get_authorized_keys_returns_plain_text_on_an_internal_error(api_client: FlaskClient, argus_db, active_config, ssh_tunnel_server_identity, monkeypatch):
+def test_get_authorized_keys_returns_plain_text_on_an_internal_error(api_client: TestClient, argus_db, active_config, ssh_tunnel_server_identity, monkeypatch):
     """A driver fault must not reach sshd as a 200 with a JSON body either."""
     def _boom(self, fingerprint=None):
         raise RuntimeError("secondary index is missing")
@@ -370,7 +370,7 @@ def test_get_authorized_keys_forbidden_for_normal_user(api_client, argus_db, act
 
 
 @pytest.mark.docker_required
-def test_get_authorized_keys_with_multiple_active_configs(api_client: FlaskClient, argus_db, active_config, ssh_tunnel_server_identity):
+def test_get_authorized_keys_with_multiple_active_configs(api_client: TestClient, argus_db, active_config, ssh_tunnel_server_identity):
     """API should still return keys when multiple active tunnel configs are present."""
     from datetime import UTC, datetime
 
@@ -411,7 +411,7 @@ def test_get_authorized_keys_with_multiple_active_configs(api_client: FlaskClien
 
 
 @pytest.mark.docker_required
-def test_get_authorized_keys_empty_when_no_keys(api_client: FlaskClient, argus_db, active_config, ssh_tunnel_server_identity):
+def test_get_authorized_keys_empty_when_no_keys(api_client: TestClient, argus_db, active_config, ssh_tunnel_server_identity):
     """GET /ssh/keys for an empty database should return empty text."""
     for row in SSHTunnelKey.find().all():
         row.delete()
@@ -442,7 +442,7 @@ def test_ssh_tunnel_server_role_cannot_call_other_api(api_client, argus_db, ssh_
 # ---------------------------------------------------------------------------
 
 @pytest.mark.docker_required
-def test_get_user_keys_returns_only_current_user(api_client: FlaskClient, argus_db, active_config):
+def test_get_user_keys_returns_only_current_user(api_client: TestClient, argus_db, active_config):
     from datetime import UTC, datetime
 
     own_key = _make_public_key()
@@ -471,7 +471,7 @@ def test_get_user_keys_returns_only_current_user(api_client: FlaskClient, argus_
 
 
 @pytest.mark.docker_required
-def test_get_user_keys_can_filter_by_tunnel(api_client: FlaskClient, argus_db, active_config):
+def test_get_user_keys_can_filter_by_tunnel(api_client: TestClient, argus_db, active_config):
     from datetime import UTC, datetime
 
     own_key = _make_public_key()

@@ -5,7 +5,7 @@ import logging
 from time import sleep
 from uuid import uuid4
 
-from flask.testing import FlaskClient
+from starlette.testclient import TestClient
 import pytest
 
 from argus.backend.models.github_issue import GithubIssue

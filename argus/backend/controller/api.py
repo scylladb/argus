@@ -5,12 +5,11 @@ from uuid import UUID
 
 import requests
 from fastapi import APIRouter, Body, Depends, Query, Request
-from flask import Blueprint
 from pydantic import BaseModel
 from starlette.responses import RedirectResponse, Response
 
 from argus.backend.controller import client_api, notification_api, planner_api, team, testrun_api, view_api
-from argus.backend.error_handlers import APIException, handle_api_exception
+from argus.backend.error_handlers import APIException
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, User
 from argus.backend.rendering import url_for
 from argus.backend.service.argus_service import ArgusService, ScheduleUpdateRequest
@@ -535,7 +534,7 @@ def user_planned_jobs(user: User = Depends(api_current_user)):
                   name="api.zeus_proxy")
 def zeus_proxy(asgi_request: Request, endpoint: str, body: bytes = Body(b""),
                user: User = Depends(api_current_user)):
-    config = asgi_request.app.state.flask_app.config
+    config = asgi_request.app.state.config
     zeus_host = config.get("ZEUS_HOST")
     zeus_schema = config.get("ZEUS_SCHEMA", "http")
     zeus_token = config.get("ZEUS_TOKEN")
@@ -561,59 +560,3 @@ def zeus_proxy(asgi_request: Request, endpoint: str, body: bytes = Body(b""),
 
     return Response(response.content, status_code=response.status_code,
                     headers=dict(response.headers))
-
-
-# The routes above are served by FastAPI; the blueprint keeps the nested
-# (not yet migrated) sub-blueprints on Flask plus view-less rules that keep
-# the api.* endpoints buildable through Flask's url_for.
-bp = Blueprint('api', __name__, url_prefix='/api/v1')
-bp.register_blueprint(notification_api.bp)
-bp.register_blueprint(client_api.bp)
-bp.register_blueprint(testrun_api.bp)
-bp.register_blueprint(team.bp)
-bp.register_blueprint(view_api.bp)
-bp.register_blueprint(planner_api.bp)
-bp.register_error_handler(Exception, handle_api_exception)
-
-for _rule, _endpoint in (
-    ("/version", "app_version"),
-    ("/test/<path:build_id>/<int:build_number>", "get_run_by_build"),
-    ("/releases", "releases"),
-    ("/release/activity", "release_activity"),
-    ("/release/planner/data", "release_planner_data"),
-    ("/release/<string:release_id>/versions", "release_versions"),
-    ("/release/<string:release_id>/pytest/results", "release_pytest_results"),
-    ("/release/<string:release_id>/images", "release_images"),
-    ("/release/planner/comment/get/test", "get_planner_comment_by_test"),
-    ("/release/schedules/comment/update", "release_schedules_comment_update"),
-    ("/release/schedules", "release_schedules"),
-    ("/release/schedules/assignee/update", "release_schedules_assignee_update"),
-    ("/release/assignees/groups", "group_assignees"),
-    ("/release/assignees/tests", "tests_assignees"),
-    ("/release/schedules/submit", "release_schedules_submit"),
-    ("/release/schedules/delete", "release_schedules_delete"),
-    ("/release/schedules/update", "release_schedule_update"),
-    ("/groups", "argus_groups"),
-    ("/tests", "argus_tests"),
-    ("/release/<string:release_id>/details", "get_release_details"),
-    ("/group/<string:group_id>/details", "get_group_details"),
-    ("/test/<string:test_id>/details", "get_test_details"),
-    ("/test/<string:test_id>/set_plugin", "set_test_plugin"),
-    ("/test-info", "test_info"),
-    ("/test-results", "test_results"),
-    ("/create-graph-view", "create_graph_view"),
-    ("/update-graph-view", "update_graph_view"),
-    ("/test_run/comment/get", "get_test_run_comment"),
-    ("/users", "user_info"),
-    ("/release/stats/v2", "release_stats_v2"),
-    ("/test_runs/poll", "test_runs_poll"),
-    ("/test_run/poll", "test_run_poll_single"),
-    ("/release/create", "release_create"),
-    ("/artifact/resolveSize", "resolve_artifact_size"),
-    ("/s3/<string:bucket_name>/<path:bucket_path>", "s3_generic_proxy"),
-    ("/user/token", "user_token"),
-    ("/user/jobs", "user_jobs"),
-    ("/user/planned_jobs", "user_planned_jobs"),
-    ("/zeus/<path:endpoint>", "zeus_proxy"),
-):
-    bp.add_url_rule(_rule, _endpoint, None)

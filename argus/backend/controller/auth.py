@@ -2,17 +2,15 @@ import os
 import hashlib
 
 from fastapi import APIRouter, Depends, Form, Header, Request
-from flask import Blueprint
 from starlette.responses import RedirectResponse
 from werkzeug.security import check_password_hash
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.web import User, UserRoles
-from argus.backend.rendering import flash, render_template, url_for
+from argus.backend.rendering import flash, templates, url_for
 from argus.backend.service.user import (
     UserService,
     UserServiceException,
-    load_logged_in_user,
     load_user,
     ui_current_user,
     ui_require_roles,
@@ -40,13 +38,8 @@ def login(asgi_request: Request, user: User | None = Depends(load_user)):
 
     token = hashlib.sha256(os.urandom(64)).hexdigest()
     asgi_request.session["csrf_token"] = token
-    config = asgi_request.app.state.flask_app.config
-    return render_template(
-        asgi_request, "auth/login.html.j2",
-        csrf_token=token,
-        github_cid=config.get("GITHUB_CLIENT_ID", "NO_CLIENT_ID"),
-        github_scopes=config.get("GITHUB_SCOPES", "user:email read:user read:org"),
-    )
+    config = asgi_request.app.state.config
+    return templates.TemplateResponse(asgi_request, "auth/login.html.j2", {"csrf_token": token, "github_cid": config.get("GITHUB_CLIENT_ID", "NO_CLIENT_ID"), "github_scopes": config.get("GITHUB_SCOPES", "user:email read:user read:org")})
 
 
 @router.post("/login", name="auth.login")
@@ -57,7 +50,7 @@ def login_post(asgi_request: Request, username: str = Form(...), password: str =
 
     token = hashlib.sha256(os.urandom(64)).hexdigest()
     asgi_request.session["csrf_token"] = token
-    config = asgi_request.app.state.flask_app.config
+    config = asgi_request.app.state.config
     try:
         if "password" not in config.get("LOGIN_METHODS", []):
             raise UserServiceException("Password Login is disabled")
@@ -81,7 +74,7 @@ def login_post(asgi_request: Request, username: str = Form(...), password: str =
 @router.post("/login/cf", name="auth.cf_login")
 def cf_login(asgi_request: Request,
              cf_access_jwt: str | None = Header(None, alias="Cf-Access-Jwt-Assertion")):
-    config = asgi_request.app.state.flask_app.config
+    config = asgi_request.app.state.config
     res = UserService().cf_login_or_register(cf_access_jwt, asgi_request.session, config)
     if not res["redirect_optional"]:
         return RedirectResponse(url_for(asgi_request, res["redirect_to"]), status_code=302)
@@ -100,7 +93,7 @@ def generate_api_token(asgi_request: Request, user: User = Depends(ui_current_us
 @router.get("/admin/impersonate", name="auth.switch_user")
 def switch_user(asgi_request: Request, user: User = Depends(ui_require_roles(UserRoles.Admin))):
     users = UserService().get_users_privileged(service_only=True)
-    return render_template(asgi_request, "auth/user_switch.html.j2", users=users)
+    return templates.TemplateResponse(asgi_request, "auth/user_switch.html.j2", {"users": users})
 
 
 @router.post("/admin/impersonate", name="auth.switch_user")
@@ -124,20 +117,3 @@ def logout(asgi_request: Request):
     asgi_request.session.clear()
     asgi_request.session["manual_logout"] = True
     return RedirectResponse(url_for(asgi_request, "auth.login"), status_code=302)
-
-
-# The routes above are served by FastAPI; these view-less rules keep the
-# endpoints buildable through Flask's url_for until the Flask app is retired.
-bp = Blueprint('auth', __name__, url_prefix='/auth')
-for _rule, _endpoint in (
-    ("/register", "register"),
-    ("/login", "login"),
-    ("/login/cf", "cf_login"),
-    ("/profile/api/token/generate", "generate_api_token"),
-    ("/admin/impersonate", "switch_user"),
-    ("/admin/impersonate/stop", "stop_impersonation"),
-    ("/logout", "logout"),
-):
-    bp.add_url_rule(_rule, _endpoint, None)
-
-bp.before_app_request(load_logged_in_user)
