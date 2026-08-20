@@ -39,15 +39,18 @@ func TestFlattenSnapshotDir_ReExtractExistingBlock(t *testing.T) {
 
 	err := flattenSnapshotDir(dataDir)
 
-	// Today's (buggy) behavior: the bare os.Rename onto an existing
-	// destination directory fails, and flattenSnapshotDir surfaces that as
-	// an error instead of reconciling the two copies of the block.
-	require.Error(t, err, "expected flattenSnapshotDir to fail when the destination block already exists")
-	assert.Contains(t, err.Error(), "moving")
+	// flattenSnapshotDir must be idempotent: re-extracting the same block
+	// into an already-flattened data dir should succeed by treating the
+	// existing destination as already up to date, not error out.
+	require.NoError(t, err, "flattenSnapshotDir should tolerate a block that was already extracted")
 
-	// The wrapper directory should still exist since the rename never
-	// completed, leaving the run's data dir in the broken, non-flattened
-	// state that triggers the failure on every subsequent start.
+	// The block must end up in place at the data-dir root.
+	metaPath := filepath.Join(dataDir, ulid, "meta.json")
+	assert.FileExists(t, metaPath, "block should be present at the data-dir root")
+	chunkPath := filepath.Join(dataDir, ulid, "chunks", "000001")
+	assert.FileExists(t, chunkPath, "block chunk data should be present at the data-dir root")
+
+	// The wrapper directory should be cleaned up after a successful flatten.
 	_, statErr := os.Stat(wrapperDir)
-	assert.NoError(t, statErr, "wrapper dir should remain when the move fails")
+	assert.True(t, os.IsNotExist(statErr), "wrapper dir should be removed after a successful flatten")
 }
