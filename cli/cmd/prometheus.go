@@ -224,6 +224,10 @@ var promStartCmd = &cobra.Command{
 		if err := os.WriteFile(configPath, []byte(promConfig), 0644); err != nil {
 			return fmt.Errorf("writing prometheus config: %w", err)
 		}
+		// WriteFile applies the umask; the container user must still read this.
+		if err := os.Chmod(configPath, 0644); err != nil {
+			return fmt.Errorf("setting prometheus config permissions: %w", err)
+		}
 
 		// 8. Start Docker container
 		dockerArgs := []string{
