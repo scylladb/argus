@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -580,6 +581,8 @@ func flattenSnapshotDir(dataDir string) error {
 				if err := os.RemoveAll(dst); err != nil {
 					return fmt.Errorf("removing existing %s before re-extraction: %w", dst, err)
 				}
+			} else if !errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("checking existing %s before re-extraction: %w", dst, err)
 			}
 			if err := os.Rename(src, dst); err != nil {
 				return fmt.Errorf("moving %s to %s: %w", src, dst, err)
