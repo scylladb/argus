@@ -3,7 +3,6 @@ from abc import ABC, abstractmethod
 import jenkins
 import click
 import re
-from flask.cli import with_appcontext
 
 from coodie.exceptions import DocumentNotFound
 

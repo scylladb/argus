@@ -3,7 +3,7 @@ from dataclasses import asdict, dataclass
 import json
 
 import pytest
-from flask.testing import FlaskClient
+from starlette.testclient import TestClient
 
 from argus.backend.models.web import ArgusTest
 from argus.backend.service.client_service import ClientService
@@ -15,7 +15,7 @@ from argus.backend.util.encoders import ArgusJSONEncoder
 
 
 
-def test_submit_simple_config(api_client: FlaskClient, client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
+def test_submit_simple_config(api_client: TestClient, client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
     client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
@@ -46,7 +46,7 @@ def test_submit_simple_config(api_client: FlaskClient, client_service: ClientSer
     assert response.json()["response"]
 
 
-def test_get_config_properties(api_client: FlaskClient, client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
+def test_get_config_properties(api_client: TestClient, client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
     client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
@@ -81,7 +81,7 @@ def test_get_config_properties(api_client: FlaskClient, client_service: ClientSe
     assert props[0].value == "10"
 
 
-def test_get_configs_for_runs(api_client: FlaskClient, client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
+def test_get_configs_for_runs(api_client: TestClient, client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
     client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)

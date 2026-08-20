@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from flask import Blueprint
 
 from argus.backend.models.web import ArgusTest, ArgusUserView, User
 from argus.backend.service.results_service import ResultsService
@@ -68,9 +67,3 @@ def get_graph_views(view_id: UUID = Query(...),
         "response": response,
         "tests_details": tests_details
     })
-
-
-# The route above is served by FastAPI; this view-less rule keeps the
-# endpoint buildable through Flask's url_for until the Flask app is retired.
-bp = Blueprint("graphs", __name__, url_prefix="/widgets")
-bp.add_url_rule("/graphs/graph_views", "get_graph_views", None)

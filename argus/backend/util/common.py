@@ -5,15 +5,11 @@ import os
 from typing import Callable, Iterable, TypeVar
 from uuid import UUID
 
-from flask import Request, Response, g
 from pydantic import BeforeValidator
-
-from argus.backend.models.web import User
 
 T = TypeVar('T')
 
 LOGGER = logging.getLogger(__name__)
-FlaskView = Callable[..., Response]
 
 # Frontends serialize unset optional query params as bare keys (?planId=),
 # which arrive as "" — treat that as absent, like Flask's request.args did.
@@ -46,21 +42,6 @@ def strip_html_tags(text: str):
 
 def convert_str_list_to_uuid(lst: list[str]) -> list[UUID]:
     return [UUID(s) for s in lst]
-
-
-def get_payload(client_request: Request) -> dict:
-    if not client_request.is_json:
-        raise Exception(
-            "Content-Type mismatch, expected application/json, got:",
-            client_request.content_type
-        )
-    request_payload = client_request.get_json()
-
-    return request_payload
-
-
-def current_user() -> User:
-    return g.user
 
 
 def gen_pass() -> str:

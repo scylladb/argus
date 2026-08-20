@@ -1,3 +1,4 @@
+import dataclasses
 from collections.abc import Mapping
 from datetime import datetime
 import json
@@ -6,7 +7,6 @@ from json.encoder import JSONEncoder
 from typing import Any
 from uuid import UUID
 
-from flask.json.provider import DefaultJSONProvider
 from pydantic import BaseModel
 from starlette.responses import JSONResponse
 from cassandra.util import OrderedMapSerializedKey
@@ -30,7 +30,7 @@ class ArgusJSONEncoder(JSONEncoder):
                 return super().default(o)
 
 
-class ArgusJSONProvider(DefaultJSONProvider):
+class ArgusJSONProvider:
 
     @staticmethod
     def process_nested_dicts(o: dict):
@@ -56,8 +56,10 @@ class ArgusJSONProvider(DefaultJSONProvider):
                 return o.strftime("%Y-%m-%dT%H:%M:%S.%fZ")[:-4] + "Z"  # Include milliseconds, trim to 3 decimal places
             case bytes():
                 return o.decode("utf-8", errors="replace")
+            case _ if dataclasses.is_dataclass(o) and not isinstance(o, type):
+                return dataclasses.asdict(o)
             case _:
-                return super().default(o)
+                raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
 
 
 class ArgusJSONResponse(JSONResponse):

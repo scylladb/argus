@@ -13,7 +13,7 @@ import time
 import uuid
 
 import pytest
-from flask import g
+from argus.backend.tests.conftest import g
 
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.service.planner_service import (

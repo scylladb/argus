@@ -1,14 +1,7 @@
-"""Gunicorn configuration replacing uwsgi.ini.
+"""Gunicorn configuration.
 
-uwsgi.ini mapping:
-- socket + umask         -> bind + umask
-- processes = 4          -> workers = 4 (uvicorn worker: event loop +
--                            threadpool replaces `threads = 100`)
-- max-requests = 65535   -> max_requests (+ jitter so workers don't recycle
--                            in lockstep; also covers max-worker-lifetime)
-- worker-reload-mercy    -> graceful_timeout
-- touch-chain-reload     -> send SIGHUP to the master for a rolling reload
-- env PROMETHEUS_...     -> raw_env + child_exit hook for multiproc cleanup
+Launch: gunicorn -c gunicorn.conf.py 'argus_backend:create_app()'
+Rolling reload: send SIGHUP to the master.
 """
 
 import os

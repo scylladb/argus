@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, Query
-from flask import Blueprint
 
 from argus.backend.models.web import User
 from argus.backend.plugins.driver_matrix_tests.raw_types import (
@@ -55,15 +54,3 @@ def submit_env(payload: DriverMatrixSubmitEnvRequest, user: User = Depends(api_c
         "status": "ok",
         "response": result
     })
-
-
-# The routes above are served by FastAPI; these view-less rules keep the
-# endpoints buildable through Flask's url_for until the Flask app is retired.
-bp = Blueprint("driver_matrix_api", __name__, url_prefix="/driver_matrix")
-for _rule, _endpoint in (
-    ("/test_report", "driver_matrix_test_report"),
-    ("/result/submit", "submit_result"),
-    ("/result/fail", "submit_failure"),
-    ("/env/submit", "submit_env"),
-):
-    bp.add_url_rule(_rule, _endpoint, None)

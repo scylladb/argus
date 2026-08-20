@@ -17,11 +17,6 @@ def argus_db():
     yield None
 
 
-@pytest.fixture(scope="session")
-def argus_app():
-    yield None
-
-
 @pytest.fixture(scope="session", autouse=True)
-def app_context(argus_db, argus_app):
+def test_user_context(argus_db):
     yield

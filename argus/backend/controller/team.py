@@ -2,10 +2,8 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
-from flask import Blueprint
 from pydantic import BaseModel
 
-from argus.backend.error_handlers import handle_api_exception
 from argus.backend.models.web import User
 from argus.backend.service.argus_service import ArgusService
 from argus.backend.service.team_manager_service import TeamManagerService
@@ -137,20 +135,3 @@ def leader_teams(user_id: UUID, user: User = Depends(api_current_user)):
         "status": "ok",
         "response": result
     })
-
-
-# The routes above are served by FastAPI; these view-less rules keep the
-# endpoints buildable through Flask's url_for until the Flask app is retired.
-bp = Blueprint('team_api', __name__, url_prefix='/team')
-bp.register_error_handler(Exception, handle_api_exception)
-for _rule, _endpoint in (
-    ("/create", "team_create"),
-    ("/<string:team_id>/get", "team_get"),
-    ("/<string:team_id>/delete", "team_delete"),
-    ("/<string:team_id>/edit", "team_edit"),
-    ("/<string:team_id>/motd/edit", "team_edit_motd"),
-    ("/user/<string:user_id>/teams", "user_teams"),
-    ("/user/<string:user_id>/jobs", "user_jobs"),
-    ("/leader/<string:user_id>/teams", "leader_teams"),
-):
-    bp.add_url_rule(_rule, _endpoint, None)

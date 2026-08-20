@@ -77,7 +77,7 @@ def _link_issue_to_run(run, issue) -> IssueLink:
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def jira_service_factory(app_context, logged_in_user):
+def jira_service_factory(test_user_context, logged_in_user):
     """Return a callable that creates a dry-run JiraService for a given server URL.
 
     The returned service is valid for the lifetime of the test; callers must

@@ -3,10 +3,8 @@ from dataclasses import asdict
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Query
-from flask import Blueprint
 from pydantic import BaseModel
 
-from argus.backend.error_handlers import handle_api_exception
 from argus.backend.models.web import User, UserRoles
 from argus.backend.service.release_manager import ReleaseManagerService
 from argus.backend.service.tunnel_service import TunnelService
@@ -460,44 +458,3 @@ def delete_ssh_key(key_id: UUID, user: User = Depends(admin_user)):
             "deleted": True,
         },
     })
-
-
-# The routes above are served by FastAPI; these view-less rules keep the
-# endpoints buildable through Flask's url_for until the Flask app is retired.
-bp = Blueprint('admin_api', __name__, url_prefix='/api/v1')
-bp.register_error_handler(Exception, handle_api_exception)
-
-for _rule, _endpoint in (
-    ("/", "index"),
-    ("/release/create", "create_release"),
-    ("/release/set_perpetual", "set_release_perpetual"),
-    ("/release/set_state", "set_release_state"),
-    ("/release/set_dormant", "set_release_dormancy"),
-    ("/release/edit", "edit_release"),
-    ("/release/delete", "delete_release"),
-    ("/group/create", "create_group"),
-    ("/group/update", "update_group"),
-    ("/group/delete", "delete_group"),
-    ("/test/create", "create_test"),
-    ("/test/update", "update_test"),
-    ("/test/batch_move", "batch_move_tests"),
-    ("/test/delete", "delete_test"),
-    ("/releases/get", "get_releases"),
-    ("/groups/get", "get_groups_for_release"),
-    ("/tests/get", "get_tests_for_group"),
-    ("/release/test/state/toggle", "quick_toggle_test_enabled"),
-    ("/release/group/state/toggle", "quick_toggle_group_enabled"),
-    ("/users", "user_info"),
-    ("/user/<string:user_id>/email/set", "user_change_email"),
-    ("/user/<string:user_id>/delete", "user_delete"),
-    ("/user/<string:user_id>/password/set", "user_change_password"),
-    ("/user/<string:user_id>/admin/toggle", "user_toggle_admin"),
-    ("/proxy-tunnel/config", "get_proxy_tunnel_config"),
-    ("/proxy-tunnel/config", "save_proxy_tunnel_config"),
-    ("/proxy-tunnel/configs", "list_proxy_tunnel_configs"),
-    ("/proxy-tunnel/config/<string:tunnel_id>", "delete_proxy_tunnel_config"),
-    ("/proxy-tunnel/config/<string:tunnel_id>/active", "set_proxy_tunnel_config_active"),
-    ("/ssh/keys", "list_ssh_keys"),
-    ("/ssh/keys/<string:key_id>", "delete_ssh_key"),
-):
-    bp.add_url_rule(_rule, _endpoint, None)

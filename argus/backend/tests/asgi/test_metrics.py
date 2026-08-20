@@ -1,8 +1,8 @@
-"""Metrics parity tests for the strangler setup.
+"""Metrics tests.
 
-FastAPI-served routes are recorded by the ASGI middleware, fall-through
-routes by the Flask hooks — each request lands in the shared series exactly
-once, and /metrics itself keeps working through the fall-through.
+Every request lands in the shared series exactly once — matched routes
+under their route name, unmatched ones too — and /metrics serves the
+shared registry.
 """
 from fastapi import APIRouter
 from prometheus_client import REGISTRY
@@ -38,7 +38,7 @@ def test_fastapi_route_is_recorded_once_under_its_route_name(api_client):
     assert _sample("http_request_by_endpoint_total", labels) == before + 1
 
 
-def test_fallthrough_request_is_recorded_once_by_flask(api_client):
+def test_unmatched_request_is_recorded_once(api_client):
     total_labels = {"method": "GET", "status": "404 NOT FOUND"}
     before = _sample("http_request_total", total_labels)
     response = api_client.get("/definitely-not-a-route-anywhere")

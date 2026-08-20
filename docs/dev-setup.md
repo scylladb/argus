@@ -21,10 +21,7 @@ docker compose -f dev-db/docker-compose.yaml up -d
 docker logs -f dev-db-alpha-1 2>&1 | grep -m1 "initialization completed"
 
 # 2. Start the backend (in one terminal)
-FLASK_ENV=development \
-  FLASK_APP=argus_backend:start_server \
-  CQLENG_ALLOW_SCHEMA_MANAGEMENT=1 \
-  uv run flask run
+uv run uvicorn --factory argus_backend:create_app --port 5000 --reload
 
 # 3. Start the frontend (in another terminal)
 yarn build:watch
@@ -137,10 +134,7 @@ below for details.
 
 ```bash
 # Start the backend
-FLASK_ENV=development \
-  FLASK_APP=argus_backend:start_server \
-  CQLENG_ALLOW_SCHEMA_MANAGEMENT=1 \
-  uv run flask run
+uv run uvicorn --factory argus_backend:create_app --port 5000 --reload
 ```
 
 Open <http://localhost:5000> and log in with `admin` / `admin`.
@@ -214,9 +208,8 @@ docker exec dev-db-alpha-1 cqlsh 172.18.0.2 -u cassandra -p cassandra \
   -e "CREATE KEYSPACE IF NOT EXISTS argus WITH replication = \
       {'class': 'NetworkTopologyStrategy', 'replication_factor': 1};"
 
-# Sync table schemas via Flask CLI
-CQLENG_ALLOW_SCHEMA_MANAGEMENT=1 FLASK_ENV=development \
-  FLASK_APP=argus_backend:start_server uv run flask cli sync-models
+# Sync table schemas via the Argus CLI
+uv run python -m argus.backend.cli sync-models
 ```
 
 Note: this does **not** create the `argus_tablets` keyspace (needed by AI
@@ -234,7 +227,7 @@ to register a user through the UI or another method.
 | Wait for DB       | `docker logs -f dev-db-alpha-1 2>&1 \| grep -m1 "initialization completed"`                                    |
 | Seed (first time) | `uv run python dev-db/seed_data.py --create-keyspace`                                                          |
 | Seed (reset)      | `uv run python dev-db/seed_data.py --force --create-keyspace`                                                  |
-| Start backend     | `FLASK_ENV=development FLASK_APP=argus_backend:start_server CQLENG_ALLOW_SCHEMA_MANAGEMENT=1 uv run flask run` |
+| Start backend     | `uv run uvicorn --factory argus_backend:create_app --port 5000 --reload`                                       |
 | Start frontend    | `yarn build:watch`                                                                                             |
 | Run linter        | `uv run ruff check`                                                                                            |
 | Run backend tests | `uv run pytest argus/backend/tests`                                                                            |

@@ -1,10 +1,8 @@
 from fastapi import APIRouter, Body, Depends, Request
-from flask import Blueprint
 from pydantic import BaseModel
 from starlette.responses import HTMLResponse
 
 from argus.backend.controller import replay_api, ssh_api
-from argus.backend.error_handlers import handle_api_exception
 from argus.backend.models.web import User
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS
 from argus.backend.service.client_service import ClientService
@@ -197,35 +195,3 @@ def render_email_report(payload: dict = Body(...), user: User = Depends(api_curr
     result = EmailService().display_report(request_data=payload)
     # the rendered report is returned as raw HTML, not the JSON envelope
     return HTMLResponse(result)
-
-
-# The routes above are served by FastAPI; the blueprint keeps view-less rules
-# plus the nested manifests so every endpoint stays buildable through Flask's
-# url_for until the Flask app is retired.
-bp = Blueprint("client_api", __name__, url_prefix="/client")
-bp.register_error_handler(Exception, handle_api_exception)
-bp.register_blueprint(ssh_api.bp)
-bp.register_blueprint(replay_api.bp)
-for plugin in AVAILABLE_PLUGINS.values():
-    if getattr(plugin, "controller_bp", None) is not None:
-        bp.register_blueprint(plugin.controller_bp)
-
-for _rule, _endpoint in (
-    ("/testrun/<string:run_id>/info", "get_run_info"),
-    ("/testrun/<string:run_type>/submit", "submit_run"),
-    ("/testrun/<string:run_type>/<string:run_id>/get", "get_run"),
-    ("/testrun/<string:run_type>/<string:run_id>/heartbeat", "run_heartbeat"),
-    ("/testrun/<string:run_type>/<string:run_id>/get_status", "run_get_status"),
-    ("/testrun/<string:run_type>/<string:run_id>/set_status", "run_set_status"),
-    ("/testrun/<string:run_type>/<string:run_id>/update_product_version", "run_update_product_version"),
-    ("/testrun/<string:run_type>/<string:run_id>/logs/submit", "run_submit_logs"),
-    ("/<string:run_id>/config/submit", "submit_run_config"),
-    ("/<string:run_id>/config/all", "get_all_run_configs"),
-    ("/testrun/<string:run_type>/<string:run_id>/finalize", "run_finalize"),
-    ("/testrun/<string:run_type>/<string:run_id>/submit_results", "submit_results"),
-    ("/testrun/pytest/result/submit", "submit_pytest_result"),
-    ("/testrun/pytest/<string:test_name>/stats/<string:field_name>/<string:aggr_function>", "get_pytest_test_field_stats"),
-    ("/testrun/report/email", "send_email_report"),
-    ("/testrun/report", "render_email_report"),
-):
-    bp.add_url_rule(_rule, _endpoint, None)

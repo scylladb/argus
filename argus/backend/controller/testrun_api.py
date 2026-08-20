@@ -2,13 +2,11 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Query, Request
-from flask import Blueprint
 from pydantic import BaseModel
 
 from coodie.exceptions import DocumentNotFound
 from starlette.responses import RedirectResponse
 
-from argus.backend.error_handlers import handle_api_exception
 from argus.backend.models.web import ArgusTest, User
 from argus.backend.service.issue_service import IssueService
 from argus.backend.service.jenkins_service import JenkinsService
@@ -621,48 +619,3 @@ def get_pytest_test_results(test_name: str, before: float | None = Query(None),
         "status": "ok",
         "response": result
     })
-
-
-# The routes above are served by FastAPI; these view-less rules keep the
-# endpoints buildable through Flask's url_for until the Flask app is retired.
-bp = Blueprint('testrun_api', __name__, 'testrun')
-bp.register_error_handler(Exception, handle_api_exception)
-
-for _rule, _endpoint in (
-    ("/test/<string:test_id>/runs", "get_runs_for_test"),
-    ("/run/<string:run_id>/type", "get_type_for_run"),
-    ("/run/<string:run_type>/<string:run_id>", "get_testrun"),
-    ("/run/<string:run_id>/activity", "test_run_activity"),
-    ("/run/<string:test_id>/<string:run_id>/fetch_results", "fetch_results"),
-    ("/test/<string:test_id>/run/<string:run_id>/status/set", "set_testrun_status"),
-    ("/tests/<string:plugin_name>/<string:run_id>/log/<string:log_name>/download", "download_log"),
-    ("/tests/<string:plugin_name>/<string:run_id>/screenshot/<string:image_name>", "proxy_screenshot"),
-    ("/test/<string:test_id>/run/<string:run_id>/investigation_status/set", "set_testrun_investigation_status"),
-    ("/test/<string:test_id>/run/<string:run_id>/assignee/set", "set_testrun_assignee"),
-    ("/test/<string:test_id>/run/<string:run_id>/issues/submit", "issues_submit"),
-    ("/test/<string:test_id>/run/<string:run_id>/issues/event/<string:event_id>/submit", "issues_submit_for_event"),
-    ("/issues/get", "issues_get"),
-    ("/issues/delete", "issues_delete"),
-    ("/run/<string:run_id>/comments", "get_testrun_comments"),
-    ("/run/<string:run_id>/pytest/results", "get_testrun_pytest_results"),
-    ("/comment/<string:comment_id>/get", "get_single_comment"),
-    ("/test/<string:test_id>/run/<string:run_id>/comments/submit", "submit_testrun_comment"),
-    ("/test/<string:test_id>/run/<string:run_id>/comment/<string:comment_id>/update", "test_run_update_comment"),
-    ("/test/<string:test_id>/run/<string:run_id>/comment/<string:comment_id>/delete", "test_run_delete_comment"),
-    ("/terminate_stuck_runs", "sct_terminate_stuck_runs"),
-    ("/ignore_jobs", "ignore_jobs"),
-    ("/get_runs_by_test_id_run_id", "get_runs_by_test_id_run_id"),
-    ("/jenkins/params", "get_jenkins_job_params"),
-    ("/jenkins/build", "build_jenkins_job"),
-    ("/jenkins/queue_info", "get_queue_info"),
-    ("/jenkins/clone/targets", "get_clone_targets"),
-    ("/jenkins/clone/groups", "get_groups_for_target"),
-    ("/jenkins/clone/create", "clone_jenkins_job"),
-    ("/jenkins/clone/build", "clone_build_jenkins_job"),
-    ("/jenkins/clone/settings", "get_clone_job_advanced_settings"),
-    ("/jenkins/clone/settings/change", "set_job_settings"),
-    ("/jenkins/clone/settings/validate", "clone_validate_new_settings"),
-    ("/pytest/<string:test_name>/results", "get_pytest_test_results"),
-    ("/pytest/<string:test_name>/stats/<string:field_name>/<string:aggr_function>", "get_pytest_test_field_stats"),
-):
-    bp.add_url_rule(_rule, _endpoint, None)

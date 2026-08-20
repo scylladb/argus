@@ -2,7 +2,6 @@ import logging
 from dataclasses import asdict
 
 from fastapi import APIRouter, Depends, Query
-from flask import Blueprint
 from pydantic import BaseModel
 from starlette.responses import PlainTextResponse
 
@@ -92,15 +91,3 @@ def get_authorized_keys(fingerprint: str | None = Query(None),
         LOGGER.exception("authorized_keys lookup failed")
         return PlainTextResponse("", status_code=500)
     return PlainTextResponse(keys_text)
-
-
-# The routes above are served by FastAPI; these view-less rules keep the
-# endpoints buildable through Flask's url_for until the Flask app is retired.
-bp = Blueprint("ssh_api", __name__, url_prefix="/ssh")
-for _rule, _endpoint in (
-    ("/tunnel", "register_tunnel"),
-    ("/tunnel", "get_tunnel_connection"),
-    ("/tunnel/keys", "get_user_keys"),
-    ("/keys", "get_authorized_keys"),
-):
-    bp.add_url_rule(_rule, _endpoint, None)

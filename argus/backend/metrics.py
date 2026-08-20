@@ -1,8 +1,7 @@
 import os
-import time
 from http import HTTPStatus
 
-from flask import Flask, Response, request
+from fastapi import APIRouter, Depends
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_fastapi_instrumentator.metrics import Info
 from prometheus_client import (
@@ -14,9 +13,10 @@ from prometheus_client import (
     generate_latest,
     multiprocess,
 )
+from starlette.responses import Response
 
 from argus.backend import metrics_labels
-from argus.backend.service.user import api_login_required
+from argus.backend.service.user import api_current_user
 
 REQUEST_DURATION = Histogram(
     "http_request_duration_seconds",
@@ -118,46 +118,26 @@ def render_metrics() -> tuple[bytes, str]:
 METRICS_ENDPOINT_NAME = "prometheus_metrics"
 
 
-def init_flask_metrics(app: Flask) -> None:
-    """Install the request hooks and the /metrics endpoint on the Flask app."""
-    @app.before_request
-    def _start_timer():
-        request.environ["argus.metrics_start"] = time.perf_counter()
+def build_metrics_router() -> APIRouter:
+    """The /metrics endpoint: requires auth in production (multiproc) mode
+    and is open in development, matching the original exporter setup."""
+    dependencies = [Depends(api_current_user)] if os.environ.get("PROMETHEUS_MULTIPROC_DIR") else []
+    router = APIRouter()
 
-    @app.after_request
-    def _record(response):
-        if request.endpoint == METRICS_ENDPOINT_NAME:
-            return response
-        started = request.environ.get("argus.metrics_start")
-        record_request(
-            endpoint=request.endpoint,
-            method=request.method,
-            status=response.status,
-            remote_addr=request.remote_addr,
-            headers=request.headers,
-            duration=time.perf_counter() - started if started else None,
-        )
-        return response
-
+    @router.get("/metrics", name=METRICS_ENDPOINT_NAME, dependencies=dependencies)
     def metrics_view():
         payload, content_type = render_metrics()
-        return Response(payload, mimetype=content_type)
+        return Response(payload, media_type=content_type)
 
-    if os.environ.get("PROMETHEUS_MULTIPROC_DIR"):
-        # Parity with the exporter setup: the endpoint requires auth in
-        # production (multiproc) mode and is open in development.
-        metrics_view = api_login_required(metrics_view)
-    app.add_url_rule("/metrics", METRICS_ENDPOINT_NAME, metrics_view)
+    return router
 
 
-def build_instrumentator(skip_endpoints: tuple = ()) -> Instrumentator:
-    """Request metrics for the FastAPI side, via prometheus-fastapi-instrumentator.
+def build_instrumentator() -> Instrumentator:
+    """Request metrics via prometheus-fastapi-instrumentator.
 
     One custom instrumentation function increments the shared series above —
     no default library metrics, so the series stay exactly the ones the
-    dashboards already use. Requests that fall through the WSGI mount are
-    skipped (the Flask hooks record those), as is /metrics itself, which is
-    served by Flask through the fall-through.
+    dashboards already use. /metrics itself is not recorded.
 
     The endpoint label uses the matched route's name; migrated routes are
     named after their Flask endpoints (e.g. "api.client_api.submit_run") to
@@ -166,12 +146,11 @@ def build_instrumentator(skip_endpoints: tuple = ()) -> Instrumentator:
     instrumentator = Instrumentator(
         should_group_status_codes=False,
         should_ignore_untemplated=False,
+        excluded_handlers=["^/metrics$"],
     )
 
     def argus_request_metrics(info: Info) -> None:
         scope = info.request.scope
-        if scope.get("endpoint") in skip_endpoints:
-            return
         route = scope.get("route")
         endpoint = getattr(route, "name", None) or info.modified_handler
         client = scope.get("client")

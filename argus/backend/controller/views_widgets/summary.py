@@ -1,7 +1,6 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Query
-from flask import Blueprint
 
 from argus.backend.models.web import ArgusUserView, User
 from argus.backend.service.results_service import ResultsService
@@ -38,10 +37,3 @@ def get_runs_results(versioned_runs: dict = Body(...), user: User = Depends(api_
         "status": "ok",
         "response": response,
     })
-
-
-# The routes above are served by FastAPI; these view-less rules keep the
-# endpoints buildable through Flask's url_for until the Flask app is retired.
-bp = Blueprint("summary", __name__, url_prefix="/widgets")
-bp.add_url_rule("/summary/versioned_runs", "get_versioned_runs", None)
-bp.add_url_rule("/summary/runs_results", "get_runs_results", None)

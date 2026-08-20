@@ -5,7 +5,6 @@ import os
 from threading import Lock
 from traceback import format_exception
 from fastapi import Request
-from flask import flash, redirect, request, url_for
 from starlette.responses import JSONResponse, RedirectResponse
 
 from argus.backend.db import ScyllaCluster
@@ -134,36 +133,5 @@ class DBErrorHandler():
             }
 
 
-def handle_api_exception(exception: Exception):
-    trace_id = base64.encodebytes(sha256(os.urandom(64)).digest()).decode(encoding="utf-8").strip()
-    response_code = 200
-    if issubclass(exception.__class__, APIException):
-        LOGGER.info("[TraceId: %s] Endpoint %s responded with error %s: %s", trace_id,
-                    request.endpoint, exception.__class__.__name__, str(exception))
-        LOGGER.info("[TraceId: %s] Headers\n%s", trace_id, request.headers)
-        LOGGER.info("[TraceId: %s] Request Data Start\n%s\nRequest Data End", trace_id,
-                    request.json if request.is_json else request.get_data(as_text=True))
-    else:
-        LOGGER.error("[TraceId: %s] Exception in %s\n%s", trace_id,
-                     request.endpoint, "".join(format_exception(exception)))
-        LOGGER.error("[TraceId: %s] Headers\n%s", trace_id, request.headers)
-        LOGGER.error("[TraceId: %s] Request Data Start\n%s\nRequest Data End", trace_id,
-                     request.json if request.is_json else request.get_data(as_text=True))
-
-    return ({
-        "status": "error",
-        "response": {
-            "trace_id": trace_id,
-            "exception": exception.__class__.__name__,
-            "message": str(exception),
-            "arguments": exception.args
-        }
-    }, response_code)
-
-def handle_profile_exception(exception: Exception):
-    flash(message=" ".join(exception.args), category="error")
-    return redirect(url_for("main.profile"))
-
-def handle_view_not_found(exception: Exception):
-    flash(message=str(exception), category="error")
-    return redirect(url_for("main.views"))
+async def db_error_handler(_: Request, exception: Exception) -> JSONResponse:
+    return JSONResponse(DBErrorHandler.handle_db_errors(exception))

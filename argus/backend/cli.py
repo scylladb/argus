@@ -1,22 +1,36 @@
+"""Argus maintenance commands.
+
+Run from the repository root:
+
+    uv run python -m argus.backend.cli sync-models
+    uv run python -m argus.backend.cli refresh-issues
+    uv run python -m argus.backend.cli scan-jenkins
+"""
 import logging
+
 import click
-from flask import Blueprint, current_app
-from flask.cli import with_appcontext
+
 from argus.backend.db import ScyllaCluster
 from argus.backend.plugins.loader import all_plugin_models, all_plugin_types
 from argus.backend.service.build_system_monitor import JenkinsMonitor
 from argus.backend.service.github_service import GithubService
 from argus.backend.service.jira_service import JiraService
+from argus.backend.util.config import Config
+from argus.backend.util.logsetup import setup_application_logging
 
-cli_bp = Blueprint("cli", __name__)
 LOGGER = logging.getLogger(__name__)
 
 
-@cli_bp.cli.add_command
-@click.command('sync-models')
-@with_appcontext
+@click.group()
+def cli():
+    config = Config.load_yaml_config()
+    setup_application_logging(log_level=config["APP_LOG_LEVEL"])
+    ScyllaCluster.get(config)
+
+
+@cli.command("sync-models")
 def sync_models_command():
-    main_ks = current_app.config["SCYLLA_KEYSPACE_NAME"]
+    main_ks = ScyllaCluster.get().config["SCYLLA_KEYSPACE_NAME"]
     sync_models(main_ks)
 
 
@@ -46,17 +60,17 @@ def refresh_issues():
     j.refresh_stale_issues()
 
 
-@cli_bp.cli.add_command
-@click.command('refresh-issues')
-@with_appcontext
+@cli.command("refresh-issues")
 def refresh_issues_command():
     refresh_issues()
 
 
-@cli_bp.cli.add_command
-@click.command('scan-jenkins')
-@with_appcontext
+@cli.command("scan-jenkins")
 def scan_jenkins_command():
     monitor = JenkinsMonitor()
     monitor.collect()
     click.echo("Done.")
+
+
+if __name__ == "__main__":
+    cli()

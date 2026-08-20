@@ -1,7 +1,6 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
-from flask import Blueprint
 
 from argus.backend.models.web import User
 from argus.backend.service.user import api_current_user
@@ -60,16 +59,3 @@ def get_user_fields_for_test(test_name: str, id: str, user: User = Depends(api_c
         "status": "ok",
         "response": res
     })
-
-
-# The routes above are served by FastAPI; these view-less rules keep the
-# endpoints buildable through Flask's url_for until the Flask app is retired.
-bp = Blueprint("pytest", __name__, url_prefix="/widgets")
-for _rule, _endpoint in (
-    ("/pytest/view", "get_versioned_runs"),
-    ("/pytest/release/<string:release_id>/results", "get_release_pytest_results"),
-    ("/pytest/view/<string:view_id>/results", "get_view_pytest_results"),
-    ("/pytest/results", "get_pytest_results"),
-    ("/pytest/<path:test_name>/<string:id>/fields", "get_user_fields_for_test"),
-):
-    bp.add_url_rule(_rule, _endpoint, None)

@@ -4,13 +4,11 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
-from flask import Blueprint
 from starlette.responses import RedirectResponse, Response
 
 from argus.backend.controller import notifications, team_ui
-from argus.backend.error_handlers import handle_profile_exception, handle_view_not_found
 from argus.backend.models.web import ArgusRelease, User, WebFileStorage
-from argus.backend.rendering import flash, render_template, url_for
+from argus.backend.rendering import flash, templates, url_for
 from argus.backend.service.argus_service import ArgusService
 from argus.backend.service.planner_service import PlanningService
 from argus.backend.service.testrun import TestRunService
@@ -34,20 +32,19 @@ def _error_redirect(asgi_request: Request, error_type: int) -> RedirectResponse:
 
 @router.get("/test_runs", name="main.test_runs")
 def test_runs(asgi_request: Request, user: User = Depends(ui_current_user)):
-    return render_template(asgi_request, "test_runs.html.j2")
+    return templates.TemplateResponse(asgi_request, "test_runs.html.j2")
 
 
 @router.get("/test_run/{run_id}", name="main.test_run")
 def test_run(asgi_request: Request, run_id: UUID, user: User = Depends(ui_current_user)):
-    return render_template(asgi_request, "test_run.html.j2", id=run_id)
+    return templates.TemplateResponse(asgi_request, "test_run.html.j2", {"id": run_id})
 
 
 @router.get("/test/{test_id}/runs", name="main.runs")
 def runs(asgi_request: Request, test_id: UUID,
          additional_runs: list[str] = Query(default=[], alias="additionalRuns[]"),
          user: User = Depends(ui_current_user)):
-    return render_template(asgi_request, "standalone_test_with_runs.html.j2",
-                           test_id=test_id, additional_runs=additional_runs)
+    return templates.TemplateResponse(asgi_request, "standalone_test_with_runs.html.j2", {"test_id": test_id, "additional_runs": additional_runs})
 
 
 @router.get("/tests/{plugin_name}/{run_id}", name="main.get_run_by_plugin")
@@ -63,7 +60,7 @@ def get_run_by_plugin(asgi_request: Request, plugin_name: str, run_id: str, tab:
     if not run:
         flash(asgi_request, f"Run {plugin_name}/{run_id} not found.", "error")
         return _error_redirect(asgi_request, 404)
-    return render_template(asgi_request, "run_view_by_plugin.html.j2", run=run, tab=tab)
+    return templates.TemplateResponse(asgi_request, "run_view_by_plugin.html.j2", {"run": run, "tab": tab})
 
 
 @router.get("/test/{build_id:path}/{build_number:int}/{tab}", name="main.get_run_by_build")
@@ -78,7 +75,7 @@ def get_run_by_build(asgi_request: Request, build_id: str, build_number: int, ta
     if not run:
         flash(asgi_request, f"Run {build_id} #{build_number} not found.", "error")
         return _error_redirect(asgi_request, 404)
-    return render_template(asgi_request, "run_view_by_plugin.html.j2", run=run, tab=tab)
+    return templates.TemplateResponse(asgi_request, "run_view_by_plugin.html.j2", {"run": run, "tab": tab})
 
 
 @router.get("/", name="main.home")
@@ -89,23 +86,22 @@ def home(asgi_request: Request):
 @router.get("/run_dashboard", name="main.run_dashboard")
 @router.get("/workspace", name="main.run_dashboard")
 def run_dashboard(asgi_request: Request, user: User = Depends(ui_current_user)):
-    return render_template(asgi_request, "dashboard.html.j2")
+    return templates.TemplateResponse(asgi_request, "dashboard.html.j2")
 
 
 @router.get("/releases", name="main.releases")
 def releases(asgi_request: Request, user: User = Depends(ui_current_user)):
     service = ArgusService()
     all_releases = service.get_releases()
-    return render_template(asgi_request, "releases.html.j2", releases=all_releases)
+    return templates.TemplateResponse(asgi_request, "releases.html.j2", {"releases": all_releases})
 
 
 @router.get("/views", name="main.views")
 def views(asgi_request: Request, user: User = Depends(ui_current_user)):
     service = UserViewService()
     all_views = service.get_all_views()
-    return render_template(asgi_request, "views.html.j2",
-                           views=sorted(all_views, key=lambda view: view.created or datetime.datetime.fromtimestamp(0),
-                                        reverse=True))
+    return templates.TemplateResponse(asgi_request, "views.html.j2", {"views": sorted(all_views, key=lambda view: view.created or datetime.datetime.fromtimestamp(0),
+                                        reverse=True)})
 
 
 @router.get("/view/{view_name}", name="main.view_dashboard")
@@ -114,7 +110,7 @@ def view_dashboard(asgi_request: Request, view_name: str, user: User = Depends(u
     view = service.get_view_by_name(view_name=view_name)
     data_json = view
     view.widget_settings = json.loads(view.widget_settings)
-    return render_template(asgi_request, "view_dashboard.html.j2", data=data_json)
+    return templates.TemplateResponse(asgi_request, "view_dashboard.html.j2", {"data": data_json})
 
 
 @router.get("/plan/{plan_id}", name="main.plan_dashboard")
@@ -122,7 +118,7 @@ def plan_dashboard(asgi_request: Request, plan_id: str, user: User = Depends(ui_
     service = PlanningService()
     plan = service.get_plan(plan_id=plan_id)
     data_json = plan
-    return render_template(asgi_request, "plan_dashboard.html.j2", data=data_json)
+    return templates.TemplateResponse(asgi_request, "plan_dashboard.html.j2", {"data": data_json})
 
 
 @router.get("/alert_debug", name="main.alert_debug")
@@ -130,7 +126,7 @@ def alert_debug(asgi_request: Request, alert_type: str = Query("success", alias=
                 message: str = Query("No message provided"),
                 user: User = Depends(ui_current_user)):
     flash(asgi_request, message=message, category=alert_type)
-    return render_template(asgi_request, "flash_debug.html.j2")
+    return templates.TemplateResponse(asgi_request, "flash_debug.html.j2")
 
 
 @router.get("/dashboard/{release_name:path}", name="main.release_dashboard")
@@ -143,7 +139,7 @@ def release_dashboard(asgi_request: Request, release_name: str, user: User = Dep
         "groups": [group.model_dump() for group in release_groups],
         "tests": [test.model_dump() for test in release_tests],
     }
-    return render_template(asgi_request, "release_dashboard.html.j2", release_name=release_name, data=data_json)
+    return templates.TemplateResponse(asgi_request, "release_dashboard.html.j2", {"release_name": release_name, "data": data_json})
 
 
 @router.get("/release/{name}/scheduler", name="main.release_scheduler")
@@ -156,7 +152,7 @@ def release_scheduler(asgi_request: Request, name: str, user: User = Depends(ui_
         "groups": [group.model_dump() for group in release_groups],
         "tests": [test.model_dump() for test in release_tests],
     }
-    return render_template(asgi_request, "release_schedule.html.j2", release_name=name, data=data_json)
+    return templates.TemplateResponse(asgi_request, "release_schedule.html.j2", {"release_name": name, "data": data_json})
 
 
 @router.get("/release/by-id/{id}/planner", name="main.release_planner_by_id")
@@ -170,8 +166,7 @@ def release_planner_by_id(asgi_request: Request, id: UUID, user: User = Depends(
 def release_planner(asgi_request: Request, name: str, user: User = Depends(ui_current_user)):
     service = PlanningService()
     planner_data = service.release_planner(name)
-    return render_template(asgi_request, "release_planner.html.j2",
-                           release_name=planner_data["release"].name, planner_data=planner_data)
+    return templates.TemplateResponse(asgi_request, "release_planner.html.j2", {"release_name": planner_data["release"].name, "planner_data": planner_data})
 
 
 @router.get("/release/{name}/duty", name="main.duty_planner")
@@ -184,12 +179,12 @@ def duty_planner(asgi_request: Request, name: str, user: User = Depends(ui_curre
         "groups": [group.model_dump() for group in release_groups],
         "tests": [test.model_dump() for test in release_tests],
     }
-    return render_template(asgi_request, "duty_planner.html.j2", release_name=name, data=data_json)
+    return templates.TemplateResponse(asgi_request, "duty_planner.html.j2", {"release_name": name, "data": data_json})
 
 
 @router.get("/error/", name="main.error")
 def error(asgi_request: Request, error_type: str = Query("400", alias="type")):
-    return render_template(asgi_request, "error.html.j2", type=error_type)
+    return templates.TemplateResponse(asgi_request, "error.html.j2", {"type": error_type})
 
 
 @router.get("/profile/", name="main.profile")
@@ -197,15 +192,14 @@ def profile(asgi_request: Request, user: User = Depends(ui_current_user)):
     first_run = asgi_request.session.pop("first_run_info", None)
     token_generated = asgi_request.session.pop("token_generated", None)
 
-    return render_template(asgi_request, "profile.html.j2", first_run=first_run,
-                           token_generated=token_generated)
+    return templates.TemplateResponse(asgi_request, "profile.html.j2", {"first_run": first_run, "token_generated": token_generated})
 
 
 @router.get("/profile/create", name="main.profile_user_create")
 def profile_user_create(asgi_request: Request):
     if not asgi_request.session.get("registration_allowed", False):
         raise UserServiceException("Registration is not allowed at the moment.")
-    return render_template(asgi_request, "create_user.html.j2", feedback={})
+    return templates.TemplateResponse(asgi_request, "create_user.html.j2", {"feedback": {}})
 
 
 @router.post("/profile/create", name="main.profile_user_create")
@@ -229,7 +223,7 @@ def profile_user_create_post(asgi_request: Request, username: str = Form(...),
         }
         return _profile_redirect(asgi_request)
 
-    return render_template(asgi_request, "create_user.html.j2", feedback=result.get("form_feedback", {}))
+    return templates.TemplateResponse(asgi_request, "create_user.html.j2", {"feedback": result.get("form_feedback", {})})
 
 
 @router.get("/profile/oauth/github", name="main.profile_oauth_github_callback")
@@ -241,7 +235,7 @@ def profile_oauth_github_callback(asgi_request: Request, state: str = Query(""),
     service = UserService()
     try:
         first_run_info = service.github_callback(code, asgi_request.session,
-                                                 asgi_request.app.state.flask_app.config)
+                                                 asgi_request.app.state.config)
     except Exception as exc:
         LOGGER.error("An error occured in callback", exc_info=True)
         flash(asgi_request, message=exc.args[0], category="error")
@@ -354,53 +348,11 @@ def update_password(asgi_request: Request, old_password: str | None = Form(None)
 
 @router.get("/profile/jobs", name="main.profile_jobs")
 def profile_jobs(asgi_request: Request, user: User = Depends(ui_current_user)):
-    return render_template(asgi_request, "profile_jobs.html.j2")
+    return templates.TemplateResponse(asgi_request, "profile_jobs.html.j2")
 
 
 @router.get("/profile/schedules", name="main.profile_schedules")
 def profile_schedules(asgi_request: Request, user: User = Depends(ui_current_user)):
     service = ArgusService()
     schedules = service.get_schedules_for_user(user)
-    return render_template(asgi_request, "profile_schedules.html.j2", schedules=schedules)
-
-
-# The routes above are served by FastAPI; these view-less rules keep the
-# endpoints buildable through Flask's url_for until the Flask app is retired.
-bp = Blueprint('main', __name__)
-bp.register_error_handler(UserServiceException, handle_profile_exception)
-bp.register_error_handler(UserViewException, handle_view_not_found)
-bp.register_blueprint(notifications.bp)
-bp.register_blueprint(team_ui.bp)
-
-for _rule, _endpoint in (
-    ("/test_runs", "test_runs"),
-    ("/test_run/<string:run_id>", "test_run"),
-    ("/test/<string:test_id>/runs", "runs"),
-    ("/tests/<string:plugin_name>/<string:run_id>", "get_run_by_plugin"),
-    ("/test/<path:build_id>/<int:build_number>", "get_run_by_build"),
-    ("/", "home"),
-    ("/workspace", "run_dashboard"),
-    ("/releases", "releases"),
-    ("/views", "views"),
-    ("/view/<string:view_name>", "view_dashboard"),
-    ("/plan/<string:plan_id>", "plan_dashboard"),
-    ("/alert_debug", "alert_debug"),
-    ("/dashboard/<path:release_name>", "release_dashboard"),
-    ("/release/<string:name>/scheduler", "release_scheduler"),
-    ("/release/by-id/<string:id>/planner", "release_planner_by_id"),
-    ("/release/<string:name>/planner", "release_planner"),
-    ("/release/<string:name>/duty", "duty_planner"),
-    ("/error/", "error"),
-    ("/profile/", "profile"),
-    ("/profile/create", "profile_user_create"),
-    ("/profile/oauth/github", "profile_oauth_github_callback"),
-    ("/storage/picture/<string:picture_id>", "get_picture"),
-    ("/profile/update/picture", "upload_file"),
-    ("/profile/update/name", "update_full_name"),
-    ("/profile/update/username", "update_user_name"),
-    ("/profile/update/email", "update_email"),
-    ("/profile/update/password", "update_password"),
-    ("/profile/jobs", "profile_jobs"),
-    ("/profile/schedules", "profile_schedules"),
-):
-    bp.add_url_rule(_rule, _endpoint, None)
+    return templates.TemplateResponse(asgi_request, "profile_schedules.html.j2", {"schedules": schedules})
