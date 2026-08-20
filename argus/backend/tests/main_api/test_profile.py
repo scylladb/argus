@@ -222,7 +222,7 @@ def test_profile_oauth_github_callback_success_stores_first_run_info(
     )
     assert res.status_code == 302
     assert res.headers["Location"].endswith("/some/target")
-    mock_github_callback.assert_called_once_with("auth-code", ANY)
+    mock_github_callback.assert_called_once_with("auth-code", ANY, ANY)
     assert read_session(anon_client).get("first_run_info") == {"password": "tmp", "first_login": True}
 
 

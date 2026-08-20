@@ -54,7 +54,7 @@ class UserService:
                     return True
         return False
 
-    def github_callback(self, req_code: str, config: Mapping) -> dict | None:
+    def github_callback(self, req_code: str, session: MutableMapping, config: Mapping) -> dict | None:
         if "gh" not in config.get("LOGIN_METHODS", []):
             raise UserServiceException("Github Login is disabled")
         oauth_response = requests.post(

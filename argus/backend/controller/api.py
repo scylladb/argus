@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timezone
+from typing import Annotated
 from uuid import UUID
 
 import requests
@@ -17,6 +18,7 @@ from argus.backend.service.results_service import ResultsService
 from argus.backend.service.stats import ReleaseStatsCollector
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.user import UserService, api_current_user
+from argus.backend.util.common import NoneIfEmpty
 from argus.backend.util.encoders import ArgusJSONResponse
 
 LOGGER = logging.getLogger(__name__)
@@ -198,7 +200,8 @@ def release_schedules_assignee_update(payload: dict = Body(...),
 
 @router.get("/release/assignees/groups", name="api.group_assignees")
 def group_assignees(release_id: UUID = Query(..., alias="releaseId"),
-                    version: str | None = Query(None), plan_id: UUID | None = Query(None, alias="planId"),
+                    version: str | None = Query(None),
+                    plan_id: Annotated[UUID | None, NoneIfEmpty, Query(alias="planId")] = None,
                     user: User = Depends(api_current_user)):
     service = ArgusService()
     group_assignees_list = service.get_groups_assignees(release_id, version, plan_id)
@@ -211,7 +214,8 @@ def group_assignees(release_id: UUID = Query(..., alias="releaseId"),
 
 @router.get("/release/assignees/tests", name="api.tests_assignees")
 def tests_assignees(group_id: UUID = Query(..., alias="groupId"),
-                    version: str | None = Query(None), plan_id: UUID | None = Query(None, alias="planId"),
+                    version: str | None = Query(None),
+                    plan_id: Annotated[UUID | None, NoneIfEmpty, Query(alias="planId")] = None,
                     user: User = Depends(api_current_user)):
     service = ArgusService()
     tests_assignees_list = service.get_tests_assignees(group_id, version, plan_id)
@@ -359,8 +363,8 @@ def test_info(test_id: UUID = Query(..., alias="testId"),
 @router.get("/test-results", name="api.test_results")
 @router.head("/test-results", name="api.test_results")
 def test_results(asgi_request: Request, test_id: UUID = Query(..., alias="testId"),
-                 start_date: datetime | None = Query(None, alias="startDate"),
-                 end_date: datetime | None = Query(None, alias="endDate"),
+                 start_date: Annotated[datetime | None, NoneIfEmpty, Query(alias="startDate")] = None,
+                 end_date: Annotated[datetime | None, NoneIfEmpty, Query(alias="endDate")] = None,
                  table_names: list[str] = Query(default=[], alias="tableNames[]"),
                  user: User = Depends(api_current_user)):
     start_date = start_date.astimezone(timezone.utc) if start_date else None
