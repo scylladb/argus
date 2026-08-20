@@ -25,7 +25,13 @@ const (
 	promContainerPrefix = "argus-prom-"
 	promMaxTTL          = 1 * time.Hour
 	promImage           = "prom/prometheus:latest"
+	promConfigMode      = 0o644
 )
+
+const promConfig = `global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+`
 
 // ---------------------------------------------------------------------------
 // Parent command: run prometheus
@@ -217,16 +223,8 @@ var promStartCmd = &cobra.Command{
 
 		// 7. Write minimal prometheus.yml
 		configPath := filepath.Join(dataDir, "prometheus.yml")
-		promConfig := `global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
-`
-		if err := os.WriteFile(configPath, []byte(promConfig), 0644); err != nil {
-			return fmt.Errorf("writing prometheus config: %w", err)
-		}
-		// WriteFile applies the umask; the container user must still read this.
-		if err := os.Chmod(configPath, 0644); err != nil {
-			return fmt.Errorf("setting prometheus config permissions: %w", err)
+		if err := writePromConfig(configPath, promConfig); err != nil {
+			return err
 		}
 
 		// 8. Start Docker container
@@ -598,6 +596,19 @@ func flattenSnapshotDir(dataDir string) error {
 		return nil // only one snapshot directory expected
 	}
 
+	return nil
+}
+
+// The prometheus container runs as uid 65534 and reads this file through a bind
+// mount, so the mode has to hold whatever umask the caller was started with.
+// WriteFile passes the mode to open(2), which masks it; Chmod does not.
+func writePromConfig(configPath, contents string) error {
+	if err := os.WriteFile(configPath, []byte(contents), promConfigMode); err != nil {
+		return fmt.Errorf("writing prometheus config: %w", err)
+	}
+	if err := os.Chmod(configPath, promConfigMode); err != nil {
+		return fmt.Errorf("setting prometheus config permissions: %w", err)
+	}
 	return nil
 }
 
