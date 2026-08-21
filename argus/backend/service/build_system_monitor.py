@@ -3,12 +3,11 @@ from abc import ABC, abstractmethod
 import jenkins
 import click
 import re
-from flask import current_app
-from flask.cli import with_appcontext
 
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.db import ScyllaCluster
+from argus.backend.util.config import Config
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, ArgusTestException
 from argus.backend.service.release_manager import ReleaseManagerService
 
@@ -96,9 +95,10 @@ class JenkinsMonitor(ArgusTestsMonitor):
 
     def __init__(self) -> None:
         super().__init__()
-        self._jenkins = jenkins.Jenkins(url=current_app.config["JENKINS_URL"],
-                                        username=current_app.config["JENKINS_USER"],
-                                        password=current_app.config["JENKINS_API_TOKEN"])
+        config = Config.load_yaml_config()
+        self._jenkins = jenkins.Jenkins(url=config["JENKINS_URL"],
+                                        username=config["JENKINS_USER"],
+                                        password=config["JENKINS_API_TOKEN"])
         self._monitored_releases = self.JENKINS_MONITORED_RELEASES
 
     def _check_release_name(self, release_name: str):

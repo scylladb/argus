@@ -3,7 +3,6 @@ from datetime import datetime, UTC
 from uuid import UUID
 import re
 
-from flask import g
 from argus.backend.error_handlers import APIException
 
 from argus.backend.db import ScyllaCluster
@@ -214,19 +213,20 @@ class HighlightsService:
         self.cluster = ScyllaCluster.get()
         self.RE_MENTION = r"@[\w-]+"
 
-    def _process_mentions(self, content: str) -> set:
+    def _process_mentions(self, content: str, current_user_id: UUID) -> set:
         """Process mentions from content and return set of users to notify."""
         content_stripped = strip_html_tags(content)
         mentions = set()
         for potential_mention in re.findall(self.RE_MENTION, content_stripped):
             if user := User.exists_by_name(potential_mention.lstrip("@")):
-                mentions.add(user) if user.id != g.user.id else None
+                mentions.add(user) if user.id != current_user_id else None
         return mentions, content_stripped
 
     def _send_highlight_notifications(self, mentions: set, content: str, view_id: UUID, sender_id: UUID, is_action_item: bool, is_comment: bool = False):
         """Send notifications to mentioned users."""
         view = ArgusUserView.get(id=view_id)
         highlight_type = "action item" if is_action_item else "highlight"
+        sender_username = User.get(id=sender_id).username if mentions else None
         for mention in mentions:
             NotificationManagerService().send_notification(
                 receiver=mention.id,
@@ -236,7 +236,7 @@ class HighlightsService:
                 source_id=view_id,
                 source_message=content,
                 content_params={
-                    "username": g.user.username,
+                    "username": sender_username,
                     "view_id": view.id,
                     "view_name": view.name,
                     "display_name": view.display_name,
@@ -250,7 +250,7 @@ class HighlightsService:
             creator: UUID,
             payload: HighlightCreate,
     ) -> Highlight | ActionItem:
-        mentions, content_stripped = self._process_mentions(payload.content)
+        mentions, content_stripped = self._process_mentions(payload.content, creator)
 
         group_value = None
         if payload.is_task:
@@ -336,7 +336,7 @@ class HighlightsService:
         if entry.creator_id != user_id:
             raise Forbidden("Not authorized to update highlight")
 
-        mentions, content_stripped = self._process_mentions(payload.content)
+        mentions, content_stripped = self._process_mentions(payload.content, user_id)
         entry.content = content_stripped
         entry.save()
 
@@ -388,7 +388,7 @@ class HighlightsService:
         if not highlight:
             raise NotFound("Highlight not found")
         created_at = datetime.now(UTC)
-        mentions, content_stripped = self._process_mentions(payload.content)
+        mentions, content_stripped = self._process_mentions(payload.content, creator_id)
         comment = WidgetComment(
             view_id=payload.view_id,
             index=payload.index,
@@ -417,7 +417,7 @@ class HighlightsService:
             raise NotFound("Comment not found")
         if comment.creator_id != user_id:
             raise Forbidden("Not authorized to update comment")
-        mentions, content_stripped = self._process_mentions(payload.content)
+        mentions, content_stripped = self._process_mentions(payload.content, user_id)
         comment.content = payload.content
         comment.save()
         self._send_highlight_notifications(mentions, content_stripped, payload.view_id, user_id, WidgetHighlights.find(

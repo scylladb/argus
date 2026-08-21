@@ -6,7 +6,7 @@ import json
 import logging
 from typing import IO
 
-from flask.testing import FlaskClient
+from starlette.testclient import TestClient
 
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest
 from argus.backend.plugins.sct.testrun import SCTTestRun
@@ -21,52 +21,50 @@ LOGGER = logging.getLogger(__name__)
 
 
 
-def test_send_default_email(flask_client: FlaskClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
+def test_send_default_email(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
     run_type, run_req = get_fake_test_run(fake_test)
     client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
 
-    response = flask_client.post(
+    response = api_client.post(
         f"/api/v1/client/testrun/report/email",
-        data=json.dumps({
+        content=json.dumps({
             "run_id": run.id,
             "title": "#auto",
             "recipients": ["john.smith@scylladb.com"],
             "sections": [],
             "attachments": [],
             "schema_version": "v8",
-        }, cls=ArgusJSONEncoder),
-        content_type="application/json",
+        }, cls=ArgusJSONEncoder), headers={"content-type": "application/json"},
     )
 
-    assert response.json["status"] == "ok"
-    assert response.json["response"]
+    assert response.json()["status"] == "ok"
+    assert response.json()["response"]
 
     assert "default_user" in email_listener.content
     assert "default_commit" in email_listener.content
     assert ["john.smith@scylladb.com"] == email_listener.recipients
 
 
-def test_send_default_email_empty_sections_not_rendered(flask_client: FlaskClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
+def test_send_default_email_empty_sections_not_rendered(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
     run_type, run_req = get_fake_test_run(fake_test)
     client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
 
-    response = flask_client.post(
+    response = api_client.post(
         f"/api/v1/client/testrun/report/email",
-        data=json.dumps({
+        content=json.dumps({
             "run_id": run.id,
             "title": "#auto",
             "recipients": ["john.smith@scylladb.com"],
             "sections": [],
             "attachments": [],
             "schema_version": "v8",
-        }, cls=ArgusJSONEncoder),
-        content_type="application/json",
+        }, cls=ArgusJSONEncoder), headers={"content-type": "application/json"},
     )
 
-    assert response.json["status"] == "ok"
-    assert response.json["response"]
+    assert response.json()["status"] == "ok"
+    assert response.json()["response"]
 
     assert "Logs" not in email_listener.content
     assert "Nemesis" not in email_listener.content
@@ -74,14 +72,14 @@ def test_send_default_email_empty_sections_not_rendered(flask_client: FlaskClien
 
 
 
-def test_send_email_custom_html(flask_client: FlaskClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
+def test_send_email_custom_html(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
     run_type, run_req = get_fake_test_run(fake_test)
     client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
 
-    response = flask_client.post(
+    response = api_client.post(
         f"/api/v1/client/testrun/report/email",
-        data=json.dumps({
+        content=json.dumps({
             "run_id": run.id,
             "title": "#auto",
             "recipients": ["john.smith@scylladb.com"],
@@ -96,25 +94,24 @@ def test_send_email_custom_html(flask_client: FlaskClient, fake_test: ArgusTest,
             ],
             "attachments": [],
             "schema_version": "v8",
-        }, cls=ArgusJSONEncoder),
-        content_type="application/json",
+        }, cls=ArgusJSONEncoder), headers={"content-type": "application/json"},
     )
 
-    assert response.json["status"] == "ok"
-    assert response.json["response"]
+    assert response.json()["status"] == "ok"
+    assert response.json()["response"]
 
     assert "Hello world" in email_listener.content
     assert "<p title='my section'>This is a custom section</p>" in email_listener.content
 
 
-def test_send_email_unsupported_section(flask_client: FlaskClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
+def test_send_email_unsupported_section(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
     run_type, run_req = get_fake_test_run(fake_test)
     client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
 
-    response = flask_client.post(
+    response = api_client.post(
         f"/api/v1/client/testrun/report/email",
-        data=json.dumps({
+        content=json.dumps({
             "run_id": run.id,
             "title": "#auto",
             "recipients": ["john.smith@scylladb.com"],
@@ -128,19 +125,18 @@ def test_send_email_unsupported_section(flask_client: FlaskClient, fake_test: Ar
             ],
             "attachments": [],
             "schema_version": "v8",
-        }, cls=ArgusJSONEncoder),
-        content_type="application/json",
+        }, cls=ArgusJSONEncoder), headers={"content-type": "application/json"},
     )
 
-    assert response.json["status"] == "ok"
-    assert response.json["response"]
+    assert response.json()["status"] == "ok"
+    assert response.json()["response"]
 
     assert "Received an unknown template request" in email_listener.content
     assert "something_magical" in email_listener.content
     assert "42" in email_listener.content
 
 
-def test_send_email_attachments(flask_client: FlaskClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
+def test_send_email_attachments(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
     run_type, run_req = get_fake_test_run(fake_test)
     client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
@@ -148,9 +144,9 @@ def test_send_email_attachments(flask_client: FlaskClient, fake_test: ArgusTest,
     data = base64.encodebytes(b"Hello World!")
     filename = "my_file.txt"
 
-    response = flask_client.post(
+    response = api_client.post(
         f"/api/v1/client/testrun/report/email",
-        data=json.dumps({
+        content=json.dumps({
             "run_id": run.id,
             "title": "#auto",
             "recipients": ["john.smith@scylladb.com"],
@@ -162,12 +158,11 @@ def test_send_email_attachments(flask_client: FlaskClient, fake_test: ArgusTest,
                 }
             ],
             "schema_version": "v8",
-        }, cls=ArgusJSONEncoder),
-        content_type="application/json",
+        }, cls=ArgusJSONEncoder), headers={"content-type": "application/json"},
     )
 
-    assert response.json["status"] == "ok"
-    assert response.json["response"]
+    assert response.json()["status"] == "ok"
+    assert response.json()["response"]
 
     assert len(email_listener.attachments) > 0
     attachment = email_listener.attachments[0]

@@ -1,121 +1,119 @@
 import os
 import hashlib
-from flask import (
-    Blueprint, flash, g, redirect, render_template, request, session, url_for, current_app
-)
+
+from fastapi import APIRouter, Depends, Form, Header, Request
+from starlette.responses import RedirectResponse
 from werkzeug.security import check_password_hash
 from coodie.exceptions import DocumentNotFound
 
-from argus.backend.error_handlers import handle_profile_exception
 from argus.backend.models.web import User, UserRoles
+from argus.backend.rendering import flash, templates, url_for
 from argus.backend.service.user import (
     UserService,
     UserServiceException,
-    check_roles,
-    load_logged_in_user,
-    login_required,
+    load_user,
+    ui_current_user,
+    ui_require_roles,
 )
 
-bp = Blueprint('auth', __name__, url_prefix='/auth')
-bp.register_error_handler(UserServiceException, handle_profile_exception)
+router = APIRouter(prefix="/auth")
 
 
-@bp.route('/register', methods=('GET', 'POST'))
-def register():
-    return redirect(url_for("auth.login"))
+def _authenticated_redirect(asgi_request: Request) -> RedirectResponse:
+    if redirect_target := asgi_request.session.pop("redirect_target", None):
+        return RedirectResponse(redirect_target, status_code=302)
+    return RedirectResponse(url_for(asgi_request, "main.home"), status_code=302)
 
 
-@bp.route('/login', methods=('GET', 'POST'))
-def login():
-    if g.user:
-        if redirect_target := session.pop("redirect_target", None):
-            return redirect(redirect_target)
-        return redirect(url_for("main.home"))
+@router.get("/register", name="auth.register")
+@router.post("/register", name="auth.register")
+def register(asgi_request: Request):
+    return RedirectResponse(url_for(asgi_request, "auth.login"), status_code=302)
 
-    token = hashlib.sha256((os.urandom(64))).hexdigest()
-    session["csrf_token"] = token
 
-    if request.method == 'POST':
+@router.get("/login", name="auth.login")
+def login(asgi_request: Request, user: User | None = Depends(load_user)):
+    if user:
+        return _authenticated_redirect(asgi_request)
+
+    token = hashlib.sha256(os.urandom(64)).hexdigest()
+    asgi_request.session["csrf_token"] = token
+    config = asgi_request.app.state.config
+    return templates.TemplateResponse(asgi_request, "auth/login.html.j2", {"csrf_token": token, "github_cid": config.get("GITHUB_CLIENT_ID", "NO_CLIENT_ID"), "github_scopes": config.get("GITHUB_SCOPES", "user:email read:user read:org")})
+
+
+@router.post("/login", name="auth.login")
+def login_post(asgi_request: Request, username: str = Form(...), password: str = Form(...),
+               user: User | None = Depends(load_user)):
+    if user:
+        return _authenticated_redirect(asgi_request)
+
+    token = hashlib.sha256(os.urandom(64)).hexdigest()
+    asgi_request.session["csrf_token"] = token
+    config = asgi_request.app.state.config
+    try:
+        if "password" not in config.get("LOGIN_METHODS", []):
+            raise UserServiceException("Password Login is disabled")
         try:
-            if "password" not in current_app.config.get("LOGIN_METHODS", []):
-                raise UserServiceException("Password Login is disabled")
-            username = request.form["username"]
-            password = request.form["password"]
+            account: User = User.get(username=username)
+        except DocumentNotFound:
+            raise UserServiceException("User not found")
 
-            try:
-                user: User = User.get(username=username)
-            except DocumentNotFound:
-                raise UserServiceException("User not found")
+        if not check_password_hash(account.password, password):
+            raise UserServiceException("Incorrect Password")
 
-            if not check_password_hash(user.password, password):
-                raise UserServiceException("Incorrect Password")
+        asgi_request.session.clear()
+        asgi_request.session["user_id"] = str(account.id)
+        asgi_request.session["csrf_token"] = token
+    except UserServiceException as exc:
+        flash(asgi_request, next(iter(exc.args), "No message"), category="error")
 
-            session.clear()
-            session["user_id"] = str(user.id)
-            session["csrf_token"] = token
-        except UserServiceException as exc:
-            flash(next(iter(exc.args), "No message"), category="error")
-
-        return redirect(url_for('main.home'))
-
-    return render_template('auth/login.html.j2',
-                           csrf_token=token,
-                           github_cid=current_app.config.get("GITHUB_CLIENT_ID", "NO_CLIENT_ID"),
-                           github_scopes=current_app.config.get("GITHUB_SCOPES", "user:email read:user read:org")
-                           )
+    return RedirectResponse(url_for(asgi_request, "main.home"), status_code=302)
 
 
-@bp.route("/login/cf", methods=("POST",))
-def cf_login():
-    res = UserService().cf_login_or_register()
+@router.post("/login/cf", name="auth.cf_login")
+def cf_login(asgi_request: Request,
+             cf_access_jwt: str | None = Header(None, alias="Cf-Access-Jwt-Assertion")):
+    config = asgi_request.app.state.config
+    res = UserService().cf_login_or_register(cf_access_jwt, asgi_request.session, config)
     if not res["redirect_optional"]:
-        return redirect(url_for(res["redirect_to"]))
-    if redirect_target := session.pop("redirect_target", None):
-        return redirect(redirect_target)
-    return redirect(url_for(res["redirect_to"]))
+        return RedirectResponse(url_for(asgi_request, res["redirect_to"]), status_code=302)
+    if redirect_target := asgi_request.session.pop("redirect_target", None):
+        return RedirectResponse(redirect_target, status_code=302)
+    return RedirectResponse(url_for(asgi_request, res["redirect_to"]), status_code=302)
 
 
-@bp.route("/profile/api/token/generate", methods=("POST",))
-@login_required
-def generate_api_token():
-    new_token = UserService().generate_token(g.user)
-    session["token_generated"] = new_token
-    return redirect(url_for('main.profile'))
+@router.post("/profile/api/token/generate", name="auth.generate_api_token")
+def generate_api_token(asgi_request: Request, user: User = Depends(ui_current_user)):
+    new_token = UserService().generate_token(user)
+    asgi_request.session["token_generated"] = new_token
+    return RedirectResponse(url_for(asgi_request, "main.profile"), status_code=302)
 
 
-@bp.route('/admin/impersonate', methods=("POST","GET"))
-@check_roles(UserRoles.Admin)
-@login_required
-def switch_user():
-
-    if request.method == 'POST':
-        try:
-            user_id = request.form["user_id"]
-        except KeyError:
-            flash("No user id", category="error")
-            return redirect(url_for('main.profile'))
-        UserService().set_user_impersonation(user_id)
-        return redirect(url_for('main.profile'))
-
+@router.get("/admin/impersonate", name="auth.switch_user")
+def switch_user(asgi_request: Request, user: User = Depends(ui_require_roles(UserRoles.Admin))):
     users = UserService().get_users_privileged(service_only=True)
-
-    return render_template('auth/user_switch.html.j2', users=users)
-
-
-@bp.route('/admin/impersonate/stop', methods=("POST",))
-@login_required
-def stop_impersonation():
-
-    UserService().stop_user_impersonation()
-    return redirect(url_for('main.profile'))
+    return templates.TemplateResponse(asgi_request, "auth/user_switch.html.j2", {"users": users})
 
 
+@router.post("/admin/impersonate", name="auth.switch_user")
+def switch_user_post(asgi_request: Request, user_id: str | None = Form(None),
+                     user: User = Depends(ui_require_roles(UserRoles.Admin))):
+    if not user_id:
+        flash(asgi_request, "No user id", category="error")
+        return RedirectResponse(url_for(asgi_request, "main.profile"), status_code=302)
+    UserService().set_user_impersonation(user_id, asgi_request.session, user)
+    return RedirectResponse(url_for(asgi_request, "main.profile"), status_code=302)
 
-@bp.route('/logout', methods=("POST",))
-def logout():
-    session.clear()
-    session["manual_logout"] = True
-    return redirect(url_for('auth.login'))
+
+@router.post("/admin/impersonate/stop", name="auth.stop_impersonation")
+def stop_impersonation(asgi_request: Request, user: User = Depends(ui_current_user)):
+    UserService().stop_user_impersonation(asgi_request.session)
+    return RedirectResponse(url_for(asgi_request, "main.profile"), status_code=302)
 
 
-bp.before_app_request(load_logged_in_user)
+@router.post("/logout", name="auth.logout")
+def logout(asgi_request: Request):
+    asgi_request.session.clear()
+    asgi_request.session["manual_logout"] = True
+    return RedirectResponse(url_for(asgi_request, "auth.login"), status_code=302)

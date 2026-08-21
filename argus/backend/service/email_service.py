@@ -6,9 +6,9 @@ import logging
 import re
 from typing import Any
 
-from flask import render_template
 import humanize
 from argus.backend.plugins.sct.testrun import SCTEventSeverity, SCTNemesis, SCTTestRun
+from argus.backend.rendering import render_background_template
 from argus.backend.service.results_service import ResultsService
 from argus.backend.util.send_email import Attachment, Email
 from argus.common.email import RawAttachment, RawReportSendRequest, ReportSection, ReportSectionShortHand
@@ -381,4 +381,4 @@ class EmailService:
         if request.title == "#auto":
             request.title = f"[{run.status.upper()}] {run.build_id}#{run.build_number}: {run.start_time.strftime("%d/%m/%Y %H:%M:%S")}"
         request.sections = partials
-        return render_template("email/base.html.j2", **asdict(request), run=run)
+        return render_background_template("email/base.html.j2", **asdict(request), run=run)

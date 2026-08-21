@@ -1,7 +1,6 @@
 from functools import cached_property
 import logging
 from typing import Optional
-from flask import current_app, g, Flask
 from cassandra.policies import WhiteListRoundRobinPolicy
 from cassandra import ConsistencyLevel
 from cassandra.cluster import ExecutionProfile, EXEC_PROFILE_DEFAULT, Cluster
@@ -102,10 +101,9 @@ class ScyllaCluster:
     def reconnect(cls):
         if cls.APP_INSTANCE:
             old_statements = cls.APP_INSTANCE.prepared_statements
-            cls.close_session()
+            config = cls.APP_INSTANCE.config
             cls.APP_INSTANCE.shutdown()
-            app = current_app
-            new_instance = cls.get(app.config)
+            new_instance = cls.get(config)
             for query, _ in old_statements.items():
                 new_instance.prepare(query)
             return new_instance
@@ -155,15 +153,4 @@ class ScyllaCluster:
 
     @classmethod
     def get_session(cls):
-        cluster = cls.get()
-        if 'scylla_session' not in g:
-            g.scylla_session = cluster.session
-        return g.scylla_session
-
-    @classmethod
-    def close_session(cls, error=None):
-        g.pop("scylla_session", None)
-
-    @classmethod
-    def attach_to_app(cls, app: Flask):
-        app.teardown_appcontext(cls.close_session)
+        return cls.get().session

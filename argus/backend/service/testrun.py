@@ -12,7 +12,6 @@ from uuid import UUID
 import boto3
 import magic
 import requests
-from flask import current_app, g
 from botocore.exceptions import ClientError
 from cassandra.util import uuid_from_time
 from cassandra.query import BatchStatement, ConsistencyLevel
@@ -20,6 +19,7 @@ from coodie.sync import BatchQuery
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.db import ScyllaCluster
+from argus.backend.util.config import Config
 
 from argus.backend.models.pytest import PytestResultTable, PytestUserField
 from argus.backend.models.web import (
@@ -63,8 +63,9 @@ class TestRunService:
 
     def __init__(self) -> None:
         self.notification_manager = NotificationManagerService()
-        self.s3 = boto3.client(service_name="s3", aws_access_key_id=current_app.config.get(
-            "AWS_CLIENT_ID"), aws_secret_access_key=current_app.config.get("AWS_CLIENT_SECRET"))
+        config = Config.load_yaml_config()
+        self.s3 = boto3.client(service_name="s3", aws_access_key_id=config.get(
+            "AWS_CLIENT_ID"), aws_secret_access_key=config.get("AWS_CLIENT_SECRET"))
 
     def get_plugin(self, plugin_name: str) -> PluginInfoBase | None:
         return self.plugins.get(plugin_name)
@@ -162,7 +163,7 @@ class TestRunService:
         response = {str(run.id): run for run in polled_runs}
         return response
 
-    def change_run_status(self, test_id: UUID, run_id: UUID, new_status: TestStatus):
+    def change_run_status(self, test_id: UUID, run_id: UUID, new_status: TestStatus, user: User):
         try:
             test = ArgusTest.get(id=test_id)
         except DocumentNotFound as exc:
@@ -179,9 +180,9 @@ class TestRunService:
                 "message": "Status was changed from {old_status} to {new_status} by {username}",
                 "old_status": old_status,
                 "new_status": new_status.value,
-                "username": g.user.username
+                "username": user.username
             },
-            user_id=g.user.id,
+            user_id=user.id,
             run_id=run.id,
             release_id=test.release_id,
             group_id=test.group_id,
@@ -257,18 +258,18 @@ class TestRunService:
         return self.s3.generate_presigned_url(ClientMethod="get_object", Params={"Bucket": match.group("bucket"), "Key": match.group("key")}, ExpiresIn=3600)
 
     def proxy_s3_file(self, bucket_name: str, bucket_path: str):
-        if bucket_name not in current_app.config.get("S3_ALLOWED_BUCKETS", []):
+        if bucket_name not in Config.load_yaml_config().get("S3_ALLOWED_BUCKETS", []):
             raise TestRunServiceException(f"{bucket_name} is not an allowed S3 bucket to pull from")
 
         obj = self.s3.get_object(Bucket=bucket_name, Key=bucket_path)
         header = obj["Body"].read(1024)
         mime = magic.from_buffer(header, mime=True)
-        if mime.lower() not in current_app.config.get("S3_ALLOWED_MIME", []):
+        if mime.lower() not in Config.load_yaml_config().get("S3_ALLOWED_MIME", []):
             raise TestRunServiceException(f"Cannot proxy mime type that is not allowed: {mime}", mime)
 
         return self.s3.generate_presigned_url(ClientMethod="get_object", Params={"Bucket": bucket_name, "Key": bucket_path}, ExpiresIn=600)
 
-    def change_run_investigation_status(self, test_id: UUID, run_id: UUID, new_status: TestInvestigationStatus):
+    def change_run_investigation_status(self, test_id: UUID, run_id: UUID, new_status: TestInvestigationStatus, user: User):
         test = ArgusTest.get(id=test_id)
         plugin = self.get_plugin(plugin_name=test.plugin_name)
         run: PluginModelBase = plugin.model.get(id=run_id)
@@ -282,9 +283,9 @@ class TestRunService:
                 "message": "Investigation status was changed from {old_status} to {new_status} by {username}",
                 "old_status": old_status,
                 "new_status": new_status.value,
-                "username": g.user.username
+                "username": user.username
             },
-            user_id=g.user.id,
+            user_id=user.id,
             run_id=run.id,
             release_id=test.release_id,
             group_id=test.group_id,
@@ -297,7 +298,7 @@ class TestRunService:
             "investigation_status": new_status
         }
 
-    def change_run_assignee(self, test_id: UUID, run_id: UUID, new_assignee: UUID | None):
+    def change_run_assignee(self, test_id: UUID, run_id: UUID, new_assignee: UUID | None, user: User):
         test = ArgusTest.get(id=test_id)
         plugin = self.get_plugin(plugin_name=test.plugin_name)
         if not plugin:
@@ -328,24 +329,24 @@ class TestRunService:
                 "message": "Assignee was changed from \"{old_user}\" to \"{new_user}\" by {username}",
                 "old_user": old_assignee_user.username if old_assignee else "None",
                 "new_user": new_assignee_user.username if new_assignee else "None",
-                "username": g.user.username
+                "username": user.username
             },
-            user_id=g.user.id,
+            user_id=user.id,
             run_id=run.id,
             release_id=test.release_id,
             group_id=test.group_id,
             test_id=test.id
         )
-        if new_assignee_user and new_assignee_user.id != g.user.id:
+        if new_assignee_user and new_assignee_user.id != user.id:
             self.notification_manager.send_notification(
                 receiver=new_assignee_user.id,
-                sender=g.user.id,
+                sender=user.id,
                 notification_type=ArgusNotificationTypes.AssigneeChange,
                 source_type=ArgusNotificationSourceTypes.TestRun,
                 source_id=run.id,
                 source_message=str(run.test_id),
                 content_params={
-                    "username": g.user.username,
+                    "username": user.username,
                     "run_id": run.id,
                     "test_id": test.id,
                     "build_id": run.build_id,
@@ -367,13 +368,13 @@ class TestRunService:
     def get_run_comments(self, run_id: UUID):
         return sorted(ArgusTestRunComment.find(test_run_id=run_id).all(), key=lambda c: c.posted_at)
 
-    def post_run_comment(self, test_id: UUID, run_id: UUID, message: str, reactions: dict, mentions: list[str]):
+    def post_run_comment(self, test_id: UUID, run_id: UUID, message: str, reactions: dict, mentions: list[str], user: User):
         message_stripped = strip_html_tags(message)
 
         mentions = set(mentions)
         for potential_mention in re.findall(self.RE_MENTION, message_stripped):
-            if user := User.exists_by_name(potential_mention.lstrip("@")):
-                mentions.add(user) if user.id != g.user.id else None
+            if mentioned_user := User.exists_by_name(potential_mention.lstrip("@")):
+                mentions.add(mentioned_user) if mentioned_user.id != user.id else None
 
         test: ArgusTest = ArgusTest.get(id=test_id)
         plugin = self.get_plugin(test.plugin_name)
@@ -385,7 +386,7 @@ class TestRunService:
         comment.mentions = [m.id for m in mentions]
         comment.test_run_id = run_id
         comment.release_id = release.id
-        comment.user_id = g.user.id
+        comment.user_id = user.id
         comment.posted_at = int(time.time())
         comment.save()
 
@@ -393,7 +394,7 @@ class TestRunService:
         build_number = run.build_number
         for mention in mentions:
             params = {
-                "username": g.user.username,
+                "username": user.username,
                 "run_id": comment.test_run_id,
                 "test_id": test.id,
                 "build_id": run.build_id,
@@ -411,29 +412,29 @@ class TestRunService:
 
         EventService.create_run_event(kind=ArgusEventTypes.TestRunCommentPosted, body={
             "message": "A comment was posted by {username}",
-            "username": g.user.username
-        }, user_id=g.user.id, run_id=run_id, release_id=release.id, test_id=test.id)
+            "username": user.username
+        }, user_id=user.id, run_id=run_id, release_id=release.id, test_id=test.id)
 
         invalidate_release_snapshots(release.id)
         return self.get_run_comments(run_id=run_id)
 
-    def delete_run_comment(self, comment_id: UUID, test_id: UUID, run_id: UUID):
+    def delete_run_comment(self, comment_id: UUID, test_id: UUID, run_id: UUID, user: User):
         comment: ArgusTestRunComment = ArgusTestRunComment.get(id=comment_id)
-        if comment.user_id != g.user.id:
+        if comment.user_id != user.id:
             raise Exception("Unable to delete other user comments")
         comment.delete()
 
         EventService.create_run_event(kind=ArgusEventTypes.TestRunCommentDeleted, body={
             "message": "A comment was deleted by {username}",
-            "username": g.user.username
-        }, user_id=g.user.id, run_id=run_id, release_id=comment.release_id, test_id=test_id)
+            "username": user.username
+        }, user_id=user.id, run_id=run_id, release_id=comment.release_id, test_id=test_id)
 
         invalidate_release_snapshots(comment.release_id)
         return self.get_run_comments(run_id=run_id)
 
-    def update_run_comment(self, comment_id: UUID, test_id: UUID, run_id: UUID, message: str, mentions: list[str], reactions: dict):
+    def update_run_comment(self, comment_id: UUID, test_id: UUID, run_id: UUID, message: str, mentions: list[str], reactions: dict, user: User):
         comment: ArgusTestRunComment = ArgusTestRunComment.get(id=comment_id)
-        if comment.user_id != g.user.id:
+        if comment.user_id != user.id:
             raise Exception("Unable to edit other user comments")
         comment.message = strip_html_tags(message)
         comment.reactions = reactions
@@ -442,8 +443,8 @@ class TestRunService:
 
         EventService.create_run_event(kind=ArgusEventTypes.TestRunCommentUpdated, body={
             "message": "A comment was edited by {username}",
-            "username": g.user.username
-        }, user_id=g.user.id, run_id=run_id, release_id=comment.release_id, test_id=test_id)
+            "username": user.username
+        }, user_id=user.id, run_id=run_id, release_id=comment.release_id, test_id=test_id)
 
         invalidate_release_snapshots(comment.release_id)
         return self.get_run_comments(run_id=run_id)
@@ -483,7 +484,7 @@ class TestRunService:
 
         return all_runs
 
-    def terminate_stuck_runs(self):
+    def terminate_stuck_runs(self, user: User):
         sct = AVAILABLE_PLUGINS.get("scylla-cluster-tests").model
         now = datetime.now(UTC)
         stuck_period = now - timedelta(minutes=45)
@@ -508,9 +509,9 @@ class TestRunService:
                                "(Status changed from {old_status} to {new_status}) by {username}",
                     "old_status": old_status,
                     "new_status": run.status,
-                    "username": g.user.username
+                    "username": user.username
                 },
-                user_id=g.user.id,
+                user_id=user.id,
                 run_id=run.id,
                 release_id=run.release_id,
                 group_id=run.group_id,
@@ -519,7 +520,7 @@ class TestRunService:
 
         return len(all_stuck_runs)
 
-    def ignore_jobs(self, test_id: UUID, reason: str):
+    def ignore_jobs(self, test_id: UUID, reason: str, user: User):
         test: ArgusTest = ArgusTest.get(id=test_id)
         plugin = self.get_plugin(plugin_name=test.plugin_name)
 
@@ -544,11 +545,11 @@ class TestRunService:
                     release_id=job["release_id"],
                     group_id=job["group_id"],
                     test_id=test_id,
-                    user_id=g.user.id,
+                    user_id=user.id,
                     run_id=job["id"],
                     body=json.dumps({
                         "message": "Run was marked as ignored by {username} due to the following reason: {reason}",
-                        "username": g.user.username,
+                        "username": user.username,
                         "reason": reason,
                     }, ensure_ascii=True, separators=(',', ':')),
                     kind=ArgusEventTypes.TestRunBatchInvestigationStatusChange.value,

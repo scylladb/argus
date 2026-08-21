@@ -1,120 +1,54 @@
 import logging
-import os
+from contextlib import asynccontextmanager
+
 import cassandra.cluster
-from flask import Flask, request
-from prometheus_flask_exporter import NO_PREFIX
-from argus.backend.error_handlers import DBErrorHandler
-from argus.backend.metrics import METRICS
-from argus.backend import metrics_labels
-from argus.backend.template_filters import export_filters
-from argus.backend.controller import admin, api, main
-from argus.backend.cli import cli_bp
-from argus.backend.util.logsetup import setup_application_logging
-from argus.backend.util.encoders import ArgusJSONProvider
-from argus.backend.db import ScyllaCluster
-from argus.backend.controller import auth
-from argus.backend.util.config import Config
+from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
+from fastapi.staticfiles import StaticFiles
 from jwt import PyJWKClient
-from argus.backend.service.user import cache_ssh_tunnel_server_allowed_endpoints
+from starlette.middleware.sessions import SessionMiddleware
+
+from argus.backend.controller import admin, api, auth, main
+from argus.backend.db import ScyllaCluster
+from argus.backend.error_handlers import (
+    APIException,
+    AuthorizationError,
+    UIRedirect,
+    api_exception_handler,
+    authorization_error_handler,
+    db_error_handler,
+    redirecting_exception_handler,
+    ui_redirect_handler,
+)
+from argus.backend.metrics import build_instrumentator, build_metrics_router
+from argus.backend.rendering import register_app
+from argus.backend.service.user import UserServiceException
+from argus.backend.service.views import UserViewException
+from argus.backend.util.config import Config
+from argus.backend.util.logsetup import setup_application_logging
 
 LOGGER = logging.getLogger(__name__)
 
-
-def register_metrics():
-    METRICS.export_defaults(group_by="endpoint", prefix=NO_PREFIX)
-    METRICS.register_default(
-        METRICS.counter(
-            "http_request_by_endpoint_total",
-            "Total Requests made",
-            labels={
-                "endpoint": lambda: request.endpoint,
-                "method": lambda: request.method,
-                "status": lambda response: response.status,
-            },
-        )
-    )
-    METRICS.register_default(
-        METRICS.counter(
-            "http_request_by_ip_total",
-            "Total requests by source IP",
-            labels={
-                "ip": lambda: request.remote_addr,
-                "endpoint": lambda: request.endpoint,
-            },
-        )
-    )
-    METRICS.register_default(
-        METRICS.counter(
-            "http_request_ssh_tunnel_total",
-            "Total requests by SSH tunnel presence",
-            labels={
-                "ssh_tunnel": metrics_labels.ssh_tunnel,
-                "tunnel_established": lambda: "yes" if request.headers.get("X-Tunnel-Established-At") else "no",
-                "endpoint": lambda: request.endpoint,
-            },
-        )
-    )
-    # The metric that answers "which jobs are not using the tunnel". The
-    # per-build counter cannot: it mints a series per build, which rules out
-    # keeping the long ranges that adoption has to be measured over.
-    METRICS.register_default(
-        METRICS.counter(
-            "http_request_job_tunnel_total",
-            "Requests by Jenkins job, release line, client version and SSH tunnel state",
-            labels={
-                "job_name": metrics_labels.job_name,
-                "branch": metrics_labels.branch,
-                "client_version": metrics_labels.client_version,
-                "ssh_tunnel": metrics_labels.ssh_tunnel,
-            },
-        )
-    )
-    METRICS.register_default(
-        METRICS.counter(
-            "http_request_by_user_agent_total",
-            "Total requests by user agent category and client version",
-            labels={
-                "user_agent_category": lambda: metrics_labels.categorize_user_agent(
-                    request.headers.get("User-Agent", "")
-                ),
-                # A client too old to send X-Argus-Build-Id is also too old to
-                # appear in http_request_job_tunnel_total under its own job. Here
-                # it still counts, as an argus-client of version "unknown".
-                "client_version": metrics_labels.client_version,
-                "endpoint": lambda: request.endpoint,
-            },
-        )
-    )
-    METRICS.register_default(
-        METRICS.counter(
-            "http_request_tunnel_build_total",
-            "Requests by Jenkins build id (X-Argus-Build-Id) and SSH tunnel state",
-            labels={
-                "build_id": metrics_labels.build_id,
-                "build_url": lambda: request.headers.get("X-Argus-Build-Url") or "",
-                "ssh_tunnel": metrics_labels.ssh_tunnel,
-            },
-        )
-    )
+SESSION_LIFETIME = 31 * 24 * 60 * 60  # Flask's permanent_session_lifetime default
 
 
-def start_server(config=None) -> Flask:
-    app = Flask(__name__, static_url_path="/s/", static_folder="public")
-    METRICS.init_app(app)
-    if os.environ.get("PROMETHEUS_MULTIPROC_DIR"):
-        with app.app_context():
-            METRICS.register_endpoint("/metrics")
-    app.json_provider_class = ArgusJSONProvider
-    app.json = ArgusJSONProvider(app)
-    app.jinja_env.policies["json.dumps_kwargs"]["default"] = app.json.default
-    app.config.from_mapping(Config.load_yaml_config())
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # The Scylla connection is established when the app is built below;
+    # closing it here lets gunicorn recycle workers cleanly.
+    yield
+    ScyllaCluster.shutdown()
+
+
+def create_app(config=None) -> FastAPI:
+    app_config = dict(Config.load_yaml_config())
     if config:
-        app.config.from_mapping(config)
+        app_config.update(config)
 
-    if "cf" in app.config.get("LOGIN_METHODS", []):
-        cf_domain = app.config.get("CLOUDFLARE_ACCESS_TEAM_DOMAIN")
+    if "cf" in app_config.get("LOGIN_METHODS", []):
+        cf_domain = app_config.get("CLOUDFLARE_ACCESS_TEAM_DOMAIN")
         if cf_domain:
-            app.config["CLOUDFLARE_ACCESS_JWK_CLIENT"] = PyJWKClient(
+            app_config["CLOUDFLARE_ACCESS_JWK_CLIENT"] = PyJWKClient(
                 f"https://{cf_domain}/cdn-cgi/access/certs",
                 cache_keys=True,
                 lifespan=3600,
@@ -123,32 +57,45 @@ def start_server(config=None) -> Flask:
         else:
             LOGGER.warning("Cloudflare Access enabled but CLOUDFLARE_ACCESS_TEAM_DOMAIN is missing")
 
-    setup_application_logging(log_level=app.config["APP_LOG_LEVEL"])
-    app.logger.info("Starting Scylla Cluster connection...")
-    app.register_error_handler(cassandra.cluster.NoHostAvailable, DBErrorHandler.handle_db_errors)
-    app.register_error_handler(cassandra.cluster.NoConnectionsAvailable, DBErrorHandler.handle_db_errors)
-    ScyllaCluster.get(app.config)
-    ScyllaCluster.attach_to_app(app)
+    setup_application_logging(log_level=app_config["APP_LOG_LEVEL"])
+    LOGGER.info("Starting Scylla Cluster connection...")
+    ScyllaCluster.get(app_config)
 
-    app.logger.info("Loading filters...")
-    for filter_func in export_filters():
-        app.add_template_filter(filter_func, name=filter_func.filter_name)
+    app = FastAPI(
+        title="Argus",
+        lifespan=lifespan,
+        # UI parity with the Flask app: no schema/docs endpoints (yet)
+        openapi_url=None,
+        docs_url=None,
+        redoc_url=None,
+    )
+    app.state.config = app_config
+    register_app(app)
 
-    app.logger.info("Registering blueprints...")
-    app.register_blueprint(auth.bp)
-    app.register_blueprint(main.bp)
-    app.register_blueprint(api.bp)
-    app.register_blueprint(admin.bp)
-    app.register_blueprint(cli_bp)
-    cache_ssh_tunnel_server_allowed_endpoints(app)
-    with app.app_context():
-        try:
-            register_metrics()
-        except ValueError:
-            pass
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=app_config["SECRET_KEY"],
+        session_cookie=app_config.get("SESSION_COOKIE_NAME") or "session",
+        max_age=SESSION_LIFETIME,
+        https_only=bool(app_config.get("SESSION_COOKIE_SECURE")),
+    )
+    build_instrumentator().instrument(app)
+    app.add_exception_handler(AuthorizationError, authorization_error_handler)
+    app.add_exception_handler(APIException, api_exception_handler)
+    app.add_exception_handler(RequestValidationError, api_exception_handler)
+    app.add_exception_handler(UIRedirect, ui_redirect_handler)
+    app.add_exception_handler(UserServiceException, redirecting_exception_handler("main.profile"))
+    app.add_exception_handler(UserViewException, redirecting_exception_handler("main.views"))
+    app.add_exception_handler(cassandra.cluster.NoHostAvailable, db_error_handler)
+    app.add_exception_handler(cassandra.cluster.NoConnectionsAvailable, db_error_handler)
+    app.add_exception_handler(Exception, api_exception_handler)
 
-    app.logger.info("Ready.")
+    app.include_router(auth.router)
+    app.include_router(main.router)
+    app.include_router(api.router)
+    app.include_router(admin.router)
+    app.include_router(build_metrics_router())
+
+    app.mount("/s", StaticFiles(directory="public"), name="static")
+    LOGGER.info("Ready.")
     return app
-
-
-argus_app = start_server()

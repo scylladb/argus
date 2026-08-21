@@ -1,19 +1,23 @@
 from uuid import UUID
 
-from argus.backend.util.common import get_payload
-from flask import Blueprint, request
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 
-from argus.backend.models.web import ArgusUserView
+from argus.backend.models.web import ArgusUserView, User
+from argus.backend.service.user import api_current_user
 from argus.backend.service.views_widgets.graphed_stats import GraphedStatsService
-from argus.backend.service.user import api_login_required
+from argus.backend.util.encoders import ArgusJSONResponse
 
-bp = Blueprint("graphed_stats", __name__, url_prefix="/widgets")
+router = APIRouter(prefix="/widgets")
 
 
-@bp.route("/graphed_stats", methods=["GET"])
-@api_login_required
-def get_graphed_stats():
-    view_id = UUID(request.args.get("view_id"))
+class RunsDetailsRequest(BaseModel):
+    run_ids: list[str]
+
+
+@router.get("/graphed_stats", name="api.view_api.graphed_stats.get_graphed_stats")
+def get_graphed_stats(view_id: UUID = Query(...), filters: str | None = Query(None),
+                      user: User = Depends(api_current_user)):
     view: ArgusUserView = ArgusUserView.get(id=view_id)
     service = GraphedStatsService()
     response_data = {
@@ -21,34 +25,23 @@ def get_graphed_stats():
         "nemesis_data": []
     }
 
-    filters = request.args.get("filters")
-
     for test_id in view.tests:
         data = service.get_graphed_stats(test_id, filters)
         response_data["test_runs"].extend(data["test_runs"])
         response_data["nemesis_data"].extend(data["nemesis_data"])
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": response_data
-    }
+    })
 
 
-@bp.route("/runs_details", methods=["POST"])
-@api_login_required
-def get_runs_details():
+@router.post("/runs_details", name="api.view_api.graphed_stats.get_runs_details")
+def get_runs_details(payload: RunsDetailsRequest, user: User = Depends(api_current_user)):
     """Get detailed information for provided test runs including assignee and attached issues."""
-    data = get_payload(request)
-    if not data or "run_ids" not in data:
-        raise ValueError("Missing run_ids parameter")
-
-    run_ids = data["run_ids"]
-    if not isinstance(run_ids, list):
-        raise ValueError("run_ids must be a list")
-
     service = GraphedStatsService()
-    result = service.get_runs_details(run_ids)
+    result = service.get_runs_details(payload.run_ids)
 
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })

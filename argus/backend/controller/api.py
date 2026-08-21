@@ -1,47 +1,61 @@
 import logging
 from datetime import datetime, timezone
+from typing import Annotated
 from uuid import UUID
+
 import requests
-from flask import (
-    Blueprint,
-    current_app,
-    g,
-    redirect,
-    request, Response,
-    url_for,
-)
-from flask.json import jsonify
-from argus.backend.error_handlers import APIException, handle_api_exception
-from argus.backend.controller.notification_api import bp as notifications_bp
-from argus.backend.controller.client_api import bp as client_bp
-from argus.backend.controller.testrun_api import bp as testrun_bp
-from argus.backend.controller.team import bp as team_bp
-from argus.backend.controller.view_api import bp as view_bp
-from argus.backend.controller.planner_api import bp as planner_bp
+from fastapi import APIRouter, Body, Depends, Query, Request
+from pydantic import BaseModel
+from starlette.responses import RedirectResponse, Response
+
+from argus.backend.controller import client_api, notification_api, planner_api, team, testrun_api, view_api
+from argus.backend.error_handlers import APIException
+from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, User
+from argus.backend.rendering import url_for
 from argus.backend.service.argus_service import ArgusService, ScheduleUpdateRequest
 from argus.backend.service.results_service import ResultsService
-from argus.backend.service.testrun import TestRunService
-from argus.backend.service.user import UserService, api_login_required
 from argus.backend.service.stats import ReleaseStatsCollector
-from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, User, UserOauthToken
-from argus.backend.util.common import get_payload
+from argus.backend.service.testrun import TestRunService
+from argus.backend.service.user import UserService, api_current_user
+from argus.backend.util.common import NoneIfEmpty
+from argus.backend.util.encoders import ArgusJSONResponse
 
-bp = Blueprint('api', __name__, url_prefix='/api/v1')
-bp.register_blueprint(notifications_bp)
-bp.register_blueprint(client_bp)
-bp.register_blueprint(testrun_bp)
-bp.register_blueprint(team_bp)
-bp.register_blueprint(view_bp)
-bp.register_blueprint(planner_bp)
-bp.register_error_handler(Exception, handle_api_exception)
 LOGGER = logging.getLogger(__name__)
 
+router = APIRouter(prefix="/api/v1")
+router.include_router(client_api.router)
+router.include_router(notification_api.router)
+router.include_router(testrun_api.router)
+router.include_router(planner_api.router)
+router.include_router(team.router)
+router.include_router(view_api.router)
 
-@bp.route("/version")
+CACHEABLE = {"Cache-Control": "max-age=60"}
+
+
+class SetTestPluginRequest(BaseModel):
+    plugin_name: str
+
+
+class CreateGraphViewRequest(BaseModel):
+    testId: UUID
+    name: str
+    description: str
+
+
+class UpdateGraphViewRequest(BaseModel):
+    testId: UUID
+    id: UUID
+    name: str
+    description: str
+    graphs: dict[str, str]
+
+
+@router.get("/version", name="api.app_version")
 def app_version():
     service = ArgusService()
     argus_version = service.get_version()
-    return jsonify({
+    return ArgusJSONResponse({
         "status": "ok",
         "response": {
             "commit_id": argus_version
@@ -49,212 +63,171 @@ def app_version():
     })
 
 
-@bp.route("/test/<path:build_id>/<int:build_number>")
-@api_login_required
-def get_run_by_build(build_id: str, build_number: int):
+@router.get("/test/{build_id:path}/{build_number:int}", name="api.get_run_by_build")
+def get_run_by_build(asgi_request: Request, build_id: str, build_number: int,
+                     user: User = Depends(api_current_user)):
     # JSON sibling of main.get_run_by_build: resolve a run from its
     # build_system_id + Jenkins build number and return its id and Argus URL.
     run = TestRunService().get_run_by_build_number(build_id, build_number)
     if not run:
         raise Exception(f"Run not found for {build_id} #{build_number}")
-    return jsonify({
+    run_path = url_for(asgi_request, "main.get_run_by_plugin",
+                       plugin_name=run._plugin_name, run_id=run.id)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": {
             "run_id": str(run.id),
             "plugin_name": run._plugin_name,
-            "url": url_for("main.get_run_by_plugin", plugin_name=run._plugin_name, run_id=run.id, _external=True),
+            "url": str(asgi_request.base_url).rstrip("/") + run_path,
         }
     })
 
 
-@bp.route("/releases")
-@api_login_required
-def releases():
+@router.get("/releases", name="api.releases")
+def releases(force_all: bool = Query(False, alias="all"),
+             user: User = Depends(api_current_user)):
     service = ArgusService()
-    force_all = request.args.get("all", False)
     all_releases = service.get_releases()
-    response = jsonify({
+    return ArgusJSONResponse({
         "status": "ok",
         "response": [d.model_dump() for d in all_releases if d.enabled or force_all]
-    })
-
-    response.cache_control.max_age = 60
-    return response
+    }, headers=CACHEABLE)
 
 
-@bp.route("/release/activity", methods=["GET"])
-@api_login_required
-def release_activity():
-    release_name = request.args.get("releaseName")
-    if not release_name:
-        raise Exception("Release name not specified in the request")
+@router.get("/release/activity", name="api.release_activity")
+def release_activity(release_name: str = Query(..., alias="releaseName"),
+                     user: User = Depends(api_current_user)):
     service = ArgusService()
     activity_data = service.fetch_release_activity(release_name)
 
-    return jsonify({
+    return ArgusJSONResponse({
         "status": "ok",
         "response": activity_data
     })
 
 
-@bp.route("/release/planner/data", methods=["GET"])
-@api_login_required
-def release_planner_data():
-
-    release_id = request.args.get("releaseId")
-    if not release_id:
-        raise Exception("Release Id not specified")
+@router.get("/release/planner/data", name="api.release_planner_data")
+def release_planner_data(release_id: UUID = Query(..., alias="releaseId"),
+                         user: User = Depends(api_current_user)):
     service = ArgusService()
     planner_data = service.get_planner_data(release_id)
-    return jsonify({
+    return ArgusJSONResponse({
         "status": "ok",
         "response": planner_data
     })
 
 
-@bp.route("/release/<string:release_id>/versions")
-@api_login_required
-def release_versions(release_id: str):
-    release_id = UUID(release_id)
+@router.get("/release/{release_id}/versions", name="api.release_versions")
+def release_versions(release_id: UUID, user: User = Depends(api_current_user)):
     service = ArgusService()
     distinct_versions = service.get_distinct_release_versions(release_id=release_id)
 
-    return jsonify({
+    return ArgusJSONResponse({
         "status": "ok",
         "response": distinct_versions
     })
 
 
-@bp.route("/release/<string:release_id>/pytest/results")
-@api_login_required
-def release_pytest_results(release_id: str):
-    release_id = UUID(release_id)
+@router.get("/release/{release_id}/pytest/results", name="api.release_pytest_results")
+def release_pytest_results(release_id: UUID, user: User = Depends(api_current_user)):
     service = TestRunService()
     res = service.get_pytest_release_results(release_id=release_id)
 
-    return jsonify({
+    return ArgusJSONResponse({
         "status": "ok",
         "response": res
     })
 
 
-@bp.route("/release/<string:release_id>/images")
-@api_login_required
-def release_images(release_id: str):
-    release_id = UUID(release_id)
+@router.get("/release/{release_id}/images", name="api.release_images")
+def release_images(release_id: UUID, user: User = Depends(api_current_user)):
     service = ArgusService()
     distinct_images = service.get_distinct_release_images(release_id=release_id)
 
-    return jsonify({
+    return ArgusJSONResponse({
         "status": "ok",
         "response": distinct_images
     })
 
 
-@bp.route("/release/planner/comment/get/test")
-def get_planner_comment_by_test():
-    test_id = request.args.get("id")
-    if not test_id:
-        raise Exception("TestId was not specified")
+@router.get("/release/planner/comment/get/test", name="api.get_planner_comment_by_test")
+def get_planner_comment_by_test(test_id: UUID = Query(..., alias="id")):
     service = ArgusService()
-    planner_comments_by_test = service.get_planner_comment_by_test(UUID(test_id))
+    planner_comments_by_test = service.get_planner_comment_by_test(test_id)
 
-    response = jsonify({
+    return ArgusJSONResponse({
         "status": "ok",
         "response": planner_comments_by_test
-    })
-    response.cache_control.max_age = 60
-    return response
+    }, headers=CACHEABLE)
 
 
-@bp.route("/release/schedules/comment/update", methods=["POST"])
-@api_login_required
-def release_schedules_comment_update():
-    if not request.is_json:
-        raise Exception(
-            "Content-Type mismatch, expected application/json, got:", request.content_type)
-    request_payload = request.get_json()
+@router.post("/release/schedules/comment/update", name="api.release_schedules_comment_update")
+def release_schedules_comment_update(payload: dict = Body(...),
+                                     user: User = Depends(api_current_user)):
     service = ArgusService()
-    comment_update_result = service.update_schedule_comment(request_payload)
+    comment_update_result = service.update_schedule_comment(payload)
 
-    return jsonify({
+    return ArgusJSONResponse({
         "status": "ok",
         "response": comment_update_result
     })
 
 
-@bp.route("/release/schedules", methods=["GET"])
-@api_login_required
-def release_schedules():
-    release = request.args.get("releaseId")
-    if not release:
-        raise Exception("No releaseId provided")
+@router.get("/release/schedules", name="api.release_schedules")
+def release_schedules(release: UUID = Query(..., alias="releaseId"),
+                      user: User = Depends(api_current_user)):
     service = ArgusService()
     release_schedules_data = service.get_schedules_for_release(release)
 
-    return jsonify({
+    return ArgusJSONResponse({
         "status": "ok",
         "response": release_schedules_data
     })
 
 
-@bp.route("/release/schedules/assignee/update", methods=["POST"])
-@api_login_required
-def release_schedules_assignee_update():
-    if not request.is_json:
-        raise Exception(
-            "Content-Type mismatch, expected application/json, got:", request.content_type)
-    request_payload = request.get_json()
+@router.post("/release/schedules/assignee/update", name="api.release_schedules_assignee_update")
+def release_schedules_assignee_update(payload: dict = Body(...),
+                                      user: User = Depends(api_current_user)):
     service = ArgusService()
-    assignee_update_status = service.update_schedule_assignees(request_payload)
+    assignee_update_status = service.update_schedule_assignees(payload)
 
-    return jsonify({
+    return ArgusJSONResponse({
         "status": "ok",
         "response": assignee_update_status
     })
 
 
-@bp.route("/release/assignees/groups", methods=["GET"])
-@api_login_required
-def group_assignees():
-    release_id = request.args.get("releaseId")
-    version = request.args.get("version")
-    plan_id = request.args.get("planId")
-    if not release_id:
-        raise Exception("Missing releaseId")
+@router.get("/release/assignees/groups", name="api.group_assignees")
+def group_assignees(release_id: UUID = Query(..., alias="releaseId"),
+                    version: str | None = Query(None),
+                    plan_id: Annotated[UUID | None, NoneIfEmpty, Query(alias="planId")] = None,
+                    user: User = Depends(api_current_user)):
     service = ArgusService()
     group_assignees_list = service.get_groups_assignees(release_id, version, plan_id)
 
-    return jsonify({
+    return ArgusJSONResponse({
         "status": "ok",
         "response": group_assignees_list
     })
 
 
-@bp.route("/release/assignees/tests", methods=["GET"])
-@api_login_required
-def tests_assignees():
-    group_id = request.args.get("groupId")
-    version = request.args.get("version")
-    plan_id = request.args.get("planId")
-    if not group_id:
-        raise Exception("Missing groupId")
+@router.get("/release/assignees/tests", name="api.tests_assignees")
+def tests_assignees(group_id: UUID = Query(..., alias="groupId"),
+                    version: str | None = Query(None),
+                    plan_id: Annotated[UUID | None, NoneIfEmpty, Query(alias="planId")] = None,
+                    user: User = Depends(api_current_user)):
     service = ArgusService()
     tests_assignees_list = service.get_tests_assignees(group_id, version, plan_id)
 
-    return jsonify({
+    return ArgusJSONResponse({
         "status": "ok",
         "response": tests_assignees_list
     })
 
 
-@bp.route("/release/schedules/submit", methods=["POST"])
-@api_login_required
-def release_schedules_submit():
-    if not request.is_json:
-        raise Exception(
-            "Content-Type mismatch, expected application/json, got:", request.content_type)
-    payload = request.get_json()
+@router.post("/release/schedules/submit", name="api.release_schedules_submit")
+def release_schedules_submit(payload: dict = Body(...),
+                             user: User = Depends(api_current_user)):
     service = ArgusService()
     schedule_submit_result = service.submit_new_schedule(
         release=payload["releaseId"],
@@ -268,32 +241,27 @@ def release_schedules_submit():
         group_ids=payload.get("groupIds"),
     )
 
-    return jsonify({
+    return ArgusJSONResponse({
         "status": "ok",
         "response": schedule_submit_result
     })
 
 
-@bp.route("/release/schedules/delete", methods=["POST"])
-@api_login_required
-def release_schedules_delete():
-    if not request.is_json:
-        raise Exception(
-            "Content-Type mismatch, expected application/json, got:", request.content_type)
-    request_payload = request.get_json()
+@router.post("/release/schedules/delete", name="api.release_schedules_delete")
+def release_schedules_delete(payload: dict = Body(...),
+                             user: User = Depends(api_current_user)):
     service = ArgusService()
-    schedule_delete_result = service.delete_schedule(request_payload)
+    schedule_delete_result = service.delete_schedule(payload)
 
-    return jsonify({
+    return ArgusJSONResponse({
         "status": "ok",
         "response": schedule_delete_result
     })
 
 
-@bp.route("/release/schedules/update", methods=["POST"])
-@api_login_required
-def release_schedule_update():
-    payload = get_payload(request)
+@router.post("/release/schedules/update", name="api.release_schedule_update")
+def release_schedule_update(payload: dict = Body(...),
+                            user: User = Depends(api_current_user)):
     req = ScheduleUpdateRequest(**payload)
     service = ArgusService()
     update_result = service.update_schedule(
@@ -305,215 +273,169 @@ def release_schedule_update():
         assignee=req.assignee
     )
 
-    return jsonify({
+    return ArgusJSONResponse({
         "status": "ok",
         "response": update_result
     })
 
 
-@bp.route("/groups", methods=["GET"])
-@api_login_required
-def argus_groups():
-    release_id = request.args.get("releaseId")
-    if not release_id:
-        raise Exception("No releaseId provided")
-
-    force_all = request.args.get("all", False)
+@router.get("/groups", name="api.argus_groups")
+def argus_groups(release_id: UUID = Query(..., alias="releaseId"),
+                 force_all: bool = Query(False, alias="all"),
+                 user: User = Depends(api_current_user)):
     service = ArgusService()
-    groups = service.get_groups(UUID(release_id))
-    result_groups = [g.model_dump() for g in groups if g.enabled or force_all]
+    groups = service.get_groups(release_id)
+    result_groups = [group.model_dump() for group in groups if group.enabled or force_all]
 
-    response = jsonify({
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result_groups
-    })
-    response.cache_control.max_age = 60
-    return response
+    }, headers=CACHEABLE)
 
 
-@bp.route("/tests", methods=["GET"])
-@api_login_required
-def argus_tests():
-    group_id = request.args.get("groupId")
-    if not group_id:
-        raise Exception("No groupId provided")
-    force_all = request.args.get("all", False)
+@router.get("/tests", name="api.argus_tests")
+def argus_tests(group_id: UUID = Query(..., alias="groupId"),
+                force_all: bool = Query(False, alias="all"),
+                user: User = Depends(api_current_user)):
     service = ArgusService()
-    tests = service.get_tests(group_id=UUID(group_id))
+    tests = service.get_tests(group_id=group_id)
     result_tests = [t.model_dump() for t in tests if t.enabled or force_all]
 
-    response = jsonify({
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result_tests
-    })
-    response.cache_control.max_age = 60
-    return response
+    }, headers=CACHEABLE)
 
 
-@bp.route("/release/<string:release_id>/details", methods=["GET"])
-@api_login_required
-def get_release_details(release_id: str):
-    release = ArgusRelease.get(id=UUID(release_id))
-    response = jsonify({
+@router.get("/release/{release_id}/details", name="api.get_release_details")
+def get_release_details(release_id: UUID, user: User = Depends(api_current_user)):
+    release = ArgusRelease.get(id=release_id)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": release,
-    })
-    response.cache_control.max_age = 60
-    return response
+    }, headers=CACHEABLE)
 
 
-@bp.route("/group/<string:group_id>/details", methods=["GET"])
-@api_login_required
-def get_group_details(group_id: str):
-    group = ArgusGroup.get(id=UUID(group_id))
-    response = jsonify({
+@router.get("/group/{group_id}/details", name="api.get_group_details")
+def get_group_details(group_id: UUID, user: User = Depends(api_current_user)):
+    group = ArgusGroup.get(id=group_id)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": group,
-    })
-    response.cache_control.max_age = 60
-    return response
+    }, headers=CACHEABLE)
 
 
-@bp.route("/test/<string:test_id>/details", methods=["GET"])
-@api_login_required
-def get_test_details(test_id: str):
-    test = ArgusTest.get(id=UUID(test_id))
-    response = jsonify({
+@router.get("/test/{test_id}/details", name="api.get_test_details")
+def get_test_details(test_id: UUID, user: User = Depends(api_current_user)):
+    test = ArgusTest.get(id=test_id)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": test
-    })
-    response.cache_control.max_age = 60
-    return response
+    }, headers=CACHEABLE)
 
 
-@bp.route("/test/<string:test_id>/set_plugin", methods=["POST"])
-@api_login_required
-def set_test_plugin(test_id: str):
-    payload = get_payload(request)
-
-    current_user: User = g.user
-    test: ArgusTest = ArgusTest.get(id=UUID(test_id))
-    test.plugin_name = payload["plugin_name"]
+@router.post("/test/{test_id}/set_plugin", name="api.set_test_plugin")
+def set_test_plugin(test_id: UUID, payload: SetTestPluginRequest,
+                    user: User = Depends(api_current_user)):
+    test: ArgusTest = ArgusTest.get(id=test_id)
+    test.plugin_name = payload.plugin_name
     test.save()
 
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": test
-    }
+    })
 
 
-@bp.route("/test-info", methods=["GET"])
-@api_login_required
-def test_info():
-    test_id = request.args.get("testId")
-    if not test_id:
-        raise Exception("No testId provided")
+@router.get("/test-info", name="api.test_info")
+def test_info(test_id: UUID = Query(..., alias="testId"),
+              user: User = Depends(api_current_user)):
     service = ArgusService()
-    info = service.get_test_info(test_id=UUID(test_id))
+    info = service.get_test_info(test_id=test_id)
 
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": info
-    }
+    })
 
 
-@bp.route("/test-results", methods=["GET", "HEAD"])
-@api_login_required
-def test_results():
-    test_id = request.args.get("testId")
-    start_date_str = request.args.get("startDate")
-    end_date_str = request.args.get("endDate")
-    table_names = request.args.getlist("tableNames[]")
-
-    if not test_id:
-        raise Exception("No testId provided")
-
-    start_date = datetime.fromisoformat(start_date_str).astimezone(timezone.utc) if start_date_str else None
-    end_date = datetime.fromisoformat(end_date_str).astimezone(timezone.utc) if end_date_str else None
+@router.get("/test-results", name="api.test_results")
+@router.head("/test-results", name="api.test_results")
+def test_results(asgi_request: Request, test_id: UUID = Query(..., alias="testId"),
+                 start_date: Annotated[datetime | None, NoneIfEmpty, Query(alias="startDate")] = None,
+                 end_date: Annotated[datetime | None, NoneIfEmpty, Query(alias="endDate")] = None,
+                 table_names: list[str] = Query(default=[], alias="tableNames[]"),
+                 user: User = Depends(api_current_user)):
+    start_date = start_date.astimezone(timezone.utc) if start_date else None
+    end_date = end_date.astimezone(timezone.utc) if end_date else None
 
     service = ResultsService()
-    if request.method == 'HEAD':
-        exists = service.is_results_exist(test_id=UUID(test_id))
-        return Response(status=200 if exists else 404)
+    if asgi_request.method == "HEAD":
+        exists = service.is_results_exist(test_id=test_id)
+        return Response(status_code=200 if exists else 404)
 
-    graphs, ticks, releases_filters = service.get_test_graphs(test_id=UUID(
-        test_id), start_date=start_date, end_date=end_date, table_names=table_names)
-    graph_views = service.get_argus_graph_views(test_id=UUID(test_id))
+    graphs, ticks, releases_filters = service.get_test_graphs(
+        test_id=test_id, start_date=start_date, end_date=end_date, table_names=table_names)
+    graph_views = service.get_argus_graph_views(test_id=test_id)
 
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
-        "response": {"graphs": graphs, "ticks": ticks, "releases_filters": releases_filters, "graph_views": graph_views}
-    }
+        "response": {"graphs": graphs, "ticks": ticks, "releases_filters": releases_filters,
+                     "graph_views": graph_views}
+    })
 
 
-@bp.route("/create-graph-view", methods=["POST"])
-@api_login_required
-def create_graph_view():
-    payload = get_payload(request)
+@router.post("/create-graph-view", name="api.create_graph_view")
+def create_graph_view(payload: CreateGraphViewRequest, user: User = Depends(api_current_user)):
     service = ResultsService()
-    test_id = payload["testId"]
-    name = payload["name"]
-    description = payload["description"]
-    graph_view = service.create_argus_graph_view(test_id=UUID(test_id), name=name, description=description)
-    return {
+    graph_view = service.create_argus_graph_view(
+        test_id=payload.testId, name=payload.name, description=payload.description)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": graph_view
-    }
+    })
 
 
-@bp.route("/update-graph-view", methods=["POST"])
-@api_login_required
-def update_graph_view():
-    payload = get_payload(request)
+@router.post("/update-graph-view", name="api.update_graph_view")
+def update_graph_view(payload: UpdateGraphViewRequest, user: User = Depends(api_current_user)):
     service = ResultsService()
-    test_id = payload["testId"]
-    id = payload["id"]
-    name = payload["name"]
-    description = payload["description"]
-    graphs = payload["graphs"]
-    graph_view = service.update_argus_graph_view(test_id=UUID(test_id), view_id=UUID(id), name=name, description=description,
-                                                 graphs=graphs)
-    return {
+    graph_view = service.update_argus_graph_view(
+        test_id=payload.testId, view_id=payload.id, name=payload.name,
+        description=payload.description, graphs=payload.graphs)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": graph_view
-    }
+    })
 
 
-@bp.route("/test_run/comment/get", methods=["GET"])  # TODO: remove
-@api_login_required
-def get_test_run_comment():
-    comment_id = request.args.get("commentId")
-    if not comment_id:
-        raise Exception("commentId wasn't specified in the request")
+@router.get("/test_run/comment/get", name="api.get_test_run_comment")  # TODO: remove
+def get_test_run_comment(comment_id: UUID = Query(..., alias="commentId"),
+                         user: User = Depends(api_current_user)):
     service = ArgusService()
-    comment = service.get_comment(comment_id=UUID(comment_id))
-    return jsonify({
+    comment = service.get_comment(comment_id=comment_id)
+    return ArgusJSONResponse({
         "status": "ok",
         "response": comment if comment else False
     })
 
 
-@bp.route("/users", methods=["GET"])
-@api_login_required
-def user_info():
+@router.get("/users", name="api.user_info")
+def user_info(user: User = Depends(api_current_user)):
     result = UserService().get_users()
 
-    return jsonify({
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
     })
 
 
-@bp.route("/release/stats/v2", methods=["GET"])
-@api_login_required
-def release_stats_v2():
-    request.query_string.decode(encoding="UTF-8")
-    release = request.args.get("release")
-    limited = bool(int(request.args.get("limited")))
-    version = request.args.get("productVersion", None)
-    image_id = request.args.get("imageId", None)
-    include_no_version = bool(int(request.args.get("includeNoVersion", True)))
-    force = bool(int(request.args.get("force")))
+@router.get("/release/stats/v2", name="api.release_stats_v2")
+def release_stats_v2(release: str = Query(...), limited: bool = Query(...),
+                     version: str | None = Query(None, alias="productVersion"),
+                     image_id: str | None = Query(None, alias="imageId"),
+                     include_no_version: bool = Query(True, alias="includeNoVersion"),
+                     force: bool = Query(...),
+                     user: User = Depends(api_current_user)):
     stats = ReleaseStatsCollector(
         release_name=release, release_version=version).collect(
             limited=limited,
@@ -522,132 +444,119 @@ def release_stats_v2():
             image_id=image_id
     )
 
-    res = jsonify({
+    return ArgusJSONResponse({
         "status": "ok",
         "response": stats
     })
-    return res
 
 
-@bp.route("/test_runs/poll", methods=["GET"])
-@api_login_required
-def test_runs_poll():
+@router.get("/test_runs/poll", name="api.test_runs_poll")
+def test_runs_poll(user: User = Depends(api_current_user)):
     raise APIException("This endpoint has been removed")
 
 
-@bp.route("/test_run/poll", methods=["GET"])
-@api_login_required
-def test_run_poll_single():
+@router.get("/test_run/poll", name="api.test_run_poll_single")
+def test_run_poll_single(user: User = Depends(api_current_user)):
     raise APIException("This endpoint has been removed")
 
 
-@bp.route("/release/create", methods=["POST"])
-@api_login_required
-def release_create():
-    if not request.is_json:
-        raise Exception(
-            "Content-Type mismatch, expected application/json, got:", request.content_type)
-    request_payload = request.get_json()
+@router.post("/release/create", name="api.release_create")
+def release_create(payload: dict = Body(...), user: User = Depends(api_current_user)):
     service = ArgusService()
-    result = service.create_release(request_payload)
+    result = service.create_release(payload)
 
-    return jsonify({
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
     })
 
 
-@bp.route("/artifact/resolveSize")
-@api_login_required
-def resolve_artifact_size():
-    link = request.args.get("l")
-    if not link:
-        raise Exception("No link provided")
-
+@router.get("/artifact/resolveSize", name="api.resolve_artifact_size")
+def resolve_artifact_size(link: str = Query(..., alias="l"),
+                          user: User = Depends(api_current_user)):
     length = TestRunService().resolve_artifact_size(link)
 
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": {
             "artifactSize": length,
         }
-    }
+    })
 
 
-@bp.route("/s3/<string:bucket_name>/<path:bucket_path>")
-@api_login_required
-def s3_generic_proxy(bucket_name: str, bucket_path: str):
+@router.get("/s3/{bucket_name}/{bucket_path:path}", name="api.s3_generic_proxy")
+def s3_generic_proxy(bucket_name: str, bucket_path: str,
+                     user: User = Depends(api_current_user)):
     service = TestRunService()
     result = service.proxy_s3_file(
         bucket_name=bucket_name,
         bucket_path=bucket_path
     )
 
-    return redirect(result, code=302)
+    return RedirectResponse(result, status_code=302)
 
 
-@bp.route("/user/token", methods=["GET"])
-@api_login_required
-def user_token():
-    token = UserService().get_or_generate_token(user=g.user)
+@router.get("/user/token", name="api.user_token")
+def user_token(user: User = Depends(api_current_user)):
+    token = UserService().get_or_generate_token(user=user)
 
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": {
             "token": token
         }
-    }
+    })
 
 
-@bp.route("/user/jobs")
-@api_login_required
-def user_jobs():
+@router.get("/user/jobs", name="api.user_jobs")
+def user_jobs(user: User = Depends(api_current_user)):
     service = ArgusService()
-    result = list(service.get_jobs_for_user(user=g.user))
+    result = list(service.get_jobs_for_user(user=user))
 
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
-@bp.route("/user/planned_jobs")
-@api_login_required
-def user_planned_jobs():
+
+@router.get("/user/planned_jobs", name="api.user_planned_jobs")
+def user_planned_jobs(user: User = Depends(api_current_user)):
     service = ArgusService()
-    result = list(service.get_planned_jobs_for_user(user=g.user))
+    result = list(service.get_planned_jobs_for_user(user=user))
 
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/zeus/<path:endpoint>", methods=["GET", "POST", "HEAD", "PUT", "DELETE"])
-@api_login_required
-def zeus_proxy(endpoint: str):
-    zeus_host = current_app.config.get("ZEUS_HOST")
-    zeus_schema = current_app.config.get("ZEUS_SCHEMA", "http")
-    zeus_token = current_app.config.get("ZEUS_TOKEN")
+@router.api_route("/zeus/{endpoint:path}", methods=["GET", "POST", "HEAD", "PUT", "DELETE"],
+                  name="api.zeus_proxy")
+def zeus_proxy(asgi_request: Request, endpoint: str, body: bytes = Body(b""),
+               user: User = Depends(api_current_user)):
+    config = asgi_request.app.state.config
+    zeus_host = config.get("ZEUS_HOST")
+    zeus_schema = config.get("ZEUS_SCHEMA", "http")
+    zeus_token = config.get("ZEUS_TOKEN")
     if not zeus_host:
         raise Exception("ZEUS_HOST is not configured, proxying is impossible.")
     if not zeus_token:
         raise Exception("Missing authorization token for Zeus [ZEUS_TOKEN]")
 
-    query_str = request.query_string.decode("utf-8")
-    method = request.method.lower()
-    headers = dict(request.headers)
-    headers["X-Forwarded-For"] = request.remote_addr
+    query_str = asgi_request.url.query
+    method = asgi_request.method.lower()
+    headers = dict(asgi_request.headers)
+    headers["X-Forwarded-For"] = asgi_request.client.host if asgi_request.client else ""
     headers["X-Argus-Proxy"] = "1"
     headers["Authorization"] = f"Bearer {zeus_token}"
-    body = request.get_data()
-
-    zeus_host = current_app.config.get("ZEUS_HOST")
-    zeus_schema = current_app.config.get("ZEUS_SCHEMA")
 
     session = requests.Session()
-    proxy_request = requests.Request(method=method, url=f"{zeus_schema}://{zeus_host}/{endpoint}?{query_str}", headers=headers, data=body)
+    proxy_request = requests.Request(
+        method=method, url=f"{zeus_schema}://{zeus_host}/{endpoint}?{query_str}",
+        headers=headers, data=body)
     prepared = proxy_request.prepare()
 
     response = session.send(prepared)
 
-    return (response.content, response.status_code, response.headers.items())
+    return Response(response.content, status_code=response.status_code,
+                    headers=dict(response.headers))

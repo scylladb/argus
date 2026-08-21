@@ -1,9 +1,10 @@
 import logging
 from typing import Any
 from uuid import UUID
-from flask import current_app, render_template
 from coodie.exceptions import DocumentNotFound
 
+from argus.backend.rendering import render_background_template
+from argus.backend.util.config import Config
 from argus.backend.models.web import ArgusNotification, ArgusNotificationSourceTypes, ArgusNotificationTypes, ArgusNotificationState, User
 from argus.backend.util.send_email import Email
 
@@ -20,7 +21,7 @@ class NotificationManagerService:
         self.notification_services: list["NotificationSenderBase"] = [
             ArgusDBNotificationSaver(),
         ]
-        if current_app.config.get("EMAIL_ENABLED", True):
+        if Config.load_yaml_config().get("EMAIL_ENABLED", True):
             self.notification_services.append(EmailNotificationServiceSender())
         if notification_senders:
             self.notification_services.extend(notification_senders)
@@ -102,11 +103,11 @@ class NotificationSenderBase:
 
 class ArgusDBNotificationSaver(NotificationSenderBase):
     CONTENT_TEMPLATES = {
-        ArgusNotificationTypes.Mention: lambda p: render_template("notifications/mention.html.j2", **p if p else {}),
-        ArgusNotificationTypes.AssigneeChange: lambda p: render_template("notifications/assigned.html.j2", **p if p else {}),
-        ArgusNotificationTypes.ViewActionItemAssignee: lambda p: render_template(
+        ArgusNotificationTypes.Mention: lambda p: render_background_template("notifications/mention.html.j2", **p if p else {}),
+        ArgusNotificationTypes.AssigneeChange: lambda p: render_background_template("notifications/assigned.html.j2", **p if p else {}),
+        ArgusNotificationTypes.ViewActionItemAssignee: lambda p: render_background_template(
             "notifications/view_action_item_assigned.html.j2", **p if p else {}),
-        ArgusNotificationTypes.ViewHighlightMention: lambda p: render_template(
+        ArgusNotificationTypes.ViewHighlightMention: lambda p: render_background_template(
             "notifications/view_highlight_mention.html.j2", **p if p else {}),
     }
 
@@ -131,11 +132,11 @@ class ArgusDBNotificationSaver(NotificationSenderBase):
 
 class EmailNotificationServiceSender(NotificationSenderBase):
     CONTENT_TEMPLATES = {
-        ArgusNotificationTypes.Mention: lambda p: render_template(
+        ArgusNotificationTypes.Mention: lambda p: render_background_template(
             "notifications/email_mention.html.j2", **p if p else {}),
-        ArgusNotificationTypes.AssigneeChange: lambda p: render_template("notifications/assigned_email.html.j2", **p if p else {}),
-        ArgusNotificationTypes.ViewActionItemAssignee: lambda p: render_template("notifications/view_action_item_assigned_email.html.j2", **p if p else {}),
-        ArgusNotificationTypes.ViewHighlightMention: lambda p: render_template(
+        ArgusNotificationTypes.AssigneeChange: lambda p: render_background_template("notifications/assigned_email.html.j2", **p if p else {}),
+        ArgusNotificationTypes.ViewActionItemAssignee: lambda p: render_background_template("notifications/view_action_item_assigned_email.html.j2", **p if p else {}),
+        ArgusNotificationTypes.ViewHighlightMention: lambda p: render_background_template(
             "notifications/view_highlight_mention_email.html.j2", **p if p else {}),
     }
 
@@ -164,4 +165,4 @@ class EmailNotificationServiceSender(NotificationSenderBase):
                             content=email_content,
                             recipients=[receiver_user.email])
         except Exception as details:
-            current_app.logger.error("Failed to send email: %s", details)
+            LOGGER.error("Failed to send email: %s", details)

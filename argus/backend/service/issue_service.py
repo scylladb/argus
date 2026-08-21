@@ -1,8 +1,9 @@
 from uuid import UUID
-from flask import current_app
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.github_issue import GithubIssue, IssueLink
+from argus.backend.models.web import User
+from argus.backend.util.config import Config
 from argus.backend.service.github_service import GithubService
 from argus.backend.service.issue_utils import build_version_map, filter_links_by_version
 from argus.backend.service.jira_service import JiraService
@@ -11,8 +12,9 @@ from argus.backend.service.jira_service import JiraService
 class IssueService:
 
     def __init__(self, dry_run: bool | None = None):
-        github_dry_run = dry_run if dry_run is not None else not current_app.config.get("GITHUB_ENABLED", True)
-        jira_dry_run = dry_run if dry_run is not None else not current_app.config.get("JIRA_ENABLED", True)
+        config = Config.load_yaml_config()
+        github_dry_run = dry_run if dry_run is not None else not config.get("GITHUB_ENABLED", True)
+        jira_dry_run = dry_run if dry_run is not None else not config.get("JIRA_ENABLED", True)
         self.gh = GithubService(github_dry_run)
         self.jira = JiraService(jira_dry_run)
 
@@ -51,21 +53,21 @@ class IssueService:
 
         return issues
 
-    def delete(self, issue_id: UUID | str, run_id: UUID | str):
+    def delete(self, issue_id: UUID | str, run_id: UUID | str, user: User):
         issue_id = UUID(issue_id) if isinstance(issue_id, str) else issue_id
         run_id = UUID(run_id) if isinstance(run_id, str) else run_id
         try:
-            return self.gh.delete_issue(issue_id=issue_id, run_id=run_id)
+            return self.gh.delete_issue(issue_id=issue_id, run_id=run_id, user=user)
         except DocumentNotFound:
-            return self.jira.delete_issue(issue_id=issue_id, run_id=run_id)
+            return self.jira.delete_issue(issue_id=issue_id, run_id=run_id, user=user)
 
-    def submit(self, issue_url: str, test_id: UUID | str, run_id: UUID | str):
+    def submit(self, issue_url: str, test_id: UUID | str, run_id: UUID | str, user: User):
         test_id = UUID(test_id) if isinstance(test_id, str) else test_id
         run_id = UUID(run_id) if isinstance(run_id, str) else run_id
-        return self._get_service(issue_url).submit_issue(issue_url=issue_url, test_id=test_id, run_id=run_id)
+        return self._get_service(issue_url).submit_issue(issue_url=issue_url, test_id=test_id, run_id=run_id, user=user)
 
-    def submit_for_sct_event(self, issue_url: str, test_id: UUID | str, event_id: UUID | str, run_id: UUID | str):
+    def submit_for_sct_event(self, issue_url: str, test_id: UUID | str, event_id: UUID | str, run_id: UUID | str, user: User):
         test_id = UUID(test_id) if isinstance(test_id, str) else test_id
         run_id = UUID(run_id) if isinstance(run_id, str) else run_id
         event_id = UUID(event_id) if isinstance(event_id, str) else event_id
-        return self._get_service(issue_url).submit_issue(issue_url=issue_url, test_id=test_id, run_id=run_id, event_id=event_id)
+        return self._get_service(issue_url).submit_issue(issue_url=issue_url, test_id=test_id, run_id=run_id, user=user, event_id=event_id)

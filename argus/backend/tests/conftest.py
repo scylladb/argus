@@ -1,4 +1,5 @@
 from cassandra.cluster import Cluster
+import json
 import logging
 from argus.backend.service.results_service import ResultsService
 from argus.backend.service.release_manager import ReleaseManagerService
@@ -7,8 +8,12 @@ from argus.backend.plugins.sct.testrun import SCTTestRunSubmissionRequest
 from argus.backend.models.web import ArgusTest, ArgusGroup, ArgusRelease, User, UserRoles
 from argus.backend.db import ScyllaCluster
 from argus.backend.cli import sync_models
+from base64 import b64decode, b64encode
 from docker.errors import NotFound
 from _pytest.fixtures import fixture
+from fastapi import Request as FastAPIRequest
+from itsdangerous import TimestampSigner
+from starlette.testclient import TestClient
 import os
 from pathlib import Path
 import time
@@ -19,8 +24,6 @@ from unittest.mock import patch, MagicMock
 from cassandra.auth import PlainTextAuthProvider
 from docker import DockerClient
 from docker.models.containers import Container
-from flask import g, Flask
-from flask.testing import FlaskClient
 import pytest
 
 from argus.backend.plugins.loader import all_plugin_models, all_plugin_types
@@ -28,6 +31,7 @@ from argus.backend.plugins.sct.service import SCTService
 from argus.backend.service.issue_service import IssueService
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.views_widgets.pytest import PytestViewService
+from argus.backend.service.user import load_user
 from argus.backend.util.config import Config
 
 
@@ -135,6 +139,7 @@ def argus_db():
               "EMAIL_SENDER": "unit tester", "EMAIL_SENDER_PASS": "pass", "EMAIL_SENDER_USER": "qa",
               "EMAIL_SERVER": "fake", "EMAIL_SERVER_PORT": 25,
               "GITHUB_ACCESS_TOKEN": "test_token",
+              "SECRET_KEY": "test-secret-key",
               # External-service config keys: set so service constructors don't crash
               # in tests. Real network calls are blocked by per-test mocks (see
               # argus/backend/tests/_helpers/external_mocks.py).
@@ -184,26 +189,91 @@ def argus_db():
 
 
 @fixture(scope='session')
-def argus_app():
-    with patch('argus.backend.service.user.load_logged_in_user') as mock_load:
-        # Make the function do nothing so test can override user
-        mock_load.return_value = None
-        from argus_backend import argus_app
-        yield argus_app
-
-
-@fixture(scope='session', autouse=True)
-def app_context(argus_db, argus_app):
-    with argus_app.app_context():
-        g.user = User(id=uuid.uuid4(), username='test_user', full_name='Test User',
-                      email="tester@scylladb.com",
-                      roles=[UserRoles.User, UserRoles.Admin, UserRoles.Manager])
-        yield
+def asgi_app(argus_db):
+    """The FastAPI app, built once for the whole session."""
+    import argus_backend
+    yield argus_backend.create_app()
 
 
 @fixture(scope='session')
-def flask_client(argus_app: Flask) -> FlaskClient:
-    return argus_app.test_client()
+def logged_in_user() -> User:
+    return User(id=uuid.uuid4(), username='test_user', full_name='Test User',
+                email="tester@scylladb.com",
+                roles=[UserRoles.User, UserRoles.Admin, UserRoles.Manager])
+
+
+class _RequestContextShim:
+    """Stand-in for the removed flask.g: tests keep referring to ``g.user``
+    for the shared logged-in test user."""
+    user: User | None = None
+
+
+g = _RequestContextShim()
+
+
+@fixture(scope='session', autouse=True)
+def test_user_context(argus_db, logged_in_user):
+    g.user = logged_in_user
+    yield
+
+
+@fixture(scope='session')
+def app_config(asgi_app) -> dict:
+    """The live config mapping the controllers read (request.app.state.config)."""
+    return asgi_app.state.config
+
+
+@fixture(scope='session')
+def api_client(asgi_app, logged_in_user):
+    """TestClient over the app, logged in as logged_in_user through the
+    load_user dependency override."""
+    def _logged_in_user_override(request: FastAPIRequest) -> User:
+        request.state.user = logged_in_user
+        return logged_in_user
+
+    asgi_app.dependency_overrides[load_user] = _logged_in_user_override
+    yield TestClient(asgi_app, raise_server_exceptions=False)
+    asgi_app.dependency_overrides.pop(load_user, None)
+
+
+@fixture
+def anon_client(asgi_app):
+    """TestClient without dependency overrides — exercises real auth.
+
+    api_client's session-scoped load_user override lives on the shared app
+    object, so it is stashed away for the duration of the test.
+    """
+    saved = dict(asgi_app.dependency_overrides)
+    asgi_app.dependency_overrides.clear()
+    yield TestClient(asgi_app, raise_server_exceptions=False)
+    asgi_app.dependency_overrides.update(saved)
+
+
+@fixture(scope='session')
+def session_signer(asgi_app) -> TimestampSigner:
+    """The session-cookie signer SessionMiddleware uses — mint and read
+    session cookies for TestClient-based tests."""
+    return TimestampSigner(str(asgi_app.state.config["SECRET_KEY"]))
+
+
+@fixture
+def make_session_cookie(session_signer):
+    def make(**values) -> str:
+        data = b64encode(json.dumps(values).encode("utf-8"))
+        return session_signer.sign(data).decode("utf-8")
+    return make
+
+
+@fixture
+def read_session(session_signer):
+    def read(client) -> dict:
+        jar_cookies = [c for c in client.cookies.jar if c.name == "session"]
+        if not jar_cookies:
+            return {}
+        # prefer the host cookie the server set over a test-minted one
+        cookie = next((c for c in jar_cookies if c.domain == "testserver"), jar_cookies[-1])
+        return json.loads(b64decode(session_signer.unsign(cookie.value)))
+    return read
 
 
 @fixture(scope='session')

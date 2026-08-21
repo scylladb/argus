@@ -1,5 +1,5 @@
+from collections.abc import Mapping, MutableMapping
 from datetime import UTC, datetime
-import functools
 import hashlib
 import mimetypes
 import os
@@ -10,21 +10,22 @@ from uuid import UUID
 from time import time
 from hashlib import sha384
 
+from collections.abc import Callable
+
 from coodie.exceptions import DocumentNotFound
-from flask import current_app, flash, g, redirect, request, session, url_for
+from fastapi import Depends, Request
 import magic
 import requests
 import jwt
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from argus.backend.db import ScyllaCluster
-from argus.backend.error_handlers import APIException
+from argus.backend.error_handlers import APIException, AuthorizationError, UIRedirect
 from argus.backend.models.web import User, UserOauthToken, UserRoles, WebFileStorage
-from argus.backend.util.common import FlaskView, gen_pass
+from argus.backend.util.common import gen_pass
 
 LOGGER = logging.getLogger(__name__)
 
-SSH_TUNNEL_SERVER_ALLOWED_ENDPOINTS_KEY = "ssh_tunnel_server_allowed_endpoints"
 
 class UserServiceException(Exception):
     pass
@@ -52,8 +53,8 @@ class UserService:
                     return True
         return False
 
-    def github_callback(self, req_code: str) -> dict | None:
-        if "gh" not in current_app.config.get("LOGIN_METHODS", []):
+    def github_callback(self, req_code: str, session: MutableMapping, config: Mapping) -> dict | None:
+        if "gh" not in config.get("LOGIN_METHODS", []):
             raise UserServiceException("Github Login is disabled")
         oauth_response = requests.post(
             "https://github.com/login/oauth/access_token",
@@ -62,8 +63,8 @@ class UserService:
             },
             params={
                 "code": req_code,
-                "client_id": current_app.config.get("GITHUB_CLIENT_ID"),
-                "client_secret": current_app.config.get("GITHUB_CLIENT_SECRET"),
+                "client_id": config.get("GITHUB_CLIENT_ID"),
+                "client_secret": config.get("GITHUB_CLIENT_SECRET"),
             }
         )
 
@@ -93,7 +94,7 @@ class UserService:
         ).json()
 
         temp_password = None
-        required_organizations = current_app.config.get("GITHUB_REQUIRED_ORGANIZATIONS")
+        required_organizations = config.get("GITHUB_REQUIRED_ORGANIZATIONS")
         if required_organizations:
             logins = set([org["login"] for org in organizations])
             required_organizations = set(required_organizations)
@@ -154,12 +155,10 @@ class UserService:
             }
         return None
 
-    def cf_login_or_register(self):
-        cf_access_jwt = request.headers.get("Cf-Access-Jwt-Assertion")
-
-        if cf_access_jwt and "cf" in current_app.config.get("LOGIN_METHODS", []):
+    def cf_login_or_register(self, cf_access_jwt: str | None, session: MutableMapping, config: Mapping):
+        if cf_access_jwt and "cf" in config.get("LOGIN_METHODS", []):
             try:
-                res = _get_user_from_cf_access(cf_access_jwt)
+                res = _get_user_from_cf_access(cf_access_jwt, config)
             except UserServiceException as exc:
                 session["manual_logout"] = True
                 raise exc
@@ -209,22 +208,23 @@ class UserService:
 
         return users
 
-    def set_user_impersonation(self, user_id: str):
+    def set_user_impersonation(self, user_id: str, session: MutableMapping, current_user: User) -> User:
         if session.get("original_user"):
             raise UserServiceException("Cannot impersonate while already impersonating a user.")
 
         user = User.get(id=UUID(user_id))
-        session["original_user"] = str(g.user.id)
-        g.user = user
+        session["original_user"] = str(current_user.id)
         session["user_id"] = str(user.id)
+        return user
 
-    def stop_user_impersonation(self):
+    def stop_user_impersonation(self, session: MutableMapping) -> User:
         if not session.get("original_user"):
             raise UserServiceException("No impersonation in progress.")
 
         user_id = session.pop("original_user")
-        g.user = User.get(id=UUID(user_id))
-        session["user_id"] = str(g.user.id)
+        user = User.get(id=UUID(user_id))
+        session["user_id"] = str(user.id)
+        return user
 
     def generate_token(self, user: User):
         token_digest = f"{user.username}-{int(time())}-{base64.encodebytes(os.urandom(128)).decode(encoding='utf-8')}"
@@ -249,10 +249,10 @@ class UserService:
 
         return True
 
-    def toggle_admin(self, user_id: str):
+    def toggle_admin(self, user_id: str, current_user: User):
         user: User = User.get(id=UUID(user_id))
 
-        if user.id == g.user.id:
+        if user.id == current_user.id:
             raise UserServiceException("Cannot toggle admin role from yourself.")
 
         is_admin = UserService.check_roles(UserRoles.Admin, user)
@@ -266,7 +266,8 @@ class UserService:
         return True
 
 
-    def create_user(self, username: str, email: str, full_name: str) -> dict:
+    def create_user(self, username: str, email: str, full_name: str,
+                    avatar: tuple[str, bytes] | None = None) -> dict:
 
         result = {
             "created": False,
@@ -309,8 +310,8 @@ class UserService:
         user.registration_date = datetime.now(tz=UTC)
         user.roles = ["ROLE_USER"]
 
-        if avatar := request.files.get("avatar"):
-            content = avatar.stream.read()
+        if avatar:
+            _, content = avatar
             avatar_mime = magic.from_buffer(content, mime=True)
             if not re.match(r"^image/.*", avatar_mime, re.IGNORECASE):
                 raise UserServiceException(f"Expected image/*, got {avatar_mime} for user avatar.")
@@ -335,9 +336,9 @@ class UserService:
 
         return result
 
-    def delete_user(self, user_id: str):
+    def delete_user(self, user_id: str, current_user: User):
         user: User = User.get(id=UUID(user_id))
-        if user.id == g.user.id:
+        if user.id == current_user.id:
             raise UserServiceException("Cannot delete user that you are logged in as.")
 
         if user.is_admin():
@@ -383,100 +384,98 @@ class UserService:
 
         return original_filename, filepath
 
-    def update_profile_picture(self, filename: str, filepath: str):
+    def update_profile_picture(self, filename: str, filepath: str, user: User):
         web_file = WebFileStorage()
         web_file.filename = filename
         web_file.filepath = filepath
         web_file.save()
 
         try:
-            if old_picture_id := g.user.picture_id:
+            if old_picture_id := user.picture_id:
                 old_file = WebFileStorage.get(id=old_picture_id)
                 os.unlink(old_file.filepath)
                 old_file.delete()
         except Exception as exc:
             print(exc)
 
-        g.user.picture_id = web_file.id
-        g.user.save()
+        user.picture_id = web_file.id
+        user.save()
 
 
-def login_required(view: FlaskView):
-    @functools.wraps(view)
-    def wrapped_view(*args, **kwargs):
-        if g.user is None and not getattr(view, "api_view", False):
-            flash(message='Unauthorized, please login', category='error')
-            session["redirect_target"] = request.full_path
-            return redirect(url_for('auth.login'))
-        elif g.user is None and getattr(view, "api_view", True):
-            return {
-                "status": "error",
-                "message": "Authorization required"
-            }, 403
-
-        if is_scoped_ssh_tunnel_server_blocked(g.user):
-            if getattr(view, "api_view", False):
-                return {
-                    "status": "error",
-                    "message": "Authorization required",
-                }, 403
-
-            flash(message='Not authorized to access this area', category='error')
-            return redirect(url_for('main.home'))
-
-        return view(*args, **kwargs)
-
-    return wrapped_view
-
-
-def api_login_required(view: FlaskView):
-    view.api_view = True
-    return login_required(view)
-
-
-def check_roles(needed_roles: list[str] | str = None):
-    def inner(view: FlaskView):
-        @functools.wraps(view)
-        def wrapped_view(*args, **kwargs):
-            if not UserService.check_roles(needed_roles, g.user):
-                if getattr(view, "api_view", False):
-                    return {"status": "error", "message": "Forbidden"}, 403
-                flash(message='Not authorized to access this area', category='error')
-                return redirect(url_for('main.home'))
-
-            return view(*args, **kwargs)
-
-        return wrapped_view
-    return inner
-
-
-def allow_ssh_tunnel_server_scope(view: FlaskView):
+def allow_ssh_tunnel_server_scope(view: Callable):
     setattr(view, "allow_ssh_tunnel_server_scope", True)
     return view
 
 
-def load_logged_in_user():
-    auth_header = request.headers.get("Authorization")
-
+def load_user(asgi_request: Request) -> User | None:
+    """FastAPI counterpart of load_logged_in_user: resolves the request's
+    user in the same order (token header, session user_id, anonymous) and
+    sets request.state.user as a side effect."""
+    user = None
+    auth_header = asgi_request.headers.get("Authorization")
     if auth_header:
         try:
             auth_schema, *auth_data = auth_header.split()
             if auth_schema == "token":
-                token = auth_data[0]
-                g.user = User.get(api_token=token)
-                return
+                user = User.get(api_token=auth_data[0])
         except IndexError as exception:
             raise APIException("Malformed authorization header") from exception
         except DocumentNotFound as exception:
             raise APIException("User not found for supplied token") from exception
 
-    if user_id := session.get('user_id'):
+    if not user and (user_id := asgi_request.session.get("user_id")):
         try:
-            g.user = User.get(id=UUID(user_id))
-            return
+            user = User.get(id=UUID(user_id))
         except DocumentNotFound:
-            session.clear()
-    g.user = None
+            asgi_request.session.clear()
+
+    asgi_request.state.user = user
+    return user
+
+
+def api_current_user(asgi_request: Request, user: User | None = Depends(load_user)) -> User:
+    """FastAPI counterpart of @api_login_required."""
+    if user is None:
+        raise AuthorizationError("Authorization required")
+    if is_ssh_tunnel_server_user(user) and not is_ssh_tunnel_server_asgi_request_allowed(asgi_request):
+        raise AuthorizationError("Authorization required")
+    return user
+
+
+def require_roles(needed_roles: list[UserRoles] | UserRoles):
+    """FastAPI counterpart of @check_roles for API views."""
+
+    def dependency(user: User = Depends(api_current_user)) -> User:
+        if not UserService.check_roles(needed_roles, user):
+            raise AuthorizationError("Forbidden")
+        return user
+
+    return dependency
+
+
+def ui_current_user(asgi_request: Request, user: User | None = Depends(load_user)) -> User:
+    """FastAPI counterpart of @login_required for UI pages: anonymous users
+    are flash-redirected to the login page with the original target saved."""
+    if user is None:
+        target = asgi_request.url.path
+        if asgi_request.url.query:
+            target = f"{target}?{asgi_request.url.query}"
+        asgi_request.session["redirect_target"] = target
+        raise UIRedirect("auth.login", flash_message=("error", "Unauthorized, please login"))
+    if is_ssh_tunnel_server_user(user) and not is_ssh_tunnel_server_asgi_request_allowed(asgi_request):
+        raise UIRedirect("main.home", flash_message=("error", "Not authorized to access this area"))
+    return user
+
+
+def ui_require_roles(needed_roles: list[UserRoles] | UserRoles):
+    """FastAPI counterpart of @check_roles for UI pages."""
+
+    def dependency(user: User = Depends(ui_current_user)) -> User:
+        if not UserService.check_roles(needed_roles, user):
+            raise UIRedirect("main.home", flash_message=("error", "Not authorized to access this area"))
+        return user
+
+    return dependency
 
 
 def is_ssh_tunnel_server_user(user: User | None) -> bool:
@@ -485,39 +484,22 @@ def is_ssh_tunnel_server_user(user: User | None) -> bool:
     return UserService.check_roles(UserRoles.SSHTunnelServer, user)
 
 
-def is_ssh_tunnel_server_request_allowed() -> bool:
-    endpoint = request.endpoint
-    if not endpoint:
-        return False
-
-    allowed_endpoint_methods = current_app.extensions.get(SSH_TUNNEL_SERVER_ALLOWED_ENDPOINTS_KEY, set())
-
-    return (endpoint, request.method) in allowed_endpoint_methods
+def is_ssh_tunnel_server_asgi_request_allowed(asgi_request: Request) -> bool:
+    """ASGI counterpart of is_ssh_tunnel_server_request_allowed: FastAPI
+    routes opt in with the same @allow_ssh_tunnel_server_scope marker
+    instead of the url_map scan."""
+    endpoint = asgi_request.scope.get("endpoint")
+    return bool(getattr(endpoint, "allow_ssh_tunnel_server_scope", False))
 
 
-def cache_ssh_tunnel_server_allowed_endpoints(app):
-    allowed_endpoint_methods = set()
-    for rule in app.url_map.iter_rules():
-        view = app.view_functions.get(rule.endpoint)
-        if getattr(view, "allow_ssh_tunnel_server_scope", False):
-            for method in rule.methods:
-                allowed_endpoint_methods.add((rule.endpoint, method))
-
-    app.extensions[SSH_TUNNEL_SERVER_ALLOWED_ENDPOINTS_KEY] = allowed_endpoint_methods
-
-
-def is_scoped_ssh_tunnel_server_blocked(user: User | None) -> bool:
-    return is_ssh_tunnel_server_user(user) and not is_ssh_tunnel_server_request_allowed()
-
-
-def _get_cf_access_payload(token: str) -> dict | None:
-    cf_domain = current_app.config.get("CLOUDFLARE_ACCESS_TEAM_DOMAIN")
-    cf_aud = current_app.config.get("CLOUDFLARE_ACCESS_AUD")
+def _get_cf_access_payload(token: str, config: Mapping) -> dict | None:
+    cf_domain = config.get("CLOUDFLARE_ACCESS_TEAM_DOMAIN")
+    cf_aud = config.get("CLOUDFLARE_ACCESS_AUD")
     if not cf_domain or not cf_aud:
         LOGGER.warning("Cloudflare Access config missing: domain or audience")
         raise UserServiceException("Cloudflare Access config missing: domain or audience")
 
-    jwk_client = current_app.config.get("CLOUDFLARE_ACCESS_JWK_CLIENT")
+    jwk_client = config.get("CLOUDFLARE_ACCESS_JWK_CLIENT")
     if not jwk_client:
         LOGGER.warning("Cloudflare Access JWK client is not configured")
         raise UserServiceException("Cloudflare Access JWK client is not configured")
@@ -541,8 +523,8 @@ def _get_cf_access_payload(token: str) -> dict | None:
     return payload
 
 
-def _get_user_from_cf_access(token: str) -> dict:
-    payload = _get_cf_access_payload(token)
+def _get_user_from_cf_access(token: str, config: Mapping) -> dict:
+    payload = _get_cf_access_payload(token, config)
     if not payload:
         raise UserServiceException("Invalid Cloudflare Access Payload")
     email = payload.get("email")

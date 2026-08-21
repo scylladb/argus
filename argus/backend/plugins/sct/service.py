@@ -8,14 +8,13 @@ from time import time
 from typing import TypedDict
 from uuid import UUID
 from xml.etree import ElementTree
-from flask import current_app, g
 from cassandra.util import uuid_from_time
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.jira import JiraIssue
-from argus.backend.models.web import ArgusEventTypes, ErrorEventEmbeddings, CriticalEventEmbeddings
+from argus.backend.models.web import ArgusEventTypes, CriticalEventEmbeddings, ErrorEventEmbeddings, User
 from argus.backend.models.argus_ai import SCTErrorEventEmbedding, SCTCriticalEventEmbedding
 from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTJunitReports, SCTResource, SCTNemesis, SCTTestRun, SubtestType, SCTUnprocessedEvent, StressCommand
 from argus.common.sct_types import GeminiResultsRequest, PerformanceResultsRequest, RawEventPayload, ResourceUpdateRequest
@@ -154,7 +153,7 @@ class SCTService:
         return "submitted"
 
     @staticmethod
-    def submit_gemini_results(run_id: str, gemini_data: GeminiResultsRequest) -> str:
+    def submit_gemini_results(run_id: str, gemini_data: GeminiResultsRequest, user: User) -> str:
         try:
             run: SCTTestRun = SCTTestRun.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
             run.subtest_name = SubtestType.GEMINI.value
@@ -178,10 +177,10 @@ class SCTService:
                 run.status = TestStatus.FAILED.value
                 EventService.create_run_event(kind=ArgusEventTypes.TestRunStatusChanged, body={
                     "message": "[{username}] Setting run status to {status} due to Gemini reporting following status: {gemini_status}",
-                    "username": g.user.username,
+                    "username": user.username,
                     "status": TestStatus.FAILED.value,
                     "gemini_status": run.gemini_status,
-                }, user_id=g.user.id, run_id=run_id, release_id=run.release_id, test_id=run.test_id)
+                }, user_id=user.id, run_id=run_id, release_id=run.release_id, test_id=run.test_id)
                 run.save()
         except DocumentNotFound as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
@@ -190,7 +189,7 @@ class SCTService:
         return "submitted"
 
     @staticmethod
-    def submit_performance_results(run_id: str, performance_results: PerformanceResultsRequest):
+    def submit_performance_results(run_id: str, performance_results: PerformanceResultsRequest, user: User):
         try:
             run: SCTTestRun = SCTTestRun.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
             run.subtest_name = SubtestType.PERFORMANCE.value
@@ -281,7 +280,7 @@ class SCTService:
                     "message": "[{username}] Setting run status to {status} due to performance metric '{metric}' falling "
                     "below allowed threshold ({threshold_negative}): {delta}% compared to "
                     "<a href='/test/{test_id}/runs?additionalRuns[]={base_run_id}&additionalRuns[]={previous_run_id}'>This {version} (#{build_number}) run</a>",
-                    "username": g.user.username,
+                    "username": user.username,
                     "status": TestStatus.FAILED.value,
                     "metric": regression_info["metric"],
                     "threshold_negative": threshold_negative,
@@ -291,7 +290,7 @@ class SCTService:
                     "previous_run_id": regression_info["id"],
                     "version": regression_info["version"],
                     "build_number": regression_info["build_number"]
-                }, user_id=g.user.id, run_id=run_id, release_id=run.release_id, test_id=run.test_id)
+                }, user_id=user.id, run_id=run_id, release_id=run.release_id, test_id=run.test_id)
             else:
                 # NOTE: This will override status set by SCT Events.
                 run.status = TestStatus.PASSED.value
@@ -414,7 +413,7 @@ class SCTService:
 
     @staticmethod
     def get_nemesis(run_id: str) -> list:
-        return list(SCTNemesis.find(run_id=run_id).all())
+        return list(SCTNemesis.find(run_id=UUID(run_id) if isinstance(run_id, str) else run_id).all())
 
     @staticmethod
     def submit_nemesis(run_id: str, nemesis_details: dict) -> str:
@@ -697,7 +696,7 @@ class SCTService:
 
             db = ScyllaCluster.get()
             table_name = embedding_model.table_name()
-            keyspace = embedding_model.Settings.keyspace or current_app.config["SCYLLA_KEYSPACE_NAME"]
+            keyspace = embedding_model.Settings.keyspace or Config.load_yaml_config()["SCYLLA_KEYSPACE_NAME"]
 
             query = f"""
                 SELECT run_id, ts

@@ -10,7 +10,6 @@ from time import sleep, time
 
 
 from humanize import naturaltime
-from flask import request
 from cassandra.util import uuid_from_time, unix_time_from_uuid1
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.pytest import PytestResultTable, PytestUserField
@@ -59,11 +58,11 @@ class PytestViewService:
             return not res
         return res
 
-    def view_results(self, view_id: str | UUID):
-        return self.result_filter()
+    def view_results(self, view_id: str | UUID, args):
+        return self.result_filter(args)
 
-    def release_results(self, release_id: str | UUID):
-        return self.result_filter()
+    def release_results(self, release_id: str | UUID, args):
+        return self.result_filter(args)
 
     def prepare_pie_chart(self, hits: list[dict]) -> dict:
         def count_status(acc: dict, result: dict):
@@ -111,9 +110,9 @@ class PytestViewService:
             "datasets": datasets,
         }
 
-    def result_filter(self) -> PytestResult:
+    def result_filter(self, args) -> PytestResult:
         db = ScyllaCluster.get()
-        test = request.args.get("test")
+        test = args.get("test")
 
         unique_tests: list[str] = []
         unique_tests.extend((row["name"] for row in db.session.execute(
@@ -124,13 +123,13 @@ class PytestViewService:
             unique_tests = [
                 t for t in unique_tests if re.search(re.escape(test), t)]
 
-        limit = int(request.args.get("limit", 500))
-        before = request.args.get("before")
-        after = request.args.get("after")
-        enabled_statuses = request.args.getlist("status[]")
-        query = request.args.get("query")
-        filters = request.args.getlist("filters[]")
-        markers = request.args.getlist("markers[]")
+        limit = int(args.get("limit", 500))
+        before = args.get("before")
+        after = args.get("after")
+        enabled_statuses = args.getlist("status[]")
+        query = args.get("query")
+        filters = args.getlist("filters[]")
+        markers = args.getlist("markers[]")
 
         db_query = "SELECT test_id, id, name, run_id, message, session_timestamp, status, markers, duration, test_type FROM pytest_v2"
         query_filters = []

@@ -7,19 +7,19 @@ from functools import reduce
 from unittest.mock import MagicMock
 from urllib.parse import urlparse
 from uuid import UUID
-from flask import current_app, g
 from jira import JIRA
 
 from argus.backend.models.jira import JiraIssue
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.runtime_store import RuntimeStore
-from argus.backend.models.web import ArgusEventTypes, ArgusTest, ArgusUserView, invalidate_release_snapshots
+from argus.backend.models.web import ArgusEventTypes, ArgusTest, ArgusUserView, User, invalidate_release_snapshots
 from argus.backend.models.github_issue import IssueLink, IssueLabel
 from argus.backend.plugins.core import PluginInfoBase
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS
 from argus.backend.service.event_service import EventService
 from argus.backend.util.common import chunk
+from argus.backend.util.config import Config
 
 LOGGER = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ class JiraService:
         if dry_run:
             self.jira = None
             return
-        config = current_app.config
+        config = Config.load_yaml_config()
         self.jira = JIRA(server=config["JIRA_SERVER"], basic_auth=(config["JIRA_EMAIL"], config["JIRA_TOKEN"]))
 
     def get_plugin(self, plugin_name: str) -> PluginInfoBase | None:
@@ -80,8 +80,8 @@ class JiraService:
         last_ran.value = check_time
         last_ran.save()
 
-    def get_issue(self, issue_url: str) -> tuple[JiraIssue, bool]:
-        server_host = re.escape(urlparse(current_app.config["JIRA_SERVER"]).hostname)
+    def get_issue(self, issue_url: str, user: User) -> tuple[JiraIssue, bool]:
+        server_host = re.escape(urlparse(Config.load_yaml_config()["JIRA_SERVER"]).hostname)
         match = re.match(
             rf"http(s)?://{server_host}/browse/(?P<key>[A-Z]+-\d+)(/)?",
             issue_url,
@@ -102,7 +102,7 @@ class JiraService:
             remote_issue = self.jira.issue(key)
 
             issue = JiraIssue()
-            issue.user_id = g.user.id
+            issue.user_id = user.id
             issue.key = remote_issue.key
             issue.state = remote_issue.fields.status.name.lower()
             issue.summary = remote_issue.fields.summary
@@ -123,15 +123,15 @@ class JiraService:
 
         return issue, existing
 
-    def submit_issue(self, issue_url: str, test_id: UUID, run_id: UUID, event_id: UUID | str = None):
+    def submit_issue(self, issue_url: str, test_id: UUID, run_id: UUID, user: User, event_id: UUID | str = None):
         test: ArgusTest = ArgusTest.get(id=test_id)
         plugin = self.get_plugin(plugin_name=test.plugin_name)
         run = plugin.model.get(id=run_id)
-        issue, state = self.get_issue(issue_url)
+        issue, state = self.get_issue(issue_url, user)
 
         link = IssueLink()
         link.run_id = run.id
-        link.user_id = g.user.id
+        link.user_id = user.id
         link.issue_id = issue.id
         link.release_id = test.release_id
         link.test_id = test.id
@@ -145,12 +145,12 @@ class JiraService:
             kind=ArgusEventTypes.TestRunIssueAdded,
             body={
                 "message": f"An issue titled \"{{summary}}\" was {'attached' if state else 'added'} by {{username}}",
-                "username": g.user.username,
+                "username": user.username,
                 "url": issue_url,
                 "summary": issue.summary,
                 "state": issue.state,
             },
-            user_id=g.user.id,
+            user_id=user.id,
             run_id=link.run_id,
             release_id=link.release_id,
             group_id=link.group_id,
@@ -204,7 +204,7 @@ class JiraService:
             response = [{**issue.model_dump(), **issues[issue.id][0].model_dump(), "subtype": "jira" } for issue in resolved_issues]
         return response
 
-    def delete_issue(self, issue_id: UUID, run_id: UUID) -> dict:
+    def delete_issue(self, issue_id: UUID, run_id: UUID, user: User) -> dict:
         issue: JiraIssue = JiraIssue.get(id=issue_id)
         links = list(IssueLink.find(issue_id=issue_id).allow_filtering().all())
         link: IssueLink = IssueLink.get(run_id=run_id, issue_id=issue_id)
@@ -214,13 +214,13 @@ class JiraService:
             kind=ArgusEventTypes.TestRunIssueRemoved,
             body={
                 "message": "An issue titled \"{title}\" was removed by {username} from \"{run_id}\"",
-                "username": g.user.username,
+                "username": user.username,
                 "url": issue.permalink,
                 "title": issue.summary,
                 "state": issue.state,
                 "run_id": run_id,
             },
-            user_id=g.user.id,
+            user_id=user.id,
             run_id=link.run_id,
             release_id=link.release_id,
             group_id=link.group_id,

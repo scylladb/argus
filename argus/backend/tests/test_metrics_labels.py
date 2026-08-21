@@ -1,26 +1,22 @@
-"""Unit tests for the Prometheus label callbacks.
+"""Unit tests for the Prometheus label helpers.
 
-No database and no app factory: the callbacks read only ``flask.request``, so a
-bare test request context is enough.
+No database and no app factory: the helpers are pure functions over a header
+mapping shared by the Flask hook and the FastAPI middleware.
 """
 
 import pytest
-from flask import Flask
 
 from argus.backend import metrics_labels
 
-app = Flask(__name__)
-
 
 def _labels(**headers):
-    with app.test_request_context("/api/v1/client/ssh/tunnel", headers=headers):
-        return {
-            "ssh_tunnel": metrics_labels.ssh_tunnel(),
-            "build_id": metrics_labels.build_id(),
-            "job_name": metrics_labels.job_name(),
-            "branch": metrics_labels.branch(),
-            "client_version": metrics_labels.client_version(),
-        }
+    return {
+        "ssh_tunnel": metrics_labels.ssh_tunnel(headers),
+        "build_id": metrics_labels.build_id(headers),
+        "job_name": metrics_labels.job_name(headers),
+        "branch": metrics_labels.branch(headers),
+        "client_version": metrics_labels.client_version(headers),
+    }
 
 
 def test_tunneled_ci_request_is_attributed_to_its_job():

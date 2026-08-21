@@ -5,7 +5,7 @@ import logging
 from time import sleep
 from uuid import uuid4
 
-from flask.testing import FlaskClient
+from starlette.testclient import TestClient
 import pytest
 
 from argus.backend.models.github_issue import GithubIssue
@@ -23,7 +23,7 @@ from argus.common.sct_types import RawEventPayload
 LOGGER = logging.getLogger(__name__)
 
 
-def test_submit_github_issue_link_for_existing_issue(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest, issue_service: IssueService):
+def test_submit_github_issue_link_for_existing_issue(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest, issue_service: IssueService, logged_in_user):
     run_type, run_req = get_fake_test_run(fake_test)
     client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
@@ -39,7 +39,7 @@ def test_submit_github_issue_link_for_existing_issue(client_service: ClientServi
     i.url = "https://github.com/scylladb/argus/issues/1"
     i.save()
 
-    result = issue_service.submit(issue_url="https://github.com/scylladb/argus/issues/1", test_id=run.test_id, run_id=run.id)
+    result = issue_service.submit(issue_url="https://github.com/scylladb/argus/issues/1", test_id=run.test_id, run_id=run.id, user=logged_in_user)
 
     assert result["title"] == "Example Issue"
 
@@ -48,7 +48,7 @@ def test_submit_github_issue_link_for_existing_issue(client_service: ClientServi
     assert len(issue_with_links[0]["links"]) == 1
 
 
-def test_submit_jira_issue_link_for_existing_issue(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest, issue_service: IssueService):
+def test_submit_jira_issue_link_for_existing_issue(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest, issue_service: IssueService, logged_in_user):
     run_type, run_req = get_fake_test_run(fake_test)
     client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
@@ -62,7 +62,7 @@ def test_submit_jira_issue_link_for_existing_issue(client_service: ClientService
     i.permalink = "https://zxqtesting.atlassian.net/browse/FROBNICATOR-1"
     i.save()
 
-    result = issue_service.submit(issue_url="https://zxqtesting.atlassian.net/browse/FROBNICATOR-1", test_id=run.test_id, run_id=run.id)
+    result = issue_service.submit(issue_url="https://zxqtesting.atlassian.net/browse/FROBNICATOR-1", test_id=run.test_id, run_id=run.id, user=logged_in_user)
 
     assert result["summary"] == "Example Issue"
 

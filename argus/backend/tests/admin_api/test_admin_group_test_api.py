@@ -41,7 +41,7 @@ def admin_release(release_manager_service):
 
 
 @pytest.fixture
-def admin_group_via_api(flask_client, admin_release):
+def admin_group_via_api(api_client, admin_release):
     name = f"adm9_grp_{time.time_ns()}"
     payload = {
         "group_name": name,
@@ -49,15 +49,15 @@ def admin_group_via_api(flask_client, admin_release):
         "build_system_id": f"bsid_{time.time_ns()}",
         "release_id": str(admin_release.id),
     }
-    resp = client_post(flask_client, f"{ADMIN_PREFIX}/group/create", payload)
-    assert resp.status_code == 200, resp.data
-    body = resp.json
+    resp = client_post(api_client, f"{ADMIN_PREFIX}/group/create", payload)
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
     assert body["status"] == "ok"
     return body["response"]["new_group"]
 
 
 @pytest.fixture
-def admin_test_via_api(flask_client, admin_release, admin_group_via_api):
+def admin_test_via_api(api_client, admin_release, admin_group_via_api):
     name = f"adm9_test_{time.time_ns()}"
     payload = {
         "test_name": name,
@@ -68,9 +68,9 @@ def admin_test_via_api(flask_client, admin_release, admin_group_via_api):
         "release_id": str(admin_release.id),
         "plugin_name": "scylla-cluster-tests",
     }
-    resp = client_post(flask_client, f"{ADMIN_PREFIX}/test/create", payload)
-    assert resp.status_code == 200, resp.data
-    body = resp.json
+    resp = client_post(api_client, f"{ADMIN_PREFIX}/test/create", payload)
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
     assert body["status"] == "ok"
     return body["response"]["new_test"]
 
@@ -79,21 +79,21 @@ def admin_test_via_api(flask_client, admin_release, admin_group_via_api):
 # /group/create + /groups/get + /group/details (round-trip)
 # ---------------------------------------------------------------------------
 
-def test_admin_create_group_round_trip(flask_client, admin_release, admin_group_via_api):
-    resp = flask_client.get(f"{API_PREFIX}/group/{admin_group_via_api['id']}/details")
+def test_admin_create_group_round_trip(api_client, admin_release, admin_group_via_api):
+    resp = api_client.get(f"{API_PREFIX}/group/{admin_group_via_api['id']}/details")
     assert resp.status_code == 200
-    body = resp.json
+    body = resp.json()
     assert body["status"] == "ok"
     assert body["response"]["name"] == admin_group_via_api["name"]
     assert str(body["response"]["release_id"]) == str(admin_release.id)
 
 
-def test_admin_get_groups_includes_created(flask_client, admin_release, admin_group_via_api):
-    resp = flask_client.get(
-        f"{ADMIN_PREFIX}/groups/get", query_string={"releaseId": str(admin_release.id)}
+def test_admin_get_groups_includes_created(api_client, admin_release, admin_group_via_api):
+    resp = api_client.get(
+        f"{ADMIN_PREFIX}/groups/get", params={"releaseId": str(admin_release.id)}
     )
-    assert resp.status_code == 200, resp.data
-    body = resp.json
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
     assert body["status"] == "ok"
     assert any(
         g["id"] == admin_group_via_api["id"] and g["name"] == admin_group_via_api["name"]
@@ -101,17 +101,17 @@ def test_admin_get_groups_includes_created(flask_client, admin_release, admin_gr
     )
 
 
-def test_admin_get_groups_missing_release_id(flask_client):
-    resp = flask_client.get(f"{ADMIN_PREFIX}/groups/get")
+def test_admin_get_groups_missing_release_id(api_client):
+    resp = api_client.get(f"{ADMIN_PREFIX}/groups/get")
     assert resp.status_code == 200
-    assert resp.json["status"] == "error"
+    assert resp.json()["status"] == "error"
 
 
 # ---------------------------------------------------------------------------
 # /group/update
 # ---------------------------------------------------------------------------
 
-def test_admin_update_group(flask_client, admin_group_via_api):
+def test_admin_update_group(api_client, admin_group_via_api):
     payload = {
         "group_id": admin_group_via_api["id"],
         "name": admin_group_via_api["name"] + "_upd",
@@ -119,13 +119,13 @@ def test_admin_update_group(flask_client, admin_group_via_api):
         "enabled": False,
         "build_system_id": "updated-bsid",
     }
-    resp = client_post(flask_client, f"{ADMIN_PREFIX}/group/update", payload)
-    assert resp.status_code == 200, resp.data
-    assert resp.json["status"] == "ok"
+    resp = client_post(api_client, f"{ADMIN_PREFIX}/group/update", payload)
+    assert resp.status_code == 200, resp.content
+    assert resp.json()["status"] == "ok"
 
-    resp = flask_client.get(f"{API_PREFIX}/group/{admin_group_via_api['id']}/details")
+    resp = api_client.get(f"{API_PREFIX}/group/{admin_group_via_api['id']}/details")
     assert resp.status_code == 200
-    body = resp.json
+    body = resp.json()
     assert body["status"] == "ok"
     assert body["response"]["pretty_name"] == "updated-pretty"
     assert body["response"]["enabled"] is False
@@ -136,15 +136,15 @@ def test_admin_update_group(flask_client, admin_group_via_api):
 # /release/group/state/toggle
 # ---------------------------------------------------------------------------
 
-def test_admin_toggle_group_enabled(flask_client, admin_group_via_api):
+def test_admin_toggle_group_enabled(api_client, admin_group_via_api):
     payload = {"entityId": admin_group_via_api["id"], "state": False}
-    resp = client_post(flask_client, f"{ADMIN_PREFIX}/release/group/state/toggle", payload)
-    assert resp.status_code == 200, resp.data
-    assert resp.json["status"] == "ok"
+    resp = client_post(api_client, f"{ADMIN_PREFIX}/release/group/state/toggle", payload)
+    assert resp.status_code == 200, resp.content
+    assert resp.json()["status"] == "ok"
 
-    resp = flask_client.get(f"{API_PREFIX}/group/{admin_group_via_api['id']}/details")
+    resp = api_client.get(f"{API_PREFIX}/group/{admin_group_via_api['id']}/details")
     assert resp.status_code == 200
-    body = resp.json
+    body = resp.json()
     assert body["status"] == "ok"
     assert body["response"]["enabled"] is False
 
@@ -153,22 +153,22 @@ def test_admin_toggle_group_enabled(flask_client, admin_group_via_api):
 # /test/create + /tests/get + /test/details (round-trip)
 # ---------------------------------------------------------------------------
 
-def test_admin_create_test_round_trip(flask_client, admin_group_via_api, admin_test_via_api):
-    resp = flask_client.get(f"{API_PREFIX}/test/{admin_test_via_api['id']}/details")
+def test_admin_create_test_round_trip(api_client, admin_group_via_api, admin_test_via_api):
+    resp = api_client.get(f"{API_PREFIX}/test/{admin_test_via_api['id']}/details")
     assert resp.status_code == 200
-    body = resp.json
+    body = resp.json()
     assert body["status"] == "ok"
     assert body["response"]["name"] == admin_test_via_api["name"]
     assert str(body["response"]["group_id"]) == str(admin_group_via_api["id"])
     assert body["response"]["plugin_name"] == "scylla-cluster-tests"
 
 
-def test_admin_get_tests_includes_created(flask_client, admin_group_via_api, admin_test_via_api):
-    resp = flask_client.get(
-        f"{ADMIN_PREFIX}/tests/get", query_string={"groupId": admin_group_via_api["id"]}
+def test_admin_get_tests_includes_created(api_client, admin_group_via_api, admin_test_via_api):
+    resp = api_client.get(
+        f"{ADMIN_PREFIX}/tests/get", params={"groupId": admin_group_via_api["id"]}
     )
-    assert resp.status_code == 200, resp.data
-    body = resp.json
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
     assert body["status"] == "ok"
     assert any(
         t["id"] == admin_test_via_api["id"] and t["name"] == admin_test_via_api["name"]
@@ -176,17 +176,17 @@ def test_admin_get_tests_includes_created(flask_client, admin_group_via_api, adm
     )
 
 
-def test_admin_get_tests_missing_group_id(flask_client):
-    resp = flask_client.get(f"{ADMIN_PREFIX}/tests/get")
+def test_admin_get_tests_missing_group_id(api_client):
+    resp = api_client.get(f"{ADMIN_PREFIX}/tests/get")
     assert resp.status_code == 200
-    assert resp.json["status"] == "error"
+    assert resp.json()["status"] == "error"
 
 
 # ---------------------------------------------------------------------------
 # /test/update
 # ---------------------------------------------------------------------------
 
-def test_admin_update_test(flask_client, admin_group_via_api, admin_test_via_api):
+def test_admin_update_test(api_client, admin_group_via_api, admin_test_via_api):
     payload = {
         "test_id": admin_test_via_api["id"],
         "name": admin_test_via_api["name"] + "_upd",
@@ -197,13 +197,13 @@ def test_admin_update_test(flask_client, admin_group_via_api, admin_test_via_api
         "build_system_url": "http://example.com/job/2",
         "group_id": admin_group_via_api["id"],
     }
-    resp = client_post(flask_client, f"{ADMIN_PREFIX}/test/update", payload)
-    assert resp.status_code == 200, resp.data
-    assert resp.json["status"] == "ok"
+    resp = client_post(api_client, f"{ADMIN_PREFIX}/test/update", payload)
+    assert resp.status_code == 200, resp.content
+    assert resp.json()["status"] == "ok"
 
-    resp = flask_client.get(f"{API_PREFIX}/test/{admin_test_via_api['id']}/details")
+    resp = api_client.get(f"{API_PREFIX}/test/{admin_test_via_api['id']}/details")
     assert resp.status_code == 200
-    body = resp.json
+    body = resp.json()
     assert body["status"] == "ok"
     assert body["response"]["pretty_name"] == "updated-test-pretty"
     assert body["response"]["plugin_name"] == "driver-matrix-tests"
@@ -215,15 +215,15 @@ def test_admin_update_test(flask_client, admin_group_via_api, admin_test_via_api
 # /release/test/state/toggle
 # ---------------------------------------------------------------------------
 
-def test_admin_toggle_test_enabled(flask_client, admin_test_via_api):
+def test_admin_toggle_test_enabled(api_client, admin_test_via_api):
     payload = {"entityId": admin_test_via_api["id"], "state": False}
-    resp = client_post(flask_client, f"{ADMIN_PREFIX}/release/test/state/toggle", payload)
-    assert resp.status_code == 200, resp.data
-    assert resp.json["status"] == "ok"
+    resp = client_post(api_client, f"{ADMIN_PREFIX}/release/test/state/toggle", payload)
+    assert resp.status_code == 200, resp.content
+    assert resp.json()["status"] == "ok"
 
-    resp = flask_client.get(f"{API_PREFIX}/test/{admin_test_via_api['id']}/details")
+    resp = api_client.get(f"{API_PREFIX}/test/{admin_test_via_api['id']}/details")
     assert resp.status_code == 200
-    body = resp.json
+    body = resp.json()
     assert body["status"] == "ok"
     assert body["response"]["enabled"] is False
 
@@ -232,12 +232,11 @@ def test_admin_toggle_test_enabled(flask_client, admin_test_via_api):
 # /test/batch_move
 # ---------------------------------------------------------------------------
 
-def test_admin_batch_move_tests(flask_client, admin_release, admin_group_via_api,
-                                admin_test_via_api):
+def test_admin_batch_move_tests(api_client, admin_release, admin_group_via_api, admin_test_via_api):
     # Create a second group and move the test into it.
     second_group_name = f"adm9_grp2_{time.time_ns()}"
     create_resp = client_post(
-        flask_client,
+        api_client,
         f"{ADMIN_PREFIX}/group/create",
         {
             "group_name": second_group_name,
@@ -246,19 +245,19 @@ def test_admin_batch_move_tests(flask_client, admin_release, admin_group_via_api
             "release_id": str(admin_release.id),
         },
     )
-    assert create_resp.status_code == 200, create_resp.data
-    second_group = create_resp.json["response"]["new_group"]
+    assert create_resp.status_code == 200, create_resp.content
+    second_group = create_resp.json()["response"]["new_group"]
 
     payload = {"new_group_id": second_group["id"], "tests": [admin_test_via_api["id"]]}
-    resp = client_post(flask_client, f"{ADMIN_PREFIX}/test/batch_move", payload)
-    assert resp.status_code == 200, resp.data
-    body = resp.json
+    resp = client_post(api_client, f"{ADMIN_PREFIX}/test/batch_move", payload)
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
     assert body["status"] == "ok"
     assert body["response"]["moved"] is True
 
-    resp = flask_client.get(f"{API_PREFIX}/test/{admin_test_via_api['id']}/details")
+    resp = api_client.get(f"{API_PREFIX}/test/{admin_test_via_api['id']}/details")
     assert resp.status_code == 200
-    body = resp.json
+    body = resp.json()
     assert body["status"] == "ok"
     assert str(body["response"]["group_id"]) == str(second_group["id"])
 
@@ -267,41 +266,39 @@ def test_admin_batch_move_tests(flask_client, admin_release, admin_group_via_api
 # /test/delete + /group/delete
 # ---------------------------------------------------------------------------
 
-def test_admin_delete_test(flask_client, admin_test_via_api):
+def test_admin_delete_test(api_client, admin_test_via_api):
     resp = client_post(
-        flask_client, f"{ADMIN_PREFIX}/test/delete", {"test_id": admin_test_via_api["id"]}
+        api_client, f"{ADMIN_PREFIX}/test/delete", {"test_id": admin_test_via_api["id"]}
     )
-    assert resp.status_code == 200, resp.data
-    body = resp.json
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
     assert body["status"] == "ok"
     assert body["response"]["deleted"] is True
 
-    miss = flask_client.get(f"{API_PREFIX}/test/{admin_test_via_api['id']}/details")
+    miss = api_client.get(f"{API_PREFIX}/test/{admin_test_via_api['id']}/details")
     assert miss.status_code == 200
-    assert miss.json["status"] == "error"
+    assert miss.json()["status"] == "error"
 
 
-def test_admin_delete_group_cascades_tests(flask_client, admin_group_via_api,
-                                           admin_test_via_api):
+def test_admin_delete_group_cascades_tests(api_client, admin_group_via_api, admin_test_via_api):
     payload = {"group_id": admin_group_via_api["id"], "delete_tests": True}
-    resp = client_post(flask_client, f"{ADMIN_PREFIX}/group/delete", payload)
-    assert resp.status_code == 200, resp.data
-    body = resp.json
+    resp = client_post(api_client, f"{ADMIN_PREFIX}/group/delete", payload)
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
     assert body["status"] == "ok"
     assert body["response"]["deleted"] is True
 
-    miss_group = flask_client.get(f"{API_PREFIX}/group/{admin_group_via_api['id']}/details")
-    assert miss_group.json["status"] == "error"
-    miss_test = flask_client.get(f"{API_PREFIX}/test/{admin_test_via_api['id']}/details")
-    assert miss_test.json["status"] == "error"
+    miss_group = api_client.get(f"{API_PREFIX}/group/{admin_group_via_api['id']}/details")
+    assert miss_group.json()["status"] == "error"
+    miss_test = api_client.get(f"{API_PREFIX}/test/{admin_test_via_api['id']}/details")
+    assert miss_test.json()["status"] == "error"
 
 
-def test_admin_delete_group_relocates_tests(flask_client, admin_release, admin_group_via_api,
-                                            admin_test_via_api):
+def test_admin_delete_group_relocates_tests(api_client, admin_release, admin_group_via_api, admin_test_via_api):
     # Create a target group, then delete the source group with delete_tests=False.
     target_name = f"adm9_target_{time.time_ns()}"
     create_resp = client_post(
-        flask_client,
+        api_client,
         f"{ADMIN_PREFIX}/group/create",
         {
             "group_name": target_name,
@@ -310,20 +307,20 @@ def test_admin_delete_group_relocates_tests(flask_client, admin_release, admin_g
             "release_id": str(admin_release.id),
         },
     )
-    target = create_resp.json["response"]["new_group"]
+    target = create_resp.json()["response"]["new_group"]
 
     payload = {
         "group_id": admin_group_via_api["id"],
         "delete_tests": False,
         "new_group_id": target["id"],
     }
-    resp = client_post(flask_client, f"{ADMIN_PREFIX}/group/delete", payload)
-    assert resp.status_code == 200, resp.data
-    assert resp.json["status"] == "ok"
+    resp = client_post(api_client, f"{ADMIN_PREFIX}/group/delete", payload)
+    assert resp.status_code == 200, resp.content
+    assert resp.json()["status"] == "ok"
 
-    resp = flask_client.get(f"{API_PREFIX}/test/{admin_test_via_api['id']}/details")
+    resp = api_client.get(f"{API_PREFIX}/test/{admin_test_via_api['id']}/details")
     assert resp.status_code == 200
-    body = resp.json
+    body = resp.json()
     assert body["status"] == "ok"
     assert str(body["response"]["group_id"]) == str(target["id"])
 
@@ -332,17 +329,17 @@ def test_admin_delete_group_relocates_tests(flask_client, admin_release, admin_g
 # Negative paths
 # ---------------------------------------------------------------------------
 
-def test_admin_delete_test_unknown_id_errors(flask_client):
+def test_admin_delete_test_unknown_id_errors(api_client):
     resp = client_post(
-        flask_client, f"{ADMIN_PREFIX}/test/delete", {"test_id": str(uuid.uuid4())}
+        api_client, f"{ADMIN_PREFIX}/test/delete", {"test_id": str(uuid.uuid4())}
     )
     assert resp.status_code == 200
-    assert resp.json["status"] == "error"
+    assert resp.json()["status"] == "error"
 
 
-def test_admin_create_test_requires_json(flask_client):
-    resp = flask_client.post(
-        f"{ADMIN_PREFIX}/test/create", data="not-json", content_type="text/plain"
+def test_admin_create_test_requires_json(api_client):
+    resp = api_client.post(
+        f"{ADMIN_PREFIX}/test/create", data="not-json", headers={"content-type": "text/plain"}
     )
     assert resp.status_code == 200
-    assert resp.json["status"] == "error"
+    assert resp.json()["status"] == "error"

@@ -51,13 +51,13 @@ class DriverMatrixService:
 
     def submit_driver_result(self, run_id: UUID | str, driver_name: str, driver_type: str, raw_xml: str) -> bool:
         xml_data = base64.decodebytes(bytes(raw_xml, encoding="utf-8"))
-        DriverTestRun.submit_driver_result(UUID(run_id), driver_name, driver_type, xml_data)
+        DriverTestRun.submit_driver_result(UUID(run_id) if isinstance(run_id, str) else run_id, driver_name, driver_type, xml_data)
         return True
 
     def submit_driver_failure(self, run_id: UUID | str, driver_name: str, driver_type: str, failure_reason: str) -> bool:
-        DriverTestRun.submit_driver_failure(UUID(run_id), driver_name, driver_type, failure_reason)
+        DriverTestRun.submit_driver_failure(UUID(run_id) if isinstance(run_id, str) else run_id, driver_name, driver_type, failure_reason)
         return True
 
     def submit_env_info(self, run_id: UUID | str, raw_env: str) -> bool:
-        DriverTestRun.submit_env_info(UUID(run_id), raw_env)
+        DriverTestRun.submit_env_info(UUID(run_id) if isinstance(run_id, str) else run_id, raw_env)
         return True

@@ -3,7 +3,7 @@ import json
 import uuid
 
 import pytest
-from flask import g
+from argus.backend.tests.conftest import g
 
 from coodie.exceptions import DocumentNotFound
 
@@ -37,7 +37,7 @@ def cleanup_plans():
         plan.delete()
 
 
-def _create_plan(flask_client, release, fake_test, name=None, target_version="1.0",
+def _create_plan(api_client, release, fake_test, name=None, target_version="1.0",
                  owner=None, tests=None, groups=None):
     payload = {
         "name": name or f"plan_{uuid.uuid4().hex[:8]}",
@@ -50,21 +50,21 @@ def _create_plan(flask_client, release, fake_test, name=None, target_version="1.
         "groups": [str(gid) for gid in (groups or [])],
         "assignments": {},
     }
-    return flask_client.post("/api/v1/planning/plan/create", json=payload).json
+    return api_client.post("/api/v1/planning/plan/create", json=payload).json()
 
 
-def test_version(flask_client):
-    res = flask_client.get("/api/v1/planning/").json
+def test_version(api_client):
+    res = api_client.get("/api/v1/planning/").json()
     assert res["status"] == "ok"
     assert res["response"] == "v1"
 
 
-def test_create_plan_success(flask_client, release, fake_test, cleanup_plans):
-    res = _create_plan(flask_client, release, fake_test)
+def test_create_plan_success(api_client, release, fake_test, cleanup_plans):
+    res = _create_plan(api_client, release, fake_test)
     assert res["status"] == "ok"
     plan_id = res["response"]["id"]
 
-    fetched = flask_client.get(f"/api/v1/planning/plan/{plan_id}/get").json
+    fetched = api_client.get(f"/api/v1/planning/plan/{plan_id}/get").json()
     assert fetched["status"] == "ok"
     body = fetched["response"]
     assert body["release_id"] == str(release.id)
@@ -73,32 +73,32 @@ def test_create_plan_success(flask_client, release, fake_test, cleanup_plans):
     assert body["view_id"]  # Auto-created view
 
 
-def test_create_plan_duplicate_name_version_errors(flask_client, release, fake_test, cleanup_plans):
+def test_create_plan_duplicate_name_version_errors(api_client, release, fake_test, cleanup_plans):
     name = f"plan_{uuid.uuid4().hex[:8]}"
-    first = _create_plan(flask_client, release, fake_test, name=name, target_version="2.0")
+    first = _create_plan(api_client, release, fake_test, name=name, target_version="2.0")
     assert first["status"] == "ok"
-    dup = _create_plan(flask_client, release, fake_test, name=name, target_version="2.0")
+    dup = _create_plan(api_client, release, fake_test, name=name, target_version="2.0")
     assert dup["status"] == "error"
     assert "existing plan" in dup["response"]["arguments"][0]
 
 
-def test_get_plan_unknown_id_errors(flask_client):
-    res = flask_client.get(f"/api/v1/planning/plan/{uuid.uuid1()}/get").json
+def test_get_plan_unknown_id_errors(api_client):
+    res = api_client.get(f"/api/v1/planning/plan/{uuid.uuid1()}/get").json()
     assert res["status"] == "error"
     assert res["response"]["exception"] == "DocumentNotFound"
 
 
-def test_plans_for_release(flask_client, release, fake_test, cleanup_plans):
-    a = _create_plan(flask_client, release, fake_test, target_version="3.1")["response"]["id"]
-    b = _create_plan(flask_client, release, fake_test, target_version="3.2")["response"]["id"]
-    res = flask_client.get(f"/api/v1/planning/release/{release.id}/all").json
+def test_plans_for_release(api_client, release, fake_test, cleanup_plans):
+    a = _create_plan(api_client, release, fake_test, target_version="3.1")["response"]["id"]
+    b = _create_plan(api_client, release, fake_test, target_version="3.2")["response"]["id"]
+    res = api_client.get(f"/api/v1/planning/release/{release.id}/all").json()
     assert res["status"] == "ok"
     ids = {p["id"] for p in res["response"]}
     assert {a, b}.issubset(ids)
 
 
-def test_update_plan(flask_client, release, fake_test, cleanup_plans):
-    created = _create_plan(flask_client, release, fake_test)["response"]
+def test_update_plan(api_client, release, fake_test, cleanup_plans):
+    created = _create_plan(api_client, release, fake_test)["response"]
     plan_id = created["id"]
 
     # update_plan takes a diff-based payload (PlanDiffPayload): only changed
@@ -108,61 +108,61 @@ def test_update_plan(flask_client, release, fake_test, cleanup_plans):
         "description": "updated description",
         "target_version": "9.9",
     }
-    res = flask_client.post("/api/v1/planning/plan/update", json=update_payload).json
+    res = api_client.post("/api/v1/planning/plan/update", json=update_payload).json()
     assert res["status"] == "ok"
     assert res["response"] is True
 
-    fetched = flask_client.get(f"/api/v1/planning/plan/{plan_id}/get").json["response"]
+    fetched = api_client.get(f"/api/v1/planning/plan/{plan_id}/get").json()["response"]
     assert fetched["description"] == "updated description"
     assert fetched["target_version"] == "9.9"
 
 
-def test_change_plan_owner(flask_client, release, fake_test, planner_user, cleanup_plans):
-    plan_id = _create_plan(flask_client, release, fake_test)["response"]["id"]
-    res = flask_client.post(
+def test_change_plan_owner(api_client, release, fake_test, planner_user, cleanup_plans):
+    plan_id = _create_plan(api_client, release, fake_test)["response"]["id"]
+    res = api_client.post(
         f"/api/v1/planning/plan/{plan_id}/owner/set",
         json={"newOwner": str(planner_user.id)},
-    ).json
+    ).json()
     assert res["status"] == "ok"
-    fetched = flask_client.get(f"/api/v1/planning/plan/{plan_id}/get").json["response"]
+    fetched = api_client.get(f"/api/v1/planning/plan/{plan_id}/get").json()["response"]
     assert fetched["owner"] == str(planner_user.id)
 
 
-def test_resolve_plan_entities(flask_client, release, fake_test, cleanup_plans):
-    plan_id = _create_plan(flask_client, release, fake_test)["response"]["id"]
-    res = flask_client.get(f"/api/v1/planning/plan/{plan_id}/resolve_entities").json
+def test_resolve_plan_entities(api_client, release, fake_test, cleanup_plans):
+    plan_id = _create_plan(api_client, release, fake_test)["response"]["id"]
+    res = api_client.get(f"/api/v1/planning/plan/{plan_id}/resolve_entities").json()
     assert res["status"] == "ok"
     test_ids = {item.get("id") for item in res["response"]}
     assert str(fake_test.id) in test_ids
 
 
-def test_delete_plan_removes_view(flask_client, release, fake_test, cleanup_plans):
-    created = _create_plan(flask_client, release, fake_test)["response"]
+def test_delete_plan_removes_view(api_client, release, fake_test, cleanup_plans):
+    created = _create_plan(api_client, release, fake_test)["response"]
     plan_id = created["id"]
     view_id = created["view_id"]
-    res = flask_client.delete(f"/api/v1/planning/plan/{plan_id}/delete?deleteView=1").json
+    res = api_client.delete(f"/api/v1/planning/plan/{plan_id}/delete?deleteView=1").json()
     assert res["status"] == "ok"
     assert res["response"] is True
 
-    after = flask_client.get(f"/api/v1/planning/plan/{plan_id}/get").json
+    after = api_client.get(f"/api/v1/planning/plan/{plan_id}/get").json()
     assert after["status"] == "error"
-    view_after = flask_client.get(f"/api/v1/views/get?viewId={view_id}").json
+    view_after = api_client.get(f"/api/v1/views/get?viewId={view_id}").json()
     assert view_after["status"] == "error"
 
 
-def test_delete_plan_keeps_view(flask_client, release, fake_test, cleanup_plans):
-    created = _create_plan(flask_client, release, fake_test)["response"]
+def test_delete_plan_keeps_view(api_client, release, fake_test, cleanup_plans):
+    created = _create_plan(api_client, release, fake_test)["response"]
     plan_id = created["id"]
     view_id = created["view_id"]
-    res = flask_client.delete(f"/api/v1/planning/plan/{plan_id}/delete?deleteView=0").json
+    res = api_client.delete(f"/api/v1/planning/plan/{plan_id}/delete?deleteView=0").json()
     assert res["status"] == "ok"
-    view_after = flask_client.get(f"/api/v1/views/get?viewId={view_id}").json
+    view_after = api_client.get(f"/api/v1/views/get?viewId={view_id}").json()
     assert view_after["status"] == "ok"
     assert view_after["response"]["plan_id"] is None
 
 
-def test_grid_view_for_release(flask_client, release, group, fake_test):
-    res = flask_client.get(f"/api/v1/planning/release/{release.id}/gridview").json
+def test_grid_view_for_release(api_client, release, group, fake_test):
+    res = api_client.get(f"/api/v1/planning/release/{release.id}/gridview").json()
     assert res["status"] == "ok"
     body = res["response"]
     assert str(group.id) in body["groups"]
@@ -170,46 +170,46 @@ def test_grid_view_for_release(flask_client, release, group, fake_test):
     assert body["tests"][str(fake_test.id)]["release"] == release.name
 
 
-def test_search_no_query_returns_empty(flask_client):
-    res = flask_client.get("/api/v1/planning/search").json
+def test_search_no_query_returns_empty(api_client):
+    res = api_client.get("/api/v1/planning/search").json()
     assert res["status"] == "ok"
     assert res["response"] == {"hits": [], "total": 0}
 
 
-def test_search_finds_test_name(flask_client, release, fake_test):
-    res = flask_client.get(
+def test_search_finds_test_name(api_client, release, fake_test):
+    res = api_client.get(
         f"/api/v1/planning/search?query={fake_test.name}&releaseId={release.id}"
-    ).json
+    ).json()
     assert res["status"] == "ok"
     names = {h.get("name") for h in res["response"]["hits"]}
     assert fake_test.name in names
 
 
-def test_explode_group(flask_client, group, fake_test):
-    res = flask_client.get(f"/api/v1/planning/group/{group.id}/explode").json
+def test_explode_group(api_client, group, fake_test):
+    res = api_client.get(f"/api/v1/planning/group/{group.id}/explode").json()
     assert res["status"] == "ok"
     test_ids = {str(t["id"]) for t in res["response"]}
     assert str(fake_test.id) in test_ids
 
 
-def test_check_plan_copy_eligibility_missing_release_id_errors(flask_client, release, fake_test, cleanup_plans):
-    plan_id = _create_plan(flask_client, release, fake_test)["response"]["id"]
-    res = flask_client.get(f"/api/v1/planning/plan/{plan_id}/copy/check").json
+def test_check_plan_copy_eligibility_missing_release_id_errors(api_client, release, fake_test, cleanup_plans):
+    plan_id = _create_plan(api_client, release, fake_test)["response"]["id"]
+    res = api_client.get(f"/api/v1/planning/plan/{plan_id}/copy/check").json()
     assert res["status"] == "error"
-    assert "Missing release id" in res["response"]["arguments"][0]
+    assert res["response"]["exception"] == "RequestValidationError"
 
 
 def test_check_plan_copy_eligibility_returns_failed_for_missing_tests(
-    flask_client, release_manager_service, release, fake_test, cleanup_plans
+    api_client, release_manager_service, release, fake_test, cleanup_plans
 ):
-    plan_id = _create_plan(flask_client, release, fake_test)["response"]["id"]
+    plan_id = _create_plan(api_client, release, fake_test)["response"]["id"]
     # Create empty target release with no tests => copy will be missing
     target_release = release_manager_service.create_release(
         f"target_rel_{uuid.uuid4().hex[:8]}", "Target", False
     )
-    res = flask_client.get(
+    res = api_client.get(
         f"/api/v1/planning/plan/{plan_id}/copy/check?releaseId={target_release.id}"
-    ).json
+    ).json()
     assert res["status"] == "ok"
     assert res["response"]["status"] == "failed"
     missing_test_ids = {t.get("id") for t in res["response"]["missing"]["tests"]}
@@ -217,7 +217,7 @@ def test_check_plan_copy_eligibility_returns_failed_for_missing_tests(
 
 
 def test_copy_plan_creates_plan_in_target_release(
-    flask_client, release_manager_service, release, fake_test, cleanup_plans
+    api_client, release_manager_service, release, fake_test, cleanup_plans
 ):
     """Copy a plan into a target release and verify via paired GET.
 
@@ -240,9 +240,9 @@ def test_copy_plan_creates_plan_in_target_release(
         "groups": [],
         "assignments": {},
     }
-    plan_id = flask_client.post(
+    plan_id = api_client.post(
         "/api/v1/planning/plan/create", json=source_payload
-    ).json["response"]["id"]
+    ).json()["response"]["id"]
     # copy_plan resolves the source plan by its real key/id; the service mints a
     # fresh key for the copy, so the payload key is echoed back from the source.
     source_key = ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).key
@@ -277,12 +277,12 @@ def test_copy_plan_creates_plan_in_target_release(
         "targetReleaseId": str(target_release.id),
         "targetReleaseName": target_release.name,
     }
-    res = flask_client.post("/api/v1/planning/plan/copy", json=payload).json
+    res = api_client.post("/api/v1/planning/plan/copy", json=payload).json()
     assert res["status"] == "ok", res
     new_plan_id = res["response"]["id"]
     assert new_plan_id != plan_id
 
-    fetched = flask_client.get(f"/api/v1/planning/plan/{new_plan_id}/get").json
+    fetched = api_client.get(f"/api/v1/planning/plan/{new_plan_id}/get").json()
     assert fetched["status"] == "ok"
     body = fetched["response"]
     assert body["release_id"] == str(target_release.id)
@@ -293,7 +293,7 @@ def test_copy_plan_creates_plan_in_target_release(
 
 
 def test_create_plan_generates_sequential_keys_per_release(
-    flask_client, release_manager_service, fake_test, cleanup_plans
+    api_client, release_manager_service, fake_test, cleanup_plans
 ):
     """create_plan auto-assigns human-readable keys (``<release.name>#N``) that
     increment per release. A fresh release is used so the counter starts at 1
@@ -303,15 +303,15 @@ def test_create_plan_generates_sequential_keys_per_release(
         f"keyrel_{uuid.uuid4().hex[:8]}", "Key Release", False
     )
 
-    first_id = _create_plan(flask_client, rel, fake_test, tests=[])["response"]["id"]
-    second_id = _create_plan(flask_client, rel, fake_test, tests=[])["response"]["id"]
+    first_id = _create_plan(api_client, rel, fake_test, tests=[])["response"]["id"]
+    second_id = _create_plan(api_client, rel, fake_test, tests=[])["response"]["id"]
 
     assert ArgusReleasePlan.get(id=uuid.UUID(str(first_id))).key == f"{rel.name}#1"
     assert ArgusReleasePlan.get(id=uuid.UUID(str(second_id))).key == f"{rel.name}#2"
 
 
 def test_copy_plan_generates_fresh_key_for_target_release(
-    flask_client, release_manager_service, release, fake_test, cleanup_plans
+    api_client, release_manager_service, release, fake_test, cleanup_plans
 ):
     """copy_plan mints a new key scoped to the target release rather than
     carrying over the source plan's key (the payload key is ignored)."""
@@ -326,9 +326,9 @@ def test_copy_plan_generates_fresh_key_for_target_release(
         "groups": [],
         "assignments": {},
     }
-    src_id = flask_client.post(
+    src_id = api_client.post(
         "/api/v1/planning/plan/create", json=source_payload
-    ).json["response"]["id"]
+    ).json()["response"]["id"]
     src_key = ArgusReleasePlan.get(id=uuid.UUID(str(src_id))).key
 
     target_release = release_manager_service.create_release(
@@ -359,7 +359,7 @@ def test_copy_plan_generates_fresh_key_for_target_release(
         "targetReleaseId": str(target_release.id),
         "targetReleaseName": target_release.name,
     }
-    res = flask_client.post("/api/v1/planning/plan/copy", json=payload).json
+    res = api_client.post("/api/v1/planning/plan/copy", json=payload).json()
     assert res["status"] == "ok", res
 
     new_key = ArgusReleasePlan.get(id=uuid.UUID(str(res["response"]["id"]))).key
@@ -368,7 +368,7 @@ def test_copy_plan_generates_fresh_key_for_target_release(
 
 
 def test_update_plan_resolves_source_by_key(
-    flask_client, release_manager_service, fake_test, cleanup_plans
+    api_client, release_manager_service, fake_test, cleanup_plans
 ):
     """A plan's key is an alternate identifier: update_plan resolves the target
     by key when the diff payload's ``id`` carries the key string instead of the
@@ -376,13 +376,13 @@ def test_update_plan_resolves_source_by_key(
     rel = release_manager_service.create_release(
         f"reskey_{uuid.uuid4().hex[:8]}", "Resolve Key Release", False
     )
-    plan_id = _create_plan(flask_client, rel, fake_test, tests=[])["response"]["id"]
+    plan_id = _create_plan(api_client, rel, fake_test, tests=[])["response"]["id"]
     plan_key = ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).key
 
-    res = flask_client.post(
+    res = api_client.post(
         "/api/v1/planning/plan/update",
         json={"id": plan_key, "description": "updated via key"},
-    ).json
+    ).json()
     assert res["status"] == "ok"
     assert res["response"] is True
 
@@ -390,19 +390,19 @@ def test_update_plan_resolves_source_by_key(
 
 
 def test_update_plan_leaves_omitted_scalars_unchanged(
-    flask_client, release, fake_test, cleanup_plans
+    api_client, release, fake_test, cleanup_plans
 ):
     """PlanDiffPayload scalars are Optional[...] = None: only fields present in
     the payload are applied, the rest are left untouched (last-edit-wins)."""
-    created = _create_plan(flask_client, release, fake_test, target_version="7.7")["response"]
+    created = _create_plan(api_client, release, fake_test, target_version="7.7")["response"]
     plan_id = created["id"]
     original = ArgusReleasePlan.get(id=uuid.UUID(str(plan_id)))
     orig_name, orig_owner = original.name, original.owner
 
-    res = flask_client.post(
+    res = api_client.post(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "description": "only desc changed"},
-    ).json
+    ).json()
     assert res["status"] == "ok"
 
     updated = ArgusReleasePlan.get(id=uuid.UUID(str(plan_id)))
@@ -412,12 +412,12 @@ def test_update_plan_leaves_omitted_scalars_unchanged(
     assert updated.target_version == "7.7"
 
 
-def test_update_plan_toggles_completed(flask_client, release, fake_test, cleanup_plans):
+def test_update_plan_toggles_completed(api_client, release, fake_test, cleanup_plans):
     """The ``completed`` scalar diff flips the plan's boolean flag."""
-    plan_id = _create_plan(flask_client, release, fake_test)["response"]["id"]
+    plan_id = _create_plan(api_client, release, fake_test)["response"]["id"]
     assert ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).completed is False
 
-    flask_client.post(
+    api_client.post(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "completed": True},
     )
@@ -425,7 +425,7 @@ def test_update_plan_toggles_completed(flask_client, release, fake_test, cleanup
 
 
 def test_update_plan_adds_and_removes_tests(
-    flask_client, release_manager_service, group, release, fake_test, cleanup_plans
+    api_client, release_manager_service, group, release, fake_test, cleanup_plans
 ):
     """tests_add / tests_remove diffs mutate the plan's test list (remove wins)."""
     second_test = release_manager_service.create_test(
@@ -434,15 +434,15 @@ def test_update_plan_adds_and_removes_tests(
         group_id=str(group.id), release_id=str(release.id),
         plugin_name="scylla-cluster-tests",
     )
-    plan_id = _create_plan(flask_client, release, fake_test)["response"]["id"]
+    plan_id = _create_plan(api_client, release, fake_test)["response"]["id"]
 
-    flask_client.post(
+    api_client.post(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "tests_add": [str(second_test.id)]},
     )
     assert set(ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).tests) == {fake_test.id, second_test.id}
 
-    flask_client.post(
+    api_client.post(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "tests_remove": [str(fake_test.id)]},
     )
@@ -450,12 +450,12 @@ def test_update_plan_adds_and_removes_tests(
 
 
 def test_update_plan_add_tests_is_idempotent(
-    flask_client, release, fake_test, cleanup_plans
+    api_client, release, fake_test, cleanup_plans
 ):
     """Re-adding a test already in the plan is a no-op (no duplicate entry)."""
-    plan_id = _create_plan(flask_client, release, fake_test)["response"]["id"]
+    plan_id = _create_plan(api_client, release, fake_test)["response"]["id"]
 
-    flask_client.post(
+    api_client.post(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "tests_add": [str(fake_test.id)]},
     )
@@ -463,22 +463,22 @@ def test_update_plan_add_tests_is_idempotent(
 
 
 def test_update_plan_adds_and_removes_groups(
-    flask_client, release_manager_service, release, fake_test, cleanup_plans
+    api_client, release_manager_service, release, fake_test, cleanup_plans
 ):
     """groups_add / groups_remove diffs mutate the plan's group list."""
     new_group = release_manager_service.create_group(
         f"g2_{uuid.uuid4().hex[:8]}", "Second Group",
         build_system_id=f"gbsid_{uuid.uuid4().hex[:8]}", release_id=str(release.id),
     )
-    plan_id = _create_plan(flask_client, release, fake_test, groups=[])["response"]["id"]
+    plan_id = _create_plan(api_client, release, fake_test, groups=[])["response"]["id"]
 
-    flask_client.post(
+    api_client.post(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "groups_add": [str(new_group.id)]},
     )
     assert set(ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).groups) == {new_group.id}
 
-    flask_client.post(
+    api_client.post(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "groups_remove": [str(new_group.id)]},
     )
@@ -486,19 +486,19 @@ def test_update_plan_adds_and_removes_groups(
 
 
 def test_update_plan_adds_and_removes_participants(
-    flask_client, release, fake_test, cleanup_plans
+    api_client, release, fake_test, cleanup_plans
 ):
     """participants_add / participants_remove diffs mutate the participant list."""
-    plan_id = _create_plan(flask_client, release, fake_test)["response"]["id"]
+    plan_id = _create_plan(api_client, release, fake_test)["response"]["id"]
     p1, p2 = str(uuid.uuid4()), str(uuid.uuid4())
 
-    flask_client.post(
+    api_client.post(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "participants_add": [p1, p2]},
     )
     assert set(ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).participants) == {uuid.UUID(p1), uuid.UUID(p2)}
 
-    flask_client.post(
+    api_client.post(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "participants_remove": [p1]},
     )
@@ -506,19 +506,19 @@ def test_update_plan_adds_and_removes_participants(
 
 
 def test_update_plan_sets_and_removes_assignee_mapping(
-    flask_client, planner_user, release, fake_test, cleanup_plans
+    api_client, planner_user, release, fake_test, cleanup_plans
 ):
     """assignee_mapping_set / assignee_mapping_remove diffs mutate the per-entity
     assignee map (entity must be a member of the plan)."""
-    plan_id = _create_plan(flask_client, release, fake_test)["response"]["id"]
+    plan_id = _create_plan(api_client, release, fake_test)["response"]["id"]
 
-    flask_client.post(
+    api_client.post(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "assignee_mapping_set": {str(fake_test.id): str(planner_user.id)}},
     )
     assert ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).assignee_mapping == {fake_test.id: planner_user.id}
 
-    flask_client.post(
+    api_client.post(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "assignee_mapping_remove": [str(fake_test.id)]},
     )
@@ -526,51 +526,51 @@ def test_update_plan_sets_and_removes_assignee_mapping(
 
 
 def test_update_plan_prunes_assignee_mapping_for_removed_test(
-    flask_client, planner_user, release, fake_test, cleanup_plans
+    api_client, planner_user, release, fake_test, cleanup_plans
 ):
     """Removing a test from the plan also drops its assignee_mapping entry."""
-    plan_id = _create_plan(flask_client, release, fake_test)["response"]["id"]
-    flask_client.post(
+    plan_id = _create_plan(api_client, release, fake_test)["response"]["id"]
+    api_client.post(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "assignee_mapping_set": {str(fake_test.id): str(planner_user.id)}},
     )
     assert ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).assignee_mapping == {fake_test.id: planner_user.id}
 
-    flask_client.post(
+    api_client.post(
         "/api/v1/planning/plan/update",
         json={"id": plan_id, "tests_remove": [str(fake_test.id)]},
     )
     assert ArgusReleasePlan.get(id=uuid.UUID(str(plan_id))).assignee_mapping == {}
 
 
-def test_trigger_jobs_no_plans_returns_falsy(flask_client, mock_jenkins_service):
+def test_trigger_jobs_no_plans_returns_falsy(api_client, mock_jenkins_service):
     """No matching plans => service returns (False, 'No plans to trigger')."""
     from cassandra.util import uuid_from_time
-    res = flask_client.post(
+    res = api_client.post(
         "/api/v1/planning/plan/trigger",
         json={
             "plan_id": str(uuid_from_time(datetime.datetime.now(tz=datetime.UTC))),
             "common_params": {},
             "params": [],
         },
-    ).json
+    ).json()
     assert res["status"] == "ok"
     # Service returns a tuple (False, "No plans to trigger") which Flask
     # serializes as a 2-element list.
     assert res["response"] == [False, "No plans to trigger"]
 
 
-def test_trigger_jobs_missing_filters_errors(flask_client, mock_jenkins_service):
+def test_trigger_jobs_missing_filters_errors(api_client, mock_jenkins_service):
     """Without release/plan_id/version the service raises PlannerServiceException."""
-    res = flask_client.post(
+    res = api_client.post(
         "/api/v1/planning/plan/trigger",
         json={"common_params": {}, "params": []},
-    ).json
+    ).json()
     assert res["status"] == "error"
 
 
 def test_trigger_jobs_for_plan_with_no_tests(
-    flask_client, release, fake_test, cleanup_plans, mock_jenkins_service
+    api_client, release, fake_test, cleanup_plans, mock_jenkins_service
 ):
     """Triggering a plan whose tests list is empty returns empty jobs/failures."""
     # Create a plan with NO tests/groups so the trigger loop has nothing to do
@@ -585,14 +585,14 @@ def test_trigger_jobs_for_plan_with_no_tests(
         "groups": [],
         "assignments": {},
     }
-    plan_id = flask_client.post(
+    plan_id = api_client.post(
         "/api/v1/planning/plan/create", json=payload
-    ).json["response"]["id"]
+    ).json()["response"]["id"]
 
-    res = flask_client.post(
+    res = api_client.post(
         "/api/v1/planning/plan/trigger",
         json={"plan_id": plan_id, "common_params": {}, "params": []},
-    ).json
+    ).json()
     assert res["status"] == "ok"
     body = res["response"]
     assert body["jobs"] == []

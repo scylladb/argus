@@ -1,129 +1,137 @@
 import logging
 from uuid import UUID
-from flask import (
-    Blueprint,
-    request
-)
-from argus.backend.error_handlers import handle_api_exception
+
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+
 from argus.backend.models.web import User
 from argus.backend.service.argus_service import ArgusService
-from argus.backend.service.user import api_login_required
-from argus.backend.util.common import get_payload
 from argus.backend.service.team_manager_service import TeamManagerService
+from argus.backend.service.user import api_current_user
+from argus.backend.util.encoders import ArgusJSONResponse
 
-bp = Blueprint('team_api', __name__, url_prefix='/team')
 LOGGER = logging.getLogger(__name__)
-bp.register_error_handler(Exception, handle_api_exception)
+
+router = APIRouter(prefix="/team")
 
 
-@bp.route("/create", methods=["POST"])
-@api_login_required
-def team_create():
-    payload = get_payload(request)
+class TeamCreateRequest(BaseModel):
+    name: str
+    leader: UUID
+    members: list[UUID]
+
+
+class TeamEditRequest(BaseModel):
+    id: UUID
+    name: str
+    members: list[UUID]
+
+
+class TeamMotdEditRequest(BaseModel):
+    id: UUID
+    motd: str
+
+
+@router.post("/create", name="api.team_api.team_create")
+def team_create(payload: TeamCreateRequest, user: User = Depends(api_current_user)):
     result = TeamManagerService().create_team(
-        name=payload["name"],
-        leader=UUID(payload["leader"]),
-        members=[UUID(m) for m in payload["members"]],
+        name=payload.name,
+        leader=payload.leader,
+        members=payload.members,
     )
 
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/<string:team_id>/get")
-@api_login_required
-def team_get(team_id: str):
-    result = TeamManagerService().get_team_by_id(UUID(team_id))
+@router.get("/{team_id}/get", name="api.team_api.team_get")
+def team_get(team_id: UUID, user: User = Depends(api_current_user)):
+    result = TeamManagerService().get_team_by_id(team_id)
 
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/<string:team_id>/delete", methods=["DELETE"])
-@api_login_required
-def team_delete(team_id: str):
-    TeamManagerService().delete_team(UUID(team_id))
+@router.delete("/{team_id}/delete", name="api.team_api.team_delete")
+def team_delete(team_id: UUID, user: User = Depends(api_current_user)):
+    TeamManagerService().delete_team(team_id, user)
 
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": {
-            "team_id": team_id,
+            "team_id": str(team_id),
             "status": "deleted",
         }
-    }
+    })
 
 
-@bp.route("/<string:team_id>/edit", methods=["POST"])
-@api_login_required
-def team_edit(team_id: str):
-    payload = get_payload(request)
+@router.post("/{team_id}/edit", name="api.team_api.team_edit")
+def team_edit(team_id: UUID, payload: TeamEditRequest, user: User = Depends(api_current_user)):
     team = TeamManagerService().edit_team(
-        team_id=UUID(payload["id"]),
-        name=payload["name"],
-        members=[UUID(m) for m in payload["members"]],
+        team_id=payload.id,
+        name=payload.name,
+        members=payload.members,
+        user=user,
     )
 
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": {
-            "team_id": team_id,
+            "team_id": str(team_id),
             "status": "updated",
             "team": team,
         }
-    }
+    })
 
 
-@bp.route("/<string:team_id>/motd/edit", methods=["POST"])
-@api_login_required
-def team_edit_motd(team_id: str):
-    payload = get_payload(request)
+@router.post("/{team_id}/motd/edit", name="api.team_api.team_edit_motd")
+def team_edit_motd(team_id: UUID, payload: TeamMotdEditRequest,
+                   user: User = Depends(api_current_user)):
     TeamManagerService().edit_team_motd(
-        team_id=UUID(payload["id"]),
-        message=payload["motd"],
+        team_id=payload.id,
+        message=payload.motd,
+        user=user,
     )
 
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": {
-            "team_id": team_id,
+            "team_id": str(team_id),
             "status": "updated",
         }
-    }
+    })
 
 
-@bp.route("/user/<string:user_id>/teams")
-@api_login_required
-def user_teams(user_id: str):
-    result = TeamManagerService().get_users_teams(user_id=UUID(user_id))
+@router.get("/user/{user_id}/teams", name="api.team_api.user_teams")
+def user_teams(user_id: UUID, user: User = Depends(api_current_user)):
+    result = TeamManagerService().get_users_teams(user_id=user_id)
 
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/user/<string:user_id>/jobs")
-@api_login_required
-def user_jobs(user_id: str):
-    user = User.get(id=UUID(user_id))
-    result = list(ArgusService().get_jobs_for_user(user))
+@router.get("/user/{user_id}/jobs", name="api.team_api.user_jobs")
+def user_jobs(user_id: UUID, user: User = Depends(api_current_user)):
+    target = User.get(id=user_id)
+    result = list(ArgusService().get_jobs_for_user(target))
 
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
 
 
-@bp.route("/leader/<string:user_id>/teams")
-@api_login_required
-def leader_teams(user_id: str):
-    result = TeamManagerService().get_teams_for_user(user_id=UUID(user_id))
+@router.get("/leader/{user_id}/teams", name="api.team_api.leader_teams")
+def leader_teams(user_id: UUID, user: User = Depends(api_current_user)):
+    result = TeamManagerService().get_teams_for_user(user_id=user_id)
 
-    return {
+    return ArgusJSONResponse({
         "status": "ok",
         "response": result
-    }
+    })
