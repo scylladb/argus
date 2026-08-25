@@ -41,12 +41,12 @@ LOGGER = logging.getLogger(__name__)
 def app_version():
     service = ArgusService()
     argus_version = service.get_version()
-    return jsonify({
+    return {
         "status": "ok",
         "response": {
             "commit_id": argus_version
         }
-    })
+    }
 
 
 @bp.route("/test/<path:build_id>/<int:build_number>")
@@ -73,12 +73,10 @@ def releases():
     service = ArgusService()
     force_all = request.args.get("all", False)
     all_releases = service.get_releases()
-    response = jsonify({
+    return {
         "status": "ok",
         "response": [d.model_dump() for d in all_releases if d.enabled or force_all]
-    })
-
-    return response
+    }
 
 
 @bp.route("/release/activity", methods=["GET"])
@@ -90,10 +88,10 @@ def release_activity():
     service = ArgusService()
     activity_data = service.fetch_release_activity(release_name)
 
-    return jsonify({
+    return {
         "status": "ok",
         "response": activity_data
-    })
+    }
 
 
 @bp.route("/release/planner/data", methods=["GET"])
@@ -105,10 +103,10 @@ def release_planner_data():
         raise Exception("Release Id not specified")
     service = ArgusService()
     planner_data = service.get_planner_data(release_id)
-    return jsonify({
+    return {
         "status": "ok",
         "response": planner_data
-    })
+    }
 
 
 @bp.route("/release/<string:release_id>/versions")
@@ -118,10 +116,10 @@ def release_versions(release_id: str):
     service = ArgusService()
     distinct_versions = service.get_distinct_release_versions(release_id=release_id)
 
-    return jsonify({
+    return {
         "status": "ok",
         "response": distinct_versions
-    })
+    }
 
 
 @bp.route("/release/<string:release_id>/pytest/results")
@@ -131,10 +129,10 @@ def release_pytest_results(release_id: str):
     service = TestRunService()
     res = service.get_pytest_release_results(release_id=release_id)
 
-    return jsonify({
+    return {
         "status": "ok",
         "response": res
-    })
+    }
 
 
 @bp.route("/release/<string:release_id>/images")
@@ -144,10 +142,10 @@ def release_images(release_id: str):
     service = ArgusService()
     distinct_images = service.get_distinct_release_images(release_id=release_id)
 
-    return jsonify({
+    return {
         "status": "ok",
         "response": distinct_images
-    })
+    }
 
 
 @bp.route("/release/planner/comment/get/test")
@@ -176,10 +174,10 @@ def release_schedules_comment_update():
     service = ArgusService()
     comment_update_result = service.update_schedule_comment(request_payload)
 
-    return jsonify({
+    return {
         "status": "ok",
         "response": comment_update_result
-    })
+    }
 
 
 @bp.route("/release/schedules", methods=["GET"])
@@ -191,10 +189,10 @@ def release_schedules():
     service = ArgusService()
     release_schedules_data = service.get_schedules_for_release(release)
 
-    return jsonify({
+    return {
         "status": "ok",
         "response": release_schedules_data
-    })
+    }
 
 
 @bp.route("/release/schedules/assignee/update", methods=["POST"])
@@ -207,10 +205,10 @@ def release_schedules_assignee_update():
     service = ArgusService()
     assignee_update_status = service.update_schedule_assignees(request_payload)
 
-    return jsonify({
+    return {
         "status": "ok",
         "response": assignee_update_status
-    })
+    }
 
 
 @bp.route("/release/assignees/groups", methods=["GET"])
@@ -224,10 +222,10 @@ def group_assignees():
     service = ArgusService()
     group_assignees_list = service.get_groups_assignees(release_id, version, plan_id)
 
-    return jsonify({
+    return {
         "status": "ok",
         "response": group_assignees_list
-    })
+    }
 
 
 @bp.route("/release/assignees/tests", methods=["GET"])
@@ -241,10 +239,10 @@ def tests_assignees():
     service = ArgusService()
     tests_assignees_list = service.get_tests_assignees(group_id, version, plan_id)
 
-    return jsonify({
+    return {
         "status": "ok",
         "response": tests_assignees_list
-    })
+    }
 
 
 @bp.route("/release/schedules/submit", methods=["POST"])
@@ -267,10 +265,10 @@ def release_schedules_submit():
         group_ids=payload.get("groupIds"),
     )
 
-    return jsonify({
+    return {
         "status": "ok",
         "response": schedule_submit_result
-    })
+    }
 
 
 @bp.route("/release/schedules/delete", methods=["POST"])
@@ -283,10 +281,10 @@ def release_schedules_delete():
     service = ArgusService()
     schedule_delete_result = service.delete_schedule(request_payload)
 
-    return jsonify({
+    return {
         "status": "ok",
         "response": schedule_delete_result
-    })
+    }
 
 
 @bp.route("/release/schedules/update", methods=["POST"])
@@ -304,10 +302,10 @@ def release_schedule_update():
         assignee=req.assignee
     )
 
-    return jsonify({
+    return {
         "status": "ok",
         "response": update_result
-    })
+    }
 
 
 @bp.route("/groups", methods=["GET"])
@@ -322,10 +320,10 @@ def argus_groups():
     groups = service.get_groups(UUID(release_id))
     result_groups = [g.model_dump() for g in groups if g.enabled or force_all]
 
-    return jsonify({
+    return {
         "status": "ok",
         "response": result_groups
-    })
+    }
 
 
 @bp.route("/tests", methods=["GET"])
@@ -339,40 +337,40 @@ def argus_tests():
     tests = service.get_tests(group_id=UUID(group_id))
     result_tests = [t.model_dump() for t in tests if t.enabled or force_all]
 
-    return jsonify({
+    return {
         "status": "ok",
         "response": result_tests
-    })
+    }
 
 
 @bp.route("/release/<string:release_id>/details", methods=["GET"])
 @api_login_required
 def get_release_details(release_id: str):
     release = ArgusRelease.get(id=UUID(release_id))
-    return jsonify({
+    return {
         "status": "ok",
         "response": release,
-    })
+    }
 
 
 @bp.route("/group/<string:group_id>/details", methods=["GET"])
 @api_login_required
 def get_group_details(group_id: str):
     group = ArgusGroup.get(id=UUID(group_id))
-    return jsonify({
+    return {
         "status": "ok",
         "response": group,
-    })
+    }
 
 
 @bp.route("/test/<string:test_id>/details", methods=["GET"])
 @api_login_required
 def get_test_details(test_id: str):
     test = ArgusTest.get(id=UUID(test_id))
-    return jsonify({
+    return {
         "status": "ok",
         "response": test
-    })
+    }
 
 
 @bp.route("/test/<string:test_id>/set_plugin", methods=["POST"])
@@ -476,10 +474,10 @@ def get_test_run_comment():
         raise Exception("commentId wasn't specified in the request")
     service = ArgusService()
     comment = service.get_comment(comment_id=UUID(comment_id))
-    return jsonify({
+    return {
         "status": "ok",
         "response": comment if comment else False
-    })
+    }
 
 
 @bp.route("/users", methods=["GET"])
@@ -487,10 +485,10 @@ def get_test_run_comment():
 def user_info():
     result = UserService().get_users()
 
-    return jsonify({
+    return {
         "status": "ok",
         "response": result
-    })
+    }
 
 
 @bp.route("/release/stats/v2", methods=["GET"])
@@ -511,11 +509,10 @@ def release_stats_v2():
             image_id=image_id
     )
 
-    res = jsonify({
+    return {
         "status": "ok",
         "response": stats
-    })
-    return res
+    }
 
 
 @bp.route("/test_runs/poll", methods=["GET"])
@@ -540,10 +537,10 @@ def release_create():
     service = ArgusService()
     result = service.create_release(request_payload)
 
-    return jsonify({
+    return {
         "status": "ok",
         "response": result
-    })
+    }
 
 
 @bp.route("/artifact/resolveSize")
