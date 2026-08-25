@@ -16,6 +16,7 @@ from urllib3.util.retry import Retry
 from argus.client.tunnel import (
     SSHTunnel,
     TunnelConfig,
+    delete_cached_tunnel_state,
     resolve_tunnel_config_with_reason,
 )
 
@@ -171,7 +172,7 @@ class TunneledSession(requests.Session):
     with no restart.
     """
 
-    def __init__(self, auth_token: str, original_base_url: str, max_retries: int = 3) -> None:
+    def __init__(self, auth_token: str, original_base_url: str, run_id: str, max_retries: int = 3) -> None:
         super().__init__()
         adapter = _build_retry_adapter(max_retries)
         self.mount("http://", adapter)
@@ -179,6 +180,7 @@ class TunneledSession(requests.Session):
 
         self._auth_token = auth_token
         self._original_base_url = original_base_url
+        self._run_id = run_id
         self._build_id = _resolve_build_id()
         self._build_url = _resolve_build_url()
 
@@ -256,9 +258,10 @@ class TunneledSession(requests.Session):
             # forward session-level headers (e.g. Cloudflare Access tokens)
             # via extra_headers instead.
             extra_headers = dict(self.headers) if self.headers else None
-            config, config_reason = resolve_tunnel_config_with_reason(
+            config, key_path, config_reason = resolve_tunnel_config_with_reason(
                 auth_token=self._auth_token,
                 base_url=self._original_base_url,
+                run_id=self._run_id,
                 force_refresh=force_refresh,
                 session=None,
                 extra_headers=extra_headers,
@@ -267,26 +270,31 @@ class TunneledSession(requests.Session):
                 self._teardown(config_reason or "failed to resolve tunnel configuration")
                 return
 
-            tunnel = SSHTunnel()
+            tunnel = SSHTunnel(key_path=key_path)
             config, local_port, establish_reason = self._establish_any(tunnel, config)
 
             if local_port is None and not force_refresh:
                 # The cached config may name a proxy that has since been
                 # retired. Re-fetch the live list once before giving up.
-                fresh, config_reason = resolve_tunnel_config_with_reason(
+                fresh, fresh_key_path, config_reason = resolve_tunnel_config_with_reason(
                     auth_token=self._auth_token,
                     base_url=self._original_base_url,
+                    run_id=self._run_id,
                     force_refresh=True,
                     session=None,
                     extra_headers=extra_headers,
                 )
                 if fresh is not None:
+                    tunnel.shutdown()
+                    tunnel = SSHTunnel(key_path=fresh_key_path)
                     config, local_port, establish_reason = self._establish_any(tunnel, fresh)
                 else:
                     establish_reason = config_reason
 
             if local_port is None or config is None:
                 tunnel.shutdown()
+                if getattr(tunnel, "sshd_rejected_key", False):
+                    delete_cached_tunnel_state(self._run_id)
                 self._teardown(establish_reason or "failed to establish tunnel")
                 return
 
@@ -502,10 +510,15 @@ def create_session(
     base_url: str,
     use_tunnel: bool | None,
     max_retries: int = 3,
+    run_id: str | None = None,
 ) -> requests.Session:
-    if _resolve_use_tunnel(use_tunnel):
-        session = TunneledSession(auth_token=auth_token, original_base_url=base_url, max_retries=max_retries)
+    if _resolve_use_tunnel(use_tunnel) and run_id:
+        session = TunneledSession(
+            auth_token=auth_token, original_base_url=base_url, run_id=run_id, max_retries=max_retries
+        )
     else:
+        if _resolve_use_tunnel(use_tunnel) and not run_id:
+            LOGGER.warning("SSH tunnel requested with no run_id to scope its key by; using a direct connection")
         session = _build_retry_session(max_retries)
     # Both branches, so that a job which never opens a tunnel, or which falls
     # back to a direct connection, is still named in the backend metrics.
