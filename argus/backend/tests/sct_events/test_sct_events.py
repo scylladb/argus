@@ -375,15 +375,11 @@ def test_controller_submit_events_and_get_by_severity(api_client: TestClient, fa
         "received_timestamp": "2025-05-01T19:30:21.666Z",
         "run_id": run.id,
         "severity": SCTEventSeverity.CRITICAL.value,
-        "ts": datetime.now(tz=UTC).timestamp()
+        # pinned away from the second boundary: the get filter is inclusive
+        # (ts <= before) and before is truncated to whole seconds, so a
+        # sub-millisecond fraction lands event 25 exactly on the boundary
+        "ts": int(datetime.now(tz=UTC).timestamp()) + 0.5
     }
-
-    events = []
-    for i in range(100):
-        event = dict(body)
-        event["ts"] += i
-        events.append(event)
-
 
     events = []
     for i in range(1000):
