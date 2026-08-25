@@ -30,8 +30,6 @@ router.include_router(planner_api.router)
 router.include_router(team.router)
 router.include_router(view_api.router)
 
-CACHEABLE = {"Cache-Control": "max-age=60"}
-
 
 class SetTestPluginRequest(BaseModel):
     plugin_name: str
@@ -91,7 +89,7 @@ def releases(force_all: bool = Query(False, alias="all"),
     return APIResponse({
         "status": "ok",
         "response": [d.model_dump() for d in all_releases if d.enabled or force_all]
-    }, headers=CACHEABLE)
+    })
 
 
 @router.get("/release/activity", name="api.release_activity")
@@ -158,7 +156,7 @@ def get_planner_comment_by_test(test_id: UUID = Query(..., alias="id")):
     return APIResponse({
         "status": "ok",
         "response": planner_comments_by_test
-    }, headers=CACHEABLE)
+    })
 
 
 @router.post("/release/schedules/comment/update", name="api.release_schedules_comment_update")
@@ -290,7 +288,7 @@ def argus_groups(release_id: UUID = Query(..., alias="releaseId"),
     return APIResponse({
         "status": "ok",
         "response": result_groups
-    }, headers=CACHEABLE)
+    })
 
 
 @router.get("/tests", name="api.argus_tests")
@@ -304,7 +302,7 @@ def argus_tests(group_id: UUID = Query(..., alias="groupId"),
     return APIResponse({
         "status": "ok",
         "response": result_tests
-    }, headers=CACHEABLE)
+    })
 
 
 @router.get("/release/{release_id}/details", name="api.get_release_details")
@@ -313,7 +311,7 @@ def get_release_details(release_id: UUID, user: User = Depends(api_current_user)
     return APIResponse({
         "status": "ok",
         "response": release,
-    }, headers=CACHEABLE)
+    })
 
 
 @router.get("/group/{group_id}/details", name="api.get_group_details")
@@ -322,7 +320,7 @@ def get_group_details(group_id: UUID, user: User = Depends(api_current_user)):
     return APIResponse({
         "status": "ok",
         "response": group,
-    }, headers=CACHEABLE)
+    })
 
 
 @router.get("/test/{test_id}/details", name="api.get_test_details")
@@ -331,7 +329,7 @@ def get_test_details(test_id: UUID, user: User = Depends(api_current_user)):
     return APIResponse({
         "status": "ok",
         "response": test
-    }, headers=CACHEABLE)
+    })
 
 
 @router.post("/test/{test_id}/set_plugin", name="api.set_test_plugin")
