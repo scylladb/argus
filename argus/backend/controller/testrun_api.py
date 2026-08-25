@@ -13,7 +13,7 @@ from argus.backend.service.jenkins_service import JenkinsService
 from argus.backend.service.results_service import ResultsService
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.user import api_current_user
-from argus.backend.util.encoders import ArgusJSONResponse
+from argus.backend.util.encoders import APIResponse
 from argus.common.enums import TestInvestigationStatus, TestStatus
 
 LOGGER = logging.getLogger(__name__)
@@ -92,7 +92,7 @@ def get_runs_for_test(test_id: UUID, limit: int = Query(10), before: float | Non
     runs = service.get_runs_by_test_id(test_id=test_id, additional_runs=additional_runs,
                                        limit=limit, full=full, before=before, after=after)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": runs
     })
@@ -103,7 +103,7 @@ def get_type_for_run(run_id: str, user: User = Depends(api_current_user)):
     service = TestRunService()
     run_type = service.get_test_type_for_run(run_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "run_type": run_type,
@@ -116,7 +116,7 @@ def test_run_activity(run_id: UUID, user: User = Depends(api_current_user)):
     service = TestRunService()
     activity = service.get_run_events(run_id=run_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": activity
     })
@@ -125,7 +125,7 @@ def test_run_activity(run_id: UUID, user: User = Depends(api_current_user)):
 @router.get("/run/{test_id}/{run_id}/fetch_results", name="api.testrun_api.fetch_results")
 def fetch_results(test_id: UUID, run_id: UUID, user: User = Depends(api_current_user)):
     tables = ResultsService().get_run_results(test_id=test_id, run_id=run_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "tables": tables
     })
@@ -142,7 +142,7 @@ def set_testrun_status(test_id: UUID, run_id: UUID, payload: SetStatusRequest,
         user=user,
     )
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -187,7 +187,7 @@ def set_testrun_investigation_status(test_id: UUID, run_id: UUID,
         user=user,
     )
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -204,7 +204,7 @@ def set_testrun_assignee(test_id: UUID, run_id: UUID, payload: SetAssigneeReques
         user=user,
     )
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -221,7 +221,7 @@ def issues_submit(test_id: UUID, run_id: UUID, payload: IssueSubmitRequest,
         user=user,
     )
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": submit_result
     })
@@ -241,7 +241,7 @@ def issues_submit_for_event(test_id: UUID, run_id: UUID, event_id: UUID,
         user=user,
     )
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": submit_result
     })
@@ -263,7 +263,7 @@ def issues_get(filter_key: str = Query(..., alias="filterKey"),
         include_no_version=include_no_version,
     )
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": issues
     })
@@ -274,7 +274,7 @@ def issues_delete(payload: IssueDeleteRequest, user: User = Depends(api_current_
     service = IssueService()
     result = service.delete(issue_id=payload.issue_id, run_id=payload.run_id, user=user)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -285,7 +285,7 @@ def get_testrun_comments(run_id: UUID, user: User = Depends(api_current_user)):
     service = TestRunService()
     comments = service.get_run_comments(run_id=run_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": comments
     })
@@ -296,7 +296,7 @@ def get_testrun_pytest_results(run_id: UUID, user: User = Depends(api_current_us
     service = TestRunService()
     res = service.get_pytest_run_results(run_id=run_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": res
     })
@@ -308,7 +308,7 @@ def get_testrun_pytest_results(run_id: UUID, user: User = Depends(api_current_us
 def get_testrun(run_type: str, run_id: UUID, user: User = Depends(api_current_user)):
     service = TestRunService()
     test_run = service.get_run_response(run_type=run_type, run_id=run_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": test_run
     })
@@ -319,7 +319,7 @@ def get_single_comment(comment_id: UUID, user: User = Depends(api_current_user))
     service = TestRunService()
     comment = service.get_run_comment(comment_id=comment_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": comment
     })
@@ -338,7 +338,7 @@ def submit_testrun_comment(test_id: UUID, run_id: UUID, payload: CommentRequest,
         user=user,
     )
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -360,7 +360,7 @@ def test_run_update_comment(test_id: UUID, run_id: UUID, comment_id: UUID,
         user=user,
     )
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -378,7 +378,7 @@ def test_run_delete_comment(test_id: UUID, run_id: UUID, comment_id: UUID,
         user=user,
     )
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -387,7 +387,7 @@ def test_run_delete_comment(test_id: UUID, run_id: UUID, comment_id: UUID,
 @router.post("/terminate_stuck_runs", name="api.testrun_api.sct_terminate_stuck_runs")
 def sct_terminate_stuck_runs(user: User = Depends(api_current_user)):
     result = TestRunService().terminate_stuck_runs(user=user)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "total": result
@@ -401,7 +401,7 @@ def ignore_jobs(payload: IgnoreJobsRequest, user: User = Depends(api_current_use
 
     result = service.ignore_jobs(test_id=payload.testId, reason=payload.reason, user=user)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "affectedJobs": result
@@ -416,7 +416,7 @@ def get_runs_by_test_id_run_id(payload: list[tuple[UUID, UUID]] = Body(...),
 
     result = service.resolve_run_build_id_and_number_multiple(payload)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "runs": result
@@ -434,7 +434,7 @@ def get_jenkins_job_params(payload: JenkinsParamsRequest, user: User = Depends(a
         from_defaults=payload.fromDefaults,
     )
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "parameters": result
@@ -471,7 +471,7 @@ def build_jenkins_job(payload: JenkinsBuildRequest, user: User = Depends(api_cur
         if next_build_number > 0:
             response["nextBuildNumber"] = next_build_number
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": response
     })
@@ -483,7 +483,7 @@ def get_queue_info(queue_item: int = Query(..., alias="queueItem"),
     service = JenkinsService()
     result = service.get_queue_info(queue_item)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "queueItem": result
@@ -497,7 +497,7 @@ def get_clone_targets(test_id: str = Query(..., alias="testId"),
     service = JenkinsService()
     result = service.get_releases_for_clone(test_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "targets": result
@@ -511,7 +511,7 @@ def get_groups_for_target(target_id: str = Query(..., alias="targetId"),
     service = JenkinsService()
     result = service.get_groups_for_release(target_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "groups": result
@@ -531,7 +531,7 @@ def clone_jenkins_job(payload: JenkinsCloneRequest, user: User = Depends(api_cur
         advanced_settings=payload.advancedSettings,
     )
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -544,7 +544,7 @@ def clone_build_jenkins_job(payload: JenkinsBuildRequest, user: User = Depends(a
     result = service.clone_build_job(build_id=payload.buildId, params=payload.parameters,
                                      requested_by=user)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -556,7 +556,7 @@ def get_clone_job_advanced_settings(build_id: str = Query(..., alias="buildId"),
     service = JenkinsService()
     result = service.get_advanced_settings(build_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -569,7 +569,7 @@ def set_job_settings(payload: JenkinsSettingsChangeRequest, user: User = Depends
     result = service.adjust_job_settings(build_id=test.build_system_id,
                                          plugin_name=test.plugin_name, settings=payload.settings)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -582,7 +582,7 @@ def clone_validate_new_settings(payload: JenkinsSettingsValidateRequest,
 
     result = service.verify_job_settings(build_id=payload.buildId, new_settings=payload.newSettings)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -603,7 +603,7 @@ def get_pytest_test_field_stats(asgi_request: Request, test_name: str, field_nam
         test_name=test_name, field_name=field_name,
         aggr_function=aggr_function, query=dict(asgi_request.query_params))
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -615,7 +615,7 @@ def get_pytest_test_results(test_name: str, before: float | None = Query(None),
                             user: User = Depends(api_current_user)):
     result = TestRunService().get_pytest_test_results(test_name=test_name, before=before, after=after)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })

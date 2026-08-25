@@ -9,7 +9,7 @@ from argus.backend.models.web import User
 from argus.backend.plugins.sct.service import SCTService, SCTServiceException
 from argus.backend.plugins.sct.testrun import SCTEventSeverity
 from argus.backend.service.user import api_current_user
-from argus.backend.util.encoders import ArgusJSONResponse
+from argus.backend.util.encoders import APIResponse
 
 router = APIRouter(prefix="/sct")
 
@@ -92,7 +92,7 @@ class SimilarRunsInfoRequest(BaseModel):
 def sct_submit_packages(run_id: str, payload: PackagesSubmitRequest,
                         user: User = Depends(api_current_user)):
     result = SCTService.submit_packages(run_id=run_id, packages=payload.packages)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -102,7 +102,7 @@ def sct_submit_packages(run_id: str, payload: PackagesSubmitRequest,
 def sct_submit_screenshots(run_id: str, payload: ScreenshotsSubmitRequest,
                            user: User = Depends(api_current_user)):
     result = SCTService.submit_screenshots(run_id=run_id, screenshot_links=payload.screenshot_links)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -118,7 +118,7 @@ def sct_set_runner(run_id: str, payload: SetRunnerRequest, user: User = Depends(
         backend=payload.backend,
         name=payload.name
     )
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -127,7 +127,7 @@ def sct_set_runner(run_id: str, payload: SetRunnerRequest, user: User = Depends(
 @router.get("/{run_id}/resource/all", name="api.client_api.sct_api.sct_resource_all")
 def sct_resource_all(run_id: str, user: User = Depends(api_current_user)):
     result = SCTService.get_resources(run_id=run_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -136,7 +136,7 @@ def sct_resource_all(run_id: str, user: User = Depends(api_current_user)):
 @router.get("/{run_id}/resource/{name}/get", name="api.client_api.sct_api.sct_resource_get")
 def sct_resource_get(run_id: str, name: str, user: User = Depends(api_current_user)):
     result = SCTService.get_resource(run_id=run_id, name=name)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -146,7 +146,7 @@ def sct_resource_get(run_id: str, name: str, user: User = Depends(api_current_us
 def sct_resource_create(run_id: str, payload: ResourceCreateRequest,
                         user: User = Depends(api_current_user)):
     result = SCTService.create_resource(run_id=run_id, resource_details=payload.resource)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -158,7 +158,7 @@ def sct_resource_terminate(run_id: str, resource_name: str, payload: ResourceTer
                            user: User = Depends(api_current_user)):
     result = SCTService.terminate_resource(run_id=run_id, resource_name=resource_name,
                                            reason=payload.reason)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -170,7 +170,7 @@ def sct_resource_update_shards(run_id: str, resource_name: str, payload: Resourc
                                user: User = Depends(api_current_user)):
     result = SCTService.update_resource_shards(run_id=run_id, resource_name=resource_name,
                                                new_shards=payload.shards)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -182,7 +182,7 @@ def sct_resource_update(run_id: str, resource_name: str, payload: ResourceUpdate
                         user: User = Depends(api_current_user)):
     result = SCTService.update_resource(run_id=run_id, resource_name=resource_name,
                                         update_data=payload.update_data)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -191,7 +191,7 @@ def sct_resource_update(run_id: str, resource_name: str, payload: ResourceUpdate
 @router.post("/{run_id}/nemesis/submit", name="api.client_api.sct_api.sct_nemesis_submit")
 def sct_nemesis_submit(run_id: str, payload: NemesisRequest, user: User = Depends(api_current_user)):
     result = SCTService.submit_nemesis(run_id=run_id, nemesis_details=payload.nemesis)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -200,7 +200,7 @@ def sct_nemesis_submit(run_id: str, payload: NemesisRequest, user: User = Depend
 @router.get("/{run_id}/nemesis/get", name="api.client_api.sct_api.sct_nemesis_get")
 def sct_nemesis_get(run_id: str, user: User = Depends(api_current_user)):
     result = SCTService.get_nemesis(run_id=run_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -209,7 +209,7 @@ def sct_nemesis_get(run_id: str, user: User = Depends(api_current_user)):
 @router.post("/{run_id}/nemesis/finalize", name="api.client_api.sct_api.sct_nemesis_finalize")
 def sct_nemesis_finalize(run_id: str, payload: NemesisRequest, user: User = Depends(api_current_user)):
     result = SCTService.finalize_nemesis(run_id=run_id, nemesis_details=payload.nemesis)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -224,7 +224,7 @@ def sct_events_submit(run_id: str, payload: EventsSubmitRequest,
         onto SCTTestRun
     """
     result = SCTService.submit_events(run_id=run_id, events=payload.events)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -237,7 +237,7 @@ def sct_events_get(run_id: str, limit: int = Query(100), before: str | None = Qu
                    user: User = Depends(api_current_user)):
     result = SCTService.get_events(run_id=run_id, limit=limit, before=before, after=after,
                                    severities=severities)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -249,7 +249,7 @@ def sct_events_get_by_severity(run_id: str, severity: SCTEventSeverity, limit: i
                                user: User = Depends(api_current_user)):
     result = SCTService.get_events(run_id=run_id, limit=limit, before=before, after=after,
                                    severities=[severity])
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -260,7 +260,7 @@ def sct_events_get_by_severity(run_id: str, severity: SCTEventSeverity, limit: i
 def sct_events_count_by_severity(run_id: str, severity: SCTEventSeverity,
                                  user: User = Depends(api_current_user)):
     result = SCTService.count_events_by_severity(run_id=run_id, severity=severity)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -277,7 +277,7 @@ def sct_event_submit(run_id: str, payload: EventSubmitRequest,
         result = all([SCTService.submit_event(run_id=run_id, raw_event=e) for e in event_data])
     else:
         result = SCTService.submit_event(run_id=run_id, raw_event=event_data)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -287,7 +287,7 @@ def sct_event_submit(run_id: str, payload: EventSubmitRequest,
 def sct_gemini_results_submit(run_id: str, payload: GeminiResultsRequest,
                               user: User = Depends(api_current_user)):
     result = SCTService.submit_gemini_results(run_id=run_id, gemini_data=payload.gemini_data, user=user)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -300,7 +300,7 @@ def sct_performance_results_submit(run_id: str, payload: PerformanceResultsReque
     result = SCTService.submit_performance_results(run_id=run_id,
                                                    performance_results=payload.performance_results,
                                                    user=user)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -309,7 +309,7 @@ def sct_performance_results_submit(run_id: str, payload: PerformanceResultsReque
 @router.get("/{run_id}/performance/history", name="api.client_api.sct_api.sct_get_performance_history")
 def sct_get_performance_history(run_id: str, user: User = Depends(api_current_user)):
     result = SCTService.get_performance_history_for_test(run_id=run_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -318,7 +318,7 @@ def sct_get_performance_history(run_id: str, user: User = Depends(api_current_us
 @router.get("/release/{release_name:path}/kernels", name="api.client_api.sct_api.sct_get_kernel_report")
 def sct_get_kernel_report(release_name: str, user: User = Depends(api_current_user)):
     result = SCTService.get_scylla_version_kernels_report(release_name=release_name)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -328,7 +328,7 @@ def sct_get_kernel_report(release_name: str, user: User = Depends(api_current_us
 def sct_submit_junit_report(run_id: str, payload: JunitSubmitRequest,
                             user: User = Depends(api_current_user)):
     result = SCTService.junit_submit(run_id, payload.file_name, payload.content)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -339,7 +339,7 @@ def sct_add_stress_cmd(run_id: str, payload: StressCommandRequest,
                        user: User = Depends(api_current_user)):
     result = SCTService.add_stress_command(run_id, cmd=payload.cmd, ts=payload.ts,
                                            loader_name=payload.loader_name, log_name=payload.log_name)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -348,7 +348,7 @@ def sct_add_stress_cmd(run_id: str, payload: StressCommandRequest,
 @router.get("/{run_id}/stress_cmd/get", name="api.client_api.sct_api.sct_get_all_stress_cmds")
 def sct_get_all_stress_cmds(run_id: str, user: User = Depends(api_current_user)):
     result = SCTService.get_stress_commands(run_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -357,7 +357,7 @@ def sct_get_all_stress_cmds(run_id: str, user: User = Depends(api_current_user))
 @router.get("/{run_id}/similar_events", name="api.client_api.sct_api.sct_get_similar_events")
 def sct_get_similar_events(run_id: str, user: User = Depends(api_current_user)):
     result = SCTService.get_similar_events(run_id=run_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -383,7 +383,7 @@ def sct_get_similar_events_realtime(run_id: str, payload: SimilarEventRequest,
         ts=payload.ts,
         limit=payload.limit
     )
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -394,7 +394,7 @@ def sct_get_similar_runs_info(payload: SimilarRunsInfoRequest,
                               user: User = Depends(api_current_user)):
     """Get build IDs and issues for a list of run IDs"""
     result = SCTService.get_similar_runs_info(run_ids=payload.run_ids)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })

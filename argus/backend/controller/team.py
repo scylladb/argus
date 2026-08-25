@@ -8,7 +8,7 @@ from argus.backend.models.web import User
 from argus.backend.service.argus_service import ArgusService
 from argus.backend.service.team_manager_service import TeamManagerService
 from argus.backend.service.user import api_current_user
-from argus.backend.util.encoders import ArgusJSONResponse
+from argus.backend.util.encoders import APIResponse
 
 LOGGER = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ def team_create(payload: TeamCreateRequest, user: User = Depends(api_current_use
         members=payload.members,
     )
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -50,7 +50,7 @@ def team_create(payload: TeamCreateRequest, user: User = Depends(api_current_use
 def team_get(team_id: UUID, user: User = Depends(api_current_user)):
     result = TeamManagerService().get_team_by_id(team_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -60,7 +60,7 @@ def team_get(team_id: UUID, user: User = Depends(api_current_user)):
 def team_delete(team_id: UUID, user: User = Depends(api_current_user)):
     TeamManagerService().delete_team(team_id, user)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "team_id": str(team_id),
@@ -78,7 +78,7 @@ def team_edit(team_id: UUID, payload: TeamEditRequest, user: User = Depends(api_
         user=user,
     )
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "team_id": str(team_id),
@@ -97,7 +97,7 @@ def team_edit_motd(team_id: UUID, payload: TeamMotdEditRequest,
         user=user,
     )
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "team_id": str(team_id),
@@ -110,7 +110,7 @@ def team_edit_motd(team_id: UUID, payload: TeamMotdEditRequest,
 def user_teams(user_id: UUID, user: User = Depends(api_current_user)):
     result = TeamManagerService().get_users_teams(user_id=user_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -121,7 +121,7 @@ def user_jobs(user_id: UUID, user: User = Depends(api_current_user)):
     target = User.get(id=user_id)
     result = list(ArgusService().get_jobs_for_user(target))
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -131,7 +131,7 @@ def user_jobs(user_id: UUID, user: User = Depends(api_current_user)):
 def leader_teams(user_id: UUID, user: User = Depends(api_current_user)):
     result = TeamManagerService().get_teams_for_user(user_id=user_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })

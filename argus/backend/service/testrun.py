@@ -4,7 +4,6 @@ from functools import reduce
 import json
 import logging
 import re
-from sys import prefix
 import time
 from typing import Any
 from uuid import UUID
@@ -21,7 +20,7 @@ from coodie.exceptions import DocumentNotFound
 from argus.backend.db import ScyllaCluster
 from argus.backend.util.config import Config
 
-from argus.backend.models.pytest import PytestResultTable, PytestUserField
+from argus.backend.models.pytest import PytestResultTable
 from argus.backend.models.web import (
     ArgusEvent,
     ArgusEventTypes,
@@ -115,7 +114,8 @@ class TestRunService:
             return plugin.model.get_run_response(run_id)
 
     def get_runs_by_test_id(self, test_id: UUID, additional_runs: list[UUID], before: str | None, after: str | None, full: bool = False, limit: int = 10):
-        limited_fields = ["id", "test_id", "group_id", "release_id", "status", "start_time", "build_number", "build_job_url", "build_id", "assignee", "end_time", "investigation_status", "heartbeat"]
+        limited_fields = ["id", "test_id", "group_id", "release_id", "status", "start_time", "build_number",
+                          "build_job_url", "build_id", "assignee", "end_time", "investigation_status", "heartbeat"]
         test: ArgusTest = ArgusTest.get(id=test_id)
         plugin = self.get_plugin(plugin_name=test.plugin_name)
         if not plugin:
@@ -303,7 +303,7 @@ class TestRunService:
         plugin = self.get_plugin(plugin_name=test.plugin_name)
         if not plugin:
             return {
-                "test_run_id": run.id,
+                "test_run_id": run_id,
                 "assignee": None
             }
 

@@ -62,7 +62,7 @@ class ArgusJSONProvider:
                 raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
 
 
-class ArgusJSONResponse(JSONResponse):
+class APIResponse(JSONResponse):
     """FastAPI/starlette response class sharing the Flask app's encoder semantics."""
 
     def render(self, content: Any) -> bytes:

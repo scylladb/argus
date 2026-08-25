@@ -8,7 +8,7 @@ from starlette.responses import PlainTextResponse
 from argus.backend.models.web import User, UserRoles
 from argus.backend.service.tunnel_service import TunnelService, TunnelServiceException
 from argus.backend.service.user import allow_ssh_tunnel_server_scope, api_current_user, require_roles
-from argus.backend.util.encoders import ArgusJSONResponse
+from argus.backend.util.encoders import APIResponse
 
 LOGGER = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ def register_tunnel(payload: RegisterTunnelRequest, user: User = Depends(api_cur
         public_key=payload.public_key,
         ttl_seconds=payload.ttl_seconds,
     )
-    return ArgusJSONResponse({"status": "ok", "response": asdict(result)})
+    return APIResponse({"status": "ok", "response": asdict(result)})
 
 
 @router.get("/tunnel", name="api.client_api.ssh_api.get_tunnel_connection")
@@ -47,7 +47,7 @@ def get_tunnel_connection(proxy_host: str | None = Query(None),
         user_id=user.id,
         proxy_host=proxy_host,
     )
-    return ArgusJSONResponse({"status": "ok", "response": asdict(result)})
+    return APIResponse({"status": "ok", "response": asdict(result)})
 
 
 @router.get("/tunnel/keys", name="api.client_api.ssh_api.get_user_keys")
@@ -59,7 +59,7 @@ def get_user_keys(tunnel_id: str | None = Query(None), user: User = Depends(api_
     - tunnel_id: UUID of a specific tunnel to scope keys
     """
     result = TunnelService().list_keys(tunnel_id=tunnel_id, user_id=user.id)
-    return ArgusJSONResponse({"status": "ok", "response": [asdict(row) for row in result]})
+    return APIResponse({"status": "ok", "response": [asdict(row) for row in result]})
 
 
 @router.get("/keys", name="api.client_api.ssh_api.get_authorized_keys")

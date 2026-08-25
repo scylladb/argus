@@ -16,7 +16,7 @@ from argus.backend.service.stats import ViewStatsCollector
 from argus.backend.service.user import api_current_user
 from argus.backend.service.views import UserViewService
 from argus.backend.util.common import NoneIfEmpty
-from argus.backend.util.encoders import ArgusJSONResponse
+from argus.backend.util.encoders import APIResponse
 
 LOGGER = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ class DeleteViewRequest(BaseModel):
 
 @router.get("/", name="api.view_api.index")
 def index(user: User = Depends(api_current_user)):
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "version": "v1",
@@ -65,7 +65,7 @@ def create_view(payload: CreateViewRequest, user: User = Depends(api_current_use
         description=payload.description,
         display_name=payload.displayName
     )
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": view
     })
@@ -75,7 +75,7 @@ def create_view(payload: CreateViewRequest, user: User = Depends(api_current_use
 def get_view(view_id: UUID = Query(..., alias="viewId"), user: User = Depends(api_current_user)):
     service = UserViewService()
     view = service.get_view(view_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": view
     })
@@ -87,7 +87,7 @@ def get_all_views(user_id: Annotated[UUID | None, NoneIfEmpty, Query(alias="user
     view_user = User.get(id=user_id) if user_id else None
     service = UserViewService()
     views = service.get_all_views(view_user)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": views
     })
@@ -97,7 +97,7 @@ def get_all_views(user_id: Annotated[UUID | None, NoneIfEmpty, Query(alias="user
 def update_view(payload: UpdateViewRequest, user: User = Depends(api_current_user)):
     service = UserViewService()
     res = service.update_view(view_id=payload.viewId, update_data=payload.updateData, user=user)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": res
     })
@@ -107,7 +107,7 @@ def update_view(payload: UpdateViewRequest, user: User = Depends(api_current_use
 def delete_view(payload: DeleteViewRequest, user: User = Depends(api_current_user)):
     service = UserViewService()
     res = service.delete_view(payload.viewId, user=user)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": res
     })
@@ -120,7 +120,7 @@ def search_tests(query: str | None = Query(None), user: User = Depends(api_curre
         res = service.test_lookup(query)
     else:
         res = []
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "hits": res,
@@ -141,7 +141,7 @@ def view_stats(view_id: str = Query(..., alias="viewId"), limited: bool = Query(
     stats = collector.collect(limited=limited, force=force, include_no_version=include_no_version,
                               widget_id=widget_id, image_id=image_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": stats
     })
@@ -151,7 +151,7 @@ def view_stats(view_id: str = Query(..., alias="viewId"), limited: bool = Query(
 def view_versions(view_id: str, user: User = Depends(api_current_user)):
     service = UserViewService()
     res = service.get_versions_for_view(view_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": res
     })
@@ -161,7 +161,7 @@ def view_versions(view_id: str, user: User = Depends(api_current_user)):
 def view_images(view_id: str, user: User = Depends(api_current_user)):
     service = UserViewService()
     res = service.get_images_for_view(view_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": res
     })
@@ -171,7 +171,7 @@ def view_images(view_id: str, user: User = Depends(api_current_user)):
 def view_resolve(view_id: str, user: User = Depends(api_current_user)):
     service = UserViewService()
     res = service.resolve_view_for_edit(view_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": res
     })
@@ -181,7 +181,7 @@ def view_resolve(view_id: str, user: User = Depends(api_current_user)):
 def view_resolve_tests(view_id: str, user: User = Depends(api_current_user)):
     service = UserViewService()
     res = service.resolve_view_tests(view_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": res
     })
@@ -191,7 +191,7 @@ def view_resolve_tests(view_id: str, user: User = Depends(api_current_user)):
 def view_get_pytest_results(view_id: str, user: User = Depends(api_current_user)):
     service = UserViewService()
     res = service.get_pytest_view_results(view_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": res
     })

@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from argus.backend.models.web import ArgusUserView, User
 from argus.backend.service.user import api_current_user
 from argus.backend.service.views_widgets.graphed_stats import GraphedStatsService
-from argus.backend.util.encoders import ArgusJSONResponse
+from argus.backend.util.encoders import APIResponse
 
 router = APIRouter(prefix="/widgets")
 
@@ -29,7 +29,7 @@ def get_graphed_stats(view_id: UUID = Query(...), filters: str | None = Query(No
         data = service.get_graphed_stats(test_id, filters)
         response_data["test_runs"].extend(data["test_runs"])
         response_data["nemesis_data"].extend(data["nemesis_data"])
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": response_data
     })
@@ -41,7 +41,7 @@ def get_runs_details(payload: RunsDetailsRequest, user: User = Depends(api_curre
     service = GraphedStatsService()
     result = service.get_runs_details(payload.run_ids)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })

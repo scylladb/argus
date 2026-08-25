@@ -5,14 +5,14 @@ from fastapi import APIRouter, Depends, Request
 from argus.backend.models.web import User
 from argus.backend.service.user import api_current_user
 from argus.backend.service.views_widgets.pytest import PytestViewService
-from argus.backend.util.encoders import ArgusJSONResponse
+from argus.backend.util.encoders import APIResponse
 
 router = APIRouter(prefix="/widgets")
 
 
 @router.get("/pytest/view", name="api.view_api.pytest.get_versioned_runs")
 def get_versioned_runs(user: User = Depends(api_current_user)):
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": 0,
     })
@@ -24,7 +24,7 @@ def get_release_pytest_results(asgi_request: Request, release_id: UUID,
     service = PytestViewService()
     res = service.release_results(release_id, asgi_request.query_params)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": res
     })
@@ -35,7 +35,7 @@ def get_view_pytest_results(asgi_request: Request, view_id: str,
                             user: User = Depends(api_current_user)):
     service = PytestViewService()
     res = service.view_results(view_id, asgi_request.query_params)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": res
     })
@@ -45,7 +45,7 @@ def get_view_pytest_results(asgi_request: Request, view_id: str,
 def get_pytest_results(asgi_request: Request, user: User = Depends(api_current_user)):
     service = PytestViewService()
     res = service.result_filter(asgi_request.query_params)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": res
     })
@@ -55,7 +55,7 @@ def get_pytest_results(asgi_request: Request, user: User = Depends(api_current_u
 def get_user_fields_for_test(test_name: str, id: str, user: User = Depends(api_current_user)):
     service = PytestViewService()
     res = service.get_user_fields_for_result(test_name, id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": res
     })

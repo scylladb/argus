@@ -9,7 +9,7 @@ from argus.backend.service.client_service import ClientService
 from argus.backend.service.email_service import EmailService
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.user import api_current_user
-from argus.backend.util.encoders import ArgusJSONResponse
+from argus.backend.util.encoders import APIResponse
 
 router = APIRouter(prefix="/client")
 router.include_router(ssh_api.router)
@@ -39,7 +39,7 @@ class ConfigSubmitRequest(BaseModel):
 @router.get("/testrun/{run_id}/info", name="api.client_api.get_run_info")
 def get_run_info(run_id: str, user: User = Depends(api_current_user)):
     result = ClientService().get_run_info(run_id=run_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -48,7 +48,7 @@ def get_run_info(run_id: str, user: User = Depends(api_current_user)):
 @router.post("/testrun/{run_type}/submit", name="api.client_api.submit_run")
 def submit_run(run_type: str, payload: dict = Body(...), user: User = Depends(api_current_user)):
     result = ClientService().submit_run(run_type=run_type, request_data=payload)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -57,7 +57,7 @@ def submit_run(run_type: str, payload: dict = Body(...), user: User = Depends(ap
 @router.get("/testrun/{run_type}/{run_id}/get", name="api.client_api.get_run")
 def get_run(run_type: str, run_id: str, user: User = Depends(api_current_user)):
     result = ClientService().get_run(run_type=run_type, run_id=run_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -66,7 +66,7 @@ def get_run(run_type: str, run_id: str, user: User = Depends(api_current_user)):
 @router.post("/testrun/{run_type}/{run_id}/heartbeat", name="api.client_api.run_heartbeat")
 def run_heartbeat(run_type: str, run_id: str, user: User = Depends(api_current_user)):
     result = ClientService().heartbeat(run_type=run_type, run_id=run_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -75,7 +75,7 @@ def run_heartbeat(run_type: str, run_id: str, user: User = Depends(api_current_u
 @router.get("/testrun/{run_type}/{run_id}/get_status", name="api.client_api.run_get_status")
 def run_get_status(run_type: str, run_id: str, user: User = Depends(api_current_user)):
     result = ClientService().get_run_status(run_type=run_type, run_id=run_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -86,7 +86,7 @@ def run_set_status(run_type: str, run_id: str, payload: SetStatusRequest,
                    user: User = Depends(api_current_user)):
     result = ClientService().update_run_status(run_type=run_type, run_id=run_id,
                                                new_status=payload.new_status)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -98,7 +98,7 @@ def run_update_product_version(run_type: str, run_id: str, payload: ProductVersi
                                user: User = Depends(api_current_user)):
     result = ClientService().submit_product_version(
         run_type=run_type, run_id=run_id, version=payload.product_version)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -108,7 +108,7 @@ def run_update_product_version(run_type: str, run_id: str, payload: ProductVersi
 def run_submit_logs(run_type: str, run_id: str, payload: LogsSubmitRequest,
                     user: User = Depends(api_current_user)):
     result = ClientService().submit_logs(run_type=run_type, run_id=run_id, logs=payload.logs)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -119,7 +119,7 @@ def submit_run_config(run_id: str, payload: ConfigSubmitRequest,
                       user: User = Depends(api_current_user)):
     result = ClientService().submit_config(run_id, config_name=payload.name,
                                            config_content=payload.content)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -128,7 +128,7 @@ def submit_run_config(run_id: str, payload: ConfigSubmitRequest,
 @router.get("/{run_id}/config/all", name="api.client_api.get_all_run_configs")
 def get_all_run_configs(run_id: str, user: User = Depends(api_current_user)):
     result = ClientService().get_all_configs(run_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -138,7 +138,7 @@ def get_all_run_configs(run_id: str, user: User = Depends(api_current_user)):
 def run_finalize(run_type: str, run_id: str, payload: dict | None = Body(None),
                  user: User = Depends(api_current_user)):
     result = ClientService().finish_run(run_type=run_type, run_id=run_id, payload=payload)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -147,14 +147,14 @@ def run_finalize(run_type: str, run_id: str, payload: dict | None = Body(None),
 @router.post("/testrun/{run_type}/{run_id}/submit_results", name="api.client_api.submit_results")
 def submit_results(run_type: str, run_id: str, payload: dict = Body(...),
                    user: User = Depends(api_current_user)):
-    return ArgusJSONResponse(
+    return APIResponse(
         ClientService().submit_results(run_type=run_type, run_id=run_id, results=payload))
 
 
 @router.post("/testrun/pytest/result/submit", name="api.client_api.submit_pytest_result")
 def submit_pytest_result(payload: dict = Body(...), user: User = Depends(api_current_user)):
     result = ClientService().submit_pytest_result(request_data=payload)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -175,7 +175,7 @@ def get_pytest_test_field_stats(asgi_request: Request, test_name: str, field_nam
         test_name=test_name, field_name=field_name,
         aggr_function=aggr_function, query=dict(asgi_request.query_params))
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -184,7 +184,7 @@ def get_pytest_test_field_stats(asgi_request: Request, test_name: str, field_nam
 @router.post("/testrun/report/email", name="api.client_api.send_email_report")
 def send_email_report(payload: dict = Body(...), user: User = Depends(api_current_user)):
     result = EmailService().send_report(request_data=payload)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })

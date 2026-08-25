@@ -1,4 +1,3 @@
-from math import ceil
 from dataclasses import dataclass
 import subprocess
 import json
@@ -6,7 +5,6 @@ import logging
 import datetime
 from types import NoneType
 from uuid import UUID
-from cassandra.util import uuid_from_time
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.db import ScyllaCluster
@@ -27,7 +25,6 @@ from argus.backend.models.web import (
 )
 from argus.backend.events.event_processors import EVENT_PROCESSORS
 from argus.backend.service.planner_service import PlanningService
-from argus.backend.service.testrun import TestRunService
 from argus.backend.util.common import chunk
 
 LOGGER = logging.getLogger(__name__)
@@ -139,7 +136,6 @@ class ArgusService:
     def get_groups(self, release_id: UUID) -> list[ArgusGroup]:
         groups = list(ArgusGroup.find(release_id=release_id).all())
         return sorted(groups, key=lambda g: g.pretty_name if g.pretty_name else g.name)
-
 
     def get_tests(self, group_id: UUID) -> list[ArgusTest]:
         return list(ArgusTest.find(group_id=group_id).all())
@@ -352,7 +348,7 @@ class ArgusService:
             except DocumentNotFound:
                 last_runs[test.id] = None
 
-        return [{**test.model_dump(), "last_run": last_runs.get(test.id) } for test in resolved if test.enabled]
+        return [{**test.model_dump(), "last_run": last_runs.get(test.id)} for test in resolved if test.enabled]
 
     # TODO: Remove - legacy scheduling, superseded by release planner
     def get_schedules_for_user(self, user: User) -> list[dict]:
