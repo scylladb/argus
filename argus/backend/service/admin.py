@@ -1,18 +1,6 @@
 
 
 from argus.backend.db import ScyllaCluster
-from argus.backend.models.web import (
-    ArgusRelease,
-    ArgusGroup,
-    ArgusTest,
-    ArgusTestRunComment,
-    ArgusEvent,
-    ArgusEventTypes,
-    ReleasePlannerComment,
-    User,
-    UserOauthToken,
-    WebFileStorage,
-)
 
 
 class AdminService:

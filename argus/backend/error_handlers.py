@@ -9,7 +9,7 @@ from starlette.responses import JSONResponse, RedirectResponse
 
 from argus.backend.db import ScyllaCluster
 from argus.backend.rendering import flash as asgi_flash, url_for as asgi_url_for
-from argus.backend.util.encoders import ArgusJSONResponse
+from argus.backend.util.encoders import APIResponse
 
 LOGGER = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ def authorization_error_handler(_: Request, exc: AuthorizationError) -> JSONResp
     return JSONResponse({"status": "error", "message": exc.message}, status_code=403)
 
 
-async def api_exception_handler(asgi_request: Request, exception: Exception) -> ArgusJSONResponse:
+async def api_exception_handler(asgi_request: Request, exception: Exception) -> APIResponse:
     """FastAPI counterpart of handle_api_exception below: same logging split
     and the exact {"status": "error", "response": {...}} / HTTP 200 contract."""
     trace_id = base64.encodebytes(sha256(os.urandom(64)).digest()).decode(encoding="utf-8").strip()
@@ -94,7 +94,7 @@ async def api_exception_handler(asgi_request: Request, exception: Exception) -> 
         LOGGER.error("[TraceId: %s] Headers\n%s", trace_id, dict(asgi_request.headers))
         LOGGER.error("[TraceId: %s] Request Data Start\n%s\nRequest Data End", trace_id, body)
 
-    return ArgusJSONResponse(
+    return APIResponse(
         {
             "status": "error",
             "response": {
@@ -116,7 +116,7 @@ class DBErrorHandler():
     @classmethod
     def handle_db_errors(cls, exception: Exception):
         with cls.RESTART_LOCK:
-            cls.DB_ERROR_COUNTER +=1
+            cls.DB_ERROR_COUNTER += 1
             LOGGER.error("Received error from db cluster.", exc_info=True)
             if cls.DB_ERROR_COUNTER > cls.DB_ERROR_THRESHOLD:
                 LOGGER.warning("Reconnecting the cluster as we've exceeded cassandra error counter...")

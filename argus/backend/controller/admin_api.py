@@ -9,7 +9,7 @@ from argus.backend.models.web import User, UserRoles
 from argus.backend.service.release_manager import ReleaseManagerService
 from argus.backend.service.tunnel_service import TunnelService
 from argus.backend.service.user import UserService, require_roles
-from argus.backend.util.encoders import ArgusJSONResponse
+from argus.backend.util.encoders import APIResponse
 
 LOGGER = logging.getLogger(__name__)
 
@@ -133,7 +133,7 @@ class ProxyTunnelActiveRequest(BaseModel):
 
 @router.get("/", name="admin.admin_api.index")
 def index(user: User = Depends(admin_user)):
-    return ArgusJSONResponse({
+    return APIResponse({
         "version": "v1"
     })
 
@@ -142,7 +142,7 @@ def index(user: User = Depends(admin_user)):
 def create_release(payload: CreateReleaseRequest, user: User = Depends(admin_user)):
     release = ReleaseManagerService().create_release(**payload.model_dump())
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "new_release": release
@@ -153,7 +153,7 @@ def create_release(payload: CreateReleaseRequest, user: User = Depends(admin_use
 @router.post("/release/set_perpetual", name="admin.admin_api.set_release_perpetual")
 def set_release_perpetual(payload: SetReleasePerpetualRequest, user: User = Depends(admin_user)):
     result = ReleaseManagerService().set_release_perpetuality(**payload.model_dump())
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "updated": result
@@ -165,7 +165,7 @@ def set_release_perpetual(payload: SetReleasePerpetualRequest, user: User = Depe
 def set_release_state(payload: SetReleaseStateRequest, user: User = Depends(admin_user)):
     result = ReleaseManagerService().set_release_state(**payload.model_dump())
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "updated": result
@@ -177,7 +177,7 @@ def set_release_state(payload: SetReleaseStateRequest, user: User = Depends(admi
 def set_release_dormancy(payload: SetReleaseDormancyRequest, user: User = Depends(admin_user)):
     result = ReleaseManagerService().set_release_dormancy(**payload.model_dump())
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "updated": result
@@ -189,7 +189,7 @@ def set_release_dormancy(payload: SetReleaseDormancyRequest, user: User = Depend
 def edit_release(payload: EditReleaseRequest, user: User = Depends(admin_user)):
     result = ReleaseManagerService().edit_release(payload.model_dump())
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "updated": result
@@ -201,7 +201,7 @@ def edit_release(payload: EditReleaseRequest, user: User = Depends(admin_user)):
 def delete_release(payload: DeleteReleaseRequest, user: User = Depends(admin_user)):
     result = ReleaseManagerService().delete_release(release_id=payload.releaseId)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "deleted": result
@@ -213,7 +213,7 @@ def delete_release(payload: DeleteReleaseRequest, user: User = Depends(admin_use
 def create_group(payload: CreateGroupRequest, user: User = Depends(admin_user)):
     group = ReleaseManagerService().create_group(**payload.model_dump())
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "new_group": group
@@ -224,7 +224,7 @@ def create_group(payload: CreateGroupRequest, user: User = Depends(admin_user)):
 @router.post("/group/update", name="admin.admin_api.update_group")
 def update_group(payload: UpdateGroupRequest, user: User = Depends(admin_user)):
     result = ReleaseManagerService().update_group(**payload.model_dump())
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "updated": result
@@ -236,7 +236,7 @@ def update_group(payload: UpdateGroupRequest, user: User = Depends(admin_user)):
 def delete_group(payload: DeleteGroupRequest, user: User = Depends(admin_user)):
     result = ReleaseManagerService().delete_group(**payload.model_dump())
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "deleted": result
@@ -247,7 +247,7 @@ def delete_group(payload: DeleteGroupRequest, user: User = Depends(admin_user)):
 @router.post("/test/create", name="admin.admin_api.create_test")
 def create_test(payload: CreateTestRequest, user: User = Depends(admin_user)):
     test = ReleaseManagerService().create_test(**payload.model_dump())
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "new_test": test
@@ -258,7 +258,7 @@ def create_test(payload: CreateTestRequest, user: User = Depends(admin_user)):
 @router.post("/test/update", name="admin.admin_api.update_test")
 def update_test(payload: UpdateTestRequest, user: User = Depends(admin_user)):
     result = ReleaseManagerService().update_test(**payload.model_dump())
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "updated": result
@@ -269,7 +269,7 @@ def update_test(payload: UpdateTestRequest, user: User = Depends(admin_user)):
 @router.post("/test/batch_move", name="admin.admin_api.batch_move_tests")
 def batch_move_tests(payload: BatchMoveTestsRequest, user: User = Depends(admin_user)):
     result = ReleaseManagerService().batch_move_tests(**payload.model_dump())
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "moved": result
@@ -281,7 +281,7 @@ def batch_move_tests(payload: BatchMoveTestsRequest, user: User = Depends(admin_
 def delete_test(payload: DeleteTestRequest, user: User = Depends(admin_user)):
     result = ReleaseManagerService().delete_test(**payload.model_dump())
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "deleted": result
@@ -292,7 +292,7 @@ def delete_test(payload: DeleteTestRequest, user: User = Depends(admin_user)):
 @router.get("/releases/get", name="admin.admin_api.get_releases")
 def get_releases(user: User = Depends(admin_user)):
     releases = ReleaseManagerService().get_releases()
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": releases
     })
@@ -303,7 +303,7 @@ def get_groups_for_release(release_id: UUID = Query(..., alias="releaseId"),
                            user: User = Depends(admin_user)):
     groups = ReleaseManagerService().get_groups(release_id=release_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": groups
     })
@@ -313,7 +313,7 @@ def get_groups_for_release(release_id: UUID = Query(..., alias="releaseId"),
 def get_tests_for_group(group_id: UUID = Query(..., alias="groupId"),
                         user: User = Depends(admin_user)):
     tests = ReleaseManagerService().get_tests(group_id=group_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": tests
     })
@@ -322,7 +322,7 @@ def get_tests_for_group(group_id: UUID = Query(..., alias="groupId"),
 @router.post("/release/test/state/toggle", name="admin.admin_api.quick_toggle_test_enabled")
 def quick_toggle_test_enabled(payload: ToggleEntityStateRequest, user: User = Depends(admin_user)):
     res = ReleaseManagerService().toggle_test_enabled(test_id=payload.entityId, new_state=payload.state)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": res
     })
@@ -331,7 +331,7 @@ def quick_toggle_test_enabled(payload: ToggleEntityStateRequest, user: User = De
 @router.post("/release/group/state/toggle", name="admin.admin_api.quick_toggle_group_enabled")
 def quick_toggle_group_enabled(payload: ToggleEntityStateRequest, user: User = Depends(admin_user)):
     res = ReleaseManagerService().toggle_group_enabled(group_id=payload.entityId, new_state=payload.state)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": res
     })
@@ -341,7 +341,7 @@ def quick_toggle_group_enabled(payload: ToggleEntityStateRequest, user: User = D
 def user_info(user: User = Depends(admin_user)):
     result = UserService().get_users_privileged()
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -353,7 +353,7 @@ def user_change_email(user_id: UUID, payload: UserEmailChangeRequest,
     target = User.get(id=user_id)
     result = UserService().update_email(user=target, new_email=payload.newEmail)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -363,7 +363,7 @@ def user_change_email(user_id: UUID, payload: UserEmailChangeRequest,
 def user_delete(user_id: str, user: User = Depends(admin_user)):
     result = UserService().delete_user(user_id=user_id, current_user=user)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -376,7 +376,7 @@ def user_change_password(user_id: UUID, payload: UserPasswordChangeRequest,
     result = UserService().update_password(user=target, old_password="",
                                            new_password=payload.newPassword, force=True)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -386,7 +386,7 @@ def user_change_password(user_id: UUID, payload: UserPasswordChangeRequest,
 def user_toggle_admin(user_id: str, user: User = Depends(admin_user)):
     result = UserService().toggle_admin(user_id=user_id, current_user=user)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -396,7 +396,7 @@ def user_toggle_admin(user_id: str, user: User = Depends(admin_user)):
 def get_proxy_tunnel_config(tunnel_id: str | None = Query(None),
                             user: User = Depends(admin_user)):
     config = TunnelService().get_proxy_tunnel_config(tunnel_id=tunnel_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": asdict(config) if config else None,
     })
@@ -406,7 +406,7 @@ def get_proxy_tunnel_config(tunnel_id: str | None = Query(None),
 def list_proxy_tunnel_configs(active_only: bool | None = Query(None),
                               user: User = Depends(admin_user)):
     configs = TunnelService().list_proxy_tunnel_configs(active_only=active_only)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": [asdict(row) for row in configs],
     })
@@ -416,7 +416,7 @@ def list_proxy_tunnel_configs(active_only: bool | None = Query(None),
 def save_proxy_tunnel_config(payload: ProxyTunnelConfigRequest,
                              user: User = Depends(admin_user)):
     config = TunnelService().save_proxy_tunnel_config(payload.model_dump(exclude_unset=True))
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": asdict(config),
     })
@@ -427,14 +427,14 @@ def delete_proxy_tunnel_config(tunnel_id: UUID, payload: dict | None = Body(None
                                user: User = Depends(admin_user)):
     delete_user_flag = bool((payload or {}).get("delete_user", False))
     TunnelService().delete_proxy_tunnel_config(tunnel_id, delete_user=delete_user_flag)
-    return ArgusJSONResponse({"status": "ok", "response": {"deleted": True, "user_deleted": delete_user_flag}})
+    return APIResponse({"status": "ok", "response": {"deleted": True, "user_deleted": delete_user_flag}})
 
 
 @router.post("/proxy-tunnel/config/{tunnel_id}/active", name="admin.admin_api.set_proxy_tunnel_config_active")
 def set_proxy_tunnel_config_active(tunnel_id: UUID, payload: ProxyTunnelActiveRequest,
                                    user: User = Depends(admin_user)):
     config = TunnelService().set_proxy_tunnel_config_active(tunnel_id, payload.is_active)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": asdict(config),
     })
@@ -443,7 +443,7 @@ def set_proxy_tunnel_config_active(tunnel_id: UUID, payload: ProxyTunnelActiveRe
 @router.get("/ssh/keys", name="admin.admin_api.list_ssh_keys")
 def list_ssh_keys(user: User = Depends(admin_user)):
     keys = TunnelService().list_keys()
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": [asdict(row) for row in keys],
     })
@@ -452,7 +452,7 @@ def list_ssh_keys(user: User = Depends(admin_user)):
 @router.delete("/ssh/keys/{key_id}", name="admin.admin_api.delete_ssh_key")
 def delete_ssh_key(key_id: UUID, user: User = Depends(admin_user)):
     TunnelService().delete_key(key_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "deleted": True,

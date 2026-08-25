@@ -8,7 +8,7 @@ from argus.backend.plugins.driver_matrix_tests.raw_types import (
 )
 from argus.backend.plugins.driver_matrix_tests.service import DriverMatrixService
 from argus.backend.service.user import api_current_user
-from argus.backend.util.encoders import ArgusJSONResponse
+from argus.backend.util.encoders import APIResponse
 
 router = APIRouter(prefix="/driver_matrix")
 
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/driver_matrix")
 def driver_matrix_test_report(build_id: str = Query(..., alias="buildId"),
                               user: User = Depends(api_current_user)):
     result = DriverMatrixService().tested_versions_report(build_id=build_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -29,7 +29,7 @@ def submit_result(payload: DriverMatrixSubmitResultRequest,
     result = DriverMatrixService().submit_driver_result(
         driver_name=payload.driver_name, driver_type=payload.driver_type,
         run_id=payload.run_id, raw_xml=payload.raw_xml)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -41,7 +41,7 @@ def submit_failure(payload: DriverMatrixSubmitFailureRequest,
     result = DriverMatrixService().submit_driver_failure(
         driver_name=payload.driver_name, driver_type=payload.driver_type,
         run_id=payload.run_id, failure_reason=payload.failure_reason)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -50,7 +50,7 @@ def submit_failure(payload: DriverMatrixSubmitFailureRequest,
 @router.post("/env/submit", name="api.client_api.driver_matrix_api.submit_env")
 def submit_env(payload: DriverMatrixSubmitEnvRequest, user: User = Depends(api_current_user)):
     result = DriverMatrixService().submit_env_info(run_id=payload.run_id, raw_env=payload.raw_env)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })

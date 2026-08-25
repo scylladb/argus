@@ -18,7 +18,7 @@ from argus.backend.service.stats import ReleaseStatsCollector
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.user import UserService, api_current_user
 from argus.backend.util.common import NoneIfEmpty
-from argus.backend.util.encoders import ArgusJSONResponse
+from argus.backend.util.encoders import APIResponse
 
 LOGGER = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ class UpdateGraphViewRequest(BaseModel):
 def app_version():
     service = ArgusService()
     argus_version = service.get_version()
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "commit_id": argus_version
@@ -73,7 +73,7 @@ def get_run_by_build(asgi_request: Request, build_id: str, build_number: int,
         raise Exception(f"Run not found for {build_id} #{build_number}")
     run_path = url_for(asgi_request, "main.get_run_by_plugin",
                        plugin_name=run._plugin_name, run_id=run.id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "run_id": str(run.id),
@@ -88,7 +88,7 @@ def releases(force_all: bool = Query(False, alias="all"),
              user: User = Depends(api_current_user)):
     service = ArgusService()
     all_releases = service.get_releases()
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": [d.model_dump() for d in all_releases if d.enabled or force_all]
     }, headers=CACHEABLE)
@@ -100,7 +100,7 @@ def release_activity(release_name: str = Query(..., alias="releaseName"),
     service = ArgusService()
     activity_data = service.fetch_release_activity(release_name)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": activity_data
     })
@@ -111,7 +111,7 @@ def release_planner_data(release_id: UUID = Query(..., alias="releaseId"),
                          user: User = Depends(api_current_user)):
     service = ArgusService()
     planner_data = service.get_planner_data(release_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": planner_data
     })
@@ -122,7 +122,7 @@ def release_versions(release_id: UUID, user: User = Depends(api_current_user)):
     service = ArgusService()
     distinct_versions = service.get_distinct_release_versions(release_id=release_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": distinct_versions
     })
@@ -133,7 +133,7 @@ def release_pytest_results(release_id: UUID, user: User = Depends(api_current_us
     service = TestRunService()
     res = service.get_pytest_release_results(release_id=release_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": res
     })
@@ -144,7 +144,7 @@ def release_images(release_id: UUID, user: User = Depends(api_current_user)):
     service = ArgusService()
     distinct_images = service.get_distinct_release_images(release_id=release_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": distinct_images
     })
@@ -155,7 +155,7 @@ def get_planner_comment_by_test(test_id: UUID = Query(..., alias="id")):
     service = ArgusService()
     planner_comments_by_test = service.get_planner_comment_by_test(test_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": planner_comments_by_test
     }, headers=CACHEABLE)
@@ -167,7 +167,7 @@ def release_schedules_comment_update(payload: dict = Body(...),
     service = ArgusService()
     comment_update_result = service.update_schedule_comment(payload)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": comment_update_result
     })
@@ -179,7 +179,7 @@ def release_schedules(release: UUID = Query(..., alias="releaseId"),
     service = ArgusService()
     release_schedules_data = service.get_schedules_for_release(release)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": release_schedules_data
     })
@@ -191,7 +191,7 @@ def release_schedules_assignee_update(payload: dict = Body(...),
     service = ArgusService()
     assignee_update_status = service.update_schedule_assignees(payload)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": assignee_update_status
     })
@@ -205,7 +205,7 @@ def group_assignees(release_id: UUID = Query(..., alias="releaseId"),
     service = ArgusService()
     group_assignees_list = service.get_groups_assignees(release_id, version, plan_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": group_assignees_list
     })
@@ -219,7 +219,7 @@ def tests_assignees(group_id: UUID = Query(..., alias="groupId"),
     service = ArgusService()
     tests_assignees_list = service.get_tests_assignees(group_id, version, plan_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": tests_assignees_list
     })
@@ -241,7 +241,7 @@ def release_schedules_submit(payload: dict = Body(...),
         group_ids=payload.get("groupIds"),
     )
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": schedule_submit_result
     })
@@ -253,7 +253,7 @@ def release_schedules_delete(payload: dict = Body(...),
     service = ArgusService()
     schedule_delete_result = service.delete_schedule(payload)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": schedule_delete_result
     })
@@ -273,7 +273,7 @@ def release_schedule_update(payload: dict = Body(...),
         assignee=req.assignee
     )
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": update_result
     })
@@ -287,7 +287,7 @@ def argus_groups(release_id: UUID = Query(..., alias="releaseId"),
     groups = service.get_groups(release_id)
     result_groups = [group.model_dump() for group in groups if group.enabled or force_all]
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result_groups
     }, headers=CACHEABLE)
@@ -301,7 +301,7 @@ def argus_tests(group_id: UUID = Query(..., alias="groupId"),
     tests = service.get_tests(group_id=group_id)
     result_tests = [t.model_dump() for t in tests if t.enabled or force_all]
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result_tests
     }, headers=CACHEABLE)
@@ -310,7 +310,7 @@ def argus_tests(group_id: UUID = Query(..., alias="groupId"),
 @router.get("/release/{release_id}/details", name="api.get_release_details")
 def get_release_details(release_id: UUID, user: User = Depends(api_current_user)):
     release = ArgusRelease.get(id=release_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": release,
     }, headers=CACHEABLE)
@@ -319,7 +319,7 @@ def get_release_details(release_id: UUID, user: User = Depends(api_current_user)
 @router.get("/group/{group_id}/details", name="api.get_group_details")
 def get_group_details(group_id: UUID, user: User = Depends(api_current_user)):
     group = ArgusGroup.get(id=group_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": group,
     }, headers=CACHEABLE)
@@ -328,7 +328,7 @@ def get_group_details(group_id: UUID, user: User = Depends(api_current_user)):
 @router.get("/test/{test_id}/details", name="api.get_test_details")
 def get_test_details(test_id: UUID, user: User = Depends(api_current_user)):
     test = ArgusTest.get(id=test_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": test
     }, headers=CACHEABLE)
@@ -341,7 +341,7 @@ def set_test_plugin(test_id: UUID, payload: SetTestPluginRequest,
     test.plugin_name = payload.plugin_name
     test.save()
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": test
     })
@@ -353,7 +353,7 @@ def test_info(test_id: UUID = Query(..., alias="testId"),
     service = ArgusService()
     info = service.get_test_info(test_id=test_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": info
     })
@@ -378,7 +378,7 @@ def test_results(asgi_request: Request, test_id: UUID = Query(..., alias="testId
         test_id=test_id, start_date=start_date, end_date=end_date, table_names=table_names)
     graph_views = service.get_argus_graph_views(test_id=test_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {"graphs": graphs, "ticks": ticks, "releases_filters": releases_filters,
                      "graph_views": graph_views}
@@ -390,7 +390,7 @@ def create_graph_view(payload: CreateGraphViewRequest, user: User = Depends(api_
     service = ResultsService()
     graph_view = service.create_argus_graph_view(
         test_id=payload.testId, name=payload.name, description=payload.description)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": graph_view
     })
@@ -402,7 +402,7 @@ def update_graph_view(payload: UpdateGraphViewRequest, user: User = Depends(api_
     graph_view = service.update_argus_graph_view(
         test_id=payload.testId, view_id=payload.id, name=payload.name,
         description=payload.description, graphs=payload.graphs)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": graph_view
     })
@@ -413,7 +413,7 @@ def get_test_run_comment(comment_id: UUID = Query(..., alias="commentId"),
                          user: User = Depends(api_current_user)):
     service = ArgusService()
     comment = service.get_comment(comment_id=comment_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": comment if comment else False
     })
@@ -423,7 +423,7 @@ def get_test_run_comment(comment_id: UUID = Query(..., alias="commentId"),
 def user_info(user: User = Depends(api_current_user)):
     result = UserService().get_users()
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -444,7 +444,7 @@ def release_stats_v2(release: str = Query(...), limited: bool = Query(...),
             image_id=image_id
     )
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": stats
     })
@@ -465,7 +465,7 @@ def release_create(payload: dict = Body(...), user: User = Depends(api_current_u
     service = ArgusService()
     result = service.create_release(payload)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -476,7 +476,7 @@ def resolve_artifact_size(link: str = Query(..., alias="l"),
                           user: User = Depends(api_current_user)):
     length = TestRunService().resolve_artifact_size(link)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "artifactSize": length,
@@ -500,7 +500,7 @@ def s3_generic_proxy(bucket_name: str, bucket_path: str,
 def user_token(user: User = Depends(api_current_user)):
     token = UserService().get_or_generate_token(user=user)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "token": token
@@ -513,7 +513,7 @@ def user_jobs(user: User = Depends(api_current_user)):
     service = ArgusService()
     result = list(service.get_jobs_for_user(user=user))
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -524,7 +524,7 @@ def user_planned_jobs(user: User = Depends(api_current_user)):
     service = ArgusService()
     result = list(service.get_planned_jobs_for_user(user=user))
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })

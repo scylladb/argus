@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from argus.backend.models.web import ArgusTest, ArgusUserView, User
 from argus.backend.service.results_service import ResultsService
 from argus.backend.service.user import api_current_user
-from argus.backend.util.encoders import ArgusJSONResponse
+from argus.backend.util.encoders import APIResponse
 
 router = APIRouter(prefix="/widgets")
 
@@ -62,7 +62,7 @@ def get_graph_views(view_id: UUID = Query(...),
 
         response[str(test_id)] = view_data
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": response,
         "tests_details": tests_details

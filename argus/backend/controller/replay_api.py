@@ -20,7 +20,7 @@ from argus.backend.error_handlers import APIException
 from argus.backend.models.web import User
 from argus.backend.service.replay_service import ReplayService
 from argus.backend.service.user import api_current_user
-from argus.backend.util.encoders import ArgusJSONResponse
+from argus.backend.util.encoders import APIResponse
 
 router = APIRouter(prefix="/replay")
 
@@ -81,7 +81,7 @@ def replay_ingest(asgi_request: Request, archive: bytes = Body(b""),
     )
     summary = service.ingest(archive, dry_run=dry_run)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": summary.as_dict(),
     })

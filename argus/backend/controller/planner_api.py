@@ -8,7 +8,7 @@ from argus.backend.models.web import User
 from argus.backend.service.planner_service import CopyPlanPayload, PlanningService
 from argus.backend.service.test_lookup import TestLookup
 from argus.backend.service.user import api_current_user
-from argus.backend.util.encoders import ArgusJSONResponse
+from argus.backend.util.encoders import APIResponse
 
 LOGGER = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ class ChangePlanOwnerRequest(BaseModel):
 def version(user: User = Depends(api_current_user)):
     result = PlanningService().version()
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -34,7 +34,7 @@ def is_plan_eligible_for_copy(plan_id: UUID, release_id: UUID = Query(..., alias
                               user: User = Depends(api_current_user)):
     result = PlanningService().check_plan_copy_eligibility(plan_id=plan_id, target_release_id=release_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -44,7 +44,7 @@ def is_plan_eligible_for_copy(plan_id: UUID, release_id: UUID = Query(..., alias
 def grid_view_for_release(release_id: UUID, user: User = Depends(api_current_user)):
     result = PlanningService().get_gridview_for_release(release_id=release_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -57,7 +57,7 @@ def search_tests(query: str | None = Query(None), release_id: str | None = Query
         res = TestLookup.test_lookup(query, release_id=release_id)
     else:
         res = []
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": {
             "hits": res,
@@ -69,7 +69,7 @@ def search_tests(query: str | None = Query(None), release_id: str | None = Query
 @router.get("/group/{group_id}/explode", name="api.planning_api.explode_group")
 def explode_group(group_id: str, user: User = Depends(api_current_user)):
     res = TestLookup.explode_group(group_id=group_id)
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": res
     })
@@ -79,7 +79,7 @@ def explode_group(group_id: str, user: User = Depends(api_current_user)):
 def get_plan(plan_id: str, user: User = Depends(api_current_user)):
     result = PlanningService().get_plan(plan_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -89,7 +89,7 @@ def get_plan(plan_id: str, user: User = Depends(api_current_user)):
 def get_plans_for_release(release_id: str, user: User = Depends(api_current_user)):
     result = PlanningService().get_plans_for_release(release_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -99,7 +99,7 @@ def get_plans_for_release(release_id: str, user: User = Depends(api_current_user
 def create_plan(payload: dict = Body(...), user: User = Depends(api_current_user)):
     result = PlanningService().create_plan(payload, user)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -109,7 +109,7 @@ def create_plan(payload: dict = Body(...), user: User = Depends(api_current_user
 def update_plan(payload: dict = Body(...), user: User = Depends(api_current_user)):
     result = PlanningService().update_plan(payload, user)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -119,7 +119,7 @@ def update_plan(payload: dict = Body(...), user: User = Depends(api_current_user
 def copy_plan(payload: CopyPlanPayload, user: User = Depends(api_current_user)):
     result = PlanningService().copy_plan(payload, user)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -130,7 +130,7 @@ def delete_plan(plan_id: str, delete_view: bool = Query(False, alias="deleteView
                 user: User = Depends(api_current_user)):
     result = PlanningService().delete_plan(plan_id, delete_view=delete_view)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -141,7 +141,7 @@ def change_plan_owner(plan_id: str, payload: ChangePlanOwnerRequest,
                       user: User = Depends(api_current_user)):
     result = PlanningService().change_plan_owner(plan_id=plan_id, new_owner=payload.newOwner)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result
     })
@@ -152,7 +152,7 @@ def resolve_plan_entities(plan_id: str, user: User = Depends(api_current_user)):
     service = PlanningService()
     result = service.resolve_plan(plan_id)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result,
     })
@@ -163,7 +163,7 @@ def trigger_jobs_for_plans(payload: dict = Body(...), user: User = Depends(api_c
     service = PlanningService()
     result = service.trigger_jobs(payload, user.username)
 
-    return ArgusJSONResponse({
+    return APIResponse({
         "status": "ok",
         "response": result,
     })
