@@ -7,11 +7,10 @@ from urllib3.util.retry import Retry
 
 from argus.client.tunnel.models import DEFAULT_TUNNEL_TIMEOUT, TunnelClientError, TunnelConfig
 from argus.client.tunnel.state import (
-    generate_keypair_if_needed,
-    get_tunnel_state_paths,
-    is_key_valid,
+    find_existing_key_dir,
+    generate_and_register_key,
     read_cached_tunnel_config,
-    write_key_meta,
+    sweep_stale_tunnel_keys,
     write_tunnel_cache,
 )
 
@@ -37,30 +36,33 @@ def _create_api_session() -> requests.Session:
 def resolve_tunnel_config(
     auth_token: str,
     base_url: str,
-    force_refresh: bool = False,
-    ttl_seconds: int | None = None,
-    session: requests.Session | None = None,
-    extra_headers: dict[str, str] | None = None,
-) -> TunnelConfig | None:
-    config, _reason = resolve_tunnel_config_with_reason(
-        auth_token=auth_token,
-        base_url=base_url,
-        force_refresh=force_refresh,
-        ttl_seconds=ttl_seconds,
-        session=session,
-        extra_headers=extra_headers,
-    )
-    return config
-
-
-def resolve_tunnel_config_with_reason(
-    auth_token: str,
-    base_url: str,
+    run_id: str,
     force_refresh: bool = False,
     ttl_seconds: int | None = None,
     session: requests.Session | None = None,
     extra_headers: dict[str, str] | None = None,
 ) -> tuple[TunnelConfig | None, str | None]:
+    config, key_path, _reason = resolve_tunnel_config_with_reason(
+        auth_token=auth_token,
+        base_url=base_url,
+        run_id=run_id,
+        force_refresh=force_refresh,
+        ttl_seconds=ttl_seconds,
+        session=session,
+        extra_headers=extra_headers,
+    )
+    return config, key_path
+
+
+def resolve_tunnel_config_with_reason(
+    auth_token: str,
+    base_url: str,
+    run_id: str,
+    force_refresh: bool = False,
+    ttl_seconds: int | None = None,
+    session: requests.Session | None = None,
+    extra_headers: dict[str, str] | None = None,
+) -> tuple[TunnelConfig | None, str | None, str | None]:
     """
     Resolve tunnel configuration while keeping Cloudflare bootstrap calls minimal.
 
@@ -68,28 +70,35 @@ def resolve_tunnel_config_with_reason(
     1. Use cached config when key/cache are still valid and refresh is not forced.
     2. Use GET /client/ssh/tunnel when key exists and remains valid.
     3. Register/re-register via POST /client/ssh/tunnel.
+
+    Returns ``(config, private_key_path, reason)``. ``run_id`` names the
+    on-disk key directory so two runs on the same host never share or race on
+    one keypair — each generates and registers its own.
     """
-    paths = get_tunnel_state_paths()
+    try:
+        existing = find_existing_key_dir(run_id)
+    except ValueError as exc:
+        return None, None, str(exc)
 
-    if not force_refresh:
-        cached = read_cached_tunnel_config(paths)
-        if cached is not None and is_key_valid(paths):
-            return cached, None
+    if existing is not None:
+        if not force_refresh:
+            cached = read_cached_tunnel_config(existing)
+            if cached is not None:
+                return cached, existing.private_key, None
 
-    if is_key_valid(paths):
         try:
-            config = _get_tunnel_connection(auth_token=auth_token, base_url=base_url, session=session,
-                                           extra_headers=extra_headers)
-            write_tunnel_cache(paths, config)
-            return config, None
+            config = _get_tunnel_connection(
+                auth_token=auth_token, base_url=base_url, session=session, extra_headers=extra_headers
+            )
+            write_tunnel_cache(existing, config)
+            return config, existing.private_key, None
         except TunnelClientError as exc:
             LOGGER.warning("Unable to refresh tunnel connection details via API: %s", exc)
 
-    try:
-        generate_keypair_if_needed(paths)
-        with open(paths.public_key, encoding="utf-8") as fh:
-            public_key = fh.read().strip()
-        config = _register_tunnel(
+    sweep_stale_tunnel_keys()
+
+    def _register(public_key: str) -> TunnelConfig:
+        return _register_tunnel(
             auth_token=auth_token,
             base_url=base_url,
             public_key=public_key,
@@ -97,12 +106,13 @@ def resolve_tunnel_config_with_reason(
             session=session,
             extra_headers=extra_headers,
         )
-        write_key_meta(paths, config.expires_at)
-        write_tunnel_cache(paths, config)
-        return config, None
+
+    try:
+        config, key_path = generate_and_register_key(run_id, _register)
+        return config, key_path, None
     except (OSError, TunnelClientError) as exc:
         LOGGER.warning("Unable to resolve SSH tunnel configuration: %s", exc)
-        return None, str(exc)
+        return None, None, str(exc)
 
 
 def _register_tunnel(
@@ -196,9 +206,7 @@ def _call_tunnel_api(
             ) from exc
 
         if not isinstance(response_payload, dict):
-            raise TunnelClientError(
-                f"Tunnel API response payload has invalid format ({method} {url})"
-            )
+            raise TunnelClientError(f"Tunnel API response payload has invalid format ({method} {url})")
 
         if response_payload.get("status") != "ok":
             response_error = response_payload.get("response")
