@@ -98,7 +98,13 @@ def trigger_jobs(api_key: str, base_url: str, use_tunnel: bool | None, log_dir: 
         extra_headers=extra_headers,
         use_tunnel=use_tunnel,
     ) as client:
-        client.trigger_jobs({"release": release, "version": version, "plan_id": plan_id, **payload})
+        client.trigger_jobs(
+            common_params=payload.get("common_params", {}),
+            params=payload.get("params", []),
+            version=version,
+            release=release,
+            plan_id=plan_id,
+        )
 
 
 cli.add_command(submit_run)
