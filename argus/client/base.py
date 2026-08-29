@@ -61,6 +61,12 @@ class ArgusClient:
     # replay-log filename.
     test_type: str | None = None
 
+    # Route templates mounted directly under /api/<ver> instead of the
+    # /api/<ver>/client sub-tree. Kept as a lookup on the template (not baked
+    # into the route string) so replay logs keep recording the same endpoint
+    # values the backend skip-list knows.
+    non_client_routes: frozenset[str] = frozenset()
+
     def __init__(self, auth_token: str, base_url: str, log_dir: str | Path, api_version="v1",
                  extra_headers: dict | None = None, timeout: int = 60, max_retries: int = 3,
                  use_tunnel: bool | None = None, replay_log_only: bool = False,
@@ -142,10 +148,11 @@ class ArgusClient:
             )
 
     def get_url_for_endpoint(self, endpoint: str, location_params: dict[str, str] | None) -> str:
+        prefix = "" if endpoint in self.non_client_routes else "/client"
         if self.verify_location_params(endpoint, location_params):
             for param, value in location_params.items():
                 endpoint = endpoint.replace(f"${param}", str(value))
-        return f"{self._base_url}/api/{self._api_ver}/client{endpoint}"
+        return f"{self._base_url}/api/{self._api_ver}{prefix}{endpoint}"
 
     @property
     def generic_body(self) -> dict:
