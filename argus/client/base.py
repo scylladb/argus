@@ -53,7 +53,6 @@ class ArgusClient:
         SET_PRODUCT_VERSION = "/testrun/$type/$id/update_product_version"
         SUBMIT_LOGS = "/testrun/$type/$id/logs/submit"
         SUBMIT_RESULTS = "/testrun/$type/$id/submit_results"
-        FETCH_RESULTS = "/testrun/$type/$id/fetch_results"
         FINALIZE = "/testrun/$type/$id/finalize"
 
     # Subclasses override ``test_type`` as a class attribute; ``run_id`` is
