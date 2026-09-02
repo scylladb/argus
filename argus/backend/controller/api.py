@@ -530,8 +530,11 @@ def user_planned_jobs(user: User = Depends(api_current_user)):
 
 @router.api_route("/zeus/{endpoint:path}", methods=["GET", "POST", "HEAD", "PUT", "DELETE"],
                   name="api.zeus_proxy")
-def zeus_proxy(asgi_request: Request, endpoint: str, body: bytes = Body(b""),
-               user: User = Depends(api_current_user)):
+async def zeus_proxy(asgi_request: Request, endpoint: str,
+                     user: User = Depends(api_current_user)):
+    # the body is forwarded verbatim — a Body(...) param would make FastAPI
+    # JSON-parse it and fail validation on any JSON payload
+    body = await asgi_request.body()
     config = asgi_request.app.state.config
     zeus_host = config.get("ZEUS_HOST")
     zeus_schema = config.get("ZEUS_SCHEMA", "http")

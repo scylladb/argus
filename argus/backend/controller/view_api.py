@@ -23,6 +23,24 @@ LOGGER = logging.getLogger(__name__)
 router = APIRouter(prefix="/views")
 
 
+def _widget_modules() -> list[ModuleType]:
+    """Discover the view widget controllers: every module in views_widgets
+    that exports a FastAPI ``router``."""
+    modules = []
+    for module_info in pkgutil.iter_modules(views_widgets.__path__):
+        module = importlib.import_module(f"{views_widgets.__package__}.{module_info.name}")
+        if getattr(module, "router", None) is not None:
+            modules.append(module)
+    return modules
+
+
+# Included before this module's own routes: starlette matches in
+# registration order, so /widgets/... must beat the /{view_id}/... rules
+# below (Flask scored the static rule higher regardless of order).
+for _module in _widget_modules():
+    router.include_router(_module.router)
+
+
 class ViewApiException(APIException):
     pass
 
@@ -195,18 +213,3 @@ def view_get_pytest_results(view_id: str, user: User = Depends(api_current_user)
         "status": "ok",
         "response": res
     })
-
-
-def _widget_modules() -> list[ModuleType]:
-    """Discover the view widget controllers: every module in views_widgets
-    that exports a FastAPI ``router``."""
-    modules = []
-    for module_info in pkgutil.iter_modules(views_widgets.__path__):
-        module = importlib.import_module(f"{views_widgets.__package__}.{module_info.name}")
-        if getattr(module, "router", None) is not None:
-            modules.append(module)
-    return modules
-
-
-for _module in _widget_modules():
-    router.include_router(_module.router)

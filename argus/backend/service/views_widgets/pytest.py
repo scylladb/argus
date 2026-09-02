@@ -73,11 +73,14 @@ class PytestViewService:
     def prepare_bar_chart(self, hits: list[dict], before: datetime, after: datetime) -> dict:
         start_date = None
         end_date = None
+        # without hits there is no oldest result to open the window at —
+        # fall back to today, producing an empty chart
+        oldest_hit_date = date.fromtimestamp(hits[-1]["id"].timestamp()) if hits else date.today()
         if not before and not after:
-            start_date = date.fromtimestamp(hits[-1]["id"].timestamp())
+            start_date = oldest_hit_date
             end_date = date.today()
         elif before and not after:
-            start_date = date.fromtimestamp(hits[-1]["id"].timestamp())
+            start_date = oldest_hit_date
             end_date = date.fromtimestamp(before.timestamp())
         elif after and not before:
             start_date = date.fromtimestamp(after.timestamp())

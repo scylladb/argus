@@ -1,10 +1,11 @@
 from time import time
-from typing import Optional
+from typing import Annotated, Optional
 
 from pydantic import Field
 
 from coodie.usertype import UserType
 
+from argus.backend.util.common import NoneAsEmptyList
 from argus.common.enums import ResourceState
 
 
@@ -77,7 +78,7 @@ class CloudResource(UserType):
 class EventsBySeverity(UserType):
     severity: Optional[str] = None
     event_amount: Optional[int] = None
-    last_events: list[str] = Field(default_factory=list)
+    last_events: Annotated[list[str], NoneAsEmptyList] = Field(default_factory=list)
 
     class Settings:
         __type_name__ = "eventsbyseverity"

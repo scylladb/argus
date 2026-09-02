@@ -191,6 +191,36 @@ def test_zeus_proxy_without_host_errors(api_client, app_config):
             app_config["ZEUS_HOST"] = saved_host
 
 
+def test_zeus_proxy_forwards_json_body_verbatim(api_client, app_config):
+    """A Body(...) param made FastAPI JSON-parse the payload and reject every
+    JSON request with RequestValidationError — the body must pass through raw."""
+    saved_host = app_config.get("ZEUS_HOST")
+    saved_token = app_config.get("ZEUS_TOKEN")
+    app_config["ZEUS_HOST"] = "zeus.test"
+    app_config["ZEUS_TOKEN"] = "zeus-token"
+    upstream = MagicMock()
+    upstream.content = b'{"zeus": "ok"}'
+    upstream.status_code = 200
+    upstream.headers = {"content-type": "application/json"}
+    try:
+        with patch("argus.backend.controller.api.requests.Session") as session_cls:
+            session_cls.return_value.send.return_value = upstream
+            resp = api_client.post(f"{API_PREFIX}/zeus/some/endpoint", json={"key": "value"})
+        assert resp.status_code == 200
+        assert resp.json() == {"zeus": "ok"}
+        prepared = session_cls.return_value.send.call_args.args[0]
+        assert prepared.body == b'{"key":"value"}'
+    finally:
+        if saved_host is None:
+            app_config.pop("ZEUS_HOST", None)
+        else:
+            app_config["ZEUS_HOST"] = saved_host
+        if saved_token is None:
+            app_config.pop("ZEUS_TOKEN", None)
+        else:
+            app_config["ZEUS_TOKEN"] = saved_token
+
+
 def test_zeus_proxy_without_token_errors(api_client, app_config):
     saved_host = app_config.get("ZEUS_HOST")
     saved_token = app_config.pop("ZEUS_TOKEN", None)

@@ -8,6 +8,7 @@ from fastapi import Request
 from starlette.responses import JSONResponse, RedirectResponse
 
 from argus.backend.db import ScyllaCluster
+from argus.backend.metrics import record_exception
 from argus.backend.rendering import flash as asgi_flash, url_for as asgi_url_for
 from argus.backend.util.encoders import APIResponse
 
@@ -89,6 +90,7 @@ async def api_exception_handler(asgi_request: Request, exception: Exception) -> 
         LOGGER.info("[TraceId: %s] Headers\n%s", trace_id, dict(asgi_request.headers))
         LOGGER.info("[TraceId: %s] Request Data Start\n%s\nRequest Data End", trace_id, body)
     else:
+        record_exception(method=asgi_request.method)
         LOGGER.error("[TraceId: %s] Exception in %s\n%s", trace_id,
                      endpoint, "".join(format_exception(exception)))
         LOGGER.error("[TraceId: %s] Headers\n%s", trace_id, dict(asgi_request.headers))

@@ -1,5 +1,4 @@
 import logging
-from contextlib import asynccontextmanager
 
 import cassandra.cluster
 from fastapi import FastAPI
@@ -22,22 +21,14 @@ from argus.backend.error_handlers import (
 )
 from argus.backend.metrics import build_instrumentator, build_metrics_router
 from argus.backend.rendering import register_app
-from argus.backend.service.user import UserServiceException
+from argus.backend.service.user import UserServiceException, api_current_user
 from argus.backend.service.views import UserViewException
 from argus.backend.util.config import Config
-from argus.backend.util.logsetup import setup_application_logging
+from argus.backend.util.logsetup import RequestLogContextMiddleware, setup_application_logging
 
 LOGGER = logging.getLogger(__name__)
 
 SESSION_LIFETIME = 31 * 24 * 60 * 60  # Flask's permanent_session_lifetime default
-
-
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    # The Scylla connection is established when the app is built below;
-    # closing it here lets gunicorn recycle workers cleanly.
-    yield
-    ScyllaCluster.shutdown()
 
 
 def create_app(config=None) -> FastAPI:
@@ -63,7 +54,6 @@ def create_app(config=None) -> FastAPI:
 
     app = FastAPI(
         title="Argus",
-        lifespan=lifespan,
         # UI parity with the Flask app: no schema/docs endpoints (yet)
         openapi_url=None,
         docs_url=None,
@@ -79,6 +69,7 @@ def create_app(config=None) -> FastAPI:
         max_age=SESSION_LIFETIME,
         https_only=bool(app_config.get("SESSION_COOKIE_SECURE")),
     )
+    app.add_middleware(RequestLogContextMiddleware)
     build_instrumentator().instrument(app)
     app.add_exception_handler(AuthorizationError, authorization_error_handler)
     app.add_exception_handler(APIException, api_exception_handler)
@@ -94,7 +85,7 @@ def create_app(config=None) -> FastAPI:
     app.include_router(main.router)
     app.include_router(api.router)
     app.include_router(admin.router)
-    app.include_router(build_metrics_router())
+    app.include_router(build_metrics_router(current_user_dependency=api_current_user))
 
     app.mount("/s", StaticFiles(directory="public"), name="static")
     LOGGER.info("Ready.")
