@@ -12,7 +12,7 @@ from argus.backend.rendering import flash, templates, url_for
 from argus.backend.service.argus_service import ArgusService
 from argus.backend.service.planner_service import PlanningService
 from argus.backend.service.testrun import TestRunService
-from argus.backend.service.user import UserService, UserServiceException, ui_current_user
+from argus.backend.service.user import UserService, UserServiceException, load_user, ui_current_user
 from argus.backend.service.views import UserViewException, UserViewService
 
 LOGGER = logging.getLogger(__name__)
@@ -183,7 +183,10 @@ def duty_planner(asgi_request: Request, name: str, user: User = Depends(ui_curre
 
 
 @router.get("/error/", name="main.error")
-def error(asgi_request: Request, error_type: str = Query("400", alias="type")):
+def error(asgi_request: Request, error_type: str = Query("400", alias="type"),
+          user: User | None = Depends(load_user)):
+    # load_user only resolves the visitor (g.user for the nav bar) — the
+    # error page itself stays reachable anonymously
     return templates.TemplateResponse(asgi_request, "error.html.j2", {"type": error_type})
 
 

@@ -256,3 +256,12 @@ def test_view_stats_with_widget_id_filter_returns_ok(api_client, view_name):
     res = api_client.get(f"/api/v1/views/stats?viewId={view_id}&widgetId=0").json()
     assert res["status"] == "ok"
     assert isinstance(res["response"], dict)
+
+
+def test_widget_routes_are_not_shadowed_by_view_id_rules(api_client):
+    """/views/widgets/... must match the widget routers, not
+    /views/{view_id}/... with view_id="widgets" (starlette matches in
+    registration order, unlike Flask's static-first scoring)."""
+    res = api_client.get("/api/v1/views/widgets/pytest/results").json()
+    assert res["status"] == "ok"
+    assert res.get("response", {}).get("exception") != "ValueError"

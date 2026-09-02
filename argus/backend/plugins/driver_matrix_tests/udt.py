@@ -1,8 +1,10 @@
 from datetime import datetime
-from typing import Optional
+from typing import Annotated, Optional
 
 from pydantic import Field
 from coodie.usertype import UserType
+
+from argus.backend.util.common import NoneAsEmptyList
 
 
 class TestCase(UserType):
@@ -25,7 +27,7 @@ class TestSuite(UserType):
     passed: Optional[int] = 0
     errors: Optional[int] = 0
     time: Optional[float] = None
-    cases: list[TestCase] = Field(default_factory=list)
+    cases: Annotated[list[TestCase], NoneAsEmptyList] = Field(default_factory=list)
 
     class Settings:
         __type_name__ = "test_suite"
@@ -43,7 +45,7 @@ class TestCollection(UserType):
     errors: Optional[int] = 0
     timestamp: Optional[datetime] = None
     time: Optional[float] = 0.0
-    suites: list[TestSuite] = Field(default_factory=list)
+    suites: Annotated[list[TestSuite], NoneAsEmptyList] = Field(default_factory=list)
 
     class Settings:
         __type_name__ = "test_collection"

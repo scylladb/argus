@@ -15,6 +15,11 @@ LOGGER = logging.getLogger(__name__)
 # which arrive as "" — treat that as absent, like Flask's request.args did.
 NoneIfEmpty = BeforeValidator(lambda value: None if value == "" else value)
 
+# Rows written pre-coodie store NULL for empty collections; coodie coerces
+# those to empty containers on Document reads but not inside UDTs, where the
+# cassandra driver decodes NULL fields as None.
+NoneAsEmptyList = BeforeValidator(lambda value: [] if value is None else value)
+
 
 def first(iterable, value, key: Callable = None, predicate: Callable = None):
     for elem in iterable:

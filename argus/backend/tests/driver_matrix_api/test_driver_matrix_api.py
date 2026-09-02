@@ -25,6 +25,7 @@ from uuid import uuid4
 import pytest
 
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest
+from argus.backend.plugins.driver_matrix_tests.udt import TestCollection, TestSuite
 
 CLIENT_PREFIX = "/api/v1/client"
 DRIVER_MATRIX_PREFIX = f"{CLIENT_PREFIX}/driver_matrix"
@@ -216,3 +217,13 @@ def test_get_driver_matrix_test_report_unknown_build_id(api_client):
     body = resp.json()
     assert body["status"] == "error"
     assert "No results for build_id" in body["response"]["message"]
+
+
+def test_udt_null_collections_coerce_to_empty_lists():
+    """Rows written pre-coodie store NULL for empty collections; the driver
+    decodes those UDT fields as None, which must coerce instead of failing
+    pydantic validation (seen on production driver_test_run rows)."""
+    collection = TestCollection(name="python", driver="scylla", suites=None)
+    assert collection.suites == []
+    suite = TestSuite(name="suite", cases=None)
+    assert suite.cases == []

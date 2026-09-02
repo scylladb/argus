@@ -287,3 +287,19 @@ def test_profile_create_post_locked_email_mismatch_errors(anon_client, make_sess
     assert res.status_code == 302
     # Should NOT have created a user with that username
     assert User.exists_by_name("x") is None
+
+
+def test_error_page_shows_logged_in_nav_for_authenticated_user(anon_client, db_user, make_session_cookie):
+    """main.error must resolve the visitor (load_user) so a logged-in user
+    redirected to /error/ keeps the logged-in nav bar."""
+    anon_client.cookies.set("session", make_session_cookie(user_id=str(db_user.id)))
+    res = anon_client.get("/error/", params={"type": "404"})
+    assert res.status_code == 200
+    assert db_user.username in res.text
+    assert "fa-sign-in-alt" not in res.text  # no Login link
+
+
+def test_error_page_shows_logged_out_nav_for_anonymous_user(anon_client):
+    res = anon_client.get("/error/", params={"type": "404"})
+    assert res.status_code == 200
+    assert "fa-sign-in-alt" in res.text  # Login link present

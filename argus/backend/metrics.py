@@ -1,5 +1,7 @@
 import os
 from http import HTTPStatus
+from importlib.metadata import version
+from typing import Callable
 
 from fastapi import APIRouter, Depends
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -8,6 +10,7 @@ from prometheus_client import (
     CONTENT_TYPE_LATEST,
     CollectorRegistry,
     Counter,
+    Gauge,
     Histogram,
     REGISTRY,
     generate_latest,
@@ -16,8 +19,10 @@ from prometheus_client import (
 from starlette.responses import Response
 
 from argus.backend import metrics_labels
-from argus.backend.service.user import api_current_user
 
+# The former prometheus_flask_exporter default series (export_defaults with
+# NO_PREFIX): numeric status label ("200"), unlike the by_* counters below
+# which keep werkzeug's response.status format ("200 OK").
 REQUEST_DURATION = Histogram(
     "http_request_duration_seconds",
     "HTTP request duration in seconds",
@@ -28,6 +33,18 @@ REQUEST_TOTAL = Counter(
     "Total number of HTTP requests",
     ["method", "status"],
 )
+REQUEST_EXCEPTIONS = Counter(
+    "http_request_exceptions_total",
+    "Total number of HTTP requests which resulted in an exception",
+    ["method", "status"],
+)
+EXPORTER_INFO = Gauge(
+    "exporter_info",
+    "Information about the Prometheus exporter",
+    ["version"],
+    multiprocess_mode="max",
+)
+EXPORTER_INFO.labels(version=version("prometheus-fastapi-instrumentator")).set(1)
 REQUESTS_BY_ENDPOINT = Counter(
     "http_request_by_endpoint_total",
     "Total Requests made",
@@ -71,17 +88,18 @@ def status_line(status_code: int) -> str:
         return f"{status_code} UNKNOWN"
 
 
-def record_request(endpoint: str, method: str, status: str, remote_addr: str | None,
+def record_request(endpoint: str, method: str, status_code: int, remote_addr: str | None,
                    headers, duration: float | None = None) -> None:
     """Increment every request series; headers is any case-insensitive mapping."""
     endpoint = endpoint or "unknown"
     ssh_tunnel = metrics_labels.ssh_tunnel(headers)
     client_version = metrics_labels.client_version(headers)
+    status = str(status_code)
 
     REQUEST_TOTAL.labels(method=method, status=status).inc()
     if duration is not None:
         REQUEST_DURATION.labels(method=method, endpoint=endpoint, status=status).observe(duration)
-    REQUESTS_BY_ENDPOINT.labels(endpoint=endpoint, method=method, status=status).inc()
+    REQUESTS_BY_ENDPOINT.labels(endpoint=endpoint, method=method, status=status_line(status_code)).inc()
     REQUESTS_BY_IP.labels(ip=remote_addr or "unknown", endpoint=endpoint).inc()
     REQUESTS_SSH_TUNNEL.labels(
         ssh_tunnel=ssh_tunnel,
@@ -118,10 +136,21 @@ def render_metrics() -> tuple[bytes, str]:
 METRICS_ENDPOINT_NAME = "prometheus_metrics"
 
 
-def build_metrics_router() -> APIRouter:
+def record_exception(method: str, status_code: int = 500) -> None:
+    """Count an unhandled exception, like the flask exporter's default series
+    did for exceptions that escaped the views."""
+    REQUEST_EXCEPTIONS.labels(method=method, status=str(status_code)).inc()
+
+
+def build_metrics_router(current_user_dependency: Callable) -> APIRouter:
     """The /metrics endpoint: requires auth in production (multiproc) mode
-    and is open in development, matching the original exporter setup."""
-    dependencies = [Depends(api_current_user)] if os.environ.get("PROMETHEUS_MULTIPROC_DIR") else []
+    and is open in development, matching the original exporter setup.
+
+    The auth dependency is injected by create_app — importing it here would
+    close an import cycle (service.user imports error_handlers, which uses
+    the exception counter above).
+    """
+    dependencies = [Depends(current_user_dependency)] if os.environ.get("PROMETHEUS_MULTIPROC_DIR") else []
     router = APIRouter()
 
     @router.get("/metrics", name=METRICS_ENDPOINT_NAME, dependencies=dependencies)
@@ -157,7 +186,7 @@ def build_instrumentator() -> Instrumentator:
         record_request(
             endpoint=endpoint,
             method=info.request.method,
-            status=status_line(info.response.status_code) if info.response else status_line(500),
+            status_code=info.response.status_code if info.response else 500,
             remote_addr=client[0] if client else None,
             headers=info.request.headers,
             duration=info.modified_duration,

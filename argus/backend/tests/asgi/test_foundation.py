@@ -1,14 +1,18 @@
 """Foundation tests for the FastAPI app.
 
 Covers the pieces every controller relies on: the signed session cookie
-(both directions), the auth dependencies' response shapes, and the
-APIException contract.
+(both directions), the auth dependencies' response shapes, the
+APIException contract, and request context in log lines.
 """
+import io
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, Request
 from pytest import fixture
 from starlette.testclient import TestClient
+
+from argus.backend.util.logsetup import LOG_FORMAT_REQUEST, ArgusRequestLogFormatter
 
 from argus.backend.error_handlers import APIException
 from argus.backend.service.user import api_current_user, require_roles
@@ -110,3 +114,24 @@ def test_session_writes_produce_a_readable_signed_cookie(anon_client, read_sessi
 def test_unknown_routes_return_404(anon_client):
     response = anon_client.get("/api/v1/definitely-not-a-route")
     assert response.status_code == 404
+
+
+def test_log_lines_carry_request_context(api_client):
+    """TraceId error lines must be correlatable: the formatter resolves
+    url/remote_addr/endpoint from the live request scope."""
+    logger = logging.getLogger("argus.backend.error_handlers")
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(ArgusRequestLogFormatter(LOG_FORMAT_REQUEST))
+    logger.addHandler(handler)
+    old_level = logger.level
+    logger.setLevel(logging.INFO)
+    try:
+        api_client.get("/asgi-probe/boom", params={"marker": "ctx"})
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(old_level)
+    output = stream.getvalue()
+    assert "[TraceId:" in output
+    assert "/asgi-probe/boom?marker=ctx" in output
+    assert "probe_boom" in output
