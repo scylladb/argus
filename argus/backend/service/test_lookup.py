@@ -100,7 +100,8 @@ class TestLookup:
 
     @classmethod
     def test_lookup(cls, query: str, release_id: UUID | str = None):
-        release_id = UUID(release_id) if isinstance(release_id, str) else release_id
+        if release_id:
+            release_id = UUID(release_id) if isinstance(release_id, str) else release_id
         if uuid := cls.query_to_uuid(query):
             return cls.make_single_run_response(uuid)
 
