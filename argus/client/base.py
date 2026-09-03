@@ -140,10 +140,19 @@ class ArgusClient:
         response_data: JSON = response.json()
         LOGGER.debug("API Response: status=%s", response_data.get("status"))
         if response_data.get("status") != "ok":
-            exc_args = response_data["response"]["arguments"]
+            # The standard error envelope carries a dict with "arguments"
+            # (error_handlers.api_exception_handler), but some responses put
+            # a plain string under "response" instead -- e.g. the DB-outage
+            # handler.
+            error_body = response_data.get("response")
+            if isinstance(error_body, dict):
+                exc_args = error_body.get("arguments") or ()
+                detail = exc_args[0] if len(exc_args) > 0 else error_body.get("exception", "#NoMessage")
+            else:
+                detail = error_body if error_body is not None else "#NoMessage"
             raise ArgusClientError(
                 f"API Error encountered using endpoint: {response.request.method} {response.request.path_url}",
-                exc_args[0] if len(exc_args) > 0 else response_data.get("response", {}).get("exception", "#NoMessage"),
+                detail,
             )
 
     def get_url_for_endpoint(self, endpoint: str, location_params: dict[str, str] | None) -> str:
