@@ -80,7 +80,7 @@ class StressCommandRequest(BaseModel):
 
 class SimilarEventRequest(BaseModel):
     severity: str | None = None
-    ts: float | None = None
+    ts: str | None = None
     limit: int = 100
 
 
