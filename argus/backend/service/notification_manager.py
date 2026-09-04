@@ -113,7 +113,7 @@ class ArgusDBNotificationSaver(NotificationSenderBase):
 
     def send_notification(self, receiver: UUID, sender: UUID, notification_type: ArgusNotificationTypes, source_type: ArgusNotificationSourceTypes,
                           source_id: UUID, title: str | None = None, content: str | None = None, content_params: dict | None = None) -> ArgusNotification:
-        new_notification = ArgusNotification()
+        new_notification = ArgusNotification.model_construct()
         for user in [sender, receiver]:
             if not self._check_user(user_id=user):
                 raise NotificationManagerException(f"UserId {user} not found in the database", user)

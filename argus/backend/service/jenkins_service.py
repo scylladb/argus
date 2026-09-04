@@ -320,7 +320,7 @@ class JenkinsService:
 
         jenkins_new_build_id = f"{target_group.build_system_id}/{new_name}"
 
-        new_test = ArgusTest()
+        new_test = ArgusTest.model_construct()
         new_test.name = new_name
         new_test.build_system_id = jenkins_new_build_id
         new_test.group_id = target_group.id

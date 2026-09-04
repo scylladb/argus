@@ -61,10 +61,11 @@ def saved_github_issue():
 
 
 def _link_issue_to_run(run, issue) -> IssueLink:
-    link = IssueLink()
+    link = IssueLink.model_construct()
     link.test_id = run.test_id
     link.run_id = run.id
     link.release_id = run.release_id
+    link.group_id = run.group_id
     link.issue_id = issue.id
     link.type = "issues"
     link.user_id = issue.user_id

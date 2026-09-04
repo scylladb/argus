@@ -77,7 +77,7 @@ def _get_or_create_release(name: str) -> ArgusRelease:
     try:
         return ArgusRelease.get(name=name)
     except DocumentNotFound:
-        release = ArgusRelease()
+        release = ArgusRelease.model_construct()
         release.name = name
         release.save()
         LOGGER.info("Auto-created ArgusRelease %s", name)
@@ -90,7 +90,7 @@ def _get_or_create_group(release: ArgusRelease, name: str, build_system_id: str)
     for g in ArgusGroup.find(release_id=release.id).all():
         if g.build_system_id == build_system_id:
             return g
-    group = ArgusGroup()
+    group = ArgusGroup.model_construct()
     group.release_id = release.id
     group.name = name
     group.build_system_id = build_system_id
@@ -110,7 +110,7 @@ def _get_or_create_test(
     try:
         return ArgusTest.get(build_system_id=build_system_id)
     except DocumentNotFound:
-        test = ArgusTest()
+        test = ArgusTest.model_construct()
         test.name = name
         test.group_id = group.id
         test.release_id = release.id

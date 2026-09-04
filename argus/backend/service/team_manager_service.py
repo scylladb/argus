@@ -22,7 +22,7 @@ class TeamManagerService:
         self.database = database
 
     def create_team(self, name: str, leader: UUID, members: list[UUID]):
-        team = Team()
+        team = Team.model_construct()
         team.name = name
         team.leader = leader
         team.members = [leader, *members]

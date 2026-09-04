@@ -47,11 +47,11 @@ class UserRoles(str, Enum):
 
 class User(Document):
     id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
-    username: Annotated[Optional[str], Indexed()] = None
+    username: Annotated[str, Indexed()]
     full_name: Optional[str] = None
-    password: Optional[str] = None
+    password: str
     email: Annotated[Optional[str], Indexed()] = None
-    registration_date: Optional[datetime] = None
+    registration_date: datetime
     roles: list[str] = Field(default_factory=list)
     picture_id: Optional[UUID] = None
     api_token: Annotated[Optional[str], Indexed()] = None
@@ -136,8 +136,8 @@ class User(Document):
 
 class Team(Document):
     id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
-    name: Optional[str] = None
-    leader: Annotated[Optional[UUID], Indexed()] = None
+    name: str
+    leader: Annotated[UUID, Indexed()]
     members: list[UUID] = Field(default_factory=list)
     motd: Optional[str] = None
 
@@ -147,9 +147,9 @@ class Team(Document):
 
 class UserOauthToken(Document):
     id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
-    user_id: Annotated[Optional[UUID], Indexed()] = None
-    kind: Annotated[Optional[str], Indexed()] = None
-    token: Optional[str] = None
+    user_id: Annotated[UUID, Indexed()]
+    kind: Annotated[str, Indexed()]
+    token: str
 
     class Settings:
         name = "user_oauth_token"
@@ -157,16 +157,16 @@ class UserOauthToken(Document):
 
 class ArgusRelease(Document):
     id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
-    name: Annotated[Optional[str], Indexed()] = None
+    name: Annotated[str, Indexed()]
     pretty_name: Optional[str] = None
     description: Optional[str] = None
     github_repo_url: Optional[str] = None
     valid_version_regex: Optional[str] = None
     assignee: list[UUID] = Field(default_factory=list)
     picture_id: Optional[UUID] = None
-    enabled: Optional[bool] = True
-    perpetual: Optional[bool] = False
-    dormant: Optional[bool] = False
+    enabled: bool = True
+    perpetual: bool = False
+    dormant: bool = False
 
     class Settings:
         name = "argus_release_v2"
@@ -180,13 +180,13 @@ class ArgusRelease(Document):
 
 class ArgusGroup(Document):
     id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
-    release_id: Annotated[Optional[UUID], Indexed()] = None
-    name: Annotated[Optional[str], Indexed()] = None
+    release_id: Annotated[UUID, Indexed()]
+    name: Annotated[str, Indexed()]
     pretty_name: Optional[str] = None
     description: Optional[str] = None
     assignee: list[UUID] = Field(default_factory=list)
     build_system_id: Optional[str] = None
-    enabled: Optional[bool] = True
+    enabled: bool = True
 
     class Settings:
         name = "argus_group_v2"
@@ -203,16 +203,16 @@ class ArgusGroup(Document):
 
 class ArgusUserView(Document):
     id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
-    name: Annotated[Optional[str], Indexed()] = None
-    display_name: Optional[str] = None
+    name: Annotated[str, Indexed()]
+    display_name: str
     description: Optional[str] = None
-    user_id: Annotated[Optional[UUID], Indexed()] = None
+    user_id: Annotated[UUID, Indexed()]
     plan_id: Annotated[Optional[UUID], Indexed()] = None
     tests: list[UUID] = Field(default_factory=list)
     release_ids: list[UUID] = Field(default_factory=list)
     group_ids: list[UUID] = Field(default_factory=list)
-    created: Optional[datetime] = Field(default_factory=datetime.utcnow)
-    last_updated: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    created: datetime = Field(default_factory=datetime.utcnow)
+    last_updated: datetime = Field(default_factory=datetime.utcnow)
     widget_settings: Optional[str] = None
 
     class Settings:
@@ -221,14 +221,14 @@ class ArgusUserView(Document):
 
 class ArgusTest(Document):
     id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
-    group_id: Annotated[Optional[UUID], Indexed()] = None
-    release_id: Annotated[Optional[UUID], Indexed()] = None
-    name: Annotated[Optional[str], Indexed()] = None
+    group_id: Annotated[UUID, Indexed()]
+    release_id: Annotated[UUID, Indexed()]
+    name: Annotated[str, Indexed()]
     pretty_name: Optional[str] = None
     description: Optional[str] = None
     assignee: list[UUID] = Field(default_factory=list)
     build_system_id: Annotated[Optional[str], Indexed()] = None
-    enabled: Optional[bool] = True
+    enabled: bool = True
     build_system_url: Optional[str] = None
     plugin_name: Optional[str] = None
     plugin_subtype: Optional[str] = None
@@ -253,12 +253,12 @@ class ArgusTest(Document):
 
 class ArgusTestRunComment(Document):
     id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
-    posted_at: Annotated[Optional[int], ClusteringKey(order="DESC")] = None
-    test_run_id: Annotated[Optional[UUID], Indexed()] = None
-    user_id: Annotated[Optional[UUID], Indexed()] = None
-    release_id: Annotated[Optional[UUID], Indexed()] = None
+    posted_at: Annotated[int, ClusteringKey(order="DESC")]
+    test_run_id: Annotated[UUID, Indexed()]
+    user_id: Annotated[UUID, Indexed()]
+    release_id: Annotated[UUID, Indexed()]
     test_id: Annotated[Optional[UUID], Indexed()] = None
-    message: Optional[str] = Field(default=None, min_length=1, max_length=65535)
+    message: str = Field(min_length=1, max_length=65535)
     mentions: list[UUID] = Field(default_factory=list)
     reactions: dict[str, int] = Field(default_factory=dict)
 
@@ -285,9 +285,9 @@ class ArgusEvent(Document):
     test_id: Annotated[Optional[UUID], Indexed()] = None
     run_id: Annotated[Optional[UUID], Indexed()] = None
     user_id: Annotated[Optional[UUID], Indexed()] = None
-    kind: Annotated[Optional[str], Indexed()] = None
-    body: Optional[str] = None
-    created_at: Optional[datetime] = None
+    kind: Annotated[str, Indexed()]
+    body: str
+    created_at: datetime
 
     class Settings:
         name = "argus_event"
@@ -316,14 +316,14 @@ class ArgusNotificationState(IntEnum):
 
 
 class ArgusNotification(Document):
-    receiver: Annotated[Optional[UUID], PrimaryKey()] = None
+    receiver: Annotated[UUID, PrimaryKey()]
     id: Annotated[UUID, TimeUUID(), ClusteringKey(order="DESC")] = Field(default_factory=uuid_now)
-    type: Optional[str] = None
-    state: Annotated[Optional[int], SmallInt()] = Field(default=ArgusNotificationState.UNREAD)
-    sender: Optional[UUID] = None
-    source_type: Optional[str] = None
-    source_id: Optional[UUID] = None
-    title: Optional[str] = Field(default=None, max_length=1024)
+    type: str
+    state: Annotated[int, SmallInt()] = Field(default=ArgusNotificationState.UNREAD)
+    sender: UUID
+    source_type: str
+    source_id: UUID
+    title: str = Field(max_length=1024)
     content: Optional[str] = Field(default=None, max_length=65535)
 
     class Settings:
@@ -366,18 +366,18 @@ class ReleasePlannerComment(Document):
 
 class WebFileStorage(Document):
     id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
-    filepath: Optional[str] = Field(default=None, min_length=1)
-    filename: Optional[str] = Field(default=None, min_length=1)
+    filepath: str = Field(min_length=1)
+    filename: str = Field(min_length=1)
 
     class Settings:
         name = "web_file_storage"
 
 
 class ReleaseStatsSnapshot(Document):
-    release_id: Annotated[Optional[UUID], PrimaryKey()] = None
-    filter_key: Annotated[Optional[str], ClusteringKey()] = None
-    payload: Optional[str] = None
-    generated_at: Optional[datetime] = None
+    release_id: Annotated[UUID, PrimaryKey()]
+    filter_key: Annotated[str, ClusteringKey()]
+    payload: str
+    generated_at: datetime
 
     class Settings:
         name = "argus_release_stats_snapshot"
@@ -388,8 +388,8 @@ class ReleaseDistinctVersions(Document):
     Replaces the expensive GSI scan in get_distinct_product_versions.
     Keyed by release_id (partition) + version (clustering) for O(1) reads.
     """
-    release_id: Annotated[Optional[UUID], PrimaryKey()] = None
-    version: Annotated[Optional[str], ClusteringKey()] = None
+    release_id: Annotated[UUID, PrimaryKey()]
+    version: Annotated[str, ClusteringKey()]
 
     class Settings:
         name = "release_distinct_versions"
@@ -400,8 +400,8 @@ class ReleaseDistinctImages(Document):
     Replaces the expensive GSI scan + UDT deserialization in get_distinct_cloud_images_for_release.
     Keyed by release_id (partition) + image_id (clustering) for O(1) reads.
     """
-    release_id: Annotated[Optional[UUID], PrimaryKey()] = None
-    image_id: Annotated[Optional[str], ClusteringKey()] = None
+    release_id: Annotated[UUID, PrimaryKey()]
+    image_id: Annotated[str, ClusteringKey()]
 
     class Settings:
         name = "release_distinct_images"

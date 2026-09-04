@@ -27,14 +27,14 @@ class ArgusTestsMonitor(ABC):
         self._filtered_groups: list[str] = self.BUILD_SYSTEM_FILTERED_PREFIXES
 
     def create_release(self, release_name: str):
-        release = ArgusRelease()
+        release = ArgusRelease.model_construct()
         release.name = release_name
         release.save()
 
         return release
 
     def create_group(self, release: ArgusRelease, group_name: str, build_id: str, group_pretty_name: str | None = None):
-        group = ArgusGroup()
+        group = ArgusGroup.model_construct()
         group.release_id = release.id
         group.name = group_name
         group.build_system_id = build_id
@@ -46,7 +46,7 @@ class ArgusTestsMonitor(ABC):
 
     def create_test(self, release: ArgusRelease, group: ArgusGroup,
                     test_name: str, build_id: str, build_url: str) -> ArgusTest:
-        test = ArgusTest()
+        test = ArgusTest.model_construct()
         test.name = test_name
         test.group_id = group.id
         test.release_id = release.id

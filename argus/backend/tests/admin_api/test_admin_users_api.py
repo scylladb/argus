@@ -12,6 +12,7 @@ Scope (iteration 10 of the controller coverage matrix):
 - ``POST /admin/api/v1/user/<id>/admin/toggle``
 """
 
+from datetime import UTC, datetime
 import json
 import uuid
 
@@ -42,7 +43,7 @@ def regular_user():
         full_name="Admin10 Test User",
         email=f"adm10_{uuid.uuid4().hex[:8]}@scylladb.com",
         password="hash:placeholder",
-        roles=[UserRoles.User.value],
+        roles=[UserRoles.User.value], registration_date=datetime.now(UTC),
     )
     user.save()
     return user

@@ -428,7 +428,7 @@ class ResultsService:
                      f" FROM generic_result_metadata_v1 WHERE test_id = ?")
         query = self.cluster.prepare(raw_query)
         tables_meta = self.cluster.session.execute(query=query, parameters=(test_id,))
-        return [ArgusGenericResultMetadata(**table) for table in tables_meta]
+        return [ArgusGenericResultMetadata(test_id=test_id, **table) for table in tables_meta]
 
     def _get_tables_data(self, test_id: UUID, table_name: str, ignored_runs: list[RunId],
                          start_date: datetime | None = None, end_date: datetime | None = None) -> list[ArgusGenericResultData]:
@@ -449,7 +449,8 @@ class ResultsService:
             raw_query += " ALLOW FILTERING"
         query = self.cluster.prepare(raw_query)
         data = self.cluster.session.execute(query=query, parameters=tuple(parameters))
-        return [ArgusGenericResultData(**cell) for cell in data if cell["run_id"] not in ignored_runs]
+        return [ArgusGenericResultData(test_id=test_id, name=table_name, **cell)
+                for cell in data if cell["run_id"] not in ignored_runs]
 
     def get_table_metadata(self, test_id: UUID, table_name: str) -> ArgusGenericResultMetadata:
         raw_query = ("SELECT * FROM generic_result_metadata_v1 WHERE test_id = ? AND name = ?")
@@ -659,9 +660,7 @@ class ResultsService:
 
     def create_argus_graph_view(self, test_id: UUID, name: str, description: str) -> ArgusGraphView:
         view_id = uuid4()
-        graph_view = ArgusGraphView(test_id=test_id, id=view_id)
-        graph_view.name = name
-        graph_view.description = description
+        graph_view = ArgusGraphView(test_id=test_id, id=view_id, name=name, description=description)
         graph_view.save()
         return graph_view
 

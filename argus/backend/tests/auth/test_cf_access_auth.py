@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 import uuid
 from types import SimpleNamespace
 
@@ -64,7 +65,7 @@ def test_user_creation_rejects_missing_email(monkeypatch, argus_db):
 
 
 def test_user_cf_access_returns_existing_user_by_email(monkeypatch, argus_db):
-    existing = User(id=uuid.uuid4(), username=f"cf-access-{uuid.uuid4().hex[:8]}", roles=["ROLE_USER"])
+    existing = User(id=uuid.uuid4(), username=f"cf-access-{uuid.uuid4().hex[:8]}", roles=["ROLE_USER"], password="", registration_date=datetime.now(UTC))
     existing.email = f"{existing.username}@scylladb.com"
     existing.save()
 

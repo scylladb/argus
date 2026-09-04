@@ -1,4 +1,4 @@
-from typing import Annotated, Optional
+from typing import Annotated
 from uuid import UUID, uuid4
 from datetime import UTC, datetime
 
@@ -11,15 +11,15 @@ from argus.backend.models.github_issue import IssueLabel
 
 class JiraIssue(Document):
     id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
-    user_id: Annotated[Optional[UUID], Indexed()] = None
-    summary: Optional[str] = None
-    key: Optional[str] = None
-    state: Optional[str] = None
-    project: Optional[str] = None
-    permalink: Annotated[Optional[str], Indexed()] = None
+    user_id: Annotated[UUID, Indexed()]
+    summary: str
+    key: str
+    state: str
+    project: str
+    permalink: Annotated[str, Indexed()]
     labels: list[IssueLabel] = Field(default_factory=list)
     assignees: list[str] = Field(default_factory=list)
-    added_on: Optional[datetime] = Field(default=datetime.now(tz=UTC))
+    added_on: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
 
     class Settings:
         name = "jira_issue"

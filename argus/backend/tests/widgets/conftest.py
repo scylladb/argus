@@ -26,7 +26,7 @@ from argus.backend.models.result import (
     ArgusGraphView,
 )
 from argus.backend.models.pytest import PytestResultTable, PytestUserField
-from argus.backend.models.web import ArgusUserView
+from argus.backend.models.web import ArgusTest, ArgusUserView
 from argus.backend.plugins.sct.testrun import SCTTestRun
 
 
@@ -311,7 +311,7 @@ def seeded_pytest_row(client_service, fake_test):
 @pytest.fixture
 def linked_github_issue(sct_run: SctRun):
     """Insert a ``GithubIssue`` and link it to the seeded SCT run."""
-    issue = GithubIssue()
+    issue = GithubIssue.model_construct()
     issue.user_id = uuid.uuid4()
     issue.type = "issues"
     issue.owner = "scylladb"
@@ -322,10 +322,13 @@ def linked_github_issue(sct_run: SctRun):
     issue.url = f"https://github.com/scylladb/scylladb/issues/12345?seed={uuid.uuid4().hex[:6]}"
     issue.save()
 
+    test = ArgusTest.get(id=uuid.UUID(sct_run.test_id))
     link = IssueLink(
         run_id=uuid.UUID(sct_run.run_id),
         issue_id=issue.id,
-        test_id=uuid.UUID(sct_run.test_id),
+        test_id=test.id,
+        release_id=test.release_id,
+        group_id=test.group_id,
         type="github",
     )
     link.save()

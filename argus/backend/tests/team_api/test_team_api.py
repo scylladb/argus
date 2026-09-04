@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 import uuid
 
 import pytest
@@ -15,7 +16,7 @@ def _make_user() -> User:
         full_name="Team User",
         email=f"team_{uuid.uuid4().hex[:8]}@scylladb.com",
         password="pw",
-        roles=[UserRoles.User.value],
+        roles=[UserRoles.User.value], registration_date=datetime.now(UTC),
     )
     user.save()
     return user

@@ -1,6 +1,7 @@
 from cassandra.cluster import Cluster
 import json
 import logging
+from datetime import UTC, datetime
 from argus.backend.service.results_service import ResultsService
 from argus.backend.service.release_manager import ReleaseManagerService
 from argus.backend.service.client_service import ClientService
@@ -198,7 +199,7 @@ def asgi_app(argus_db):
 @fixture(scope='session')
 def logged_in_user() -> User:
     return User(id=uuid.uuid4(), username='test_user', full_name='Test User',
-                email="tester@scylladb.com",
+                email="tester@scylladb.com", password="", registration_date=datetime.now(UTC),
                 roles=[UserRoles.User, UserRoles.Admin, UserRoles.Manager])
 
 

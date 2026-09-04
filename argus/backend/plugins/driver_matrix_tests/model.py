@@ -166,7 +166,7 @@ class DriverTestRun(PluginModelBase):
         else:
             return cls.submit_matrix_run(request_data)
 
-        run = cls()
+        run = cls.model_construct()
         run.id = UUID(req.run_id) if isinstance(req.run_id, str) else req.run_id
         run.build_id = req.job_name
         run.build_job_url = req.job_url
@@ -229,7 +229,7 @@ class DriverTestRun(PluginModelBase):
         existing_keys = {ei.key for ei in run.environment_info}
         for key, value in env.items():
             if key not in existing_keys:
-                env_info = EnvironmentInfo()
+                env_info = EnvironmentInfo.model_construct()
                 env_info.key = key
                 env_info.value = value
                 run.environment_info.append(env_info)
@@ -348,7 +348,7 @@ class DriverTestRun(PluginModelBase):
     def submit_matrix_run(cls, request_data):
         # Legacy method
         req = DriverMatrixRunSubmissionRequest(**request_data)
-        run = cls()
+        run = cls.model_construct()
         run.id = UUID(req.run_id) if isinstance(req.run_id, str) else req.run_id
         run.build_id = req.job_name
         run.build_job_url = req.job_url
@@ -358,7 +358,7 @@ class DriverTestRun(PluginModelBase):
         except Exception:
             run.assignee = None
         for key, value in req.test_environment.items():
-            env_info = EnvironmentInfo()
+            env_info = EnvironmentInfo.model_construct()
             env_info.key = key
             env_info.value = value
             run.environment_info.append(env_info)

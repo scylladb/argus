@@ -47,7 +47,7 @@ class SirenadaRun(PluginModelBase):
     logs: dict[str, str] = Field(default_factory=dict)
     # TODO: Legacy field name, should be renamed to product_version and abstracted
     scylla_version: Optional[str] = None
-    region: Optional[str] = None
+    region: str
     sirenada_test_ids: list[str] = Field(default_factory=list)
     s3_folder_ids: list[tuple[str, str]] = Field(default_factory=list)
     browsers: list[str] = Field(default_factory=list)
@@ -94,7 +94,7 @@ class SirenadaRun(PluginModelBase):
         try:
             run = cls.get(id=UUID(request_data["run_id"]))
         except DocumentNotFound:
-            run = cls()
+            run = cls.model_construct()
             run.id = UUID(request_data["run_id"])
             run.build_id = request_data["build_id"]
             run.start_time = datetime.now(UTC)

@@ -19,7 +19,7 @@ def planner_user():
         full_name="Planner User",
         email=f"planner_{uuid.uuid4().hex[:8]}@scylladb.com",
         password="pw",
-        roles=[UserRoles.User.value],
+        roles=[UserRoles.User.value], registration_date=datetime.datetime.now(datetime.UTC),
     )
     user.save()
     return user

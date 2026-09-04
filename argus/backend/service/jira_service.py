@@ -101,7 +101,7 @@ class JiraService:
             key = match.group("key")
             remote_issue = self.jira.issue(key)
 
-            issue = JiraIssue()
+            issue = JiraIssue.model_construct()
             issue.user_id = user.id
             issue.key = remote_issue.key
             issue.state = remote_issue.fields.status.name.lower()
@@ -109,7 +109,7 @@ class JiraService:
             issue.project = remote_issue.fields.project.key
             issue.permalink = remote_issue.permalink()
             for label in remote_issue.fields.labels:
-                l = IssueLabel()
+                l = IssueLabel.model_construct()
                 l.id = self.derive_label_id(label)
                 l.name = label
                 l.color = "000"
@@ -129,7 +129,7 @@ class JiraService:
         run = plugin.model.get(id=run_id)
         issue, state = self.get_issue(issue_url, user)
 
-        link = IssueLink()
+        link = IssueLink.model_construct()
         link.run_id = run.id
         link.user_id = user.id
         link.issue_id = issue.id

@@ -11,21 +11,21 @@ from coodie.sync import Document
 class ArgusReleasePlan(Document):
     id: Annotated[UUID, TimeUUID(), PrimaryKey()] = Field(
         default_factory=lambda: uuid_from_time(datetime.datetime.now(tz=datetime.UTC)))
-    name: Optional[str] = None
-    completed: Optional[bool] = False
-    description: Optional[str] = None
-    owner: Optional[UUID] = None
+    name: str
+    completed: bool = False
+    description: str
+    owner: UUID
     participants: list[UUID] = Field(default_factory=list)
-    target_version: Annotated[Optional[str], Ascii(), Indexed()] = None
+    target_version: Annotated[str, Ascii(), Indexed()]
     assignee_mapping: dict[UUID, UUID] = Field(default_factory=dict)
-    release_id: Annotated[Optional[UUID], Indexed()] = None
+    release_id: Annotated[UUID, Indexed()]
     tests: list[UUID] = Field(default_factory=list)
     groups: list[UUID] = Field(default_factory=list)
     view_id: Annotated[Optional[UUID], Indexed()] = None
     created_from: Annotated[Optional[UUID], Indexed()] = None
-    creation_time: Optional[datetime.datetime] = Field(
+    creation_time: datetime.datetime = Field(
         default_factory=lambda: datetime.datetime.now(tz=datetime.UTC))
-    last_updated: Optional[datetime.datetime] = Field(
+    last_updated: datetime.datetime = Field(
         default_factory=lambda: datetime.datetime.now(tz=datetime.UTC))
     ends_at: Optional[datetime.datetime] = None
     key: Optional[str] = None

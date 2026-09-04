@@ -66,7 +66,7 @@ class ReleaseManagerService:
         try:
             release = ArgusRelease.get(name=release_name)
         except DocumentNotFound:
-            release = ArgusRelease()
+            release = ArgusRelease.model_construct()
             release.name = release_name
             release.pretty_name = pretty_name
             release.perpetual = perpetual
@@ -82,7 +82,7 @@ class ReleaseManagerService:
                      release_id: str) -> ArgusGroup:
         release = ArgusRelease.get(id=UUID(release_id))
 
-        new_group = ArgusGroup()
+        new_group = ArgusGroup.model_construct()
         new_group.name = group_name
         new_group.pretty_name = pretty_name
         new_group.release_id = release.id
@@ -95,7 +95,7 @@ class ReleaseManagerService:
         release = ArgusRelease.get(id=UUID(release_id))
         group = ArgusGroup.get(id=UUID(group_id))
 
-        new_test = ArgusTest()
+        new_test = ArgusTest.model_construct()
         new_test.name = test_name
         new_test.pretty_name = pretty_name
         new_test.build_system_id = build_id

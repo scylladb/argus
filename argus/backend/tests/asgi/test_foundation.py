@@ -4,6 +4,7 @@ Covers the pieces every controller relies on: the signed session cookie
 (both directions), the auth dependencies' response shapes, the
 APIException contract, and request context in log lines.
 """
+from datetime import UTC, datetime
 import io
 import logging
 import uuid
@@ -55,7 +56,7 @@ def probe_routes(asgi_app, include_router_before_fallback):
 def db_user(argus_db) -> User:
     user = User(id=uuid.uuid4(), username="asgi_probe_user", full_name="ASGI Probe",
                 email="asgi-probe@scylladb.com", api_token=f"probe-token-{uuid.uuid4()}",
-                roles=[UserRoles.User])
+                roles=[UserRoles.User], password="", registration_date=datetime.now(UTC))
     user.save()
     return user
 

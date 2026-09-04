@@ -10,9 +10,9 @@ from coodie.usertype import UserType
 
 
 class IssueLabel(UserType):
-    id: Annotated[Optional[int], BigInt()] = None
-    name: Optional[str] = None
-    color: Optional[str] = None
+    id: Annotated[int, BigInt()]
+    name: str
+    color: str
     description: Optional[str] = None
 
     def __hash__(self) -> int:
@@ -25,23 +25,23 @@ class IssueLabel(UserType):
 
 
 class IssueAssignee(UserType):
-    login: Optional[str] = None
-    html_url: Optional[str] = None
+    login: str
+    html_url: str
 
 
 class GithubIssue(Document):
     id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
-    user_id: Annotated[Optional[UUID], Indexed()] = None  # Internal Argus UserId
-    type: Optional[str] = None  # Can be: issues, pulls
+    user_id: Annotated[UUID, Indexed()]  # Internal Argus UserId
+    type: str  # Can be: issues, pulls
     owner: Optional[str] = None  # Org or the user to which the repo belongs to
-    repo: Optional[str] = None
-    number: Optional[int] = None
-    state: Optional[str] = None  # Possible states: open, closed
-    title: Optional[str] = None
+    repo: str
+    number: int
+    state: str  # Possible states: open, closed
+    title: str
     labels: list[IssueLabel] = Field(default_factory=list)
     assignees: list[IssueAssignee] = Field(default_factory=list)
-    url: Annotated[Optional[str], Indexed()] = None
-    added_on: Optional[datetime] = Field(default_factory=lambda: datetime.now(tz=UTC))
+    url: Annotated[str, Indexed()]
+    added_on: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
 
     class Settings:
         name = "github_issue"
@@ -59,11 +59,11 @@ class GithubIssue(Document):
 
 
 class IssueLink(Document):
-    run_id: Annotated[Optional[UUID], PrimaryKey()] = None
-    issue_id: Annotated[Optional[UUID], ClusteringKey()] = None
-    release_id: Annotated[Optional[UUID], Indexed()] = None
-    group_id: Annotated[Optional[UUID], Indexed()] = None
-    test_id: Annotated[Optional[UUID], Indexed()] = None
+    run_id: Annotated[UUID, PrimaryKey()]
+    issue_id: Annotated[UUID, ClusteringKey()]
+    release_id: Annotated[UUID, Indexed()]
+    group_id: Annotated[UUID, Indexed()]
+    test_id: Annotated[UUID, Indexed()]
     user_id: Annotated[Optional[UUID], Indexed()] = None
     event_id: Annotated[Optional[UUID], Indexed()] = None
     added_on: Optional[datetime] = Field(default_factory=lambda: datetime.now(tz=UTC))

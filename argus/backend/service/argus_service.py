@@ -80,7 +80,7 @@ class ArgusService:
             except DocumentNotFound:
                 pass
 
-            new_release = ArgusRelease()
+            new_release = ArgusRelease.model_construct()
             new_release.name = release_name
             new_release.save()
             response[release_name] = {}
@@ -94,7 +94,7 @@ class ArgusService:
     def create_groups(self, groups: dict, parent_release_id) -> dict:
         response = {}
         for group_name, group_definition in groups.items():
-            new_group = ArgusGroup()
+            new_group = ArgusGroup.model_construct()
             new_group.release_id = parent_release_id
             new_group.name = group_name
             new_group.pretty_name = group_definition.get("pretty_name")
@@ -112,7 +112,7 @@ class ArgusService:
         response = {}
 
         for test_name in tests:
-            new_test = ArgusTest()
+            new_test = ArgusTest.model_construct()
             new_test.release_id = parent_release_id
             new_test.group_id = parent_group_id
             new_test.name = test_name

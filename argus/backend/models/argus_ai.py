@@ -8,8 +8,8 @@ from coodie.sync import Document
 
 
 class ErrorEventEmbeddings(Document):
-    run_id: Annotated[Optional[UUID], PrimaryKey()] = None
-    event_index: Annotated[Optional[int], ClusteringKey()] = None
+    run_id: Annotated[UUID, PrimaryKey()]
+    event_index: Annotated[int, ClusteringKey()]
     start_time: Annotated[Optional[datetime], Static()] = None
     embedding: Annotated[Optional[list[float]], Frozen()] = None
     similars_map: Annotated[Optional[dict[UUID, int]], Frozen()] = None
@@ -20,8 +20,8 @@ class ErrorEventEmbeddings(Document):
 
 
 class CriticalEventEmbeddings(Document):
-    run_id: Annotated[Optional[UUID], PrimaryKey()] = None
-    event_index: Annotated[Optional[int], ClusteringKey()] = None
+    run_id: Annotated[UUID, PrimaryKey()]
+    event_index: Annotated[int, ClusteringKey()]
     start_time: Annotated[Optional[datetime], Static()] = None
     embedding: Annotated[Optional[list[float]], Frozen()] = None
     similars_map: Annotated[Optional[dict[UUID, int]], Frozen()] = None
@@ -33,8 +33,8 @@ class CriticalEventEmbeddings(Document):
 
 class SCTErrorEventEmbedding(Document):
     """Table to store ERROR event embeddings for similarity search."""
-    run_id: Annotated[Optional[UUID], PrimaryKey()] = None
-    ts: Annotated[Optional[datetime], ClusteringKey(order="DESC")] = None
+    run_id: Annotated[UUID, PrimaryKey()]
+    ts: Annotated[datetime, ClusteringKey(order="DESC")]
     embedding: Annotated[list[float], Vector(dimensions=384),
                          VectorIndex(similarity_function="COSINE")] = Field(default_factory=list)
 
@@ -45,8 +45,8 @@ class SCTErrorEventEmbedding(Document):
 
 class SCTCriticalEventEmbedding(Document):
     """Table to store CRITICAL event embeddings for similarity search."""
-    run_id: Annotated[Optional[UUID], PrimaryKey()] = None
-    ts: Annotated[Optional[datetime], ClusteringKey(order="DESC")] = None
+    run_id: Annotated[UUID, PrimaryKey()]
+    ts: Annotated[datetime, ClusteringKey(order="DESC")]
     embedding: Annotated[list[float], Vector(dimensions=384),
                          VectorIndex(similarity_function="COSINE")] = Field(default_factory=list)
 

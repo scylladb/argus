@@ -6,8 +6,8 @@ from coodie.sync import Document
 
 
 class RunConfiguration(Document):
-    run_id: Annotated[Optional[UUID], PrimaryKey()] = None
-    name: Annotated[Optional[str], ClusteringKey()] = None
+    run_id: Annotated[UUID, PrimaryKey()]
+    name: Annotated[str, ClusteringKey()]
     content: Optional[str] = None
 
     class Settings:
@@ -15,9 +15,9 @@ class RunConfiguration(Document):
 
 
 class RunConfigParam(Document):
-    name: Annotated[Optional[str], PrimaryKey(partition_key_index=0)] = None
-    value: Annotated[Optional[str], PrimaryKey(partition_key_index=1)] = None
-    run_id: Annotated[Optional[str], ClusteringKey()] = None
+    name: Annotated[str, PrimaryKey(partition_key_index=0)]
+    value: Annotated[str, PrimaryKey(partition_key_index=1)]
+    run_id: Annotated[str, ClusteringKey()]
 
     class Settings:
         name = "run_config_param"
