@@ -57,3 +57,22 @@ def test_driver_matrix_lifecycle(driver_matrix_client, driver_matrix_test, api_c
     collected = next((c for c in run["test_collection"] if "e2eDriver" in c["name"]), None)
     assert collected is not None
     assert collected["tests_total"] == 1
+
+
+def test_driver_matrix_failure(driver_matrix_client, driver_matrix_test, api_client):
+    client = driver_matrix_client
+
+    client.submit_driver_matrix_run(
+        job_name=driver_matrix_test.build_system_id,
+        job_url="http://example.com/job/43/",
+    )
+    client.submit_driver_failure(driver_name="broken-driver", driver_type="cpp",
+                                 failure_reason="compilation error")
+
+    resp = api_client.get(f"/api/v1/run/{RUN_TYPE}/{client.run_id}")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["status"] == "ok"
+    failure = next(c for c in resp.json()["response"]["test_collection"] if c["name"] == "broken-driver")
+    assert failure["failure_message"] == "compilation error"
+    assert failure["failures"] == 1
+    assert failure["tests_total"] == 1

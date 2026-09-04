@@ -124,3 +124,74 @@ def test_driver_matrix_cli_full_flow(live_server, api_token, tmp_path, driver_ma
         "--status", "passed",
     ])
     assert result.exit_code == 0, result.output
+
+
+def test_driver_matrix_cli_failure_paths(live_server, api_token, tmp_path, driver_matrix_test, api_client):
+    runner = CliRunner()
+    run_id = str(uuid.uuid4())
+    common = _common_args(live_server, api_token, tmp_path)
+
+    result = _invoke(runner, driver_matrix_cli, [
+        "submit-run", *common,
+        "--id", run_id,
+        "--build-id", driver_matrix_test.build_system_id,
+        "--build-url", "http://example.com/job/44/",
+    ])
+    assert result.exit_code == 0, result.output
+
+    # Explicit failure command.
+    failed = tmp_path / "failed.json"
+    failed.write_text(json.dumps({
+        "driver_name": "explicit-failure",
+        "driver_type": "cpp",
+        "failure_reason": "build timed out",
+    }))
+    result = _invoke(runner, driver_matrix_cli, [
+        "fail-driver", *common,
+        "--id", run_id,
+        "--metadata-path", str(failed),
+    ])
+    assert result.exit_code == 0, result.output
+
+    # submit-or-fail-driver dispatches on failure_reason: present -> failure ...
+    dispatched_failure = tmp_path / "dispatched_failure.json"
+    dispatched_failure.write_text(json.dumps({
+        "driver_name": "dispatched-failure",
+        "driver_type": "cpp",
+        "failure_reason": "linker error",
+    }))
+    result = _invoke(runner, driver_matrix_cli, [
+        "submit-or-fail-driver", *common,
+        "--id", run_id,
+        "--metadata-path", str(dispatched_failure),
+    ])
+    assert result.exit_code == 0, result.output
+
+    # ... absent -> result submission from the referenced junit file.
+    junit = tmp_path / "TEST-dispatchedDriver-1.0.xml"
+    junit.write_text(
+        '<testsuites timestamp="2026-08-29T00:00:00" time="0.10">'
+        '<testsuite name="suite-1" tests="1" failures="0" errors="0" '
+        'skipped="0" disabled="0" passed="1" time="0.10">'
+        '<testcase name="case-1" classname="cls" time="0.05"/>'
+        '</testsuite></testsuites>'
+    )
+    dispatched_result = tmp_path / "dispatched_result.json"
+    dispatched_result.write_text(json.dumps({
+        "driver_name": junit.name,
+        "driver_type": "cpp",
+        "junit_result": junit.name,
+    }))
+    result = _invoke(runner, driver_matrix_cli, [
+        "submit-or-fail-driver", *common,
+        "--id", run_id,
+        "--metadata-path", str(dispatched_result),
+    ])
+    assert result.exit_code == 0, result.output
+
+    resp = api_client.get(f"/api/v1/run/driver-matrix-tests/{run_id}")
+    assert resp.status_code == 200, resp.text
+    collection = {c["name"]: c for c in resp.json()["response"]["test_collection"]}
+    assert collection["explicit-failure"]["failure_message"] == "build timed out"
+    assert collection["dispatched-failure"]["failure_message"] == "linker error"
+    assert collection[junit.name]["failures"] == 0
