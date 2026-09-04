@@ -3,12 +3,11 @@ from datetime import UTC, datetime
 import hashlib
 import mimetypes
 import os
-import base64
+import hmac
 import logging
 import re
+import secrets
 from uuid import UUID
-from time import time
-from hashlib import sha384
 
 from collections.abc import Callable
 
@@ -33,6 +32,18 @@ class UserServiceException(Exception):
 
 class GithubOrganizationMissingError(Exception):
     pass
+
+
+def hash_api_token(token: str) -> str:
+    """Return the digest stored in ``User.token`` for a plaintext API token.
+
+    HMAC-SHA256 keyed with ``SECRET_KEY``. The digest is deterministic so the
+    token can still be looked up through the secondary index on ``User.token``
+    from the bare ``Authorization: token …`` header, while the database never
+    holds the token itself. Changing ``SECRET_KEY`` invalidates every issued token.
+    """
+    secret = ScyllaCluster.get().config["SECRET_KEY"]
+    return hmac.new(str(secret).encode("utf-8"), token.encode("utf-8"), "sha256").hexdigest()
 
 
 class UserService:
@@ -204,7 +215,7 @@ class UserService:
         users = {str(user.id): user.model_dump() for user in sorted(users, key=lambda u: u.username)}
         for user in users.values():
             user.pop("password")
-            user.pop("api_token")
+            user.pop("token")
 
         return users
 
@@ -226,18 +237,16 @@ class UserService:
         session["user_id"] = str(user.id)
         return user
 
-    def generate_token(self, user: User):
-        token_digest = f"{user.username}-{int(time())}-{base64.encodebytes(os.urandom(128)).decode(encoding='utf-8')}"
-        new_token = base64.encodebytes(sha384(token_digest.encode(encoding="utf-8")
-                                              ).digest()).decode(encoding="utf-8").strip()
-        user.api_token = new_token
+    def generate_token(self, user: User) -> str:
+        """Issue a new API token for ``user`` and return its plaintext.
+
+        Only the HMAC digest is persisted, so this is the single moment the
+        plaintext exists server-side. Any previously issued token stops working.
+        """
+        new_token = secrets.token_hex(32)
+        user.token = hash_api_token(new_token)
         user.save()
         return new_token
-
-    def get_or_generate_token(self, user: User) -> str:
-        if user.api_token:
-            return user.api_token
-        return self.generate_token(user)
 
     def update_email(self, user: User, new_email: str):
         if (existing := User.exists_by_email(new_email)) and existing.id != user.id:
@@ -417,7 +426,7 @@ def load_user(asgi_request: Request) -> User | None:
         try:
             auth_schema, *auth_data = auth_header.split()
             if auth_schema == "token":
-                user = User.get(api_token=auth_data[0])
+                user = User.get(token=hash_api_token(auth_data[0]))
         except IndexError as exception:
             raise APIException("Malformed authorization header") from exception
         except DocumentNotFound as exception:

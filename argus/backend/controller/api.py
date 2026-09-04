@@ -496,7 +496,12 @@ def s3_generic_proxy(bucket_name: str, bucket_path: str,
 
 @router.get("/user/token", name="api.user_token")
 def user_token(user: User = Depends(api_current_user)):
-    token = UserService().get_or_generate_token(user=user)
+    """Issue a fresh API token for the caller (used by ``argus auth login``).
+
+    Only a digest of the token is stored, so the existing token cannot be read
+    back: every call rotates it and the previous token stops working.
+    """
+    token = UserService().generate_token(user=user)
 
     return APIResponse({
         "status": "ok",

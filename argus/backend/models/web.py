@@ -54,7 +54,7 @@ class User(Document):
     registration_date: Optional[datetime] = None
     roles: list[str] = Field(default_factory=list)
     picture_id: Optional[UUID] = None
-    api_token: Annotated[Optional[str], Indexed()] = None
+    token: Annotated[Optional[str], Indexed()] = None
     service_user: Optional[bool] = False
 
     class Settings:

@@ -4,6 +4,7 @@ import pytest
 from werkzeug.security import generate_password_hash
 
 from argus.backend.models.web import User, UserRoles
+from argus.backend.service.user import hash_api_token
 
 
 @pytest.fixture
@@ -65,8 +66,10 @@ def test_generate_api_token_persists_and_redirects_to_profile(admin_client, db_a
     assert "/profile" in res.headers["Location"]
 
     refreshed = User.get(id=db_admin.id)
-    assert refreshed.api_token
-    assert read_session(admin_client).get("token_generated") == refreshed.api_token
+    plaintext = read_session(admin_client).get("token_generated")
+    assert plaintext
+    assert refreshed.token == hash_api_token(plaintext)
+    assert refreshed.token != plaintext
 
 
 def test_cf_login_without_jwt_redirects_to_login_with_manual_logout(anon_client, read_session):

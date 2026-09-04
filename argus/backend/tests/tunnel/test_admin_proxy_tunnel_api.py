@@ -307,7 +307,6 @@ def test_admin_save_proxy_tunnel_config_rejects_username_collision(api_client, a
         email=f"{username}@example.com",
         registration_date=now_utc,
         roles=["ROLE_USER"],
-        api_token="",
         service_user=False,
     )
     try:

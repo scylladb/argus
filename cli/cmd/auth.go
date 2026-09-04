@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -29,8 +30,11 @@ stored in the system keychain (macOS Keychain, Windows Credential Manager,
 or the Secret Service on Linux) and reused on subsequent invocations until
 it expires.
 
-The JWT is then exchanged for an Argus session token via POST /auth/login/cf
-and that session is also stored in the keychain.`,
+The JWT is then exchanged for an Argus session via POST /auth/login/cf and
+the session for a durable API token (PAT) stored in the keychain.  A PAT that
+is already stored is kept unless Argus rejected it: Argus stores only a digest
+of each token, so requesting one always issues a new token and invalidates
+the previous one for every other client.`,
 	Annotations: map[string]string{SkipAuthRetryAnnotation: "true"},
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
@@ -39,18 +43,21 @@ and that session is also stored in the keychain.`,
 		log := logging.For(LoggerFrom(ctx), "auth")
 
 		// ---- verify existing credentials --------------------------------
+		// GET /api/v1/users is read-only. GET /api/v1/user/token must not be
+		// used here: it issues a new token, invalidating the stored PAT.
+		var verifyErr error
 		client := APIClientFrom(ctx)
 		if client != nil {
 			log.Debug().Msg("verifying existing credentials")
-			req, reqErr := client.NewRequest(ctx, http.MethodGet, api.UserToken, nil)
+			req, reqErr := client.NewRequest(ctx, http.MethodGet, api.Users, nil)
 			if reqErr == nil {
-				if _, verifyErr := api.DoJSON[models.UserTokenResponse](client, req); verifyErr == nil {
+				if _, verifyErr = api.DoJSON[models.UsersMap](client, req); verifyErr == nil {
 					log.Info().Msg("existing credentials are valid")
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Already authenticated.")
 					return nil
 				}
 			}
-			log.Debug().Msg("existing credentials invalid or missing; proceeding with login")
+			log.Debug().Err(verifyErr).Msg("existing credentials invalid or missing; proceeding with login")
 		}
 
 		// ---- headless mode: cloudflare disabled -------------------------
@@ -63,8 +70,13 @@ and that session is also stored in the keychain.`,
 		}
 
 		// ---- cloudflared login flow -------------------------------------
-		// Purge stale keychain credentials so Login() does not reuse them.
-		_ = keychain.DeletePAT()
+		// Login() keeps a stored PAT (fetching a new one rotates it
+		// server-side). Purge it only when Argus itself rejected it; a
+		// Cloudflare challenge or a missing CF token says nothing about the PAT.
+		if verifyErr != nil && errors.Is(verifyErr, api.ErrUnauthorized) && !errors.Is(verifyErr, api.ErrCFChallenge) {
+			log.Debug().Msg("stored PAT rejected by Argus; discarding it")
+			_ = keychain.DeletePAT()
+		}
 		_ = keychain.Delete()
 
 		log.Debug().Msg("locating cloudflared binary")
