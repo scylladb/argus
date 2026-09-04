@@ -1,19 +1,71 @@
+import json
 import logging
 from argus.backend.plugins.sct.udt import CloudNodesInfo, CloudSetupDetails
 
 LOGGER = logging.getLogger(__name__)
 
+XCLOUD_BACKEND = "xcloud"
+XCLOUD_CLUSTER_TYPE_STANDARD = "standard"
+XCLOUD_CLUSTER_TYPE_XCLOUD = "xcloud"
+XCLOUD_NETWORK_TYPE_PUBLIC = "public"
+XCLOUD_NETWORK_TYPE_PRIVATE_VPC = "private-vpc"
+# Name SCT passes to ``sct_submit_config``; its keys land in ``RunConfigParam`` as ``sct_config.<key>[.<sub>]``.
+SCT_CONFIG_NAME = "sct_config"
+
+# Backends where SCT does not know the DB node shape up front, so ``db_node.instance_type`` /
+# ``db_node.node_amount`` are derived from the resources SCT registers during the run instead.
+RESOURCE_DERIVED_DB_NODE_BACKENDS = frozenset({XCLOUD_BACKEND})
+
+
+def is_db_resource(resource_type: str | None) -> bool:
+    return bool(resource_type) and "db" in resource_type
+
+
+def _as_mapping(value: dict | str | None) -> dict:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            loaded = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return loaded if isinstance(loaded, dict) else {}
+    return {}
+
+
+def _is_truthy(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() == "true"
+
+
+def xcloud_cluster_type(scaling_config: dict | str | None) -> str:
+    return XCLOUD_CLUSTER_TYPE_XCLOUD if _as_mapping(scaling_config) else XCLOUD_CLUSTER_TYPE_STANDARD
+
+
+def xcloud_network_type(vpc_peering: dict | str | None) -> str:
+    enabled = _as_mapping(vpc_peering).get("enabled")
+    return XCLOUD_NETWORK_TYPE_PRIVATE_VPC if _is_truthy(enabled) else XCLOUD_NETWORK_TYPE_PUBLIC
+
+
+def _config_param_mapping(params: dict[str, str], key: str) -> dict:
+    prefix = f"{SCT_CONFIG_NAME}.{key}."
+    nested = {name[len(prefix):]: value for name, value in params.items() if name.startswith(prefix)}
+    if nested:
+        return nested
+    return _as_mapping(params.get(f"{SCT_CONFIG_NAME}.{key}"))
+
+
+def xcloud_details_from_config_params(params: dict[str, str]) -> dict[str, str | None]:
+    if f"{SCT_CONFIG_NAME}.cluster_backend" not in params:
+        return {"cluster_type": None, "network_type": None}
+    return {
+        "cluster_type": xcloud_cluster_type(_config_param_mapping(params, "xcloud_scaling_config")),
+        "network_type": xcloud_network_type(_config_param_mapping(params, "xcloud_vpc_peering")),
+    }
+
 
 def _resolve_node_count(value: int | str | list | None) -> int | None:
-    """Normalise the various shapes SCT uses for node counts into a single int.
-
-    Accepted input formats:
-    - ``None``        → ``None`` (unknown / not set)
-    - ``int``         → returned as-is
-    - ``str``         → space-separated token string, e.g. ``"3 1 1"``; tokens are
-                        summed after casting to int (multi-DC notation).
-    - ``list[int]``   → each element cast to int and summed (multi-DC list notation).
-    """
     if value is None:
         return None
     if isinstance(value, int):
@@ -205,6 +257,36 @@ def _prepare_docker_resource_setup(sct_config: dict) -> CloudSetupDetails:
     return cloud_setup
 
 
+XCLOUD_PROVIDER_MAP = {
+    "aws": _prepare_aws_resource_setup,
+    "gce": _prepare_gce_resource_setup,
+}
+
+
+def _prepare_xcloud_resource_setup(sct_config: dict) -> CloudSetupDetails:
+    """Scylla Cloud (xcloud) backend.
+
+    Loaders and monitors are regular VMs on the underlying provider (``xcloud_provider``), so their
+    setup follows that provider's config keys. DB nodes are managed by Scylla Cloud:
+
+    - "standard" clusters are created with the configured instance type and node count;
+    - "xcloud" clusters (``xcloud_scaling_config`` set) let Scylla Cloud pick the instance type and
+      node count from the scaling policy, so both stay unset here and are filled in from the
+      resources SCT registers once the cluster is up (see ``SCTTestRun.sync_db_node_setup_from_resources``).
+    """
+    provider = str(sct_config.get("xcloud_provider") or "").lower()
+    if provider not in XCLOUD_PROVIDER_MAP:
+        LOGGER.warning("Unknown xcloud provider encountered: %s", provider or None)
+    cloud_setup = XCLOUD_PROVIDER_MAP.get(provider, _prepare_unknown_resource_setup)(sct_config)
+
+    cloud_setup.db_node.image_id = sct_config.get("scylla_version")
+    if xcloud_cluster_type(sct_config.get("xcloud_scaling_config")) == XCLOUD_CLUSTER_TYPE_XCLOUD:
+        cloud_setup.db_node.instance_type = None
+        cloud_setup.db_node.node_amount = None
+
+    return cloud_setup
+
+
 class ResourceSetup:
     BACKEND_MAP = {
         "aws": _prepare_aws_resource_setup,
@@ -218,6 +300,7 @@ class ResourceSetup:
         "k8s-gce-minikube": _prepare_k8s_gce_minikube_resource_setup,
         "baremetal": _prepare_bare_metal_resource_setup,
         "docker": _prepare_docker_resource_setup,
+        XCLOUD_BACKEND: _prepare_xcloud_resource_setup,
         "unknown": _prepare_unknown_resource_setup,
     }
 

@@ -94,6 +94,9 @@
             db_node: CloudNodesInfo,
             loader_node: CloudNodesInfo,
             monitor_node: CloudNodesInfo,
+            // xcloud only
+            cluster_type: string | null,
+            network_type: string | null,
         }
     }
 

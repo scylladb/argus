@@ -1,9 +1,11 @@
+import base64
 import datetime
 import json
 import time
 from uuid import UUID, uuid4
 import pytest
 
+from argus.backend.models.run_config import RunConfigParam
 from argus.backend.plugins.sct.testrun import SCTResource, SCTNemesis, SCTTestRun
 from argus.common.utils import clamp_ts_to_milliseconds
 
@@ -103,14 +105,15 @@ def test_set_runner(api_client, sct_run_id):
                "runner-1" for res in SCTResource.find(run_id=UUID(sct_run_id)).all())
 
 
-def _create_resource(api_client, sct_run_id, resource_name="node-1"):
+def _create_resource(api_client, sct_run_id, resource_name="node-1", resource_type="db_node",
+                     instance_type="i3.4xlarge"):
     payload = {
         "resource": {
             "name": resource_name,
             "state": "running",
-            "resource_type": "db_node",
+            "resource_type": resource_type,
             "instance_details": {
-                "instance_type": "i3.4xlarge",
+                "instance_type": instance_type,
                 "provider": "aws",
                 "region": "us-east-1",
                 "dc_name": "us-east",
@@ -138,6 +141,157 @@ def test_resource_create(api_client, sct_run_id):
     assert res.resource_type == "db_node"
     assert res.instance_info.shards_amount == 8
     assert res.state == "running"
+
+    # Non-xcloud backends keep whatever the config said, they are not derived from resources
+    run = SCTTestRun.get(id=UUID(sct_run_id))
+    assert run.cloud_setup.backend == "aws"
+    assert run.cloud_setup.db_node.instance_type is None
+    assert run.cloud_setup.db_node.node_amount is None
+
+
+XCLOUD_SCALING_CONFIG = {
+    "InstanceFamilies": ["i8g"],
+    "Mode": "xcloud",
+    "Policies": {"Storage": {"Min": 0, "TargetUtilization": 0.8}, "VCPU": {"Min": 0}},
+}
+
+
+def _submit_xcloud_run(api_client, fake_test, sct_config: dict) -> str:
+    run_id = str(uuid4())
+    payload = {
+        "run_id": run_id,
+        "job_name": fake_test.build_system_id,
+        "job_url": "http://example.com/job/2",
+        "started_by": "test_user",
+        "commit_id": "deadbeef",
+        "origin_url": "http://example.com/repo.git",
+        "branch_name": "main",
+        "sct_config": {"cluster_backend": "xcloud", **sct_config},
+        "schema_version": "v8",
+    }
+    resp = api_client.post("/api/v1/client/testrun/scylla-cluster-tests/submit", json=payload)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["status"] == "ok"
+    return run_id
+
+
+def _submit_sct_config(api_client, run_id: str, sct_config: dict) -> None:
+    """Mirror SCT's ``sct_submit_config(name="sct_config", content=params.model_dump_json())``."""
+    content = base64.encodebytes(json.dumps(sct_config).encode("utf-8")).decode("utf-8")
+    resp = api_client.post(f"/api/v1/client/{run_id}/config/submit", json={"name": "sct_config", "content": content})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["status"] == "ok"
+
+
+def test_xcloud_scaling_run_derives_db_node_setup_from_resources(api_client, fake_test):
+    run_id = _submit_xcloud_run(api_client, fake_test, {
+        "xcloud_provider": "gce",
+        "gce_datacenter": "us-east1",
+        "scylla_version": "2025.3.0",
+        "xcloud_scaling_config": XCLOUD_SCALING_CONFIG,
+        "xcloud_vpc_peering": {"enabled": True},
+        "n_db_nodes": 3,
+    })
+
+    run = SCTTestRun.get(id=UUID(run_id))
+    assert run.cloud_setup.backend == "xcloud"
+    assert run.cloud_setup.db_node.image_id == "2025.3.0"
+    assert run.cloud_setup.db_node.instance_type is None
+    assert run.cloud_setup.db_node.node_amount is None
+    assert run.region_name == ["us-east1"]
+
+    # loaders do not influence the DB node shape
+    _create_resource(api_client, run_id, resource_name="loader-node-1", resource_type="loader",
+                     instance_type="e2-standard-8")
+    run = SCTTestRun.get(id=UUID(run_id))
+    assert run.cloud_setup.db_node.instance_type is None
+    assert run.cloud_setup.db_node.node_amount is None
+
+    # Scylla Cloud picked i8g.large for the two DB nodes it provisioned
+    _create_resource(api_client, run_id, resource_name="db-node-0-1", resource_type="scylla-db",
+                     instance_type="i8g.large")
+    _create_resource(api_client, run_id, resource_name="db-node-0-2", resource_type="scylla-db",
+                     instance_type="i8g.large")
+    run = SCTTestRun.get(id=UUID(run_id))
+    assert run.cloud_setup.db_node.instance_type == "i8g.large"
+    assert run.cloud_setup.db_node.node_amount == 2
+
+    # a scale-out with a different instance type is reflected too
+    _create_resource(api_client, run_id, resource_name="db-node-0-3", resource_type="scylla-db",
+                     instance_type="i8g.xlarge")
+    run = SCTTestRun.get(id=UUID(run_id))
+    assert run.cloud_setup.db_node.instance_type == "i8g.large, i8g.xlarge"
+    assert run.cloud_setup.db_node.node_amount == 3
+
+    # re-registering an existing resource is a no-op
+    _create_resource(api_client, run_id, resource_name="db-node-0-3", resource_type="scylla-db",
+                     instance_type="i8g.xlarge")
+    assert SCTTestRun.get(id=UUID(run_id)).cloud_setup.db_node.node_amount == 3
+
+    response = SCTTestRun.get_run_response(UUID(run_id))
+    assert response["cloud_setup"]["db_node"]["instance_type"] == "i8g.large, i8g.xlarge"
+    assert response["cloud_setup"]["db_node"]["node_amount"] == 3
+
+
+def test_xcloud_standard_run_uses_configured_db_node_setup(api_client, fake_test):
+    run_id = _submit_xcloud_run(api_client, fake_test, {
+        "xcloud_provider": "aws",
+        "region_name": "eu-west-1",
+        "scylla_version": "2025.3.0",
+        "xcloud_scaling_config": {},
+        "xcloud_vpc_peering": {"enabled": False},
+        "n_db_nodes": 3,
+        "instance_type_db": "i4i.large",
+    })
+
+    run = SCTTestRun.get(id=UUID(run_id))
+    assert run.cloud_setup.db_node.instance_type == "i4i.large"
+    assert run.cloud_setup.db_node.node_amount == 3
+    assert run.region_name == ["eu-west-1"]
+
+
+def test_xcloud_details_are_built_from_run_config_params_at_read_time(api_client, fake_test):
+    sct_config = {
+        "cluster_backend": "xcloud",
+        "xcloud_provider": "gce",
+        "gce_datacenter": "us-east1",
+        "scylla_version": "2025.3.0",
+        "xcloud_scaling_config": XCLOUD_SCALING_CONFIG,
+        "xcloud_vpc_peering": {"enabled": True, "cidr_pool_base": "172.31.0.0/16"},
+    }
+    run_id = _submit_xcloud_run(api_client, fake_test, sct_config)
+
+    # SCT submits the run first and its config right after; until then the descriptors are unknown
+    response = SCTTestRun.get_run_response(UUID(run_id))
+    assert response["cloud_setup"]["backend"] == "xcloud"
+    assert response["cloud_setup"]["cluster_type"] is None
+    assert response["cloud_setup"]["network_type"] is None
+    assert not hasattr(SCTTestRun.get(id=UUID(run_id)).cloud_setup, "cluster_type")
+
+    _submit_sct_config(api_client, run_id, sct_config)
+    params = SCTTestRun.get(id=UUID(run_id)).get_config_params()
+    assert params["sct_config.cluster_backend"] == "xcloud"
+    assert params["sct_config.xcloud_vpc_peering.enabled"] == "True"
+    assert RunConfigParam.find(name="sct_config.xcloud_scaling_config.Mode", value="xcloud", run_id=run_id).count() == 1
+
+    response = SCTTestRun.get_run_response(UUID(run_id))
+    assert response["cloud_setup"]["cluster_type"] == "xcloud"
+    assert response["cloud_setup"]["network_type"] == "private-vpc"
+
+    # a standard, public cluster on another run: params of one run do not leak into another
+    other_config = {**sct_config, "xcloud_scaling_config": {}, "xcloud_vpc_peering": {"enabled": False}}
+    other_run_id = _submit_xcloud_run(api_client, fake_test, other_config)
+    _submit_sct_config(api_client, other_run_id, other_config)
+    response = SCTTestRun.get_run_response(UUID(other_run_id))
+    assert response["cloud_setup"]["cluster_type"] == "standard"
+    assert response["cloud_setup"]["network_type"] == "public"
+
+
+def test_non_xcloud_run_response_has_no_xcloud_descriptors(api_client, sct_run_id):
+    response = SCTTestRun.get_run_response(UUID(sct_run_id))
+    assert response["cloud_setup"]["backend"] == "aws"
+    assert "cluster_type" not in response["cloud_setup"]
+    assert "network_type" not in response["cloud_setup"]
 
 
 def test_resource_update_shards(api_client, sct_run_id):

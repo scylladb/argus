@@ -327,7 +327,7 @@ class SCTService:
             **resource_details.pop("instance_details"))
         resource_name = resource_details.get("name")
         try:
-            SCTTestRun.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
+            run: SCTTestRun = SCTTestRun.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
             if not SCTResource.find(run_id=UUID(run_id), name=resource_name).count():
                 SCTResource.create(
                     run_id=UUID(run_id),
@@ -337,6 +337,8 @@ class SCTService:
                     resource_type=resource_details.get("resource_type"),
                     instance_info=instance_details,
                 )
+                if run.sync_db_node_setup_from_resources():
+                    run.save()
         except DocumentNotFound as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
             raise SCTServiceException("Run not found", run_id) from exception

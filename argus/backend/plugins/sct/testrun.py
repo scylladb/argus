@@ -12,11 +12,19 @@ from coodie.exceptions import DocumentNotFound
 from coodie.sync import Document
 
 from argus.backend.db import ScyllaCluster
+from argus.backend.models.run_config import RunConfigParam
 from argus.backend.models.web import ArgusRelease, ArgusTest, ReleaseDistinctVersions, ReleaseDistinctImages
 from argus.backend.plugins.core import PluginModelBase
-from argus.backend.plugins.sct.resource_setup import ResourceSetup
+from argus.backend.plugins.sct.resource_setup import (
+    RESOURCE_DERIVED_DB_NODE_BACKENDS,
+    XCLOUD_BACKEND,
+    ResourceSetup,
+    is_db_resource,
+    xcloud_details_from_config_params,
+)
 from argus.backend.plugins.sct.udt import (
     CloudInstanceDetails,
+    CloudNodesInfo,
     CloudResource,
     CloudSetupDetails,
     EventsBySeverity,
@@ -40,6 +48,13 @@ SCT_REGION_PROPERTY_MAP = {
     "oci": "oci_region_name",
     "default": "region_name",
 }
+
+
+def get_region_property(backend: str | None, sct_config: dict) -> str:
+    """Config key holding the region list. xcloud runs keep it under the underlying provider's key."""
+    if backend == XCLOUD_BACKEND:
+        backend = str(sct_config.get("xcloud_provider") or "").lower()
+    return SCT_REGION_PROPERTY_MAP.get(backend, SCT_REGION_PROPERTY_MAP["default"])
 
 
 class SubtestType(str, Enum):
@@ -322,8 +337,7 @@ class SCTTestRun(PluginModelBase):
             backend = req.sct_config.get("cluster_backend")
             if duration_override := req.sct_config.get("stress_duration"):
                 run.stress_duration = float(duration_override)
-            region_key = SCT_REGION_PROPERTY_MAP.get(
-                backend, SCT_REGION_PROPERTY_MAP["default"])
+            region_key = get_region_property(backend, req.sct_config)
             raw_regions = req.sct_config.get(region_key) or "undefined_region"
             regions = raw_regions.split() if isinstance(raw_regions, str) else raw_regions
             primary_region = regions[0]
@@ -347,8 +361,44 @@ class SCTTestRun(PluginModelBase):
     def get_resources(self) -> list[SCTResource]:
         return list(SCTResource.find(run_id=self.id).all())
 
+    def sync_db_node_setup_from_resources(self) -> bool:
+        """Derive ``cloud_setup.db_node`` instance type and node amount from registered DB resources.
+
+        Only applies to backends where SCT cannot know these up front (Scylla Cloud picks them from
+        the scaling policy). Returns True when ``cloud_setup`` changed and the run needs saving.
+        """
+        if not self.cloud_setup or self.cloud_setup.backend not in RESOURCE_DERIVED_DB_NODE_BACKENDS:
+            return False
+        db_resources = [res for res in self.get_resources() if is_db_resource(res.resource_type)]
+        if not db_resources:
+            return False
+
+        instance_types = sorted({
+            res.instance_info.instance_type
+            for res in db_resources
+            if res.instance_info and res.instance_info.instance_type
+        })
+        db_node = self.cloud_setup.db_node.model_copy() if self.cloud_setup.db_node else CloudNodesInfo()
+        db_node.instance_type = ", ".join(instance_types) or db_node.instance_type
+        db_node.node_amount = len(db_resources)
+
+        current = self.cloud_setup.db_node
+        if current and current.instance_type == db_node.instance_type and current.node_amount == db_node.node_amount:
+            return False
+        self.cloud_setup = self.cloud_setup.model_copy(update={"db_node": db_node})
+        return True
+
     def get_nemeses(self) -> list[SCTNemesis]:
         return list(SCTNemesis.find(run_id=self.id).all())
+
+    def get_config_params(self) -> dict[str, str]:
+        return {
+            param.name: param.value
+            for param in RunConfigParam.find(run_id=str(self.id)).allow_filtering().all()
+        }
+
+    def get_xcloud_details(self) -> dict[str, str | None]:
+        return xcloud_details_from_config_params(self.get_config_params())
 
     @classmethod
     def get_stress_commands(cls, run_id: str) -> list[StressCommand]:
@@ -494,6 +544,8 @@ class SCTTestRun(PluginModelBase):
         except DocumentNotFound:
             return None
         response = run.model_dump()
+        if run.cloud_setup and run.cloud_setup.backend == XCLOUD_BACKEND and response.get("cloud_setup"):
+            response["cloud_setup"].update(run.get_xcloud_details())
         response["junit_reports"] = list(
             SCTJunitReports.find(test_id=run_id).all())
         response["nemesis_data"] = list(SCTNemesis.find(run_id=run.id).all())
