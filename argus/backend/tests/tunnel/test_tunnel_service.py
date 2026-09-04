@@ -20,6 +20,7 @@ from coodie.exceptions import DocumentNotFound
 from argus.backend.models.ssh_key import ProxyTunnelConfig, SSHTunnelKey
 from argus.backend.models.web import User, UserRoles
 from argus.backend.service.tunnel_service import TunnelService, TunnelServiceException, _derive_fingerprint
+from argus.backend.service.user import hash_api_token
 
 
 # ---------------------------------------------------------------------------
@@ -43,7 +44,7 @@ def _make_user() -> User:
         email=f"tunnel_test_{uuid4().hex[:8]}@test.internal",
         registration_date=datetime.now(tz=UTC),
         roles=[UserRoles.User.value],
-        api_token=token_hex(32),
+        token=hash_api_token(token_hex(32)),
         service_user=False,
     )
 
@@ -473,9 +474,10 @@ def test_save_proxy_tunnel_config_creates_service_user(argus_db, mock_host_finge
 
         assert result.is_active is True
         assert result.service_user_id is not None
-        assert result.api_token is not None
+        assert result.api_token
 
         service_user = User.get(id=result.service_user_id)
+        assert service_user.token == hash_api_token(result.api_token)
         assert service_user.service_user is True
         assert f"proxy-tunnel-{host}" in service_user.username
         assert service_user.roles == [UserRoles.SSHTunnelServer.value]
@@ -504,6 +506,8 @@ def test_save_proxy_tunnel_config_reuses_existing_tunnel_service_user(argus_db, 
         second = svc.save_proxy_tunnel_config(payload)
 
         assert first.service_user_id == second.service_user_id
+        assert second.api_token == ""
+        assert User.get(id=second.service_user_id).token == hash_api_token(first.api_token)
     finally:
         _restore_configs(previous_active_ids)
 
@@ -628,7 +632,6 @@ def test_create_proxy_service_user_rejects_username_collision(argus_db):
         email=f"{username}@example.com",
         registration_date=now_utc,
         roles=[UserRoles.User.value],
-        api_token="",
         service_user=False,
     )
 

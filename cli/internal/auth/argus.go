@@ -70,10 +70,15 @@ var (
 //     This opens a browser window, authenticates the user, and writes the token
 //     file to ~/.cloudflared/.  The JWT is the last non-empty line of stdout.
 //  2. Cache the JWT in the OS keychain for future invocations.
-//  3. Exchange the JWT for an Argus session cookie via POST /auth/login/cf.
-//  4. Use that session to call GET /api/v1/user/token, obtaining (or generating)
-//     the caller's Argus API token.
-//  5. Store the API token as the primary credential under the "pat" keychain key
+//  3. If a PAT is already stored in the keychain, stop here and keep it.
+//     Argus stores only a digest of each token, so GET /api/v1/user/token
+//     cannot echo the current one: it always issues a new token and the old
+//     one stops working. A PAT is therefore only fetched when none is stored;
+//     callers that know the stored PAT was rejected delete it first.
+//  4. Exchange the JWT for an Argus session cookie via POST /auth/login/cf.
+//  5. Use that session to call GET /api/v1/user/token, obtaining a fresh
+//     Argus API token.
+//  6. Store the API token as the primary credential under the "pat" keychain key
 //     and discard the session cookie — the PAT is the durable credential.
 type ArgusService struct {
 	// argusURL is the base URL of the Argus instance (e.g. https://argus.example.com).
@@ -144,18 +149,31 @@ func (s *ArgusService) CachedCFToken(ctx context.Context) (string, error) {
 	return cached, nil
 }
 
-// Login obtains a Cloudflare Access token, exchanges it for an Argus session,
-// immediately trades that session for a durable Argus API token (PAT) via
-// GET /api/v1/user/token, and stores the PAT in the system keychain.
+// Login obtains a Cloudflare Access token and, unless the keychain already
+// holds a PAT, exchanges it for an Argus session, trades that session for a
+// durable Argus API token (PAT) via GET /api/v1/user/token, and stores the
+// PAT in the system keychain.
 //
-// Login always performs the full cloudflared authentication flow.  Callers
-// that want to avoid unnecessary logins should verify their existing
-// credentials first (e.g. by making a lightweight API call) and only call
-// Login when those credentials are known to be invalid.
+// A stored PAT is kept as-is: fetching a token rotates it server-side, which
+// would break every other client using the same token. Callers that know the
+// stored PAT was rejected by Argus must delete it (keychain.DeletePAT) before
+// calling Login so a fresh one is issued.
+//
+// Login always performs the cloudflared authentication flow.  Callers that
+// want to avoid unnecessary logins should verify their existing credentials
+// first (e.g. by making a lightweight API call) and only call Login when
+// those credentials are known to be invalid.
 func (s *ArgusService) Login(ctx context.Context) error {
 	cfToken, err := s.GetOrFetchCFToken(ctx)
 	if err != nil {
 		return err
+	}
+
+	if _, patErr := keychain.LoadPAT(); patErr == nil {
+		// The PAT is the durable credential; a stale session must not be
+		// sent alongside it.
+		_ = keychain.Delete()
+		return nil
 	}
 
 	session, err := s.login(ctx, cfToken)
@@ -186,7 +204,8 @@ func (s *ArgusService) Login(ctx context.Context) error {
 }
 
 // fetchPAT calls GET /api/v1/user/token authenticated with the given session
-// cookie and CF Access JWT, and returns the Argus API token string.
+// cookie and CF Access JWT, and returns the freshly issued Argus API token.
+// The call rotates the caller's token: any previously issued one stops working.
 //
 // Both the session cookie and the CF token are required: the session
 // authenticates against Argus itself while the CF token passes through the

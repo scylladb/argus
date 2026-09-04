@@ -104,15 +104,15 @@ Profile
                     </div>
                 {% endif %}
                 <form class="d-flex align-items-center" action="{{ url_for('auth.generate_api_token') }}" method="post">
-                    {% if g.user.api_token %}
+                    {% if g.user.token %}
                         <div class="input-group">
                             <span class="input-group-text">Current token</span>
-                            <input class="form-control" type="text" disabled value="{{ g.user.api_token if token_generated else '************'}}">
+                            <input class="form-control" type="text" disabled value="{{ token_generated if token_generated else '************'}}">
                         </div>
                     {% endif %}
                     <div class="ms-2">
                         <button class="btn btn-sm btn-primary" type="submit">
-                            {{ "Generate" if not g.user.api_token else "Regenerate"}}
+                            {{ "Generate" if not g.user.token else "Regenerate"}}
                         </button>
                     </div>
                 </form>

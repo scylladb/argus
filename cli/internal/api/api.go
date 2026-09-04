@@ -48,10 +48,16 @@ var (
 	ErrAPIError = errors.New("api: server returned error")
 
 	// ErrUnauthorized is returned (wrapped) by [DoJSON] when the server
-	// responds with a non-JSON content type on a 2xx status, which almost
-	// always means a Cloudflare Access authentication challenge was served
-	// instead of the expected API response.
+	// responds with 401/403, or with a non-JSON content type on a 2xx status,
+	// which almost always means a Cloudflare Access authentication challenge
+	// was served instead of the expected API response.
 	ErrUnauthorized = errors.New("unauthorized")
+
+	// ErrCFChallenge is returned (wrapped, together with [ErrUnauthorized])
+	// when the response looks like a Cloudflare Access challenge rather than
+	// an Argus rejection. Callers use it to tell "the CF token expired" apart
+	// from "Argus rejected the PAT": the former does not invalidate the PAT.
+	ErrCFChallenge = errors.New("cloudflare access challenge")
 )
 
 // APIError wraps a backend error response so callers can inspect the details
@@ -332,10 +338,11 @@ func DecodeResponse[T any](resp *http.Response) (T, error) {
 		// message so LLM consumers and humans can self-correct by
 		// re-authenticating rather than seeing a confusing decode error.
 		return zero, fmt.Errorf(
-			"%w: server returned Content-Type %q instead of application/json — "+
+			"%w: %w: server returned Content-Type %q instead of application/json — "+
 				"this usually means authentication failed or the session expired; "+
 				"re-authenticate with `argus auth` or set ARGUS_AUTH_TOKEN (or ARGUS_TOKEN)",
 			ErrUnauthorized,
+			ErrCFChallenge,
 			contentType,
 		)
 	}

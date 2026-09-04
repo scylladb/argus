@@ -22,6 +22,7 @@ import pytest
 from argus.backend.tests.conftest import g
 
 from argus.backend.models.web import User, UserRoles
+from argus.backend.service.user import hash_api_token
 
 
 API_PREFIX = "/api/v1"
@@ -82,7 +83,9 @@ def test_list_users_returns_dict(api_client, saved_g_user):
 # /user/token
 # ---------------------------------------------------------------------------
 
-def test_user_token_is_stable_across_calls(api_client, saved_g_user):
+def test_user_token_rotates_on_each_call(api_client, saved_g_user):
+    """Only a digest is stored, so the endpoint cannot echo the current token:
+    each call issues a new one and the previous one stops resolving."""
     first = api_client.get(f"{API_PREFIX}/user/token")
     assert first.status_code == 200, first.content
     body = first.json()
@@ -91,7 +94,12 @@ def test_user_token_is_stable_across_calls(api_client, saved_g_user):
     assert isinstance(token, str) and token
 
     second = api_client.get(f"{API_PREFIX}/user/token")
-    assert second.json()["response"]["token"] == token
+    new_token = second.json()["response"]["token"]
+    assert new_token != token
+
+    stored = User.get(id=saved_g_user.id)
+    assert stored.token == hash_api_token(new_token)
+    assert stored.token != hash_api_token(token)
 
 
 # ---------------------------------------------------------------------------

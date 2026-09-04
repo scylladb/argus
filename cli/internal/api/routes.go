@@ -7,7 +7,9 @@ const (
 	ArgusVersion = "/api/v1/version"
 
 	// User token route
-	// GET – returns (or generates on first call) the caller's Argus API token.
+	// GET – issues a new Argus API token for the caller. Argus stores only a
+	// digest, so the current token cannot be read back: every call rotates it
+	// and the previous token stops working. Never use it to verify credentials.
 	// Requires an active session cookie or an existing Authorization: token header.
 	UserToken = "/api/v1/user/token"
 

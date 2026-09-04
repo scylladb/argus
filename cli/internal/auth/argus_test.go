@@ -198,30 +198,38 @@ func newArgusTestServer(t *testing.T, cfJWT, sessionValue, patToken string) *htt
 
 // ---- tests -----------------------------------------------------------------
 
-// TestArgusService_Login_OverwritesCachedPAT verifies that Login always
-// performs the full cloudflared flow even when a PAT is already stored in
-// the keychain, replacing the old PAT with a freshly obtained one.
-func TestArgusService_Login_OverwritesCachedPAT(t *testing.T) {
+// TestArgusService_Login_KeepsCachedPAT verifies that Login refreshes the CF
+// token but does not request a new PAT when one is already stored: Argus only
+// keeps a digest of the token, so GET /api/v1/user/token would rotate it and
+// break every other client using it.
+func TestArgusService_Login_KeepsCachedPAT(t *testing.T) {
 	setupMockKeyring(t)
-	require.NoError(t, keychain.StorePAT("stale-pat"))
+	require.NoError(t, keychain.StorePAT("stored-pat"))
+	require.NoError(t, keychain.Store("stale-session"))
 
-	const wantSession = "fresh-session"
-	const wantPAT = "fresh-pat"
 	cfJWT := validJWT()
 
 	// access token fails (no local cache), access login succeeds.
 	binPath := fakeCFBin(t, cfJWT, 0, 1)
-	srv := newArgusTestServer(t, cfJWT, wantSession, wantPAT)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("unexpected request %s %s: a stored PAT must not trigger session login or token fetch",
+			r.Method, r.URL.Path)
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
 
 	svc := auth.NewArgusService(srv.URL, binPath,
 		auth.WithHTTPClient(srv.Client()),
 	)
 	require.NoError(t, svc.Login(t.Context()))
 
-	// The freshly obtained PAT must replace the stale one.
 	gotPAT, err := keychain.LoadPAT()
 	require.NoError(t, err)
-	assert.Equal(t, wantPAT, gotPAT)
+	assert.Equal(t, "stored-pat", gotPAT)
+
+	// The stale session must not linger next to the PAT.
+	_, sessionErr := keychain.Load()
+	assert.Error(t, sessionErr, "session should be deleted when the PAT is kept")
 }
 
 // TestArgusService_Login_CFLoginFails verifies that a cloudflared access login

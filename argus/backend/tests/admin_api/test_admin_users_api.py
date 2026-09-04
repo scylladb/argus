@@ -61,7 +61,7 @@ def test_admin_users_returns_dict_without_password(api_client, regular_user):
     assert str(regular_user.id) in body["response"]
     entry = body["response"][str(regular_user.id)]
     assert "password" not in entry
-    assert "api_token" not in entry
+    assert "token" not in entry
     assert entry["username"] == regular_user.username
     assert entry["email"] == regular_user.email
 
