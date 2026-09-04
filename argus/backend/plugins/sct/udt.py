@@ -57,6 +57,9 @@ class CloudSetupDetails(UserType):
     loader_node: Optional[CloudNodesInfo] = None
     monitor_node: Optional[CloudNodesInfo] = None
     backend: Optional[str] = None
+    # Scylla Cloud (xcloud) only: "standard" | "xcloud" and "public" | "private-vpc"
+    cluster_type: Optional[str] = None
+    network_type: Optional[str] = None
 
     class Settings:
         __type_name__ = "cloudsetupdetails"

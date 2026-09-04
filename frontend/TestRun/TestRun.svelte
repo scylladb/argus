@@ -93,6 +93,8 @@
             db_node: CloudNodesInfo,
             loader_node: CloudNodesInfo,
             monitor_node: CloudNodesInfo,
+            cluster_type: string | null,
+            network_type: string | null,
         }
     }
 

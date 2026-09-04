@@ -14,6 +14,7 @@
     import { getScyllaPackage, getKernelPackage, getUpgradedScyllaPackage,
         getOperatorPackage, getOperatorHelmPackage, getOperatorHelmRepoPackage,
     } from "../Common/RunUtils";
+    import { clusterTypeLabel, networkTypeLabel, isCloudManagedDbCluster, getDbNodeSetup } from "../Common/CloudSetupUtils";
     import JenkinsBuildModal from "./Jenkins/JenkinsBuildModal.svelte";
     import JenkinsCloneModal from "./Jenkins/JenkinsCloneModal.svelte";
     import { createEventDispatcher } from "svelte";
@@ -65,6 +66,10 @@
     run(() => {
         upgradedPackage = getUpgradedScyllaPackage(test_run.packages);
     });
+
+    let dbNodeSetup = $derived(getDbNodeSetup(test_run));
+    // xcloud clusters get their DB node shape from Scylla Cloud's scaling policy, known only once nodes are registered
+    let dbNodeUnknownLabel = $derived(isCloudManagedDbCluster(test_run) ? "Pending (selected by Scylla Cloud)" : "Unknown");
 </script>
 
 <svelte:window bind:innerWidth={innerWidth} />
@@ -143,6 +148,18 @@
                     <span class="fw-bold">Backend:</span>
                     {test_run.cloud_setup?.backend ?? "Unknown"}
                 </li>
+                {#if test_run.cloud_setup?.cluster_type}
+                    <li>
+                        <span class="fw-bold">Cluster type:</span>
+                        {clusterTypeLabel(test_run.cloud_setup.cluster_type)}
+                    </li>
+                {/if}
+                {#if test_run.cloud_setup?.network_type}
+                    <li>
+                        <span class="fw-bold">Network type:</span>
+                        {networkTypeLabel(test_run.cloud_setup.network_type)}
+                    </li>
+                {/if}
                 <li>
                     <span class="fw-bold">Region:</span>
                     {test_run.region_name.join(", ") || "Unknown region"}
@@ -227,11 +244,11 @@
                 {/if}
                 <li>
                     <span class="fw-bold">Instance type:</span>
-                    {test_run.cloud_setup?.db_node?.instance_type ?? "Unknown"}
+                    {dbNodeSetup.instanceType ?? dbNodeUnknownLabel}
                 </li>
                 <li>
                     <span class="fw-bold">Node amount:</span>
-                    {test_run.cloud_setup?.db_node?.node_amount ?? "Unknown"}
+                    {dbNodeSetup.nodeAmount ?? dbNodeUnknownLabel}
                 </li>
             </ul>
         </div>

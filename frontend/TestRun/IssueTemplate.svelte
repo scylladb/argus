@@ -10,6 +10,7 @@
     } from "../Common/RunUtils";
     import { markdownRendererOptions } from "../markdownOptions";
     import { sendMessage } from "../Stores/AlertStore";
+    import { clusterTypeLabel, networkTypeLabel, getDbNodeSetup } from "../Common/CloudSetupUtils";
     let { test_run = {}, test } = $props();
     let renderedElement = $state();
     let renderedShortElement = $state();
@@ -209,7 +210,8 @@
 
 ## Installation details
 
-Cluster size: {test_run?.cloud_setup?.db_node?.node_amount ?? "Unknown amount of"} nodes ({test_run?.cloud_setup?.db_node?.instance_type ?? "Unknown instance type"})
+Cluster size: {getDbNodeSetup(test_run).nodeAmount ?? "Unknown amount of"} nodes ({getDbNodeSetup(test_run).instanceType ?? "Unknown instance type"})
+{#if test_run?.cloud_setup?.cluster_type}Scylla Cloud cluster type: {clusterTypeLabel(test_run.cloud_setup.cluster_type)}, network: {networkTypeLabel(test_run.cloud_setup.network_type) ?? "Unknown"}{/if}
 
 Scylla Nodes used in this run:
 {#each filterDbNodes(test_run.allocated_resources) as resource}
@@ -303,7 +305,8 @@ Extra information
 
 ## Installation details
 
-Cluster size: {test_run?.cloud_setup?.db_node?.node_amount ?? "Unknown amount of"} nodes ({test_run?.cloud_setup?.db_node?.instance_type ?? "Unknown instance type"})
+Cluster size: {getDbNodeSetup(test_run).nodeAmount ?? "Unknown amount of"} nodes ({getDbNodeSetup(test_run).instanceType ?? "Unknown instance type"})
+{#if test_run?.cloud_setup?.cluster_type}Scylla Cloud cluster type: {clusterTypeLabel(test_run.cloud_setup.cluster_type)}, network: {networkTypeLabel(test_run.cloud_setup.network_type) ?? "Unknown"}{/if}
 
 Scylla Nodes used in this run:
 {#each filterDbNodes(test_run.allocated_resources) as resource}
