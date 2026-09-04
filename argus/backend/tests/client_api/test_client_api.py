@@ -27,7 +27,7 @@ from uuid import uuid4
 import pytest
 
 from argus.backend.service.email_service import EmailService
-from argus.backend.tests.email_service.conftest import EmailListener
+from argus.backend.tests.email_service.utils import EmailListener
 
 API_PREFIX = "/api/v1/client"
 RUN_TYPE = "scylla-cluster-tests"

@@ -33,14 +33,6 @@ from argus.client.sct.client import ArgusSCTClient
 
 @fixture(scope='session')
 def live_server(argus_db) -> str:
-    """Real HTTP server on an ephemeral localhost port for the clients.
-
-    Serves a dedicated app instance: the shared ``asgi_app`` carries the
-    session-long ``load_user`` override installed by ``api_client``, which
-    would silently bypass token auth. ``lifespan="off"`` because the app
-    lifespan shuts down the process-wide ScyllaCluster singleton on exit,
-    and ``argus_db`` owns that shutdown.
-    """
     import argus_backend
     app = argus_backend.create_app()
     config = uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning", lifespan="off")

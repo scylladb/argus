@@ -15,7 +15,7 @@ from argus.backend.plugins.sct.service import SCTService
 from argus.backend.service.testrun import TestRunService
 from argus.backend.tests.conftest import get_fake_test_run
 from argus.backend.util.encoders import ArgusJSONEncoder
-from argus.backend.tests.email_service.conftest import EmailListener
+from argus.backend.tests.email_service.utils import EmailListener
 
 LOGGER = logging.getLogger(__name__)
 
