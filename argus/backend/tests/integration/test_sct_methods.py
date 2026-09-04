@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 import pytest
 
 from argus.backend.service.email_service import EmailService
-from argus.backend.tests.email_service.conftest import EmailListener
+from argus.backend.tests.email_service.utils import EmailListener
 from argus.client.sct.types import EventsInfo
 from argus.common.utils import clamp_ts_to_milliseconds
 
