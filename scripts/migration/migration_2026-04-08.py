@@ -19,7 +19,7 @@ def migrate():
         LOGGER.info("[%s/%s] Migrating nemeses from run %s...", idx + 1, run_count, run.id)
         for nemesis in run.nemesis_data:
             nemesis_stats["total"] += 1
-            nem = SCTNemesis()
+            nem = SCTNemesis.model_construct()
             nem.run_id = run.id
             nem.start_time = nemesis.start_time
             nem.end_time = nemesis.end_time

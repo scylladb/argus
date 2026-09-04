@@ -48,7 +48,7 @@ class ClientService:
 
     def submit_pytest_result(self, request_data: PytestSubmitData) -> dict[str, str | UUID]:
 
-        new_result = PytestResultTable()
+        new_result = PytestResultTable.model_construct()
         new_result.name = request_data["name"]
         new_result.id = datetime.fromtimestamp(request_data["timestamp"], tz=UTC)
         new_result.status = request_data["status"]
@@ -61,7 +61,7 @@ class ClientService:
         new_result.markers = request_data["markers"]
         fields: list[PytestUserField] = []
         for field, value in request_data.get("user_fields", {}).items():
-            f = PytestUserField()
+            f = PytestUserField.model_construct()
             f.name = new_result.name
             f.id = new_result.id
             f.field_name = field
@@ -250,7 +250,7 @@ class ClientService:
         try:
             config_store = RunConfiguration.get(run_id=run_id, name=config_name)
         except DocumentNotFound:
-            config_store = RunConfiguration()
+            config_store = RunConfiguration.model_construct()
             config_store.run_id = run_id
             config_store.name = config_name
 
@@ -286,7 +286,7 @@ class ClientService:
         # Store flattened keys to a separate table for comparison purposes
         for level, key, value in loaded_items:
             if is_scalar(value):
-                param = RunConfigParam()
+                param = RunConfigParam.model_construct()
                 param.name = f"{level}{key}"
                 param.value = str(value) or "null"
                 param.run_id = run_id

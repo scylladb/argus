@@ -67,6 +67,7 @@ def _make_active_config(**overrides) -> ProxyTunnelConfig:
         target_host="10.0.0.1",
         target_port=8080,
         host_key_fingerprint="SHA256:testfp",
+        service_user_id=uuid4(),
         is_active=True,
     )
     defaults.update(overrides)

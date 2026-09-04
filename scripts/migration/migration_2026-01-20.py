@@ -80,7 +80,7 @@ def migrate():
             batch_count += 1
             with BatchQuery() as b:
                 for event in event_batch:
-                    unprocessed_event = SCTUnprocessedEvent()
+                    unprocessed_event = SCTUnprocessedEvent.model_construct()
                     unprocessed_event.run_id = event.run_id
                     unprocessed_event.severity = event.severity
                     unprocessed_event.ts = event.ts

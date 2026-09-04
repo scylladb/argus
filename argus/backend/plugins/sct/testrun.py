@@ -71,24 +71,24 @@ class SCTEventSeverity(str, Enum):
 
 
 class StressCommand(Document):
-    run_id: Annotated[Optional[UUID], PrimaryKey()] = None
-    ts: Annotated[Optional[datetime], ClusteringKey(order="DESC")] = Field(
+    run_id: Annotated[UUID, PrimaryKey()]
+    ts: Annotated[datetime, ClusteringKey(order="DESC")] = Field(
         default_factory=lambda: datetime.now(tz=UTC))
-    cmd: Optional[str] = None
-    log_name: Optional[str] = None
-    node_name: Optional[str] = None
+    cmd: str
+    log_name: str
+    node_name: str
 
     class Settings:
         name = "stress_command"
 
 
 class SCTEvent(Document):
-    run_id: Annotated[Optional[UUID], PrimaryKey(partition_key_index=0)] = None
-    severity: Annotated[Optional[str], PrimaryKey(partition_key_index=1)] = None
-    ts: Annotated[Optional[datetime], ClusteringKey()] = None
-    event_id: Annotated[Optional[UUID], Indexed()] = Field(default_factory=uuid4)
+    run_id: Annotated[UUID, PrimaryKey(partition_key_index=0)]
+    severity: Annotated[str, PrimaryKey(partition_key_index=1)]
+    ts: Annotated[datetime, ClusteringKey()]
+    event_id: Annotated[UUID, Indexed()] = Field(default_factory=uuid4)
     event_type: Optional[str] = None
-    message: Optional[str] = None
+    message: str
     duplicate_id: Optional[UUID] = None
     summary: Optional[str] = None  # LLM-generated summary; null until/unless summarized (see argusAI)
 
@@ -111,35 +111,35 @@ class SCTEvent(Document):
 
 class SCTUnprocessedEvent(Document):
     """Table to track events that need embedding generation."""
-    run_id: Annotated[Optional[UUID], PrimaryKey()] = None
-    severity: Annotated[Optional[str], ClusteringKey(clustering_key_index=0)] = None
-    ts: Annotated[Optional[datetime], ClusteringKey(order="DESC", clustering_key_index=1)] = None
+    run_id: Annotated[UUID, PrimaryKey()]
+    severity: Annotated[str, ClusteringKey(clustering_key_index=0)]
+    ts: Annotated[datetime, ClusteringKey(order="DESC", clustering_key_index=1)]
 
     class Settings:
         name = "sct_unprocessed_events"
 
 
 class SCTNemesis(Document):
-    run_id: Annotated[Optional[UUID], PrimaryKey()] = None
-    start_time: Annotated[Optional[int], ClusteringKey()] = None
-    class_name: Optional[str] = None
-    name: Optional[str] = None
-    duration: Optional[int] = None
-    target_node: Optional[NodeDescription] = None
-    status: Optional[str] = None
-    end_time: Optional[int] = None
-    stack_trace: Optional[str] = None
+    run_id: Annotated[UUID, PrimaryKey()]
+    start_time: Annotated[int, ClusteringKey()]
+    class_name: str
+    name: str
+    duration: int
+    target_node: NodeDescription
+    status: str
+    end_time: int
+    stack_trace: str
 
     class Settings:
         name = "sct_nemesis"
 
 
 class SCTResource(Document):
-    run_id: Annotated[Optional[UUID], PrimaryKey()] = None
-    name: Annotated[Optional[str], ClusteringKey()] = None
-    state: Optional[str] = Field(default=ResourceState.RUNNING.value)
+    run_id: Annotated[UUID, PrimaryKey()]
+    name: Annotated[str, ClusteringKey()]
+    state: str = Field(default=ResourceState.RUNNING.value)
     resource_type: Optional[str] = None
-    instance_info: Optional[CloudInstanceDetails] = None
+    instance_info: CloudInstanceDetails
 
     class Settings:
         name = "sct_resource"
@@ -291,7 +291,7 @@ class SCTTestRun(PluginModelBase):
 
     @classmethod
     def init_sct_run(cls, req: SCTTestRunSubmissionRequest):
-        run = cls()
+        run = cls.model_construct()
         run.build_id = req.job_name
         run.assign_categories()
         try:
@@ -355,7 +355,7 @@ class SCTTestRun(PluginModelBase):
         return list(StressCommand.find(run_id=UUID(run_id) if isinstance(run_id, str) else run_id).all())
 
     def add_stress_command(self, cmd: str, ts: float, log_name: str, loader_name: str):
-        s = StressCommand()
+        s = StressCommand.model_construct()
         s.run_id = self.id
         s.ts = datetime.fromtimestamp(ts)
         s.cmd = cmd
@@ -515,9 +515,9 @@ class SCTTestRun(PluginModelBase):
 
 
 class SCTJunitReports(Document):
-    test_id: Annotated[Optional[UUID], PrimaryKey()] = None
-    file_name: Annotated[Optional[str], ClusteringKey()] = None
-    report: Optional[str] = None
+    test_id: Annotated[UUID, PrimaryKey()]
+    file_name: Annotated[str, ClusteringKey()]
+    report: str
 
     class Settings:
         # cqlengine collapsed the consecutive capitals when deriving the name

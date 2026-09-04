@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 import os
 import uuid
 from unittest.mock import ANY
@@ -13,7 +14,7 @@ def db_user(argus_db) -> User:
     user = User(id=uuid.uuid4(), username=f"profile-user-{uuid.uuid4().hex[:8]}",
                 full_name="Profile User", email="profile-user@scylladb.com",
                 password=generate_password_hash("old_password"),
-                roles=[UserRoles.User.value, UserRoles.Admin.value])
+                roles=[UserRoles.User.value, UserRoles.Admin.value], registration_date=datetime.now(UTC))
     user.save()
     return user
 
@@ -134,7 +135,7 @@ def test_get_picture_returns_file_contents(profile_client, tmp_path):
     file_path = tmp_path / "pic.png"
     file_path.write_bytes(payload)
 
-    storage = WebFileStorage()
+    storage = WebFileStorage.model_construct()
     storage.filename = "pic.png"
     storage.filepath = str(file_path)
     storage.save()
@@ -148,7 +149,7 @@ def test_get_picture_returns_file_contents(profile_client, tmp_path):
 
 
 def test_get_picture_file_missing_on_disk_returns_404(profile_client, tmp_path):
-    storage = WebFileStorage()
+    storage = WebFileStorage.model_construct()
     storage.filename = "missing.png"
     storage.filepath = str(tmp_path / "does_not_exist.png")
     storage.save()

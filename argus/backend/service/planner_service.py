@@ -185,7 +185,7 @@ class PlanningService:
             raise PlannerServiceException(
                 f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing, plan_request)
 
-        plan = ArgusReleasePlan()
+        plan = ArgusReleasePlan.model_construct()
         plan.name = plan_request.name
         plan.description = plan_request.description
         plan.owner = UUID(plan_request.owner)
@@ -491,7 +491,7 @@ class PlanningService:
                 if group_options:
                     new_options[str(new_group_id)] = group_options
 
-        new_plan = ArgusReleasePlan()
+        new_plan = ArgusReleasePlan.model_construct()
         new_plan.release_id = target_release.id
         new_plan.owner = UUID(payload.plan.owner) if isinstance(payload.plan.owner, str) else payload.plan.owner
         new_plan.name = payload.plan.name

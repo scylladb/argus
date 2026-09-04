@@ -105,7 +105,7 @@ class UserService:
         try:
             user = User.get(username=user_info.get("login"))
         except DocumentNotFound:
-            user = User()
+            user = User.model_construct()
             user.username = user_info.get("login")
             # pick only scylladb.com emails
             scylla_email = next(iter([email.get("email")
@@ -124,7 +124,7 @@ class UserService:
             avatar_name = avatar_url.split("/")[-1]
             filename, filepath = self.save_profile_picture_to_disk(avatar_name, avatar, user.username)
 
-            web_file = WebFileStorage()
+            web_file = WebFileStorage.model_construct()
             web_file.filename = filename
             web_file.filepath = filepath
             web_file.save()
@@ -138,7 +138,7 @@ class UserService:
             github_token.token = oauth_data.get('access_token')
             github_token.save()
         except IndexError:
-            github_token = UserOauthToken()
+            github_token = UserOauthToken.model_construct()
             github_token.kind = "github"
             github_token.user_id = user.id
             github_token.token = oauth_data.get('access_token')
@@ -303,7 +303,7 @@ class UserService:
         if errors:
             return result
 
-        user = User()
+        user = User.model_construct()
         user.username = username
         user.email = email
         user.full_name = full_name
@@ -319,7 +319,7 @@ class UserService:
             filename = f"{username}_{datetime.now(tz=UTC).timestamp()}{avatar_ext}"
             filename, filepath = self.save_profile_picture_to_disk(filename, content, user.username)
 
-            web_file = WebFileStorage()
+            web_file = WebFileStorage.model_construct()
             web_file.filename = filename
             web_file.filepath = filepath
             web_file.save()
@@ -385,7 +385,7 @@ class UserService:
         return original_filename, filepath
 
     def update_profile_picture(self, filename: str, filepath: str, user: User):
-        web_file = WebFileStorage()
+        web_file = WebFileStorage.model_construct()
         web_file.filename = filename
         web_file.filepath = filepath
         web_file.save()

@@ -54,12 +54,13 @@ def test_get_sorted_data_for_column_and_row():
     run_id1 = uuid4()
     run_id2 = uuid4()
     run_id3 = uuid4()
+    test_id = uuid4()
     data = [
-        ArgusGenericResultData(run_id=run_id2, column="col1", row="row1", value=1.5, status="PASS",
+        ArgusGenericResultData(test_id=test_id, name='table1', run_id=run_id2, column="col1", row="row1", value=1.5, status="PASS",
                                sut_timestamp=datetime(2023, 10, 23)),
-        ArgusGenericResultData(run_id=run_id3, column="col1", row="row1", value=2.5, status="PASS",
+        ArgusGenericResultData(test_id=test_id, name='table1', run_id=run_id3, column="col1", row="row1", value=2.5, status="PASS",
                                sut_timestamp=datetime(2023, 10, 24)),
-        ArgusGenericResultData(run_id=run_id1, column="col1", row="row1", value=0.5, status="PASS",
+        ArgusGenericResultData(test_id=test_id, name='table1', run_id=run_id1, column="col1", row="row1", value=0.5, status="PASS",
                                sut_timestamp=datetime(2023, 10, 22)),
     ]
     packages = {
@@ -123,7 +124,7 @@ def test_coerce_values_to_axis_boundries():
 
 
 def test_create_chart_options():
-    table = ArgusGenericResultMetadata(name="Test Table", description="Test Description",
+    table = ArgusGenericResultMetadata(test_id=uuid4(), name="Test Table", description="Test Description",
                                        columns_meta=[ColumnMetadata(name="col1", unit="ms",
                                                                     type="NUMBER", higher_is_better=True)],
                                        rows_meta=["row1"], validation_rules={})
@@ -137,6 +138,7 @@ def test_create_chart_options():
 
 def test_create_datasets_for_column():
     table = ArgusGenericResultMetadata(
+        test_id=uuid4(),
         name="Test Table",
         description="Test Description",
         columns_meta=[ColumnMetadata(name="col1", unit="ms", type="NUMBER", higher_is_better=True)],
@@ -144,11 +146,11 @@ def test_create_datasets_for_column():
         validation_rules={}
     )
     data = [
-        ArgusGenericResultData(run_id=uuid4(), column="col1", row="row1", value=1.5,
+        ArgusGenericResultData(test_id=uuid4(), name='table1', run_id=uuid4(), column="col1", row="row1", value=1.5,
                                status="PASS", sut_timestamp=datetime(2023, 10, 23)),
-        ArgusGenericResultData(run_id=uuid4(), column="col1", row="row1", value=2.5,
+        ArgusGenericResultData(test_id=uuid4(), name='table1', run_id=uuid4(), column="col1", row="row1", value=2.5,
                                status="PASS", sut_timestamp=datetime(2023, 10, 24)),
-        ArgusGenericResultData(run_id=uuid4(), column="col1", row="row2", value=3.5,
+        ArgusGenericResultData(test_id=uuid4(), name='table1', run_id=uuid4(), column="col1", row="row2", value=3.5,
                                status="PASS", sut_timestamp=datetime(2023, 10, 25)),
     ]
     best_results = {}
@@ -189,7 +191,7 @@ def test_create_limit_dataset():
     best_results = {
         "col1:row1": [BestResult(key="col1:row1", value=2.0, result_date=datetime(2023, 10, 24), run_id="run2")]
     }
-    table = ArgusGenericResultMetadata(name="Test Table", description="Test Description",
+    table = ArgusGenericResultMetadata(test_id=uuid4(), name="Test Table", description="Test Description",
                                        columns_meta=[column], rows_meta=[row], validation_rules={
                                            "col1": [{"fixed_limit": 1.8, "best_pct": 10, "best_abs": 0.2, "valid_from": datetime(2023, 10, 23)}]
                                        })

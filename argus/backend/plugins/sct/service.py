@@ -480,7 +480,7 @@ class SCTService:
     def submit_event(cls, run_id: str, raw_event: RawEventPayload):
         req = EventSubmitRequest(**raw_event)
 
-        event = SCTEvent()
+        event = SCTEvent.model_construct()
         event.run_id = UUID(run_id)
         event.severity = SCTEventSeverity(req.severity.upper()).value
         event.ts = datetime.fromtimestamp(req.ts, tz=UTC)
@@ -513,7 +513,7 @@ class SCTService:
         # Add to unprocessed events queue for ERROR and CRITICAL events
         if event.severity in (SCTEventSeverity.ERROR.value, SCTEventSeverity.CRITICAL.value):
             try:
-                unprocessed_event = SCTUnprocessedEvent()
+                unprocessed_event = SCTUnprocessedEvent.model_construct()
                 unprocessed_event.run_id = event.run_id
                 unprocessed_event.severity = event.severity
                 unprocessed_event.ts = event.ts
@@ -948,7 +948,7 @@ class SCTService:
         try:
             report = SCTJunitReports.get(test_id=UUID(run_id) if isinstance(run_id, str) else run_id, file_name=file_name)
         except DocumentNotFound:
-            report = SCTJunitReports()
+            report = SCTJunitReports.model_construct()
             report.test_id = UUID(run_id) if isinstance(run_id, str) else run_id
             report.file_name = file_name
 

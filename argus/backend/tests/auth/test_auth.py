@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 import uuid
 
 import pytest
@@ -10,7 +11,7 @@ from argus.backend.models.web import User, UserRoles
 def db_admin(argus_db) -> User:
     user = User(id=uuid.uuid4(), username=f"auth-admin-{uuid.uuid4().hex[:8]}",
                 email="auth-admin@scylladb.com", password="irrelevant",
-                roles=[UserRoles.User.value, UserRoles.Admin.value])
+                roles=[UserRoles.User.value, UserRoles.Admin.value], registration_date=datetime.now(UTC))
     user.save()
     return user
 
@@ -99,7 +100,7 @@ def test_password_login_success_sets_user_id_in_session(anon_client, app_config,
     """Posting valid credentials with password login enabled stores user_id in session."""
     raw_password = "s3cret-pw"
     user = User(id=uuid.uuid4(), username=f"pw-user-{uuid.uuid4().hex[:8]}",
-                password=generate_password_hash(raw_password), roles=["ROLE_USER"])
+                password=generate_password_hash(raw_password), roles=["ROLE_USER"], registration_date=datetime.now(UTC))
     user.email = f"{user.username}@scylladb.com"
     user.save()
 
@@ -137,7 +138,7 @@ def test_password_login_disabled_flashes_error(anon_client, app_config, read_ses
 def test_cf_login_with_valid_jwt_logs_in_existing_user(anon_client, argus_db,
                                                        mock_cf_access_payload, read_session):
     """CF JWT happy path: /auth/login/cf logs in matching @scylladb.com user."""
-    user = User(id=uuid.uuid4(), username=f"cf-user-{uuid.uuid4().hex[:8]}", roles=["ROLE_USER"])
+    user = User(id=uuid.uuid4(), username=f"cf-user-{uuid.uuid4().hex[:8]}", roles=["ROLE_USER"], password="", registration_date=datetime.now(UTC))
     user.email = f"{user.username}@scylladb.com"
     user.save()
     mock_cf_access_payload.return_value = {"email": user.email}
@@ -157,7 +158,7 @@ def test_cf_login_with_valid_jwt_logs_in_existing_user(anon_client, argus_db,
 
 def test_full_impersonation_flow(admin_client, db_admin, argus_db, read_session):
     """Admin impersonates another user, then stops impersonation."""
-    target = User(id=uuid.uuid4(), username=f"imp-{uuid.uuid4().hex[:8]}", roles=["ROLE_USER"])
+    target = User(id=uuid.uuid4(), username=f"imp-{uuid.uuid4().hex[:8]}", roles=["ROLE_USER"], password="", registration_date=datetime.now(UTC))
     target.email = f"{target.username}@scylladb.com"
     target.save()
 

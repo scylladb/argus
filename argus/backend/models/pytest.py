@@ -24,7 +24,7 @@ class PytestSubmitData(TypedDict):
 
 
 class PytestResultTableOld(Document):
-    name: Annotated[Optional[str], PrimaryKey()] = None
+    name: Annotated[str, PrimaryKey()]
     id: Annotated[UUID, TimeUUID(), ClusteringKey(order="DESC")] = Field(
         default_factory=lambda: uuid_from_time(datetime.now(tz=UTC)))
     test_type: Optional[str] = None
@@ -56,19 +56,19 @@ class PytestResultTableOld(Document):
 
 
 class PytestResultTable(Document):
-    name: Annotated[Optional[str], PrimaryKey()] = None
-    status: Annotated[Optional[str], ClusteringKey(clustering_key_index=0)] = Field(
+    name: Annotated[str, PrimaryKey()]
+    status: Annotated[str, ClusteringKey(clustering_key_index=0)] = Field(
         default=PytestStatus.PASSED.value)
-    id: Annotated[Optional[datetime], ClusteringKey(clustering_key_index=1)] = Field(
+    id: Annotated[datetime, ClusteringKey(clustering_key_index=1)] = Field(
         default_factory=lambda: datetime.now(tz=UTC))
-    test_type: Optional[str] = None
-    run_id: Annotated[Optional[UUID], Indexed()] = None
+    test_type: str
+    run_id: Annotated[UUID, Indexed()]
     test_id: Annotated[Optional[UUID], Indexed()] = None
     release_id: Annotated[Optional[UUID], Indexed()] = None
     duration: Annotated[Optional[float], Double()] = None
     message: Optional[str] = None
-    test_timestamp: Optional[datetime] = None  # timestamp for the submitted test
-    session_timestamp: Optional[datetime] = None  # timestamp of the test session
+    test_timestamp: datetime  # timestamp for the submitted test
+    session_timestamp: datetime  # timestamp of the test session
     markers: list[str] = Field(default_factory=list)
 
     class Settings:
@@ -76,9 +76,9 @@ class PytestResultTable(Document):
 
 
 class PytestUserField(Document):
-    name: Annotated[Optional[str], PrimaryKey()] = None
-    id: Annotated[Optional[datetime], ClusteringKey(clustering_key_index=0)] = None
-    field_name: Annotated[Optional[str], ClusteringKey(clustering_key_index=1)] = None
+    name: Annotated[str, PrimaryKey()]
+    id: Annotated[datetime, ClusteringKey(clustering_key_index=0)]
+    field_name: Annotated[str, ClusteringKey(clustering_key_index=1)]
     field_value: Optional[str] = None
 
     class Settings:

@@ -360,7 +360,7 @@ def test_event_to_embedding_flow_should_handle_processing_errors_gracefully(
 
     # Step 3: Manually create an unprocessed event that points to non-existent event
     fake_run_id = uuid4()
-    fake_unprocessed = SCTUnprocessedEvent()
+    fake_unprocessed = SCTUnprocessedEvent.model_construct()
     fake_unprocessed.run_id = fake_run_id
     fake_unprocessed.severity = SCTEventSeverity.ERROR.value
     fake_unprocessed.ts = datetime.now(tz=UTC)
