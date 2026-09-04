@@ -7,7 +7,8 @@
         faPlay,
     } from "@fortawesome/free-solid-svg-icons";
     import { sendMessage } from "../Stores/AlertStore";
-    let { resources = $bindable(), backend, run_id } = $props();
+    import { buildCleanResourcesCommand } from "../Common/RunUtils";
+    let { resources = $bindable(), backend, run_id, regions = [] } = $props();
     let sortHeaders = {
         creationTime: ["instance_info", "creation_time"],
         terminationTime: ["instance_info", "termination_time"],
@@ -33,8 +34,7 @@
         terminated: "table-danger",
     };
 
-    let regions = "SCT_REGION_NAME= SCT_GCE_DATACENTER= SCT_AZURE_REGION_NAME= ";
-    const CMD_CLEAN_RESOURCES = `${regions} hydra clean-resources --backend ${backend} --test-id ${run_id}`;
+    const CMD_CLEAN_RESOURCES = buildCleanResourcesCommand(backend, regions, run_id);
 
     const filterResource = function (resource) {
         let resourceAsString = `${resource.name}${resource.state}${

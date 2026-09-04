@@ -26,6 +26,34 @@ export const extractBuildNumber = function (run) {
     return run.build_job_url ? run.build_job_url.trim().split("/").reverse()[1] : -1;
 };
 
+const SCT_REGION_ENV_VAR_MAP = {
+    aws: "SCT_REGION_NAME",
+    "aws-siren": "SCT_REGION_NAME",
+    "k8s-eks": "SCT_REGION_NAME",
+    gce: "SCT_GCE_DATACENTER",
+    "gce-siren": "SCT_GCE_DATACENTER",
+    "k8s-gke": "SCT_GCE_DATACENTER",
+    azure: "SCT_AZURE_REGION_NAME",
+    oci: "SCT_OCI_REGION_NAME",
+};
+
+/**
+ * Build the copyable "hydra clean-resources" command for a run, prefixed with
+ * the backend-specific region env var when a known region is available.
+ * @param {string} backend
+ * @param {string[]} regions
+ * @param {string} runId
+ * @returns {string}
+ */
+export const buildCleanResourcesCommand = function (backend, regions, runId) {
+    const envVar = SCT_REGION_ENV_VAR_MAP[backend];
+    const hasKnownRegions = regions && regions.length > 0 && regions.some((region) => region != "undefined_region");
+    if (envVar && hasKnownRegions) {
+        return `${envVar}="${regions.join(" ")}" hydra clean-resources --backend ${backend} --test-id ${runId}`;
+    }
+    return `hydra clean-resources --backend ${backend} --test-id ${runId}`;
+};
+
 export const getRelocatableScyllaPackage = function(packages) {
     // relocatable package: https://docs.scylladb.com/stable/getting-started/install-scylla/unified-installer.html
     return packages.find((pkg) => pkg.name == "relocatable_pkg");

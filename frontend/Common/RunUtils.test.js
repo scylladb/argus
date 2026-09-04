@@ -11,6 +11,7 @@ import {
     filterInvestigated,
     filterNotInvestigated,
     createScreenshotUrl,
+    buildCleanResourcesCommand,
 } from "./RunUtils.js";
 
 const samplePackages = [
@@ -157,5 +158,51 @@ describe("createScreenshotUrl", () => {
     it("extracts filename from the end of the link path", () => {
         const url = createScreenshotUrl("generic", "id-1", "https://cdn.example.com/a/b/c/image.jpg");
         expect(url).toBe("/api/v1/tests/generic/id-1/screenshot/image.jpg");
+    });
+});
+
+describe("buildCleanResourcesCommand", () => {
+    it("includes SCT_OCI_REGION_NAME for oci backend", () => {
+        const cmd = buildCleanResourcesCommand("oci", ["us-ashburn-1"], "run-1");
+        expect(cmd).toBe("SCT_OCI_REGION_NAME=\"us-ashburn-1\" hydra clean-resources --backend oci --test-id run-1");
+    });
+
+    it("uses SCT_REGION_NAME for aws backend", () => {
+        const cmd = buildCleanResourcesCommand("aws", ["us-east-1"], "run-1");
+        expect(cmd).toBe("SCT_REGION_NAME=\"us-east-1\" hydra clean-resources --backend aws --test-id run-1");
+    });
+
+    it("uses SCT_GCE_DATACENTER for gce-siren backend", () => {
+        const cmd = buildCleanResourcesCommand("gce-siren", ["us-central1"], "run-1");
+        expect(cmd).toBe(
+            "SCT_GCE_DATACENTER=\"us-central1\" hydra clean-resources --backend gce-siren --test-id run-1",
+        );
+    });
+
+    it("uses SCT_AZURE_REGION_NAME for azure backend", () => {
+        const cmd = buildCleanResourcesCommand("azure", ["eastus"], "run-1");
+        expect(cmd).toBe("SCT_AZURE_REGION_NAME=\"eastus\" hydra clean-resources --backend azure --test-id run-1");
+    });
+
+    it("space-joins multiple regions in the env var value", () => {
+        const cmd = buildCleanResourcesCommand("aws", ["us-east-1", "us-west-2"], "run-1");
+        expect(cmd).toBe(
+            "SCT_REGION_NAME=\"us-east-1 us-west-2\" hydra clean-resources --backend aws --test-id run-1",
+        );
+    });
+
+    it("omits the env-var prefix when regions is only the undefined_region sentinel", () => {
+        const cmd = buildCleanResourcesCommand("oci", ["undefined_region"], "run-1");
+        expect(cmd).toBe("hydra clean-resources --backend oci --test-id run-1");
+    });
+
+    it("omits the env-var prefix when regions is empty", () => {
+        const cmd = buildCleanResourcesCommand("oci", [], "run-1");
+        expect(cmd).toBe("hydra clean-resources --backend oci --test-id run-1");
+    });
+
+    it("omits the env-var prefix for an unknown backend", () => {
+        const cmd = buildCleanResourcesCommand("unknown-backend", ["region-1"], "run-1");
+        expect(cmd).toBe("hydra clean-resources --backend unknown-backend --test-id run-1");
     });
 });

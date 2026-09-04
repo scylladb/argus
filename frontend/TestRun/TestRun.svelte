@@ -87,6 +87,7 @@
         screenshots: string[],
         packages: SCTPackage[],
         allocated_resources: CloudResource[],
+        region_name: string[],
         nemesis_data: NemesisInfo[],
         cloud_setup: {
             backend: string,
@@ -420,6 +421,7 @@
                             resources={testRun.allocated_resources}
                             backend={testRun.cloud_setup?.backend}
                             run_id={testRun.id}
+                            regions={testRun.region_name ?? []}
                         />
                     </div>
                 </div>
