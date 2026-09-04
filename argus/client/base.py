@@ -44,7 +44,7 @@ class ArgusClientError(Exception):
 class ArgusClient:
     schema_version: str | None = None
 
-    class Routes():
+    class Routes:
         SUBMIT = "/testrun/$type/submit"
         GET = "/testrun/$type/$id/get"
         HEARTBEAT = "/testrun/$type/$id/heartbeat"
@@ -61,10 +61,19 @@ class ArgusClient:
     # replay-log filename.
     test_type: str | None = None
 
-    def __init__(self, auth_token: str, base_url: str, log_dir: str | Path, api_version="v1",
-                 extra_headers: dict | None = None, timeout: int = 60, max_retries: int = 3,
-                 use_tunnel: bool | None = None, replay_log_only: bool = False,
-                 run_id: UUID | str | None = None) -> None:
+    def __init__(
+        self,
+        auth_token: str,
+        base_url: str,
+        log_dir: str | Path,
+        api_version="v1",
+        extra_headers: dict | None = None,
+        timeout: int = 60,
+        max_retries: int = 3,
+        use_tunnel: bool | None = None,
+        replay_log_only: bool = False,
+        run_id: UUID | str | None = None,
+    ) -> None:
         self._auth_token = auth_token
         self._base_url = base_url
         self._api_ver = api_version
@@ -84,6 +93,7 @@ class ArgusClient:
                 base_url=base_url,
                 use_tunnel=use_tunnel,
                 max_retries=max_retries,
+                run_id=str(run_id) if run_id is not None else None,
             )
             if extra_headers:
                 self.session.headers.update(extra_headers)
@@ -149,9 +159,7 @@ class ArgusClient:
 
     @property
     def generic_body(self) -> dict:
-        return {
-            "schema_version": self.schema_version
-        }
+        return {"schema_version": self.schema_version}
 
     @property
     def request_headers(self):
@@ -168,17 +176,9 @@ class ArgusClient:
         if self._replay_log_only:
             LOGGER.debug("GET [replay-log-only] %s params: %s", endpoint, params)
             return ReplayLogOnlyResponse(endpoint=endpoint)
-        url = self.get_url_for_endpoint(
-            endpoint=endpoint,
-            location_params=location_params
-        )
+        url = self.get_url_for_endpoint(endpoint=endpoint, location_params=location_params)
         LOGGER.debug("GET Request: %s, params: %s", url, params)
-        response = self.session.get(
-            url=url,
-            params=params,
-            headers=self.request_headers,
-            timeout=self._timeout
-        )
+        response = self.session.get(url=url, params=params, headers=self.request_headers, timeout=self._timeout)
         LOGGER.debug("GET Response: %s %s", response.status_code, response.url)
 
         return response
@@ -190,9 +190,7 @@ class ArgusClient:
         params: dict = None,
         body: dict = None,
     ) -> requests.Response:
-        record = functools.partial(
-            self._replay_log.write, "POST", endpoint, location_params, params, body
-        )
+        record = functools.partial(self._replay_log.write, "POST", endpoint, location_params, params, body)
 
         if self._replay_log_only:
             # Record the request so a future replay can re-send it, but skip
@@ -201,18 +199,11 @@ class ArgusClient:
             record(success=False)
             return ReplayLogOnlyResponse(endpoint=endpoint)
 
-        url = self.get_url_for_endpoint(
-            endpoint=endpoint,
-            location_params=location_params
-        )
+        url = self.get_url_for_endpoint(endpoint=endpoint, location_params=location_params)
         LOGGER.debug("POST Request: %s, params: %s", url, params)
         try:
             response = self.session.post(
-                url=url,
-                params=params,
-                json=body,
-                headers=self.request_headers,
-                timeout=self._timeout
+                url=url, params=params, json=body, headers=self.request_headers, timeout=self._timeout
             )
         except Exception as exc:
             record(success=False, error=f"{type(exc).__name__}: {exc}")
@@ -223,10 +214,9 @@ class ArgusClient:
         return response
 
     def submit_run(self, run_type: str, run_body: dict) -> requests.Response:
-        return self.post(endpoint=self.Routes.SUBMIT, location_params={"type": run_type}, body={
-            **self.generic_body,
-            **run_body
-        })
+        return self.post(
+            endpoint=self.Routes.SUBMIT, location_params={"type": run_type}, body={**self.generic_body, **run_body}
+        )
 
     def get_run(self, run_type: str = None, run_id: UUID | str = None) -> requests.Response:
 
@@ -265,30 +255,21 @@ class ArgusClient:
         return self.post(
             endpoint=self.Routes.SET_STATUS,
             location_params={"type": run_type, "id": str(run_id)},
-            body={
-                **self.generic_body,
-                "new_status": new_status.value
-            }
+            body={**self.generic_body, "new_status": new_status.value},
         )
 
     def update_product_version(self, run_type: str, run_id: UUID, product_version: str) -> requests.Response:
         return self.post(
             endpoint=self.Routes.SET_PRODUCT_VERSION,
             location_params={"type": run_type, "id": str(run_id)},
-            body={
-                **self.generic_body,
-                "product_version": product_version
-            }
+            body={**self.generic_body, "product_version": product_version},
         )
 
     def submit_logs(self, run_type: str, run_id: UUID, logs: list[LogLink]) -> requests.Response:
         return self.post(
             endpoint=self.Routes.SUBMIT_LOGS,
             location_params={"type": run_type, "id": str(run_id)},
-            body={
-                **self.generic_body,
-                "logs": [asdict(l) for l in logs]
-            }
+            body={**self.generic_body, "logs": [asdict(l) for l in logs]},
         )
 
     def finalize_run(self, run_type: str, run_id: UUID, body: dict = None) -> requests.Response:
@@ -299,7 +280,7 @@ class ArgusClient:
             body={
                 **self.generic_body,
                 **body,
-            }
+            },
         )
 
     def heartbeat(self, run_type: str, run_id: UUID) -> None:
@@ -308,7 +289,7 @@ class ArgusClient:
             location_params={"type": run_type, "id": str(run_id)},
             body={
                 **self.generic_body,
-            }
+            },
         )
         self.check_response(response)
 
@@ -319,7 +300,7 @@ class ArgusClient:
             body={
                 **self.generic_body,
                 "run_id": str(self.run_id),
-                ** result.as_dict(),
-            }
+                **result.as_dict(),
+            },
         )
         self.check_response(response)
