@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from typing import Annotated, Optional
+from typing import Annotated
 from uuid import UUID, uuid4
 
 from pydantic import Field
@@ -21,12 +21,12 @@ class SSHTunnelKey(Document):
     """
 
     id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
-    user_id: Annotated[Optional[UUID], Indexed()] = None
-    tunnel_id: Annotated[Optional[UUID], Indexed()] = None
-    public_key: Optional[str] = None
-    fingerprint: Annotated[Optional[str], Indexed()] = None
-    created_at: Optional[datetime] = Field(default_factory=_utcnow_naive)
-    expires_at: Optional[datetime] = None
+    user_id: Annotated[UUID, Indexed()]
+    tunnel_id: Annotated[UUID, Indexed()]
+    public_key: str
+    fingerprint: Annotated[str, Indexed()]
+    created_at: datetime = Field(default_factory=_utcnow_naive)
+    expires_at: datetime
 
     class Settings:
         # cqlengine collapsed the consecutive capitals when deriving the name
@@ -47,14 +47,14 @@ class ProxyTunnelConfig(Document):
     """
 
     id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
-    host: Optional[str] = None
-    port: Optional[int] = None
-    proxy_user: Optional[str] = None
-    target_host: Optional[str] = None
-    target_port: Optional[int] = None
-    host_key_fingerprint: Optional[str] = None
-    service_user_id: Optional[UUID] = None
-    is_active: Optional[bool] = True
+    host: str
+    port: int
+    proxy_user: str
+    target_host: str
+    target_port: int
+    host_key_fingerprint: str
+    service_user_id: UUID
+    is_active: bool = True
 
     class Settings:
         name = "proxy_tunnel_config"

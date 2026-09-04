@@ -38,7 +38,7 @@ class UserViewService:
                 f"View with name {name} already exists: {name_check.id}", name, name_check, name_check.id)
         except DocumentNotFound:
             pass
-        view = ArgusUserView()
+        view = ArgusUserView.model_construct()
         view.name = name
         view.display_name = display_name or name
         view.description = description

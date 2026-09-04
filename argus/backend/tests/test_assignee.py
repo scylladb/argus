@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 import json
 import uuid
 from unittest.mock import patch
@@ -19,7 +20,7 @@ def test_user():
         full_name="Assignee Test User",
         email=f"assignee_{uuid.uuid4().hex[:8]}@scylladb.com",
         password="test_password",
-        roles=[UserRoles.User.value],
+        roles=[UserRoles.User.value], registration_date=datetime.now(UTC),
     )
     user.save()
     return user

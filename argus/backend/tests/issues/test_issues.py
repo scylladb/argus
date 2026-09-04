@@ -27,7 +27,7 @@ def test_submit_github_issue_link_for_existing_issue(client_service: ClientServi
     run_type, run_req = get_fake_test_run(fake_test)
     client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
-    i = GithubIssue()
+    i = GithubIssue.model_construct()
     uid = uuid4()
     i.user_id = uid
     i.type = "issues"
@@ -52,7 +52,7 @@ def test_submit_jira_issue_link_for_existing_issue(client_service: ClientService
     run_type, run_req = get_fake_test_run(fake_test)
     client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
-    i = JiraIssue()
+    i = JiraIssue.model_construct()
     uid = uuid4()
     i.user_id = uid
     i.key = "FROBNICATOR-1"

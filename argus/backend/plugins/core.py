@@ -34,19 +34,19 @@ class PluginModelBase(Document):
 
     _plugin_name: ClassVar[str] = "unknown"
     # Metadata
-    build_id: Annotated[Optional[str], PrimaryKey()] = None
-    start_time: Annotated[Optional[datetime], ClusteringKey(order="DESC")] = Field(
+    build_id: Annotated[str, PrimaryKey()]
+    start_time: Annotated[datetime, ClusteringKey(order="DESC")] = Field(
         default_factory=lambda: datetime.now(UTC))
-    id: Annotated[Optional[UUID], Indexed()] = None
+    id: Annotated[UUID, Indexed()]
     release_id: Annotated[Optional[UUID], Indexed()] = None
     group_id: Annotated[Optional[UUID], Indexed()] = None
     test_id: Annotated[Optional[UUID], Indexed()] = None
     assignee: Annotated[Optional[UUID], Indexed()] = None
-    status: Optional[str] = Field(default=TestStatus.CREATED.value)
-    investigation_status: Optional[str] = Field(default=TestInvestigationStatus.NOT_INVESTIGATED.value)
-    heartbeat: Optional[int] = Field(default_factory=lambda: int(time()))
-    end_time: Optional[datetime] = Field(default_factory=lambda: datetime.fromtimestamp(0, UTC))
-    build_job_url: Optional[str] = None
+    status: str = Field(default=TestStatus.CREATED.value)
+    investigation_status: str = Field(default=TestInvestigationStatus.NOT_INVESTIGATED.value)
+    heartbeat: int = Field(default_factory=lambda: int(time()))
+    end_time: datetime = Field(default_factory=lambda: datetime.fromtimestamp(0, UTC))
+    build_job_url: str
     build_number: Optional[int] = None
     product_version: Annotated[Optional[str], Indexed()] = None
     scylla_version: Optional[str] = None

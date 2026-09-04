@@ -379,7 +379,7 @@ class TestRunService:
         test: ArgusTest = ArgusTest.get(id=test_id)
         plugin = self.get_plugin(test.plugin_name)
         release: ArgusRelease = ArgusRelease.get(id=test.release_id)
-        comment = ArgusTestRunComment()
+        comment = ArgusTestRunComment.model_construct()
         comment.test_id = test.id
         comment.message = message_stripped
         comment.reactions = reactions

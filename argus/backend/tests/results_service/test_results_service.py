@@ -120,6 +120,7 @@ def test_get_tests_by_version_groups_runs_correctly(argus_db):
     SCTTestRun(
         id=run_id1,
         build_id='build_id1',
+        build_job_url='http://jenkins/job/build_id1/',
         test_id=test_id1,
         test_method='test_method1',  # Changed to 'test_method'
         investigation_status='',
@@ -129,6 +130,7 @@ def test_get_tests_by_version_groups_runs_correctly(argus_db):
     SCTTestRun(
         id=run_id2,
         build_id='build_id1',
+        build_job_url='http://jenkins/job/build_id1/',
         test_id=test_id1,
         test_method='test_method2',  # Changed to 'test_method'
         investigation_status='ignored',
@@ -138,6 +140,7 @@ def test_get_tests_by_version_groups_runs_correctly(argus_db):
     SCTTestRun(
         id=run_id3,
         build_id='build_id1',
+        build_job_url='http://jenkins/job/build_id1/',
         test_id=test_id2,
         test_method='test_method1',  # Changed to 'test_method'
         investigation_status='',
@@ -147,6 +150,7 @@ def test_get_tests_by_version_groups_runs_correctly(argus_db):
     SCTTestRun(
         id=run_id4,
         build_id='build_id1',
+        build_job_url='http://jenkins/job/build_id1/',
         test_id=test_id2,
         test_method='test_method1',  # Changed to 'test_method'
         investigation_status='',

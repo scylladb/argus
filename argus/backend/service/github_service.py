@@ -117,7 +117,7 @@ class GithubService:
             remote_repo = self.gh.get_repo(repo_id)
             remote_issue = remote_repo.get_issue(int(match.group("issue_number")))
 
-            issue = GithubIssue()
+            issue = GithubIssue.model_construct()
             issue.user_id = user.id
             issue.type = match.group("type")
             issue.owner = remote_issue.repository.owner.name
@@ -127,7 +127,7 @@ class GithubService:
             issue.title = remote_issue.title
             issue.url = issue_url
             for label in remote_issue.labels:
-                l = IssueLabel()
+                l = IssueLabel.model_construct()
                 l.id = label.id
                 l.name = label.name
                 l.description = label.description
@@ -135,7 +135,7 @@ class GithubService:
                 issue.labels.append(l)
 
             for assignee in remote_issue.assignees:
-                a = IssueAssignee()
+                a = IssueAssignee.model_construct()
                 a.login = assignee.login
                 a.html_url = assignee.html_url
                 issue.assignees.append(a)
@@ -149,7 +149,7 @@ class GithubService:
         run = plugin.model.get(id=run_id)
         issue, state = self.get_issue(issue_url, user)
 
-        link = IssueLink()
+        link = IssueLink.model_construct()
         link.run_id = run.id
         link.user_id = user.id
         link.issue_id = issue.id

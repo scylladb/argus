@@ -32,7 +32,7 @@ def migrate():
                 new = PytestResultTable(**old)
                 new.id = ts
                 for key, value in uf.items():
-                    f = PytestUserField()
+                    f = PytestUserField.model_construct()
                     f.name = new.name
                     f.id = new.id
                     f.field_name = key

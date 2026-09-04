@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 import json
 import time
 import uuid
@@ -109,7 +110,7 @@ def test_all_views_filters_by_user(api_client, view_name):
         full_name="Other Viewer",
         email=f"viewuser_{uuid.uuid4().hex[:8]}@scylladb.com",
         password="pw",
-        roles=[UserRoles.User.value],
+        roles=[UserRoles.User.value], registration_date=datetime.now(UTC),
     )
     other.save()
     other_listing = api_client.get(f"/api/v1/views/all?userId={other.id}").json()

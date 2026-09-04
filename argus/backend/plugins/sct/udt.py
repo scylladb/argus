@@ -33,10 +33,10 @@ class CloudInstanceDetails(UserType):
     private_ip: Optional[str] = None
     dc_name: Optional[str] = None
     rack_name: Optional[str] = None
-    creation_time: Optional[int] = Field(default_factory=lambda: int(time()))
-    termination_time: Optional[int] = 0
-    termination_reason: Optional[str] = ""
-    shards_amount: Optional[int] = 0
+    creation_time: int = Field(default_factory=lambda: int(time()))
+    termination_time: int = 0
+    termination_reason: str = ""
+    shards_amount: int = 0
 
     class Settings:
         __type_name__ = "cloudinstancedetails_v3"
@@ -53,7 +53,7 @@ class CloudNodesInfo(UserType):
 
 
 class CloudSetupDetails(UserType):
-    db_node: Optional[CloudNodesInfo] = None
+    db_node: CloudNodesInfo
     loader_node: Optional[CloudNodesInfo] = None
     monitor_node: Optional[CloudNodesInfo] = None
     backend: Optional[str] = None
@@ -64,7 +64,7 @@ class CloudSetupDetails(UserType):
 
 class CloudResource(UserType):
     name: Optional[str] = None
-    state: Optional[str] = Field(default=ResourceState.RUNNING.value)
+    state: str = Field(default=ResourceState.RUNNING.value)
     resource_type: Optional[str] = None
     instance_info: Optional[CloudInstanceDetails] = None
 
@@ -76,8 +76,8 @@ class CloudResource(UserType):
 
 
 class EventsBySeverity(UserType):
-    severity: Optional[str] = None
-    event_amount: Optional[int] = None
+    severity: str
+    event_amount: int
     last_events: Annotated[list[str], NoneAsEmptyList] = Field(default_factory=list)
 
     class Settings:
@@ -85,7 +85,7 @@ class EventsBySeverity(UserType):
 
 
 class NodeDescription(UserType):
-    name: Optional[str] = None
+    name: str
     ip: Optional[str] = None
     shards: Optional[int] = None
 

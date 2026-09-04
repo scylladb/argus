@@ -16,16 +16,16 @@ class ValidationRules(UserType):
 
 
 class ColumnMetadata(UserType):
-    name: Annotated[Optional[str], Ascii()] = None
-    unit: Optional[str] = None
-    type: Annotated[Optional[str], Ascii()] = None
+    name: Annotated[str, Ascii()]
+    unit: str
+    type: Annotated[str, Ascii()]
     higher_is_better: Optional[bool] = None  # used for tracking best results, if None - no tracking
-    visible: Optional[bool] = True  # controls visibility in UI, True by default
+    visible: bool = True  # controls visibility in UI, True by default
 
 
 class ArgusGenericResultMetadata(Document):
-    test_id: Annotated[Optional[UUID], PrimaryKey()] = None
-    name: Annotated[Optional[str], ClusteringKey()] = None
+    test_id: Annotated[UUID, PrimaryKey()]
+    name: Annotated[str, ClusteringKey()]
     description: Optional[str] = None
     columns_meta: list[ColumnMetadata] = Field(default_factory=list)
     validation_rules: dict[Annotated[str, Ascii()], Annotated[list[ValidationRules], Frozen()]] = Field(
@@ -157,37 +157,37 @@ class ArgusGenericResultMetadata(Document):
 
 
 class ArgusGenericResultData(Document):
-    test_id: Annotated[Optional[UUID], PrimaryKey(partition_key_index=0)] = None
-    name: Annotated[Optional[str], PrimaryKey(partition_key_index=1)] = None
-    run_id: Annotated[Optional[UUID], ClusteringKey(clustering_key_index=0)] = None
-    column: Annotated[Optional[str], Ascii(), ClusteringKey(clustering_key_index=1), Indexed()] = None
-    row: Annotated[Optional[str], Ascii(), ClusteringKey(clustering_key_index=2), Indexed()] = None
-    sut_timestamp: Optional[datetime] = None  # for sorting
+    test_id: Annotated[UUID, PrimaryKey(partition_key_index=0)]
+    name: Annotated[str, PrimaryKey(partition_key_index=1)]
+    run_id: Annotated[UUID, ClusteringKey(clustering_key_index=0)]
+    column: Annotated[str, Ascii(), ClusteringKey(clustering_key_index=1), Indexed()]
+    row: Annotated[str, Ascii(), ClusteringKey(clustering_key_index=2), Indexed()]
+    sut_timestamp: datetime  # for sorting
     value: Annotated[Optional[float], Double()] = None
     value_text: Optional[str] = None
-    status: Annotated[Optional[str], Ascii()] = None
+    status: Annotated[str, Ascii()]
 
     class Settings:
         name = "generic_result_data_v1"
 
 
 class ArgusBestResultData(Document):
-    test_id: Annotated[Optional[UUID], PrimaryKey(partition_key_index=0)] = None
-    name: Annotated[Optional[str], PrimaryKey(partition_key_index=1)] = None
-    result_date: Annotated[Optional[datetime], ClusteringKey(order="DESC", clustering_key_index=0)] = None
-    key: Annotated[Optional[str], Ascii(), ClusteringKey(clustering_key_index=1)] = None  # represents pair column:row
-    value: Annotated[Optional[float], Double()] = None
-    run_id: Optional[UUID] = None
+    test_id: Annotated[UUID, PrimaryKey(partition_key_index=0)]
+    name: Annotated[str, PrimaryKey(partition_key_index=1)]
+    result_date: Annotated[datetime, ClusteringKey(order="DESC", clustering_key_index=0)]
+    key: Annotated[str, Ascii(), ClusteringKey(clustering_key_index=1)]  # represents pair column:row
+    value: Annotated[float, Double()]
+    run_id: UUID
 
     class Settings:
         name = "generic_result_best_v2"
 
 
 class ArgusGraphView(Document):
-    test_id: Annotated[Optional[UUID], PrimaryKey()] = None
-    id: Annotated[Optional[UUID], ClusteringKey()] = None
-    name: Optional[str] = None
-    description: Optional[str] = None
+    test_id: Annotated[UUID, PrimaryKey()]
+    id: Annotated[UUID, ClusteringKey()]
+    name: str
+    description: str
     # key: graph name, value: graph properties (e.g. size)
     graphs: dict[str, Annotated[str, Ascii()]] = Field(default_factory=dict)
 

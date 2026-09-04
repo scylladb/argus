@@ -6,7 +6,7 @@ from argus.backend.models.web import ArgusEvent, ArgusEventTypes
 class EventService:
     @staticmethod
     def create_run_event(kind: ArgusEventTypes, body: dict, user_id=None, run_id=None, release_id=None, group_id=None, test_id=None):
-        event = ArgusEvent()
+        event = ArgusEvent.model_construct()
         event.release_id = release_id
         event.group_id = group_id
         event.test_id = test_id

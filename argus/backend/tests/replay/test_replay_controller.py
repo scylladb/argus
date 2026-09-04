@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import json
+from datetime import UTC, datetime
 import tarfile
 from unittest.mock import patch
 
@@ -30,7 +31,8 @@ def app():
     app.add_exception_handler(APIException, api_exception_handler)
     # No-op the auth pipeline so the test client can hit the endpoint.
     import uuid
-    test_user = User(id=uuid.uuid4(), username="replay-test", roles=["ROLE_USER"])
+    test_user = User(id=uuid.uuid4(), username="replay-test", password="", registration_date=datetime.now(UTC),
+                     roles=["ROLE_USER"])
     app.dependency_overrides[load_user] = lambda: test_user
     return app
 

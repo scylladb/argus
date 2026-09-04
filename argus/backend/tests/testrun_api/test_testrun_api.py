@@ -13,6 +13,7 @@ Out-of-scope for this iteration (deferred — needs Jenkins/Github/Jira/S3 mocks
 - /terminate_stuck_runs                              (mutates ScyllaCluster session/state)
 """
 
+from datetime import UTC, datetime
 import json
 import time
 from unittest.mock import patch
@@ -143,7 +144,7 @@ def test_set_assignee_persists_user_id(api_client, submitted_run, fake_test):
     rid, _ = submitted_run
     assignee = User(id=uuid4(), username=f"assignee_{uuid4().hex[:8]}",
                     full_name="Assignee User", email="a@example.com",
-                    password="x", roles=[UserRoles.User.value])
+                    password="x", roles=[UserRoles.User.value], registration_date=datetime.now(UTC))
     assignee.save()
 
     with patch("argus.backend.service.notification_manager.NotificationManagerService.send_notification"):
@@ -163,7 +164,7 @@ def test_set_assignee_placeholder_clears_assignee(api_client, submitted_run, fak
     rid, _ = submitted_run
     assignee = User(id=uuid4(), username=f"assignee_{uuid4().hex[:8]}",
                     full_name="Assignee User 2", email="a2@example.com",
-                    password="x", roles=[UserRoles.User.value])
+                    password="x", roles=[UserRoles.User.value], registration_date=datetime.now(UTC))
     assignee.save()
 
     with patch("argus.backend.service.notification_manager.NotificationManagerService.send_notification"):

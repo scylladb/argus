@@ -24,7 +24,7 @@ class GenericRun(PluginModelBase):
         name = "generic_run"
 
     logs: dict[str, str] = Field(default_factory=dict)
-    started_by: Optional[str] = None
+    started_by: str
     sub_type: Optional[str] = None  # Used to tell which framework the GenericRun belongs to
 
     @classmethod
@@ -65,7 +65,7 @@ class GenericRun(PluginModelBase):
             return cls.get(id=UUID(request_data["run_id"]) if isinstance(request_data["run_id"], str) else request_data["run_id"])
         except DocumentNotFound:
             pass
-        run = cls()
+        run = cls.model_construct()
         run.start_time = datetime.now(UTC)
         run.build_id = request_data["build_id"]
         run.started_by = request_data["started_by"]

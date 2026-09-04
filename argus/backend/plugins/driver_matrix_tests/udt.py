@@ -52,8 +52,8 @@ class TestCollection(UserType):
 
 
 class EnvironmentInfo(UserType):
-    key: Optional[str] = None
-    value: Optional[str] = None
+    key: str
+    value: str
 
     class Settings:
         __type_name__ = "environment_info"
