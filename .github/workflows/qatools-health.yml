@@ -1,0 +1,50 @@
+name: QA Tools Health
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - 'qatools-health/**'
+      - '.github/workflows/qatools-health.yml'
+  pull_request:
+    branches: [ master ]
+    paths:
+      - 'qatools-health/**'
+      - '.github/workflows/qatools-health.yml'
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: qatools-health
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true
+          python-version: '3.12'
+
+      - name: Install the package
+        run: uv pip install --system -e '.[dev]'
+
+      - name: Check that the package stands alone
+        run: |
+          if grep -rn '^\s*\(import\|from\) argus' src tests; then
+            echo 'qatools-health must not import argus'
+            exit 1
+          fi
+
+      - name: Lint
+        run: |
+          ruff check src tests
+          ruff format --check src tests
+
+      - name: Test
+        run: pytest --cov=qatools_health --cov-fail-under=90
