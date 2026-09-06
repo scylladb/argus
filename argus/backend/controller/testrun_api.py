@@ -123,8 +123,10 @@ def test_run_activity(run_id: UUID, user: User = Depends(api_current_user)):
 
 
 @router.get("/run/{test_id}/{run_id}/fetch_results", name="api.testrun_api.fetch_results")
-def fetch_results(test_id: UUID, run_id: UUID, user: User = Depends(api_current_user)):
-    tables = ResultsService().get_run_results(test_id=test_id, run_id=run_id)
+def fetch_results(test_id: UUID, run_id: UUID,
+                  include_hidden: bool = Query(False, alias="includeHidden"),
+                  user: User = Depends(api_current_user)):
+    tables = ResultsService().get_run_results(test_id=test_id, run_id=run_id, include_hidden=include_hidden)
     return APIResponse({
         "status": "ok",
         "tables": tables

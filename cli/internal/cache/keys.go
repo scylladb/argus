@@ -82,10 +82,24 @@ func ActivityKey(runID string) string {
 }
 
 // ResultsKey returns the cache key for a run's performance result tables.
+// includeHidden selects between the default (visible columns only) and the
+// full-column variant, so the two responses never share a cache entry.
 //
-// On disk: cache/results/{testID}/{runID}/
-func ResultsKey(testID, runID string) string {
-	return path.Join("results", testID, runID)
+// The variant sits *above* the run ID rather than below it. Earlier CLI
+// versions keyed this entry as results/{testID}/{runID}, so on upgrade that
+// directory may still hold a legacy meta.json. findLeaves stops descending at
+// the first meta.json it finds, which would hide entries nested underneath it
+// from Stats and PurgeExpired — and PurgeExpired removes the whole entry
+// directory, taking any nested variants with it. Keeping the variant above the
+// run ID leaves the new entries outside the legacy leaf.
+//
+// On disk: cache/results/{testID}/{visible|all}/{runID}/
+func ResultsKey(testID, runID string, includeHidden bool) string {
+	variant := "visible"
+	if includeHidden {
+		variant = "all"
+	}
+	return path.Join("results", testID, variant, runID)
 }
 
 // RunCommentsKey returns the cache key for the comments on a run.
