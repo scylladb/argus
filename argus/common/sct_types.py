@@ -67,6 +67,9 @@ class InstanceInfoUpdateRequest(TypedDict):
     termination_time: int
     termination_reason: str
     shards_amount: int
+    price_per_hour: float | None
+    cost: float | None
+    is_spot: bool | None
 
 
 class ResourceUpdateRequest(TypedDict):

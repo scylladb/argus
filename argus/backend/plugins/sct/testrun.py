@@ -171,6 +171,10 @@ class SCTTestRun(PluginModelBase):
     # Test Runtime Resources
     allocated_resources: list[CloudResource] = Field(default_factory=list)
 
+    # Pre-run cost estimate (USD) computed by SCT from the resolved instance types and
+    # test duration. The actual cost is summed from the per-resource values on read.
+    estimated_cost: Annotated[Optional[float], Double()] = None
+
     # Test Results
     events: list[EventsBySeverity] = Field(default_factory=list)
     nemesis_data: list[NemesisRunInfo] = Field(default_factory=list)

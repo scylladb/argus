@@ -35,6 +35,7 @@ class ArgusSCTClient(ArgusClient):
         SUBMIT_STRESS_CMD = "/sct/$id/stress_cmd/submit"
         SUBMIT_EMAIL = "/testrun/report/email"
         SUBMIT_CONFIG = "/$id/config/submit"
+        SUBMIT_COST_ESTIMATE = "/sct/$id/cost/estimate"
 
     def __init__(self, run_id: UUID, auth_token: str, base_url: str, log_dir, api_version="v1",
                  extra_headers: dict | None = None, timeout: int = 60, max_retries: int = 3,
@@ -91,9 +92,16 @@ class ArgusSCTClient(ArgusClient):
         self.check_response(response)
         return response.json()["response"]
 
-    def set_sct_runner(self, public_ip: str, private_ip: str, region: str, backend: str, name: str = None) -> None:
+    def set_sct_runner(self, public_ip: str, private_ip: str, region: str, backend: str, name: str = None,
+                       instance_type: str | None = None, price_per_hour: float | None = None,
+                       is_spot: bool | None = None, cost: float | None = None) -> None:
         """
             Sets runner information for an SCT run.
+
+            The runner outlives the run, so its final `cost` is only known at cleanup -
+            call this again with the cost once the runner is terminated. `price_per_hour`
+            lets Argus render a live cost while the run is still in flight. Both are USD
+            and must be None (never 0) when the price could not be determined.
         """
         response = self.post(
             endpoint=self.Routes.SET_SCT_RUNNER,
@@ -105,6 +113,24 @@ class ArgusSCTClient(ArgusClient):
                 "region": region,
                 "backend": backend,
                 "name": name,
+                "instance_type": instance_type,
+                "price_per_hour": price_per_hour,
+                "is_spot": is_spot,
+                "cost": cost,
+            }
+        )
+        self.check_response(response)
+
+    def submit_cost_estimate(self, estimated_cost: float | None) -> None:
+        """
+            Submits SCT's pre-run cost estimate (USD) for the run.
+        """
+        response = self.post(
+            endpoint=self.Routes.SUBMIT_COST_ESTIMATE,
+            location_params={"id": str(self.run_id)},
+            body={
+                **self.generic_body,
+                "estimated_cost": estimated_cost,
             }
         )
         self.check_response(response)
@@ -236,9 +262,16 @@ class ArgusSCTClient(ArgusClient):
         self.check_response(response)
 
     def create_resource(self, name: str, resource_type: str, public_ip: str, private_ip: str, instance_type: str,
-                        region: str, provider: str, dc_name: str, rack_name: str, shards_amount: int, state=ResourceState.RUNNING) -> None:
+                        region: str, provider: str, dc_name: str, rack_name: str, shards_amount: int,
+                        state=ResourceState.RUNNING, price_per_hour: float | None = None,
+                        is_spot: bool | None = None) -> None:
         """
             Creates a cloud resource record in argus.
+
+            `price_per_hour` is the resource's hourly rate in USD, captured at creation, and
+            is what lets Argus render a live cost for a run that is still in flight. Pass
+            None (never 0) when the rate is unknown, so an unpriced resource is not shown
+            as free.
         """
         response = self.post(
             endpoint=self.Routes.CREATE_RESOURCE,
@@ -258,15 +291,21 @@ class ArgusSCTClient(ArgusClient):
                         "public_ip": public_ip,
                         "private_ip": private_ip,
                         "shards_amount": shards_amount,
+                        "price_per_hour": price_per_hour,
+                        "is_spot": is_spot,
                     }
                 },
             }
         )
         self.check_response(response)
 
-    def terminate_resource(self, name: str, reason: str) -> None:
+    def terminate_resource(self, name: str, reason: str, cost: float | None = None) -> None:
         """
             Marks already created resource record as terminated.
+
+            `cost` is the resource's final cost in USD, computed by SCT. Argus stores it
+            verbatim and never recomputes it. Pass None (never 0) when the cost is unknown -
+            0 would be indistinguishable from a genuinely free resource.
         """
         response = self.post(
             endpoint=self.Routes.TERMINATE_RESOURCE,
@@ -274,6 +313,7 @@ class ArgusSCTClient(ArgusClient):
             body={
                 **self.generic_body,
                 "reason": reason,
+                "cost": cost,
             }
         )
         self.check_response(response)

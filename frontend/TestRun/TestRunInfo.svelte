@@ -18,6 +18,7 @@
     import JenkinsCloneModal from "./Jenkins/JenkinsCloneModal.svelte";
     import { createEventDispatcher } from "svelte";
     import { sendMessage } from "../Stores/AlertStore";
+    import { formatCost, runCostSummary } from "../Common/CostUtils";
     let {
         test_run = {},
         release,
@@ -65,6 +66,18 @@
     run(() => {
         upgradedPackage = getUpgradedScyllaPackage(test_run.packages);
     });
+
+    // Run total is summed on read from the per-resource costs SCT reported; nothing is
+    // stored on the run. Still-running resources contribute a live figure, so re-tick.
+    const LIVE_COST_REFRESH_MS = 30000;
+    let now = $state(Date.now() / 1000);
+    $effect(() => {
+        const timer = setInterval(() => {
+            now = Date.now() / 1000;
+        }, LIVE_COST_REFRESH_MS);
+        return () => clearInterval(timer);
+    });
+    let costSummary = $derived(runCostSummary(test_run.allocated_resources, now));
 </script>
 
 <svelte:window bind:innerWidth={innerWidth} />
@@ -133,6 +146,25 @@
                     <a href={test_run.build_job_url} target="_blank">
                         {test_run.build_id}
                     </a>
+                </li>
+                <li>
+                    <span class="fw-bold">Cost:</span>
+                    {#if costSummary.known > 0}
+                        {formatCost(costSummary.total)}
+                        {#if costSummary.partial}
+                            <span
+                                class="badge bg-warning text-dark"
+                                title="{costSummary.unknown} resource(s) reported no cost — the real total is higher"
+                            >partial</span>
+                        {/if}
+                    {:else}
+                        <span class="text-muted">No cost data</span>
+                    {/if}
+                    {#if test_run.estimated_cost}
+                        <span class="text-muted ms-1">
+                            (estimated {formatCost(test_run.estimated_cost)})
+                        </span>
+                    {/if}
                 </li>
             </ul>
         </div>
