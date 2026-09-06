@@ -106,7 +106,7 @@ def test_set_runner(api_client, sct_run_id):
 
 
 def _create_resource(api_client, sct_run_id, resource_name="node-1", resource_type="db_node",
-                     instance_type="i3.4xlarge"):
+                     instance_type="i3.4xlarge", **instance_details):
     payload = {
         "resource": {
             "name": resource_name,
@@ -121,6 +121,7 @@ def _create_resource(api_client, sct_run_id, resource_name="node-1", resource_ty
                 "public_ip": "1.2.3.4",
                 "private_ip": "10.0.0.1",
                 "shards_amount": 8,
+                **instance_details,
             },
         },
         "schema_version": "v8",
@@ -346,6 +347,246 @@ def test_resource_terminate(api_client, sct_run_id):
     assert res.state == "terminated"
     assert res.instance_info.termination_reason == "test-complete"
     assert res.instance_info.termination_time and res.instance_info.termination_time > 0
+    # An old client sends no cost at all - the resource still terminates, with no false zero
+    assert res.instance_info.cost is None
+
+
+def test_resource_create_with_rate(api_client, sct_run_id):
+    resp = _create_resource(api_client, sct_run_id, resource_name="node-cost-1",
+                            price_per_hour=1.25, is_spot=True)
+    assert resp.status_code == 200
+
+    res = SCTResource.get(run_id=UUID(sct_run_id), name="node-cost-1")
+    assert res.instance_info.price_per_hour == pytest.approx(1.25)
+    assert res.instance_info.is_spot is True
+    # No cost until the resource is terminated
+    assert res.instance_info.cost is None
+
+
+def test_resource_create_without_rate(api_client, sct_run_id):
+    """An old client sends no rate fields - creation still works and nothing is invented."""
+    resp = _create_resource(api_client, sct_run_id, resource_name="node-cost-2")
+    assert resp.status_code == 200
+
+    res = SCTResource.get(run_id=UUID(sct_run_id), name="node-cost-2")
+    assert res.instance_info.price_per_hour is None
+    assert res.instance_info.is_spot is None
+
+
+def test_resource_terminate_with_cost(api_client, sct_run_id):
+    _create_resource(api_client, sct_run_id, resource_name="node-cost-3", price_per_hour=2.0)
+    payload = {"reason": "test-complete", "cost": 4.75, "schema_version": "v8"}
+    resp = api_client.post(
+        f"{API_PREFIX}/{sct_run_id}/resource/node-cost-3/terminate",
+        json=payload,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"
+
+    res = SCTResource.get(run_id=UUID(sct_run_id), name="node-cost-3")
+    assert res.state == "terminated"
+    assert res.instance_info.cost == pytest.approx(4.75)
+    # The rate reported at creation survives termination
+    assert res.instance_info.price_per_hour == pytest.approx(2.0)
+
+
+def test_set_runner_with_cost(api_client, sct_run_id):
+    """The runner's final cost only exists at cleanup, so a second call must update the row."""
+    base = {
+        "public_ip": "1.2.3.4",
+        "private_ip": "10.0.0.1",
+        "region": "us-east-1",
+        "backend": "aws",
+        "name": "runner-cost",
+        "schema_version": "v8",
+    }
+    resp = api_client.post(
+        f"{API_PREFIX}/{sct_run_id}/sct_runner/set",
+        json={**base, "instance_type": "c6i.2xlarge", "price_per_hour": 0.5, "is_spot": False},
+    )
+    assert resp.status_code == 200
+
+    res = SCTResource.get(run_id=UUID(sct_run_id), name="runner-cost")
+    assert res.instance_info.instance_type == "c6i.2xlarge"
+    assert res.instance_info.price_per_hour == pytest.approx(0.5)
+    assert res.instance_info.cost is None
+    creation_time = res.instance_info.creation_time
+
+    resp = api_client.post(
+        f"{API_PREFIX}/{sct_run_id}/sct_runner/set",
+        json={**base, "instance_type": "c6i.2xlarge", "price_per_hour": 0.5, "cost": 3.25},
+    )
+    assert resp.status_code == 200
+
+    res = SCTResource.get(run_id=UUID(sct_run_id), name="runner-cost")
+    assert res.instance_info.cost == pytest.approx(3.25)
+    assert res.instance_info.creation_time == creation_time
+
+    run = SCTTestRun.get(id=UUID(sct_run_id))
+    assert run.sct_runner_host.cost == pytest.approx(3.25)
+
+
+def test_set_runner_cost_after_termination(api_client, sct_run_id):
+    """Reporting the runner's cost at cleanup must not wipe an earlier termination."""
+    base = {
+        "public_ip": "1.2.3.4",
+        "private_ip": "10.0.0.1",
+        "region": "us-east-1",
+        "backend": "aws",
+        "name": "sct-runner-late",
+        "schema_version": "v8",
+    }
+    assert api_client.post(f"{API_PREFIX}/{sct_run_id}/sct_runner/set", json=base).status_code == 200
+    assert api_client.post(
+        f"{API_PREFIX}/{sct_run_id}/resource/sct-runner-late/terminate",
+        json={"reason": "cleanup", "schema_version": "v8"},
+    ).status_code == 200
+
+    assert api_client.post(
+        f"{API_PREFIX}/{sct_run_id}/sct_runner/set",
+        json={**base, "cost": 7.5},
+    ).status_code == 200
+
+    res = SCTResource.get(run_id=UUID(sct_run_id), name="sct-runner-late")
+    assert res.instance_info.cost == pytest.approx(7.5)
+    assert res.instance_info.termination_reason == "cleanup"
+    assert res.instance_info.termination_time > 0
+
+
+def test_resource_update_accepts_cost_fields(api_client, sct_run_id):
+    """update_resource copies any CloudInstanceDetails field, so the cost fields need no wiring."""
+    _create_resource(api_client, sct_run_id, resource_name="node-cost-4")
+    resp = api_client.post(
+        f"{API_PREFIX}/{sct_run_id}/resource/node-cost-4/update",
+        json={"update_data": {"instance_info": {"price_per_hour": 3.5, "cost": 7.0, "is_spot": True}},
+              "schema_version": "v8"},
+    )
+    assert resp.status_code == 200
+    assert set(resp.json()["response"]["fields"]) == {"price_per_hour", "cost", "is_spot"}
+
+    res = SCTResource.get(run_id=UUID(sct_run_id), name="node-cost-4")
+    assert res.instance_info.price_per_hour == pytest.approx(3.5)
+    assert res.instance_info.cost == pytest.approx(7.0)
+    assert res.instance_info.is_spot is True
+
+
+def test_submit_cost_estimate(api_client, sct_run_id):
+    resp = api_client.post(
+        f"{API_PREFIX}/{sct_run_id}/cost/estimate",
+        json={"estimated_cost": 123.45, "schema_version": "v8"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"
+
+    run = SCTTestRun.get(id=UUID(sct_run_id))
+    assert run.estimated_cost == pytest.approx(123.45)
+
+
+@pytest.mark.parametrize("bad", [0, -12.5], ids=["zero", "negative"])
+def test_submit_cost_estimate_rejects_unusable(api_client, sct_run_id, bad):
+    """An unusable estimate is stored as None, never rendered as a real figure."""
+    resp = api_client.post(
+        f"{API_PREFIX}/{sct_run_id}/cost/estimate",
+        json={"estimated_cost": bad, "schema_version": "v8"},
+    )
+    assert resp.status_code == 200
+
+    run = SCTTestRun.get(id=UUID(sct_run_id))
+    assert run.estimated_cost is None
+
+
+@pytest.mark.parametrize("literal", ["NaN", "Infinity", "-Infinity"])
+def test_submit_cost_estimate_rejects_non_finite(api_client, sct_run_id, literal):
+    """`requests` emits bare NaN/Infinity literals and Python's json accepts them, so a
+    non-finite estimate really can reach the endpoint - it must not reach storage."""
+    resp = api_client.post(
+        f"{API_PREFIX}/{sct_run_id}/cost/estimate",
+        content=f'{{"estimated_cost": {literal}, "schema_version": "v8"}}',
+        headers={"Content-Type": "application/json"},
+    )
+    assert resp.status_code == 200, resp.text
+
+    run = SCTTestRun.get(id=UUID(sct_run_id))
+    assert run.estimated_cost is None
+
+
+@pytest.mark.parametrize("bad,label", [(0, "zero"), (-3.0, "negative")])
+def test_resource_cost_rejects_unusable(api_client, sct_run_id, bad, label):
+    """A false zero must not reach storage from any write path."""
+    name = f"node-bad-{label}"
+    resp = _create_resource(api_client, sct_run_id, resource_name=name, price_per_hour=bad)
+    assert resp.status_code == 200
+    assert SCTResource.get(run_id=UUID(sct_run_id), name=name).instance_info.price_per_hour is None
+
+    resp = api_client.post(
+        f"{API_PREFIX}/{sct_run_id}/resource/{name}/terminate",
+        json={"reason": "test-complete", "cost": bad, "schema_version": "v8"},
+    )
+    assert resp.status_code == 200
+
+    res = SCTResource.get(run_id=UUID(sct_run_id), name=name)
+    assert res.state == "terminated"
+    assert res.instance_info.cost is None
+
+
+def test_resource_update_rejects_unusable_cost(api_client, sct_run_id):
+    """update_resource copies arbitrary fields through, so it needs the same guard."""
+    _create_resource(api_client, sct_run_id, resource_name="node-upd-bad")
+    resp = api_client.post(
+        f"{API_PREFIX}/{sct_run_id}/resource/node-upd-bad/update",
+        json={"update_data": {"instance_info": {"cost": 0, "price_per_hour": -1}},
+              "schema_version": "v8"},
+    )
+    assert resp.status_code == 200
+
+    res = SCTResource.get(run_id=UUID(sct_run_id), name="node-upd-bad")
+    assert res.instance_info.cost is None
+    assert res.instance_info.price_per_hour is None
+
+
+def test_resource_update_unusable_cost_does_not_erase_known_one(api_client, sct_run_id):
+    """A malformed later update must not destroy an amount already recorded."""
+    _create_resource(api_client, sct_run_id, resource_name="node-upd-keep")
+    api_client.post(
+        f"{API_PREFIX}/{sct_run_id}/resource/node-upd-keep/update",
+        json={"update_data": {"instance_info": {"cost": 8.25, "price_per_hour": 1.5}},
+              "schema_version": "v8"},
+    )
+    resp = api_client.post(
+        f"{API_PREFIX}/{sct_run_id}/resource/node-upd-keep/update",
+        json={"update_data": {"instance_info": {"cost": 0, "price_per_hour": float("-1")}},
+              "schema_version": "v8"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["response"]["fields"] == {}
+
+    res = SCTResource.get(run_id=UUID(sct_run_id), name="node-upd-keep")
+    assert res.instance_info.cost == pytest.approx(8.25)
+    assert res.instance_info.price_per_hour == pytest.approx(1.5)
+
+
+@pytest.mark.parametrize("field", ["cost", "price_per_hour"])
+def test_boolean_is_not_a_cost(api_client, sct_run_id, field):
+    """JSON `true` reaches the untyped resource payloads, and float(True) is 1.0."""
+    name = f"node-bool-{field}"
+    resp = _create_resource(api_client, sct_run_id, resource_name=name, **{field: True})
+    assert resp.status_code == 200
+
+    res = SCTResource.get(run_id=UUID(sct_run_id), name=name)
+    assert getattr(res.instance_info, field) is None
+
+
+def test_terminate_with_unusable_cost_keeps_reported_one(api_client, sct_run_id):
+    """A later bad report must not wipe a cost that was already reported correctly."""
+    _create_resource(api_client, sct_run_id, resource_name="node-keep-cost")
+    for cost, expected in ((5.5, 5.5), (0, 5.5)):
+        resp = api_client.post(
+            f"{API_PREFIX}/{sct_run_id}/resource/node-keep-cost/terminate",
+            json={"reason": "test-complete", "cost": cost, "schema_version": "v8"},
+        )
+        assert resp.status_code == 200
+        res = SCTResource.get(run_id=UUID(sct_run_id), name="node-keep-cost")
+        assert res.instance_info.cost == pytest.approx(expected)
 
 
 def test_nemesis_submit_and_finalize(api_client, sct_run_id):

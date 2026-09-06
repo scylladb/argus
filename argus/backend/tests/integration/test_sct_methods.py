@@ -86,6 +86,43 @@ def test_runner_and_resource_cycle(submitted_sct_client):
     node = client.get_resource("node-1")
     assert node["state"] == "terminated"
     assert node["instance_info"]["termination_reason"] == "test-complete"
+    # An old client sends no cost - the resource terminates without one, never as a zero.
+    assert node["instance_info"]["cost"] is None
+
+
+def test_resource_cost_cycle(submitted_sct_client, api_client):
+    """SCT reports the hourly rate at creation and the final cost at termination."""
+    client = submitted_sct_client
+
+    client.create_resource(
+        name="node-priced",
+        resource_type="db_node",
+        public_ip="1.2.3.6",
+        private_ip="10.0.0.3",
+        instance_type="i3.4xlarge",
+        region="us-east-1",
+        provider="aws",
+        dc_name="us-east",
+        rack_name="rack-1",
+        shards_amount=8,
+        price_per_hour=1.25,
+        is_spot=True,
+    )
+
+    node = client.get_resource("node-priced")
+    assert node["instance_info"]["price_per_hour"] == pytest.approx(1.25)
+    assert node["instance_info"]["is_spot"] is True
+    assert node["instance_info"]["cost"] is None
+
+    client.terminate_resource(name="node-priced", reason="test-complete", cost=2.5)
+    node = client.get_resource("node-priced")
+    assert node["instance_info"]["cost"] == pytest.approx(2.5)
+
+    client.submit_cost_estimate(estimated_cost=42.0)
+    run = _run_dump(api_client, client.run_id)
+    assert run["estimated_cost"] == pytest.approx(42.0)
+    priced = next(r for r in run["allocated_resources"] if r["name"] == "node-priced")
+    assert priced["instance_info"]["cost"] == pytest.approx(2.5)
 
 
 def test_nemesis_cycle(submitted_sct_client):
