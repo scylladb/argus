@@ -1,7 +1,36 @@
+import json
 import logging
 from argus.backend.plugins.sct.udt import CloudNodesInfo, CloudSetupDetails
 
 LOGGER = logging.getLogger(__name__)
+
+XCLOUD_BACKEND = "xcloud"
+XCLOUD_CLUSTER_TYPE_STANDARD = "standard"
+XCLOUD_CLUSTER_TYPE_XCLOUD = "xcloud"
+XCLOUD_NETWORK_TYPE_PUBLIC = "public"
+XCLOUD_NETWORK_TYPE_PRIVATE_VPC = "private-vpc"
+
+# Backends where SCT does not know the DB node shape up front, so ``db_node.instance_type`` /
+# ``db_node.node_amount`` are derived from the resources SCT registers during the run instead.
+RESOURCE_DERIVED_DB_NODE_BACKENDS = frozenset({XCLOUD_BACKEND})
+
+
+def is_db_resource(resource_type: str | None) -> bool:
+    """Mirror SCT's own ``"db" in node_type`` check (``scylla-db``, ``cs-db``...)."""
+    return bool(resource_type) and "db" in resource_type
+
+
+def _as_mapping(value: dict | str | None) -> dict:
+    """SCT declares some params as ``dict_or_str``; accept both shapes and treat anything else as empty."""
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            loaded = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return loaded if isinstance(loaded, dict) else {}
+    return {}
 
 
 def _resolve_node_count(value: int | str | list | None) -> int | None:
@@ -205,6 +234,42 @@ def _prepare_docker_resource_setup(sct_config: dict) -> CloudSetupDetails:
     return cloud_setup
 
 
+XCLOUD_PROVIDER_MAP = {
+    "aws": _prepare_aws_resource_setup,
+    "gce": _prepare_gce_resource_setup,
+}
+
+
+def _prepare_xcloud_resource_setup(sct_config: dict) -> CloudSetupDetails:
+    """Scylla Cloud (xcloud) backend.
+
+    Loaders and monitors are regular VMs on the underlying provider (``xcloud_provider``), so their
+    setup follows that provider's config keys. DB nodes are managed by Scylla Cloud:
+
+    - "standard" clusters are created with the configured instance type and node count;
+    - "xcloud" clusters (``xcloud_scaling_config`` set) let Scylla Cloud pick the instance type and
+      node count from the scaling policy, so both stay unset here and are filled in from the
+      resources SCT registers once the cluster is up (see ``SCTTestRun.sync_db_node_setup_from_resources``).
+    """
+    provider = str(sct_config.get("xcloud_provider") or "").lower()
+    if provider not in XCLOUD_PROVIDER_MAP:
+        LOGGER.warning("Unknown xcloud provider encountered: %s", provider or None)
+    cloud_setup = XCLOUD_PROVIDER_MAP.get(provider, _prepare_unknown_resource_setup)(sct_config)
+
+    scaling_config = _as_mapping(sct_config.get("xcloud_scaling_config"))
+    vpc_peering = _as_mapping(sct_config.get("xcloud_vpc_peering"))
+    cloud_setup.cluster_type = XCLOUD_CLUSTER_TYPE_XCLOUD if scaling_config else XCLOUD_CLUSTER_TYPE_STANDARD
+    cloud_setup.network_type = (XCLOUD_NETWORK_TYPE_PRIVATE_VPC if vpc_peering.get("enabled")
+                                else XCLOUD_NETWORK_TYPE_PUBLIC)
+
+    cloud_setup.db_node.image_id = sct_config.get("scylla_version")
+    if scaling_config:
+        cloud_setup.db_node.instance_type = None
+        cloud_setup.db_node.node_amount = None
+
+    return cloud_setup
+
+
 class ResourceSetup:
     BACKEND_MAP = {
         "aws": _prepare_aws_resource_setup,
@@ -218,6 +283,7 @@ class ResourceSetup:
         "k8s-gce-minikube": _prepare_k8s_gce_minikube_resource_setup,
         "baremetal": _prepare_bare_metal_resource_setup,
         "docker": _prepare_docker_resource_setup,
+        XCLOUD_BACKEND: _prepare_xcloud_resource_setup,
         "unknown": _prepare_unknown_resource_setup,
     }
 
