@@ -8,8 +8,44 @@
     } from "@fortawesome/free-solid-svg-icons";
     import { sendMessage } from "../Stores/AlertStore";
     import { buildCleanResourcesCommand } from "../Common/RunUtils";
+    import { formatCost, formatRate, isLiveCost, resourceCost } from "../Common/CostUtils";
+    import type { CostInstanceInfo, CostResource } from "../Common/CostUtils";
+
+    interface ResourceRow extends CostResource {
+        name: string;
+        state: string;
+        resource_type?: string;
+        instance_info: CostInstanceInfo & {
+            // Always present: the backend UDT defaults both.
+            creation_time: number;
+            termination_time: number;
+            termination_reason?: string;
+            provider?: string;
+            instance_type?: string;
+            region?: string;
+            dc_name?: string;
+            rack_name?: string;
+            shards_amount?: number;
+            public_ip?: string;
+            private_ip?: string;
+        };
+    }
+
     let { resources = $bindable(), backend, run_id, regions = [] } = $props();
-    let sortHeaders = {
+
+    // Running resources have no final cost yet, so theirs is extrapolated from the hourly
+    // rate SCT reported at creation. Re-tick so the number does not go stale on an open tab.
+    const LIVE_COST_REFRESH_MS = 30000;
+    let now = $state(Date.now() / 1000);
+    $effect(() => {
+        const timer = setInterval(() => {
+            now = Date.now() / 1000;
+        }, LIVE_COST_REFRESH_MS);
+        return () => clearInterval(timer);
+    });
+
+    // A sort key is either a path into the resource, or a resolver for a derived value.
+    let sortHeaders: Record<string, string | string[] | ((resource: CostResource) => unknown)> = {
         creationTime: ["instance_info", "creation_time"],
         terminationTime: ["instance_info", "termination_time"],
         terminationReason: ["instance_info", "termination_reason"],
@@ -23,12 +59,14 @@
         shards: ["instance_info", "shards_amount"],
         publicIp: ["instance_info", "public_ip"],
         privateIp: ["instance_info", "private_ip"],
+        // Derived rather than stored, so it sorts through a resolver instead of a path.
+        cost: (resource: CostResource) => resourceCost(resource, now) ?? -1,
     };
     let sortHeader = $state("name");
     let sortAscending = $state(false);
     let filterString = $state("");
 
-    const tableStates = {
+    const tableStates: Record<string, string> = {
         running: "table-success",
         stopped: "table-",
         terminated: "table-danger",
@@ -36,7 +74,7 @@
 
     const CMD_CLEAN_RESOURCES = buildCleanResourcesCommand(backend, regions, run_id);
 
-    const filterResource = function (resource) {
+    const filterResource = function (resource: ResourceRow) {
         let resourceAsString = `${resource.name}${resource.state}${
             resource.instance_info.shards_amount
         }${timestampToISODate(
@@ -56,25 +94,30 @@
         }
     };
 
-    const sortResourcesByKey = function (resources, key, descending) {
-        const getValue = function (resource, key) {
+    const sortResourcesByKey = function (resources: ResourceRow[], key: string, descending: boolean): ResourceRow[] {
+        const getValue = function (resource: ResourceRow, key: string): unknown {
             let path = sortHeaders[key];
-            if (typeof path == "string") {
-                let value = resource[sortHeaders[path]];
-                return value;
+            if (typeof path == "function") {
+                return path(resource);
+            } else if (typeof path == "string") {
+                // `path` is already the field name; the old double lookup through
+                // sortHeaders always yielded undefined, so "name"/"state" never sorted.
+                return (resource as unknown as Record<string, unknown>)[path];
             } else if (typeof path == "object") {
-                let value = resource;
-                for (let idx = 0; idx < path.length; idx++) {
-                    value = value[path[idx]];
+                let value: unknown = resource;
+                for (const segment of path) {
+                    value = (value as Record<string, unknown>)?.[segment];
                 }
                 return value;
             }
         };
 
         return Array.from(resources).sort((a, b) => {
-            if (getValue(a, key) > getValue(b, key)) {
+            const left = getValue(a, key) as string | number;
+            const right = getValue(b, key) as string | number;
+            if (left > right) {
                 return descending ? 1 : -1;
-            } else if (getValue(b, key) > getValue(a, key)) {
+            } else if (right > left) {
                 return descending ? -1 : 1;
             }
             return 0;
@@ -364,10 +407,30 @@
                 {/if}
                 Termination reason
             </th>
+            <th
+                role="button"
+                scope="col"
+                class="text-center align-middle"
+                onclick={() => {
+                    sortHeader = "cost";
+                    sortAscending = !sortAscending;
+                }}
+            >
+                {#if sortHeader == "cost"}
+                    <span
+                        class="d-inline-block"
+                        class:invertArrow={sortAscending}
+                    >
+                        &#x25B2;
+                    </span>
+                {/if}
+                Cost
+            </th>
         </tr>
     </thead>
     <tbody>
         {#each sortResourcesByKey(resources, sortHeader, sortAscending) as resource (resource.name)}
+            {@const cost = resourceCost(resource, now)}
             <tr class:d-none={filterResource(resource)}>
                 <td>{resource.instance_info.provider}</td>
                 <td>{resource.instance_info.instance_type || "N/A"}</td>
@@ -396,10 +459,26 @@
                     {/if}
                 </td>
                 <td class="narrow-cell">{resource.instance_info.termination_reason}</td>
+                <td class="text-nowrap">
+                    <span
+                        class:text-muted={cost === null}
+                        title={cost === null
+                            ? "No cost reported for this resource"
+                            : `Hourly rate: ${formatRate(resource.instance_info.price_per_hour, "unknown")}`}
+                    >
+                        {formatCost(cost)}
+                    </span>
+                    {#if isLiveCost(resource)}
+                        <span class="badge bg-secondary" title="Estimated from the hourly rate while the resource is still running">live</span>
+                    {/if}
+                    {#if resource.instance_info.is_spot}
+                        <span class="badge bg-info text-dark" title="Spot instance">spot</span>
+                    {/if}
+                </td>
             </tr>
         {:else}
             <tr>
-                <td colspan="10"> No resources </td>
+                <td colspan="14"> No resources </td>
             </tr>
         {/each}
     </tbody>
