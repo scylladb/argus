@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -501,6 +502,19 @@ var activityCmd = &cobra.Command{
 // Subcommand: run results
 // ---------------------------------------------------------------------------
 
+// resultsRoute builds the fetch_results route for a run.  Columns marked
+// hidden (visible=false) are filtered out server-side unless the includeHidden
+// query parameter asks for them.
+func resultsRoute(testID, runID string, includeHidden bool) string {
+	route := fmt.Sprintf(api.TestRunFetchResults, testID, runID)
+	if includeHidden {
+		params := url.Values{}
+		params.Set("includeHidden", "true")
+		route += "?" + params.Encode()
+	}
+	return route
+}
+
 var resultsCmd = &cobra.Command{
 	Use:   "results",
 	Short: "Fetch result tables for a test run",
@@ -531,7 +545,8 @@ var resultsCmd = &cobra.Command{
 
 		log.Debug().Str("test_id", testID).Str("run_id", runID).Msg("fetching run results")
 
-		cacheKey := cache.ResultsKey(testID, runID)
+		showHidden, _ := cmd.Flags().GetBool("show-hidden")
+		cacheKey := cache.ResultsKey(testID, runID, showHidden)
 
 		if cached, _, err := cache.Get[models.FetchResultsResponse](c, cacheKey); isCacheable(err) {
 			log.Debug().Str("run_id", runID).Msg("results served from cache")
@@ -541,7 +556,7 @@ var resultsCmd = &cobra.Command{
 			return out.Write(cached)
 		}
 
-		route := fmt.Sprintf(api.TestRunFetchResults, testID, runID)
+		route := resultsRoute(testID, runID, showHidden)
 		log.Debug().Str("run_id", runID).Str("route", route).Msg("fetching results from API")
 		req, err := client.NewRequest(ctx, "GET", route, nil)
 		if err != nil {
@@ -765,6 +780,7 @@ func init() {
 	resultsCmd.Flags().String("test-id", "", "Test UUID (optional, auto-resolved from run-id if omitted)")
 	resultsCmd.Flags().String("run-id", "", "Run UUID (required)")
 	resultsCmd.Flags().Bool("show-urls", false, "Display full URLs in cell values instead of 'link'")
+	resultsCmd.Flags().Bool("show-hidden", false, "Include columns marked hidden (visible=false), e.g. adaptive-timeout metrics")
 	_ = resultsCmd.MarkFlagRequired("run-id")
 
 	// run comments

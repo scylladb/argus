@@ -82,10 +82,16 @@ func ActivityKey(runID string) string {
 }
 
 // ResultsKey returns the cache key for a run's performance result tables.
+// includeHidden selects between the default (visible columns only) and the
+// full-column variant, so the two responses never share a cache entry.
 //
-// On disk: cache/results/{testID}/{runID}/
-func ResultsKey(testID, runID string) string {
-	return path.Join("results", testID, runID)
+// On disk: cache/results/{testID}/{runID}/{visible|all}/
+func ResultsKey(testID, runID string, includeHidden bool) string {
+	variant := "visible"
+	if includeHidden {
+		variant = "all"
+	}
+	return path.Join("results", testID, runID, variant)
 }
 
 // RunCommentsKey returns the cache key for the comments on a run.

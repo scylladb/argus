@@ -457,7 +457,8 @@ class ResultsService:
         table_meta = self.cluster.session.execute(query=query, parameters=(test_id, table_name))
         return [ArgusGenericResultMetadata(**table) for table in table_meta][0] if table_meta else None
 
-    def get_run_results(self, test_id: UUID, run_id: UUID, key_metrics: list[str] | None = None) -> list:
+    def get_run_results(self, test_id: UUID, run_id: UUID, key_metrics: list[str] | None = None,
+                        include_hidden: bool = False) -> list:
         query_fields = ["column", "row", "value", "value_text", "status"]
         raw_query = (f"SELECT {','.join(query_fields)}, WRITETIME(status) as ordering "
                      f"FROM generic_result_data_v1 WHERE test_id = ? AND run_id = ? AND name = ?")
@@ -475,7 +476,8 @@ class ResultsService:
             table_name = table.name
             table_description = table.description
             column_types_map = {col_meta.name: col_meta.type for col_meta in table.columns_meta}
-            column_names = [col_meta.name for col_meta in table.columns_meta if col_meta.visible is not False]
+            column_names = [col_meta.name for col_meta in table.columns_meta
+                            if include_hidden or col_meta.visible is not False]
 
             table_data = {
                 'description': table_description,
