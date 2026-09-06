@@ -28,6 +28,10 @@ class SetRunnerRequest(BaseModel):
     region: str
     backend: str
     name: str | None = None
+    instance_type: str | None = None
+    price_per_hour: float | None = None
+    is_spot: bool | None = None
+    cost: float | None = None
 
 
 class ResourceCreateRequest(BaseModel):
@@ -36,6 +40,11 @@ class ResourceCreateRequest(BaseModel):
 
 class ResourceTerminateRequest(BaseModel):
     reason: str
+    cost: float | None = None
+
+
+class CostEstimateRequest(BaseModel):
+    estimated_cost: float | None = None
 
 
 class ResourceShardsRequest(BaseModel):
@@ -116,8 +125,21 @@ def sct_set_runner(run_id: str, payload: SetRunnerRequest, user: User = Depends(
         private_ip=payload.private_ip,
         region=payload.region,
         backend=payload.backend,
-        name=payload.name
+        name=payload.name,
+        instance_type=payload.instance_type,
+        price_per_hour=payload.price_per_hour,
+        is_spot=payload.is_spot,
+        cost=payload.cost,
     )
+    return APIResponse({
+        "status": "ok",
+        "response": result
+    })
+
+
+@router.post("/{run_id}/cost/estimate", name="api.client_api.sct_api.sct_submit_cost_estimate")
+def sct_submit_cost_estimate(run_id: str, payload: CostEstimateRequest, user: User = Depends(api_current_user)):
+    result = SCTService.submit_cost_estimate(run_id=run_id, estimated_cost=payload.estimated_cost)
     return APIResponse({
         "status": "ok",
         "response": result
@@ -157,7 +179,7 @@ def sct_resource_create(run_id: str, payload: ResourceCreateRequest,
 def sct_resource_terminate(run_id: str, resource_name: str, payload: ResourceTerminateRequest,
                            user: User = Depends(api_current_user)):
     result = SCTService.terminate_resource(run_id=run_id, resource_name=resource_name,
-                                           reason=payload.reason)
+                                           reason=payload.reason, cost=payload.cost)
     return APIResponse({
         "status": "ok",
         "response": result
