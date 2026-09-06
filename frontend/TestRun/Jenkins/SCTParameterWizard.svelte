@@ -7,6 +7,7 @@
     import StringParam from "./StringParam.svelte";
     import { faExclamationCircle, faMinus, faPlus, faQuestionCircle } from "@fortawesome/free-solid-svg-icons";
     import DummyCheckParam from "./DummyCheckParam.svelte";
+    import { sendMessage } from "../../Stores/AlertStore";
 
 
     /**
@@ -48,13 +49,72 @@
         return result;
     };
 
-    const onChangeWrapper = function(event, definition, params) {
+    const onChangeWrapper = async function(event, definition, params) {
         if (definition.onChange) definition.onChange(event, params);
         if (definition.requiresValidation) {
-            definition.validated = definition.validate(params);
+            definition.validated = await runValidation(definition, params);
         }
         paramDefinitions = paramDefinitions;
     };
+
+    /**
+     * Runs a definition's validate function, marking it as pending while an
+     * asynchronous (backend-backed) validator is in flight.
+     *
+     * @param {object} definition A parameter or category definition
+     * @param {{[string]: string}} params Current build parameters
+     */
+    const runValidation = async function(definition, params) {
+        definition.validating = true;
+        try {
+            return await definition.validate(params);
+        } finally {
+            definition.validating = false;
+        }
+    };
+
+    /**
+     * Asks the backend whether a GitHub repository (and optionally a branch inside it) exists.
+     *
+     * @param {string} repo Repository in git@github.com:owner/repo.git form
+     * @param {string} [branch] Branch name, omitted when only the repository should be checked
+     * @returns {Promise<[boolean, string]>} Validation result and a human readable message
+     */
+    const validateGithubRepo = async function(repo, branch) {
+        try {
+            const response = await fetch("/api/v1/github/repo/validate", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ repo: repo, branch: branch ?? null })
+            });
+            const json = await response.json();
+            if (json.status != "ok") {
+                throw json;
+            }
+            return [json.response.validated, json.response.message];
+        } catch (error) {
+            if (error?.status === "error") {
+                sendMessage(
+                    "error",
+                    `API Error when validating GitHub repository.\nMessage: ${error.response.arguments[0]}`,
+                    "SCTParameterWizard::validateGithubRepo"
+                );
+            } else {
+                sendMessage(
+                    "error",
+                    "A backend error occurred during GitHub repository validation",
+                    "SCTParameterWizard::validateGithubRepo"
+                );
+                console.log(error);
+            }
+            return [false, "Unable to validate the repository, please try again."];
+        }
+    };
+
+    const GIT_REPO_RE = /^git@github\.com:[\w-]+\/[\w-]+\.git$/;
+    const GIT_REPO_HELP_TEXT = "Repository URL must be in the format: git@github.com:<username>/<repo>.git";
 
     const ALL_BACKENDS = {
         azure: "Microsoft Azure",
@@ -206,7 +266,7 @@
             requiresValidation: true,
             validated: true,
             validationHelpText: "",
-            validate: function (params) {
+            validate: async function (params) {
                 const PARAMS_TO_CHECK = {
                     scylla_version: ["scyllaVersion"],
                     scylla_repo: ["scyllaRepo"],
@@ -215,13 +275,10 @@
                     scylla_byo: ["scyllaRepoBYO", "scyllaBranchBYO"],
                 };
                 let result = true;
-                console.log(this);
                 for (let paramName of PARAMS_TO_CHECK[this.currentSource]) {
-                    console.log(this.params.masterSelect.args.value);
                     let param = this.params[paramName];
-                    console.log(param);
                     if (param.requiresValidation && param.condition(params, paramDefinitions)) {
-                        param.validated = param.validate(params);
+                        param.validated = await runValidation(param, params);
                     }
                     if (!param.validated) {
                         result = false;
@@ -368,10 +425,18 @@
                     internalName: "byo_scylla_repo",
                     requiresValidation: true,
                     validated: true,
-                    validationHelpText: "Repository URL must be in the format: git@github.com:<username>/<repo>.git",
-                    validate: function (params) {
-                        const GIT_REPO_RE = /^git@github\.com:[\w-]+\/[\w-]+\.git$/;
-                        return !!params[this.internalName] && GIT_REPO_RE.test(params[this.internalName]);
+                    validationHelpText: GIT_REPO_HELP_TEXT,
+                    validate: async function (params) {
+                        const repo = params[this.internalName];
+                        if (!repo || !GIT_REPO_RE.test(repo)) {
+                            this.validationHelpText = GIT_REPO_HELP_TEXT;
+                            return false;
+                        }
+                        const [validated, message] = await validateGithubRepo(repo);
+                        if (!validated) {
+                            this.validationHelpText = message;
+                        }
+                        return validated;
                     },
                     condition: (params, defs) => (defs.scyllaVersion.currentSource == "scylla_byo"),
                     onChange: function (e, params) {
@@ -391,8 +456,22 @@
                     requiresValidation: true,
                     validated: true,
                     validationHelpText: "Branch name cannot be empty.",
-                    validate: function (params) {
-                        return !!params[this.internalName];
+                    validate: async function (params) {
+                        const branch = params[this.internalName];
+                        if (!branch) {
+                            this.validationHelpText = "Branch name cannot be empty.";
+                            return false;
+                        }
+                        const repo = params.byo_scylla_repo;
+                        if (!GIT_REPO_RE.test(repo ?? "")) {
+                            // Nothing to check the branch against, the repository field reports its own error.
+                            return true;
+                        }
+                        const [validated, message] = await validateGithubRepo(repo, branch);
+                        if (!validated) {
+                            this.validationHelpText = message;
+                        }
+                        return validated;
                     },
                     condition: (params, defs) => (defs.scyllaVersion.currentSource == "scylla_byo"),
                     onChange: function (e, params) {
@@ -575,12 +654,12 @@
         }
     });
 
-    export function validate() {
+    export async function validate() {
         const errors = {};
         let validated = true;
         for (let [categoryName, category] of Object.entries(paramDefinitions)) {
             if (category.requiresValidation) {
-                let res = category.validate(params);
+                let res = await runValidation(category, params);
                 if (!res) {
                     validated = false;
                     errors[categoryName] = category.validationHelpText;
@@ -629,7 +708,11 @@
                             </div>
                             <param.type definition={param} bind:params={params} wrapper={onChangeWrapper}/>
                             <div id="paramHelp{sanitizeSelector(param.internalName ?? "")}" class="form-text">{@html param.description ?? rawParams.find(v => v.name == param.internalName)?.description ?? ""}</div>
-                            {#if !param.validated && param.requiresValidation}
+                            {#if param.validating}
+                                <div class="form-text">
+                                    <span class="spinner-border spinner-border-sm"></span> Validating...
+                                </div>
+                            {:else if !param.validated && param.requiresValidation}
                                 <div class="alert alert-danger">
                                     <Fa icon={faExclamationCircle}/> {param.validationHelpText}
                                 </div>

@@ -8,6 +8,7 @@ from coodie.exceptions import DocumentNotFound
 from starlette.responses import RedirectResponse
 
 from argus.backend.models.web import ArgusTest, User
+from argus.backend.service.github_service import GithubService
 from argus.backend.service.issue_service import IssueService
 from argus.backend.service.jenkins_service import JenkinsService
 from argus.backend.service.results_service import ResultsService
@@ -81,6 +82,11 @@ class JenkinsSettingsChangeRequest(BaseModel):
 class JenkinsSettingsValidateRequest(BaseModel):
     buildId: str
     newSettings: dict
+
+
+class GithubRepoValidateRequest(BaseModel):
+    repo: str
+    branch: str | None = None
 
 
 @router.get("/test/{test_id}/runs", name="api.testrun_api.get_runs_for_test")
@@ -618,4 +624,19 @@ def get_pytest_test_results(test_name: str, before: float | None = Query(None),
     return APIResponse({
         "status": "ok",
         "response": result
+    })
+
+
+@router.post("/github/repo/validate", name="api.testrun_api.byo_validation")
+def byo_validation(payload: GithubRepoValidateRequest, user: User = Depends(api_current_user)):
+    service = GithubService()
+
+    validated, message = service.validate_repo(payload.repo, payload.branch)
+
+    return APIResponse({
+        "status": "ok",
+        "response": {
+            "validated": validated,
+            "message": message,
+        }
     })
