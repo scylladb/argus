@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from argus.backend.models.web import ArgusUserView, User
 from argus.backend.service.user import api_current_user
 from argus.backend.service.views_widgets.graphed_stats import GraphedStatsService
+from argus.backend.util.concurrency import map_concurrently
 from argus.backend.util.encoders import APIResponse
 
 router = APIRouter(prefix="/widgets")
@@ -25,8 +26,10 @@ def get_graphed_stats(view_id: UUID = Query(...), filters: str | None = Query(No
         "nemesis_data": []
     }
 
-    for test_id in view.tests:
-        data = service.get_graphed_stats(test_id, filters)
+    # One query per test (results are partitioned by test_id), so fan out
+    # concurrently -- sequentially this endpoint costs the sum of the per-test
+    # queries rather than roughly the slowest. Order is preserved.
+    for data in map_concurrently(lambda test_id: service.get_graphed_stats(test_id, filters), view.tests):
         response_data["test_runs"].extend(data["test_runs"])
         response_data["nemesis_data"].extend(data["nemesis_data"])
     return APIResponse({
