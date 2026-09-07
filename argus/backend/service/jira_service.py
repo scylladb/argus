@@ -218,7 +218,7 @@ class JiraService:
                 "url": issue.permalink,
                 "title": issue.summary,
                 "state": issue.state,
-                "run_id": run_id,
+                "run_id": str(run_id),
             },
             user_id=user.id,
             run_id=link.run_id,
