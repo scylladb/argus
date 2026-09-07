@@ -20,6 +20,7 @@ import uuid
 from datetime import UTC, datetime
 
 import uvicorn
+from werkzeug.security import generate_password_hash
 from _pytest.fixtures import fixture
 
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, User, UserRoles
@@ -67,6 +68,7 @@ def api_user(argus_db) -> User:
         username=f"e2e_client_{suffix}",
         full_name="E2E Client User",
         email=f"e2e-client-{suffix}@scylladb.com",
+        password=generate_password_hash("123"),
         registration_date=datetime.now(UTC),
         roles=[UserRoles.User.value],
     )
