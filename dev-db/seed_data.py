@@ -45,6 +45,7 @@ from argus.backend.models.web import (
     UserRoles,
 )
 from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTTestRun
+from argus.backend.service.user import UserService
 from argus.backend.util.config import Config
 from argus.common.enums import TestInvestigationStatus, TestStatus
 
@@ -294,10 +295,10 @@ def create_admin_user(username: str, password: str) -> User:
         email=f"{username}@localhost",
         registration_date=datetime.now(UTC),
         roles=[UserRoles.User.value, UserRoles.Admin.value, UserRoles.Manager.value],
-        api_token=str(uuid4()),
     )
+    api_token = UserService().generate_token(user, duration=None).token
     COUNTS["users"] += 1
-    LOGGER.info("  Created admin user '%s' (password: %s)", username, password)
+    LOGGER.info("  Created admin user '%s' (password: %s, api token: %s)", username, password, api_token)
     return user
 
 

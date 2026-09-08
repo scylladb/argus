@@ -16,7 +16,7 @@ from argus.backend.service.argus_service import ArgusService, ScheduleUpdateRequ
 from argus.backend.service.results_service import ResultsService
 from argus.backend.service.stats import ReleaseStatsCollector
 from argus.backend.service.testrun import TestRunService
-from argus.backend.service.user import UserService, api_current_user
+from argus.backend.service.user import DEFAULT_API_TOKEN_DURATION, UserService, api_current_user
 from argus.backend.util.common import NoneIfEmpty
 from argus.backend.util.encoders import APIResponse
 
@@ -494,14 +494,41 @@ def s3_generic_proxy(bucket_name: str, bucket_path: str,
     return RedirectResponse(result, status_code=302)
 
 
-@router.get("/user/token", name="api.user_token")
-def user_token(user: User = Depends(api_current_user)):
-    token = UserService().get_or_generate_token(user=user)
+class UserTokenRequest(BaseModel):
+    duration: str | None = DEFAULT_API_TOKEN_DURATION
+
+
+@router.post("/user/token", name="api.user_token")
+def user_token(payload: UserTokenRequest = Body(default_factory=UserTokenRequest),
+               user: User = Depends(api_current_user)):
+    """Issue an additional API token for the caller (used by ``argus auth login``).
+
+    Only a digest of the token is stored, so existing tokens cannot be read back.
+    ``duration`` (e.g. ``60d``, ``24h``) defaults to 365 days; ``null`` issues a
+    non-expiring token.
+    """
+    issued = UserService().generate_token(user=user, duration=payload.duration)
 
     return APIResponse({
         "status": "ok",
         "response": {
-            "token": token
+            "token": issued.token,
+            "expiration_date": issued.expiration_date,
+        }
+    })
+
+
+@router.get("/user/token", name="api.user_token_info")
+def user_token_info(asgi_request: Request, user: User = Depends(api_current_user)):
+    """Return the expiration of the API token that authenticated this request."""
+    api_token = getattr(asgi_request.state, "api_token", None)
+    if api_token is None:
+        raise APIException("Request is not authenticated with an API token")
+
+    return APIResponse({
+        "status": "ok",
+        "response": {
+            "expiration_date": api_token.expiration_date,
         }
     })
 

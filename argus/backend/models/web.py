@@ -54,7 +54,6 @@ class User(Document):
     registration_date: datetime
     roles: list[str] = Field(default_factory=list)
     picture_id: Optional[UUID] = None
-    api_token: Annotated[Optional[str], Indexed()] = None
     service_user: Optional[bool] = False
 
     class Settings:
@@ -146,13 +145,13 @@ class Team(Document):
 
 
 class UserOauthToken(Document):
-    id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
-    user_id: Annotated[UUID, Indexed()]
+    user_id: Annotated[UUID, PrimaryKey()]
+    token: Annotated[str, ClusteringKey(), Indexed()]
     kind: Annotated[str, Indexed()]
-    token: str
+    expiration_date: Optional[datetime] = None
 
     class Settings:
-        name = "user_oauth_token"
+        name = "user_oauth_token_v2"
 
 
 class ArgusRelease(Document):

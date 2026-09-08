@@ -9,7 +9,6 @@ import hashlib
 import pytest
 from pytest import MonkeyPatch
 from datetime import UTC, datetime
-from secrets import token_hex
 from uuid import uuid4
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -20,6 +19,7 @@ from coodie.exceptions import DocumentNotFound
 from argus.backend.models.ssh_key import ProxyTunnelConfig, SSHTunnelKey
 from argus.backend.models.web import User, UserRoles
 from argus.backend.service.tunnel_service import TunnelService, TunnelServiceException, _derive_fingerprint
+from argus.backend.service.user import UserService, hash_api_token
 
 
 # ---------------------------------------------------------------------------
@@ -43,7 +43,6 @@ def _make_user() -> User:
         email=f"tunnel_test_{uuid4().hex[:8]}@test.internal",
         registration_date=datetime.now(tz=UTC),
         roles=[UserRoles.User.value],
-        api_token=token_hex(32),
         service_user=False,
     )
 
@@ -473,9 +472,12 @@ def test_save_proxy_tunnel_config_creates_service_user(argus_db, mock_host_finge
 
         assert result.is_active is True
         assert result.service_user_id is not None
-        assert result.api_token is not None
+        assert result.api_token
 
         service_user = User.get(id=result.service_user_id)
+        tokens = UserService.get_api_tokens(service_user)
+        assert [t.token for t in tokens] == [hash_api_token(result.api_token)]
+        assert tokens[0].expiration_date is None
         assert service_user.service_user is True
         assert f"proxy-tunnel-{host}" in service_user.username
         assert service_user.roles == [UserRoles.SSHTunnelServer.value]
@@ -504,6 +506,9 @@ def test_save_proxy_tunnel_config_reuses_existing_tunnel_service_user(argus_db, 
         second = svc.save_proxy_tunnel_config(payload)
 
         assert first.service_user_id == second.service_user_id
+        assert second.api_token == ""
+        service_user = User.get(id=second.service_user_id)
+        assert [t.token for t in UserService.get_api_tokens(service_user)] == [hash_api_token(first.api_token)]
     finally:
         _restore_configs(previous_active_ids)
 
@@ -628,7 +633,6 @@ def test_create_proxy_service_user_rejects_username_collision(argus_db):
         email=f"{username}@example.com",
         registration_date=now_utc,
         roles=[UserRoles.User.value],
-        api_token="",
         service_user=False,
     )
 

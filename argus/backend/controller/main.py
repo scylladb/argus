@@ -194,8 +194,13 @@ def error(asgi_request: Request, error_type: str = Query("400", alias="type"),
 def profile(asgi_request: Request, user: User = Depends(ui_current_user)):
     first_run = asgi_request.session.pop("first_run_info", None)
     token_generated = asgi_request.session.pop("token_generated", None)
+    api_token_count = len(UserService.get_api_tokens(user))
 
-    return templates.TemplateResponse(asgi_request, "profile.html.j2", {"first_run": first_run, "token_generated": token_generated})
+    return templates.TemplateResponse(asgi_request, "profile.html.j2", {
+        "first_run": first_run,
+        "token_generated": token_generated,
+        "api_token_count": api_token_count,
+    })
 
 
 @router.get("/profile/create", name="main.profile_user_create")

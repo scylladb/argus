@@ -2,7 +2,6 @@ import base64
 import binascii
 import hashlib
 import logging
-import secrets
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -448,6 +447,8 @@ class TunnelService:
 
         Returns the saved config as a dict (including ``service_user_id`` and
         the generated ``api_token`` so the caller can provision the proxy host).
+        ``api_token`` is empty when the host's service user already had a token:
+        saving the same config again is idempotent and keeps it.
         """
         required = ("host", "port", "proxy_user", "target_host", "target_port")
         missing = [k for k in required if not payload.get(k)]
@@ -523,10 +524,10 @@ class TunnelService:
             except DocumentNotFound:
                 service_user = None
             if service_user is not None:
+                UserService().revoke_api_tokens(service_user)
                 if delete_user:
                     service_user.delete()
                 else:
-                    service_user.api_token = ""
                     if UserRoles.SSHTunnelServer.value in service_user.roles:
                         service_user.roles = [
                             role for role in service_user.roles
@@ -679,7 +680,10 @@ class TunnelService:
         return ``(user, api_token)``.
 
         The username follows the pattern ``proxy-tunnel-<host>`` to make it
-        easy to identify in the user list.
+        easy to identify in the user list. A re-used user keeps its token; as
+        only its digest is stored, the returned ``api_token`` is then empty. A
+        token is generated only when the user has none (e.g. after the tunnel
+        config was deleted).
         """
         username = f"proxy-tunnel-{host}"
 
@@ -690,11 +694,10 @@ class TunnelService:
                 raise TunnelServiceException(
                     f"User '{username}' already exists and is not a dedicated SSH tunnel service user"
                 )
-            svc = UserService()
-            token = svc.get_or_generate_token(existing)
-            return existing, token
+            if UserService.get_api_tokens(existing):
+                return existing, ""
+            return existing, UserService().generate_token(existing, duration=None).token
 
-        api_token = secrets.token_hex(32)
         now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
         user = User.create(
             id=uuid4(),
@@ -704,10 +707,9 @@ class TunnelService:
             email=f"{username}@argus.internal",
             registration_date=now,
             roles=[UserRoles.SSHTunnelServer.value],
-            api_token=api_token,
             service_user=True,
         )
-        return user, api_token
+        return user, UserService().generate_token(user, duration=None).token
 
     @staticmethod
     def _to_ssh_tunnel_key_dto(row: SSHTunnelKey) -> SSHTunnelKeyDTO:

@@ -8,7 +8,7 @@ import logging
 
 
 from argus.backend.error_handlers import DataValidationError
-from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, User, UserOauthToken
+from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, User
 from argus.backend.util.config import Config
 
 LOGGER = logging.getLogger(__name__)

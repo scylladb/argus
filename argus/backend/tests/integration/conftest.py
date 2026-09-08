@@ -59,9 +59,9 @@ def live_server(argus_db) -> str:
 def api_user(argus_db) -> User:
     """A persisted user for real token auth.
 
-    ``load_user`` resolves the Authorization header via
-    ``User.get(api_token=...)``, so unlike ``logged_in_user`` this one must
-    exist in the database.
+    ``load_user`` resolves the Authorization header through the digest rows in
+    ``UserOauthToken``, so unlike ``logged_in_user`` this one must exist in the
+    database.
     """
     suffix = time.time_ns()
     user = User(
@@ -79,7 +79,9 @@ def api_user(argus_db) -> User:
 
 @fixture(scope='session')
 def api_token(api_user) -> str:
-    return UserService().get_or_generate_token(api_user)
+    service = UserService()
+    yield service.generate_token(api_user).token
+    service.revoke_api_tokens(api_user)
 
 
 @fixture

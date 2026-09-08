@@ -110,6 +110,7 @@ web-backend = [
     { name = "python-slugify" },
     { name = "pyyaml" },
     { name = "scylla-driver" },
+    { name = "timelength" },
     { name = "uvicorn" },
     { name = "werkzeug" },
     { name = "zstandard" },
@@ -162,6 +163,7 @@ requires-dist = [
     { name = "supervisor", marker = "extra == 'docker-image'", specifier = "~=4.2.4" },
     { name = "tiktoken", marker = "extra == 'ai'", specifier = ">=0.7.0" },
     { name = "tiktoken", marker = "extra == 'ai-eval'", specifier = ">=0.7.0" },
+    { name = "timelength", marker = "extra == 'web-backend'", specifier = ">=3.0.4" },
     { name = "uvicorn", marker = "extra == 'web-backend'", specifier = ">=0.40.0" },
     { name = "werkzeug", marker = "extra == 'web-backend'", specifier = ">=3.0.0" },
     { name = "zstandard", marker = "extra == 'web-backend'", specifier = ">=0.22.0" },
@@ -3610,6 +3612,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/96/d9/dfd086aa2d918c563a140720e0ce296cada1634efd2783d5cf51e05f984e/tiktoken-0.13.0-cp314-cp314t-musllinux_1_2_aarch64.whl", hash = "sha256:6644c9c2b5cf3916f5a3641d7d12fdb3f006a7b3d9ff6acdaec44e29ab1ff91e", size = 1181863, upload-time = "2026-05-15T04:51:15.025Z" },
     { url = "https://files.pythonhosted.org/packages/2f/68/a18b4f307086954fdae32714cb4f85562e34f9d34ab206e61f1816aa6018/tiktoken-0.13.0-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:5cb65b60b9408563676d874a3a4ee573370066f0dc4e29d84e82e989c6517424", size = 1239218, upload-time = "2026-05-15T04:51:16.103Z" },
     { url = "https://files.pythonhosted.org/packages/16/5b/f2aa703a4fc5d2dff73460a7d46cc2f3f44aa0f3dd8eeb20d2a0ecf68862/tiktoken-0.13.0-cp314-cp314t-win_amd64.whl", hash = "sha256:85b78cc3a2c3d48723ca751fa981f1fedccd54194ca0471b957364353a898b07", size = 918110, upload-time = "2026-05-15T04:51:17.237Z" },
+]
+
+[[package]]
+name = "timelength"
+version = "3.0.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b2/15/0202e062c7fb44421d80dd2f8add665a637f49a5b5492fd578b6a1a8bd5b/timelength-3.0.4.tar.gz", hash = "sha256:5b5b44928c9d8da91bcb92eacbc69873ccded50f635d0de42063ca0fef557967", size = 49506, upload-time = "2026-07-19T10:27:27.359Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/72/b6/f8a2b57dfba55c273e26602a5ff20c5f37a7051cc7a1356c3252712ff882/timelength-3.0.4-py3-none-any.whl", hash = "sha256:d163f2897e7ff64b538b560e147efc56a20d0e15319ad3502159147b42b795c7", size = 37928, upload-time = "2026-07-19T10:27:26.3Z" },
 ]
 
 [[package]]

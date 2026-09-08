@@ -1,26 +1,27 @@
 from collections.abc import Mapping, MutableMapping
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 import hashlib
 import mimetypes
 import os
-import base64
+import hmac
 import logging
 import re
+import secrets
 from uuid import UUID
-from time import time
-from hashlib import sha384
 
 from collections.abc import Callable
+from typing import NamedTuple
 
 from coodie.exceptions import DocumentNotFound
 from fastapi import Depends, Request
 import magic
 import requests
 import jwt
+from timelength import TimeLength
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from argus.backend.db import ScyllaCluster
-from argus.backend.error_handlers import APIException, AuthorizationError, UIRedirect
+from argus.backend.error_handlers import APIException, AuthorizationError, DataValidationError, UIRedirect
 from argus.backend.models.web import User, UserOauthToken, UserRoles, WebFileStorage
 from argus.backend.util.common import gen_pass
 
@@ -33,6 +34,37 @@ class UserServiceException(Exception):
 
 class GithubOrganizationMissingError(Exception):
     pass
+
+
+API_TOKEN_KIND = "api"
+DEFAULT_API_TOKEN_DURATION = "365d"
+
+
+class IssuedToken(NamedTuple):
+    token: str
+    expiration_date: datetime | None
+
+
+def parse_token_duration(duration: str | None) -> timedelta | None:
+    """Parse a human duration such as ``60d`` or ``24h``; ``None`` means no expiration."""
+    if duration is None:
+        return None
+    parsed = TimeLength(duration).result
+    if not parsed.success or parsed.seconds <= 0:
+        raise DataValidationError(f"Invalid token duration: {duration!r}")
+    return timedelta(seconds=parsed.seconds)
+
+
+def hash_api_token(token: str) -> str:
+    """Return the digest stored in ``UserOauthToken.token`` for a plaintext API token.
+
+    HMAC-SHA256 keyed with ``SECRET_KEY``. The digest is deterministic so the
+    token can still be looked up from the bare ``Authorization: token …`` header,
+    while the database never holds the token itself. Changing ``SECRET_KEY``
+    invalidates every issued token.
+    """
+    secret = ScyllaCluster.get().config["SECRET_KEY"]
+    return hmac.new(str(secret).encode("utf-8"), token.encode("utf-8"), "sha256").hexdigest()
 
 
 class UserService:
@@ -131,18 +163,10 @@ class UserService:
             user.picture_id = web_file.id
             user.save()
 
-        try:
-            tokens = UserOauthToken.find(user_id=user.id).all()
-            github_token = [
-                token for token in tokens if token.kind == "github"][0]
-            github_token.token = oauth_data.get('access_token')
-            github_token.save()
-        except IndexError:
-            github_token = UserOauthToken.model_construct()
-            github_token.kind = "github"
-            github_token.user_id = user.id
-            github_token.token = oauth_data.get('access_token')
-            github_token.save()
+        for token in UserOauthToken.find(user_id=user.id).all():
+            if token.kind == "github":
+                token.delete()
+        UserOauthToken(user_id=user.id, token=oauth_data.get('access_token'), kind="github").save()
 
         redirect_target = session.get("redirect_target")
         session.clear()
@@ -204,7 +228,6 @@ class UserService:
         users = {str(user.id): user.model_dump() for user in sorted(users, key=lambda u: u.username)}
         for user in users.values():
             user.pop("password")
-            user.pop("api_token")
 
         return users
 
@@ -226,18 +249,29 @@ class UserService:
         session["user_id"] = str(user.id)
         return user
 
-    def generate_token(self, user: User):
-        token_digest = f"{user.username}-{int(time())}-{base64.encodebytes(os.urandom(128)).decode(encoding='utf-8')}"
-        new_token = base64.encodebytes(sha384(token_digest.encode(encoding="utf-8")
-                                              ).digest()).decode(encoding="utf-8").strip()
-        user.api_token = new_token
-        user.save()
-        return new_token
+    @staticmethod
+    def get_api_tokens(user: User) -> list[UserOauthToken]:
+        return [token for token in UserOauthToken.find(user_id=user.id).all() if token.kind == API_TOKEN_KIND]
 
-    def get_or_generate_token(self, user: User) -> str:
-        if user.api_token:
-            return user.api_token
-        return self.generate_token(user)
+    def revoke_api_tokens(self, user: User) -> None:
+        for token in self.get_api_tokens(user):
+            token.delete()
+
+    def generate_token(self, user: User, duration: str | None = DEFAULT_API_TOKEN_DURATION) -> IssuedToken:
+        """Issue an additional API token for ``user`` valid for ``duration``.
+
+        Only the HMAC digest is persisted, so this is the single moment the
+        plaintext exists server-side. Previously issued tokens keep working.
+        ``duration`` is parsed by :func:`parse_token_duration`; ``None`` issues
+        a non-expiring token. The row's TTL matches the expiration date.
+        """
+        lifetime = parse_token_duration(duration)
+        expiration_date = datetime.now(UTC).replace(tzinfo=None) + lifetime if lifetime else None
+        new_token = secrets.token_hex(32)
+        UserOauthToken(
+            user_id=user.id, token=hash_api_token(new_token), kind=API_TOKEN_KIND, expiration_date=expiration_date
+        ).save(ttl=int(lifetime.total_seconds()) if lifetime else None)
+        return IssuedToken(token=new_token, expiration_date=expiration_date)
 
     def update_email(self, user: User, new_email: str):
         if (existing := User.exists_by_email(new_email)) and existing.id != user.id:
@@ -412,12 +446,19 @@ def load_user(asgi_request: Request) -> User | None:
     user in the same order (token header, session user_id, anonymous) and
     sets request.state.user as a side effect."""
     user = None
+    api_token = None
     auth_header = asgi_request.headers.get("Authorization")
     if auth_header:
         try:
             auth_schema, *auth_data = auth_header.split()
             if auth_schema == "token":
-                user = User.get(api_token=auth_data[0])
+                digest = hash_api_token(auth_data[0])
+                api_token = next(
+                    (t for t in UserOauthToken.find(token=digest).all() if t.kind == API_TOKEN_KIND), None
+                )
+                if not api_token:
+                    raise APIException("User not found for supplied token")
+                user = User.get(id=api_token.user_id)
         except IndexError as exception:
             raise APIException("Malformed authorization header") from exception
         except DocumentNotFound as exception:
@@ -430,6 +471,7 @@ def load_user(asgi_request: Request) -> User | None:
             asgi_request.session.clear()
 
     asgi_request.state.user = user
+    asgi_request.state.api_token = api_token
     return user
 
 

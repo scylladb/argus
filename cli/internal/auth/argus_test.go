@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -146,27 +148,54 @@ func validJWT() string {
 // expiredJWT returns a JWT with an expiry one hour in the past.
 func expiredJWT() string { return makeJWT(time.Now().Add(-time.Hour).Unix(), 0) }
 
-// userTokenJSON returns a JSON body that mimics the /api/v1/user/token response.
-func userTokenJSON(token string) []byte {
-	type inner struct {
-		Token string `json:"token"`
-	}
-	type envelope struct {
-		Status   string `json:"status"`
-		Response inner  `json:"response"`
-	}
-	b, _ := json.Marshal(envelope{Status: "ok", Response: inner{Token: token}})
+// apiEnvelope mimics Argus' {"status": "ok", "response": ...} JSON envelope.
+func apiEnvelope(response any) []byte {
+	b, _ := json.Marshal(map[string]any{"status": "ok", "response": response})
 	return b
 }
 
-// newArgusTestServer creates an httptest.Server that handles both the CF login
-// endpoint and the user-token endpoint used by the PAT exchange step.
+// apiErrorEnvelope mimics the HTTP 200 {"status": "error", ...} body Argus'
+// api_exception_handler returns for an APIException such as an unknown token.
+func apiErrorEnvelope(exception, message string) []byte {
+	b, _ := json.Marshal(map[string]any{
+		"status": "error",
+		"response": map[string]any{
+			"trace_id":  "test-trace",
+			"exception": exception,
+			"message":   message,
+			"arguments": []string{message},
+		},
+	})
+	return b
+}
+
+// tokenServerState records what the fake Argus saw on the token endpoints.
+type tokenServerState struct {
+	mu sync.Mutex
+	// issued holds the "duration" of every POST /api/v1/user/token body.
+	issued []string
+}
+
+func (s *tokenServerState) Issued() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.issued...)
+}
+
+// newTokenTestServer creates an httptest.Server that handles the CF login
+// endpoint and both verbs of the user-token endpoint.
 //
 //   - POST /auth/login/cf with the expected CF JWT → sets a session cookie.
-//   - GET  /api/v1/user/token with a valid session → returns patToken as JSON.
+//   - GET  /api/v1/user/token with "Authorization: token <pat>" → the HTTP 200
+//     APIException envelope Argus sends for an unknown token unless pat is a
+//     key of known; otherwise returns its expiration (nil = never).
+//   - POST /api/v1/user/token with a valid session → records the requested
+//     duration and returns patToken as JSON.
 //   - Everything else → 404.
-func newArgusTestServer(t *testing.T, cfJWT, sessionValue, patToken string) *httptest.Server {
+func newTokenTestServer(t *testing.T, cfJWT, sessionValue, patToken string,
+	known map[string]*time.Time) (*httptest.Server, *tokenServerState) {
 	t.Helper()
+	state := &tokenServerState{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/auth/login/cf":
@@ -179,49 +208,172 @@ func newArgusTestServer(t *testing.T, cfJWT, sessionValue, patToken string) *htt
 			w.WriteHeader(http.StatusOK)
 
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/user/token":
+			pat := strings.TrimPrefix(r.Header.Get("Authorization"), "token ")
+			w.Header().Set("Content-Type", "application/json")
+			expiration, ok := known[pat]
+			if pat == "" || !ok {
+				_, _ = w.Write(apiErrorEnvelope("APIException", "User not found for supplied token"))
+				return
+			}
+			_, _ = w.Write(apiEnvelope(map[string]any{"expiration_date": expiration}))
+
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/user/token":
 			// Verify the session cookie is present.
 			c, err := r.Cookie("session")
 			if err != nil || c.Value != sessionValue {
 				http.Error(w, "missing or wrong session cookie", http.StatusUnauthorized)
 				return
 			}
+			var body struct {
+				Duration string `json:"duration"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				http.Error(w, "bad body", http.StatusBadRequest)
+				return
+			}
+			state.mu.Lock()
+			state.issued = append(state.issued, body.Duration)
+			state.mu.Unlock()
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write(userTokenJSON(patToken))
+			_, _ = w.Write(apiEnvelope(map[string]any{"token": patToken, "expiration_date": nil}))
 
 		default:
 			http.NotFound(w, r)
 		}
 	}))
 	t.Cleanup(srv.Close)
+	return srv, state
+}
+
+// newArgusTestServer is newTokenTestServer for flows that start without a
+// stored PAT; only patToken is known to the fake Argus.
+func newArgusTestServer(t *testing.T, cfJWT, sessionValue, patToken string) *httptest.Server {
+	t.Helper()
+	srv, _ := newTokenTestServer(t, cfJWT, sessionValue, patToken, map[string]*time.Time{patToken: nil})
 	return srv
 }
 
 // ---- tests -----------------------------------------------------------------
 
-// TestArgusService_Login_OverwritesCachedPAT verifies that Login always
-// performs the full cloudflared flow even when a PAT is already stored in
-// the keychain, replacing the old PAT with a freshly obtained one.
-func TestArgusService_Login_OverwritesCachedPAT(t *testing.T) {
+// TestArgusService_Login_KeepsCachedPAT verifies that Login refreshes the CF
+// token but keeps a stored PAT that Argus still accepts and that has not
+// expired, without requesting a new one.
+func TestArgusService_Login_KeepsCachedPAT(t *testing.T) {
 	setupMockKeyring(t)
-	require.NoError(t, keychain.StorePAT("stale-pat"))
+	require.NoError(t, keychain.StorePAT("stored-pat"))
+	require.NoError(t, keychain.Store("stale-session"))
 
-	const wantSession = "fresh-session"
-	const wantPAT = "fresh-pat"
 	cfJWT := validJWT()
 
 	// access token fails (no local cache), access login succeeds.
 	binPath := fakeCFBin(t, cfJWT, 0, 1)
-	srv := newArgusTestServer(t, cfJWT, wantSession, wantPAT)
+	future := time.Now().Add(7 * 24 * time.Hour)
+	srv, state := newTokenTestServer(t, cfJWT, "unused-session", "new-pat",
+		map[string]*time.Time{"stored-pat": &future})
 
 	svc := auth.NewArgusService(srv.URL, binPath,
 		auth.WithHTTPClient(srv.Client()),
 	)
 	require.NoError(t, svc.Login(t.Context()))
 
-	// The freshly obtained PAT must replace the stale one.
 	gotPAT, err := keychain.LoadPAT()
 	require.NoError(t, err)
-	assert.Equal(t, wantPAT, gotPAT)
+	assert.Equal(t, "stored-pat", gotPAT)
+	assert.Empty(t, state.Issued(), "a valid stored PAT must not trigger a token request")
+
+	// The stale session must not linger next to the PAT.
+	_, sessionErr := keychain.Load()
+	assert.Error(t, sessionErr, "session should be deleted when the PAT is kept")
+}
+
+// TestArgusService_Login_KeepsNonExpiringCachedPAT verifies that a stored PAT
+// without an expiration date is kept.
+func TestArgusService_Login_KeepsNonExpiringCachedPAT(t *testing.T) {
+	setupMockKeyring(t)
+	require.NoError(t, keychain.StorePAT("stored-pat"))
+
+	cfJWT := validJWT()
+	binPath := fakeCFBin(t, cfJWT, 0, 1)
+	srv, state := newTokenTestServer(t, cfJWT, "unused-session", "new-pat",
+		map[string]*time.Time{"stored-pat": nil})
+
+	svc := auth.NewArgusService(srv.URL, binPath, auth.WithHTTPClient(srv.Client()))
+	require.NoError(t, svc.Login(t.Context()))
+
+	gotPAT, err := keychain.LoadPAT()
+	require.NoError(t, err)
+	assert.Equal(t, "stored-pat", gotPAT)
+	assert.Empty(t, state.Issued())
+}
+
+// TestArgusService_Login_ReplacesExpiredCachedPAT verifies that a stored PAT
+// whose expiration date has passed is replaced by a fresh 14-day token.
+func TestArgusService_Login_ReplacesExpiredCachedPAT(t *testing.T) {
+	setupMockKeyring(t)
+	require.NoError(t, keychain.StorePAT("stored-pat"))
+
+	cfJWT := validJWT()
+	binPath := fakeCFBin(t, cfJWT, 0, 1)
+	past := time.Now().Add(-time.Hour)
+	srv, state := newTokenTestServer(t, cfJWT, "argus-session", "new-pat",
+		map[string]*time.Time{"stored-pat": &past})
+
+	svc := auth.NewArgusService(srv.URL, binPath, auth.WithHTTPClient(srv.Client()))
+	require.NoError(t, svc.Login(t.Context()))
+
+	gotPAT, err := keychain.LoadPAT()
+	require.NoError(t, err)
+	assert.Equal(t, "new-pat", gotPAT)
+	assert.Equal(t, []string{"14d"}, state.Issued())
+}
+
+// TestArgusService_Login_ReplacesRejectedCachedPAT verifies that a stored PAT
+// Argus no longer accepts (HTTP 200 APIException envelope) is replaced by a
+// fresh token.
+func TestArgusService_Login_ReplacesRejectedCachedPAT(t *testing.T) {
+	setupMockKeyring(t)
+	require.NoError(t, keychain.StorePAT("revoked-pat"))
+
+	cfJWT := validJWT()
+	binPath := fakeCFBin(t, cfJWT, 0, 1)
+	srv, state := newTokenTestServer(t, cfJWT, "argus-session", "new-pat", map[string]*time.Time{})
+
+	svc := auth.NewArgusService(srv.URL, binPath, auth.WithHTTPClient(srv.Client()))
+	require.NoError(t, svc.Login(t.Context()))
+
+	gotPAT, err := keychain.LoadPAT()
+	require.NoError(t, err)
+	assert.Equal(t, "new-pat", gotPAT)
+	assert.Equal(t, []string{"14d"}, state.Issued())
+}
+
+// TestArgusService_Login_CheckFailureKeepsPAT verifies that when the token
+// check itself fails (here a 500), Login reports ErrCheckingToken and neither
+// discards the stored PAT nor requests a new one.
+func TestArgusService_Login_CheckFailureKeepsPAT(t *testing.T) {
+	setupMockKeyring(t)
+	require.NoError(t, keychain.StorePAT("stored-pat"))
+
+	cfJWT := validJWT()
+	binPath := fakeCFBin(t, cfJWT, 0, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v1/user/token" {
+			http.Error(w, "boom", http.StatusInternalServerError)
+			return
+		}
+		t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+
+	svc := auth.NewArgusService(srv.URL, binPath, auth.WithHTTPClient(srv.Client()))
+	err := svc.Login(t.Context())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, auth.ErrCheckingToken)
+
+	gotPAT, loadErr := keychain.LoadPAT()
+	require.NoError(t, loadErr)
+	assert.Equal(t, "stored-pat", gotPAT)
 }
 
 // TestArgusService_Login_CFLoginFails verifies that a cloudflared access login
@@ -280,17 +432,18 @@ func TestArgusService_Login_HappyPath(t *testing.T) {
 
 	// access token fails (no local cache), access login succeeds.
 	binPath := fakeCFBin(t, cfJWT, 0, 1)
-	srv := newArgusTestServer(t, cfJWT, wantSession, wantPAT)
+	srv, state := newTokenTestServer(t, cfJWT, wantSession, wantPAT, map[string]*time.Time{wantPAT: nil})
 
 	svc := auth.NewArgusService(srv.URL, binPath,
 		auth.WithHTTPClient(srv.Client()),
 	)
 	require.NoError(t, svc.Login(t.Context()))
 
-	// PAT must be stored in the keychain.
+	// PAT must be stored in the keychain, requested with the CLI lifetime.
 	gotPAT, err := keychain.LoadPAT()
 	require.NoError(t, err)
 	assert.Equal(t, wantPAT, gotPAT)
+	assert.Equal(t, []string{"14d"}, state.Issued())
 
 	// The session should have been deleted after PAT exchange.
 	_, sessionErr := keychain.Load()
