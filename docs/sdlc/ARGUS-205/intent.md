@@ -7,14 +7,8 @@
 | **SCT side** | [scylla-cluster-tests#15979](https://github.com/scylladb/scylla-cluster-tests/pull/15979) |
 | **Follow-up** | [ARGUS-218](https://scylladb.atlassian.net/browse/ARGUS-218) (cross-run Cost Explorer) |
 | **Stage** | 1 — Plan |
-| **Status** | **Open for discussion** — this supersedes the approach currently implemented in #1071 |
+| **Status** | Open for discussion — decisions from the [#1071 review](https://github.com/scylladb/argus/pull/1071) folded in |
 | **Date** | 2026-09-08 |
-
-> **Why this document exists.** #1071 was opened without one, and the first substantive
-> review comment was that the decisions in it had nowhere to be discussed. That is a fair
-> hit. This intent and its spec are the place to settle the API and data model *before*
-> more code is written, and they deliberately propose something different from what the PR
-> currently implements.
 
 ## Problem
 
@@ -23,92 +17,92 @@ cloud-monitor cost site, which is cumbersome to reach and effectively nobody che
 expensive mistakes — an oversized cluster, a run that leaked nodes for a weekend — go
 unnoticed until someone audits the bill.
 
-The cost is knowable. SCT already has the pricing classes behind the cost site, and it
-knows the instance types, regions, lifecycles and runtimes. What is missing is somewhere
-to put the number where the person who caused it will see it.
+Nobody can answer these today:
+
+- *What did this run cost?* — the run page shows no cost at all.
+- *Is this release tracking to its estimate?* — a release owner has no running total to
+  compare against what was budgeted.
+- *What is my team spending?* — TLs and managers have no view of their own footprint,
+  which is the visibility scylla-staging spend most needs.
 
 ## Proposed outcome
 
-A run's cost is stored in Argus and shown on that run's page, broken down by what the
-money went on — DB nodes, loaders, monitors, the runner, networking — so an engineer can
-see both the total and which part of the setup dominated it.
+A run's cost is stored in Argus and shown on that run's page. Where the producer sends
+detail, the run's cost is broken down by what the money went on; where it sends only a
+total, the total is what is shown.
 
-**The unit is the run, not the instance.** Argus stores a total plus a category breakdown
-that the producing system computes and sends. Argus does not assemble a run's cost by
-summing per-instance records, and does no pricing arithmetic of its own.
+**The unit is the run.** Argus stores what the producer computes and sends. It performs no
+pricing arithmetic of its own, and never derives a run's cost by inferring it from
+resource records it happens to hold.
 
-Per-instance cost is a **possible later extension**, not part of this. It is genuinely
-useful for "which node was expensive", but it is not what makes the feature worth having,
-and treating it as the core forces a per-resource schema on every test type that reports
-cost.
+Cost also has to be **queryable across runs**, not just displayable on one, because the
+questions above are aggregate questions:
+
+| Aggregate | Who needs it |
+| --- | --- |
+| Per release | Release owner, tracking actual against the estimate while the release is in flight |
+| Per team / per group | TLs and managers, for their own spend |
+| Global, over time | Whoever is answering "why did the cloud bill go up" |
+
+That is [ARGUS-218](https://scylladb.atlassian.net/browse/ARGUS-218) — the
+[Cost Explorer mockup](https://claude.ai/code/artifact/6f49b965-a496-4d64-80a2-d9ab0073fcca)
+shows the shape. This intent does not build it, but it must not make it impossible: an
+actual cost that only exists as a read-time sum cannot be filtered or ranked, so the number
+has to be stored.
+
+**Phasing.** Phase 1 is the run total. Per-item detail is phase 2, and possibly never if it
+proves not worth it — but the API and data model must accept both from the start, so phase
+2 is a producer change rather than an Argus migration.
 
 ## Affected users and systems
 
-**Users.** Anyone opening a run page — QA engineers, release leads. Later, whoever is
-answering "why did the cloud bill go up", via [ARGUS-218](https://scylladb.atlassian.net/browse/ARGUS-218).
+**Users.** Anyone opening a run page. Later, release owners, TLs and managers via the
+aggregate views.
 
-**Producers.** SCT first. But cost is **not an SCT concept** — dtest, driver-matrix and
-any future plugin can incur cost, so the model and the API must be plugin-agnostic from
-the start. Retrofitting that later means a migration.
+**Producers.** SCT first. Cost is **not an SCT concept** — dtest, driver-matrix and any
+future plugin can incur it — so the model and API are plugin-agnostic from the start.
+Retrofitting that later means a migration.
 
-**Systems.** A new cost model and its endpoints; the run page (a new tab); the Python
-client. Not the existing resource tables, not `SCTTestRun`'s schema, not any plugin's run
-model.
+**Systems.** A new cost model and its endpoints, a new tab on the run page, and the Python
+client. Not the existing resource tables, not any plugin's run model.
 
 ## Constraints
 
 1. **All cost arithmetic stays in the producer.** Argus has no pricing catalog and must not
    grow one. It stores what it is told and adds it up for display.
-2. **Plugin-agnostic.** Keyed by `run_id` and carrying a plugin name — never a field on
-   `SCTTestRun` or on an SCT UDT.
-3. **Actual cost must be stored, not only estimated.** A run needs both, and the actual
-   figure has to be a queryable column, because filtering and ranking by real spend is the
-   obvious next request and is impossible against a value that is only summed at read time.
-4. **No new index on the plugin run tables.** Cost queries must not make `sct_test_run`
-   more expensive to write for everyone, including runs that never report cost.
-5. **Unknown must never render as free.** An unpriced component is null, never `0`.
-   Partial totals must say they are partial.
-6. **The run page is already dense.** The Resources table is wide before any of this; cost
+2. **Plugin-agnostic.** Keyed by `run_id` and carrying a plugin name — never a field on a
+   plugin's run model or UDT.
+3. **Actual cost is a stored, queryable column**, alongside the estimate. Required by the
+   aggregates above.
+4. **No new index on the plugin run tables.** Cost must not make `sct_test_run` more
+   expensive to write for everyone, including runs that never report cost.
+5. **Argus defines no category vocabulary.** Categories are whatever the producer sends. A
+   fixed enum would mean an Argus change every time SCT grows a resource kind.
+6. **Unknown must never render as free.** An unpriced component is null, never `0`.
+7. **The run page is already dense.** The Resources table is wide before any of this; cost
    does not belong as extra columns in it.
-7. **Old clients keep working.** A producer that reports no cost sees no error and no
-   change in behaviour.
+8. **Old clients keep working.** A producer that reports no cost sees no error.
 
-## Open questions — these are the discussion
+## Settled in review
 
-1. **Category set.** Proposed: `db_node`, `loader`, `monitor`, `runner`, `oracle`,
-   `network`, `storage`, `other`. Fixed enum, or free-form strings the producer chooses?
-   Fixed gives comparable dashboards; free-form avoids Argus needing a change every time
-   SCT grows a new kind of resource.
-2. **Who owns "partial"?** Proposed: the producer sends a `complete` flag, since only it
-   knows whether a component was unpriced. The alternative — Argus infers it from null
-   categories — needs Argus to know the expected category set.
-3. **Live cost during a run.** Proposed: the producer re-reports periodically and Argus
-   shows the latest. The alternative, which #1071 currently implements, is Argus
-   extrapolating `elapsed × hourly_rate`. That inherits a real defect: Argus stamps times
-   when it is *told*, not when the instance started, and it already produced one
-   false-zero bug from clock skew. Re-reporting removes the whole class.
-4. **Where does filtering by cost live?** A `(release_id, bucket)` query table, or defer
-   entirely to the ARGUS-218 rollup? This intent assumes the latter and only requires that
-   `actual_cost` be a real stored column so either is possible.
-5. **Currency.** Assume USD everywhere, or store a currency code? Cheap now, awkward later.
-6. **Is per-instance wanted at all**, even as an extension? If nobody would use it, the
-   optional table should not be built.
-7. **Networking and storage.** The model has slots for them; SCT currently computes neither
-   ([#15979](https://github.com/scylladb/scylla-cluster-tests/pull/15979) is instance-hours
-   only). Do we ship categories that are always null until SCT catches up?
+Recorded here so they are not reopened by accident. Full threads on
+[#1071](https://github.com/scylladb/argus/pull/1071).
 
-## What this means for #1071 as it stands
+| Question | Decision |
+| --- | --- |
+| Fixed category enum, or producer-defined? | **Producer-defined, free-form.** Argus shows what it is sent and defines nothing. |
+| Live cost during a run? | **Dropped.** The estimate is shown until the run finishes, then the actual. This removes the whole live-extrapolation mechanism and shrinks the work. |
+| Currency handling? | **USD only.** A producer with another currency converts before reporting. |
+| Per-instance detail — core, or later? | **Both supported by the API; total ships first**, per-item is phase 2. Item rows carry a name and a category so Argus can sum by category now and drill down later. |
+| Networking / storage costs? | Phase 2 at the earliest. No slots reserved — they are just categories, and appear if a producer sends them. |
 
-The PR currently puts `cost`, `price_per_hour` and `is_spot` on the SCT
-`CloudInstanceDetails` UDT, `estimated_cost` on `SCTTestRun`, sums per-resource costs in
-the frontend, and adds a Cost column to the Resources table. Under this intent, most of
-that is the wrong shape: it is SCT-only, it stores no actual run cost, and it makes
-per-instance the core rather than an extension.
+## Open questions
 
-What survives is the parts that were about honesty rather than structure — `sanitize_cost`
-and the no-false-zero rules, which apply to any model — and the SCT-side contract that the
-producer computes and Argus stores.
-
-The reasonable paths are (a) reduce #1071 to the agreed core and move the per-instance
-work to a follow-up, or (b) close it and open a clean one against this spec. That is a
-decision for the reviewers, not for me to take unilaterally.
+1. **What does "partial" mean to a reader, and does it need a label?** It arises when a
+   producer reports item detail but some items are unpriced, so the total is a floor rather
+   than the real figure. Options: a `partial` / `incomplete cost` badge next to the total,
+   or a plain count of unpriced items. Worth settling before the tab is built, because it
+   determines whether the producer must send a flag or Argus can infer it from the items.
+2. **Where do the aggregate views read from?** Directly from the stored per-run cost, or
+   from a rollup maintained by [ARGUS-218](https://scylladb.atlassian.net/browse/ARGUS-218)?
+   This intent only requires that the per-run number be stored so either remains possible.

@@ -6,73 +6,67 @@
 | **Jira** | [ARGUS-205](https://scylladb.atlassian.net/browse/ARGUS-205) |
 | **PR** | [scylladb/argus#1071](https://github.com/scylladb/argus/pull/1071) |
 | **Stage** | 2 — Design |
-| **Status** | **Proposed** — not implemented; supersedes what #1071 currently contains |
+| **Status** | **Proposed** — revised against the [#1071 design review](https://github.com/scylladb/argus/pull/1071); not implemented |
 | **Date** | 2026-09-08 |
 
 ## Scope
 
-A cost model and API that is keyed by run, owned by no plugin, and stores both an estimate
-and an actual figure with a category breakdown. Plus a Costs tab on the run page that reads
-it. Per-instance cost is specified as an optional extension and is explicitly not required
-for the core to ship.
+A cost model and API keyed by run, owned by no plugin, storing an estimate and an actual
+figure. The API accepts optional per-item lines from day one; SCT sends only the total in
+phase 1. Plus a Costs tab on the run page.
+
+Live cost during a run is **out** — dropped in review. The estimate shows until the run
+finishes, then the actual. That removes the extrapolation machinery entirely.
 
 ## Data model
 
 New module `argus/backend/models/cost.py`. Nothing is added to any plugin's run model or
 UDT.
 
-### `RunCost` — one row per run, the thing everything reads
+### `RunCost` — one row per run
 
 ```python
 class RunCost(Document):
     run_id:          Annotated[UUID, PrimaryKey()]
     plugin_name:     str                       # scylla-cluster-tests | driver-matrix | ...
-    release_id:      Optional[UUID] = None     # denormalized so rollups need no join
+    release_id:      Optional[UUID] = None     # denormalized so aggregates need no join
     group_id:        Optional[UUID] = None
     test_id:         Optional[UUID] = None
-    currency:        str = "USD"
     estimated_cost:  Annotated[Optional[float], Double()] = None
     actual_cost:     Annotated[Optional[float], Double()] = None
-    is_complete:     bool = False              # False while any component is unpriced
+    unpriced_items:  int = 0                   # >0 means actual_cost is a floor
     last_reported_at: datetime
 
     class Settings:
         name = "run_cost"
 ```
 
-`actual_cost` is a **stored column**, which is the point. Requirement 3 in the intent —
-filtering and ranking by real spend — is impossible against a number that only exists as a
-read-time sum. Keeping it here rather than on `sct_test_run` also satisfies requirement 4:
-no plugin run table gains an index, and runs that never report cost pay nothing.
+`actual_cost` is a **stored column**, which is the point — intent constraint 3. Keeping it
+off `sct_test_run` satisfies constraint 4: no plugin run table gains an index, and runs
+that never report cost pay nothing. `release_id`/`group_id` are denormalized so the
+per-release and per-team aggregates can be built without joining back to the plugin's run
+table.
 
-### `RunCostByCategory` — the breakdown the Costs tab renders
+Amounts are USD. No currency column, per the review.
 
-```python
-class RunCostByCategory(Document):
-    run_id:     Annotated[UUID, PrimaryKey()]
-    category:   Annotated[str, ClusteringKey()]   # db_node|loader|monitor|runner|oracle|network|storage|other
-    cost:       Annotated[Optional[float], Double()] = None
-    unit_count: Optional[int] = None              # nodes, or GB for network
-    detail:     Optional[str] = None              # "6 x i4i.4xlarge (spot)"
-```
-
-One partition per run, a handful of rows, read whole. This is the answer to "how much did
-the DB nodes cost versus the loaders" without any per-instance storage.
-
-### `RunCostItem` — **optional extension, not core**
+### `RunCostItem` — optional detail, accepted from day one
 
 ```python
 class RunCostItem(Document):
-    run_id:         Annotated[UUID, PrimaryKey()]
-    resource_name:  Annotated[str, ClusteringKey()]
-    category:       str
-    cost:           Annotated[Optional[float], Double()] = None
-    price_per_hour: Annotated[Optional[float], Double()] = None
-    is_spot:        Optional[bool] = None
+    run_id:    Annotated[UUID, PrimaryKey()]
+    name:      Annotated[str, ClusteringKey()]   # "longevity-100gb-12h-db-node-3"
+    category:  Optional[str] = None              # free-form: "db_node", "loader", "network"...
+    cost:      Annotated[Optional[float], Double()] = None
 ```
 
-Ships only if open question 6 resolves yes. The core must not read it, and the Costs tab
-must render correctly when the table is empty.
+One partition per run, read whole. This is @soyacz's point: send the name *and* the
+category, so Argus can sum by category now and drill down to the item later, without a
+second reporting format when phase 2 arrives.
+
+**There is no category table and no category enum** (intent constraint 5). Categories are
+whatever producers send; the Costs tab groups the items it has. A category Argus has never
+seen renders like any other. When a producer sends only a total, there are no items, no
+categories, and the tab shows the total alone — which is exactly phase 1.
 
 ## API
 
@@ -83,34 +77,36 @@ POST /api/v1/client/cost/{run_id}/report
 ```
 
 ```jsonc
+// Phase 1 — SCT sends this and nothing more
+{ "plugin_name": "scylla-cluster-tests", "estimated_cost": 118.40, "actual_cost": 96.12 }
+```
+
+```jsonc
+// Phase 2 — same endpoint, same fields, plus detail
 {
   "plugin_name": "scylla-cluster-tests",
-  "currency": "USD",
   "estimated_cost": 118.40,
-  "actual_cost": 96.12,        // omit or null while unknown
-  "complete": false,           // producer says whether anything is unpriced
-  "categories": [
-    {"category": "db_node", "cost": 61.20, "unit_count": 6, "detail": "6 x i4i.4xlarge"},
-    {"category": "loader",  "cost": 18.40, "unit_count": 4},
-    {"category": "monitor", "cost": 4.10,  "unit_count": 1},
-    {"category": "runner",  "cost": 12.42, "unit_count": 1},
-    {"category": "network", "cost": null}          // slot exists, not yet computed
+  "actual_cost": 96.12,
+  "items": [
+    {"name": "longevity-100gb-12h-db-node-1", "category": "db_node", "cost": 10.20},
+    {"name": "longevity-100gb-12h-loader-node-1", "category": "loader", "cost": 4.60},
+    {"name": "sct-runner-1", "category": "runner", "cost": 12.42},
+    {"name": "egress", "category": "network", "cost": null}   // reported, not priced
   ]
 }
 ```
 
 **One call carries the whole picture.** Argus never assembles a run's cost from a stream of
-per-resource events, which is what makes it plugin-agnostic and removes the ordering and
-partial-state problems that a stream creates.
+per-resource lifecycle events — that is what keeps it plugin-agnostic and removes the
+ordering and partial-state problems a stream creates.
 
-**Idempotent and repeatable.** The producer calls it whenever it has a better number: once
-at run start with the estimate, periodically in flight, and once at teardown. Each call
-replaces the run's cost rows. This is how live cost works (open question 3) — the producer
-re-reports, and Argus shows the latest with `last_reported_at`. Argus does no
-extrapolation, so the clock-skew class of bug cannot occur.
+**Idempotent.** Each call replaces the run's cost and its items. A producer calls it when
+it has the estimate, and again when it has the actual. Repeated calls are safe; there is no
+merge semantics to reason about.
 
-**Categories replace wholesale, per call.** A partial category list would need merge rules
-nobody wants to reason about.
+`actual_cost` is taken as sent, not recomputed from the items — the producer owns the
+arithmetic (intent constraint 1). `unpriced_items` is derived by Argus as the count of
+items with a null cost, so the producer needs no flag.
 
 ### Read
 
@@ -122,91 +118,93 @@ GET /api/v1/run/{plugin_name}/{run_id}/cost
 {
   "status": "ok",
   "response": {
-    "currency": "USD", "estimated_cost": 118.40, "actual_cost": 96.12,
-    "is_complete": false, "last_reported_at": "2026-09-08T09:12:00Z",
-    "categories": [ /* as above, ordered by cost desc */ ]
+    "estimated_cost": 118.40, "actual_cost": 96.12,
+    "unpriced_items": 1, "last_reported_at": "2026-09-08T09:12:00Z",
+    "by_category": [ {"category": "db_node", "cost": 61.20, "item_count": 6} ],
+    "items": [ /* … */ ]
   }
 }
 ```
 
-Separate from the run payload so the run page does not get heavier for viewers who never
-open the tab, and so a plugin with no cost data costs one cheap miss.
+`by_category` is computed on read from the run's own item partition — a handful of rows,
+one partition, no stored aggregate to keep consistent. Empty in phase 1.
+
+Separate from the run payload, so the run page does not get heavier for viewers who never
+open the tab.
 
 ### Client
 
 ```python
-client.report_cost(estimated_cost=..., actual_cost=..., complete=..., categories=[...])
+client.report_cost(estimated_cost=..., actual_cost=..., items=None)
 ```
 
-On the shared client base, not `ArgusSCTClient`, since dtest and driver-matrix get it for
-free that way.
+On the shared client base, not `ArgusSCTClient`, so dtest and driver-matrix get it free.
 
 ## Requirements
 
-| # | Requirement | Note |
-| --- | --- | --- |
-| F1 | Cost is stored keyed by `run_id` with a plugin name, in tables no plugin owns. | Intent constraint 2 |
-| F2 | Both `estimated_cost` and `actual_cost` are stored columns. | Intent constraint 3 |
-| F3 | A category breakdown is stored and returned, ordered by cost. | soyacz's "db nodes vs loaders vs monitor vs networking" |
-| F4 | Re-reporting replaces the run's cost atomically; the endpoint is idempotent. | Live cost |
-| F5 | An unpriced component is `null`; a non-positive or non-finite report is coerced to `null`, never stored. | `sanitize_cost`, carried over from #1071 |
-| F6 | A total with any unpriced component renders as partial. | Intent constraint 5 |
-| F7 | A producer that reports nothing behaves exactly as today. | Intent constraint 7 |
-| F8 | The core reads nothing from `RunCostItem`. | Keeps per-instance optional |
+| # | Requirement |
+| --- | --- |
+| F1 | Cost is stored keyed by `run_id` with a plugin name, in tables no plugin owns. |
+| F2 | Both `estimated_cost` and `actual_cost` are stored, queryable columns. |
+| F3 | The API accepts optional per-item lines carrying name and free-form category. |
+| F4 | Argus defines no category vocabulary and rejects no category. |
+| F5 | Re-reporting replaces the run's cost and items atomically; the endpoint is idempotent. |
+| F6 | A non-positive or non-finite amount is coerced to `null`, never stored — including booleans. |
+| F7 | A total with unpriced items is presented as a floor, not a complete figure. |
+| F8 | A producer that reports nothing behaves exactly as today. |
+| F9 | Phase 1 (total only) and phase 2 (total + items) use the same endpoint and payload shape. |
 
-| # | Non-functional | |
-| --- | --- | --- |
-| N1 | No index added to any plugin run table. | Intent constraint 4 |
-| N2 | Run-page load does not get slower for users who never open the Costs tab. | Separate endpoint |
-| N3 | One partition read per run for the whole breakdown. | |
-| N4 | No migration of existing runs; no backfill is possible. | Costs of past runs are unknown |
+| # | Non-functional |
+| --- | --- |
+| N1 | No index added to any plugin run table. |
+| N2 | Run-page load unchanged for users who never open the Costs tab. |
+| N3 | One partition read per run for the whole breakdown. |
+| N4 | No migration of existing runs; no backfill is possible — past costs are unknown. |
 
 ## Frontend
 
-A **Costs tab** beside Resources, per k0machi. Not columns in the Resources table, which is
-already too wide (intent constraint 6).
+A **Costs tab** beside Resources — not columns in the Resources table, which is already too
+wide.
 
-Contents: the run total with its estimate beside it and a partial marker when applicable; a
-category table with a bar per row so the dominant line is obvious at a glance; and
-`last_reported_at`, because a live figure that might be stale must say when it was taken.
-If `RunCostItem` ships, a collapsed per-resource section goes at the bottom.
+Contents: the actual cost with the estimate beside it, or the estimate alone while the run
+is unfinished. When items exist, a table grouped by category with a bar per row so the
+dominant line is obvious. When they do not, the total alone — phase 1 must not look broken.
+
+Open question 1 in the intent covers how an incomplete total is labelled; the tab needs
+that answer before it is built.
 
 ## Flagged for policy owners
 
-1. **Category enum vs free-form** (open question 1) — a product decision about whether
-   cross-run dashboards must compare like with like.
-2. **Whether per-instance is wanted at all** (open question 6) — if not, `RunCostItem`
-   should never be built.
-3. **Currency handling** (open question 5) — cheap now, a migration later.
-4. **Retention.** Cost rows outlive nothing in particular and are never cleaned up. Whoever
-   owns storage growth should say whether they should follow run retention.
+1. **Labelling an incomplete total** — intent open question 1. Product decision.
+2. **Where aggregates read from** — intent open question 2. Affects whether ARGUS-218 owns
+   a rollup or queries these tables directly.
+3. **Retention.** Cost rows are never cleaned up. Whoever owns storage growth should say
+   whether they follow run retention.
 
 ## Verification
 
-- Unit: `sanitize_cost` boundary behaviour — zero, negative, NaN, the infinities, booleans.
-- API: report → read round-trip; re-report replaces rather than merges; a report with no
-  actual cost; a producer that never reports; a category list with a null cost.
-- Cross-plugin: the same endpoint exercised against a non-SCT run, which is the requirement
-  the current implementation cannot meet at all.
-- Frontend: the Costs tab with complete, partial, and absent data; unit tests on the
-  formatting and partial logic.
+- Unit: amount sanitisation — zero, negative, NaN, infinities, booleans.
+- API: report → read round-trip; re-report replaces rather than merges; total-only (phase 1)
+  and total-plus-items (phase 2); items with a null cost counted into `unpriced_items`;
+  a category never seen before.
+- Cross-plugin: the same endpoint against a non-SCT run — the requirement the current
+  implementation cannot meet at all.
+- Frontend: the tab with total-only, with items, and with nothing.
 
 ## Out of scope
 
-- Cross-run aggregation and the Cost Explorer — [ARGUS-218](https://scylladb.atlassian.net/browse/ARGUS-218),
-  which should read `RunCost` rather than inventing its own.
-- Budgets, threshold alerts and approval gates — [SCT-851](https://scylladb.atlassian.net/browse/SCT-851) phases 3-4.
+- Cross-run aggregation and the Cost Explorer — [ARGUS-218](https://scylladb.atlassian.net/browse/ARGUS-218).
+- Budgets, threshold alerts, approval gates — [SCT-851](https://scylladb.atlassian.net/browse/SCT-851) phases 3-4.
+- Live cost during a run — dropped in review.
 - Any pricing computation in Argus, permanently.
-- Networking and storage *computation* — the model has the slots; producing the numbers is
-  SCT's side and not yet built.
 
-## Appendix — what #1071 currently implements, and why this differs
+## Appendix — delta from what #1071 implements today
 
-| Current in #1071 | This spec | Why |
+| Currently in #1071 | This spec | Why |
 | --- | --- | --- |
-| `cost`/`price_per_hour`/`is_spot` on the SCT `CloudInstanceDetails` UDT | `RunCost` + `RunCostByCategory`, plugin-agnostic | Cost is not an SCT concept |
-| `estimated_cost` on `SCTTestRun`; actual summed at read time | Both stored columns on `RunCost` | Cannot filter or rank on a read-time sum |
-| Cost column added to the Resources table | Separate Costs tab | The table is already too wide |
-| Per-instance is the storage unit | Per-run is the unit; per-instance optional | Forces a per-resource schema on every plugin |
-| Argus extrapolates live cost from `elapsed × rate` | Producer re-reports; Argus shows the latest | Argus's timestamps are when it was told, not when the instance ran — this already caused a false-zero bug |
-| `sanitize_cost`, no-false-zero rules | **Kept unchanged** | Structure-independent, and the review round proved them necessary |
+| `cost`/`price_per_hour`/`is_spot` on the SCT `CloudInstanceDetails` UDT | `RunCost` + `RunCostItem`, plugin-agnostic | Cost is not an SCT concept |
+| `estimated_cost` on `SCTTestRun`; actual summed at read time | Both stored columns on `RunCost` | Cannot filter or rank a read-time sum |
+| Cost column in the Resources table | Separate Costs tab | The table is already too wide |
+| Per-instance is the storage unit | Run is the unit; items optional, phase 2 | Phase 1 ships sooner; API still accepts both |
+| Argus extrapolates live cost from `elapsed × rate` | **Removed** | Dropped in review; deletes the mechanism and its bug class |
+| `sanitize_cost` and the no-false-zero rules | **Kept unchanged** | Model-independent, and the review round proved them necessary |
