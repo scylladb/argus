@@ -82,10 +82,16 @@ func ActivityKey(runID string) string {
 }
 
 // ResultsKey returns the cache key for a run's performance result tables.
+// The variant stays above the run ID so neither entry lands under the legacy
+// results/{testID}/{runID} leaf written by older CLI versions.
 //
-// On disk: cache/results/{testID}/{runID}/
-func ResultsKey(testID, runID string) string {
-	return path.Join("results", testID, runID)
+// On disk: cache/results/{testID}/{visible|all}/{runID}/
+func ResultsKey(testID, runID string, includeHidden bool) string {
+	variant := "visible"
+	if includeHidden {
+		variant = "all"
+	}
+	return path.Join("results", testID, variant, runID)
 }
 
 // RunCommentsKey returns the cache key for the comments on a run.
