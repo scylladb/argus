@@ -3,13 +3,13 @@ from typing import Any
 
 from qatools_health.checks.primitives import BinaryHealthCheck, first_line, run_command
 from qatools_health.result import HealthCheckResult
-from qatools_health.status import HealthCheckStatus
+from qatools_health.status import HealthCheckStatus, Severity
 
 
 class OpencodeHealthCheck(BinaryHealthCheck):
     name = "opencode"
     binary = "opencode"
-    critical = True
+    severity = Severity.CRITICAL
     interval = 900.0
 
 
@@ -29,19 +29,13 @@ class GhCliHealthCheck(BinaryHealthCheck):
         path = shutil.which(self.binary)
         code, output = await run_command(path, "auth", "status")
         if code != 0:
-            return HealthCheckResult(self.failure_status, f"gh auth status exited {code}: {first_line(output)}")
+            return HealthCheckResult.unhealthy(f"gh auth status exited {code}: {first_line(output)}")
         return HealthCheckResult.healthy(f"{version.message}, authenticated")
 
 
 class AcliHealthCheck(BinaryHealthCheck):
     name = "acli"
     binary = "acli"
-    interval = 900.0
-
-
-class Md2AdfHealthCheck(BinaryHealthCheck):
-    name = "md2adf"
-    binary = "md2adf"
     interval = 900.0
 
 

@@ -1,9 +1,7 @@
-import asyncio
-
 from prometheus_client import CollectorRegistry, generate_latest
+from support import ScriptedCheck, settle, spin
 
-from qatools_health import HealthCheckResult, HealthCheckRunner, HealthCheckStatus
-from tests.conftest import ScriptedCheck
+from qatools_health import HealthCheckResult, HealthCheckRunner, HealthCheckStatus, Severity
 
 
 def families(runner):
@@ -18,12 +16,19 @@ def sample(runner, name, **labels):
     return None
 
 
-def build(checks, clock, **kwargs):
-    return HealthCheckRunner(checks, service="argus", version="1.4.0", clock=clock, **kwargs)
+def build(clock, *checks, **kwargs):
+    runner = HealthCheckRunner(service="argus", version="1.4.0", clock=clock, **kwargs)
+    for check in checks:
+        runner.register(check)
+    return runner
+
+
+def state_of(runner):
+    return next(iter(runner._states.values()))
 
 
 def test_every_family_the_spec_lists_is_present(clock):
-    runner = build([ScriptedCheck(name="jira")], clock)
+    runner = build(clock, ScriptedCheck(name="jira"))
     assert set(families(runner)) == {
         "healthcheck_status",
         "healthcheck_dependency_up",
@@ -31,6 +36,7 @@ def test_every_family_the_spec_lists_is_present(clock):
         "healthcheck_last_success_timestamp_seconds",
         "healthcheck_last_run_timestamp_seconds",
         "healthcheck_stale",
+        "healthcheck_subscribers",
         "healthcheck_oldest_result_timestamp_seconds",
         "healthcheck_newest_result_timestamp_seconds",
         "healthcheck_runner_up",
@@ -38,56 +44,67 @@ def test_every_family_the_spec_lists_is_present(clock):
     }
 
 
-def test_a_check_that_has_not_run_publishes_its_failure_status(clock):
-    runner = build([ScriptedCheck(name="jira", critical=True)], clock)
+def test_a_check_that_has_not_run_publishes_unhealthy(clock):
+    runner = build(clock, ScriptedCheck(name="jira", severity=Severity.CRITICAL))
     assert sample(runner, "healthcheck_dependency_up", dependency="jira").value == 0.0
     assert sample(runner, "healthcheck_last_run_timestamp_seconds", dependency="jira").value == 0.0
     assert sample(runner, "healthcheck_stale", dependency="jira").value == 1.0
     assert sample(runner, "healthcheck_status", service="argus").value == 0.0
 
 
-def test_the_critical_flag_is_a_label(clock):
-    runner = build([ScriptedCheck(name="scylla", critical=True), ScriptedCheck(name="jira")], clock)
-    assert sample(runner, "healthcheck_dependency_up", dependency="scylla").labels["critical"] == "true"
-    assert sample(runner, "healthcheck_dependency_up", dependency="jira").labels["critical"] == "false"
+def test_the_dependency_series_carries_no_severity(clock):
+    runner = build(clock, ScriptedCheck(name="scylla", severity=Severity.CRITICAL))
+    assert set(sample(runner, "healthcheck_dependency_up", dependency="scylla").labels) == {"service", "dependency"}
+
+
+def test_the_subscriber_count_follows_the_subscriptions(clock):
+    runner = build(clock, ScriptedCheck(name="jira"))
+    assert sample(runner, "healthcheck_subscribers", dependency="jira").value == 1.0
+    runner.register(ScriptedCheck(name="jira"))
+    assert sample(runner, "healthcheck_subscribers", dependency="jira").value == 2.0
 
 
 async def test_a_degraded_check_reads_as_a_half(clock):
     check = ScriptedCheck([HealthCheckResult.degraded("queue depth 812")], name="queue")
-    runner = build([check], clock)
+    runner = build(clock, check)
     runner.start()
-    async with asyncio.timeout(2):
-        while check.calls < 1:
-            await asyncio.sleep(0)
+    await settle(check)
     assert sample(runner, "healthcheck_dependency_up", dependency="queue").value == 0.5
     assert sample(runner, "healthcheck_status", service="argus").value == 1.0
     await runner.stop()
 
 
 def test_the_info_family_carries_the_version(clock):
-    runner = build([ScriptedCheck(name="jira")], clock)
-    info = sample(runner, "healthcheck_info", service="argus")
-    assert info.labels["version"] == "1.4.0"
+    runner = build(clock, ScriptedCheck(name="jira"))
+    assert sample(runner, "healthcheck_info", service="argus").labels["version"] == "1.4.0"
 
 
 def test_no_message_reaches_a_label(clock):
-    check = ScriptedCheck(name="jira")
-    runner = build([check], clock)
-    runner._states[0].message = "the Jira token expired on Tuesday"
+    runner = build(clock, ScriptedCheck(name="jira"))
+    state_of(runner).message = "the Jira token expired on Tuesday"
     for family in runner.collector.collect():
         for item in family.samples:
             assert "expired" not in "".join(item.labels.values())
 
 
-def test_the_series_follow_the_list_of_checks(clock):
-    two = build([ScriptedCheck(name="a"), ScriptedCheck(name="b")], clock)
-    one = build([ScriptedCheck(name="a")], clock)
+def test_the_series_follow_the_registered_checks(clock):
+    two = build(clock, ScriptedCheck(name="a"), ScriptedCheck(name="b"))
+    one = build(clock, ScriptedCheck(name="a"))
     assert len(families(two)["healthcheck_dependency_up"].samples) == 2
     assert len(families(one)["healthcheck_dependency_up"].samples) == 1
 
 
+async def test_retiring_a_check_removes_its_series(clock):
+    runner = build(clock, ScriptedCheck(name="a"))
+    subscription = runner.register(ScriptedCheck(name="b"))
+    assert len(families(runner)["healthcheck_dependency_up"].samples) == 2
+    subscription.close()
+    await spin()
+    assert sample(runner, "healthcheck_dependency_up", dependency="b") is None
+
+
 async def test_runner_up_drops_after_stop(clock):
-    runner = build([ScriptedCheck(name="jira")], clock)
+    runner = build(clock, ScriptedCheck(name="jira"))
     runner.start()
     assert sample(runner, "healthcheck_runner_up", service="argus").value == 1.0
     await runner.stop()
@@ -95,17 +112,22 @@ async def test_runner_up_drops_after_stop(clock):
 
 
 def test_the_result_window_is_zero_before_the_first_run(clock):
-    runner = build([ScriptedCheck(name="a"), ScriptedCheck(name="b")], clock)
+    runner = build(clock, ScriptedCheck(name="a"), ScriptedCheck(name="b"))
     assert sample(runner, "healthcheck_oldest_result_timestamp_seconds", service="argus").value == 0.0
     assert sample(runner, "healthcheck_newest_result_timestamp_seconds", service="argus").value == 0.0
 
 
+def test_the_result_window_is_zero_with_no_checks(clock):
+    runner = build(clock)
+    assert sample(runner, "healthcheck_oldest_result_timestamp_seconds", service="argus").value == 0.0
+
+
 def test_the_collector_registers_and_unregisters(clock):
     registry = CollectorRegistry()
-    runner = build([ScriptedCheck(name="jira")], clock)
-    runner.register(registry)
+    runner = build(clock, ScriptedCheck(name="jira"))
+    runner.register_collector(registry)
     assert b"healthcheck_status" in generate_latest(registry)
-    runner.unregister(registry)
+    runner.unregister_collector(registry)
     assert b"healthcheck_status" not in generate_latest(registry)
 
 
@@ -115,8 +137,8 @@ def test_the_aggregate_gauge_maps_every_status(clock):
         (HealthCheckStatus.DEGRADED, 1.0),
         (HealthCheckStatus.UNHEALTHY, 0.0),
     ):
-        check = ScriptedCheck(name="jira", stale_after_intervals=1000, critical=True)
-        runner = build([check], clock)
-        runner._states[0].status = status
-        runner._states[0].last_run_timestamp = clock.now
+        runner = build(clock, ScriptedCheck(name="jira", stale_after_intervals=1000, severity=Severity.CRITICAL))
+        state = state_of(runner)
+        state.status = status
+        state.last_run_timestamp = clock.now
         assert sample(runner, "healthcheck_status", service="argus").value == expected

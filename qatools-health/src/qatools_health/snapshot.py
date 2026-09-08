@@ -1,12 +1,12 @@
 from dataclasses import dataclass, field
 
-from qatools_health.status import HealthCheckStatus
+from qatools_health.status import HealthCheckStatus, Severity
 
 
 @dataclass(frozen=True, slots=True)
 class CheckSnapshot:
     name: str
-    critical: bool
+    severity: Severity
     status: HealthCheckStatus
     message: str = ""
     error: str | None = None
@@ -14,6 +14,7 @@ class CheckSnapshot:
     last_run_timestamp: float = 0.0
     last_success_timestamp: float = 0.0
     stale: bool = True
+    subscribers: int = 0
 
 
 @dataclass(frozen=True, slots=True)

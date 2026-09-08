@@ -6,11 +6,12 @@ from typing import Any
 
 from qatools_health.check import HealthCheck
 from qatools_health.result import HealthCheckResult
+from qatools_health.status import Severity
 
 
 class SqliteHealthCheck(HealthCheck):
     name = "sqlite"
-    critical = True
+    severity = Severity.CRITICAL
     interval = 60.0
     timeout = 5.0
 

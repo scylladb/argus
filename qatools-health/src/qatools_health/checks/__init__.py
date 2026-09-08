@@ -3,7 +3,6 @@ from qatools_health.checks.cli_tools import (
     ArgusCliHealthCheck,
     GhCliHealthCheck,
     JenkinsCliHealthCheck,
-    Md2AdfHealthCheck,
     OpencodeHealthCheck,
 )
 from qatools_health.checks.databases import SqliteHealthCheck
@@ -39,7 +38,6 @@ __all__ = [
     "JenkinsCliHealthCheck",
     "JiraApiHealthCheck",
     "MaiaApiHealthCheck",
-    "Md2AdfHealthCheck",
     "OpencodeHealthCheck",
     "SqliteHealthCheck",
     "StalenessHealthCheck",

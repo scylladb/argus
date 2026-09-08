@@ -30,7 +30,7 @@ class HealthMetricsCollector:
         dependency_up = GaugeMetricFamily(
             "healthcheck_dependency_up",
             "Health of one dependency: 1 healthy, 0.5 degraded, 0 unhealthy",
-            labels=["service", "dependency", "critical"],
+            labels=DEPENDENCY,
         )
         duration = GaugeMetricFamily(
             "healthcheck_duration_seconds",
@@ -52,17 +52,20 @@ class HealthMetricsCollector:
             "1 when the last value is older than stale_after_intervals intervals",
             labels=DEPENDENCY,
         )
+        subscribers = GaugeMetricFamily(
+            "healthcheck_subscribers",
+            "Open subscriptions holding this check",
+            labels=DEPENDENCY,
+        )
 
         for check in snapshot.checks:
             labels = [service, check.name]
-            dependency_up.add_metric(
-                [service, check.name, str(check.critical).lower()],
-                DEPENDENCY_GAUGE_VALUE[check.status],
-            )
+            dependency_up.add_metric(labels, DEPENDENCY_GAUGE_VALUE[check.status])
             duration.add_metric(labels, check.duration_seconds)
             last_success.add_metric(labels, check.last_success_timestamp)
             last_run.add_metric(labels, check.last_run_timestamp)
             stale.add_metric(labels, 1.0 if check.stale else 0.0)
+            subscribers.add_metric(labels, float(check.subscribers))
 
         completions = [check.last_run_timestamp for check in snapshot.checks]
         oldest = GaugeMetricFamily(
@@ -95,6 +98,7 @@ class HealthMetricsCollector:
             last_success,
             last_run,
             stale,
+            subscribers,
             oldest,
             newest,
             runner_up,

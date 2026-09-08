@@ -32,10 +32,10 @@ class StalenessHealthCheck(HealthCheck):
         if inspect.isawaitable(value):
             value = await value
         if value is None:
-            return HealthCheckResult(self.failure_status, "no timestamp recorded yet")
+            return HealthCheckResult.unhealthy("no timestamp recorded yet")
         age = self.clock() - float(value)
         if age > self.fail_after:
-            return HealthCheckResult(self.failure_status, f"last update {age:.0f}s ago, over {self.fail_after:g}s")
+            return HealthCheckResult.unhealthy(f"last update {age:.0f}s ago, over {self.fail_after:g}s")
         if age > self.warn_after:
             return HealthCheckResult.degraded(f"last update {age:.0f}s ago, over {self.warn_after:g}s")
         return HealthCheckResult.healthy(f"last update {age:.0f}s ago")

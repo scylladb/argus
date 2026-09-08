@@ -4,6 +4,7 @@ import httpx
 
 from qatools_health.checks.primitives import HttpHealthCheck
 from qatools_health.result import HealthCheckResult
+from qatools_health.status import Severity
 
 GITHUB_API_URL = "https://api.github.com"
 ANTHROPIC_API_URL = "https://api.anthropic.com"
@@ -14,14 +15,22 @@ def join(base_url: str, path: str) -> str:
     return f"{base_url.rstrip('/')}/{path.lstrip('/')}"
 
 
+def base_of(base_url: str | None, client: httpx.AsyncClient | None, dependency: str) -> str:
+    if base_url:
+        return base_url
+    carried = str(client.base_url) if client is not None else ""
+    if carried:
+        return carried
+    raise ValueError(f"{dependency} needs a base URL, either its own or one the client carries")
+
+
 class JenkinsApiHealthCheck(HttpHealthCheck):
     name = "jenkins_api"
-    critical = True
     interval = 120.0
 
     def __init__(
         self,
-        base_url: str,
+        base_url: str | None = None,
         user: str | None = None,
         token: str | None = None,
         *,
@@ -29,7 +38,8 @@ class JenkinsApiHealthCheck(HttpHealthCheck):
         **kwargs: Any,
     ) -> None:
         auth = httpx.BasicAuth(user, token) if user and token else None
-        super().__init__(join(base_url, "api/json?tree=mode"), auth=auth, client=client, **kwargs)
+        base = base_of(base_url, client, "jenkins_api")
+        super().__init__(join(base, "api/json?tree=mode"), auth=auth, client=client, **kwargs)
 
 
 class JiraApiHealthCheck(HttpHealthCheck):
@@ -38,7 +48,7 @@ class JiraApiHealthCheck(HttpHealthCheck):
 
     def __init__(
         self,
-        base_url: str,
+        base_url: str | None = None,
         email: str | None = None,
         token: str | None = None,
         *,
@@ -46,7 +56,8 @@ class JiraApiHealthCheck(HttpHealthCheck):
         **kwargs: Any,
     ) -> None:
         auth = httpx.BasicAuth(email, token) if email and token else None
-        super().__init__(join(base_url, "rest/api/3/myself"), auth=auth, client=client, **kwargs)
+        base = base_of(base_url, client, "jira_api")
+        super().__init__(join(base, "rest/api/3/myself"), auth=auth, client=client, **kwargs)
 
 
 class GitHubApiHealthCheck(HttpHealthCheck):
@@ -70,10 +81,13 @@ class GitHubApiHealthCheck(HttpHealthCheck):
         self.expected_login = expected_login
         super().__init__(join(base_url, "rate_limit"), headers=headers, client=client, **kwargs)
 
+    def identity(self) -> tuple[object, ...]:
+        return (type(self), self.url, self.expected_login)
+
     async def perform_check(self) -> Any:
         response = await self.request(self.url)
         if response.status_code not in self.expect:
-            return HealthCheckResult(self.failure_status, f"rate_limit answered {response.status_code}")
+            return HealthCheckResult.unhealthy(f"rate_limit answered {response.status_code}")
         core = response.json().get("resources", {}).get("core", {})
         budget = f"{core.get('remaining', '?')}/{core.get('limit', '?')} core requests left"
 
@@ -82,13 +96,10 @@ class GitHubApiHealthCheck(HttpHealthCheck):
 
         identity = await self.request(join(self.base_url, "user"))
         if identity.status_code not in self.expect:
-            return HealthCheckResult(self.failure_status, f"user answered {identity.status_code}")
+            return HealthCheckResult.unhealthy(f"user answered {identity.status_code}")
         login = identity.json().get("login")
         if login != self.expected_login:
-            return HealthCheckResult(
-                self.failure_status,
-                f"the token belongs to {login!r}, expected {self.expected_login!r}",
-            )
+            return HealthCheckResult.unhealthy(f"the token belongs to {login!r}, expected {self.expected_login!r}")
         return HealthCheckResult.healthy(f"{login}, {budget}")
 
 
@@ -98,7 +109,7 @@ class ArgusApiHealthCheck(HttpHealthCheck):
 
     def __init__(
         self,
-        base_url: str,
+        base_url: str | None = None,
         token: str | None = None,
         cf_id: str | None = None,
         cf_secret: str | None = None,
@@ -112,13 +123,13 @@ class ArgusApiHealthCheck(HttpHealthCheck):
         if cf_id and cf_secret:
             headers["CF-Access-Client-Id"] = cf_id
             headers["CF-Access-Client-Secret"] = cf_secret
-        url = join(base_url, "api/v1/notifications/get_unread")
-        super().__init__(url, headers=headers, client=client, **kwargs)
+        base = base_of(base_url, client, "argus_api")
+        super().__init__(join(base, "api/v1/notifications/get_unread"), headers=headers, client=client, **kwargs)
 
 
 class AnthropicApiHealthCheck(HttpHealthCheck):
     name = "llm_api"
-    critical = True
+    severity = Severity.CRITICAL
     interval = 300.0
 
     def __init__(
@@ -147,7 +158,7 @@ class MaiaApiHealthCheck(HttpHealthCheck):
 
     def __init__(
         self,
-        base_url: str,
+        base_url: str | None = None,
         token: str | None = None,
         *,
         path: str = "",
@@ -155,4 +166,5 @@ class MaiaApiHealthCheck(HttpHealthCheck):
         **kwargs: Any,
     ) -> None:
         headers = {"Authorization": f"Bearer {token}"} if token else {}
-        super().__init__(join(base_url, path), headers=headers, client=client, **kwargs)
+        base = base_of(base_url, client, "maia_api")
+        super().__init__(join(base, path), headers=headers, client=client, **kwargs)

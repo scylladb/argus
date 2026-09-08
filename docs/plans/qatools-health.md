@@ -2,7 +2,7 @@
 status: in_progress
 domain: infrastructure
 created: 2026-09-03
-last_updated: 2026-09-03
+last_updated: 2026-09-08
 owner: CodeLieutenant
 ---
 
@@ -50,15 +50,18 @@ in `scylladb/zeus` (PR 179). This plan implements that spec.
 1. A `qatools-health` package builds and tests on its own, and imports nothing
    from `argus`.
 2. The package depends on `prometheus-client` and `httpx`, and on nothing else.
-3. The public API matches the spec exactly: `HealthCheckStatus`,
-   `HealthCheckResult`, `HealthCheck`, `healthcheck`, `HealthCheckRunner`.
-4. The runner emits the ten metric families the spec lists, with the label sets
-   the spec gives.
-5. Every built-in check class the spec lists exists, except
+3. The public API matches the spec exactly: `HealthCheckStatus`, `Severity`,
+   `HealthCheckResult`, `HealthCheck`, `healthcheck`, `HealthCheckRunner`,
+   `HealthCheckSubscription`, `HealthCheckGroup` and `SubscriptionClosedError`.
+4. The runner emits the eleven metric families the spec lists, with the label
+   sets the spec gives.
+5. A caller subscribes to a dependency, gates its own loop on that
+   subscription, and never holds a registry of its own.
+6. Every built-in check class the spec lists exists, except
    `ScyllaHealthCheck`, which needs `scylla-driver`.
-6. Test coverage of the package is 90 percent or higher, measured by
+7. Test coverage of the package is 90 percent or higher, measured by
    `pytest --cov=qatools_health`.
-7. `ruff check qatools-health` reports zero findings.
+8. `ruff check qatools-health` reports zero findings.
 
 ## 4. Implementation Phases
 
@@ -84,8 +87,9 @@ value types the rest of the package builds on.
 
 **Importance**: Critical
 
-- `check.py`: the `HealthCheck` abstract base, its class attributes, and the
-  keyword-only constructor that overrides any of them per instance.
+- `check.py`: the `HealthCheck` abstract base, its class attributes, the
+  keyword-only constructor that overrides any of them per instance, and the
+  identity the runner keys a check by.
 - The `healthcheck` decorator, which builds an instance from an async function.
 
 **Definition of Done**
@@ -94,6 +98,8 @@ value types the rest of the package builds on.
 - [x] A constructor keyword overrides the matching class attribute.
 - [x] `aclose()` is a no-op unless a subclass overrides it.
 - [x] The decorator returns a `HealthCheck` instance, and registers nothing.
+- [x] Two instances built from the same arguments share one identity, and a
+      policy keyword never enters it.
 
 ### Phase 3: Runner, scheduling and aggregation
 
@@ -106,13 +112,16 @@ value types the rest of the package builds on.
 
 **Definition of Done**
 
-- [x] A duplicate check name raises at construction.
-- [x] A run over its timeout records `failure_status` with `timed out after Ns`.
+- [x] A second name for one identity, and a second identity under one name,
+      both raise at registration.
+- [x] A run over its timeout records UNHEALTHY with `timed out after Ns`.
 - [x] A check slower than its interval never overlaps itself.
 - [x] A status change logs once: INFO on recovery, WARNING on failure.
 - [x] A stale check contributes at least DEGRADED, and never softens a status.
-- [x] `stop()` cancels the timers, awaits the runs in flight, then calls
-      `aclose()` on every check.
+- [x] A `CRITICAL` failure fails the service, an `IMPORTANT` one degrades it,
+      and an `OPTIONAL` one changes the aggregate not at all.
+- [x] `stop()` cancels the timers, awaits the runs in flight, calls `aclose()`
+      on every check, and ends every open subscription.
 
 ### Phase 4: Prometheus collector
 
@@ -120,14 +129,14 @@ value types the rest of the package builds on.
 
 - `collector.py`: a `Collector` that builds the metric families from the last
   result of every check. It runs no check and does no I/O.
-- `register()` and `unregister()` on the runner.
+- `register_collector()` and `unregister_collector()` on the runner.
 
 **Definition of Done**
 
-- [x] The ten families in the spec appear with the given names and labels.
-- [x] A check that has not run publishes `failure_status` and a last-run
-      timestamp of 0.
-- [x] Removing a check removes its series.
+- [x] The eleven families in the spec appear with the given names and labels.
+- [x] A check that has not run publishes UNHEALTHY and a last-run timestamp
+      of 0.
+- [x] Retiring a check removes its series.
 - [x] `healthcheck_runner_up` reads 0 after `stop()`.
 - [x] No message text reaches a label.
 
@@ -151,13 +160,13 @@ value types the rest of the package builds on.
 
 - `checks/http_apis.py`: Jenkins, Jira, GitHub, Argus, Anthropic, Headroom and
   Maia.
-- `checks/cli_tools.py`: opencode, gh, acli, md2adf, argus and jenkins.
+- `checks/cli_tools.py`: opencode, gh, acli, argus and jenkins.
 - `checks/databases.py`: `SqliteHealthCheck`.
 - `checks/local.py`: `StalenessHealthCheck`.
 
 **Definition of Done**
 
-- [x] Every class carries its own default name, criticality and interval.
+- [x] Every class carries its own default name, severity and interval.
 - [x] Every class that talks over HTTP accepts `client=` for a live client.
 - [x] `GitHubApiHealthCheck` compares the login when one is given.
 - [x] `SqliteHealthCheck` names itself `sqlite:<stem>` from a path.
@@ -175,6 +184,39 @@ value types the rest of the package builds on.
 
 - [x] The README documents every public class and every metric.
 - [x] The workflow runs on a change under `qatools-health/`.
+- [x] The workflow builds its own virtual environment, because the runner
+      image refuses a `--system` install under PEP 668.
+- [x] The Argus suite does not walk into `qatools-health/`, which has its own
+      environment and its own job.
+
+### Phase 8: Subscriptions and groups
+
+**Importance**: Critical
+
+- `subscription.py`: `CheckState`, `HealthCheckSubscription`,
+  `HealthCheckGroup` and `SubscriptionClosedError`.
+- `register()` returns a subscription, `register_all()` returns a group, and
+  the runner keys a check by identity so two callers of one dependency share
+  one probe loop.
+- `healthcheck_subscribers`, and the retirement of a check the last
+  subscription let go.
+
+**Definition of Done**
+
+- [x] Two registrations of one dependency give one probe loop, one series and
+      a subscriber count of two.
+- [x] A duplicate registration takes the strictest policy of the two.
+- [x] `register()` is safe from a thread other than the loop's.
+- [x] `wait_for()` returns at once on a status the check already reads, raises
+      `TimeoutError` past its timeout, and `SubscriptionClosedError` when the
+      subscription closes under it.
+- [x] A subscriber gets the current result as its first callback, and a
+      never-run check delivers none.
+- [x] A group reads the worst status of its members, and looks a member up by
+      identity.
+- [x] `register_all()` registers every check or none.
+- [x] The last `close()` retires the check, calls `aclose()`, drops the series
+      and recomputes the aggregate.
 
 ## 5. Testing Requirements
 
@@ -182,13 +224,20 @@ value types the rest of the package builds on.
 They cover:
 
 - The coercion table, one case per row.
+- Identity, over the default, an override, and an unhashable argument.
 - Aggregation, one case per rule, including the stale interaction.
+- Subscriptions and groups, over registration, waiting, callbacks and
+  retirement.
 - Scheduling, with a fake clock, covering timeout, overlap and spread.
 - The collector, over a registry built for the test.
 - Each primitive, against a local HTTP server or a fake client.
 
 **Integration tests** are not needed. The package opens no port, reads no
 configuration and talks to no service of its own.
+
+`tests/test_wiring.py` runs the shape the README documents end to end: a
+runner under `run()`, four wiring subscriptions, a gated group, and the
+exposition read from a private registry.
 
 **Manual testing**: register a runner with two checks in a Python shell, call
 `start()`, and read `generate_latest()` twice to confirm the values move.
@@ -208,5 +257,6 @@ Every Definition of Done above is met, and:
 | Argus has no process to host an async runner, so the package ships unused | High | Medium | Accepted for now. This plan builds the package only. Argus wiring is a separate plan, and it must first choose a host process. |
 | A custom collector is invisible under `PROMETHEUS_MULTIPROC_DIR` | High | High | Argus wiring must either run the runner in a single-process daemon with its own exporter, or write `mostrecent` gauges. The package keeps the collector, because Zeus and Maia are single-process. |
 | The spec ties checks to async, and every Argus client library is synchronous | High | Medium | Argus checks will need a thread hop. The package stays async, as the spec requires. |
-| A check name reaches a label and grows unbounded | Low | High | Names are class attributes or constructor keywords. The runner rejects duplicates. Tests assert that no message text becomes a label. |
+| A check name reaches a label and grows unbounded | Low | High | Names are class attributes or constructor keywords. The runner rejects a second identity under one name. Tests assert that no message text becomes a label. |
+| A source that forgets to close its subscription holds a check forever | Medium | Low | `healthcheck_subscribers` publishes the count per dependency, so a leak reads as a count that only grows. The subscription is a context manager. |
 | The package drifts from the Zeus copy of the spec | Medium | Medium | One repository holds the package. Zeus and Maia install it, and do not copy it. |

@@ -5,7 +5,8 @@ import sys
 import httpx
 import pytest
 
-from qatools_health import HealthCheckStatus
+from qatools_health import HealthCheckStatus, Severity
+from qatools_health.checks.http_apis import base_of
 from qatools_health.checks.primitives import first_line
 from qatools_health.checks import (
     AnthropicApiHealthCheck,
@@ -90,7 +91,7 @@ async def test_jenkins_probes_the_cheap_mode_read():
     await check.perform_check()
     assert str(handler.requests[0].url) == "https://jenkins.test/api/json?tree=mode"
     assert check.name == "jenkins_api"
-    assert check.critical is True
+    assert check.severity is Severity.IMPORTANT
 
 
 async def test_jira_probes_myself():
@@ -98,7 +99,6 @@ async def test_jira_probes_myself():
     check = JiraApiHealthCheck("https://jira.test", "a@b.test", "token", client=stub_client(handler))
     await check.perform_check()
     assert handler.requests[0].url.path == "/rest/api/3/myself"
-    assert check.critical is False
 
 
 async def test_github_reports_the_remaining_budget():
@@ -154,6 +154,7 @@ async def test_anthropic_lists_models():
     assert handler.requests[0].url.path == "/v1/models"
     assert handler.requests[0].headers["x-api-key"] == "key"
     assert check.name == "llm_api"
+    assert check.severity is Severity.CRITICAL
 
 
 async def test_tcp_check_reaches_a_listening_port():
@@ -196,8 +197,10 @@ def test_binary_check_needs_a_binary():
 
 
 def test_the_cli_classes_carry_their_defaults():
-    assert (OpencodeHealthCheck().name, OpencodeHealthCheck().critical) == ("opencode", True)
+    assert OpencodeHealthCheck().name == "opencode"
+    assert OpencodeHealthCheck().severity is Severity.CRITICAL
     assert GhCliHealthCheck().name == "gh"
+    assert GhCliHealthCheck().severity is Severity.IMPORTANT
 
 
 async def test_gh_skips_the_auth_probe_by_default():
@@ -326,3 +329,43 @@ async def test_github_fails_when_the_identity_read_refuses():
     result = await check.perform_check()
     assert result.status is UNHEALTHY
     assert "user answered 403" in result.message
+
+
+async def test_jenkins_takes_its_base_url_from_the_client_it_was_given():
+    handler = responder(200)
+    client = httpx.AsyncClient(base_url="https://jenkins.test", transport=httpx.MockTransport(handler))
+    check = JenkinsApiHealthCheck(client=client)
+    await check.perform_check()
+    assert str(handler.requests[0].url) == "https://jenkins.test/api/json?tree=mode"
+
+
+def test_one_jenkins_named_two_ways_is_one_dependency():
+    client = httpx.AsyncClient(base_url="https://jenkins.test")
+    assert (
+        JenkinsApiHealthCheck(client=client).identity()
+        == JenkinsApiHealthCheck("https://jenkins.test", "user", "token").identity()
+    )
+
+
+def test_an_api_check_needs_a_base_url_from_somewhere():
+    with pytest.raises(ValueError, match="needs a base URL"):
+        JenkinsApiHealthCheck()
+    with pytest.raises(ValueError, match="needs a base URL"):
+        base_of(None, httpx.AsyncClient(), "jira_api")
+
+
+def test_two_urls_are_two_http_dependencies():
+    first = HttpHealthCheck("https://one.test/ping", name="ping")
+    second = HttpHealthCheck("https://two.test/ping", name="ping")
+    assert first.identity() != second.identity()
+
+
+def test_the_expected_login_is_part_of_the_github_identity():
+    assert GitHubApiHealthCheck("token").identity() != GitHubApiHealthCheck("token", "zeus-bot").identity()
+    assert GitHubApiHealthCheck("token", "zeus-bot").identity() == GitHubApiHealthCheck("other", "zeus-bot").identity()
+
+
+def test_the_sqlite_check_is_critical():
+    connection = sqlite3.connect(":memory:")
+    assert SqliteHealthCheck(connection, name="sqlite:context").severity is Severity.CRITICAL
+    connection.close()

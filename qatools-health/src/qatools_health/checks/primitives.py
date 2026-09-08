@@ -39,6 +39,9 @@ class HttpHealthCheck(HealthCheck):
         self._client = client
         self._owns_client = client is None
 
+    def identity(self) -> tuple[object, ...]:
+        return (type(self), self.url)
+
     def build_client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(timeout=self.timeout, follow_redirects=True)
 
@@ -57,7 +60,7 @@ class HttpHealthCheck(HealthCheck):
         response = await self.request(self.url)
         elapsed = time.monotonic() - started
         if response.status_code not in self.expect:
-            return HealthCheckResult(self.failure_status, f"{self.url} answered {response.status_code}")
+            return HealthCheckResult.unhealthy(f"{self.url} answered {response.status_code}")
         if self.latency_budget is not None and elapsed > self.latency_budget:
             return HealthCheckResult.degraded(f"{elapsed:.2f}s over the budget of {self.latency_budget:g}s")
         return HealthCheckResult.healthy(f"{response.status_code} in {elapsed:.2f}s")
@@ -112,10 +115,10 @@ class BinaryHealthCheck(HealthCheck):
     async def perform_check(self) -> Any:
         path = shutil.which(self.binary)
         if path is None:
-            return HealthCheckResult(self.failure_status, f"{self.binary} is not on PATH")
+            return HealthCheckResult.unhealthy(f"{self.binary} is not on PATH")
         code, output = await run_command(path, *self.version_args)
         if code != 0:
-            return HealthCheckResult(self.failure_status, f"{self.binary} {' '.join(self.version_args)} exited {code}")
+            return HealthCheckResult.unhealthy(f"{self.binary} {' '.join(self.version_args)} exited {code}")
         return HealthCheckResult.healthy(f"{self.binary} {first_line(output) or 'answered'}")
 
 
