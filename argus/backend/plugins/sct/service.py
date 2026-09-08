@@ -28,6 +28,7 @@ from argus.backend.plugins.sct.udt import (
 )
 from argus.backend.service.event_service import EventService
 from argus.backend.util.common import chunk
+from argus.backend.util.config import Config
 from argus.common.enums import NemesisStatus, ResourceState, TestStatus
 from argus.common.utils import clamp_ts_to_milliseconds
 
