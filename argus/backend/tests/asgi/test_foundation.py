@@ -16,8 +16,8 @@ from starlette.testclient import TestClient
 from argus.backend.util.logsetup import LOG_FORMAT_REQUEST, ArgusRequestLogFormatter
 
 from argus.backend.error_handlers import APIException
-from argus.backend.service.user import api_current_user, require_roles
-from argus.backend.models.web import User, UserRoles
+from argus.backend.service.user import API_TOKEN_KIND, api_current_user, hash_api_token, require_roles
+from argus.backend.models.web import User, UserOauthToken, UserRoles
 
 probe = APIRouter(prefix="/asgi-probe")
 
@@ -53,11 +53,18 @@ def probe_routes(asgi_app, include_router_before_fallback):
 
 
 @fixture(scope="module")
-def db_user(argus_db) -> User:
+def db_user_token() -> str:
+    """Plaintext API token of db_user; only its digest is stored on the row."""
+    return f"probe-token-{uuid.uuid4()}"
+
+
+@fixture(scope="module")
+def db_user(argus_db, db_user_token) -> User:
     user = User(id=uuid.uuid4(), username="asgi_probe_user", full_name="ASGI Probe",
-                email="asgi-probe@scylladb.com", api_token=f"probe-token-{uuid.uuid4()}",
-                roles=[UserRoles.User], password="", registration_date=datetime.now(UTC))
+                email="asgi-probe@scylladb.com", roles=[UserRoles.User],
+                password="", registration_date=datetime.now(UTC))
     user.save()
+    UserOauthToken(user_id=user.id, token=hash_api_token(db_user_token), kind=API_TOKEN_KIND).save()
     return user
 
 
@@ -73,9 +80,9 @@ def test_unauthenticated_request_matches_flask_shape(anon_client):
     assert response.json() == {"status": "error", "message": "Authorization required"}
 
 
-def test_role_check_forbidden_matches_flask_shape(anon_client, db_user):
+def test_role_check_forbidden_matches_flask_shape(anon_client, db_user, db_user_token):
     response = anon_client.get("/asgi-probe/admin-only",
-                              headers={"Authorization": f"token {db_user.api_token}"})
+                              headers={"Authorization": f"token {db_user_token}"})
     assert response.status_code == 403
     assert response.json() == {"status": "error", "message": "Forbidden"}
 
@@ -91,11 +98,21 @@ def test_api_exception_keeps_flask_contract(api_client):
     assert body["response"]["trace_id"]
 
 
-def test_token_header_authenticates_against_db(anon_client, db_user):
+def test_token_header_authenticates_against_db(anon_client, db_user, db_user_token):
     response = anon_client.get("/asgi-probe/me",
-                              headers={"Authorization": f"token {db_user.api_token}"})
+                              headers={"Authorization": f"token {db_user_token}"})
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "response": "asgi_probe_user"}
+
+
+def test_token_digest_is_rejected_as_a_token(anon_client, db_user, db_user_token):
+    """The stored digest must not work as a credential: a leaked DB row is not a token."""
+    response = anon_client.get("/asgi-probe/me",
+                              headers={"Authorization": f"token {hash_api_token(db_user_token)}"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "error"
+    assert body["response"]["exception"] == "APIException"
 
 
 def test_session_cookie_authenticates_route(anon_client, db_user, make_session_cookie):

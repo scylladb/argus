@@ -322,9 +322,8 @@ func runWithAuthRetry(cmd *cobra.Command, args []string, fn func(*cobra.Command,
 	log := LoggerFrom(ctx)
 	log.Info().Msg("session expired; re-authenticating")
 
-	// Purge stale credentials from the keychain so the login flow does not
-	// short-circuit on the same invalid PAT / CF token that just failed.
-	_ = keychain.DeletePAT()
+	// Login() checks a stored PAT against Argus and replaces it when it is
+	// rejected or expired, so only the stale session is dropped here.
 	_ = keychain.Delete()
 
 	// When cloudflare is disabled the user is in headless or local mode.

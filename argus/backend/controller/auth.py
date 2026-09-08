@@ -85,8 +85,7 @@ def cf_login(asgi_request: Request,
 
 @router.post("/profile/api/token/generate", name="auth.generate_api_token")
 def generate_api_token(asgi_request: Request, user: User = Depends(ui_current_user)):
-    new_token = UserService().generate_token(user)
-    asgi_request.session["token_generated"] = new_token
+    asgi_request.session["token_generated"] = UserService().generate_token(user).token
     return RedirectResponse(url_for(asgi_request, "main.profile"), status_code=302)
 
 

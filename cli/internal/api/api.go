@@ -48,11 +48,31 @@ var (
 	ErrAPIError = errors.New("api: server returned error")
 
 	// ErrUnauthorized is returned (wrapped) by [DoJSON] when the server
-	// responds with a non-JSON content type on a 2xx status, which almost
-	// always means a Cloudflare Access authentication challenge was served
-	// instead of the expected API response.
+	// responds with 401/403, or with a non-JSON content type on a 2xx status,
+	// which almost always means a Cloudflare Access authentication challenge
+	// was served instead of the expected API response.
 	ErrUnauthorized = errors.New("unauthorized")
+
+	// ErrCFChallenge is returned (wrapped, together with [ErrUnauthorized])
+	// when the response looks like a Cloudflare Access challenge rather than
+	// an Argus rejection. Callers use it to tell "the CF token expired" apart
+	// from "Argus rejected the PAT": the former does not invalidate the PAT.
+	ErrCFChallenge = errors.New("cloudflare access challenge")
 )
+
+// tokenRejectionMessages are the APIException messages Argus' load_user
+// raises for a bad `Authorization: token` header. They arrive as HTTP 200
+// error envelopes, so DecodeResponse maps them to ErrUnauthorized explicitly.
+var tokenRejectionMessages = map[string]bool{
+	"User not found for supplied token": true,
+	"Malformed authorization header":    true,
+}
+
+// isTokenRejection reports whether an error envelope means the presented API
+// token was rejected by Argus.
+func isTokenRejection(body models.ErrorBody) bool {
+	return body.Exception == "APIException" && tokenRejectionMessages[body.Message]
+}
 
 // APIError wraps a backend error response so callers can inspect the details
 // via errors.As while still getting ErrAPIError from errors.Is.
@@ -304,7 +324,8 @@ func DoJSON[T any](c *Client, req *http.Request) (T, error) {
 //   - A successful 2xx response carrying the standard “{"status":"error"}“
 //     envelope returns an [*APIError] wrapping the decoded body so callers
 //     can inspect “exception“ / “message“ / “arguments“ via
-//     “errors.As“.
+//     “errors.As“. When that envelope is Argus rejecting the API token
+//     (see isTokenRejection) the error also wraps [ErrUnauthorized].
 func DecodeResponse[T any](resp *http.Response) (T, error) {
 	var zero T
 	defer func() {
@@ -332,10 +353,11 @@ func DecodeResponse[T any](resp *http.Response) (T, error) {
 		// message so LLM consumers and humans can self-correct by
 		// re-authenticating rather than seeing a confusing decode error.
 		return zero, fmt.Errorf(
-			"%w: server returned Content-Type %q instead of application/json — "+
+			"%w: %w: server returned Content-Type %q instead of application/json — "+
 				"this usually means authentication failed or the session expired; "+
 				"re-authenticate with `argus auth` or set ARGUS_AUTH_TOKEN (or ARGUS_TOKEN)",
 			ErrUnauthorized,
+			ErrCFChallenge,
 			contentType,
 		)
 	}
@@ -355,7 +377,14 @@ func DecodeResponse[T any](resp *http.Response) (T, error) {
 		if err != nil {
 			return zero, fmt.Errorf("%w: %w", ErrDecodingResponse, err)
 		}
-		return zero, &APIError{Body: body}
+		apiErr := &APIError{Body: body}
+		if isTokenRejection(body) {
+			return zero, fmt.Errorf(
+				"%w: %w — run `argus auth` to obtain a new token, or set ARGUS_TOKEN=<token> for local servers",
+				ErrUnauthorized, apiErr,
+			)
+		}
+		return zero, apiErr
 	}
 
 	result, err := envelope.Decode()

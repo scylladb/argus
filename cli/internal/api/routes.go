@@ -7,8 +7,11 @@ const (
 	ArgusVersion = "/api/v1/version"
 
 	// User token route
-	// GET – returns (or generates on first call) the caller's Argus API token.
-	// Requires an active session cookie or an existing Authorization: token header.
+	// POST – issues an additional Argus API token for the caller; body
+	//        {"duration": "14d"} sets its lifetime (server default 365d).
+	//        Argus stores only a digest, so existing tokens cannot be read back.
+	// GET  – returns the expiration date of the token that authenticated the
+	//        request (null for non-expiring); a rejected token yields 401.
 	UserToken = "/api/v1/user/token"
 
 	// Test run routes

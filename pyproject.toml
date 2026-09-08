@@ -63,6 +63,7 @@ web-backend = [
   "prometheus-client>=0.26.0",
   "prometheus-fastapi-instrumentator>=8.1.0",
   "python-multipart>=0.0.32",
+  "timelength>=3.0.4",
 ]
 docker-image = ["supervisor ~= 4.2.4"]
 dev = [

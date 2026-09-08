@@ -29,8 +29,10 @@ stored in the system keychain (macOS Keychain, Windows Credential Manager,
 or the Secret Service on Linux) and reused on subsequent invocations until
 it expires.
 
-The JWT is then exchanged for an Argus session token via POST /auth/login/cf
-and that session is also stored in the keychain.`,
+The JWT is then exchanged for an Argus session via POST /auth/login/cf and
+the session for a durable API token (PAT) stored in the keychain.  A PAT that
+is already stored is kept while Argus accepts it and it has not expired;
+otherwise a new 14-day token is issued.`,
 	Annotations: map[string]string{SkipAuthRetryAnnotation: "true"},
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
@@ -39,18 +41,19 @@ and that session is also stored in the keychain.`,
 		log := logging.For(LoggerFrom(ctx), "auth")
 
 		// ---- verify existing credentials --------------------------------
+		var verifyErr error
 		client := APIClientFrom(ctx)
 		if client != nil {
 			log.Debug().Msg("verifying existing credentials")
-			req, reqErr := client.NewRequest(ctx, http.MethodGet, api.UserToken, nil)
+			req, reqErr := client.NewRequest(ctx, http.MethodGet, api.Users, nil)
 			if reqErr == nil {
-				if _, verifyErr := api.DoJSON[models.UserTokenResponse](client, req); verifyErr == nil {
+				if _, verifyErr = api.DoJSON[models.UsersMap](client, req); verifyErr == nil {
 					log.Info().Msg("existing credentials are valid")
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Already authenticated.")
 					return nil
 				}
 			}
-			log.Debug().Msg("existing credentials invalid or missing; proceeding with login")
+			log.Debug().Err(verifyErr).Msg("existing credentials invalid or missing; proceeding with login")
 		}
 
 		// ---- headless mode: cloudflare disabled -------------------------
@@ -63,8 +66,8 @@ and that session is also stored in the keychain.`,
 		}
 
 		// ---- cloudflared login flow -------------------------------------
-		// Purge stale keychain credentials so Login() does not reuse them.
-		_ = keychain.DeletePAT()
+		// Login() checks a stored PAT against Argus and replaces it when it
+		// is rejected or expired.
 		_ = keychain.Delete()
 
 		log.Debug().Msg("locating cloudflared binary")

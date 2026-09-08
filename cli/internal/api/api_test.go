@@ -308,6 +308,62 @@ func TestDoJSON_BackendError(t *testing.T) {
 	assert.Equal(t, body.TraceID, apiErr.Body.TraceID)
 }
 
+// TestDoJSON_RejectedTokenIsUnauthorized verifies that the HTTP 200
+// APIException envelope Argus returns for a bad API token is surfaced as
+// ErrUnauthorized (so the auth-retry layer re-authenticates) while still
+// exposing the APIError body.
+func TestDoJSON_RejectedTokenIsUnauthorized(t *testing.T) {
+	for _, message := range []string{"User not found for supplied token", "Malformed authorization header"} {
+		t.Run(message, func(t *testing.T) {
+			body := models.ErrorBody{
+				TraceID:   "trace-002",
+				Exception: "APIException",
+				Message:   message,
+				Arguments: []string{message},
+			}
+
+			srv := httptest.NewServer(staticHandler(http.StatusOK, errEnvelope(t, body)))
+			t.Cleanup(srv.Close)
+
+			c, err := api.New(srv.URL, api.WithHTTPClient(srv.Client()), api.WithAPIToken("stale"))
+			require.NoError(t, err)
+
+			req, err := c.NewRequest(context.Background(), http.MethodGet, "/", nil)
+			require.NoError(t, err)
+
+			_, err = api.DoJSON[samplePayload](c, req)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, api.ErrUnauthorized)
+			assert.ErrorIs(t, err, api.ErrAPIError)
+			assert.NotErrorIs(t, err, api.ErrCFChallenge)
+
+			var apiErr *api.APIError
+			require.ErrorAs(t, err, &apiErr)
+			assert.Equal(t, message, apiErr.Body.Message)
+		})
+	}
+}
+
+// TestDoJSON_OtherAPIExceptionIsNotUnauthorized verifies that an ordinary
+// APIException does not trigger the unauthorized mapping.
+func TestDoJSON_OtherAPIExceptionIsNotUnauthorized(t *testing.T) {
+	body := models.ErrorBody{Exception: "APIException", Message: "Release not found"}
+
+	srv := httptest.NewServer(staticHandler(http.StatusOK, errEnvelope(t, body)))
+	t.Cleanup(srv.Close)
+
+	c, err := api.New(srv.URL, api.WithHTTPClient(srv.Client()))
+	require.NoError(t, err)
+
+	req, err := c.NewRequest(context.Background(), http.MethodGet, "/", nil)
+	require.NoError(t, err)
+
+	_, err = api.DoJSON[samplePayload](c, req)
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, api.ErrUnauthorized)
+	assert.ErrorIs(t, err, api.ErrAPIError)
+}
+
 // --------------------------------------------------------------------------
 // DoJSON – malformed JSON
 // --------------------------------------------------------------------------

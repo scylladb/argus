@@ -98,8 +98,9 @@ argus auth
 Flow:
 1. Checks keychain — exits early if credentials are still valid.
 2. Invokes `cloudflared access login` — opens a browser window for Cloudflare Access SSO.
-3. Exchanges the resulting JWT for an Argus session.
-4. Converts the session into a durable PAT and stores it in the keychain.
+3. Asks Argus about the PAT already in the keychain, if any (`GET /api/v1/user/token` authenticated with that token). A token Argus accepts that has not expired is kept and the flow stops here.
+4. Otherwise exchanges the resulting JWT for an Argus session.
+5. Converts the session into a PAT valid for 14 days and stores it in the keychain.
 
 You only need to do this once. After that, every command works without re-authentication.
 
