@@ -22,6 +22,15 @@ Repository = "https://github.com/scylladb/argus"
 
 [tool.setuptools_scm]
 version_file = "argus/_version.py"
+git_describe_command = [
+  "git",
+  "describe",
+  "--dirty",
+  "--tags",
+  "--long",
+  "--match",
+  "v*",
+]
 
 [tool.setuptools.packages.find]
 include = ["argus", "argus.client*", "argus.common*"]
