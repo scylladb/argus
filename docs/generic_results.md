@@ -103,6 +103,21 @@ TEXT type columns can be used to send additional information like links, screens
 links/screenshots, don't add any additional text to the cell, as it will be displayed as a link/button in Argus UI.
 Text results are not displayed in graphs.
 
+## Hidden columns
+
+`ColumnMetadata` accepts a `visible` attribute (defaults to `True`). Columns declared with `visible=False` are still stored in full, but the
+`fetch_results` endpoint filters them out, so they appear neither in the Argus UI nor in the default CLI output. SCT uses this for bulky
+diagnostic datasets such as the adaptive-timeout metrics.
+
+To retrieve the hidden columns as well, pass `--show-hidden` to the CLI:
+
+```bash
+argus run results --run-id <run-id> --show-hidden
+```
+
+The flag sends `includeHidden=true` to `fetch_results`, which bypasses the server-side visibility filter for that request only. Without the
+flag the response is unchanged and hidden columns stay excluded.
+
 # Limitations
 
 * automatic SUT timestamp supported only by SCT: it calculates based on the Scylla Version date and commit id (builds from the same date are
