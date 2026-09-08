@@ -9,6 +9,7 @@ import logging
 
 from argus.backend.error_handlers import DataValidationError
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, User, UserOauthToken
+from argus.backend.util.config import Config
 
 LOGGER = logging.getLogger(__name__)
 GITHUB_REPO_RE = r"(?P<http>^https?:\/\/(www\.)?github\.com\/(?P<user>[\w\d\-]+)\/(?P<repo>[\w\d\-]+)(\.git)?$)|(?P<ssh>git@github\.com:(?P<ssh_user>[\w\d\-]+)\/(?P<ssh_repo>[\w\d\-]+)(\.git)?)"
