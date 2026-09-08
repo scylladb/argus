@@ -122,4 +122,4 @@ markers = ["docker_required: this test requires docker and docker-compose"]
 log_cli = true
 log_cli_level = "INFO"
 
-norecursedirs = ["pytest-argus-reporter/tests", "argus/backend/service"]
+norecursedirs = ["pytest-argus-reporter/tests", "qatools-health", "argus/backend/service"]
