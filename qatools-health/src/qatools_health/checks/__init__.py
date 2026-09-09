@@ -10,10 +10,8 @@ from qatools_health.checks.http_apis import (
     AnthropicApiHealthCheck,
     ArgusApiHealthCheck,
     GitHubApiHealthCheck,
-    HeadroomProxyHealthCheck,
     JenkinsApiHealthCheck,
     JiraApiHealthCheck,
-    MaiaApiHealthCheck,
 )
 from qatools_health.checks.local import StalenessHealthCheck
 from qatools_health.checks.primitives import (
@@ -32,12 +30,10 @@ __all__ = [
     "CallableHealthCheck",
     "GhCliHealthCheck",
     "GitHubApiHealthCheck",
-    "HeadroomProxyHealthCheck",
     "HttpHealthCheck",
     "JenkinsApiHealthCheck",
     "JenkinsCliHealthCheck",
     "JiraApiHealthCheck",
-    "MaiaApiHealthCheck",
     "OpencodeHealthCheck",
     "SqliteHealthCheck",
     "StalenessHealthCheck",

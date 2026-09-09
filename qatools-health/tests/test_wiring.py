@@ -1,6 +1,6 @@
 import asyncio
-import sqlite3
 
+import aiosqlite
 import httpx
 from prometheus_client import CollectorRegistry, generate_latest
 from support import spin
@@ -33,7 +33,7 @@ async def test_a_service_wires_the_runner_the_way_the_readme_shows():
             return HealthCheckResult.degraded(f"queue depth {depth} over 500")
         return None
 
-    store = sqlite3.connect(":memory:")
+    store = await aiosqlite.connect(":memory:")
     registry = CollectorRegistry()
     shutdown = asyncio.Event()
     runner = HealthCheckRunner(service="zeus", version="1.4.0")
@@ -63,4 +63,4 @@ async def test_a_service_wires_the_runner_the_way_the_readme_shows():
     await asyncio.wait_for(serving, timeout=5)
     assert 'healthcheck_runner_up{service="zeus"} 0.0' in generate_latest(registry).decode()
     runner.unregister_collector(registry)
-    store.close()
+    await store.close()

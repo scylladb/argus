@@ -618,8 +618,10 @@ class that gets neither a base URL nor a client carrying one raises.
 | `GitHubApiHealthCheck(token, expected_login=None)` | `GET /rate_limit`, plus the authenticated login when an expected login is given | `github_api` | important |
 | `ArgusApiHealthCheck(base_url, token, cf_id=None, cf_secret=None)` | `GET /api/v1/notifications/get_unread`, the cheapest authenticated read | `argus_api` | important |
 | `AnthropicApiHealthCheck(api_key)` | `GET /v1/models`. A models list is free. A completion probe would bill every five minutes for a worse signal | `llm_api` | critical |
-| `HeadroomProxyHealthCheck(url)` | The proxy answers | `headroom_proxy` | important |
-| `MaiaApiHealthCheck(base_url, token, path="")` | Maia answers an authenticated caller | `maia_api` | important |
+
+`HeadroomProxyHealthCheck` and `MaiaApiHealthCheck` live in Zeus, not here.
+Zeus is their only consumer today, and the promotion rule for this package is
+two or more consumers.
 
 `GitHubApiHealthCheck` keeps the expected login in its identity, so the probe
 that compares the login and the probe that does not stay two checks.
@@ -652,10 +654,10 @@ prefers one.
 | --- | --- | --- | --- |
 | `SqliteHealthCheck(connection \| db_path, query="SELECT 1")` | The database opens and answers | `sqlite:<stem>` | critical |
 
-A live connection is queried on the calling loop, because a `sqlite3.Connection`
-belongs to the thread that created it. A path is opened and closed in a worker
-thread. A connection given without a name keeps the class name `sqlite`, so
-register two of them under explicit names.
+The connection is `aiosqlite.Connection`, the driver Zeus's own stores already
+use, so the check awaits the query instead of blocking the loop or routing
+through a worker thread. A connection given without a name keeps the class
+name `sqlite`, so register two of them under explicit names.
 
 `ScyllaHealthCheck(session, keyspace=None)` lives in Argus and not here. Argus
 connects through `scylla-driver`, Zeus and Maia have no driver, and the Zeus

@@ -1,8 +1,7 @@
-import asyncio
-import sqlite3
-from contextlib import closing
 from pathlib import Path
 from typing import Any
+
+import aiosqlite
 
 from qatools_health.check import HealthCheck
 from qatools_health.result import HealthCheckResult
@@ -17,13 +16,13 @@ class SqliteHealthCheck(HealthCheck):
 
     def __init__(
         self,
-        connection: sqlite3.Connection | str | Path,
+        connection: aiosqlite.Connection | str | Path,
         *,
         query: str = "SELECT 1",
         **kwargs: Any,
     ) -> None:
         self.query = query
-        if isinstance(connection, sqlite3.Connection):
+        if isinstance(connection, aiosqlite.Connection):
             self.connection = connection
             self.db_path = None
         else:
@@ -35,11 +34,13 @@ class SqliteHealthCheck(HealthCheck):
 
     async def perform_check(self) -> Any:
         if self.connection is not None:
-            row = self.connection.execute(self.query).fetchone()
+            cursor = await self.connection.execute(self.query)
+            try:
+                row = await cursor.fetchone()
+            finally:
+                await cursor.close()
         else:
-            row = await asyncio.to_thread(self._open_and_query)
+            async with aiosqlite.connect(self.db_path, timeout=self.timeout) as connection:
+                cursor = await connection.execute(self.query)
+                row = await cursor.fetchone()
         return HealthCheckResult.healthy(f"{self.query} returned {row!r}")
-
-    def _open_and_query(self) -> Any:
-        with closing(sqlite3.connect(self.db_path, timeout=self.timeout)) as connection:
-            return connection.execute(self.query).fetchone()

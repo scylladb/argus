@@ -1,7 +1,7 @@
 import asyncio
-import sqlite3
 import sys
 
+import aiosqlite
 import httpx
 import pytest
 
@@ -10,8 +10,6 @@ from qatools_health.checks.http_apis import base_of
 from qatools_health.checks.primitives import first_line
 from qatools_health.checks import (
     AnthropicApiHealthCheck,
-    HeadroomProxyHealthCheck,
-    MaiaApiHealthCheck,
     ArgusApiHealthCheck,
     BinaryHealthCheck,
     GhCliHealthCheck,
@@ -209,28 +207,29 @@ async def test_gh_skips_the_auth_probe_by_default():
 
 
 async def test_sqlite_check_queries_a_live_connection():
-    connection = sqlite3.connect(":memory:")
+    connection = await aiosqlite.connect(":memory:")
     check = SqliteHealthCheck(connection, name="sqlite:context")
     result = await check.perform_check()
     assert result.status is HEALTHY
     assert check.name == "sqlite:context"
-    connection.close()
+    await connection.close()
 
 
 async def test_sqlite_check_names_itself_from_a_path(tmp_path):
     db_path = tmp_path / "context.db"
-    sqlite3.connect(db_path).close()
+    async with aiosqlite.connect(db_path):
+        pass
     check = SqliteHealthCheck(db_path)
     assert check.name == "sqlite:context"
     assert (await check.perform_check()).status is HEALTHY
 
 
 async def test_sqlite_check_raises_on_a_broken_query():
-    connection = sqlite3.connect(":memory:")
+    connection = await aiosqlite.connect(":memory:")
     check = SqliteHealthCheck(connection, query="SELECT * FROM missing", name="sqlite:broken")
-    with pytest.raises(sqlite3.OperationalError):
+    with pytest.raises(aiosqlite.OperationalError):
         await check.perform_check()
-    connection.close()
+    await connection.close()
 
 
 async def test_staleness_reports_the_three_bands():
@@ -273,23 +272,6 @@ async def test_http_check_honours_a_custom_method():
     check = HttpHealthCheck("https://example.test/ping", method="HEAD", name="ping", client=stub_client(handler))
     await check.perform_check()
     assert handler.requests[0].method == "HEAD"
-
-
-async def test_headroom_probes_the_url_it_was_given():
-    handler = responder(200)
-    check = HeadroomProxyHealthCheck("https://headroom.test/status", client=stub_client(handler))
-    await check.perform_check()
-    assert str(handler.requests[0].url) == "https://headroom.test/status"
-    assert check.name == "headroom_proxy"
-
-
-async def test_maia_sends_the_bearer_token():
-    handler = responder(200)
-    check = MaiaApiHealthCheck("https://maia.test", "token", path="api/v1/me", client=stub_client(handler))
-    await check.perform_check()
-    assert handler.requests[0].headers["Authorization"] == "Bearer token"
-    assert handler.requests[0].url.path == "/api/v1/me"
-    assert check.name == "maia_api"
 
 
 async def test_gh_merges_the_auth_probe_when_asked():
@@ -365,7 +347,7 @@ def test_the_expected_login_is_part_of_the_github_identity():
     assert GitHubApiHealthCheck("token", "zeus-bot").identity() == GitHubApiHealthCheck("other", "zeus-bot").identity()
 
 
-def test_the_sqlite_check_is_critical():
-    connection = sqlite3.connect(":memory:")
+async def test_the_sqlite_check_is_critical():
+    connection = await aiosqlite.connect(":memory:")
     assert SqliteHealthCheck(connection, name="sqlite:context").severity is Severity.CRITICAL
-    connection.close()
+    await connection.close()

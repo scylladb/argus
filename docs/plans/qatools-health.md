@@ -158,8 +158,8 @@ value types the rest of the package builds on.
 
 **Importance**: Important
 
-- `checks/http_apis.py`: Jenkins, Jira, GitHub, Argus, Anthropic, Headroom and
-  Maia.
+- `checks/http_apis.py`: Jenkins, Jira, GitHub, Argus, Anthropic. Headroom and
+  Maia stay in Zeus, the only consumer of either today.
 - `checks/cli_tools.py`: opencode, gh, acli, argus and jenkins.
 - `checks/databases.py`: `SqliteHealthCheck`.
 - `checks/local.py`: `StalenessHealthCheck`.

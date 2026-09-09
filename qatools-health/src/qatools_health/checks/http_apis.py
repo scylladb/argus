@@ -142,29 +142,3 @@ class AnthropicApiHealthCheck(HttpHealthCheck):
     ) -> None:
         headers = {"x-api-key": api_key, "anthropic-version": ANTHROPIC_VERSION}
         super().__init__(join(base_url, "v1/models"), headers=headers, client=client, **kwargs)
-
-
-class HeadroomProxyHealthCheck(HttpHealthCheck):
-    name = "headroom_proxy"
-    interval = 120.0
-
-    def __init__(self, url: str, *, client: httpx.AsyncClient | None = None, **kwargs: Any) -> None:
-        super().__init__(url, client=client, **kwargs)
-
-
-class MaiaApiHealthCheck(HttpHealthCheck):
-    name = "maia_api"
-    interval = 300.0
-
-    def __init__(
-        self,
-        base_url: str | None = None,
-        token: str | None = None,
-        *,
-        path: str = "",
-        client: httpx.AsyncClient | None = None,
-        **kwargs: Any,
-    ) -> None:
-        headers = {"Authorization": f"Bearer {token}"} if token else {}
-        base = base_of(base_url, client, "maia_api")
-        super().__init__(join(base, path), headers=headers, client=client, **kwargs)
