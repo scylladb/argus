@@ -201,17 +201,6 @@ func TestExecute_BuildIDExclusiveWithPlanID(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestArgusRunURL(t *testing.T) {
-	// build_system_id contains slashes and the base has a trailing slash.
-	got := argusRunURL("https://argus.scylladb.com/", "scylla-2026.2/longevity/longevity-100gb", 42)
-	assert.Equal(t, "https://argus.scylladb.com/test/scylla-2026.2/longevity/longevity-100gb/42", got)
-}
-
-func TestArgusRunURL_NoBuildNumber(t *testing.T) {
-	// Build number not yet known → no link.
-	assert.Empty(t, argusRunURL("https://argus.scylladb.com", "scylla-2026.2/longevity/longevity-100gb", 0))
-}
-
 func TestNormalizeSCTVersionSource_ClearsSiblings(t *testing.T) {
 	// Defaults seed a scylla_version, but the caller explicitly picked
 	// scylla_repo — the inherited version (and any other sibling source present)

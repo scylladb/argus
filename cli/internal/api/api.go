@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -161,6 +162,15 @@ func New(rawBaseURL string, opts ...ClientOption) (*Client, error) {
 // BaseURL returns the base URL the client is configured with.
 func (c *Client) BaseURL() string {
 	return c.baseURL.String()
+}
+
+// RunURL builds the stable Argus web link for a run from the base URL, a
+// build_id and its build number. It is empty when either is unknown.
+func RunURL(base, buildID string, number int) string {
+	if number == 0 || buildID == "" {
+		return ""
+	}
+	return strings.TrimRight(base, "/") + "/test/" + buildID + "/" + strconv.Itoa(number)
 }
 
 // NewRequest constructs an [http.Request] for the given method and path.

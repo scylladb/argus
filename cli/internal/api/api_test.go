@@ -548,3 +548,14 @@ func mustHost(t *testing.T, raw string) string {
 	require.NoError(t, err)
 	return u.Host
 }
+
+func TestRunURL(t *testing.T) {
+	// build_system_id contains slashes and the base has a trailing slash.
+	got := api.RunURL("https://argus.scylladb.com/", "scylla-2026.2/longevity/longevity-100gb", 42)
+	assert.Equal(t, "https://argus.scylladb.com/test/scylla-2026.2/longevity/longevity-100gb/42", got)
+}
+
+func TestRunURL_Unknown(t *testing.T) {
+	assert.Empty(t, api.RunURL("https://argus.scylladb.com", "scylla-2026.2/longevity/longevity-100gb", 0))
+	assert.Empty(t, api.RunURL("https://argus.scylladb.com", "", 42))
+}
