@@ -1,3 +1,5 @@
+"""The runner that probes every registered dependency and reports the aggregate."""
+
 import asyncio
 import logging
 import threading
@@ -30,6 +32,13 @@ Driver = tuple[CheckState, HealthCheckStatus] | None
 
 
 def merge_policy(running: HealthCheck, incoming: HealthCheck) -> None:
+    """Fold the policy of a second registration into the check that is running.
+
+    The strictest value wins in every field. A second registration can raise the
+    severity and shorten the interval, the timeout and the staleness window. It
+    can never relax one, so one caller cannot weaken the check that another
+    caller depends on.
+    """
     running.severity = strictest_severity(running.severity, incoming.severity)
     running.interval = min(running.interval, incoming.interval)
     running.timeout = min(running.timeout, incoming.timeout)
@@ -37,6 +46,14 @@ def merge_policy(running: HealthCheck, incoming: HealthCheck) -> None:
 
 
 class HealthCheckRunner:
+    """Own every check the service depends on, and report one aggregate status.
+
+    One critical dependency that fails makes the service unhealthy. Any other
+    failure degrades it. An optional dependency never changes the aggregate.
+    Registration is safe from another thread. Every probe runs on the loop that
+    called start.
+    """
+
     def __init__(
         self,
         *,
@@ -61,13 +78,21 @@ class HealthCheckRunner:
 
     @property
     def collector(self) -> HealthMetricsCollector:
+        """The Prometheus collector over this runner."""
         return self._collector
 
     @property
     def status(self) -> HealthCheckStatus:
+        """The aggregate status of the service right now."""
         return self._compute()[0]
 
     def register(self, check: HealthCheck, *, on_change: OnChange | None = None) -> HealthCheckSubscription:
+        """Register one check and return a subscription over it.
+
+        A check that names a dependency already registered joins that probe loop and
+        folds its policy in. Close the subscription to release the dependency. The
+        last subscription to close retires the check.
+        """
         state = self._intern(check)
         subscription = HealthCheckSubscription(state, on_change)
         state.attach(subscription)
@@ -81,6 +106,11 @@ class HealthCheckRunner:
         *,
         on_change: OnGroupChange | None = None,
     ) -> HealthCheckGroup:
+        """Register several checks at once and return one group over them.
+
+        The batch is validated before any member is registered, so a name that
+        clashes leaves the runner untouched.
+        """
         batch = tuple(checks)
         with self._lock:
             self._validate(batch)
@@ -91,12 +121,19 @@ class HealthCheckRunner:
         return HealthCheckGroup([subscription for _, subscription in members], on_change)
 
     def register_collector(self, registry: CollectorRegistry | None = None) -> None:
+        """Add the collector to a registry, or to the default registry."""
         (registry or DEFAULT_REGISTRY).register(self._collector)
 
     def unregister_collector(self, registry: CollectorRegistry | None = None) -> None:
+        """Remove the collector from a registry, or from the default registry."""
         (registry or DEFAULT_REGISTRY).unregister(self._collector)
 
     def start(self) -> None:
+        """Start a probe loop for every registered check.
+
+        The first runs are spread over one second, so a service with many checks
+        does not open every connection at once. Call this inside a running loop.
+        """
         if self._started:
             raise RuntimeError("health check runner is already started")
         self._loop = asyncio.get_running_loop()
@@ -112,6 +149,7 @@ class HealthCheckRunner:
         self._refresh_aggregate()
 
     async def stop(self) -> None:
+        """Stop every probe loop, close every check, and end every subscription."""
         self._stopped = True
         self._started = False
         with self._lock:
@@ -127,6 +165,7 @@ class HealthCheckRunner:
         self._runner_up = False
 
     async def run(self, shutdown: asyncio.Event) -> None:
+        """Start the runner, wait for the event, then stop the runner."""
         self.start()
         try:
             await shutdown.wait()
@@ -134,6 +173,7 @@ class HealthCheckRunner:
             await self.stop()
 
     def snapshot(self) -> RunnerSnapshot:
+        """Take one consistent view of the runner and of every check in it."""
         now = self._clock()
         with self._lock:
             aggregate, _ = self._compute(now)

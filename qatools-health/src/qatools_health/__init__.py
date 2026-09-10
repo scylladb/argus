@@ -1,3 +1,11 @@
+"""Health checking for the ScyllaDB QA Tools services.
+
+Build a HealthCheckRunner, register the checks the service depends on, and
+run it beside the service. Each register call returns a subscription that
+holds the check and reports every change. The runner also exposes a
+Prometheus collector over the same state.
+"""
+
 from qatools_health.check import CallableHealthCheck, HealthCheck, healthcheck
 from qatools_health.collector import HealthMetricsCollector
 from qatools_health.result import HealthCheckResult, coerce_result

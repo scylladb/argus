@@ -1,3 +1,5 @@
+"""Every check this package ships, grouped by the kind of resource it probes."""
+
 from qatools_health.checks.cli_tools import (
     AcliHealthCheck,
     ArgusCliHealthCheck,

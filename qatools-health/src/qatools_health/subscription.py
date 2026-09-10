@@ -1,3 +1,5 @@
+"""The subscription over one running check, and the group over several."""
+
 import asyncio
 import inspect
 import logging
@@ -18,10 +20,15 @@ EVERYTHING_HEALTHY = "every dependency healthy"
 
 
 class SubscriptionClosedError(RuntimeError):
-    pass
+    """Raised when a caller waits on a subscription that is already closed."""
 
 
 async def call_back(callback: Any, *args: Any, subject: str) -> None:
+    """Call a change callback and log whatever it raises.
+
+    The callback belongs to the service, not to the runner. A callback that
+    fails must not stop the probe loop that reported the change.
+    """
     try:
         outcome = callback(*args)
         if inspect.isawaitable(outcome):
@@ -32,6 +39,12 @@ async def call_back(callback: Any, *args: Any, subject: str) -> None:
 
 @dataclass(slots=True)
 class CheckState:
+    """Everything the runner knows about one check and its subscribers.
+
+    Two registrations of one dependency share one state, so they share one probe
+    loop and one published result.
+    """
+
     check: HealthCheck
     identity: tuple[object, ...]
     clock: Callable[[], float]
@@ -50,18 +63,22 @@ class CheckState:
     retired: bool = False
 
     def is_stale(self, now: float | None = None) -> bool:
+        """Report whether the last result is older than the staleness window."""
         moment = self.clock() if now is None else now
         return (moment - self.last_run_timestamp) > self.check.interval * self.check.stale_after_intervals
 
     def effective_status(self, now: float | None = None) -> HealthCheckStatus:
+        """Return the published status, degraded to at least DEGRADED when stale."""
         staleness = HealthCheckStatus.DEGRADED if self.is_stale(now) else HealthCheckStatus.HEALTHY
         return worse_of(self.status, staleness)
 
     def attach(self, subscription: "HealthCheckSubscription") -> None:
+        """Add one subscriber to this check."""
         with self.lock:
             self.subscriptions.append(subscription)
 
     def detach(self, subscription: "HealthCheckSubscription") -> None:
+        """Remove one subscriber, and retire the check when the last one leaves."""
         with self.lock:
             if subscription in self.subscriptions:
                 self.subscriptions.remove(subscription)
@@ -71,6 +88,13 @@ class CheckState:
 
 
 class HealthCheckSubscription:
+    """One holder of one running check.
+
+    The subscription keeps the check alive and delivers every status change to
+    the callback. Close it to release the check. Use it as a context manager to
+    close it on the way out.
+    """
+
     def __init__(self, state: CheckState, on_change: OnChange | None = None) -> None:
         self._state = state
         self._on_change = on_change
@@ -81,24 +105,32 @@ class HealthCheckSubscription:
 
     @property
     def check(self) -> HealthCheck:
+        """The check instance the runner is probing."""
         return self._state.check
 
     @property
     def status(self) -> HealthCheckStatus:
+        """The worst status among the members."""
+        """The status of the check right now, staleness included."""
         return self._state.effective_status()
 
     @property
     def result(self) -> HealthCheckResult | None:
+        """The last published result, or None before the first run finished."""
         return self._state.result
 
     @property
     def closed(self) -> bool:
+        """Whether this group has been closed."""
+        """Whether this subscription has been closed."""
         return self._closed
 
     def add_listener(self, listener: Callable[["HealthCheckSubscription"], Awaitable[None]]) -> None:
+        """Add a listener that a group uses to follow its members."""
         self._listeners.append(listener)
 
     async def deliver(self, result: HealthCheckResult) -> None:
+        """Hand one published result to the waiters, the callback and the listeners."""
         if self._closed:
             return
         previous, self._seen = self._seen, result.status
@@ -115,6 +147,12 @@ class HealthCheckSubscription:
         *statuses: HealthCheckStatus,
         timeout: float | None = None,
     ) -> HealthCheckResult:
+        """Wait until the check reaches one of the statuses, and return that result.
+
+        A check already in one of the statuses returns at once. A closed
+        subscription raises SubscriptionClosedError, and so does one that closes
+        while a caller waits.
+        """
         if not statuses:
             raise ValueError("wait_for needs at least one status")
         if self._closed:
@@ -133,6 +171,7 @@ class HealthCheckSubscription:
                 self._waiters.remove(entry)
 
     def close(self) -> None:
+        """Release the check. Waiters raise, and the last close retires the check."""
         if self._closed:
             return
         self._closed = True
@@ -167,6 +206,12 @@ class HealthCheckSubscription:
 
 
 class HealthCheckGroup:
+    """One holder of several running checks, reported as one status.
+
+    The group status is the worst status among its members. The callback fires
+    on a change of that worst status, not on every member change.
+    """
+
     def __init__(self, members: Iterable[HealthCheckSubscription], on_change: OnGroupChange | None = None) -> None:
         self._members = tuple(members)
         self._on_change = on_change
@@ -178,17 +223,21 @@ class HealthCheckGroup:
 
     @property
     def members(self) -> tuple[HealthCheckSubscription, ...]:
+        """The subscriptions in this group, in registration order."""
         return self._members
 
     @property
     def status(self) -> HealthCheckStatus:
+        """The worst status among the members."""
         return worse_of(*(member.status for member in self._members))
 
     @property
     def closed(self) -> bool:
+        """Whether this group has been closed."""
         return self._closed
 
     def __getitem__(self, check: HealthCheck) -> HealthCheckSubscription:
+        """Return the member that holds the dependency this check names."""
         identity = check.identity()
         for member in self._members:
             if member.check.identity() == identity:
@@ -200,6 +249,11 @@ class HealthCheckGroup:
         *statuses: HealthCheckStatus,
         timeout: float | None = None,
     ) -> HealthCheckStatus:
+        """Wait until the group reaches one of the statuses, and return it.
+
+        A group already in one of the statuses returns at once, but only after every
+        member has published a first result.
+        """
         if not statuses:
             raise ValueError("wait_for needs at least one status")
         if self._closed:
@@ -218,6 +272,7 @@ class HealthCheckGroup:
                 self._waiters.remove(entry)
 
     def close(self) -> None:
+        """Close every member and end every wait on the group."""
         if self._closed:
             return
         self._closed = True

@@ -1,3 +1,5 @@
+"""The checks over state the service holds itself."""
+
 import inspect
 import time
 from collections.abc import Callable
@@ -8,6 +10,13 @@ from qatools_health.result import HealthCheckResult
 
 
 class StalenessHealthCheck(HealthCheck):
+    """Grade the age of a timestamp the service keeps.
+
+    The getter returns a Unix time, or None before the service has one. An age
+    over warn_after degrades. An age over fail_after fails. Use this to watch a
+    poll loop or a cache that must keep moving.
+    """
+
     interval = 60.0
 
     def __init__(
@@ -28,6 +37,7 @@ class StalenessHealthCheck(HealthCheck):
         self.clock = clock
 
     async def perform_check(self) -> Any:
+        """Read the timestamp and grade how old it is."""
         value = self.getter()
         if inspect.isawaitable(value):
             value = await value

@@ -1,3 +1,5 @@
+"""The Prometheus collector that reads the runner and emits its metrics."""
+
 from collections.abc import Callable, Iterable
 
 from prometheus_client.metrics_core import GaugeMetricFamily, InfoMetricFamily, Metric
@@ -10,13 +12,21 @@ DEPENDENCY = ["service", "dependency"]
 
 
 class HealthMetricsCollector:
+    """Emit the runner state as Prometheus metrics.
+
+    The collector holds no state. It reads a fresh snapshot on every scrape, so
+    the numbers it emits agree with each other.
+    """
+
     def __init__(self, read_snapshot: Callable[[], RunnerSnapshot]) -> None:
         self._read_snapshot = read_snapshot
 
     def describe(self) -> Iterable[Metric]:
+        """Return no metrics, so registration does not scrape the runner."""
         return ()
 
     def collect(self) -> Iterable[Metric]:
+        """Read one snapshot and build the metric families from it."""
         snapshot = self._read_snapshot()
         service = snapshot.service
 
