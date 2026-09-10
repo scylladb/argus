@@ -1,12 +1,20 @@
 import asyncio
+import json
 import sys
+import time
+from pathlib import Path
 
 import aiosqlite
 import httpx
 import pytest
 
 from qatools_health import HealthCheckStatus, Severity
-from qatools_health.checks.http_apis import base_of
+from qatools_health.checks.http_apis import (
+    ANTHROPIC_PROBE_MODEL,
+    ANTHROPIC_STATUS_COMPONENT,
+    ANTHROPIC_STATUS_URL,
+    base_of,
+)
 from qatools_health.checks.primitives import first_line
 from qatools_health.checks import (
     AnthropicApiHealthCheck,
@@ -45,6 +53,14 @@ async def test_http_check_reports_the_status_code():
     handler = responder(200)
     check = HttpHealthCheck("https://example.test/ping", name="ping", client=stub_client(handler))
     assert (await check.perform_check()).status is HEALTHY
+
+
+@pytest.mark.parametrize("status", [200, 201, 202, 204, 301, 302])
+async def test_http_check_accepts_every_success_code(status):
+    check = HttpHealthCheck("https://example.test/ping", name="ping", client=stub_client(responder(status)))
+    result = await check.perform_check()
+    assert result.status is HEALTHY
+    assert str(status) in result.message
 
 
 async def test_http_check_fails_on_an_unexpected_status():
@@ -111,7 +127,7 @@ async def test_github_reports_the_remaining_budget():
 async def test_github_compares_the_login_when_one_is_expected():
     def handle(request):
         if request.url.path == "/rate_limit":
-            return httpx.Response(200, json={"resources": {"core": {"remaining": 1, "limit": 5000}}})
+            return httpx.Response(200, json={"resources": {"core": {"remaining": 4200, "limit": 5000}}})
         return httpx.Response(200, json={"login": "someone-else"})
 
     check = GitHubApiHealthCheck("token", "zeus-bot", client=stub_client(handle))
@@ -123,7 +139,7 @@ async def test_github_compares_the_login_when_one_is_expected():
 async def test_github_accepts_the_expected_login():
     def handle(request):
         if request.url.path == "/rate_limit":
-            return httpx.Response(200, json={"resources": {"core": {"remaining": 1, "limit": 5000}}})
+            return httpx.Response(200, json={"resources": {"core": {"remaining": 4200, "limit": 5000}}})
         return httpx.Response(200, json={"login": "zeus-bot"})
 
     check = GitHubApiHealthCheck("token", "zeus-bot", client=stub_client(handle))
@@ -133,6 +149,37 @@ async def test_github_accepts_the_expected_login():
 async def test_github_fails_when_rate_limit_refuses():
     check = GitHubApiHealthCheck("token", client=stub_client(responder(401)))
     assert (await check.perform_check()).status is UNHEALTHY
+
+
+async def test_github_reports_a_spent_rate_limit():
+    reset = int(time.time()) + 900
+    handler = responder(200, {"resources": {"core": {"remaining": 0, "limit": 5000, "reset": reset}}})
+    check = GitHubApiHealthCheck("token", "zeus-bot", client=stub_client(handler))
+    result = await check.perform_check()
+    assert result.status is UNHEALTHY
+    assert "rate limit is spent" in result.message
+    assert "0/5000" in result.message
+    assert "resets in 15m" in result.message
+    assert len(handler.requests) == 1
+
+
+async def test_github_degrades_before_the_rate_limit_runs_out():
+    handler = responder(200, {"resources": {"core": {"remaining": 400, "limit": 5000}}})
+    result = await GitHubApiHealthCheck("token", client=stub_client(handler)).perform_check()
+    assert result.status is DEGRADED
+    assert "nearly spent" in result.message
+
+
+async def test_github_names_the_rate_limit_behind_a_refusal():
+    def handle(request):
+        return httpx.Response(
+            403, headers={"x-ratelimit-remaining": "0", "x-ratelimit-reset": str(int(time.time()) + 60)}
+        )
+
+    result = await GitHubApiHealthCheck("token", client=stub_client(handle)).perform_check()
+    assert result.status is UNHEALTHY
+    assert "403" in result.message
+    assert "rate limit is spent" in result.message
 
 
 async def test_argus_sends_the_token_and_the_access_headers():
@@ -145,14 +192,108 @@ async def test_argus_sends_the_token_and_the_access_headers():
     assert request.headers["CF-Access-Client-Id"] == "cf-id"
 
 
-async def test_anthropic_lists_models():
-    handler = responder(200)
+def anthropic_stub(component="operational", messages_status=200, messages_json=None, components=None):
+    listed = components if components is not None else [{"name": ANTHROPIC_STATUS_COMPONENT, "status": component}]
+
+    def handle(request):
+        handle.requests.append(request)
+        if request.url.host == "status.anthropic.com":
+            return httpx.Response(200, json={"components": listed})
+        return httpx.Response(messages_status, json=messages_json if messages_json is not None else {})
+
+    handle.requests = []
+    return handle
+
+
+async def test_anthropic_probes_the_status_page_then_the_key():
+    handler = anthropic_stub()
     check = AnthropicApiHealthCheck("key", client=stub_client(handler))
-    await check.perform_check()
-    assert handler.requests[0].url.path == "/v1/models"
-    assert handler.requests[0].headers["x-api-key"] == "key"
+    result = await check.perform_check()
+    assert result.status is HEALTHY
+    assert [str(request.url) for request in handler.requests] == [
+        ANTHROPIC_STATUS_URL,
+        "https://api.anthropic.com/v1/messages",
+    ]
+    probe = handler.requests[1]
+    assert probe.method == "POST"
+    assert probe.headers["x-api-key"] == "key"
+    assert json.loads(probe.content) == {
+        "model": ANTHROPIC_PROBE_MODEL,
+        "max_tokens": 1,
+        "messages": [{"role": "user", "content": "ping"}],
+    }
     assert check.name == "llm_api"
     assert check.severity is Severity.CRITICAL
+
+
+async def test_anthropic_never_sends_the_key_to_the_status_page():
+    handler = anthropic_stub()
+    await AnthropicApiHealthCheck("key", client=stub_client(handler)).perform_check()
+    assert "x-api-key" not in handler.requests[0].headers
+
+
+@pytest.mark.parametrize(
+    ("component", "expected"),
+    [("degraded_performance", DEGRADED), ("partial_outage", DEGRADED), ("major_outage", UNHEALTHY)],
+)
+async def test_anthropic_stops_at_a_platform_outage(component, expected):
+    handler = anthropic_stub(component)
+    result = await AnthropicApiHealthCheck("key", client=stub_client(handler)).perform_check()
+    assert result.status is expected
+    assert component.replace("_", " ") in result.message
+    assert len(handler.requests) == 1
+
+
+async def test_anthropic_probes_the_key_when_the_component_is_absent():
+    handler = anthropic_stub(components=[{"name": "Console", "status": "major_outage"}])
+    result = await AnthropicApiHealthCheck("key", client=stub_client(handler)).perform_check()
+    assert result.status is HEALTHY
+    assert len(handler.requests) == 2
+
+
+async def test_anthropic_probes_the_key_when_the_status_page_is_unreachable():
+    def handle(request):
+        handle.requests.append(request)
+        if request.url.host == "status.anthropic.com":
+            raise httpx.ConnectError("no route", request=request)
+        return httpx.Response(200, json={})
+
+    handle.requests = []
+    result = await AnthropicApiHealthCheck("key", client=stub_client(handle)).perform_check()
+    assert result.status is HEALTHY
+
+
+async def test_anthropic_reports_a_rejected_key():
+    handler = anthropic_stub(
+        messages_status=401,
+        messages_json={"error": {"type": "authentication_error", "message": "invalid x-api-key"}},
+    )
+    result = await AnthropicApiHealthCheck("key", client=stub_client(handler)).perform_check()
+    assert result.status is UNHEALTHY
+    assert "invalid x-api-key" in result.message
+
+
+async def test_anthropic_reports_an_empty_credit_balance():
+    handler = anthropic_stub(
+        messages_status=400,
+        messages_json={"error": {"type": "invalid_request_error", "message": "credit balance is too low"}},
+    )
+    result = await AnthropicApiHealthCheck("key", client=stub_client(handler)).perform_check()
+    assert result.status is UNHEALTHY
+    assert "credit balance is too low" in result.message
+
+
+@pytest.mark.parametrize("status", [429, 529])
+async def test_anthropic_only_degrades_on_a_transient_refusal(status):
+    handler = anthropic_stub(messages_status=status, messages_json={"error": {"message": "slow down"}})
+    result = await AnthropicApiHealthCheck("key", client=stub_client(handler)).perform_check()
+    assert result.status is DEGRADED
+    assert "slow down" in result.message
+
+
+def test_anthropic_keeps_the_probe_model_in_its_identity():
+    key = "key"
+    assert AnthropicApiHealthCheck(key).identity() != AnthropicApiHealthCheck(key, model="claude-opus-5").identity()
 
 
 async def test_tcp_check_reaches_a_listening_port():
@@ -222,6 +363,24 @@ async def test_sqlite_check_names_itself_from_a_path(tmp_path):
     check = SqliteHealthCheck(db_path)
     assert check.name == "sqlite:context"
     assert (await check.perform_check()).status is HEALTHY
+
+
+async def test_sqlite_check_fails_on_a_missing_file_without_creating_it(tmp_path):
+    db_path = tmp_path / "absent.db"
+    check = SqliteHealthCheck(db_path)
+    result = await check.perform_check()
+    assert result.status is UNHEALTHY
+    assert "does not exist" in result.message
+    assert not db_path.exists()
+
+
+async def test_sqlite_check_never_creates_the_file_it_opens(tmp_path, monkeypatch):
+    db_path = tmp_path / "vanishing.db"
+    check = SqliteHealthCheck(db_path)
+    monkeypatch.setattr(Path, "is_file", lambda self: True)
+    with pytest.raises(aiosqlite.OperationalError):
+        await check.perform_check()
+    assert not db_path.exists()
 
 
 async def test_sqlite_check_raises_on_a_broken_query():
@@ -304,7 +463,7 @@ async def test_gh_reports_an_authenticated_cli(tmp_path, monkeypatch):
 async def test_github_fails_when_the_identity_read_refuses():
     def handle(request):
         if request.url.path == "/rate_limit":
-            return httpx.Response(200, json={"resources": {"core": {"remaining": 1, "limit": 5000}}})
+            return httpx.Response(200, json={"resources": {"core": {"remaining": 4200, "limit": 5000}}})
         return httpx.Response(403)
 
     check = GitHubApiHealthCheck("token", "zeus-bot", client=stub_client(handle))

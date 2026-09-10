@@ -615,9 +615,9 @@ class that gets neither a base URL nor a client carrying one raises.
 | --- | --- | --- | --- |
 | `JenkinsApiHealthCheck(base_url, user, token)` | `GET <base>/api/json?tree=mode` | `jenkins_api` | important |
 | `JiraApiHealthCheck(base_url, email, token)` | `GET /rest/api/3/myself` | `jira_api` | important |
-| `GitHubApiHealthCheck(token, expected_login=None)` | `GET /rate_limit`, plus the authenticated login when an expected login is given | `github_api` | important |
+| `GitHubApiHealthCheck(token, expected_login=None, low_budget_fraction=0.1)` | `GET /rate_limit`, plus the authenticated login when an expected login is given | `github_api` | important |
 | `ArgusApiHealthCheck(base_url, token, cf_id=None, cf_secret=None)` | `GET /api/v1/notifications/get_unread`, the cheapest authenticated read | `argus_api` | important |
-| `AnthropicApiHealthCheck(api_key)` | `GET /v1/models`. A models list is free. A completion probe would bill every five minutes for a worse signal | `llm_api` | critical |
+| `AnthropicApiHealthCheck(api_key, model="claude-haiku-4-5")` | The Claude API component on the public status page, then `POST /v1/messages` with `max_tokens: 1` | `llm_api` | critical |
 
 `HeadroomProxyHealthCheck` and `MaiaApiHealthCheck` live in Zeus, not here.
 Zeus is their only consumer today, and the promotion rule for this package is
@@ -625,6 +625,33 @@ two or more consumers.
 
 `GitHubApiHealthCheck` keeps the expected login in its identity, so the probe
 that compares the login and the probe that does not stay two checks.
+
+A token that answers is not a token that works. `GitHubApiHealthCheck` reads the
+core budget out of `/rate_limit` and reports UNHEALTHY at zero and DEGRADED
+under `low_budget_fraction` of the limit, with the minutes left until the reset.
+A spent budget also stops the identity read, so the check never spends the last
+request on itself. GitHub answers a rate-limited call with 403 or 429 and
+`x-ratelimit-remaining: 0`, so the message for a refused read names the rate
+limit instead of the bare status code.
+
+`AnthropicApiHealthCheck` runs two probes. The first reads the `Claude API
+(api.anthropic.com)` component from `https://status.anthropic.com/api/v2/summary.json`.
+An outage there returns at once, because a key probe against a broken platform
+tells the service nothing and costs a request. The status page takes no
+credentials, so the check sends it no key. An unreachable status page is not a
+verdict, and the check falls through to the key probe.
+
+The second probe is `POST /v1/messages` with `max_tokens: 1`. A models list
+proves that the key parses. Only a completion proves that the key is
+authorized, has credit, and is inside its rate limit, which are the three ways
+the LLM API fails in production. One token every five minutes costs about a
+cent a year on Haiku. A 429 or a 529 is DEGRADED, because both clear on their
+own. Anything else, including the 400 that carries `credit balance is too low`,
+is UNHEALTHY.
+
+The Anthropic API pins every model identifier, so `model` names a real model and
+no floating alias exists to track. The probe model is a constructor argument.
+Point it at the cheapest current model and move it when that model retires.
 
 ### Command-line tools
 
@@ -658,6 +685,10 @@ The connection is `aiosqlite.Connection`, the driver Zeus's own stores already
 use, so the check awaits the query instead of blocking the loop or routing
 through a worker thread. A connection given without a name keeps the class
 name `sqlite`, so register two of them under explicit names.
+
+A path opens through the `file:...?mode=rw` URI, and the check reports UNHEALTHY
+when the file is absent. A plain `aiosqlite.connect(path)` call creates an empty
+database, which turns a lost data file into a healthy check over zero rows.
 
 `ScyllaHealthCheck(session, keyspace=None)` lives in Argus and not here. Argus
 connects through `scylla-driver`, Zeus and Maia have no driver, and the Zeus

@@ -48,6 +48,31 @@ def test_a_duplicate_takes_the_strictest_policy(clock):
     assert len(runner.snapshot().checks) == 1
 
 
+def test_a_duplicate_never_relaxes_the_running_policy(clock):
+    check = ScriptedCheck(name="jira", severity=Severity.CRITICAL, interval=10, timeout=2, stale_after_intervals=2)
+    runner = build(clock, check)
+    runner.register(
+        ScriptedCheck(name="jira", severity=Severity.OPTIONAL, interval=600, timeout=30, stale_after_intervals=9)
+    )
+    assert (check.severity, check.interval, check.timeout, check.stale_after_intervals) == (
+        Severity.CRITICAL,
+        10.0,
+        2.0,
+        2.0,
+    )
+
+
+def test_the_strictest_policy_survives_every_order(clock):
+    strict = ScriptedCheck(name="jira", severity=Severity.CRITICAL, interval=10)
+    runner = build(clock, ScriptedCheck(name="jira", severity=Severity.IMPORTANT, interval=300))
+    runner.register(ScriptedCheck(name="jira", severity=Severity.OPTIONAL, interval=600))
+    runner.register(strict)
+    runner.register(ScriptedCheck(name="jira", severity=Severity.OPTIONAL, interval=900))
+    running = runner.snapshot().checks[0]
+    assert (running.severity, published(runner).name) == (Severity.CRITICAL, "jira")
+    assert runner.register(ScriptedCheck(name="jira")).check.interval == 10.0
+
+
 async def test_a_duplicate_shares_one_probe_loop(clock):
     first, second = ScriptedCheck([True], name="jira"), ScriptedCheck([True], name="jira")
     runner = build(clock, first, second)
