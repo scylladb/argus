@@ -374,17 +374,9 @@ func (s *PlannerService) ResolveGlobalRef(ctx context.Context, ref string) (stri
 }
 
 // UsernameByID returns the username for a user UUID, falling back to the raw id
-// when the user is not in the users list (so display commands never fail on a
-// stale or external id).
+// when the user is unknown. It delegates to [UserService.UsernameByID].
 func (s *PlannerService) UsernameByID(ctx context.Context, id string) (string, error) {
-	users, err := s.getUsers(ctx)
-	if err != nil {
-		return "", err
-	}
-	if u, ok := users[id]; ok {
-		return u.Username, nil
-	}
-	return id, nil
+	return s.userSvc.UsernameByID(ctx, id)
 }
 
 // PlanKeyByID resolves a plan UUID to its human-friendly key

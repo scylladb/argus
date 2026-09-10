@@ -194,3 +194,10 @@ def test_user_jobs_returns_empty_for_unassigned_user(api_client):
     res = api_client.get(f"/api/v1/team/user/{user.id}/jobs").json()
     assert res["status"] == "ok"
     assert res["response"] == []
+
+
+def test_user_planned_jobs_returns_empty_for_unassigned_user(api_client):
+    user = _make_user()
+    res = api_client.get(f"/api/v1/team/user/{user.id}/planned_jobs").json()
+    assert res["status"] == "ok"
+    assert res["response"] == []

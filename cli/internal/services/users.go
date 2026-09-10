@@ -156,3 +156,20 @@ func (s *UserService) ResolveUserID(ctx context.Context, ref string) (string, er
 		return "", fmt.Errorf("ambiguous username %q (%d matches)", ref, len(matches))
 	}
 }
+
+// UsernameByID returns the username for a user UUID, falling back to the raw id
+// when the user is not in the users list so display commands never fail on a
+// stale or external id.
+func (s *UserService) UsernameByID(ctx context.Context, id string) (string, error) {
+	if id == "" {
+		return "", nil
+	}
+	users, err := s.getUsers(ctx)
+	if err != nil {
+		return "", err
+	}
+	if u, ok := users[id]; ok {
+		return u.Username, nil
+	}
+	return id, nil
+}

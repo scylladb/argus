@@ -8,12 +8,12 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/scylladb/argus/cli/internal/api"
 	"github.com/scylladb/argus/cli/internal/cmdctx"
 	"github.com/scylladb/argus/cli/internal/logging"
 	"github.com/scylladb/argus/cli/internal/models"
@@ -165,7 +165,7 @@ func runExecuteSingle(cmd *cobra.Command, _ []string) error {
 			BuildID:     buildID,
 			QueueItem:   queueItem,
 			BuildNumber: nextBuildNumber,
-			ArgusURL:    argusRunURL(cfg.URL, buildID, nextBuildNumber),
+			ArgusURL:    api.RunURL(cfg.URL, buildID, nextBuildNumber),
 		}
 		log.Info().Str("build_id", buildID).Int("build_number", nextBuildNumber).Str("argus_url", result.ArgusURL).Msg("build queued")
 		return out.Write(models.NewKVTabular(result))
@@ -182,7 +182,7 @@ func runExecuteSingle(cmd *cobra.Command, _ []string) error {
 		BuildID:     buildID,
 		JenkinsURL:  info.URL,
 		BuildNumber: info.Number,
-		ArgusURL:    argusRunURL(cfg.URL, buildID, info.Number),
+		ArgusURL:    api.RunURL(cfg.URL, buildID, info.Number),
 	}
 	log.Info().Str("build_id", buildID).Str("url", info.URL).Str("argus_url", result.ArgusURL).Msg("build started")
 	return out.Write(models.NewKVTabular(result))
@@ -321,7 +321,7 @@ func waitAllBuilds(ctx context.Context, svc *services.TestExecutionService, resu
 				return
 			}
 			results[i].URL = info.URL
-			results[i].ArgusURL = argusRunURL(argusBase, results[i].BuildSystemID, info.Number)
+			results[i].ArgusURL = api.RunURL(argusBase, results[i].BuildSystemID, info.Number)
 			results[i].Status = "started"
 		}(i)
 	}
@@ -347,16 +347,6 @@ func loadParamsFile(cmd *cobra.Command) (map[string]any, error) {
 		return nil, fmt.Errorf("parsing params file (expected a {name: value} object): %w", err)
 	}
 	return params, nil
-}
-
-// argusRunURL builds the stable Argus run link for a build from the configured
-// Argus base URL, the test's build_system_id, and its Jenkins build number.
-// It returns "" when the build number is not yet known (number == 0).
-func argusRunURL(base, buildID string, number int) string {
-	if number == 0 {
-		return ""
-	}
-	return strings.TrimRight(base, "/") + "/test/" + buildID + "/" + strconv.Itoa(number)
 }
 
 // sctVersionSourceFamilies mirrors the backend SCT_VERSION_SOURCE_FAMILIES: each

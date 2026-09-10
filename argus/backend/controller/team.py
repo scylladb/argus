@@ -127,6 +127,17 @@ def user_jobs(user_id: UUID, user: User = Depends(api_current_user)):
     })
 
 
+@router.get("/user/{user_id}/planned_jobs", name="api.team_api.user_planned_jobs")
+def user_planned_jobs(user_id: UUID, user: User = Depends(api_current_user)):
+    target = User.get(id=user_id)
+    result = list(ArgusService().get_planned_jobs_for_user(target))
+
+    return APIResponse({
+        "status": "ok",
+        "response": result
+    })
+
+
 @router.get("/leader/{user_id}/teams", name="api.team_api.leader_teams")
 def leader_teams(user_id: UUID, user: User = Depends(api_current_user)):
     result = TeamManagerService().get_teams_for_user(user_id=user_id)
