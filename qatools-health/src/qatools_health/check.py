@@ -10,6 +10,20 @@ from qatools_health.status import Severity
 POLICY_KEYWORDS = frozenset({"name", "severity", "interval", "timeout", "stale_after_intervals"})
 
 
+def is_identity_field(key: str, value: Any) -> bool:
+    """Report whether one attribute of a check selects the dependency it probes.
+
+    A name that starts with an underscore holds transport or bookkeeping. A
+    policy keyword tunes the check. Anything callable is behavior. What is left
+    is configuration, and configuration is what names a dependency.
+    """
+    if key.startswith("_") or key in POLICY_KEYWORDS:
+        return False
+    if isinstance(value, property | staticmethod | classmethod):
+        return False
+    return not callable(value)
+
+
 def freeze(value: Any) -> Any:
     """Turn a constructor argument into a hashable stand-in for it.
 
@@ -49,16 +63,6 @@ class HealthCheck(ABC):
     timeout: float = 10.0
     stale_after_intervals: float = 3.0
 
-    _construction: tuple[Any, ...]
-
-    def __new__(cls, *args: Any, **kwargs: Any) -> "HealthCheck":
-        instance = super().__new__(cls)
-        instance._construction = (
-            freeze(args),
-            tuple(sorted((key, freeze(value)) for key, value in kwargs.items() if key not in POLICY_KEYWORDS)),
-        )
-        return instance
-
     def __init__(
         self,
         *,
@@ -91,11 +95,28 @@ class HealthCheck(ABC):
     def identity(self) -> tuple[object, ...]:
         """Return what makes this the dependency it is.
 
-        Two instances with one identity share one probe loop and one metric series.
-        The class and the arguments that select the dependency form the identity.
-        Override this when an argument does not select a dependency.
+        Two instances with one identity share one probe loop and one metric
+        series. The identity is the class and the effective value of every
+        public field, so a different host, port, path, token, model or flag is
+        a different dependency and reports its own series. A field left at its
+        class default and the same value passed to the constructor give one
+        identity, so two instances that describe one dependency collapse
+        however each of them was written.
+
+        The scheduling policy is left out, because it tunes a check rather than
+        selects one. A field whose name starts with an underscore is left out,
+        which is how a check keeps a transport object out of its identity.
         """
-        return (type(self), *self._construction)
+        return (type(self), tuple(sorted((key, freeze(value)) for key, value in self.identity_fields().items())))
+
+    def identity_fields(self) -> dict[str, Any]:
+        """Return the effective value of every public field of this check."""
+        fields: dict[str, Any] = {}
+        for source in (*reversed(type(self).__mro__), self):
+            for key, value in vars(source).items():
+                if is_identity_field(key, value):
+                    fields[key] = value
+        return fields
 
     @abstractmethod
     async def perform_check(self) -> Any:

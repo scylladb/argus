@@ -81,7 +81,7 @@ class JenkinsApiHealthCheck(HttpHealthCheck):
     ) -> None:
         auth = httpx.BasicAuth(user, token) if user and token else None
         base = base_of(base_url, client, "jenkins_api")
-        super().__init__(join(base, "api/json?tree=mode"), auth=auth, client=client, **kwargs)
+        super().__init__(join(base, "api/json?tree=mode"), auth=auth, credential=(user, token), client=client, **kwargs)
 
 
 class JiraApiHealthCheck(HttpHealthCheck):
@@ -101,7 +101,7 @@ class JiraApiHealthCheck(HttpHealthCheck):
     ) -> None:
         auth = httpx.BasicAuth(email, token) if email and token else None
         base = base_of(base_url, client, "jira_api")
-        super().__init__(join(base, "rest/api/3/myself"), auth=auth, client=client, **kwargs)
+        super().__init__(join(base, "rest/api/3/myself"), auth=auth, credential=(email, token), client=client, **kwargs)
 
 
 class GitHubApiHealthCheck(HttpHealthCheck):
@@ -134,10 +134,6 @@ class GitHubApiHealthCheck(HttpHealthCheck):
         self.expected_login = expected_login
         self.low_budget_fraction = low_budget_fraction
         super().__init__(join(base_url, "rate_limit"), headers=headers, client=client, **kwargs)
-
-    def identity(self) -> tuple[object, ...]:
-        """The expected login selects the probe, so it belongs in the identity."""
-        return (type(self), self.url, self.expected_login)
 
     async def perform_check(self) -> Any:
         """Read the rate limit, then compare the login when one is expected."""
@@ -251,10 +247,6 @@ class AnthropicApiHealthCheck(HttpHealthCheck):
         self.status_url = status_url
         self.component = component
         super().__init__(join(base_url, "v1/messages"), headers=headers, client=client, **kwargs)
-
-    def identity(self) -> tuple[object, ...]:
-        """The probe model and the status page select the probe, so both count."""
-        return (type(self), self.url, self.model, self.status_url)
 
     async def perform_check(self) -> Any:
         """Grade the platform status, then spend one token on the key."""

@@ -1,10 +1,12 @@
 import asyncio
 import logging
 
+import httpx
 import pytest
 from support import PairedCheck, ScriptedCheck, settle, spin
 
 from qatools_health import HealthCheckResult, HealthCheckRunner, HealthCheckStatus, Severity
+from qatools_health.checks import GitHubApiHealthCheck
 
 HEALTHY = HealthCheckStatus.HEALTHY
 DEGRADED = HealthCheckStatus.DEGRADED
@@ -16,6 +18,11 @@ def build(clock, *checks, **kwargs):
     for check in checks:
         runner.register(check)
     return runner
+
+
+def stub(status):
+    payload = {"resources": {"core": {"remaining": 4200, "limit": 5000}}}
+    return httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(status, json=payload)))
 
 
 def published(runner, index=0):
@@ -71,6 +78,48 @@ def test_the_strictest_policy_survives_every_order(clock):
     running = runner.snapshot().checks[0]
     assert (running.severity, published(runner).name) == (Severity.CRITICAL, "jira")
     assert runner.register(ScriptedCheck(name="jira")).check.interval == 10.0
+
+
+def test_two_tokens_for_one_api_are_two_series(clock):
+    runner = build(clock)
+    runner.register(GitHubApiHealthCheck("token-read", name="github_api:read"))
+    runner.register(GitHubApiHealthCheck("token-write", name="github_api:write"))
+    published = {check.name for check in runner.snapshot().checks}
+    assert published == {"github_api:read", "github_api:write"}
+
+
+def test_two_tokens_keep_their_own_credentials(clock):
+    runner = build(clock)
+    read = runner.register(GitHubApiHealthCheck("token-read", name="github_api:read"))
+    write = runner.register(GitHubApiHealthCheck("token-write", name="github_api:write"))
+    assert read.check.headers["Authorization"] == "Bearer token-read"
+    assert write.check.headers["Authorization"] == "Bearer token-write"
+
+
+def test_two_tokens_under_one_name_are_rejected(clock):
+    runner = build(clock)
+    runner.register(GitHubApiHealthCheck("token-read"))
+    with pytest.raises(ValueError, match="already names another dependency"):
+        runner.register(GitHubApiHealthCheck("token-write"))
+
+
+async def test_two_tokens_run_two_probe_loops(clock):
+    runner = build(clock)
+    read = runner.register(GitHubApiHealthCheck("token-read", name="github_api:read", client=stub(200)))
+    write = runner.register(GitHubApiHealthCheck("token-write", name="github_api:write", client=stub(503)))
+    runner.start()
+    await spin()
+    assert read.status is HEALTHY
+    assert write.status is UNHEALTHY
+    await runner.stop()
+
+
+def test_one_token_registered_twice_is_one_series(clock):
+    runner = build(clock)
+    runner.register(GitHubApiHealthCheck("token-read", name="github_api:read"))
+    runner.register(GitHubApiHealthCheck("token-read", name="github_api:read"))
+    assert len(runner.snapshot().checks) == 1
+    assert published(runner).subscribers == 2
 
 
 async def test_a_duplicate_shares_one_probe_loop(clock):

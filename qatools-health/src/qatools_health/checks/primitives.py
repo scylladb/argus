@@ -21,6 +21,13 @@ class HttpHealthCheck(HealthCheck):
     latency_budget is degraded. The check builds its own client when it gets
     none, and closes only a client it built. Subclass it to probe one named
     service, and override perform_check to read the body.
+
+    The resolved URL, the headers and `credential` name the dependency, so two
+    checks over one URL with different tokens each run their own loop and report
+    their own series. Give each of them a name, because the runner refuses to
+    publish two dependencies under one name. A credential that travels in `auth`
+    rather than in a header must also be passed as `credential`, because two
+    `auth` objects that carry one password still compare unequal.
     """
 
     name = "http"
@@ -35,6 +42,7 @@ class HttpHealthCheck(HealthCheck):
         latency_budget: float | None = None,
         headers: Mapping[str, str] | None = None,
         auth: Any = None,
+        credential: Sequence[object] | None = None,
         client: httpx.AsyncClient | None = None,
         **kwargs: Any,
     ) -> None:
@@ -45,13 +53,10 @@ class HttpHealthCheck(HealthCheck):
         self.expect = expect
         self.latency_budget = latency_budget
         self.headers = dict(headers) if headers else {}
-        self.auth = auth
+        self._auth = auth
+        self.credential = tuple(credential) if credential is not None else ()
         self._client = client
         self._owns_client = client is None
-
-    def identity(self) -> tuple[object, ...]:
-        """The URL alone names the dependency, so the credentials stay out."""
-        return (type(self), self.url)
 
     def build_client(self) -> httpx.AsyncClient:
         """Build the client this check owns. Override to change the transport."""
@@ -65,7 +70,7 @@ class HttpHealthCheck(HealthCheck):
 
     async def request(self, url: str, *, method: str | None = None, **kwargs: Any) -> httpx.Response:
         """Send one request with the headers and the credentials of this check."""
-        options: dict[str, Any] = {"headers": self.headers, "auth": self.auth}
+        options: dict[str, Any] = {"headers": self.headers, "auth": self._auth}
         options.update(kwargs)
         return await self.client().request(method or self.method, url, **options)
 

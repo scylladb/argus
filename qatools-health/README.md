@@ -245,22 +245,43 @@ client either gets a check written against an async client, or gets no check.
 def identity(self) -> tuple[object, ...]
 ```
 
-Two instances that probe the same thing are the same check. The base class
-derives an identity from the concrete class and the arguments the constructor
-received, minus the five policy keywords above, and the runner keys the check by
-it. A caller therefore constructs an instance wherever it needs one and never
-holds a registry of its own.
+Two instances that probe the same thing are the same check. The identity is the
+concrete class and the effective value of every public field, minus the five
+policy keywords above, and the runner keys the check by it. A caller therefore
+constructs an instance wherever it needs one and never holds a registry of its
+own.
 
-Override `identity()` for the case the default gets wrong.
-`JenkinsApiHealthCheck(client=jenkins_client)` and
-`JenkinsApiHealthCheck(base_url, user, token)` name one Jenkins, so
-`HttpHealthCheck` returns the probe URL from both forms. A subclass overrides
-`identity()` when the argument list carries more than the dependency it names,
-and leaves it alone otherwise.
+A field left at its class default and the same value passed to the constructor
+give one identity, so two instances that describe one dependency collapse
+however each of them was written. `HttpHealthCheck(url)` and
+`HttpHealthCheck(url, method="GET")` are one check.
+
+The identity reads resolved state, not the argument list, so
+`JenkinsApiHealthCheck(client=jenkins_client, user=user, token=token)` and
+`JenkinsApiHealthCheck(base_url, user, token)` name one Jenkins. Both resolve
+one probe URL and one credential. No subclass overrides `identity()`.
+
+Anything that separates two dependencies separates them automatically: a host,
+a port, a path, a database file, a token, a probe model, an expected login, an
+enterprise base URL. Two checks that differ in any of them run two probe loops
+and publish two series, and the runner rejects them under one name. Give each
+one a name:
+
+```python
+runner.register(GitHubApiHealthCheck(READ_TOKEN, name="github_api:read"))
+runner.register(GitHubApiHealthCheck(WRITE_TOKEN, name="github_api:write"))
+```
+
+An attribute whose name starts with an underscore stays out, which is how a
+check keeps a transport object out of its identity. `HttpHealthCheck` holds the
+client and the `auth` object that way, because two of them can carry one
+configuration and still compare unequal. A credential that travels in `auth`
+rather than in a header goes to `credential=` as well, which is what
+`JenkinsApiHealthCheck` and `JiraApiHealthCheck` pass.
 
 An identity value never reaches a log line, a metric label or a `repr`. A
-credential is an ordinary constructor argument, so the identity is compared and
-hashed but never rendered.
+credential is ordinary resolved state, so the identity is compared and hashed
+but never rendered.
 
 Policy is not part of the identity. Two registrations of one dependency with
 different severities, intervals or timeouts collapse into one check that takes
@@ -623,8 +644,10 @@ class that gets neither a base URL nor a client carrying one raises.
 Zeus is their only consumer today, and the promotion rule for this package is
 two or more consumers.
 
-`GitHubApiHealthCheck` keeps the expected login in its identity, so the probe
-that compares the login and the probe that does not stay two checks.
+Each of these separates on its credentials. Two tokens against one Jenkins, two
+Jira accounts, two GitHub tokens with different scopes, or two Anthropic keys
+are each two dependencies with two series. Name them apart, as
+`github_api:read` and `github_api:write`.
 
 A token that answers is not a token that works. `GitHubApiHealthCheck` reads the
 core budget out of `/rate_limit` and reports UNHEALTHY at zero and DEGRADED

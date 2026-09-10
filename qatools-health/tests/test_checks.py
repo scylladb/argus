@@ -480,12 +480,25 @@ async def test_jenkins_takes_its_base_url_from_the_client_it_was_given():
     assert str(handler.requests[0].url) == "https://jenkins.test/api/json?tree=mode"
 
 
-def test_one_jenkins_named_two_ways_is_one_dependency():
+def test_one_jenkins_reached_two_ways_is_one_dependency():
     client = httpx.AsyncClient(base_url="https://jenkins.test")
     assert (
-        JenkinsApiHealthCheck(client=client).identity()
+        JenkinsApiHealthCheck(client=client, user="user", token="token").identity()
         == JenkinsApiHealthCheck("https://jenkins.test", "user", "token").identity()
     )
+
+
+def test_two_jenkins_credentials_are_two_dependencies():
+    assert (
+        JenkinsApiHealthCheck("https://jenkins.test", "user", "one").identity()
+        != JenkinsApiHealthCheck("https://jenkins.test", "user", "two").identity()
+    )
+
+
+def test_the_transport_client_never_reaches_the_identity():
+    first = httpx.AsyncClient(base_url="https://jenkins.test")
+    second = httpx.AsyncClient(base_url="https://jenkins.test")
+    assert JenkinsApiHealthCheck(client=first).identity() == JenkinsApiHealthCheck(client=second).identity()
 
 
 def test_an_api_check_needs_a_base_url_from_somewhere():
@@ -503,7 +516,91 @@ def test_two_urls_are_two_http_dependencies():
 
 def test_the_expected_login_is_part_of_the_github_identity():
     assert GitHubApiHealthCheck("token").identity() != GitHubApiHealthCheck("token", "zeus-bot").identity()
-    assert GitHubApiHealthCheck("token", "zeus-bot").identity() == GitHubApiHealthCheck("other", "zeus-bot").identity()
+
+
+def test_a_class_default_and_the_same_value_passed_are_one_dependency():
+    assert (
+        HttpHealthCheck("https://one.test/ping", name="ping").identity()
+        == HttpHealthCheck("https://one.test/ping", name="ping", method="GET").identity()
+    )
+    assert (
+        BinaryHealthCheck("gh", name="gh").identity()
+        == BinaryHealthCheck("gh", name="gh", version_args=("--version",)).identity()
+    )
+    assert GhCliHealthCheck().identity() == GhCliHealthCheck(verify_auth=False).identity()
+
+
+def test_a_class_default_overridden_is_another_dependency():
+    assert GhCliHealthCheck().identity() != GhCliHealthCheck(verify_auth=True).identity()
+    assert (
+        HttpHealthCheck("https://one.test/ping", name="ping").identity()
+        != HttpHealthCheck("https://one.test/ping", name="ping", method="HEAD").identity()
+    )
+
+
+def test_a_subclass_of_a_shipped_check_is_another_dependency():
+    class GitHubEnterpriseHealthCheck(GitHubApiHealthCheck):
+        pass
+
+    base = GitHubApiHealthCheck("token")
+    derived = GitHubEnterpriseHealthCheck("token")
+    assert base.identity_fields() == derived.identity_fields()
+    assert base.identity() != derived.identity()
+
+
+def test_a_subclass_that_changes_a_default_is_another_dependency():
+    class SlowHttpHealthCheck(HttpHealthCheck):
+        method = "HEAD"
+
+    base = HttpHealthCheck("https://one.test/ping", name="ping")
+    derived = SlowHttpHealthCheck("https://one.test/ping", name="ping")
+    assert base.identity_fields() != derived.identity_fields()
+    assert base.identity() != derived.identity()
+
+
+def test_behavior_and_bookkeeping_stay_out_of_the_identity():
+    fields = GitHubApiHealthCheck("token").identity_fields()
+    assert "perform_check" not in fields
+    assert not [key for key in fields if key.startswith("_")]
+    assert not [key for key in fields if callable(fields[key])]
+
+
+def test_two_github_tokens_are_two_dependencies():
+    assert GitHubApiHealthCheck("token", "zeus-bot").identity() != GitHubApiHealthCheck("other", "zeus-bot").identity()
+    assert GitHubApiHealthCheck("token").identity() != GitHubApiHealthCheck("other").identity()
+
+
+def test_one_github_token_registered_twice_is_one_dependency():
+    assert GitHubApiHealthCheck("token", "zeus-bot").identity() == GitHubApiHealthCheck("token", "zeus-bot").identity()
+
+
+def test_two_enterprise_hosts_are_two_dependencies():
+    assert (
+        GitHubApiHealthCheck("token", base_url="https://one.test/api/v3").identity()
+        != GitHubApiHealthCheck("token", base_url="https://two.test/api/v3").identity()
+    )
+
+
+def test_two_anthropic_keys_are_two_dependencies():
+    assert AnthropicApiHealthCheck("key-one").identity() != AnthropicApiHealthCheck("key-two").identity()
+
+
+def test_two_probe_models_are_two_dependencies():
+    assert (
+        AnthropicApiHealthCheck("key", model="claude-haiku-4-5").identity()
+        != AnthropicApiHealthCheck("key", model="claude-sonnet-5").identity()
+    )
+
+
+def test_one_host_on_two_ports_is_two_dependencies():
+    assert TcpHealthCheck("db.test", 5432, name="a").identity() != TcpHealthCheck("db.test", 5433, name="b").identity()
+
+
+def test_the_policy_never_reaches_the_identity():
+    assert (
+        GitHubApiHealthCheck("token", interval=10, severity=Severity.CRITICAL, timeout=1).identity()
+        == GitHubApiHealthCheck("token", interval=600, severity=Severity.OPTIONAL, timeout=9).identity()
+    )
 
 
 async def test_the_sqlite_check_is_critical():
