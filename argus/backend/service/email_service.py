@@ -83,7 +83,7 @@ class Main(Partial):
             "duration": humanize.naturaldelta(self.test_run.end_time - self.test_run.start_time),
             "build_job_url": self.test_run.build_job_url,
             "run_id": self.test_run.id,
-            "packages": self.test_run.packages,
+            "packages": [dict(p) for p in self.test_run.packages],
             "status": self.test_run.status,
             "commit": self.test_run.scm_revision_id,
             "branch": self.test_run.branch_name,
