@@ -170,3 +170,38 @@ def test_send_email_attachments(api_client: TestClient, fake_test: ArgusTest, cl
     assert isinstance(attachment["data"], BytesIO)
     decoded = attachment["data"].read()
     assert decoded == base64.decodebytes(data)
+
+
+def test_send_default_email_renders_package_versions(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, sct_service: SCTService, email_listener: EmailListener):
+    run_type, run_req = get_fake_test_run(fake_test)
+    client_service.submit_run(run_type, asdict(run_req))
+    run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
+
+    sct_service.submit_packages(str(run.id), [
+        {"name": "kernel", "version": "6.8.0-1066-gcp", "date": "", "revision_id": "", "build_id": ""},
+        {
+            "name": "scylla-server",
+            "version": "2026.4.0.dev",
+            "date": "20260909",
+            "revision_id": "c99402fba78b",
+            "build_id": "1ec8bd52e326",
+        },
+    ])
+
+    response = api_client.post(
+        f"/api/v1/client/testrun/report/email",
+        content=json.dumps({
+            "run_id": run.id,
+            "title": "#auto",
+            "recipients": ["john.smith@scylladb.com"],
+            "sections": [],
+            "attachments": [],
+            "schema_version": "v8",
+        }, cls=ArgusJSONEncoder), headers={"content-type": "application/json"},
+    )
+
+    assert response.json()["status"] == "ok"
+    assert response.json()["response"]
+
+    assert "6.8.0-1066-gcp" in email_listener.content
+    assert "2026.4.0.dev.20260909.c99402fba78b (buildId: 1ec8bd52e326)" in email_listener.content
