@@ -50,12 +50,13 @@
         FETCH_EMPTY: "FETCH_EMPTY",
         FETCH_SUCCESS: "FETCH_SUCCESS",
         FETCH_TEST_INFO_FAILED: "FETCH_TEST_INFO_FAILED",
+        NO_TEST: "NO_TEST",
     };
     let currentState = $state(states.INIT);
 
     const stateMap = {
         [states.INIT]: {
-            nextStates: [states.INIT_RUNS, states.FETCH_TEST_INFO_FAILED],
+            nextStates: [states.INIT_RUNS, states.FETCH_TEST_INFO_FAILED, states.NO_TEST],
             inProgress: true,
             classes: ["text-muted"],
             message: "Loading test information...",
@@ -108,6 +109,15 @@
                 //empty
             },
         },
+        [states.NO_TEST]: {
+            nextStates: [],
+            inProgress: false,
+            classes: ["alert-danger"],
+            message: "This job has no test in Argus.",
+            onEnter: function () {
+                //empty
+            },
+        },
     };
 
     const setState = function (newState) {
@@ -141,6 +151,10 @@
     });
 
     const fetchTestInfo = async function () {
+        if (!testId) {
+            setState(states.NO_TEST);
+            return;
+        }
         try {
             let params = queryString.stringify(
                 {
@@ -163,7 +177,7 @@
             if (error?.exception) {
                 sendMessage(
                     "error",
-                    `Failed fetching test info: ${error.exception}\n${error.arguments.join(" ")}`,
+                    `Failed fetching test info: ${error.exception}\n${error.message}`,
                     "TestRuns::fetchTestInfo",
                 );
             } else if (error instanceof Error) {
@@ -201,7 +215,7 @@
             if (error?.exception) {
                 sendMessage(
                     "error",
-                    `Failed fetching runs: ${error.exception}\n${error.arguments.join(" ")}`,
+                    `Failed fetching runs: ${error.exception}\n${error.message}`,
                     "TestRuns::fetchTestRuns",
                 );
             } else if (error instanceof Error) {
