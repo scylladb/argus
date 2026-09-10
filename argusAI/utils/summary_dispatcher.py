@@ -18,20 +18,16 @@ from .summarizer import DEFAULT_PROMPT, Summarizer, SummarizerError
 LOGGER = logging.getLogger(__name__)
 
 _SCT_EVENT_TABLE = SCTEvent.table_name()
-# Data-backed floor: events under ~250 tokens (≈800 chars for SCT event bodies) expand rather
-# than compress, so summarizing them wastes tokens (argusAI/eval §7). Operators override via
-# EVENT_SUMMARIZATION_MIN_TOKENS; set 0 to summarize everything.
-_DEFAULT_MIN_TOKENS = 250
+# Events under this many input tokens are already short enough to read in full, so a summary
+# saves nothing. Operators override via EVENT_SUMMARIZATION_MIN_TOKENS; set 0 to summarize everything.
+_DEFAULT_MIN_TOKENS = 150
 _STATS_LOG_EVERY = 50  # emit a rolling aggregate line every N completed summarizations
 
 
-def _resolve_encoder(model: str) -> tiktoken.Encoding:
-    """Tokenizer for the summary model; falls back to o200k_base (GPT-4o/5 family) for models
-    tiktoken does not recognize — mirrors the eval harness so the gate and the sweep agree."""
-    try:
-        return tiktoken.encoding_for_model(model)
-    except KeyError:
-        return tiktoken.get_encoding("o200k_base")
+def _resolve_encoder() -> tiktoken.Encoding:
+    """Local tokenizer for the min-token gate. Claude's tokenizer is not public, so counts are an
+    approximation; the eval harness measures with the same encoder so gate and sweep agree."""
+    return tiktoken.get_encoding("o200k_base")
 
 
 def _lag_seconds(ts: datetime) -> float:
@@ -57,7 +53,12 @@ def _resolve_prompt(config: dict) -> str:
 class SummaryDispatcher:
     def __init__(self, db, config: dict):
         self._db = db
-        self.model = config.get("OPENAI_SUMMARY_MODEL", "gpt-5.6-terra")
+        self.model = config.get("ANTHROPIC_SUMMARY_MODEL", "claude-sonnet-5")
+        # Effort steers the model's thinking depth. Summarization is extraction, so `low` holds
+        # quality at a fraction of the output tokens. Empty disables the parameter for models
+        # without effort support.
+        effort = config.get("ANTHROPIC_SUMMARY_EFFORT", "low")
+        self.model_params: dict = {"output_config": {"effort": effort}} if effort else {}
         self.prompt = _resolve_prompt(config)
         self.min_tokens = 0
         self._encoder: tiktoken.Encoding | None = None
@@ -79,14 +80,14 @@ class SummaryDispatcher:
             self.min_tokens = int(config.get("EVENT_SUMMARIZATION_MIN_TOKENS", _DEFAULT_MIN_TOKENS))
             # Always resolve: input tokens are counted once per event for both the gate and the
             # input-size metric, so the encoder is needed even when the gate is off.
-            self._encoder = _resolve_encoder(self.model)
+            self._encoder = _resolve_encoder()
             max_concurrency = int(config.get("EVENT_SUMMARIZATION_MAX_CONCURRENCY", 4))
             max_backlog = int(config.get("EVENT_SUMMARIZATION_MAX_BACKLOG", 1000))
             self._slots = BoundedSemaphore(max_backlog)
-            api_key = config.get("OPENAI_API_KEY")
+            api_key = config.get("ANTHROPIC_API_KEY")
             if not api_key:
-                raise ValueError("OPENAI_API_KEY is missing")
-            self._summarizer = Summarizer(api_key=api_key, base_url=config.get("OPENAI_BASE_URL"))
+                raise ValueError("ANTHROPIC_API_KEY is missing")
+            self._summarizer = Summarizer(api_key=api_key, base_url=config.get("ANTHROPIC_BASE_URL"))
             self._executor = ThreadPoolExecutor(max_workers=max_concurrency, thread_name_prefix="event-summarizer")
         except Exception as exc:  # noqa: BLE001 - summarization setup must never break the embedding worker
             LOGGER.info("Event summarization disabled: %s", exc)
@@ -94,8 +95,9 @@ class SummaryDispatcher:
 
         self.enabled = True
         LOGGER.info(
-            "Event summarization enabled (model=%s, concurrency=%d, max_backlog=%d, min_tokens=%d)",
+            "Event summarization enabled (model=%s, params=%s, concurrency=%d, max_backlog=%d, min_tokens=%d)",
             self.model,
+            self.model_params,
             max_concurrency,
             max_backlog,
             self.min_tokens,
@@ -123,7 +125,7 @@ class SummaryDispatcher:
 
     def _summarize_and_store(self, run_id: UUID, severity: str, ts: datetime, message: str, input_tokens: int) -> None:
         try:
-            result = self._summarizer.summarize(self.model, message, prompt=self.prompt)
+            result = self._summarizer.summarize(self.model, message, prompt=self.prompt, **self.model_params)
             query = f"UPDATE {_SCT_EVENT_TABLE} SET summary = ? WHERE run_id = ? AND severity = ? AND ts = ?"
             # ScyllaConnection.execute swallows write failures and returns None; a null result
             # means the summary never persisted, so don't count/log it as a success.

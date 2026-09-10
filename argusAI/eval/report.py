@@ -227,7 +227,8 @@ def _summary_card(c: dict, show_prompt: bool) -> str:
     else:
         score = (
             f'<span class="score">Q {j.get("overall", 0):.0f} · '
-            f"cov {j.get('coverage', 0)} · faith {j.get('faithfulness', 0)}</span>"
+            f"cov {j.get('coverage', 0)} · faith {j.get('faithfulness', 0)} · "
+            f"size {c.get('compression_ratio', 0) * 100:.0f}%</span>"
         )
         txt, tags = html.escape(c.get("summary", "")), _tags(j)
     name = html.escape(c["model_label"])
@@ -239,13 +240,18 @@ def _summary_card(c: dict, show_prompt: bool) -> str:
 
 
 def _card_tokens(c: dict) -> str:
-    """Per-summary token line: original event tokens -> summary tokens, and how many saved."""
+    """Per-summary token line: event tokens -> summary tokens (size ratio), tokens saved, and
+    billed output tokens, which include hidden reasoning tokens."""
     inp, summ = c.get("input_tokens", 0), c.get("summary_tokens", 0)
     if not summ:  # failed cell or no summary produced
         return ""
     saved = inp - summ
-    pct = (saved / inp * 100) if inp else 0.0
-    return f'<div class="toks">{inp:,} → {summ:,} tok · saved {saved:,} ({pct:.0f}%)</div>'
+    ratio = (summ / inp * 100) if inp else 0.0
+    out_tok = c.get("completion_tokens", 0)
+    return (
+        f'<div class="toks">{inp:,} → {summ:,} tok ({ratio:.0f}% of original) · saved {saved:,} · '
+        f"{out_tok:,} billed out tok</div>"
+    )
 
 
 def _event_header(ev: dict, key: str, orig_tokens: int = 0) -> str:
@@ -267,7 +273,7 @@ def _events_section(results: dict) -> str:
     for key, cs in by_event.items():
         ev = events.get(key.strip(), {})
         show_prompt = len({x["prompt_name"] for x in cs}) > 1
-        # Original event token count is per-model but ~identical across the gpt-5 family
+        # Original event token count comes from one shared local encoder, so it is the same for every model
         # (shared o200k_base); take the max seen so the header shows the true input size.
         orig_tokens = max((c.get("input_tokens", 0) for c in cs), default=0)
         ordered = sorted(cs, key=lambda x: (x["model_label"], x["prompt_name"]))

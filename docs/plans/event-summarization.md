@@ -122,8 +122,8 @@ These were in earlier drafts and are **deliberately dropped**:
   worth keeping (see the worked example in the PR discussion, which preserves node name and
   event id). The summarizer receives the raw message.
 - **Token-based min-length gate.** Events below `EVENT_SUMMARIZATION_MIN_TOKENS` (default
-  `250` ≈ 800 chars of SCT event body) are skipped: §7 showed sub-threshold events expand
-  rather than compress, so summarizing them only burns tokens. The input is tokenized once
+  `150`) are skipped: an event that short is readable in full, so a summary saves nothing.
+  The input is tokenized once
   (tiktoken, same encoder as the eval harness) and reused for both the gate and the
   input-size metric. Set `0` to summarize every unique ERROR/CRITICAL event.
 - **No `status=failed` markers, no retries.** On failure: log, leave `summary` null, move
@@ -189,7 +189,7 @@ _process_single_event(run_id, severity, ts):
   today. A summarization task that fails, or is lost to a worker restart, leaves
   `summary = null` forever — the event is never re-enqueued. Accepted: the fallback is the
   original message, and coverage (not completeness) is the goal.
-- **Disabled/keyless mode.** If `EVENT_SUMMARIZATION_ENABLED` is false or `OPENAI_API_KEY`
+- **Disabled/keyless mode.** If `EVENT_SUMMARIZATION_ENABLED` is false or `ANTHROPIC_API_KEY`
   is missing, the dispatch is skipped entirely (one log line at startup). The worker
   otherwise behaves exactly as today.
 - **Shutdown.** On stop, the executor is drained with a short timeout; unfinished tasks are
@@ -207,12 +207,13 @@ Config keys (in `argus_web.example.yaml`, read once at worker startup via
 
 | Key | Default | Notes |
 | --- | ------- | ----- |
-| `OPENAI_API_KEY` | — | placeholder in the example file only; follows the existing secret conventions |
-| `OPENAI_SUMMARY_MODEL` | `gpt-5-mini` | starting point; final choice is gated on the evaluation (§7) |
+| `ANTHROPIC_API_KEY` | — | placeholder in the example file only; follows the existing secret conventions |
+| `ANTHROPIC_SUMMARY_MODEL` | `claude-sonnet-5` | eval winner (§7) |
+| `ANTHROPIC_SUMMARY_EFFORT` | `low` | thinking depth passed as `output_config.effort`; empty omits it |
 | `EVENT_SUMMARIZATION_ENABLED` | `false` | master switch |
-| `EVENT_SUMMARIZATION_PROMPT` | built-in default (`v1_surgical`) | inline prompt text; overrides the versioned prompt below when set |
-| `EVENT_SUMMARIZATION_PROMPT_VERSION` | `v1_surgical` | pick a versioned prompt by stem from `argusAI/prompts/` (e.g. `v2_summary`); the eval winner is the default |
-| `EVENT_SUMMARIZATION_MIN_TOKENS` | `250` | skip events smaller than this (data-backed §7 floor; `0` disables the gate) |
+| `EVENT_SUMMARIZATION_PROMPT` | built-in default (`v3_compact`) | inline prompt text; overrides the versioned prompt below when set |
+| `EVENT_SUMMARIZATION_PROMPT_VERSION` | `v3_compact` | pick a versioned prompt by stem from `argusAI/prompts/` (e.g. `v2_summary`); the eval winner is the default |
+| `EVENT_SUMMARIZATION_MIN_TOKENS` | `150` | skip events smaller than this (`0` disables the gate) |
 | `EVENT_SUMMARIZATION_MAX_CONCURRENCY` | `4` | executor size / rate-limit guard |
 | `EVENT_SUMMARIZATION_MAX_BACKLOG` | `1000` | max events queued for summarization before new ones are dropped (bounds memory if the API stalls) |
 | `EVENT_SUMMARIZATION_METRICS_PORT` | `0` | Prometheus `/metrics` port for the standalone worker (§6); `0` = off |
@@ -306,10 +307,10 @@ to be built first.
 
 **Model quality — evaluation test (required).** Take 20–50 real production events. Generate
 reference summaries with a frontier model (Opus 4.8 or GPT-5.5). Generate candidate
-summaries with cheaper models (`gpt-5-mini`, …). Score each candidate against the reference
+summaries with cheaper models (`claude-haiku-4-5`, …). Score each candidate against the reference
 (LLM-judge and/or embedding similarity) for information preservation — did the summary keep
 the failure type, node, root-cause line? Pick the cheapest model that is "good enough"; this
-sets `OPENAI_SUMMARY_MODEL`. The harness lives with the argusAI tests and is re-runnable
+sets `ANTHROPIC_SUMMARY_MODEL`. The harness lives with the argusAI tests and is re-runnable
 whenever a model swap is considered.
 
 **Cost analysis (required, with real numbers).** The economics to validate: summarization
@@ -372,12 +373,12 @@ part of the steady-state design.
 | Rate limits at high event volume | Medium | Medium | Bounded executor concurrency; duplicates (bulk of volume) never reach OpenAI. |
 | Lost summaries on worker crash/restart (no retry) | Medium | Low | Accepted under best-effort: fallback is the original message. A backfill pass over `summary IS NULL` events can be added later if coverage proves too low. |
 | Raw event content (node names, IPs, paths) sent to OpenAI | Low | Medium | Deliberate (§4 — sanitization would strip the useful details); events contain test-infrastructure data, not customer data; flag to security if that assumption ever changes. |
-| Secret leakage (`OPENAI_API_KEY` in YAML) | Low | High | Existing `ZEUS_TOKEN`/`*_SECRET` conventions; placeholder only in the example file. |
+| Secret leakage (`ANTHROPIC_API_KEY` in YAML) | Low | High | Existing `ZEUS_TOKEN`/`*_SECRET` conventions; placeholder only in the example file. |
 | Stale CLI cache hides fresh summaries | High | Low | Accepted: TTL-bounded; summaries are not time-critical for CLI users. |
 
 ## 11. Open Questions
 
-1. **Final model** — `gpt-5-mini` is the working default; the evaluation test (§7) decides.
+1. **Final model** — `claude-sonnet-5` at low effort, per the evaluation test (§7).
 2. **Per-user preference storage** — **decided: localStorage** (per-browser, zero backend
    work, matches existing view-preference patterns). A server-side `User` column can replace
    it later if cross-device consistency is ever needed; not worth the backend work up front.

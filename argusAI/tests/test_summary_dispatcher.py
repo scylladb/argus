@@ -1,6 +1,6 @@
 """Unit tests for SummaryDispatcher (best-effort event summarization).
 
-The OpenAI client is mocked; there is no network and no real ScyllaDB — the "db" is a fake
+The Anthropic client is mocked; there is no network and no real ScyllaDB — the "db" is a fake
 that records the CQL it was asked to execute. Covers the behaviors the design requires
 (docs/plans/event-summarization.md §8): unique event -> UPDATE with the right key, disabled
 / keyless -> inert, summarizer error -> no write, and the min-tokens gate.
@@ -60,8 +60,8 @@ def _reset():
 def _config(**over):
     cfg = {
         "EVENT_SUMMARIZATION_ENABLED": True,
-        "OPENAI_API_KEY": "test-key",
-        "OPENAI_SUMMARY_MODEL": "gpt-5.6-terra",
+        "ANTHROPIC_API_KEY": "test-key",
+        "ANTHROPIC_SUMMARY_MODEL": "claude-sonnet-5",
         "EVENT_SUMMARIZATION_MAX_CONCURRENCY": 2,
         "EVENT_SUMMARIZATION_MIN_TOKENS": 0,  # gate off by default; the gate test opts in
     }
@@ -105,7 +105,7 @@ def test_disabled_is_inert(monkeypatch):
 
 def test_missing_key_disables_without_crashing(monkeypatch):
     monkeypatch.setattr(sd, "Summarizer", FakeSummarizer)
-    db = FakeDB(_config(OPENAI_API_KEY=None))
+    db = FakeDB(_config(ANTHROPIC_API_KEY=None))
     dispatcher = sd.SummaryDispatcher(db, db.config)
     assert not dispatcher.enabled
     _dispatch_one(dispatcher)
