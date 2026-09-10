@@ -63,7 +63,7 @@ class EventSimilarityProcessorV2:
             or self.db.config["SCYLLA_KEYSPACE_NAME"]
         )
         # Best-effort summarization of unique events, dispatched from the per-event pipeline.
-        # Inert unless EVENT_SUMMARIZATION_ENABLED and OPENAI_API_KEY are configured; the
+        # Inert unless EVENT_SUMMARIZATION_ENABLED and ANTHROPIC_API_KEY are configured; the
         # embedding path is never blocked or altered by it.
         self.summary_dispatcher = SummaryDispatcher(self.db, self.db.config)
         LOGGER.info("EventSimilarityProcessorV2 initialized")

@@ -88,7 +88,7 @@ def parse_judge(raw: str) -> JudgeScore:
 
 class Judge:
     """Scores summaries with one frontier model. Reuses the harness's Summarizer client so
-    there's a single OpenAI connection for the whole sweep."""
+    there's a single API client for the whole sweep."""
 
     def __init__(self, summarizer: Summarizer, model: str, params: dict[str, Any] | None = None):
         self._summarizer = summarizer

@@ -1,8 +1,8 @@
 """Evaluation config: which models, which prompts, which events, and the API key.
 
 Everything the design mandates be configurable (model + key, plus the prompt) lives
-here. The key is never written to the config file — it comes from the ``OPENAI_API_KEY``
-environment variable (or ``openai_api_key_env`` naming a different var), matching the
+here. The key is never written to the config file — it comes from the ``ANTHROPIC_API_KEY``
+environment variable (or ``anthropic_api_key_env`` naming a different var), matching the
 existing ``*_TOKEN``/``*_SECRET`` secret conventions and keeping keys out of git.
 """
 
@@ -43,6 +43,7 @@ class EvalConfig:
     events_file: Path | None = None  # reuse a saved events.json instead of refetching
     similarity_dedup: bool = False  # collapse semantically-similar events (mirrors production)
     similarity_threshold: float = 0.05  # cosine distance; matches the worker
+    min_event_tokens: int = 150  # skip shorter events; matches the worker's EVENT_SUMMARIZATION_MIN_TOKENS
 
     # --- how to summarize ---
     models: list[ModelSpec] = field(default_factory=list)
@@ -50,12 +51,12 @@ class EvalConfig:
 
     # --- judging ---
     judge_enabled: bool = True
-    judge_model: str = "gpt-5"
+    judge_model: str = "claude-opus-5"
     judge_params: dict[str, Any] = field(default_factory=dict)
 
     # --- provider / secrets ---
-    openai_api_key_env: str = "OPENAI_API_KEY"
-    openai_base_url: str | None = None
+    anthropic_api_key_env: str = "ANTHROPIC_API_KEY"
+    anthropic_base_url: str | None = None
     request_timeout: float = 90.0
     max_concurrency: int = 4
 
@@ -67,11 +68,11 @@ class EvalConfig:
 
     @property
     def api_key(self) -> str:
-        key = os.environ.get(self.openai_api_key_env, "")
+        key = os.environ.get(self.anthropic_api_key_env, "")
         if not key:
             raise RuntimeError(
-                f"No API key found in environment variable '{self.openai_api_key_env}'. "
-                f"Export it, e.g.: export {self.openai_api_key_env}=sk-..."
+                f"No API key found in environment variable '{self.anthropic_api_key_env}'. "
+                f"Export it, e.g.: export {self.anthropic_api_key_env}=sk-ant-..."
             )
         return key
 
@@ -113,13 +114,14 @@ class EvalConfig:
             events_file=(Path(raw["events_file"]) if raw.get("events_file") else None),
             similarity_dedup=bool(raw.get("similarity_dedup", False)),
             similarity_threshold=float(raw.get("similarity_threshold", 0.05)),
+            min_event_tokens=int(raw.get("min_event_tokens", 150)),
             models=models,
             prompt_names=list(raw.get("prompts", [DEFAULT_PROMPT_NAME])),
             judge_enabled=bool(raw.get("judge_enabled", True)),
-            judge_model=raw.get("judge_model", "gpt-5"),
+            judge_model=raw.get("judge_model", "claude-opus-5"),
             judge_params=dict(raw.get("judge_params", {})),
-            openai_api_key_env=raw.get("openai_api_key_env", "OPENAI_API_KEY"),
-            openai_base_url=raw.get("openai_base_url"),
+            anthropic_api_key_env=raw.get("anthropic_api_key_env", "ANTHROPIC_API_KEY"),
+            anthropic_base_url=raw.get("anthropic_base_url"),
             request_timeout=float(raw.get("request_timeout", 90.0)),
             max_concurrency=int(raw.get("max_concurrency", 4)),
             argus_cli=raw.get("argus_cli"),

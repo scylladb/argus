@@ -26,22 +26,18 @@ from .results import CellResult, JudgeScore
 
 LOGGER = logging.getLogger(__name__)
 
-_ENCODERS: dict[str, tiktoken.Encoding] = {}
+_ENCODER = tiktoken.get_encoding("o200k_base")
 
 
 def _count_tokens(model: str, text: str) -> int:
-    """Token count under the model's encoding, so compression is measured in the unit we pay for.
-    Falls back to o200k_base (GPT-4o/5 family) for models tiktoken does not yet know."""
+    """Approximate token count with one local encoder for every model. Claude's tokenizer is not
+    public, so absolute counts differ from billing, but event and summary are measured with the
+    same yardstick, which keeps the compression ratio meaningful. The worker's min-token gate
+    uses the same encoder."""
+    del model  # one shared encoder; kept in the signature so callers stay model-aware
     if not text:
         return 0
-    enc = _ENCODERS.get(model)
-    if enc is None:
-        try:
-            enc = tiktoken.encoding_for_model(model)
-        except KeyError:
-            enc = tiktoken.get_encoding("o200k_base")
-        _ENCODERS[model] = enc
-    return len(enc.encode(text))
+    return len(_ENCODER.encode(text))
 
 
 class EvalHarness:
@@ -49,7 +45,7 @@ class EvalHarness:
         self.cfg = config
         self.summarizer = Summarizer(
             api_key=config.api_key,
-            base_url=config.openai_base_url,
+            base_url=config.anthropic_base_url,
             timeout=config.request_timeout,
         )
         self.pricing = PricingBook(config.pricing)
@@ -62,7 +58,7 @@ class EvalHarness:
             LOGGER.info("Loaded %d events from %s", len(events), self.cfg.events_file)
             if self.cfg.max_events:
                 events = events[: self.cfg.max_events]
-            return self._maybe_dedup(events)
+            return self._maybe_dedup(self._drop_short(events))
         fetcher = EventFetcher(argus_cli=self.cfg.argus_cli, no_cache=self.cfg.no_cache)
         events = fetcher.collect(
             run_ids=self.cfg.run_ids,
@@ -70,10 +66,25 @@ class EvalHarness:
             test_run_limit=self.cfg.test_run_limit,
             max_events=self.cfg.max_events,
         )
-        events = self._maybe_dedup(events)
+        events = self._maybe_dedup(self._drop_short(events))
         if events:
             save_events(events, self.cfg.output_dir / "events.json")
         return events
+
+    def _drop_short(self, events: list[EventSample]) -> list[EventSample]:
+        """Apply the worker's min-token gate so the sweep scores only events production would summarize."""
+        if not self.cfg.min_event_tokens:
+            return events
+        model = self.cfg.models[0].name
+        kept = [e for e in events if _count_tokens(model, e.message) >= self.cfg.min_event_tokens]
+        if len(kept) != len(events):
+            LOGGER.info(
+                "Skipped %d of %d events under %d tokens (min_event_tokens)",
+                len(events) - len(kept),
+                len(events),
+                self.cfg.min_event_tokens,
+            )
+        return kept
 
     def _maybe_dedup(self, events: list[EventSample]) -> list[EventSample]:
         """Collapse semantically-similar events (mirrors production) when enabled."""
@@ -110,8 +121,11 @@ class EvalHarness:
         cell.prompt_tokens = res.prompt_tokens
         cell.completion_tokens = res.completion_tokens
         cell.cached_tokens = res.cached_tokens
+        cell.cache_write_tokens = res.cache_write_tokens
         cell.latency_ms = res.latency_ms
-        cell.cost_usd = self.pricing.cost(model.name, res.prompt_tokens, res.completion_tokens, res.cached_tokens)
+        cell.cost_usd = self.pricing.cost(
+            model.name, res.prompt_tokens, res.completion_tokens, res.cached_tokens, res.cache_write_tokens
+        )
         if self.cfg.judge_enabled:
             # Judge.score never raises; the guard is belt-and-suspenders so one bad judge
             # can't sink the sweep even if that contract regresses.

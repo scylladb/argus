@@ -18,8 +18,8 @@ production), as is the prompt, the judge, and the pricing table.
 ## Setup
 
 ```bash
-pip install -e '.[ai-eval]'          # installs openai + PyYAML
-export OPENAI_API_KEY=sk-...          # key comes from the env, never the config file
+pip install -e '.[ai-eval]'          # installs anthropic + PyYAML
+export ANTHROPIC_API_KEY=sk-ant-...   # key comes from the env, never the config file
 ```
 
 The `argus` CLI must be authenticated (`argus auth`) — the harness shells out to it.
@@ -52,10 +52,12 @@ Outputs land in `output_dir` (default `argusAI/eval/out/`):
 
 See `config.example.yaml` — commented in full. The key knobs:
 
+- `min_event_tokens` — skip events shorter than this, like the worker's
+  `EVENT_SUMMARIZATION_MIN_TOKENS` gate (default 150; `0` scores every event).
 - `models` — list of candidates; each `params` block is forwarded verbatim to the API
   call (`reasoning_effort`, `temperature`, `max_completion_tokens`, …).
 - `prompts` — names from `prompts.py`; list several to A/B them on the same events.
-- `judge_model` / `judge_enabled` — the frontier scorer (Opus-class / GPT-5-class).
+- `judge_model` / `judge_enabled` — the frontier scorer (Opus-class).
 - `pricing` — USD per 1M tokens; **the defaults are placeholders**, set real numbers or
   the cost axis is meaningless (unknown models are flagged in the report, never silent).
 
@@ -82,7 +84,7 @@ coverage drops more than `--tolerance` points (default 3) — the two axes that 
 information was dropped or invented. Conciseness, cost, and latency are shown as deltas but
 never fail the check; new hallucinations or dropped-critical items are flagged inline.
 
-Deliberately not wired into CI: each run spends real OpenAI tokens and the judge is
+Deliberately not wired into CI: each run spends real API tokens and the judge is
 non-deterministic, so it's a manual pre-change gate, not an automated one.
 
 ## Iterating the prompt

@@ -4,7 +4,7 @@ from pathlib import Path
 
 PROMPTS_DIR = Path(__file__).resolve().parent
 
-PRODUCTION_PROMPT_NAME = "v1_surgical"
+PRODUCTION_PROMPT_NAME = "v3_compact"
 JUDGE_PROMPT_NAME = "judge"
 
 

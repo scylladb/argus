@@ -9,7 +9,7 @@ Sub-modes:
     --baseline DIR         re-run on the frozen set and check for regressions (exit 1 on FAIL)
 
 Everything else (models, prompts, events, judge) comes from the YAML config; only the
-API key comes from the environment (OPENAI_API_KEY by default).
+API key comes from the environment (ANTHROPIC_API_KEY by default).
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ def _setup_logging(verbose: bool) -> None:
         datefmt="%H:%M:%S",
     )
     logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("openai").setLevel(logging.WARNING)
+    logging.getLogger("anthropic").setLevel(logging.WARNING)
 
 
 def main(argv: list[str] | None = None) -> int:

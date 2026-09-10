@@ -6,7 +6,7 @@ information preservation with a frontier judge model, and renders a comparison g
 plus a per-event side-by-side HTML report.
 
 This is the harness the design doc (docs/plans/event-summarization.md §7) requires to
-pick ``OPENAI_SUMMARY_MODEL`` and to validate the prompt before rollout. Run it as::
+pick ``ANTHROPIC_SUMMARY_MODEL`` and to validate the prompt before rollout. Run it as::
 
     python -m argusAI.eval --config argusAI/eval/config.example.yaml
 
