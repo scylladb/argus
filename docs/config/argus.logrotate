@@ -1,4 +1,4 @@
-/var/log/argus/argus.log {
+/var/log/argus/*.log {
     daily
     rotate 7
     compress

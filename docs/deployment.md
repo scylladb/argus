@@ -111,10 +111,41 @@ sudo systemctl enable --now argus.service
 
 ## Configure Logging
 
-`uwsgi.ini` logs to `/var/log/argus/argus.log`. Create the directory and install log rotation:
+Gunicorn writes the application log to `/var/log/argus/argus.log`. The maintenance cron
+writes to `/var/log/argus/maintenance.log`. Create the directory and install log rotation:
 
 ```bash
 sudo mkdir -p /var/log/argus
 sudo chown argus:argus /var/log/argus
 sudo cp docs/config/argus.logrotate /etc/logrotate.d/argus
+```
+
+## Configure Maintenance Cron
+
+Two maintenance commands must run on a schedule:
+
+- `scan_jobs.sh` imports new Jenkins jobs as Argus tests. Without a matching
+  test, a submitted run stays invisible in the UI.
+- `refresh_issues.sh` updates the cached GitHub and Jira issue data.
+
+Edit the crontab of the `argus` user:
+
+```bash
+sudo -iu argus crontab -e
+```
+
+Replace any existing maintenance lines with these two lines:
+
+```
+*/5 * * * * /home/argus/app/scan_jobs.sh >> /var/log/argus/maintenance.log 2>&1
+*/15 * * * * /home/argus/app/refresh_issues.sh >> /var/log/argus/maintenance.log 2>&1
+```
+
+Both scripts change into the application directory and read the config from
+there. Use absolute paths in the crontab.
+
+Check the log after the first run:
+
+```bash
+tail /var/log/argus/maintenance.log
 ```
