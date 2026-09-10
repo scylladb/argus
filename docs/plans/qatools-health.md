@@ -42,8 +42,8 @@ Argus holds no health-check code. The relevant facts about the repository today:
 The package is therefore new code in a new tree. It is not an addition to
 `argus/`.
 
-The design is fixed by `docs/superpowers/specs/2026-08-31-healthcheck-design.md`
-in `scylladb/zeus` (PR 179). This plan implements that spec.
+The design is fixed by `docs/specs/2026-08-31-healthcheck-design.md`. This plan
+implements that spec.
 
 ## 3. Goals
 
