@@ -30,6 +30,16 @@ def _error_redirect(asgi_request: Request, error_type: int) -> RedirectResponse:
     return RedirectResponse(url_for(asgi_request, "main.error", type=error_type), status_code=302)
 
 
+def _run_view(asgi_request: Request, run, tab: str, run_label: str):
+    # A run keeps no test_id when its Jenkins job has no test entity in Argus.
+    # The run view needs the test, the release and the group.
+    if not run.test_id:
+        flash(asgi_request, f"Run {run_label} has no test in Argus. "
+              f"Job \"{run.build_id}\" is not registered.", "error")
+        return _error_redirect(asgi_request, 404)
+    return templates.TemplateResponse(asgi_request, "run_view_by_plugin.html.j2", {"run": run, "tab": tab})
+
+
 @router.get("/test_runs", name="main.test_runs")
 def test_runs(asgi_request: Request, user: User = Depends(ui_current_user)):
     return templates.TemplateResponse(asgi_request, "test_runs.html.j2")
@@ -60,7 +70,7 @@ def get_run_by_plugin(asgi_request: Request, plugin_name: str, run_id: str, tab:
     if not run:
         flash(asgi_request, f"Run {plugin_name}/{run_id} not found.", "error")
         return _error_redirect(asgi_request, 404)
-    return templates.TemplateResponse(asgi_request, "run_view_by_plugin.html.j2", {"run": run, "tab": tab})
+    return _run_view(asgi_request, run, tab, f"{plugin_name}/{run_id}")
 
 
 @router.get("/test/{build_id:path}/{build_number:int}/{tab}", name="main.get_run_by_build")
@@ -75,7 +85,7 @@ def get_run_by_build(asgi_request: Request, build_id: str, build_number: int, ta
     if not run:
         flash(asgi_request, f"Run {build_id} #{build_number} not found.", "error")
         return _error_redirect(asgi_request, 404)
-    return templates.TemplateResponse(asgi_request, "run_view_by_plugin.html.j2", {"run": run, "tab": tab})
+    return _run_view(asgi_request, run, tab, f"{build_id} #{build_number}")
 
 
 @router.get("/", name="main.home")

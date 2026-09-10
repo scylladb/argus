@@ -20,11 +20,12 @@
 
     const fetchTestInfo = async function () {
         try{
+            if (!jobId) throw new Error("This job has no test in Argus");
             let res = await fetch(`/api/v1/test-info?testId=${jobId}`);
             if (res.status != 200) throw new Error("HTTP Transport Error");
             let data = await res.json();
             if (data.status != "ok") {
-                throw new Error([data.exception, ...data.arguments].join(" "));
+                throw new Error(`${data.response.exception}: ${data.response.message}`);
             }
             dispatch("testIdResolved", {
                 testId: jobId,
