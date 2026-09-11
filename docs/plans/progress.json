@@ -38,5 +38,15 @@
         "created": "2026-06-08",
         "phases_total": 5,
         "phases_done": 2
+    },
+    {
+        "id": "qatools-health",
+        "title": "QA Tools Health Checking Package",
+        "file": "docs/plans/qatools-health.md",
+        "domain": "infrastructure",
+        "status": "in_progress",
+        "created": "2026-09-03",
+        "phases_total": 7,
+        "phases_done": 7
     }
 ]

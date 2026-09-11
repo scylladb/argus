@@ -1,0 +1,609 @@
+import asyncio
+import json
+import sys
+import time
+from pathlib import Path
+
+import aiosqlite
+import httpx
+import pytest
+
+from qatools_health import HealthCheckStatus, Severity
+from qatools_health.checks.http_apis import (
+    ANTHROPIC_PROBE_MODEL,
+    ANTHROPIC_STATUS_COMPONENT,
+    ANTHROPIC_STATUS_URL,
+    base_of,
+)
+from qatools_health.checks.primitives import first_line
+from qatools_health.checks import (
+    AnthropicApiHealthCheck,
+    ArgusApiHealthCheck,
+    BinaryHealthCheck,
+    GhCliHealthCheck,
+    GitHubApiHealthCheck,
+    HttpHealthCheck,
+    JenkinsApiHealthCheck,
+    JiraApiHealthCheck,
+    OpencodeHealthCheck,
+    SqliteHealthCheck,
+    StalenessHealthCheck,
+    TcpHealthCheck,
+)
+
+HEALTHY = HealthCheckStatus.HEALTHY
+DEGRADED = HealthCheckStatus.DEGRADED
+UNHEALTHY = HealthCheckStatus.UNHEALTHY
+
+
+def stub_client(handler):
+    return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+
+def responder(status=200, json=None):
+    def handle(request):
+        handle.requests.append(request)
+        return httpx.Response(status, json=json if json is not None else {})
+
+    handle.requests = []
+    return handle
+
+
+async def test_http_check_reports_the_status_code():
+    handler = responder(200)
+    check = HttpHealthCheck("https://example.test/ping", name="ping", client=stub_client(handler))
+    assert (await check.perform_check()).status is HEALTHY
+
+
+@pytest.mark.parametrize("status", [200, 201, 202, 204, 301, 302])
+async def test_http_check_accepts_every_success_code(status):
+    check = HttpHealthCheck("https://example.test/ping", name="ping", client=stub_client(responder(status)))
+    result = await check.perform_check()
+    assert result.status is HEALTHY
+    assert str(status) in result.message
+
+
+async def test_http_check_fails_on_an_unexpected_status():
+    check = HttpHealthCheck("https://example.test/ping", name="ping", client=stub_client(responder(503)))
+    result = await check.perform_check()
+    assert result.status is UNHEALTHY
+    assert "503" in result.message
+
+
+async def test_http_check_degrades_over_its_latency_budget():
+    async def slow(request):
+        await asyncio.sleep(0.02)
+        return httpx.Response(200)
+
+    check = HttpHealthCheck(
+        "https://example.test/ping",
+        name="ping",
+        latency_budget=0.001,
+        client=stub_client(slow),
+    )
+    assert (await check.perform_check()).status is DEGRADED
+
+
+async def test_http_check_never_closes_a_client_it_received():
+    client = stub_client(responder(200))
+    check = HttpHealthCheck("https://example.test/ping", name="ping", client=client)
+    await check.aclose()
+    assert client.is_closed is False
+    await client.aclose()
+
+
+async def test_http_check_closes_a_client_it_built():
+    check = HttpHealthCheck("https://example.test/ping", name="ping")
+    built = check.client()
+    await check.aclose()
+    assert built.is_closed is True
+
+
+async def test_jenkins_probes_the_cheap_mode_read():
+    handler = responder(200)
+    check = JenkinsApiHealthCheck("https://jenkins.test/", "user", "token", client=stub_client(handler))
+    await check.perform_check()
+    assert str(handler.requests[0].url) == "https://jenkins.test/api/json?tree=mode"
+    assert check.name == "jenkins_api"
+    assert check.severity is Severity.IMPORTANT
+
+
+async def test_jira_probes_myself():
+    handler = responder(200)
+    check = JiraApiHealthCheck("https://jira.test", "a@b.test", "token", client=stub_client(handler))
+    await check.perform_check()
+    assert handler.requests[0].url.path == "/rest/api/3/myself"
+
+
+async def test_github_reports_the_remaining_budget():
+    handler = responder(200, {"resources": {"core": {"remaining": 4200, "limit": 5000}}})
+    check = GitHubApiHealthCheck("token", client=stub_client(handler))
+    result = await check.perform_check()
+    assert result.status is HEALTHY
+    assert "4200/5000" in result.message
+    assert len(handler.requests) == 1
+
+
+async def test_github_compares_the_login_when_one_is_expected():
+    def handle(request):
+        if request.url.path == "/rate_limit":
+            return httpx.Response(200, json={"resources": {"core": {"remaining": 4200, "limit": 5000}}})
+        return httpx.Response(200, json={"login": "someone-else"})
+
+    check = GitHubApiHealthCheck("token", "zeus-bot", client=stub_client(handle))
+    result = await check.perform_check()
+    assert result.status is UNHEALTHY
+    assert "someone-else" in result.message
+
+
+async def test_github_accepts_the_expected_login():
+    def handle(request):
+        if request.url.path == "/rate_limit":
+            return httpx.Response(200, json={"resources": {"core": {"remaining": 4200, "limit": 5000}}})
+        return httpx.Response(200, json={"login": "zeus-bot"})
+
+    check = GitHubApiHealthCheck("token", "zeus-bot", client=stub_client(handle))
+    assert (await check.perform_check()).status is HEALTHY
+
+
+async def test_github_fails_when_rate_limit_refuses():
+    check = GitHubApiHealthCheck("token", client=stub_client(responder(401)))
+    assert (await check.perform_check()).status is UNHEALTHY
+
+
+async def test_github_reports_a_spent_rate_limit():
+    reset = int(time.time()) + 900
+    handler = responder(200, {"resources": {"core": {"remaining": 0, "limit": 5000, "reset": reset}}})
+    check = GitHubApiHealthCheck("token", "zeus-bot", client=stub_client(handler))
+    result = await check.perform_check()
+    assert result.status is UNHEALTHY
+    assert "rate limit is spent" in result.message
+    assert "0/5000" in result.message
+    assert "resets in 15m" in result.message
+    assert len(handler.requests) == 1
+
+
+async def test_github_degrades_before_the_rate_limit_runs_out():
+    handler = responder(200, {"resources": {"core": {"remaining": 400, "limit": 5000}}})
+    result = await GitHubApiHealthCheck("token", client=stub_client(handler)).perform_check()
+    assert result.status is DEGRADED
+    assert "nearly spent" in result.message
+
+
+async def test_github_names_the_rate_limit_behind_a_refusal():
+    def handle(request):
+        return httpx.Response(
+            403, headers={"x-ratelimit-remaining": "0", "x-ratelimit-reset": str(int(time.time()) + 60)}
+        )
+
+    result = await GitHubApiHealthCheck("token", client=stub_client(handle)).perform_check()
+    assert result.status is UNHEALTHY
+    assert "403" in result.message
+    assert "rate limit is spent" in result.message
+
+
+async def test_argus_sends_the_token_and_the_access_headers():
+    handler = responder(200)
+    check = ArgusApiHealthCheck("https://argus.test", "abc", "cf-id", "cf-secret", client=stub_client(handler))
+    await check.perform_check()
+    request = handler.requests[0]
+    assert request.url.path == "/api/v1/notifications/get_unread"
+    assert request.headers["Authorization"] == "token abc"
+    assert request.headers["CF-Access-Client-Id"] == "cf-id"
+
+
+def anthropic_stub(component="operational", messages_status=200, messages_json=None, components=None):
+    listed = components if components is not None else [{"name": ANTHROPIC_STATUS_COMPONENT, "status": component}]
+
+    def handle(request):
+        handle.requests.append(request)
+        if request.url.host == "status.anthropic.com":
+            return httpx.Response(200, json={"components": listed})
+        return httpx.Response(messages_status, json=messages_json if messages_json is not None else {})
+
+    handle.requests = []
+    return handle
+
+
+async def test_anthropic_probes_the_status_page_then_the_key():
+    handler = anthropic_stub()
+    check = AnthropicApiHealthCheck("key", client=stub_client(handler))
+    result = await check.perform_check()
+    assert result.status is HEALTHY
+    assert [str(request.url) for request in handler.requests] == [
+        ANTHROPIC_STATUS_URL,
+        "https://api.anthropic.com/v1/messages",
+    ]
+    probe = handler.requests[1]
+    assert probe.method == "POST"
+    assert probe.headers["x-api-key"] == "key"
+    assert json.loads(probe.content) == {
+        "model": ANTHROPIC_PROBE_MODEL,
+        "max_tokens": 1,
+        "messages": [{"role": "user", "content": "ping"}],
+    }
+    assert check.name == "llm_api"
+    assert check.severity is Severity.CRITICAL
+
+
+async def test_anthropic_never_sends_the_key_to_the_status_page():
+    handler = anthropic_stub()
+    await AnthropicApiHealthCheck("key", client=stub_client(handler)).perform_check()
+    assert "x-api-key" not in handler.requests[0].headers
+
+
+@pytest.mark.parametrize(
+    ("component", "expected"),
+    [("degraded_performance", DEGRADED), ("partial_outage", DEGRADED), ("major_outage", UNHEALTHY)],
+)
+async def test_anthropic_stops_at_a_platform_outage(component, expected):
+    handler = anthropic_stub(component)
+    result = await AnthropicApiHealthCheck("key", client=stub_client(handler)).perform_check()
+    assert result.status is expected
+    assert component.replace("_", " ") in result.message
+    assert len(handler.requests) == 1
+
+
+async def test_anthropic_probes_the_key_when_the_component_is_absent():
+    handler = anthropic_stub(components=[{"name": "Console", "status": "major_outage"}])
+    result = await AnthropicApiHealthCheck("key", client=stub_client(handler)).perform_check()
+    assert result.status is HEALTHY
+    assert len(handler.requests) == 2
+
+
+async def test_anthropic_probes_the_key_when_the_status_page_is_unreachable():
+    def handle(request):
+        handle.requests.append(request)
+        if request.url.host == "status.anthropic.com":
+            raise httpx.ConnectError("no route", request=request)
+        return httpx.Response(200, json={})
+
+    handle.requests = []
+    result = await AnthropicApiHealthCheck("key", client=stub_client(handle)).perform_check()
+    assert result.status is HEALTHY
+
+
+async def test_anthropic_reports_a_rejected_key():
+    handler = anthropic_stub(
+        messages_status=401,
+        messages_json={"error": {"type": "authentication_error", "message": "invalid x-api-key"}},
+    )
+    result = await AnthropicApiHealthCheck("key", client=stub_client(handler)).perform_check()
+    assert result.status is UNHEALTHY
+    assert "invalid x-api-key" in result.message
+
+
+async def test_anthropic_reports_an_empty_credit_balance():
+    handler = anthropic_stub(
+        messages_status=400,
+        messages_json={"error": {"type": "invalid_request_error", "message": "credit balance is too low"}},
+    )
+    result = await AnthropicApiHealthCheck("key", client=stub_client(handler)).perform_check()
+    assert result.status is UNHEALTHY
+    assert "credit balance is too low" in result.message
+
+
+@pytest.mark.parametrize("status", [429, 529])
+async def test_anthropic_only_degrades_on_a_transient_refusal(status):
+    handler = anthropic_stub(messages_status=status, messages_json={"error": {"message": "slow down"}})
+    result = await AnthropicApiHealthCheck("key", client=stub_client(handler)).perform_check()
+    assert result.status is DEGRADED
+    assert "slow down" in result.message
+
+
+def test_anthropic_keeps_the_probe_model_in_its_identity():
+    key = "key"
+    assert AnthropicApiHealthCheck(key).identity() != AnthropicApiHealthCheck(key, model="claude-opus-5").identity()
+
+
+async def test_tcp_check_reaches_a_listening_port():
+    server = await asyncio.start_server(lambda reader, writer: writer.close(), "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    async with server:
+        check = TcpHealthCheck("127.0.0.1", port, name="tunnel")
+        assert (await check.perform_check()).status is HEALTHY
+
+
+async def test_tcp_check_raises_on_a_closed_port():
+    with pytest.raises(OSError):
+        await TcpHealthCheck("127.0.0.1", 1, name="tunnel", timeout=1).perform_check()
+
+
+async def test_binary_check_reports_the_version():
+    check = BinaryHealthCheck(sys.executable, version_args=("--version",), name="python")
+    result = await check.perform_check()
+    assert result.status is HEALTHY
+    assert "Python" in result.message
+
+
+async def test_binary_check_fails_when_the_binary_is_missing():
+    check = BinaryHealthCheck("qatools-health-no-such-binary", name="missing")
+    result = await check.perform_check()
+    assert result.status is UNHEALTHY
+    assert "not on PATH" in result.message
+
+
+async def test_binary_check_fails_on_a_non_zero_exit():
+    check = BinaryHealthCheck(sys.executable, version_args=("-c", "raise SystemExit(3)"), name="python")
+    result = await check.perform_check()
+    assert result.status is UNHEALTHY
+    assert "exited 3" in result.message
+
+
+def test_binary_check_needs_a_binary():
+    with pytest.raises(ValueError, match="no binary"):
+        BinaryHealthCheck(name="empty")
+
+
+def test_the_cli_classes_carry_their_defaults():
+    assert OpencodeHealthCheck().name == "opencode"
+    assert OpencodeHealthCheck().severity is Severity.CRITICAL
+    assert GhCliHealthCheck().name == "gh"
+    assert GhCliHealthCheck().severity is Severity.IMPORTANT
+
+
+async def test_gh_skips_the_auth_probe_by_default():
+    check = GhCliHealthCheck(name="gh")
+    assert check.verify_auth is False
+
+
+async def test_sqlite_check_queries_a_live_connection():
+    connection = await aiosqlite.connect(":memory:")
+    check = SqliteHealthCheck(connection, name="sqlite:context")
+    result = await check.perform_check()
+    assert result.status is HEALTHY
+    assert check.name == "sqlite:context"
+    await connection.close()
+
+
+async def test_sqlite_check_names_itself_from_a_path(tmp_path):
+    db_path = tmp_path / "context.db"
+    async with aiosqlite.connect(db_path):
+        pass
+    check = SqliteHealthCheck(db_path)
+    assert check.name == "sqlite:context"
+    assert (await check.perform_check()).status is HEALTHY
+
+
+async def test_sqlite_check_fails_on_a_missing_file_without_creating_it(tmp_path):
+    db_path = tmp_path / "absent.db"
+    check = SqliteHealthCheck(db_path)
+    result = await check.perform_check()
+    assert result.status is UNHEALTHY
+    assert "does not exist" in result.message
+    assert not db_path.exists()
+
+
+async def test_sqlite_check_never_creates_the_file_it_opens(tmp_path, monkeypatch):
+    db_path = tmp_path / "vanishing.db"
+    check = SqliteHealthCheck(db_path)
+    monkeypatch.setattr(Path, "is_file", lambda self: True)
+    with pytest.raises(aiosqlite.OperationalError):
+        await check.perform_check()
+    assert not db_path.exists()
+
+
+async def test_sqlite_check_raises_on_a_broken_query():
+    connection = await aiosqlite.connect(":memory:")
+    check = SqliteHealthCheck(connection, query="SELECT * FROM missing", name="sqlite:broken")
+    with pytest.raises(aiosqlite.OperationalError):
+        await check.perform_check()
+    await connection.close()
+
+
+async def test_staleness_reports_the_three_bands():
+    now = 1_000_000.0
+    check = StalenessHealthCheck(lambda: now - 10, 60, 600, name="jenkins_poll", clock=lambda: now)
+    assert (await check.perform_check()).status is HEALTHY
+
+    check = StalenessHealthCheck(lambda: now - 100, 60, 600, name="jenkins_poll", clock=lambda: now)
+    assert (await check.perform_check()).status is DEGRADED
+
+    check = StalenessHealthCheck(lambda: now - 1000, 60, 600, name="jenkins_poll", clock=lambda: now)
+    assert (await check.perform_check()).status is UNHEALTHY
+
+
+async def test_staleness_handles_a_missing_timestamp():
+    check = StalenessHealthCheck(lambda: None, 60, 600, name="jenkins_poll")
+    assert (await check.perform_check()).status is UNHEALTHY
+
+
+async def test_staleness_awaits_an_async_getter():
+    async def last_poll():
+        return 1_000_000.0
+
+    check = StalenessHealthCheck(last_poll, 60, 600, name="jenkins_poll", clock=lambda: 1_000_010.0)
+    assert (await check.perform_check()).status is HEALTHY
+
+
+def test_staleness_needs_a_name():
+    with pytest.raises(ValueError, match="has no name"):
+        StalenessHealthCheck(lambda: 0.0, 60, 600)
+
+
+def test_staleness_rejects_an_inverted_window():
+    with pytest.raises(ValueError, match="warn_after"):
+        StalenessHealthCheck(lambda: 0.0, 600, 60, name="jenkins_poll")
+
+
+async def test_http_check_honours_a_custom_method():
+    handler = responder(200)
+    check = HttpHealthCheck("https://example.test/ping", method="HEAD", name="ping", client=stub_client(handler))
+    await check.perform_check()
+    assert handler.requests[0].method == "HEAD"
+
+
+async def test_gh_merges_the_auth_probe_when_asked():
+    check = GhCliHealthCheck(binary=sys.executable, version_args=("--version",), name="gh", verify_auth=True)
+    result = await check.perform_check()
+    assert result.status is UNHEALTHY
+    assert "gh auth status exited" in result.message
+
+
+async def test_gh_reports_a_missing_binary_before_the_auth_probe():
+    check = GhCliHealthCheck(binary="qatools-health-no-such-binary", name="gh", verify_auth=True)
+    assert "not on PATH" in (await check.perform_check()).message
+
+
+def test_first_line_ignores_blank_output():
+    assert first_line("\n   \n") == ""
+    assert first_line("gh version 2.40.0\nhttps://example") == "gh version 2.40.0"
+
+
+async def test_gh_reports_an_authenticated_cli(tmp_path, monkeypatch):
+    fake = tmp_path / "gh"
+    fake.write_text('#!/bin/sh\nif [ "$1" = "--version" ]; then echo \'gh version 2.40.0\'; fi\nexit 0\n')
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path))
+    result = await GhCliHealthCheck(verify_auth=True).perform_check()
+    assert result.status is HEALTHY
+    assert result.message.endswith("authenticated")
+
+
+async def test_github_fails_when_the_identity_read_refuses():
+    def handle(request):
+        if request.url.path == "/rate_limit":
+            return httpx.Response(200, json={"resources": {"core": {"remaining": 4200, "limit": 5000}}})
+        return httpx.Response(403)
+
+    check = GitHubApiHealthCheck("token", "zeus-bot", client=stub_client(handle))
+    result = await check.perform_check()
+    assert result.status is UNHEALTHY
+    assert "user answered 403" in result.message
+
+
+async def test_jenkins_takes_its_base_url_from_the_client_it_was_given():
+    handler = responder(200)
+    client = httpx.AsyncClient(base_url="https://jenkins.test", transport=httpx.MockTransport(handler))
+    check = JenkinsApiHealthCheck(client=client)
+    await check.perform_check()
+    assert str(handler.requests[0].url) == "https://jenkins.test/api/json?tree=mode"
+
+
+def test_one_jenkins_reached_two_ways_is_one_dependency():
+    client = httpx.AsyncClient(base_url="https://jenkins.test")
+    assert (
+        JenkinsApiHealthCheck(client=client, user="user", token="token").identity()
+        == JenkinsApiHealthCheck("https://jenkins.test", "user", "token").identity()
+    )
+
+
+def test_two_jenkins_credentials_are_two_dependencies():
+    assert (
+        JenkinsApiHealthCheck("https://jenkins.test", "user", "one").identity()
+        != JenkinsApiHealthCheck("https://jenkins.test", "user", "two").identity()
+    )
+
+
+def test_the_transport_client_never_reaches_the_identity():
+    first = httpx.AsyncClient(base_url="https://jenkins.test")
+    second = httpx.AsyncClient(base_url="https://jenkins.test")
+    assert JenkinsApiHealthCheck(client=first).identity() == JenkinsApiHealthCheck(client=second).identity()
+
+
+def test_an_api_check_needs_a_base_url_from_somewhere():
+    with pytest.raises(ValueError, match="needs a base URL"):
+        JenkinsApiHealthCheck()
+    with pytest.raises(ValueError, match="needs a base URL"):
+        base_of(None, httpx.AsyncClient(), "jira_api")
+
+
+def test_two_urls_are_two_http_dependencies():
+    first = HttpHealthCheck("https://one.test/ping", name="ping")
+    second = HttpHealthCheck("https://two.test/ping", name="ping")
+    assert first.identity() != second.identity()
+
+
+def test_the_expected_login_is_part_of_the_github_identity():
+    assert GitHubApiHealthCheck("token").identity() != GitHubApiHealthCheck("token", "zeus-bot").identity()
+
+
+def test_a_class_default_and_the_same_value_passed_are_one_dependency():
+    assert (
+        HttpHealthCheck("https://one.test/ping", name="ping").identity()
+        == HttpHealthCheck("https://one.test/ping", name="ping", method="GET").identity()
+    )
+    assert (
+        BinaryHealthCheck("gh", name="gh").identity()
+        == BinaryHealthCheck("gh", name="gh", version_args=("--version",)).identity()
+    )
+    assert GhCliHealthCheck().identity() == GhCliHealthCheck(verify_auth=False).identity()
+
+
+def test_a_class_default_overridden_is_another_dependency():
+    assert GhCliHealthCheck().identity() != GhCliHealthCheck(verify_auth=True).identity()
+    assert (
+        HttpHealthCheck("https://one.test/ping", name="ping").identity()
+        != HttpHealthCheck("https://one.test/ping", name="ping", method="HEAD").identity()
+    )
+
+
+def test_a_subclass_of_a_shipped_check_is_another_dependency():
+    class GitHubEnterpriseHealthCheck(GitHubApiHealthCheck):
+        pass
+
+    base = GitHubApiHealthCheck("token")
+    derived = GitHubEnterpriseHealthCheck("token")
+    assert base.identity_fields() == derived.identity_fields()
+    assert base.identity() != derived.identity()
+
+
+def test_a_subclass_that_changes_a_default_is_another_dependency():
+    class SlowHttpHealthCheck(HttpHealthCheck):
+        method = "HEAD"
+
+    base = HttpHealthCheck("https://one.test/ping", name="ping")
+    derived = SlowHttpHealthCheck("https://one.test/ping", name="ping")
+    assert base.identity_fields() != derived.identity_fields()
+    assert base.identity() != derived.identity()
+
+
+def test_behavior_and_bookkeeping_stay_out_of_the_identity():
+    fields = GitHubApiHealthCheck("token").identity_fields()
+    assert "perform_check" not in fields
+    assert not [key for key in fields if key.startswith("_")]
+    assert not [key for key in fields if callable(fields[key])]
+
+
+def test_two_github_tokens_are_two_dependencies():
+    assert GitHubApiHealthCheck("token", "zeus-bot").identity() != GitHubApiHealthCheck("other", "zeus-bot").identity()
+    assert GitHubApiHealthCheck("token").identity() != GitHubApiHealthCheck("other").identity()
+
+
+def test_one_github_token_registered_twice_is_one_dependency():
+    assert GitHubApiHealthCheck("token", "zeus-bot").identity() == GitHubApiHealthCheck("token", "zeus-bot").identity()
+
+
+def test_two_enterprise_hosts_are_two_dependencies():
+    assert (
+        GitHubApiHealthCheck("token", base_url="https://one.test/api/v3").identity()
+        != GitHubApiHealthCheck("token", base_url="https://two.test/api/v3").identity()
+    )
+
+
+def test_two_anthropic_keys_are_two_dependencies():
+    assert AnthropicApiHealthCheck("key-one").identity() != AnthropicApiHealthCheck("key-two").identity()
+
+
+def test_two_probe_models_are_two_dependencies():
+    assert (
+        AnthropicApiHealthCheck("key", model="claude-haiku-4-5").identity()
+        != AnthropicApiHealthCheck("key", model="claude-sonnet-5").identity()
+    )
+
+
+def test_one_host_on_two_ports_is_two_dependencies():
+    assert TcpHealthCheck("db.test", 5432, name="a").identity() != TcpHealthCheck("db.test", 5433, name="b").identity()
+
+
+def test_the_policy_never_reaches_the_identity():
+    assert (
+        GitHubApiHealthCheck("token", interval=10, severity=Severity.CRITICAL, timeout=1).identity()
+        == GitHubApiHealthCheck("token", interval=600, severity=Severity.OPTIONAL, timeout=9).identity()
+    )
+
+
+async def test_the_sqlite_check_is_critical():
+    connection = await aiosqlite.connect(":memory:")
+    assert SqliteHealthCheck(connection, name="sqlite:context").severity is Severity.CRITICAL
+    await connection.close()

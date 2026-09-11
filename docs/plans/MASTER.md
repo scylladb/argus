@@ -53,3 +53,4 @@ _No plans in this domain yet._
 | Plan                | Status  | File                                             | Owner    |
 | ------------------- | ------- | ------------------------------------------------ | -------- |
 | Event Summarization | `in_progress` | [event-summarization.md](event-summarization.md) | CodeLieutenant |
+| QA Tools Health Checking | `in_progress` | [qatools-health.md](qatools-health.md) | CodeLieutenant |
