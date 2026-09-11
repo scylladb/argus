@@ -431,3 +431,71 @@ func TestArgusService_Login_ErrStartingProcess(t *testing.T) {
 	// "no such file or directory" which surfaces through runCFLogin).
 	assert.ErrorIs(t, err, auth.ErrCFLogin)
 }
+
+// --------------------------------------------------------------------------
+// CachedCFToken / GetOrFetchCFToken age policy
+// --------------------------------------------------------------------------
+
+// staleJWT returns a JWT issued 13 hours ago that expires 11 hours from now:
+// still honoured by Cloudflare, but older than auth.CFTokenMaxAge.
+func staleJWT() string {
+	now := time.Now()
+	return makeJWT(now.Add(11*time.Hour).Unix(), now.Add(-13*time.Hour).Unix())
+}
+
+func TestArgusService_CachedCFToken_FreshToken(t *testing.T) {
+	tok := validJWT()
+	binPath := fakeCFBin(t, tok, 1, 0) // access login would fail: must not be needed
+	svc := auth.NewArgusService("https://argus.example.com", binPath)
+
+	got, err := svc.CachedCFToken(t.Context(), auth.CFTokenMaxAge)
+	require.NoError(t, err)
+	assert.Equal(t, tok, got)
+}
+
+// TestArgusService_CachedCFToken_StaleToken pins the regression from the
+// 2026-09 investigation: a token older than CFTokenMaxAge but not yet past
+// "exp" is rejected under the age cap, yet accepted when the cap is disabled,
+// because Cloudflare itself still accepts it.
+func TestArgusService_CachedCFToken_StaleToken(t *testing.T) {
+	tok := staleJWT()
+	binPath := fakeCFBin(t, tok, 1, 0)
+	svc := auth.NewArgusService("https://argus.example.com", binPath)
+
+	_, err := svc.CachedCFToken(t.Context(), auth.CFTokenMaxAge)
+	require.ErrorIs(t, err, auth.ErrCFTokenStale)
+
+	got, err := svc.CachedCFToken(t.Context(), 0)
+	require.NoError(t, err)
+	assert.Equal(t, tok, got)
+}
+
+func TestArgusService_CachedCFToken_ExpiredToken(t *testing.T) {
+	binPath := fakeCFBin(t, expiredJWT(), 1, 0)
+	svc := auth.NewArgusService("https://argus.example.com", binPath)
+
+	for _, maxAge := range []time.Duration{auth.CFTokenMaxAge, 0} {
+		_, err := svc.CachedCFToken(t.Context(), maxAge)
+		assert.ErrorIs(t, err, auth.ErrCFTokenExpired, "maxAge=%s", maxAge)
+	}
+}
+
+func TestArgusService_CachedCFToken_AccessTokenFails(t *testing.T) {
+	binPath := fakeCFBin(t, validJWT(), 0, 1) // access token exits 1
+	svc := auth.NewArgusService("https://argus.example.com", binPath)
+
+	_, err := svc.CachedCFToken(t.Context(), 0)
+	require.ErrorIs(t, err, auth.ErrGettingCFToken)
+}
+
+// TestArgusService_GetOrFetchCFToken_StaleTokenTriggersLogin verifies the
+// interactive policy: a stale cached token is refreshed via access login.
+func TestArgusService_GetOrFetchCFToken_StaleTokenTriggersLogin(t *testing.T) {
+	stale, fresh := staleJWT(), validJWT()
+	binPath := fakeCFBinDualToken(t, stale, fresh)
+	svc := auth.NewArgusService("https://argus.example.com", binPath)
+
+	got, err := svc.GetOrFetchCFToken(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, fresh, got)
+}
