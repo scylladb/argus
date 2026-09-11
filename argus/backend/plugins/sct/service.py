@@ -30,7 +30,7 @@ from argus.backend.service.event_service import EventService
 from argus.backend.util.common import chunk
 from argus.backend.util.config import Config
 from argus.common.enums import NemesisStatus, ResourceState, TestStatus
-from argus.common.utils import clamp_ts_to_milliseconds
+from argus.common.utils import clamp_ts_to_milliseconds, sanitize_cost
 
 LOGGER = logging.getLogger(__name__)
 MAX_SIMILARS = 20
@@ -114,30 +114,68 @@ class SCTService:
         run.scylla_version = package.version
 
     @staticmethod
-    def set_sct_runner(run_id: str, public_ip: str, private_ip: str, region: str, backend: str, name: str = None):
+    def set_sct_runner(run_id: str, public_ip: str, private_ip: str, region: str, backend: str, name: str = None,
+                       instance_type: str | None = None, price_per_hour: float | None = None,
+                       is_spot: bool | None = None, cost: float | None = None):
+        # The runner is reported more than once: its final cost is only known at cleanup,
+        # long after the row was first written. Merge the values actually supplied instead
+        # of replacing the record, so a later cost report cannot wipe an earlier
+        # termination, creation time, or a field this caller left unset.
+        supplied = {k: v for k, v in {
+            "public_ip": public_ip,
+            "private_ip": private_ip,
+            "provider": backend,
+            "region": region,
+            "instance_type": instance_type,
+            "price_per_hour": sanitize_cost(price_per_hour),
+            "is_spot": is_spot,
+            "cost": sanitize_cost(cost),
+        }.items() if v is not None}
+
+        def merged(existing_info: CloudInstanceDetails | None) -> CloudInstanceDetails:
+            info = existing_info.model_copy() if existing_info else CloudInstanceDetails()
+            for field, value in supplied.items():
+                setattr(info, field, value)
+            return info
+
         try:
             run: SCTTestRun = SCTTestRun.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
-            details = CloudInstanceDetails(
-                public_ip=public_ip,
-                private_ip=private_ip,
-                provider=backend,
-                region=region,
-            )
-            run.sct_runner_host = details
+            run.sct_runner_host = merged(run.sct_runner_host)
             run.save()
             resource_name = name or "sct-runner"
-            if not SCTResource.find(run_id=UUID(run_id), name=resource_name).count():
+            existing: SCTResource = SCTResource.find(run_id=UUID(run_id), name=resource_name).first()
+            if existing:
+                existing.update(instance_info=merged(existing.instance_info))
+                existing.save()
+            else:
                 SCTResource.create(
                     run_id=UUID(run_id),
                     name=resource_name,
                     resource_type="sct-runner",
-                    instance_info=details,
+                    instance_info=merged(None),
                 )
         except DocumentNotFound as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
             raise SCTServiceException("Run not found", run_id) from exception
 
         return "updated"
+
+    @staticmethod
+    def submit_cost_estimate(run_id: str, estimated_cost: float | None) -> str:
+        """Store SCT's pre-run cost estimate (USD) for the run.
+
+        Argus never computes this - SCT resolves the instance types and test duration
+        before the run starts and sends the number. `None` means "not estimated".
+        """
+        try:
+            run: SCTTestRun = SCTTestRun.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
+            run.estimated_cost = sanitize_cost(estimated_cost)
+            run.save()
+        except DocumentNotFound as exception:
+            LOGGER.error("Run %s not found for SCTTestRun", run_id)
+            raise SCTServiceException("Run not found", run_id) from exception
+
+        return "submitted"
 
     @staticmethod
     def submit_screenshots(run_id: str, screenshot_links: list[str]) -> str:
@@ -324,8 +362,11 @@ class SCTService:
 
     @staticmethod
     def create_resource(run_id: str, resource_details: dict) -> str:
-        instance_details = CloudInstanceDetails(
-            **resource_details.pop("instance_details"))
+        details = resource_details.pop("instance_details")
+        for field in ("price_per_hour", "cost"):
+            if field in details:
+                details[field] = sanitize_cost(details[field])
+        instance_details = CloudInstanceDetails(**details)
         resource_name = resource_details.get("name")
         try:
             run: SCTTestRun = SCTTestRun.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
@@ -375,6 +416,12 @@ class SCTService:
                                           if resource.instance_info else CloudInstanceDetails())
                 for k, v in instance_info.items():
                     if k in CloudInstanceDetails.model_fields:
+                        if k in ("price_per_hour", "cost"):
+                            v = sanitize_cost(v)
+                            # Skip rather than store None: a later malformed report must
+                            # not erase an amount an earlier call recorded correctly.
+                            if v is None:
+                                continue
                         setattr(resource_instance_info, k, v)
                         fields_updated[k] = v
                 resource.update(instance_info=resource_instance_info)
@@ -391,7 +438,7 @@ class SCTService:
         }
 
     @staticmethod
-    def terminate_resource(run_id: str, resource_name: str, reason: str) -> str:
+    def terminate_resource(run_id: str, resource_name: str, reason: str, cost: float | None = None) -> str:
         try:
             if "sct-runner" in resource_name:  # FIXME: Temp solution until sct-runner name is propagated on submit
                 resources = list(SCTResource.find(run_id=UUID(run_id)).all())
@@ -403,6 +450,9 @@ class SCTService:
             info = resource.instance_info.model_copy() if resource.instance_info else CloudInstanceDetails()
             info.termination_reason = reason
             info.termination_time = int(time())
+            # A cost we cannot use must not clear one an earlier call already reported.
+            if (reported_cost := sanitize_cost(cost)) is not None:
+                info.cost = reported_cost
             resource.state = ResourceState.TERMINATED.value
             resource.update(instance_info=info)
             resource.save()

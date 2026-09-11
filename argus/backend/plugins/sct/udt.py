@@ -3,6 +3,7 @@ from typing import Annotated, Optional
 
 from pydantic import Field
 
+from coodie import Double
 from coodie.usertype import UserType
 
 from argus.backend.util.common import NoneAsEmptyList
@@ -37,6 +38,15 @@ class CloudInstanceDetails(UserType):
     termination_time: int = 0
     termination_reason: str = ""
     shards_amount: int = 0
+    # Cost reporting (ARGUS-205). All cost math happens in SCT, Argus only stores and sums.
+    # `price_per_hour` is the hourly rate captured at resource creation, `cost` the final
+    # amount reported at termination. Both are USD and stay None when genuinely unknown -
+    # a zero here would be indistinguishable from "free", so callers must never send 0.
+    # These stay Optional under ARGUS-204's tightening: null is a real value here, and a
+    # full-data scan could not prove otherwise for fields that are null on every old row.
+    price_per_hour: Annotated[Optional[float], Double()] = None
+    cost: Annotated[Optional[float], Double()] = None
+    is_spot: Optional[bool] = None
 
     class Settings:
         __type_name__ = "cloudinstancedetails_v3"

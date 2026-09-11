@@ -56,7 +56,9 @@ class PerformanceResultsRequest(TypedDict):
     histograms: list[dict[str, RawHDRHistogram]] | None
 
 
-class InstanceInfoUpdateRequest(TypedDict):
+# Both are partial payloads: `update_resource` copies whichever keys are present and
+# leaves the rest alone, so every key is optional rather than required.
+class InstanceInfoUpdateRequest(TypedDict, total=False):
     provider: str
     region: str
     public_ip: str
@@ -67,8 +69,11 @@ class InstanceInfoUpdateRequest(TypedDict):
     termination_time: int
     termination_reason: str
     shards_amount: int
+    price_per_hour: float | None
+    cost: float | None
+    is_spot: bool | None
 
 
-class ResourceUpdateRequest(TypedDict):
+class ResourceUpdateRequest(TypedDict, total=False):
     state: str
     instance_info: InstanceInfoUpdateRequest

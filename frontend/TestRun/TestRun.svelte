@@ -21,6 +21,10 @@
             termination_time: string,
             termination_reason: string,
             shards_amount: number,
+            // Cost reporting (ARGUS-205). Computed by SCT, null when unknown.
+            price_per_hour?: number | null,
+            cost?: number | null,
+            is_spot?: boolean | null,
         }
     }
 
@@ -87,6 +91,7 @@
         screenshots: string[],
         packages: SCTPackage[],
         allocated_resources: CloudResource[],
+        estimated_cost?: number | null,
         region_name: string[],
         nemesis_data: NemesisInfo[],
         cloud_setup: {
