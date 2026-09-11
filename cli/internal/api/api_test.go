@@ -9,7 +9,9 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/scylladb/argus/cli/internal/api"
 	"github.com/scylladb/argus/cli/internal/models"
@@ -614,4 +616,88 @@ func TestRunURL(t *testing.T) {
 func TestRunURL_Unknown(t *testing.T) {
 	assert.Empty(t, api.RunURL("https://argus.scylladb.com", "scylla-2026.2/longevity/longevity-100gb", 0))
 	assert.Empty(t, api.RunURL("https://argus.scylladb.com", "", 42))
+}
+
+// --------------------------------------------------------------------------
+// WithCFTokenUnavailable
+// --------------------------------------------------------------------------
+
+func TestClient_WithCFTokenUnavailable_FailsFastWithCause(t *testing.T) {
+	t.Parallel()
+
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = io.WriteString(w, "<html>Cloudflare Access login</html>")
+	}))
+	t.Cleanup(srv.Close)
+
+	cause := errors.New("cached token expired")
+	client, err := api.New(srv.URL, api.WithAPIToken("pat"), api.WithCFTokenUnavailable(cause))
+	require.NoError(t, err)
+
+	req, err := client.NewRequest(context.Background(), http.MethodGet, "/api/v1/version", nil)
+	require.NoError(t, err)
+
+	_, err = api.DoJSON[map[string]any](client, req)
+	require.ErrorIs(t, err, api.ErrUnauthorized)
+	require.ErrorIs(t, err, api.ErrCFChallenge)
+	require.ErrorIs(t, err, cause)
+	assert.Contains(t, err.Error(), "no Cloudflare Access token")
+	assert.NotContains(t, err.Error(), "text/html")
+
+	_, err = client.DoStream(req)
+	require.ErrorIs(t, err, cause)
+
+	assert.Equal(t, int32(0), hits.Load(), "request must never reach the server")
+}
+
+// A rejected streaming request must close its body so the producer unblocks.
+func TestClient_WithCFTokenUnavailable_ClosesStreamingBody(t *testing.T) {
+	t.Parallel()
+
+	client, err := api.New("https://argus.example.com", api.WithCFTokenUnavailable(errors.New("no token")))
+	require.NoError(t, err)
+
+	pr, pw := io.Pipe()
+	writeErr := make(chan error, 1)
+	go func() {
+		_, err := pw.Write([]byte("payload"))
+		writeErr <- err
+	}()
+
+	req, err := client.NewRequest(context.Background(), http.MethodPost, "/upload", nil)
+	require.NoError(t, err)
+	req.Body = pr
+
+	_, err = client.DoStream(req)
+	require.ErrorIs(t, err, api.ErrUnauthorized)
+
+	select {
+	case err := <-writeErr:
+		assert.ErrorIs(t, err, io.ErrClosedPipe)
+	case <-time.After(2 * time.Second):
+		t.Fatal("pipe writer still blocked after DoStream returned")
+	}
+}
+
+func TestClient_WithCFTokenUnavailable_NilIsNoop(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(okEnvelope(t, map[string]string{"v": "1"}))
+	}))
+	t.Cleanup(srv.Close)
+
+	client, err := api.New(srv.URL, api.WithCFTokenUnavailable(nil))
+	require.NoError(t, err)
+
+	req, err := client.NewRequest(context.Background(), http.MethodGet, "/x", nil)
+	require.NoError(t, err)
+
+	got, err := api.DoJSON[map[string]string](client, req)
+	require.NoError(t, err)
+	assert.Equal(t, "1", got["v"])
 }
