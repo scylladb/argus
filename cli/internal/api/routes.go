@@ -14,6 +14,12 @@ const (
 	//        request (null for non-expiring); a rejected token yields 401.
 	UserToken = "/api/v1/user/token"
 
+	// User job routes
+	UserJobs            = "/api/v1/user/jobs"                 // GET – caller's assigned runs within JOB_VALIDITY_PERIOD_DAYS
+	UserPlannedJobs     = "/api/v1/user/planned_jobs"         // GET – caller's planned tests, each with its last_run (or null)
+	TeamUserJobs        = "/api/v1/team/user/%s/jobs"         // GET – assigned runs for a user (user_id)
+	TeamUserPlannedJobs = "/api/v1/team/user/%s/planned_jobs" // GET – planned tests for a user (user_id)
+
 	// Test run routes
 	TestRunsList        = "/api/v1/test/%s/runs"            // GET  – list runs for a test (test_id)
 	TestRunGetType      = "/api/v1/run/%s/type"             // GET  – run type (run_id)
