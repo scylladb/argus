@@ -61,3 +61,6 @@ jobs:
 
       - name: Run frontend tests
         run: yarn test
+
+      - name: Build frontend bundles
+        run: yarn build

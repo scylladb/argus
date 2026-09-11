@@ -1,6 +1,8 @@
 # Implementation Plan Instructions
 
-This document is the **authoritative source** for how implementation plans are written and maintained in the Argus repository. If a skill or workflow conflicts with this file, follow this file.
+This document is the **authoritative source** for the plans in `docs/plans/`. Those plans started before the development flow, and they keep this format until the work ends. If a skill or workflow conflicts with this file about one of them, follow this file.
+
+New work follows `docs/standards/development-flow.md` and writes its plan to `tasks/<KEY>/plan.md` from `tasks/templates/plan.md`.
 
 ## Plan Types
 
