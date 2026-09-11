@@ -85,8 +85,13 @@ type Client struct {
 	// session is the value of the "session" cookie, if any.
 	session string
 	// cfToken is the Cloudflare Access JWT sent as the "CF_Authorization"
-	// cookie, used only during the /auth/login/cf handshake.
+	// cookie on every request so it passes through Cloudflare Access.
 	cfToken string
+	// cfTokenErr records why no Cloudflare Access JWT could be attached when
+	// one is required. When set, [Client.Do] and [Client.DoStream] fail fast
+	// with an [ErrUnauthorized] that names this cause instead of sending an
+	// unauthenticated request that Cloudflare answers with an HTML login page.
+	cfTokenErr error
 	// apiToken is used as "Authorization: token <apiToken>" header, if any.
 	apiToken string
 
@@ -107,10 +112,22 @@ func WithSession(session string) ClientOption {
 }
 
 // WithCFToken attaches a Cloudflare Access JWT as the "CF_Authorization"
-// cookie on every request made by the client. This is only needed when
-// constructing a short-lived client for the /auth/login/cf handshake.
+// cookie on every request made by the client, so the request passes through
+// the Cloudflare Access layer in front of Argus.
 func WithCFToken(token string) ClientOption {
 	return func(c *Client) { c.cfToken = token }
+}
+
+// WithCFTokenUnavailable marks the client as lacking a required Cloudflare
+// Access JWT, recording reason as the cause. Every subsequent [Client.Do] /
+// [Client.DoStream] call then fails immediately with an [ErrUnauthorized]
+// wrapping reason, rather than hitting Cloudflare Access unauthenticated and
+// surfacing a generic "text/html instead of application/json" error that hides
+// the real problem.
+//
+// A nil reason is a no-op.
+func WithCFTokenUnavailable(reason error) ClientOption {
+	return func(c *Client) { c.cfTokenErr = reason }
 }
 
 // WithAPIToken attaches an API token to every request as the
@@ -241,9 +258,21 @@ func (c *Client) reattachAuthOnRedirect(req *http.Request, via []*http.Request) 
 	return nil
 }
 
+// preflight returns the fail-fast error, if any, that should be returned
+// instead of sending a request. See [WithCFTokenUnavailable].
+func (c *Client) preflight() error {
+	if c.cfTokenErr != nil {
+		return fmt.Errorf("%w: no Cloudflare Access token to attach: %w", ErrUnauthorized, c.cfTokenErr)
+	}
+	return nil
+}
+
 // Do executes req and returns the raw [http.Response].
 // The caller is responsible for closing the response body.
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
+	if err := c.preflight(); err != nil {
+		return nil, err
+	}
 	if req.URL.Host == "" {
 		resolved := c.baseURL.ResolveReference(req.URL)
 		req.URL = resolved
@@ -256,6 +285,9 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 // large responses such as log file downloads. The caller is responsible for
 // closing the response body.
 func (c *Client) DoStream(req *http.Request) (*http.Response, error) {
+	if err := c.preflight(); err != nil {
+		return nil, err
+	}
 	if req.URL.Host == "" {
 		resolved := c.baseURL.ResolveReference(req.URL)
 		req.URL = resolved
