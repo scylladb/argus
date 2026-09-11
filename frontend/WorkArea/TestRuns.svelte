@@ -50,13 +50,12 @@
         FETCH_EMPTY: "FETCH_EMPTY",
         FETCH_SUCCESS: "FETCH_SUCCESS",
         FETCH_TEST_INFO_FAILED: "FETCH_TEST_INFO_FAILED",
-        NO_TEST: "NO_TEST",
     };
     let currentState = $state(states.INIT);
 
     const stateMap = {
         [states.INIT]: {
-            nextStates: [states.INIT_RUNS, states.FETCH_TEST_INFO_FAILED, states.NO_TEST],
+            nextStates: [states.INIT_RUNS, states.FETCH_TEST_INFO_FAILED],
             inProgress: true,
             classes: ["text-muted"],
             message: "Loading test information...",
@@ -109,15 +108,6 @@
                 //empty
             },
         },
-        [states.NO_TEST]: {
-            nextStates: [],
-            inProgress: false,
-            classes: ["alert-danger"],
-            message: "This job has no test in Argus.",
-            onEnter: function () {
-                //empty
-            },
-        },
     };
 
     const setState = function (newState) {
@@ -151,11 +141,8 @@
     });
 
     const fetchTestInfo = async function () {
-        if (!testId) {
-            setState(states.NO_TEST);
-            return;
-        }
         try {
+            if (!testId) throw new Error("This job has no test in Argus");
             let params = queryString.stringify(
                 {
                     testId: testId,
