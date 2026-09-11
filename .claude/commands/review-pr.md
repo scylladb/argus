@@ -27,7 +27,7 @@ Record:
 
 ## Step 2: Read project review rules
 
-Read `AGENTS.md` — the "Pull Request Review Guidelines" section contains rules derived from prior false positives in this repo. These rules are mandatory for this review.
+Read `docs/standards/REVIEW.md`. It holds the three review passes and the checks that remove a false report in this repository. These rules are mandatory for this review.
 
 ## Step 3: Launch the standard code-review agents
 
@@ -35,17 +35,14 @@ Use the `code-review:code-review` skill's methodology but inject these constrain
 
 **Scope constraint:** "You may ONLY flag issues in these files: [list from step 1]. Do not read or comment on any other files."
 
-**False-positive filters (from AGENTS.md + historical analysis):**
+**Review passes:** work through the three passes in `docs/standards/REVIEW.md` — bugs and logic, security, compliance against `tasks/<KEY>/spec.md` — and state an outcome for each one.
+
+For the third pass, take the Jira key from the `Fixes ARGUS-<n>` line in the PR body (step 1) or from a `tasks/<KEY>/` path in the diff, then read that spec. When neither exists, the pull request predates the flow: report the third outcome as `not applicable — no task spec` and check the standards only.
+
+**False-positive filters:** apply every check in the "Before you report a finding" section of `docs/standards/REVIEW.md`. Inject them into each agent prompt verbatim. In addition:
 
 1. **Diff-only rule.** Only flag issues on changed lines. Pre-existing issues in unchanged code are out of scope.
 2. **3-5 findings max.** If you have more, keep only the highest-confidence ones.
-3. **Concrete bugs only.** "This could theoretically..." is a suggestion, not a bug. Require a realistic reproduction scenario for Critical/High.
-4. **Respect runtime evidence.** If the PR description or comments mention successful manual testing or link staging URLs, factor that into confidence scoring. Qualify static-analysis-only findings accordingly.
-5. **Svelte 5 ≠ Svelte 4.** `$state` creates deeply reactive proxies on native arrays and objects (`.push()` works). Reassigning a `$derived` variable is a bug — flag it.
-6. **CSS color pairs are self-contained.** Severity badges, status indicators, and alert classes set both `background-color` and `color` as a pair. They work in any theme. Only flag color issues when an element relies on the inherited page background.
-7. **3+ occurrences = convention.** If a pattern is used throughout the codebase, it's intentional.
-8. **No duplicating human reviewers.** Check existing comments from step 1 before reporting.
-9. **No migration-period false alarms.** Temporary fallbacks and dual paths during migrations are intentional.
 
 ## Step 4: Post-filter all findings
 

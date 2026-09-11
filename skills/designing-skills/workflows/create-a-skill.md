@@ -22,7 +22,7 @@ A 6-phase process for creating a skill from scratch in the Argus repository.
 
 3. **Write the "When to Use" section.** List 4-6 specific scenarios where the skill applies. Draw from the example prompts gathered in step 1. Be concrete: "when writing a new test file in `argus/backend/tests/`" not "when doing testing."
 
-4. **Write the "When NOT to Use" section.** List 3-5 scenarios where a different approach is better. Draw from the should-NOT-trigger prompts. Name the alternative: "use the writing-plans skill for implementation planning" not "not for complex tasks."
+4. **Write the "When NOT to Use" section.** List 3-5 scenarios where a different approach is better. Draw from the should-NOT-trigger prompts. Name the alternative: "use the managing-argus-release-plans skill for release test plans" not "not for complex tasks."
 
 5. **Define 3-5 essential principles.** These are non-negotiable rules for every invocation. Ask: "What mistake would ruin the output if the LLM made it?" Each principle guards against a specific failure mode. Every principle must explain WHY — reasoning helps the LLM generalize to cases the rule didn't explicitly cover.
 

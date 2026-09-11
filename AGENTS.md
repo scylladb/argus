@@ -1,69 +1,77 @@
 # Repository Guidelines
 
+Repository facts: the module map, the commands, the tooling and the skills.
+
+`docs/INDEX.md` indexes the coding standards and the project documentation.
+`CLAUDE.md` states the development flow and the verify sequence. Read both
+before you change code.
+
 ## Project Structure & Module Organization
 
-Backend services live in `argus/backend` with Flask entry points defined in `argus_backend.py`; shared helpers sit in `argus/common`, while CLI tooling and client integrations are under `argus/client`. Frontend assets are in `frontend/`, compiled into `public/dist`, and HTML templates stay in `templates/`. Test suites are grouped in `argus/backend/tests`, `argus/client/tests`, and `pytest-argus-reporter/tests`.
+The web backend lives in `argus/backend`, and `argus_backend.py` exposes the
+FastAPI application through `create_app()`. Shared helpers sit in
+`argus/common`. The client library and its CLI entry points are under
+`argus/client`. Frontend sources are in `frontend/`, built into `public/dist`,
+and the Jinja templates stay in `templates/`. The Go command line tool lives in
+`cli/`, and the AI workers in `argusAI/`. Test suites are grouped in
+`argus/backend/tests`, `argus/client/tests`, `pytest-argus-reporter/tests` and
+`cli/`.
 
 ## Build, Test, and Development Commands
-Install dependencies with `uv sync --all-extras` and `yarn install`. Rebuild the Svelte-based UI with `yarn build` (production) or `yarn build:watch` (continuous development build). Start the API locally via `uv run uvicorn --factory argus_backend:create_app --port 5000 --reload` (production runs `gunicorn -c gunicorn.conf.py 'argus_backend:create_app()'`). Maintenance commands: `uv run python -m argus.backend.cli sync-models` (also refresh-issues, scan-jenkins). For linting, run `uv run ruff check`. Run server-side tests with `uv run pytest argus/backend/tests` and client utilities through `uv run pytest argus/client/tests`.
 
-For full local setup including database, config, seed data, and troubleshooting, see `docs/dev-setup.md`.
+Install dependencies with `uv sync --all-extras` and `yarn install`. Build the
+Svelte bundles with `yarn build`, or `yarn build:watch` during development.
+Start the API locally with
+`uv run uvicorn --factory argus_backend:create_app --port 5000 --reload`.
+Production runs `gunicorn -c gunicorn.conf.py 'argus_backend:create_app()'`.
+
+Maintenance commands: `uv run python -m argus.backend.cli sync-models`, plus
+`refresh-issues` and `scan-jenkins`.
+
+Run the backend and client suites with `uv run pytest`. Run the frontend suite
+with `yarn test`. `CLAUDE.md` holds the full verify sequence, including the
+reporter suite and the Go CLI.
+
+For the full local setup, including the database, the config, the seed data and
+the troubleshooting steps, see `docs/dev-setup.md`.
 
 ## Key Files
 
 | Domain         | Path                        | Purpose                                                             |
 | -------------- | --------------------------- | ------------------------------------------------------------------- |
-| App entry      | `argus_backend.py`          | Flask app factory and server start                                  |
-| Blueprints     | `argus/backend/controller/` | Route handlers (one file per feature)                               |
-| Services       | `argus/backend/service/`    | Business logic layer called by controllers                          |
-| Models         | `argus/backend/models/`     | CQLEngine/ScyllaDB model definitions                                |
-| Client SDK     | `argus/client/`             | Python client for interacting with the Argus API                    |
-| Frontend entry | `frontend/`                 | Per-page JS entry points (e.g., `argus.js`, `release-dashboard.js`) |
+| App entry      | `argus_backend.py`          | FastAPI app factory                                                 |
+| Routers        | `argus/backend/controller/` | Route handlers, one module per feature                              |
+| Services       | `argus/backend/service/`    | Business logic called by the routers                                |
+| Models         | `argus/backend/models/`     | coodie document models on ScyllaDB                                  |
+| Plugins        | `argus/backend/plugins/`    | One directory per test source                                       |
+| Client SDK     | `argus/client/`             | Python client for the Argus API                                     |
+| Frontend entry | `frontend/`                 | Per-page entry points declared in `vite.config.ts`                  |
+| Python config  | `pyproject.toml`            | Dependencies, Ruff and pytest configuration                         |
+| Dev setup      | `docs/dev-setup.md`         | Full local environment setup guide                                  |
 
-| Python config | `pyproject.toml` | Dependencies, Ruff, and tool configuration |
-| Dev setup | `docs/dev-setup.md` | Full local environment setup guide |
-| Plans guide | `docs/plans/INSTRUCTIONS.md` | Authoritative plan structure and rules |
+## Standards
 
-## Coding Style & Naming Conventions
-
-Python code targets 3.12, uses 4-space indentation, and a 120-character line width enforced by Ruff and Autopep8 (see `pyproject.toml`). Prefer descriptive snake_case for Python modules and functions; keep Svelte/JS components in PascalCase folders aligned with entry files (e.g., `frontend/AdminPanel/`). Organize Flask blueprints by feature under `argus/backend` and export public APIs through `__init__.py`.
-
-## Svelte 5 Frontend Patterns
-
-- Favor the rune APIs (`$props`, `$state`, `$derived`, `run`) for component state and avoid legacy `$:` reactivity when a rune captures intent better.
-- Reach into the DOM through Svelte bindings or actions (`bind:this`, `use:…`) rather than global selectors; never call `Node.querySelector*` inside components—track nodes via bindings and stores instead.
-- Prefer component composition, snippets, and `@const/@render` blocks over imperative DOM updates; lean on `await tick()` when you must wait for the DOM after state changes.
-- Keep data transformations in script context and pass plain data to the markup; don’t derive clipboard or export payloads by scraping rendered HTML.
-- Encapsulate escape-hatch logic (Bootstrap collapse, portals, external widgets) inside reusable actions/helpers so behavior is testable and discoverable.
-- Use TypeScript-friendly patterns (typed props, `import type …`) whenever you bind component instances or DOM nodes, and co-locate UI-specific helpers next to their components.
-
-## Testing Guidelines
-
-Tests follow `test_*.py` naming and Pytest markers such as `@pytest.mark.docker_required` for Docker-heavy suites. Keep unit tests close to their modules (e.g., `results_service` tests). Execute full coverage with `uv run pytest --cov=argus backend/tests client/tests`. Add fixtures under `argus/backend/tests/conftest.py` when sharing setup.
-
-## Commit & Pull Request Guidelines
-
-Adopt the Conventional Commits style observed in history (`fix(scope): message`, `feature(app): ...`). Compose commits around a single logical change and run lint/tests before pushing. Pull requests should describe intent, outline manual validation steps, and link tracking issues; include screenshots or API payload snippets when UI or API responses change.
-
-## Pull Request Review Guidelines
-- **Scope reviews to the PR diff only.** Only flag issues in files and lines actually changed in the pull request. Do not audit the broader codebase for related issues — that is a separate task, not a PR review. If you notice a broader pattern worth mentioning, note it once as an aside at the end, not as individual findings.
-- **Limit findings to 3-5 maximum.** Prioritize ruthlessly. If unsure whether something is real, omit it. A review with 2 correct findings is more valuable than 2 correct findings buried among 5 false positives.
-- **Verify claims before flagging.** Read the full context (complete CSS rule, surrounding function, component logic) before reporting. Do not flag `color: black` without checking the selector's `background-color`. Do not flag a variable as unused without grepping. Do not flag a function as broken without reading its callers.
-- **Require concrete failure scenarios for bugs.** Only label something "Critical" or "likely a bug" if you can demonstrate a realistic reproduction. Theoretical edge cases involving UUIDs, rare events, or unlikely race conditions are suggestions at best. Use "potential concern" or "worth verifying" for speculative findings.
-- **Respect runtime evidence.** When a PR description or comments mention successful manual testing or link staging URLs, factor that into confidence scoring. Qualify static-analysis-only findings accordingly.
-- **Treat repeated patterns as conventions.** If a pattern appears in 3+ places in the codebase, it is likely a deliberate project convention, not a bug. Do not flag it.
-- **Check existing comments first.** Do not re-report issues already identified by human reviewers in the same PR.
-- **Svelte 5 runes are not Svelte 4.** `$state` creates deeply reactive proxies on native arrays and objects — `.push()` on a `$state` array triggers reactivity (no reassignment needed). Reassigning a `$derived` variable is a bug and should be flagged. Do not apply Svelte 4 mental models to this codebase.
-- **CSS color pairs are self-contained.** Severity badges, status indicators, and alert classes set both `background-color` and `color` as a pair. They work in any theme. Only flag color issues when an element relies on the inherited page background.
-- **Do not flag migration-period code.** Fallbacks, temporary dual paths, and compatibility shims in PRs that are part of an ongoing migration are intentional.
+| Topic | File |
+|---|---|
+| Everything | `docs/INDEX.md` |
+| Development flow and task artifacts | `docs/standards/development-flow.md` |
+| Pull request review | `docs/standards/REVIEW.md` |
+| Coding style, conventions, errors, validation | `docs/standards/global/` |
+| Routers, models, queries, schema changes | `docs/standards/backend/` |
+| Svelte 5 components, CSS, layout | `docs/standards/frontend/` |
+| Tests and CI gates | `docs/standards/testing/test-writing.md` |
 
 ## Configuration & Security Notes
 
-Never commit secrets: When testing against Cassandra, use the Docker compose setup in `dev-db/` and tear it down after use. Keep sample data archives outside the repository to avoid leaking production artifacts.
+Never commit a secret. `argus.local.yaml` and `argus_web.yaml` hold the local
+configuration, and `.gitignore` excludes both. Use the Docker Compose setup in
+`dev-db/` for a local database, and stop it after use. Keep a sample data
+archive outside the repository.
 
 ## Argus CLI (Go)
 
-The `argus` CLI lives in `cli/` and is built with Go. Releases are published via GoReleaser on `cli/v*` tags.
+The `argus` CLI lives in `cli/` and is built with Go. Releases are published via
+GoReleaser on `cli/v*` tags.
 
 ### For LLM Agents
 
@@ -79,13 +87,17 @@ AI agent skills live in `skills/` and provide task-specific guidance with struct
 
 | Skill            | Description                                                           | Path                               |
 | ---------------- | --------------------------------------------------------------------- | ---------------------------------- |
-| writing-plans    | Write implementation plans (full 7-section or lightweight mini-plans) | `skills/writing-plans/SKILL.md`    |
 | designing-skills | Meta-skill for creating and structuring new AI agent skills           | `skills/designing-skills/SKILL.md` |
 | managing-argus-release-plans | Create/update Argus release test plans, map Confluence test-plan docs to Argus tests, manage label-based test triggering | `skills/managing-argus-release-plans/SKILL.md` |
 
 ## Implementation Plans
 
-Plans are tracked in `docs/plans/`. See `docs/plans/INSTRUCTIONS.md` for the authoritative guide on plan structure, and `docs/plans/MASTER.md` for the registry of active plans.
+New work writes its plan to `tasks/<KEY>/plan.md`. See
+`docs/standards/development-flow.md`.
+
+`docs/plans/` holds the plans that started before that flow, with
+`docs/plans/INSTRUCTIONS.md` as their format guide and `docs/plans/MASTER.md`
+as their registry.
 
 <!-- CODEGRAPH_START -->
 ## CodeGraph
