@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -19,11 +21,9 @@ import (
 )
 
 const (
-	// cfTokenMaxAge is the maximum time a Cloudflare Access JWT is considered
-	// fresh after it was issued. Tokens older than this trigger a new
-	// `cloudflared access login` even if the token's own "exp" claim has not
-	// yet been reached.
-	cfTokenMaxAge = 12 * time.Hour
+	// CFTokenExpiryMargin is how close to "exp" a cached CF token counts as
+	// expiring: interactive flows re-login, non-interactive ones warn.
+	CFTokenExpiryMargin = 5 * time.Minute
 
 	// patDuration is the lifetime requested for API tokens issued by the CLI.
 	patDuration = "14d"
@@ -34,6 +34,9 @@ var (
 	// ErrGettingCFToken is returned when the cloudflared access token
 	// sub-command fails.
 	ErrGettingCFToken = errors.New("auth: getting cloudflare access token")
+
+	// ErrCFTokenExpired is returned when the cached CF token passed its "exp".
+	ErrCFTokenExpired = errors.New("auth: cached cloudflare access token is expired")
 
 	// ErrCFLogin is returned when the cloudflared access login sub-command
 	// fails or produces no recognisable JWT in its output.
@@ -125,33 +128,33 @@ func NewArgusService(argusURL, cloudflaredBin string, opts ...ArgusOption) *Argu
 	return s
 }
 
-// CachedCFToken reads the Cloudflare Access JWT from cloudflared's local
-// token cache (~/.cloudflared/) without any network call or browser
-// interaction.  It returns a non-expired, non-stale token on success, or an
-// error if the cached token is missing, expired, or older than [cfTokenMaxAge].
-//
-// This is intended for attaching the CF Access cookie to normal API requests
-// so they pass through Cloudflare Access to the backend.
-func (s *ArgusService) CachedCFToken(ctx context.Context) (string, error) {
+// CFToken is a Cloudflare Access JWT read from cloudflared's local cache.
+type CFToken struct {
+	Value     string
+	ExpiresAt time.Time // zero when the token carries no "exp"
+}
+
+// ExpiresWithin reports whether the token expires in less than d.
+func (t CFToken) ExpiresWithin(d time.Duration) bool {
+	return !t.ExpiresAt.IsZero() && time.Until(t.ExpiresAt) < d
+}
+
+// CachedCFToken reads the CF token from cloudflared's local cache without any
+// network call. It returns [ErrCFTokenExpired] once "exp" has passed.
+func (s *ArgusService) CachedCFToken(ctx context.Context) (CFToken, error) {
 	cached, err := s.runCFAccessToken(ctx)
 	if err != nil {
-		return "", err
+		return CFToken{}, err
 	}
-	expired, jwtErr := jwt.IsExpired(cached)
-	if jwtErr != nil {
-		return "", jwtErr
+	exp, err := jwt.ExpiresAt(cached)
+	if err != nil {
+		return CFToken{}, err
 	}
-	if expired {
-		return "", fmt.Errorf("%w: cached CF token is expired", ErrGettingCFToken)
+	tok := CFToken{Value: cached, ExpiresAt: exp}
+	if tok.ExpiresWithin(0) {
+		return CFToken{}, ErrCFTokenExpired
 	}
-	tooOld, ageErr := jwt.IsOlderThan(cached, cfTokenMaxAge)
-	if ageErr != nil {
-		return "", ageErr
-	}
-	if tooOld {
-		return "", fmt.Errorf("%w: cached CF token is older than %s", ErrGettingCFToken, cfTokenMaxAge)
-	}
-	return cached, nil
+	return tok, nil
 }
 
 // Login obtains a Cloudflare Access token and, unless the keychain already
@@ -295,33 +298,36 @@ func (s *ArgusService) fetchPAT(ctx context.Context, session, cfToken string) (s
 	return result.Token, nil
 }
 
-// GetOrFetchCFToken returns a valid CF Access JWT.  It first tries
-// `cloudflared access token --app <url>` which reads the token from
-// cloudflared's local token cache (~/.cloudflared/) without any network call
-// or browser interaction.  If that fails or the token is expired / too old,
-// it falls back to `cloudflared access login` which opens a browser.
+// GetOrFetchCFToken returns the cached CF token unless it is missing, expired
+// or expiring within [CFTokenExpiryMargin]; then it runs `cloudflared access
+// login`, which may open a browser.
 func (s *ArgusService) GetOrFetchCFToken(ctx context.Context) (string, error) {
-	// Try the fast, local-only `access token` subcommand first.
-	if cached, err := s.runCFAccessToken(ctx); err == nil {
-		expired, jwtErr := jwt.IsExpired(cached)
-		if jwtErr == nil && !expired {
-			// Also enforce a hard 12 h maximum regardless of what the token's
-			// own "exp" claim says — CF tokens can be issued with long
-			// lifetimes but we want to re-authenticate regularly.
-			tooOld, ageErr := jwt.IsOlderThan(cached, cfTokenMaxAge)
-			if ageErr == nil && !tooOld {
-				return cached, nil
-			}
-		}
+	cached, err := s.CachedCFToken(ctx)
+	if err == nil && !cached.ExpiresWithin(CFTokenExpiryMargin) {
+		return cached.Value, nil
 	}
+	if err == nil {
+		// `access login` reuses any unexpired cached token, so drop it to
+		// force a real re-login.
+		s.dropCachedCFToken()
+	}
+	return s.runCFLogin(ctx)
+}
 
-	// Fall back to the full browser-based login flow.
-	fresh, err := s.runCFLogin(ctx)
+// dropCachedCFToken removes cloudflared's cached token files for the Argus host.
+func (s *ArgusService) dropCachedCFToken() {
+	u, err := url.Parse(s.argusURL)
 	if err != nil {
-		return "", err
+		return
 	}
-
-	return fresh, nil
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	matches, _ := filepath.Glob(filepath.Join(home, ".cloudflared", u.Hostname()+"-*-token"))
+	for _, m := range matches {
+		_ = os.Remove(m)
+	}
 }
 
 // runCFAccessToken runs:
