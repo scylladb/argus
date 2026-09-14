@@ -31,7 +31,8 @@ var issueAddCmd = &cobra.Command{
 	Short: "Submit an issue for a test run",
 	Long: `Link an issue (GitHub or Jira) to a test run.
 
-If --test-id is omitted it will be resolved automatically from the run.`,
+If --test-id is omitted it will be resolved automatically from the run.
+With --event-id the issue is linked to that SCT event of the run.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
 		ctx := cmd.Context()
@@ -54,7 +55,8 @@ If --test-id is omitted it will be resolved automatically from the run.`,
 		}
 		log.Debug().Str("run_id", runID).Str("test_id", testID).Msg("test ID resolved")
 
-		route := fmt.Sprintf(api.TestRunIssueSubmit, testID, runID)
+		eventID, _ := cmd.Flags().GetString("event-id")
+		route := issueSubmitRoute(testID, runID, eventID)
 		body := map[string]string{"issue_url": issueURL}
 		req, err := client.NewRequest(ctx, "POST", route, body)
 		if err != nil {
@@ -71,6 +73,13 @@ If --test-id is omitted it will be resolved automatically from the run.`,
 		log.Info().Str("run_id", runID).Str("test_id", testID).Str("issue_url", issueURL).Msg("issue submitted successfully")
 		return out.Write(result)
 	},
+}
+
+func issueSubmitRoute(testID, runID, eventID string) string {
+	if eventID == "" {
+		return fmt.Sprintf(api.TestRunIssueSubmit, testID, runID)
+	}
+	return fmt.Sprintf(api.TestRunEventIssueSubmit, testID, runID, eventID)
 }
 
 // ---------------------------------------------------------------------------
@@ -149,6 +158,7 @@ func init() {
 	issueAddCmd.Flags().String("run-id", "", "Run UUID (required)")
 	issueAddCmd.Flags().String("issue-url", "", "Issue URL to link (required)")
 	issueAddCmd.Flags().String("test-id", "", "Test UUID (optional, resolved from the run if omitted)")
+	issueAddCmd.Flags().String("event-id", "", "SCT event UUID (optional, links the issue to this event of the run)")
 	_ = issueAddCmd.MarkFlagRequired("run-id")
 	_ = issueAddCmd.MarkFlagRequired("issue-url")
 

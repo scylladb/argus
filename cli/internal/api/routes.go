@@ -35,8 +35,9 @@ const (
 	TestRunCommentDelete = "/api/v1/test/%s/run/%s/comment/%s/delete" // POST – delete a comment (test_id, run_id, comment_id)
 
 	// Issue routes
-	TestRunIssueSubmit = "/api/v1/test/%s/run/%s/issues/submit" // POST – submit an issue (test_id, run_id)
-	IssuesGet          = "/api/v1/issues/get"                   // GET  – list issues (filterKey, id query params)
+	TestRunIssueSubmit      = "/api/v1/test/%s/run/%s/issues/submit" // POST – submit an issue (test_id, run_id)
+	IssuesGet               = "/api/v1/issues/get"                   // GET  – list issues (filterKey, id query params)
+	TestRunEventIssueSubmit = "/api/v1/test/%s/run/%s/issues/event/%s/submit"
 
 	// Pytest result routes
 	TestRunPytestResults = "/api/v1/run/%s/pytest/results"        // GET  – pytest results for a run (run_id)
