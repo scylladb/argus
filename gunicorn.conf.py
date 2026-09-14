@@ -5,6 +5,10 @@ Rolling reload: send SIGHUP to the master.
 """
 
 import os
+
+os.environ.setdefault("PROMETHEUS_MULTIPROC_DIR", "/tmp/promdb-argus-metrics")
+os.makedirs(os.environ["PROMETHEUS_MULTIPROC_DIR"], exist_ok=True)
+
 from prometheus_client import multiprocess
 
 bind = "unix:/var/lib/argus/argus.sock"
@@ -24,10 +28,6 @@ timeout = 120
 
 accesslog = None
 errorlog = "/var/log/argus/argus.log"
-
-raw_env = [
-    f"PROMETHEUS_MULTIPROC_DIR={os.environ.get('PROMETHEUS_MULTIPROC_DIR', '/tmp/promdb-argus-metrics')}",
-]
 
 
 def child_exit(server, worker):
