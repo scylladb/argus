@@ -84,8 +84,11 @@ class UserViewService:
         for key in ["user_id", "id"]:
             update_data.pop(key, None)
         items = update_data.pop("items")
-        for k, value in update_data.items():
-            setattr(view, k, value)
+        view.name = update_data["name"]
+        view.description = update_data["description"]
+        view.plan_id = UUID(update_data["plan_id"]) if update_data.get("plan_id", None) else None
+        view.display_name = update_data["display_name"]
+        view.widget_settings = update_data["widget_settings"]
         view.tests = []
         view.release_ids = []
         view.group_ids = []
