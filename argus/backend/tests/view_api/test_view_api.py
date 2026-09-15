@@ -151,6 +151,32 @@ def test_update_view_success(api_client, view_name, fake_test):
     assert str(fake_test.id) in [str(t) for t in fetched["tests"]]
 
 
+def test_update_view_with_plan_id(api_client, view_name, fake_test):
+    created = _create_view(api_client, view_name)
+    view_id = created["response"]["id"]
+    plan_id = str(uuid.uuid4())
+
+    update_payload = {
+        "viewId": view_id,
+        "updateData": {
+            "name": view_name,
+            "description": "updated",
+            "display_name": "Updated",
+            "items": [f"test:{fake_test.id}"],
+            "widget_settings": '{"widgets": [42]}',
+            "plan_id": plan_id,
+        },
+    }
+    res = api_client.post("/api/v1/views/update", json=update_payload).json()
+    assert res["status"] == "ok"
+    assert res["response"] is True
+
+    fetched = api_client.get(f"/api/v1/views/get?viewId={view_id}").json()["response"]
+    assert fetched["description"] == "updated"
+    assert fetched["display_name"] == "Updated"
+    assert fetched["plan_id"] == plan_id
+
+
 def test_delete_view_success(api_client, view_name):
     created = _create_view(api_client, view_name)
     view_id = created["response"]["id"]
