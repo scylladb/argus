@@ -20,11 +20,11 @@
 - Modify: `tasks/templates/spec.md`
 - Modify: `tasks/templates/plan.md`
 
-- [ ] Write the rca template from the zeus file, verbatim.
-- [ ] Replace the spec template with the zeus file, verbatim.
-- [ ] Replace the plan template with the zeus file, verbatim.
-- [ ] Run the verify sequence.
-- [ ] Commit.
+- [x] Write the rca template from the zeus file, verbatim.
+- [x] Replace the spec template with the zeus file, verbatim.
+- [x] Replace the plan template with the zeus file, verbatim.
+- [x] Run the verify sequence.
+- [x] Commit.
 
 ## Task 2 — The flow and the review policy
 
