@@ -33,19 +33,19 @@
   commits, Stage 2, Stage 3, the spike path, a new "The bug fix path" section
 - Modify: `docs/standards/REVIEW.md`, Pass 3
 
-- [ ] Stage table: name `rca.md` for a bug at Stage 2, with its approver.
-- [ ] Order of commits: name the bug fix path as the second exception.
-- [ ] Stage 2: point at the template, state what carries the design decision
+- [x] Stage table: name `rca.md` for a bug at Stage 2, with its approver.
+- [x] Order of commits: name the bug fix path as the second exception.
+- [x] Stage 2: point at the template, state what carries the design decision
       and what bounds the scope, send a bug to the bug fix path.
-- [ ] Stage 3: state that the plan carries the files, the internals, and the
+- [x] Stage 3: state that the plan carries the files, the internals, and the
       tests. Keep the `docs/plans/` paragraph.
-- [ ] Spike path: state that the diff carries them and the spec keeps the
+- [x] Spike path: state that the diff carries them and the spec keeps the
       template shape.
-- [ ] Add the bug fix path section after the spike path.
-- [ ] Pass 3: read `spec.md` or `rca.md`, add the contract question, the two
+- [x] Add the bug fix path section after the spike path.
+- [x] Pass 3: read `spec.md` or `rca.md`, add the contract question, the two
       rca questions, and the skip statement check.
-- [ ] Run the verify sequence.
-- [ ] Commit.
+- [x] Run the verify sequence.
+- [x] Commit.
 
 ## Task 3 — The agent instructions and the index
 

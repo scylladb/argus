@@ -48,11 +48,17 @@ A pull request that predates this flow carries no spec. Record the outcome
 `not applicable — no task spec` and check the standards only. Do not ask the
 author to write one for work that is already open.
 
-- Read `tasks/<KEY>/spec.md`. Does the change stay inside its goals?
+- Read `tasks/<KEY>/spec.md`, or `rca.md` for a bug fix. Does the change stay
+  inside its goals, or inside the selected approach?
 - Does the change do something the spec lists as a non-goal?
+- Does the change keep every contract the spec names: the inputs it reads,
+  the outputs it produces, and the module API?
 - Does the change follow the standards in `docs/standards/`?
 - Does a new prose artifact keep a record of a dropped decision?
 - A spec from the spike path states the design the code carries. Does it?
+- For an rca: does the code follow the selected approach? Is the regression
+  test there, or its absence explained?
+- A pull request that skipped the flow says so in its description. Does it?
 
 ## Before you report a finding
 
