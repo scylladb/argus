@@ -1,6 +1,6 @@
 # <KEY> — implementation plan
 
-**Spec:** `tasks/<KEY>/spec.md`
+**Spec:** `tasks/<KEY>/spec.md`, or `tasks/<KEY>/rca.md` for a bug fix
 
 ## Constraints
 
@@ -12,6 +12,9 @@ The project-wide rules that every task below inherits.
 - Create: `<path>`
 - Modify: `<path>:<lines>`
 - Test: `<path>`
+
+**Internals:** the functions, the classes, and the fields this task adds.
+Omit the line when the task adds none.
 
 - [ ] Write the failing test.
 - [ ] Run it and confirm the failure.
