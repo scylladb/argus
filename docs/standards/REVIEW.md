@@ -42,7 +42,7 @@ order, so a reader sees which pass produced which finding.
 
 Find the spec first. The Jira key comes from the `Fixes ARGUS-<n>` line in the
 pull request body, or from a `tasks/<KEY>/` directory in the diff. Read
-`tasks/<KEY>/spec.md`.
+`tasks/<KEY>/spec.md`, or `rca.md` for a bug fix.
 
 A pull request that predates this flow carries no spec. Record the outcome
 `not applicable — no task spec` and check the standards only. Do not ask the
