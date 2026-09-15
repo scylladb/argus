@@ -40,7 +40,7 @@
 
 ## Design
 
-Eight documents take part. The spec template defines the shape of a spec. The
+Seven documents take part. The spec template defines the shape of a spec. The
 plan template takes the detail the spec drops. A new rca template defines the
 bug fix artifact. The flow document says what a spec is for, adds the bug fix
 path, and names the path decision. The review policy reads `spec.md` or
