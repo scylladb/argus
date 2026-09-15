@@ -53,10 +53,10 @@
 - Modify: `CLAUDE.md`, Task Artifacts
 - Modify: `docs/INDEX.md`, the Development Flow and Review Policy summaries
 
-- [ ] Add `rca.md` to the artifact list and the gates, add the spec and plan
+- [x] Add `rca.md` to the artifact list and the gates, add the spec and plan
       split, the bug fix path, and the spike variant for a bug. Keep the
       `AGENTS.md` line and the `docs/plans/` paragraph.
-- [ ] Rewrite the two summaries to match the documents. Keep the Argus
+- [x] Rewrite the two summaries to match the documents. Keep the Argus
       sentences about the Svelte 5 and CSS checks.
-- [ ] Run the verify sequence.
-- [ ] Commit.
+- [x] Run the verify sequence.
+- [x] Commit.
