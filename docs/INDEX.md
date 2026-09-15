@@ -37,10 +37,10 @@ The active plans from `docs/plans/MASTER.md`, and the known debt: lint coverage,
 Located in `docs/standards/`
 
 #### Development Flow (`standards/development-flow.md`)
-The six stages of work in this repository: the artifact each stage produces, its path under `tasks/<KEY>/`, and its approver. Covers the commit order that gates each stage on the artifact before it, the spike path for code that exists before any artifact does, and the Jira key as the join between the task directory and the pull request.
+The six stages of work in this repository: the artifact each stage produces, its path under `tasks/<KEY>/`, and its approver. The spec is the design review document. A maintainer judges it from the design drivers, the flow diagrams, and the contracts. The plan carries the files, the internals, and the tests. A bug fix writes `rca.md` in place of the spec: the root cause, the approaches with the selected one, and the regression test or the reason none exists. The engineer who runs the session approves it. A very small fix may skip the flow, and the pull request says so. Also covers the commit order that gates each stage on the artifact before it, the spike path for code that exists before any artifact does, and the Jira key that joins the task directory and the pull request.
 
 #### Review Policy (`standards/REVIEW.md`)
-The three review passes applied to every pull request: bugs and logic, security, and compliance against the task spec. Also holds the checks that remove a false report, including the Svelte 5 rune semantics and the self-contained CSS color pair. A review states an outcome for every pass. Findings do not block a merge. A maintainer approves it.
+The three review passes applied to every pull request: bugs and logic, security, and compliance against the task spec or rca, including the contracts the spec names and the statement of a skipped flow. Also holds the checks that remove a false report, including the Svelte 5 rune semantics and the self-contained CSS color pair. A review states an outcome for every pass. Findings do not block a merge. A maintainer approves it.
 
 ### Global Standards
 
