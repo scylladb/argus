@@ -12,6 +12,7 @@ the `Fixes ARGUS-<n>` line at the end of the pull request body.
 |---|---|---|
 | 1. Plan | `tasks/<KEY>/intent.md` | the issue reporter |
 | 2. Design | `tasks/<KEY>/spec.md` | a maintainer |
+| 2. Design, for a bug | `tasks/<KEY>/rca.md` | the engineer who runs the session |
 | 3. Build | `tasks/<KEY>/plan.md`, then code | the engineer who runs the session |
 | 4. Test | test output in the pull request | CI |
 | 5. Review | review comments | a maintainer |
@@ -33,7 +34,8 @@ the work, not the content of the artifact.
 The branch history then carries the flow. A reviewer reads the intent, the spec
 and the plan in the order the work happened.
 
-The spike path below is the one exception to this order.
+The spike path below is the one exception to this order. The bug fix path
+below replaces the spec with `rca.md` and makes the plan optional.
 
 ## Stage 1 — Plan
 
@@ -49,8 +51,14 @@ arrive incomplete or unclear, so review it either way. Commit it.
 ## Stage 2 — Design
 
 Write `tasks/<KEY>/spec.md` from the approved intent. The brainstorming skill
-writes this file. It covers the problem, the goals, the non-goals, the target
-state, and the risks.
+writes this file, in the shape of `tasks/templates/spec.md`. The spec is the
+design review document.
+
+The drivers, the diagrams, and the contracts carry the design decision. The
+goals and the non-goals bound the scope. File lists, internal functions, and
+tests belong to the plan, so they stay out of the spec.
+
+A bug takes the bug fix path below and writes `rca.md` in place of the spec.
 
 A spec that names no non-goal is not finished. Scope grows without one.
 
@@ -59,8 +67,8 @@ A maintainer approves the spec before the build stage starts.
 ## Stage 3 — Build
 
 Write `tasks/<KEY>/plan.md` before any code. The spike path below is the
-exception. The plan names the files, the order of work, and the tests.
-Somebody who never saw the task must be able to follow it.
+exception. The plan names the files, the internals, the order of work, and
+the tests. Somebody who never saw the task must be able to follow it.
 
 Then write the code. Follow the standards in `docs/standards/`.
 
@@ -84,10 +92,40 @@ reader.
 The order of the commits holds. The artifacts are the earlier commits on the
 branch, whatever order the work happened in.
 
-The spec on this path states the design the code carries. A reviewer reads it
-like any other spec, and Stage 5 checks the change against it.
+The spec on this path states the design the code carries, in the shape of
+the template. A reviewer reads it like any other spec, and Stage 5 checks the
+change against it.
 
-This path writes no `plan.md`. A plan describes work that is already done.
+This path writes no `plan.md`. A plan describes work that is already done. The
+diff carries the files, the internals, and the tests.
+
+## The bug fix path
+
+A bug fix has a cause to find, a fix to choose, and a test to prove the fix.
+It has no design to review. A Jira Bug writes `intent.md`, then `rca.md` in
+the shape of `tasks/templates/rca.md`, then the code. The engineer who runs
+the session approves the `rca.md`.
+
+`rca.md` names the root cause with its code path, one to three approaches
+with the selected one and the reason, the regression test or the reason
+none exists, and the risks.
+The Approaches section is a decision record, so the rejected approaches stay
+in it.
+
+A plan is optional on this path. When the engineer writes one, it is
+committed before the code.
+
+Two rules decide the path, in this order, and the engineer who runs the
+session applies them:
+
+1. A bug fix that changes a contract or a module boundary writes `spec.md`
+   and takes the normal path. This rule comes first on every path, the spike
+   path included.
+2. A very small fix may skip the flow. The pull request description then
+   says so, in one line.
+
+A bug fix on the spike path writes `intent.md` and `rca.md` from the code
+that already works.
 
 ## Stage 4 — Test
 
