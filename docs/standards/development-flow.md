@@ -23,9 +23,11 @@ the `Fixes ARGUS-<n>` line at the end of the pull request body.
 Commit each artifact before you start the stage that consumes it.
 
 - Do not start a task that has no intent. Write the intent first.
-- Do not write the spec until `tasks/<KEY>/intent.md` is committed.
-- Do not write the plan until `tasks/<KEY>/spec.md` is committed.
-- Do not write code until `tasks/<KEY>/plan.md` is committed.
+- Do not write the spec, or the rca, until `tasks/<KEY>/intent.md` is
+  committed.
+- Do not write the plan until `tasks/<KEY>/spec.md`, or `rca.md`, is
+  committed.
+- Do not write code until the last artifact of the task is committed.
 
 A commit gate is not an approval gate. A committed artifact stays open to
 review, and a later commit records the correction. The gate fixes the order of
