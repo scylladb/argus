@@ -156,7 +156,8 @@ def set_testrun_status(test_id: UUID, run_id: UUID, payload: SetStatusRequest,
     })
 
 
-@router.get("/tests/{plugin_name}/{run_id}/log/{log_name}/download", name="api.testrun_api.download_log")
+@router.api_route("/tests/{plugin_name}/{run_id}/log/{log_name}/download", methods=["GET", "HEAD"],
+                  name="api.testrun_api.download_log")
 def download_log(plugin_name: str, run_id: UUID, log_name: str,
                  user: User = Depends(api_current_user)):
     service = TestRunService()
@@ -169,7 +170,8 @@ def download_log(plugin_name: str, run_id: UUID, log_name: str,
     return RedirectResponse(result, status_code=302)
 
 
-@router.get("/tests/{plugin_name}/{run_id}/screenshot/{image_name}", name="api.testrun_api.proxy_screenshot")
+@router.api_route("/tests/{plugin_name}/{run_id}/screenshot/{image_name}", methods=["GET", "HEAD"],
+                  name="api.testrun_api.proxy_screenshot")
 def proxy_screenshot(plugin_name: str, run_id: UUID, image_name: str,
                      user: User = Depends(api_current_user)):
     service = TestRunService()

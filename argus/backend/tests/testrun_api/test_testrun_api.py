@@ -5,8 +5,6 @@ GET /test/<test_id>/runs paging/filtering).  It covers the remaining endpoints
 that do NOT require external service mocking.
 
 Out-of-scope for this iteration (deferred — needs Jenkins/Github/Jira/S3 mocks):
-- /tests/<plugin>/<run_id>/log/<log_name>/download (S3)
-- /tests/<plugin>/<run_id>/screenshot/<image_name>  (S3)
 - /test/<test_id>/run/<run_id>/issues/...           (Github/Jira)
 - /issues/get, /issues/delete                        (Github/Jira)
 - /jenkins/...                                       (Jenkins)
@@ -628,6 +626,26 @@ def test_proxy_screenshot_redirects(api_client, submitted_run, mock_s3):
     assert resp.status_code == 302
     assert "test-bucket" in resp.headers["Location"]
     mock_s3.proxy_stored_s3_image.assert_called_once()
+
+
+def test_download_log_head_redirects_to_s3_url(api_client, submitted_run, mock_s3):
+    rid, _ = submitted_run
+    resp = api_client.head(
+        f"{API_PREFIX}/tests/{RUN_TYPE}/{rid}/log/example.log/download",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    assert "test-bucket" in resp.headers["Location"]
+
+
+def test_proxy_screenshot_head_redirects(api_client, submitted_run, mock_s3):
+    rid, _ = submitted_run
+    resp = api_client.head(
+        f"{API_PREFIX}/tests/{RUN_TYPE}/{rid}/screenshot/example.png",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    assert "test-bucket" in resp.headers["Location"]
 
 
 # ---------------------------------------------------------------------------

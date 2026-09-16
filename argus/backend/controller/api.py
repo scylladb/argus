@@ -482,7 +482,7 @@ def resolve_artifact_size(link: str = Query(..., alias="l"),
     })
 
 
-@router.get("/s3/{bucket_name}/{bucket_path:path}", name="api.s3_generic_proxy")
+@router.api_route("/s3/{bucket_name}/{bucket_path:path}", methods=["GET", "HEAD"], name="api.s3_generic_proxy")
 def s3_generic_proxy(bucket_name: str, bucket_path: str,
                      user: User = Depends(api_current_user)):
     service = TestRunService()
