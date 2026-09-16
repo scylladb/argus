@@ -10,6 +10,7 @@ Scope (iteration 6 of the controller coverage matrix):
 - ``GET  /api/v1/test_runs/poll``
 - ``GET  /api/v1/test_run/poll``
 - ``GET  /api/v1/artifact/resolveSize``
+- ``GET  /api/v1/s3/<bucket>/<path>``
 - ``GET  /api/v1/zeus/<endpoint>``       (error path only — no real proxy target)
 - ``GET  /api/v1/test_run/comment/get``  (deprecated companion endpoint, lives in api.py)
 """
@@ -350,3 +351,14 @@ def test_get_test_run_comment_existing_round_trip(api_client, fake_test, submitt
     assert body["status"] == "ok"
     assert str(body["response"]["id"]) == comment_id
     assert body["response"]["message"] == "iteration6 comment"
+
+
+@pytest.mark.parametrize("method", ["get", "head"])
+def test_s3_generic_proxy_redirects(api_client, mock_s3, method):
+    mock_s3.proxy_s3_file.return_value = "https://test-bucket.s3.amazonaws.com/some/file?signed"
+    resp = getattr(api_client, method)(
+        f"{API_PREFIX}/s3/test-bucket/some/file",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    assert "test-bucket" in resp.headers["Location"]
