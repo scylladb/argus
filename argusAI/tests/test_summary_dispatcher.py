@@ -2,7 +2,7 @@
 
 The Anthropic client is mocked; there is no network and no real ScyllaDB — the "db" is a fake
 that records the CQL it was asked to execute. Covers the behaviors the design requires
-(docs/plans/event-summarization.md §8): unique event -> UPDATE with the right key, disabled
+(docs/plans/archive/event-summarization.md §8): unique event -> UPDATE with the right key, disabled
 / keyless -> inert, summarizer error -> no write, and the min-tokens gate.
 """
 

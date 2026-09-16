@@ -74,10 +74,6 @@ the tests. Somebody who never saw the task must be able to follow it.
 
 Then write the code. Follow the standards in `docs/standards/`.
 
-`docs/plans/` holds the plans that started before this flow. Those plans keep
-the format in `docs/plans/INSTRUCTIONS.md` until the work ends. New work writes
-its plan to `tasks/<KEY>/plan.md`.
-
 ## The spike path
 
 Sometimes the design lives in the head of the developer, who writes the fix to

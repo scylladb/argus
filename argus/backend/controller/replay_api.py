@@ -4,7 +4,7 @@ POST /api/v1/client/replay/ingest
 
 Accepts an archive of JSONL replay logs and re-applies the recorded
 requests against the running application (via an in-process TestClient
-over the ASGI app). See ``docs/plans/request_replay.md`` for the full
+over the ASGI app). See ``docs/plans/archive/request_replay.md`` for the full
 design.
 
 Supported archive formats: ``tar.zst`` (the canonical CLI output),

@@ -26,7 +26,7 @@ Languages (Python 3.12, TypeScript and JavaScript, Go), backend and frontend fra
 Layered web application with a plugin layer for test sources. Covers the web backend layers, the plugin contract, the frontend, the command line tool, the AI workers, the client library, data flow, data model rules, external integrations, configuration and deployment.
 
 ### Roadmap (`project/roadmap.md`)
-The active plans from `docs/plans/MASTER.md`, and the known debt: lint coverage, the Python version floor, the Docker requirement in the test suite, the legacy Svelte imports, an unreferenced bundle, and hand-written API documentation.
+The current priorities, and the known debt: lint coverage, the Python version floor, the Docker requirement in the test suite, the legacy Svelte imports, an unreferenced bundle, and hand-written API documentation.
 
 ---
 
@@ -132,7 +132,7 @@ Located in `docs/`. Single-topic notes, outside the standards.
 - `argus_status_page.md` — the status page.
 - `pypi-guide.md` — publishing the Python packages.
 - `config/` — the nginx, systemd and logrotate files.
-- `plans/` — the plans that started before the development flow. See `plans/INSTRUCTIONS.md`.
+- `plans/archive/` — design documents from earlier work, kept as a historical record.
 
 ---
 

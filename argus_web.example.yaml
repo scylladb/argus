@@ -100,7 +100,7 @@ ZEUS_HOST: example.com:80
 ZEUS_TOKEN: your-token
 
 # Event summarization (argusAI worker). Disabled by default; read once at worker startup,
-# so changing any of these requires a worker restart. See docs/plans/event-summarization.md.
+# so changing any of these requires a worker restart. See docs/plans/archive/event-summarization.md.
 EVENT_SUMMARIZATION_ENABLED: false
 # ANTHROPIC_API_KEY: your-anthropic-key      # required only when summarization is enabled
 # ANTHROPIC_BASE_URL: https://api.anthropic.com  # set for a proxy or compatible endpoint
