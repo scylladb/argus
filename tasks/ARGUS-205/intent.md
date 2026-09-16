@@ -3,9 +3,11 @@
 ## Problem
 
 A test run page shows what a run did and what it produced. It does not show
-what the run cost. The producer knows the cloud spend of a run (SCT computes
-it from its instance catalog and the run duration), but Argus has no place to
-store that number and no way to display it.
+what the run cost. The producer knows the price of each resource it used:
+SCT estimates the run cost from its instance catalog and the planned duration
+before the run starts, and knows each node's final cost when it terminates
+it. Nothing sums those figures into a cost per run, and Argus has no place to
+store or display them.
 
 The figure exists elsewhere: cloud-monitor sends a cost report by email, and
 DoIT has a report. In practice nobody reads either against a specific run, so
@@ -70,6 +72,21 @@ the answer that closed each one.
 > No, I think the general cost is good enough, no need for individual
 > breakdowns.
 
+The answer refers to the UI. Item name and category are stored so a
+breakdown per name or per category stays possible; what the client sends is
+out of scope of this intent.
+
+**Who sums the run's actual cost?**
+
+> I'd propose keeping calculation of cost per instance duration on the client
+> side, but summing up costs per whole run to be done on Argus side. As soon
+> as client (SCT) knows the final instance/networking/other cost it should
+> send it to Argus. Why:
+> 1. It's going to be harder to sum up various costs on Client side. [...]
+> 2. when client crash in the middle, we won't get actual cost at all
+> 3. when global cleanup scripts encounter 'leaked' instances, they should sum
+> up to the run cost
+
 **Are cost items with a category in scope?**
 
 > I think this is in the scope. Let's allow posting name of the cost,
@@ -99,25 +116,25 @@ the answer that closed each one.
 
 ## What good looks like
 
-- A producer reports an estimated cost for a run and later an actual cost,
-  through the Python client. Both are USD amounts the producer computed.
-  Argus stores them as sent and computes no price.
-- A producer may also report named cost items for the run, each with a
-  category, an optional pricing tier, and an estimated or actual figure.
+- A producer reports an estimated cost for a run, and the final cost of
+  each named item as it becomes known, through the Python client. All are
+  USD amounts the producer computed. Argus sums the items into the run's
+  actual cost and computes no price.
+- Each item carries a category, an optional pricing tier and a leaked flag.
   Argus defines no category vocabulary.
 - The run page has a Costs tab. It shows the run's estimate and actual
   figure, and the items when there are any. It says that no cost was reported
   when there is none. An unknown figure never shows as zero.
-- Cost lives in its own tables keyed by the run's `build_id` and
+- Cost lives in its own table keyed by the run's `build_id` and
   `build_number`. No plugin run model, UDT or index changes.
 - A producer that reports no cost behaves exactly as today.
 - The stored figures are what ARGUS-218 will aggregate later.
 
 ## Out of scope
 
-- Leaked cost and the periodic cleanup scripts as a producer. Agreed in the
-  review of #1087: leak reporting is built on top of this API with its own
-  definition.
+- The periodic cleanup scripts as a producer. Agreed in the review of #1087:
+  leak reporting is built on top of this API with its own definition. The
+  item flag that marks a leaked cost exists so that they can.
 - A partial or incomplete flag on the actual figure. Agreed in the review of
   #1087: what an unpriced instance or a missing spot price means is not yet
   defined.
