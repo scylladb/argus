@@ -5,7 +5,7 @@ with several candidate models under a configurable prompt, scores the summaries 
 information preservation with a frontier judge model, and renders a comparison graph
 plus a per-event side-by-side HTML report.
 
-This is the harness the design doc (docs/plans/event-summarization.md §7) requires to
+This is the harness the design doc (docs/plans/archive/event-summarization.md §7) requires to
 pick ``ANTHROPIC_SUMMARY_MODEL`` and to validate the prompt before rollout. Run it as::
 
     python -m argusAI.eval --config argusAI/eval/config.example.yaml

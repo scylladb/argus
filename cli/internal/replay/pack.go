@@ -1,7 +1,7 @@
 // Package replay packages JSONL replay-log files into the `tar.zst`
 // archive format accepted by the Argus replay-ingest endpoint.
 //
-// See docs/plans/request_replay.md for the wire-level details.
+// See docs/plans/archive/request_replay.md for the wire-level details.
 package replay
 
 import (

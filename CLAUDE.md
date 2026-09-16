@@ -57,9 +57,6 @@ before you commit the code. Write `intent.md` and `spec.md`, or `rca.md` for a
 bug, from the code, and commit them. Then commit the code. That path writes no
 plan. See `docs/standards/development-flow.md`.
 
-`docs/plans/` holds the plans that started before this flow. Leave them in
-their own format until the work ends. See `docs/plans/INSTRUCTIONS.md`.
-
 ### Standards Evolution
 
 When you notice recurring patterns, fixes, or conventions during implementation that aren't yet captured in standards — suggest adding them. Examples:

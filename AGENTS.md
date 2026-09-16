@@ -92,12 +92,11 @@ AI agent skills live in `skills/` and provide task-specific guidance with struct
 
 ## Implementation Plans
 
-New work writes its plan to `tasks/<KEY>/plan.md`. See
+Work writes its plan to `tasks/<KEY>/plan.md`. See
 `docs/standards/development-flow.md`.
 
-`docs/plans/` holds the plans that started before that flow, with
-`docs/plans/INSTRUCTIONS.md` as their format guide and `docs/plans/MASTER.md`
-as their registry.
+`docs/plans/archive/` holds design documents from earlier work. They are a
+historical record, and no flow points at them.
 
 <!-- CODEGRAPH_START -->
 ## CodeGraph

@@ -42,5 +42,4 @@ model, router and service.
 - The REST API, for a script.
 
 ## Direction
-The registry in `docs/plans/MASTER.md` holds the active plans, and
 `docs/project/roadmap.md` states the current priorities and the known debt.

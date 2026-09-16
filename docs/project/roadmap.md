@@ -1,18 +1,8 @@
 # Development Roadmap
 
-## Active Plans
-`docs/plans/MASTER.md` is the registry. The table below repeats its current
-state.
-
-| Plan | Status | File |
-|---|---|---|
-| API tests | `in_progress` | `docs/plans/api_tests.md` |
-| CLI release plan management | `in_progress` | `docs/plans/cli-planner-command.md` |
-| Event summarization | `in_progress` | `docs/plans/event-summarization.md` |
-| SSH tunnel support | `draft` | `docs/plans/ssh-tunnel-design.md` |
-
-A plan that starts from now on follows `docs/standards/development-flow.md` and
-lives in `tasks/<KEY>/`.
+## Active Work
+A task follows `docs/standards/development-flow.md`. Its intent, spec and plan
+live in `tasks/<KEY>/`, and the Jira board holds the status.
 
 ## Known Debt
 
