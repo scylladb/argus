@@ -125,8 +125,8 @@ out of scope of this intent.
 - The run page has a Costs tab. It shows the run's estimate and actual
   figure, and the items when there are any. It says that no cost was reported
   when there is none. An unknown figure never shows as zero.
-- Cost lives in its own table keyed by the run's `build_id` and
-  `build_number`. No plugin run model, UDT or index changes.
+- Cost lives in its own table keyed by the run identifier. No plugin run
+  model, UDT or index changes.
 - A producer that reports no cost behaves exactly as today.
 - The stored figures are what ARGUS-218 will aggregate later.
 
