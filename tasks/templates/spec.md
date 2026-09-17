@@ -5,8 +5,9 @@
 Code and diagrams first. A data shape is a dataclass, a schema, or a type. A
 database change is its DDL. A module API is its signature. An external
 contract is the request and the response, with the real field names. A flow
-or a decision is a Mermaid diagram. Prose carries what no code states: a
-driver, a non-goal, a risk. Replace every example below with content.
+or a decision is a Mermaid diagram, except a single linear flow. Prose
+carries what no code states: a driver, a non-goal, a risk. Replace every
+example below with content.
 
 ## Design drivers
 
