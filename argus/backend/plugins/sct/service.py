@@ -34,6 +34,7 @@ from argus.common.utils import clamp_ts_to_milliseconds
 
 LOGGER = logging.getLogger(__name__)
 MAX_SIMILARS = 20
+PACKAGE_SUBMIT_ATTEMPTS = 5
 
 
 class SCTServiceException(Exception):
@@ -91,20 +92,34 @@ class SCTService:
 
     @staticmethod
     def submit_packages(run_id: str, packages: list[dict]) -> str:
-        try:
-            run: SCTTestRun = SCTTestRun.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
-            for package_dict in packages:
-                package = PackageVersion(**package_dict)
+        run_uuid = UUID(run_id) if isinstance(run_id, str) else run_id
+        submitted = [PackageVersion(**package_dict) for package_dict in packages]
+        for _ in range(PACKAGE_SUBMIT_ATTEMPTS):
+            try:
+                run: SCTTestRun = SCTTestRun.get(id=run_uuid)
+            except DocumentNotFound as exception:
+                LOGGER.error("Run %s not found for SCTTestRun", run_id)
+                raise SCTServiceException("Run not found", run_id) from exception
+            stored = list(run.packages)
+            merged = list(stored)
+            updates = {}
+            for package in submitted:
                 if "target" in package.name:
                     SCTService.process_target_version(run, package)
-                if package not in run.packages:
-                    run.packages.append(package)
-            run.save()
-        except DocumentNotFound as exception:
-            LOGGER.error("Run %s not found for SCTTestRun", run_id)
-            raise SCTServiceException("Run not found", run_id) from exception
-
-        return "added"
+                    updates["version_source"] = run.version_source
+                    updates["scylla_version"] = run.scylla_version
+                if package not in merged:
+                    merged.append(package)
+            if merged != stored:
+                updates["packages"] = merged
+            if not updates:
+                return "added"
+            # An empty list reads back as null, so the condition compares against null.
+            result = run.update(if_conditions={"packages": stored or None}, **updates)
+            if result.applied:
+                return "added"
+            LOGGER.info("Run %s packages changed during the submission, retrying", run_id)
+        raise SCTServiceException("Concurrent package submissions did not settle", run_id)
 
     @staticmethod
     def process_target_version(run: SCTTestRun, package: PackageVersion):

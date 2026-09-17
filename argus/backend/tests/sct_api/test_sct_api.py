@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from argus.backend.models.run_config import RunConfigParam
+from argus.backend.plugins.sct.service import SCTService
 from argus.backend.plugins.sct.testrun import SCTResource, SCTNemesis, SCTTestRun
 from argus.common.utils import clamp_ts_to_milliseconds
 
@@ -60,6 +61,32 @@ def test_submit_packages(api_client, sct_run_id):
     run = SCTTestRun.get(id=UUID(sct_run_id))
     assert any(p.name == "scylla-server" and p.version ==
                "6.0.0" for p in run.packages)
+
+
+def test_submit_packages_concurrent_submissions_keep_one_row(api_client, sct_run_id, monkeypatch):
+    java_driver = {"name": "java-driver", "version": "3.11.5.7", "date": None, "revision_id": None, "build_id": None}
+    scylla_bench = {"name": "scylla-bench", "version": "0.1.0", "date": None, "revision_id": None, "build_id": None}
+    original_get = SCTTestRun.get
+    interleaved = False
+
+    def get_then_submit_in_parallel(*args, **kwargs):
+        nonlocal interleaved
+        run = original_get(*args, **kwargs)
+        if not interleaved:
+            interleaved = True
+            SCTService.submit_packages(sct_run_id, [java_driver, scylla_bench])
+        return run
+
+    monkeypatch.setattr(SCTTestRun, "get", get_then_submit_in_parallel)
+    resp = api_client.post(
+        f"{API_PREFIX}/{sct_run_id}/packages/submit",
+        json={"packages": [java_driver], "schema_version": "v8"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"
+
+    run = original_get(id=UUID(sct_run_id))
+    assert [(p.name, p.version) for p in run.packages] == [("java-driver", "3.11.5.7"), ("scylla-bench", "0.1.0")]
 
 
 def test_submit_screenshots(api_client, sct_run_id):
