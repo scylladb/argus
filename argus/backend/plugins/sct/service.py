@@ -97,7 +97,7 @@ class SCTService:
                 package = PackageVersion(**package_dict)
                 if "target" in package.name:
                     SCTService.process_target_version(run, package)
-                if package not in run.packages:
+                if not any(existing.name == package.name for existing in run.packages):
                     run.packages.append(package)
             run.save()
         except DocumentNotFound as exception:

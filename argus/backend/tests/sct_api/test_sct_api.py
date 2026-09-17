@@ -62,6 +62,64 @@ def test_submit_packages(api_client, sct_run_id):
                "6.0.0" for p in run.packages)
 
 
+def test_submit_packages_deduplicates_by_name(api_client, sct_run_id):
+    first_payload = {
+        "packages": [
+            {
+                "name": "java-driver",
+                "version": "4.15.0",
+                "date": "2026-09-01",
+                "revision_id": "abc123",
+                "build_id": "build-1",
+            }
+        ],
+        "schema_version": "v8",
+    }
+    resp = api_client.post(
+        f"{API_PREFIX}/{sct_run_id}/packages/submit",
+        json=first_payload,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"
+
+    # Re-report the same package name with a different date/build_id (as a CI
+    # retry would), plus a distinct package name in the same call.
+    second_payload = {
+        "packages": [
+            {
+                "name": "java-driver",
+                "version": "4.15.0",
+                "date": "2026-09-02",
+                "revision_id": "def456",
+                "build_id": "build-2",
+            },
+            {
+                "name": "kernel",
+                "version": "5.15.0",
+                "date": "2026-09-02",
+                "revision_id": "",
+                "build_id": "build-2",
+            },
+        ],
+        "schema_version": "v8",
+    }
+    resp = api_client.post(
+        f"{API_PREFIX}/{sct_run_id}/packages/submit",
+        json=second_payload,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"
+
+    run = SCTTestRun.get(id=UUID(sct_run_id))
+    java_driver_rows = [p for p in run.packages if p.name == "java-driver"]
+    kernel_rows = [p for p in run.packages if p.name == "kernel"]
+    assert len(java_driver_rows) == 1
+    assert len(kernel_rows) == 1
+    # Keep-first semantics: the row from the first submission is retained.
+    assert java_driver_rows[0].date == "2026-09-01"
+    assert java_driver_rows[0].build_id == "build-1"
+
+
 def test_submit_screenshots(api_client, sct_run_id):
     payload = {
         "screenshot_links": ["https://grafana/snap/1", "https://grafana/snap/2"],
