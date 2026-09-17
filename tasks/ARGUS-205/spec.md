@@ -1,6 +1,6 @@
 # ARGUS-205 — Show the cost of a test run
 
-**Date**: 2026-09-16
+**Date**: 2026-09-17
 
 ## Design drivers
 
@@ -47,14 +47,29 @@ before it provisions, then one item per resource as soon as it knows that
 resource's final cost. The **client API** validates each call. The **run
 cost service** resolves the run from the run type and identifier the client
 already uses, takes its `build_id` and `build_number`, writes the row, and
-recomputes the actual cost from the partition after every item write. The
-**Costs tab** reads one partition and renders it.
+recomputes the actual cost from the partition after every item write and once
+more when the run is finalized. The **Costs tab** reads one partition and
+renders it.
 
-One table, `run_cost_v1`, partitioned by `(build_id, build_number)` with
-`name` as the clustering key. `estimated_cost` and `actual_cost` are static
-columns, so the partition holds the run's totals once and its items as rows.
-Each item row carries `cost`, `category`, `pricing_tier` and `leaked`. No
-timestamps and no run identifier: the partition key already names the run.
+One table. The partition is the run, the static columns hold the run's totals
+once, and each clustered row is one item. No timestamps and no run
+identifier: the partition key already names the run.
+
+```python
+class RunCost(Document):
+    build_id: Annotated[str, PrimaryKey(partition_key_index=0)]
+    build_number: Annotated[int, PrimaryKey(partition_key_index=1)]
+    name: Annotated[str, ClusteringKey()]
+    estimated_cost: Annotated[Optional[float], Double(), Static()] = None
+    actual_cost: Annotated[Optional[float], Double(), Static()] = None
+    cost: Annotated[float, Double()]
+    category: str
+    pricing_tier: Optional[str] = None
+    leaked: bool = False
+
+    class Settings:
+        name = "run_cost_v1"
+```
 
 ```mermaid
 sequenceDiagram
@@ -75,6 +90,9 @@ sequenceDiagram
         S->>C: read partition, sum cost
         S->>C: write static actual_cost
     end
+    P->>A: POST finalize
+    A->>S: recompute_actual_cost(run_type, run_id)
+    S->>C: read partition, sum cost, write static actual_cost
 ```
 
 Decision rules:
@@ -82,11 +100,15 @@ Decision rules:
 - An item is keyed by its name. A repeated name overwrites the row, so a
   repeated call is idempotent and a corrected figure replaces the old one.
 - `actual_cost` is the sum of `cost` over every item row in the partition,
-  leaked items included. It is null while the partition has no items.
+  leaked items included. It is null while the partition has no items. The
+  run finalize path in `ClientService.finish_run` recomputes it once more, so
+  a sum left stale by a racy last write is repaired when the run ends.
 - The per-category breakdown is a read-time fold over the item rows. It is
   not stored.
-- Every amount is a finite number greater than zero. Zero is rejected because
-  a producer that cannot price a resource must send nothing, not zero.
+- Every amount is a finite number of zero or more. A negative or non-finite
+  amount is rejected. Zero is a real figure, a free or prepaid resource; a
+  producer that cannot price a resource sends nothing, and the client
+  docstring says so.
 
 Failure behavior:
 
@@ -95,7 +117,7 @@ Failure behavior:
 - An amount, a name or a category fails validation: the whole call fails,
   nothing is written.
 - Two item writes race on the sum: the later recompute lands the complete
-  sum, and the next write repairs a stale one.
+  sum; the next write, or the finalize recompute, repairs a stale one.
 - No cost reported: the read returns null totals and an empty item list. The
   tab shows "No cost reported for this run".
 
@@ -170,22 +192,23 @@ Backend service, called by the client API and the read route:
 class RunCostService:
     def set_estimated_cost(self, run_type: str, run_id: str, value: float) -> dict
     def submit_cost_items(self, run_type: str, run_id: str, items: list[CostItemRequest]) -> dict
+    def recompute_actual_cost(self, run_type: str, run_id: str) -> None
     def get_run_cost(self, build_id: str, build_number: int) -> dict
 ```
 
-Each raises a typed `RunCostError` on a missing run.
+Each raises a typed `RunCostError` on a missing run. `ClientService.finish_run`
+calls `recompute_actual_cost` and ignores a partition with no items.
 
 ## Risks
 
 | Risk | Response |
 |---|---|
 | The run has no `build_number` | The call fails with a typed error; nothing is written |
-| A producer sends `0` to mean unknown | Rejected at the boundary; unknown stays null |
-| Two item writes race and one sum is stale | The next write recomputes over the full partition; the plan may add a read-time recompute if this is observed |
+| A producer sends `0` for a resource it could not price | Argus cannot tell it from a free resource; the client docstring says to send nothing for an unknown price |
+| Two item writes race and one sum is stale | The next write and the finalize path recompute over the full partition |
 | A producer reuses an item name for two resources | The second write overwrites the first; the producer owns unique names, as for resource names today |
-| A static-only write of the estimate before any item row exists | The mapper must write partition key plus static columns alone; the plan verifies this against coodie |
+| A static-only write of the estimate before any item row exists | The mapper must write partition key plus static columns alone, and read back a partition that has statics and no item row; the plan verifies both against coodie |
 | SCT vendors `argus/client` and cannot call the new methods until a release | Cut a client release after the merge, per `docs/pypi-guide.md` |
-| A client on an old Argus gets an unknown route | Producers guard the call as they do for other optional reports |
 
 ## Deferred work
 
