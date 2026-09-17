@@ -63,9 +63,9 @@ tests belong to the plan, so they stay out of the spec.
 A spec leads with code and diagrams. A data shape is a dataclass, a schema,
 or a type. A database change is its DDL. A module API is its signature. An
 external contract is the request and the response, with the real field
-names. A flow or a decision is a Mermaid diagram. Prose carries what no code
-states: a driver, a non-goal, a risk. The template gives one example per
-form.
+names. A flow or a decision is a Mermaid diagram, except a single linear
+flow. Prose carries what no code states: a driver, a non-goal, a risk. The
+template gives one example per form.
 
 A bug takes the bug fix path below and writes `rca.md` in place of the spec.
 
