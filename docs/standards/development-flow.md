@@ -60,6 +60,13 @@ The drivers, the diagrams, and the contracts carry the design decision. The
 goals and the non-goals bound the scope. File lists, internal functions, and
 tests belong to the plan, so they stay out of the spec.
 
+A spec leads with code and diagrams. A data shape is a dataclass, a schema,
+or a type. A database change is its DDL. A module API is its signature. An
+external contract is the request and the response, with the real field
+names. A flow or a decision is a Mermaid diagram. Prose carries what no code
+states: a driver, a non-goal, a risk. The template gives one example per
+form.
+
 A bug takes the bug fix path below and writes `rca.md` in place of the spec.
 
 A spec that names no non-goal is not finished. Scope grows without one.
