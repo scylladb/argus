@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from argus.backend.models.web import ArgusTest, ArgusUserView, User
 from argus.backend.service.results_service import ResultsService
 from argus.backend.service.user import api_current_user
+from argus.backend.util.concurrency import map_concurrently
 from argus.backend.util.encoders import APIResponse
 
 router = APIRouter(prefix="/widgets")
@@ -18,15 +19,13 @@ def get_graph_views(view_id: UUID = Query(...),
                     user: User = Depends(api_current_user)):
     view: ArgusUserView = ArgusUserView.get(id=view_id)
     service = ResultsService()
-    response = {}
-    tests_details = {}
+    start_dt = start_date.astimezone(timezone.utc) if start_date else None
+    end_dt = end_date.astimezone(timezone.utc) if end_date else None
 
-    for test_id in view.tests:
-        test_uuid = test_id
+    def collect(test_uuid) -> tuple[list, str | None]:
+        """Graph views for one test, plus its name when it has any."""
         graph_views = service.get_argus_graph_views(test_uuid)
-        if graph_views:
-            test_name = ArgusTest.get(id=test_uuid).name
-            tests_details[str(test_id)] = {"name": test_name}
+        test_name = ArgusTest.get(id=test_uuid).name if graph_views else None
         view_data = []
 
         for graph_view in graph_views:
@@ -37,8 +36,6 @@ def get_graph_views(view_id: UUID = Query(...),
                 table_names.add(table_name)
 
             # Get graphs data for these tables
-            start_dt = start_date.astimezone(timezone.utc) if start_date else None
-            end_dt = end_date.astimezone(timezone.utc) if end_date else None
             graphs, ticks, releases_filters = service.get_test_graphs(
                 test_id=test_uuid,
                 start_date=start_dt,
@@ -60,7 +57,17 @@ def get_graph_views(view_id: UUID = Query(...),
                     "releases_filters": releases_filters
                 })
 
+        return view_data, test_name
+
+    # get_test_graphs is the heaviest per-test read of any widget, and results
+    # are partitioned by test_id, so fan out across the view's tests instead of
+    # paying the sum of them. Order is preserved.
+    response = {}
+    tests_details = {}
+    for test_id, (view_data, test_name) in zip(view.tests, map_concurrently(collect, view.tests)):
         response[str(test_id)] = view_data
+        if test_name is not None:
+            tests_details[str(test_id)] = {"name": test_name}
 
     return APIResponse({
         "status": "ok",
