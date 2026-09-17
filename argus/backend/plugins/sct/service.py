@@ -93,11 +93,20 @@ class SCTService:
     def submit_packages(run_id: str, packages: list[dict]) -> str:
         try:
             run: SCTTestRun = SCTTestRun.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
+            # Heal any duplicates already stored (e.g. from a CI retry before this
+            # guard existed, or from a retried request) by rebuilding the list
+            # keyed on (name, version), first-seen wins.
+            deduped: dict[tuple[str, str], PackageVersion] = {}
+            for existing in run.packages:
+                deduped.setdefault((existing.name, existing.version), existing)
+            run.packages = list(deduped.values())
             for package_dict in packages:
                 package = PackageVersion(**package_dict)
                 if "target" in package.name:
                     SCTService.process_target_version(run, package)
-                if not any(existing.name == package.name for existing in run.packages):
+                key = (package.name, package.version)
+                if key not in deduped:
+                    deduped[key] = package
                     run.packages.append(package)
             run.save()
         except DocumentNotFound as exception:

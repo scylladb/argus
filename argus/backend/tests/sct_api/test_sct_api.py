@@ -62,12 +62,12 @@ def test_submit_packages(api_client, sct_run_id):
                "6.0.0" for p in run.packages)
 
 
-def test_submit_packages_deduplicates_by_name(api_client, sct_run_id):
+def test_submit_packages_deduplicates_by_name_and_version(api_client, sct_run_id):
     first_payload = {
         "packages": [
             {
                 "name": "java-driver",
-                "version": "4.15.0",
+                "version": "3.11.5.7",
                 "date": "2026-09-01",
                 "revision_id": "abc123",
                 "build_id": "build-1",
@@ -82,13 +82,14 @@ def test_submit_packages_deduplicates_by_name(api_client, sct_run_id):
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"
 
-    # Re-report the same package name with a different date/build_id (as a CI
-    # retry would), plus a distinct package name in the same call.
+    # Re-report the same (name, version) pair with a different date/build_id
+    # (as a CI retry would, or the reviewer's exact byte-identical report),
+    # plus a distinct package name in the same call.
     second_payload = {
         "packages": [
             {
                 "name": "java-driver",
-                "version": "4.15.0",
+                "version": "3.11.5.7",
                 "date": "2026-09-02",
                 "revision_id": "def456",
                 "build_id": "build-2",
@@ -118,6 +119,33 @@ def test_submit_packages_deduplicates_by_name(api_client, sct_run_id):
     # Keep-first semantics: the row from the first submission is retained.
     assert java_driver_rows[0].date == "2026-09-01"
     assert java_driver_rows[0].build_id == "build-1"
+
+    # A genuinely different version of the same package name must stay
+    # visible as its own row, not be collapsed into the existing one.
+    third_payload = {
+        "packages": [
+            {
+                "name": "java-driver",
+                "version": "4.15.0",
+                "date": "2026-09-03",
+                "revision_id": "ghi789",
+                "build_id": "build-3",
+            },
+        ],
+        "schema_version": "v8",
+    }
+    resp = api_client.post(
+        f"{API_PREFIX}/{sct_run_id}/packages/submit",
+        json=third_payload,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"
+
+    run = SCTTestRun.get(id=UUID(sct_run_id))
+    java_driver_rows = [p for p in run.packages if p.name == "java-driver"]
+    java_driver_versions = {p.version for p in java_driver_rows}
+    assert len(java_driver_rows) == 2
+    assert java_driver_versions == {"3.11.5.7", "4.15.0"}
 
 
 def test_submit_screenshots(api_client, sct_run_id):
