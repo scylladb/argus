@@ -2,13 +2,19 @@
 
 **Date**: <YYYY-MM-DD>
 
+Code and diagrams first. A data shape is a dataclass, a schema, or a type. A
+database change is its DDL. A module API is its signature. An external
+contract is the request and the response, with the real field names. A flow
+or a decision is a Mermaid diagram. Prose carries what no code states: a
+driver, a non-goal, a risk. Replace every example below with content.
+
 ## Design drivers
 
-What the design must get right. A driver is a constraint the design must
-satisfy. A goal is a deliverable. One bullet each. Typical drivers: a complex
-artifact, a multi-step collection of data, a bound on load or latency, a
-consumer that must read the result the right way, a maintenance cost. The
-Design section answers each one. The problem itself stays in `intent.md`.
+What the design must get right that `intent.md` does not name. A driver
+comes from the designer: a bound on load or latency, no new index in the
+database, a feature planned later that shapes this design. One line each.
+The Design section answers each one. Do not restate the intent. `None` when
+the intent names every constraint.
 
 ## Goals
 
@@ -16,40 +22,77 @@ What this change delivers. One line each.
 
 ## Non-goals
 
-What this change leaves alone. The list is not exhaustive. It shows what the
-team drops on purpose. It holds an implementer to the ask, since an
-implementer tends to do more than the ask.
+What this change leaves alone. One line each. The list is not exhaustive. It
+shows what the team drops on purpose. It holds an implementer to the ask,
+since an implementer tends to do more than the ask.
 
 ## Design
 
-The components that take part, and what each one does. One paragraph.
+The components that take part, and what each one does.
 
 One Mermaid diagram per flow the change adds or alters. A sequence diagram
 for a call chain, a flowchart for a decision. Name components, not functions.
 No diagram for a single linear flow.
 
-The decision rules the design adopts. A flowchart when a decision has more
-than two branches. The failure behavior the design adopts: what happens when
-a source is down, a lookup fails, or an input is partial.
+```mermaid
+flowchart LR
+    S[Jenkins] -->|failed build| M[Monitor]
+    M -->|question| A[Agent]
+    A -->|comment| J[Jira]
+```
+
+The decision rules the design adopts, as a flowchart when a decision has more
+than two branches. The failure behavior the design adopts, as a table:
+
+| Condition | Behavior |
+|---|---|
+| The source is down | Skip the poll, log once, retry on the next tick |
+| The lookup returns nothing | Answer with the partial result and say so |
 
 ## Contracts
 
 ### Inputs
 
 Each external source the change reads: the endpoint or the CLI command, and
-the fields used. `None` when the change reads nothing new.
+the fields used, as a code block. `None` when the change reads nothing new.
+
+```
+argus run get <run_id>    # fields: status, scylla_version, started_at
+```
 
 ### Outputs
 
-Each surface another party uses: a generated file, a metric, a message, an
-endpoint, a command. A generated file comes with its format and a short
-excerpt. The rules a consumer follows to read a generated file sit next to
-its format. `None` when the change produces nothing new.
+Each surface another party uses, in the form it takes. A data shape as a
+dataclass, a schema, or a type. A database change as its DDL. A generated
+file as a short excerpt. A message or an endpoint as the request and the
+response, with the real field names. The rules a consumer follows sit next
+to the artifact. `None` when the change produces nothing new.
+
+```python
+@dataclass(slots=True, frozen=True)
+class BuildFailure:
+    job: str
+    build: int
+    stage: str | None
+```
+
+```sql
+CREATE TABLE build_failure (
+    job TEXT NOT NULL,
+    build INTEGER NOT NULL,
+    stage TEXT,
+    PRIMARY KEY (job, build)
+);
+```
 
 ### Module API
 
-Each signature another module calls. The whole public API of a new module.
-`None` when no other module imports it.
+Each signature another module calls, as a code block. The whole public API
+of a new module. `None` when no other module imports it.
+
+```python
+async def triage(failure: BuildFailure, *, client: httpx.AsyncClient) -> Triage: ...
+```
 
 ## Risks
 
