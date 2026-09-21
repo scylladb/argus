@@ -26,7 +26,8 @@ changes. Update `docs/INDEX.md` when you add or remove a document.
 ### Pull Requests
 Title a pull request `type(scope): summary`. Describe the intent and the manual
 validation steps. Add a screenshot for a UI change and a payload snippet for an
-API change. End the body with `Fixes ARGUS-<n>`.
+API change. End the body with `closes <KEY>` when the merge finishes the task,
+and with `refs <KEY>` when a later pull request does.
 
 Compose a commit around one logical change. Run the verify sequence in
 `CLAUDE.md` before you push.
@@ -57,11 +58,14 @@ Keep a sample data archive outside the repository. A production artifact must
 not reach a commit.
 
 ### Minimal Dependencies
-Keep the dependency list short. State why a major dependency arrives.
+Keep the dependency list short. State why a major dependency arrives. A
+dependency declares a version floor in the manifest. The lockfile pins the
+version.
 
 ### Consistent Reviews
-`docs/standards/REVIEW.md` holds the review policy. It applies to every pull
-request.
+The `qatools-sdlc` plugin holds the review policy, and `/qatools-sdlc:review`
+runs it. It applies to every pull request. `review-findings.md` holds the
+checks that shape a finding in this repository.
 
 ### Non-Blocking Review Feedback
 Merge working code. Track the remaining comments as a follow-up Jira issue and

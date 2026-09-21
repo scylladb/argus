@@ -152,7 +152,7 @@ rules follow.
 | Amazon S3 | Run artifacts. |
 | Anthropic | Event summaries. |
 | Cloudflare Access | Protects the deployed instance. The CLI authenticates through it. |
-| Prometheus | Scrapes application metrics. |
+| Prometheus | Scrapes application metrics. No automatic trigger opens an issue from a metric. A person reads the dashboard and files the issue. |
 
 ## Configuration
 

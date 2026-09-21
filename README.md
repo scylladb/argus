@@ -83,3 +83,12 @@ For source-based production installation, nginx, systemd, and logging setup, see
 ## Contributing
 
 Review the [Repository Guidelines](AGENTS.md) for project structure, tooling expectations, and pull request practices before submitting changes.
+
+Every change goes through the development flow of the `qatools-sdlc` plugin: intent, spec or rca, plan, code, review. Install the plugin once in Claude Code:
+
+```
+/plugin marketplace add git@github.com:scylladb/qatools.git
+/plugin install qatools-sdlc@qatools
+```
+
+`CLAUDE.md` names the skills, and [`tasks/README.md`](tasks/README.md) describes the task artifacts.

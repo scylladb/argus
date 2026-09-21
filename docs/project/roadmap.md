@@ -1,8 +1,8 @@
 # Development Roadmap
 
 ## Active Work
-A task follows `docs/standards/development-flow.md`. Its intent, spec and plan
-live in `tasks/<KEY>/`, and the Jira board holds the status.
+A task follows the development flow of the `qatools-sdlc` plugin. Its intent,
+spec and plan live in `tasks/<KEY>/`, and the Jira board holds the status.
 
 ## Known Debt
 
