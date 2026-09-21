@@ -12,7 +12,7 @@ from coodie.exceptions import DocumentNotFound
 from coodie.sync import Document
 
 from argus.backend.db import ScyllaCluster
-from argus.backend.models.run_config import RunConfigParam
+from argus.backend.models.run_config import RunConfigParamByRun
 from argus.backend.models.web import ArgusRelease, ArgusTest, ReleaseDistinctVersions, ReleaseDistinctImages
 from argus.backend.plugins.core import DEFAULT_STATS_PER_PARTITION_LIMIT, PluginModelBase
 from argus.backend.plugins.sct.resource_setup import (
@@ -394,7 +394,7 @@ class SCTTestRun(PluginModelBase):
     def get_config_params(self) -> dict[str, str]:
         return {
             param.name: param.value
-            for param in RunConfigParam.find(run_id=str(self.id)).allow_filtering().all()
+            for param in RunConfigParamByRun.find(run_id=self.id).all()
         }
 
     def get_xcloud_details(self) -> dict[str, str | None]:
