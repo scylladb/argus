@@ -15,7 +15,14 @@ from argus.backend.db import ScyllaCluster
 from argus.backend.error_handlers import DataValidationError
 from argus.backend.models.pytest import PytestResultTable, PytestSubmitData, PytestUserField
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData
-from argus.backend.models.run_config import RunConfigParam, RunConfiguration
+from argus.backend.models.run_config import (
+    NAME_BUCKET,
+    RunConfigParam,
+    RunConfigParamByRun,
+    RunConfigParamName,
+    RunConfigParamValueIndex,
+    RunConfiguration,
+)
 from argus.backend.models.web import ArgusEvent, ArgusTestRunComment, ArgusTest, ArgusGroup, ArgusRelease
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.generic.model import GenericRun
@@ -26,6 +33,8 @@ from argus.backend.service.run_cost_service import RunCostService
 from argus.common.enums import TestStatus
 
 LOGGER = logging.getLogger(__name__)
+
+_INDEXED_NAMES: set[str] = set()
 
 
 class ClientException(Exception):
@@ -247,7 +256,7 @@ class ClientService:
     def get_config_property(name: str, value: Any | str, run_id: str = None) -> list[RunConfigParam]:
         dml = RunConfigParam.find(name=name, value=str(value))
         if run_id:
-            dml.filter(run_id=run_id)
+            dml = dml.filter(run_id=str(run_id))
 
         return list(dml.all())
 
@@ -290,14 +299,36 @@ class ClientService:
             return
 
         loaded_items = [[f"{name.replace(".", "_").replace(" ", "_")}.", k, v] for k, v in list(loaded.items())]
+        run_uuid = UUID(run_id) if isinstance(run_id, str) else run_id
         # Store flattened keys to a separate table for comparison purposes
         for level, key, value in loaded_items:
             if is_scalar(value):
+                param_name = f"{level}{key}"
+                param_value = str(value) or "null"
+
                 param = RunConfigParam.model_construct()
-                param.name = f"{level}{key}"
-                param.value = str(value) or "null"
+                param.name = param_name
+                param.value = param_value
                 param.run_id = run_id
                 param.save()
+
+                by_run = RunConfigParamByRun.model_construct()
+                by_run.run_id = run_uuid
+                by_run.name = param_name
+                by_run.value = param_value
+                by_run.save()
+
+                value_index = RunConfigParamValueIndex.model_construct()
+                value_index.name = param_name
+                value_index.value = param_value
+                value_index.save()
+
+                if param_name not in _INDEXED_NAMES:
+                    catalogue = RunConfigParamName.model_construct()
+                    catalogue.bucket = NAME_BUCKET
+                    catalogue.name = param_name
+                    catalogue.save()
+                    _INDEXED_NAMES.add(param_name)
             else:
                 if isinstance(value, dict):
                     loaded_items.extend([f"{level}{key}.", inner_key, value] for inner_key, value in value.items())
