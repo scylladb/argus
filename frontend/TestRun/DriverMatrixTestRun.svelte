@@ -4,6 +4,7 @@
     import {
         faBoxes,
         faCodeBranch,
+        faCoins,
         faComments,
         faExclamationTriangle,
         faInfoCircle,
@@ -11,6 +12,7 @@
         faTimes,
     } from "@fortawesome/free-solid-svg-icons";
     import ActivityTab from "./ActivityTab.svelte";
+    import CostsTab from "./CostsTab.svelte";
     import TestRunComments from "./TestRunComments.svelte";
     import { sendMessage } from "../Stores/AlertStore";
     import { fetchRun } from "../Common/RunUtils";
@@ -160,6 +162,9 @@
                     <button class="argus-tab" class:active={activeTab === 'activity'} type="button" role="tab" onclick={() => setActiveTab("activity")}>
                         <Fa icon={faExclamationTriangle}/> Activity
                     </button>
+                    <button class="argus-tab" class:active={activeTab === 'costs'} type="button" role="tab" onclick={() => setActiveTab("costs")}>
+                        <Fa icon={faCoins}/> Costs
+                    </button>
                 </div>
                 <div class="argus-tab-select">
                     <select onchange={(e) => setActiveTab(e.currentTarget.value)} value={activeTab}>
@@ -168,6 +173,7 @@
                         <option value="discuss">Discussion</option>
                         <option value="issues">Issues</option>
                         <option value="activity">Activity</option>
+                        <option value="costs">Costs</option>
                     </select>
                 </div>
             <div
@@ -195,6 +201,11 @@
                 <div role="tabpanel" style:display={activeTab === 'activity' ? "block" : "none"}>
                     {#if visitedTabs['activity']}
                         <ActivityTab id={runId} />
+                    {/if}
+                </div>
+                <div role="tabpanel" style:display={activeTab === 'costs' ? "block" : "none"}>
+                    {#if visitedTabs['costs']}
+                        <CostsTab {runId} />
                     {/if}
                 </div>
             </div>
