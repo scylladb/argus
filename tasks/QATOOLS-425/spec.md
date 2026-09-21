@@ -6,6 +6,7 @@
 
 - Four gunicorn workers export through `PROMETHEUS_MULTIPROC_DIR`, which calls no custom collector. The runner needs one process with its own exporter.
 - The gunicorn master forks a new worker on every `max_requests` restart. The master must hold no extra thread at a fork.
+- The master imports nothing from `qatools-health`. A missing package must never stop gunicorn.
 - The health process has the lifecycle of gunicorn. No new systemd unit and no new supervisord program.
 - `qatools-health` needs Python 3.13. The `argus-alm` client keeps its 3.10 floor.
 - The backend is synchronous. A check must never block the health loop.
@@ -16,7 +17,8 @@
 - Run the `qatools-health` runner in one child process that the gunicorn master starts and stops.
 - Serve `/health`, `/health/ready` and `/metrics` from that process on a separate internal port, with no authentication.
 - Probe ScyllaDB, each S3 bucket in `S3_ALLOWED_BUCKETS`, Jenkins, GitHub, Jira, nginx and the SSH tunnel key lookup.
-- Move the web backend to Python 3.13: CI backend jobs, the Dockerfile and the production venv.
+- Move the web backend to Python 3.13: CI backend jobs, the Dockerfile and the production venv, pinned by `.python-version`.
+- Update `docs/project/architecture.md` and `AGENTS.md` for the health process, and `docs/project/tech-stack.md` and the "Python version floor" entry of `docs/project/roadmap.md` for Python 3.13.
 
 ## Non-goals
 
@@ -32,13 +34,13 @@
 ```mermaid
 flowchart LR
     M[gunicorn master] -->|fork| W[4 uvicorn workers]
-    M -->|spawn on when_ready, stop on on_exit| H[argus-health process]
+    M -->|start on when_ready, stop on on_exit| H[argus-health process]
     H -->|runner probes| D[(ScyllaDB, S3, Jenkins, GitHub, Jira, nginx)]
     P[Prometheus] -->|/metrics| H
     O[Operator] -->|/health, /health/ready| H
 ```
 
-The `when_ready` hook starts the health process with the `spawn` start method, so the child shares no memory, lock or thread with the master. The master keeps only the process handle. The `on_exit` hook sends SIGTERM and waits `graceful_timeout`. The child exits when its parent process id changes, so a killed master leaves no orphan.
+The `when_ready` hook starts `[sys.executable, "-m", "argus.backend.health"]` through `subprocess.Popen`. The child is a new interpreter and shares no memory, lock or thread with the master. The master imports no health module and keeps only the process handle. The `on_exit` hook sends SIGTERM and waits `graceful_timeout`. The child exits when its parent process id changes, so a killed master leaves no orphan.
 
 The child removes `PROMETHEUS_MULTIPROC_DIR` from its environment before any import, so its metrics stay in its own registry. It loads `argus_web.yaml`, builds its own `ScyllaCluster` from the same keys the workers read, registers the checks, and runs the runner and a uvicorn server on one asyncio loop.
 
@@ -48,7 +50,7 @@ A request reads `runner.snapshot()` and never starts a probe. Each check runs on
 |---|---|---|---|---|
 | `ScyllaHealthCheck` | `scylla` | critical | `SELECT release_version FROM system.local` at `LOCAL_ONE` through `execute_async` | always |
 | `NginxHealthCheck` | `nginx` | critical | `GET http://127.0.0.1/s/<static file>`, served by nginx alone | always |
-| `SshKeyLookupHealthCheck` | `ssh_key_lookup` | important | `TunnelService.get_authorized_keys` with a sentinel fingerprint that matches no key | always |
+| `SshKeyLookupHealthCheck` | `ssh_key_lookup` | important | `TunnelService.get_authorized_keys` with a well-formed `SHA256:` sentinel fingerprint that matches no key. An empty answer is HEALTHY | always |
 | `S3BucketHealthCheck` | `s3:<bucket>` | important | `HeadBucket` | once per bucket in `S3_ALLOWED_BUCKETS` |
 | `JenkinsApiHealthCheck` | `jenkins_api` | important | from the package | `JENKINS_URL` is set |
 | `GitHubApiHealthCheck` | `github_api` | important | from the package | `GITHUB_ENABLED` |
@@ -65,7 +67,8 @@ The S3 and SSH lookup checks call a synchronous library. They run it through `as
 | No check has run yet | The aggregate reads UNHEALTHY, `/health/ready` answers 503 for at most one check timeout |
 | The config has no Jira, GitHub or Jenkins | That check is not registered and has no series |
 | The health process dies | Its port stops answering, `up{job="argus_health"}` drops to 0, the workers keep serving |
-| `HEALTH_ENABLED` is false | `when_ready` starts nothing |
+| `HEALTH_ENABLED` is false or absent | `when_ready` starts nothing |
+| `qatools-health` is not installed, as on Python 3.12 | The child logs one ERROR line and exits with status 1. The master and the workers keep serving |
 
 ## Contracts
 
@@ -75,8 +78,16 @@ The S3 and SSH lookup checks call a synchronous library. They run it through `as
 
 ```yaml
 HEALTH_ENABLED: true
-HEALTH_HOST: 0.0.0.0
+HEALTH_HOST: <private address of the host>
 HEALTH_PORT: 9300
+```
+
+An absent `HEALTH_ENABLED` reads false, so a development machine and the Docker image open no port until their config sets it. An absent `HEALTH_HOST` reads `127.0.0.1`. The production config sets the private address that Prometheus scrapes. `0.0.0.0` is an explicit choice, never a default.
+
+`.python-version`:
+
+```
+3.13
 ```
 
 Existing keys read: `SCYLLA_*`, `AWS_CLIENT_ID`, `AWS_CLIENT_SECRET`, `S3_ALLOWED_BUCKETS`, `JENKINS_URL`, `JENKINS_USER`, `JENKINS_API_TOKEN`, `GITHUB_ENABLED`, `GITHUB_ACCESS_TOKEN`, `JIRA_ENABLED`, `JIRA_SERVER`, `JIRA_EMAIL`, `JIRA_TOKEN`.
@@ -122,16 +133,18 @@ def build_runner(config: dict[str, Any], cluster: ScyllaCluster) -> HealthCheckR
 
 def build_app(runner: HealthCheckRunner, registry: CollectorRegistry) -> FastAPI: ...
 
-def serve() -> None: ...
+def main() -> int: ...
 ```
 
-`serve()` is the entry point of the child process. `gunicorn.conf.py` calls nothing else.
+`python -m argus.backend.health` calls `main()`, and its return value is the exit status. `gunicorn.conf.py` imports none of these names.
 
 ## Risks
 
 | Risk | Response |
 |---|---|
 | A library in the backend fails on Python 3.13 | Run the full backend suite on 3.13 in CI before the deploy |
+| Production syncs on 3.12 and drops `qatools-health` without an error | `.python-version` pins 3.13 for `uv sync`, and the child exit line names the missing package |
+| `/health` shows the version, the bucket names and upstream error text with no authentication | The listener binds loopback unless the config names an address |
 | The `argus-alm` metadata names `qatools-health`, which PyPI does not hold | The marker and the extra keep it out of every client install. Nobody installs `argus-alm[web-backend]` from PyPI |
 | The health process adds a fifth ScyllaDB connection pool | One pool of the same size as a worker's, with one query per interval |
 | The sentinel lookup diverges from the query `sshd` triggers | The check calls the same service method the route calls |
