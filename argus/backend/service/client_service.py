@@ -20,6 +20,7 @@ from argus.backend.plugins.generic.model import GenericRun
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS
 from argus.backend.events.event_processors import EVENT_PROCESSORS
 from argus.backend.service.results_service import ResultsService, Cell
+from argus.backend.service.run_cost_service import RunCostService
 from argus.common.enums import TestStatus
 
 LOGGER = logging.getLogger(__name__)
@@ -134,6 +135,7 @@ class ClientService:
         run = model.load_test_run(UUID(run_id))
         run.finish_run(payload)
         run.save()
+        RunCostService().recompute_actual_cost(UUID(run_id))
 
         return "Finalized"
 

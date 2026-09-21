@@ -21,6 +21,7 @@ from argus.backend.models.result import (
     ValidationRules,
 )
 from argus.backend.models.run_config import RunConfigParam, RunConfiguration
+from argus.backend.models.run_cost import RunCost
 from coodie.sync import Document
 
 from argus.backend.models.runtime_store import RuntimeStore
@@ -459,6 +460,7 @@ USED_MODELS: list[type[Document]] = [
     ReleaseDistinctImages,
     RunConfiguration,
     RunConfigParam,
+    RunCost,
     ErrorEventEmbeddings,  # to be deprecated
     CriticalEventEmbeddings,  # to be deprecated
     SCTErrorEventEmbedding,

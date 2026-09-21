@@ -121,6 +121,103 @@ argus-client-generic trigger-jobs --api-key $key --version $version --plan_id $i
 
 
 
+```http
+POST /api/v1/client/testrun/{run_id}/cost/estimated
+```
+
+Sets the estimated cost of a run. The producer computes the amount; Argus
+stores it. Repeating the call replaces the stored estimate.
+
+Accepts following payload:
+
+Type: application/json
+
+| Parameter | Type | Description |
+| --------- | ---- | ------------|
+| value          | number     | Estimated cost of the run in USD. Zero or more, and finite            |
+
+```json
+{
+  "response": {
+    "run_id": "b0a0e5ba-bd37-4f4e-bd1c-b4e0d4f80a1e",
+    "estimated_cost": 118.4
+  },
+  "status": "ok"
+}
+```
+
+```http
+POST /api/v1/client/testrun/{run_id}/cost/items
+```
+
+Submits the final cost of one or more named resources. Argus sums every item
+of the run into the run's actual cost. Send an item as soon as its price is
+known, and send nothing for a resource whose price is unknown, because a zero
+is stored as a real figure. An item is keyed by its name, so repeating a name
+replaces that item.
+
+Accepts following payload:
+
+Type: application/json
+
+| Parameter | Type | Description |
+| --------- | ---- | ------------|
+| items          | object[]     | The cost items. Names must be unique within one payload            |
+| items[].name          | string     | Resource name, not empty            |
+| items[].category          | string     | Free-form category, such as `db_node` or `loader`            |
+| items[].cost          | number     | Final cost of the resource in USD. Zero or more, and finite            |
+| items[].pricing_tier          | string, optional     | Pricing tier, such as `spot`            |
+| items[].leaked          | boolean, optional     | Marks a resource found after the run ended. Defaults to false            |
+
+Example payload:
+
+```json
+{
+  "items": [
+    {"name": "longevity-db-node-1", "category": "db_node", "cost": 12.30, "pricing_tier": "spot"},
+    {"name": "longevity-loader-1", "category": "loader", "cost": 3.70}
+  ]
+}
+```
+
+```json
+{
+  "response": {
+    "run_id": "b0a0e5ba-bd37-4f4e-bd1c-b4e0d4f80a1e",
+    "submitted": 2,
+    "actual_cost": 16.0
+  },
+  "status": "ok"
+}
+```
+
+```http
+GET /api/v1/cost/run/{run_id}
+```
+
+Reads the cost of one run. A figure that was never reported is `null`, never
+zero. Items are sorted by category, then by name.
+
+```json
+{
+  "response": {
+    "estimated_cost": 118.4,
+    "actual_cost": 16.0,
+    "items": [
+      {"name": "longevity-db-node-1", "category": "db_node", "cost": 12.3,
+       "pricing_tier": "spot", "leaked": false},
+      {"name": "longevity-loader-1", "category": "loader", "cost": 3.7,
+       "pricing_tier": null, "leaked": false}
+    ],
+    "by_category": {
+      "db_node": 12.3,
+      "loader": 3.7
+    }
+  },
+  "status": "ok"
+}
+```
+
 ## Email reporting API
 
 ```http

@@ -13,6 +13,7 @@ from argus.client.session import create_session
 from argus.client.generic_result import GenericResultTable
 from argus.client.replay_log import ReplayLog, ReplayLogOnlyResponse
 from argus.client.sct.types import LogLink
+from argus.client.types import CostItem
 
 JSON = dict[str, Any] | list[Any] | int | str | float | bool | Type[None]
 LOGGER = logging.getLogger(__name__)
@@ -54,6 +55,8 @@ class ArgusClient:
         SUBMIT_LOGS = "/testrun/$type/$id/logs/submit"
         SUBMIT_RESULTS = "/testrun/$type/$id/submit_results"
         FINALIZE = "/testrun/$type/$id/finalize"
+        SET_ESTIMATED_COST = "/testrun/$id/cost/estimated"
+        SUBMIT_COST_ITEMS = "/testrun/$id/cost/items"
 
     # Subclasses override ``test_type`` as a class attribute; ``run_id`` is
     # set on the instance by subclass constructors. Both are surfaced in the
@@ -335,6 +338,41 @@ class ArgusClient:
                 **self.generic_body,
                 "run_id": str(self.run_id),
                 ** result.as_dict(),
+            }
+        )
+        self.check_response(response)
+
+    def set_estimated_cost(self, run_id: UUID, value: float) -> None:
+        """Set the estimated cost of a run, in USD.
+
+        Send it before the run provisions anything. A repeated call replaces
+        the stored estimate. The amount is zero or more, and finite.
+        """
+        response = self.post(
+            endpoint=self.Routes.SET_ESTIMATED_COST,
+            location_params={"id": str(run_id)},
+            body={
+                **self.generic_body,
+                "value": value,
+            }
+        )
+        self.check_response(response)
+
+    def submit_cost_items(self, run_id: UUID, items: list[CostItem]) -> None:
+        """Submit the final cost of one or more named resources, in USD.
+
+        Send an item as soon as its price is known. Argus sums the items of
+        the run into the run's actual cost. Send nothing for a resource whose
+        price is unknown, because a zero is stored as a real figure. An item
+        is keyed by its name, so a repeated name replaces that item, and the
+        names are unique within one call.
+        """
+        response = self.post(
+            endpoint=self.Routes.SUBMIT_COST_ITEMS,
+            location_params={"id": str(run_id)},
+            body={
+                **self.generic_body,
+                "items": [asdict(item) for item in items],
             }
         )
         self.check_response(response)

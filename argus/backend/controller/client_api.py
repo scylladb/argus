@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Body, Depends, Request
 from pydantic import BaseModel
 from starlette.responses import HTMLResponse
@@ -7,6 +9,7 @@ from argus.backend.models.web import User
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS
 from argus.backend.service.client_service import ClientService
 from argus.backend.service.email_service import EmailService
+from argus.backend.service.run_cost_service import CostItemsRequest, EstimatedCostRequest, RunCostService
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.user import api_current_user
 from argus.backend.util.encoders import APIResponse
@@ -119,6 +122,26 @@ def submit_run_config(run_id: str, payload: ConfigSubmitRequest,
                       user: User = Depends(api_current_user)):
     result = ClientService().submit_config(run_id, config_name=payload.name,
                                            config_content=payload.content)
+    return APIResponse({
+        "status": "ok",
+        "response": result
+    })
+
+
+@router.post("/testrun/{run_id}/cost/estimated", name="api.client_api.set_estimated_cost")
+def set_estimated_cost(run_id: UUID, payload: EstimatedCostRequest,
+                       user: User = Depends(api_current_user)):
+    result = RunCostService().set_estimated_cost(run_id, payload.value)
+    return APIResponse({
+        "status": "ok",
+        "response": result
+    })
+
+
+@router.post("/testrun/{run_id}/cost/items", name="api.client_api.submit_cost_items")
+def submit_cost_items(run_id: UUID, payload: CostItemsRequest,
+                      user: User = Depends(api_current_user)):
+    result = RunCostService().submit_cost_items(run_id, payload.items)
     return APIResponse({
         "status": "ok",
         "response": result

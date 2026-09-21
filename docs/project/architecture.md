@@ -27,14 +27,15 @@ model, and optionally its own router, through the plugin layer.
 - **Entry point**: `argus_backend.py`. `create_app()` returns the FastAPI
   application.
 - **Layers**:
-  - `controller/` — 16 modules. One router per feature: `testrun_api.py`,
+  - `controller/` — 17 modules. One router per feature: `testrun_api.py`,
     `client_api.py`, `view_api.py`, `planner_api.py`, `admin_api.py`,
-    `notification_api.py`, `replay_api.py`, `ssh_api.py`, `auth.py`.
-  - `service/` — 24 modules. The business logic each router calls.
-  - `models/` — 12 modules. `web.py` holds the core entities. `jira.py`,
+    `notification_api.py`, `replay_api.py`, `ssh_api.py`, `cost_api.py`,
+    `auth.py`.
+  - `service/` — 25 modules. The business logic each router calls.
+  - `models/` — 13 modules. `web.py` holds the core entities. `jira.py`,
     `github_issue.py`, `pytest.py`, `result.py`, `plan.py`, `view_widgets.py`,
-    `ssh_key.py`, `run_config.py`, `runtime_store.py` and `argus_ai.py` hold
-    the rest.
+    `ssh_key.py`, `run_config.py`, `run_cost.py`, `runtime_store.py` and
+    `argus_ai.py` hold the rest.
   - `util/` — 7 modules of shared helpers.
   - `rendering.py` — the template helpers the `.j2` files expect.
   - `db.py` — session setup.
