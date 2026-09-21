@@ -10,5 +10,16 @@
       "mcp__codegraph__codegraph_files",
       "mcp__codegraph__codegraph_status"
     ]
+  },
+  "extraKnownMarketplaces": {
+    "qatools": {
+      "source": {
+        "source": "git",
+        "url": "git@github.com:scylladb/qatools.git"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "qatools-sdlc@qatools": true
   }
 }

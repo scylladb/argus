@@ -9,63 +9,29 @@ Follow standards in `docs/standards/` when writing code — they represent team 
 `AGENTS.md` holds the repository facts: the module map, the key files, the
 skills and the tooling. Read it for orientation.
 
-## Development Flow
+<!-- qatools-sdlc:begin -->
+## Development flow
 
-Read `docs/standards/development-flow.md`. It describes the six stages, the
-artifact each stage produces, and who approves it.
+This repository uses the `qatools-sdlc` plugin. Every piece of work goes
+through its flow: `/qatools-sdlc:intent <KEY>`, then `/qatools-sdlc:spec` or
+`/qatools-sdlc:rca` for a bug, then `/qatools-sdlc:plan`, then the code.
+Commit each artifact before the stage that consumes it. A review works
+through `/qatools-sdlc:review`. The user may skip the flow for a very small
+fix when they say so. The pull request description then states the skip in
+one line.
 
-When you review a pull request, work through the three passes in
-`docs/standards/REVIEW.md` and state the outcome of each one.
+If the `/qatools-sdlc:*` skills are not available, stop and ask the user to
+run these two commands, then start a new session:
 
-## Task Artifacts
+    /plugin marketplace add git@github.com:scylladb/qatools.git
+    /plugin install qatools-sdlc@qatools
 
-Each Jira issue gets a directory: `tasks/<KEY>/`, with the key in uppercase, as
-in `tasks/ARGUS-123/`. Copy the matching template from `tasks/templates/`.
-
-- An intent goes to `tasks/<KEY>/intent.md`.
-- A spec goes to `tasks/<KEY>/spec.md`. A bug fix writes `tasks/<KEY>/rca.md`
-  in its place.
-- A plan goes to `tasks/<KEY>/plan.md`. A bug fix may skip it.
-
-Commit each artifact before you start the work that consumes it.
-
-1. Do not start a task that has no intent. Write the intent first.
-2. Do not write the spec, or the rca, until `tasks/<KEY>/intent.md` is
-   committed.
-3. Do not write the plan until `tasks/<KEY>/spec.md`, or `rca.md`, is
-   committed.
-4. Do not write code until the last artifact of the task is committed.
-
-A commit gate is not an approval gate. A committed artifact stays open to
-review, and a later commit records the correction.
-
-The brainstorming skill writes the spec. Its output goes to the task directory,
-in the shape of `tasks/templates/spec.md`. File lists, internal functions, and
-tests go to the plan, and stay out of the spec.
-
-The skill writes no plan on its bounded path, so write the plan yourself. A
-small task keeps a short plan.
-
-A bug fix takes the bug fix path: `intent.md`, `rca.md` in the shape of
-`tasks/templates/rca.md`, then code. A fix that changes a contract or a module
-boundary writes a spec instead, and that rule comes first. A very small fix
-may skip the flow. The engineer decides, and the pull request description
-says so.
-
-A spike is the exception. When working code exists and no artifact does, stop
-before you commit the code. Write `intent.md` and `spec.md`, or `rca.md` for a
-bug, from the code, and commit them. Then commit the code. That path writes no
-plan. See `docs/standards/development-flow.md`.
-
-### Standards Evolution
-
-When you notice recurring patterns, fixes, or conventions during implementation that aren't yet captured in standards — suggest adding them. Examples:
-- A bug fix reveals a pattern that should be standardized (e.g., "always validate X before Y")
-- PR review feedback identifies a convention the team wants enforced
-- The same type of fix is needed across multiple files
-- A new library/pattern is adopted that should be documented
-
-When this happens, briefly suggest the standard to the user.
+Jira keys: `ARGUS-<n>`. Task artifacts: `tasks/<KEY>/`. Read
+`docs/INDEX.md` before any task and follow the standards in
+`docs/standards/`. Suggest `/qatools-sdlc:standards-update` when a
+convention comes up that no standard holds. Verify sequence: section
+`Commands` of this file.
+<!-- qatools-sdlc:end -->
 
 ## Commands
 
