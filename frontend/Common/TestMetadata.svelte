@@ -39,7 +39,7 @@
                 key,
                 badgeClass: BADGE_CLASSES[key] ?? "text-bg-light",
                 values: (LIST_KEYS.includes(key) ? parseList(metadata[key]) : [metadata[key]])
-                    .filter((value) => value !== "")
+                    .filter((value) => value !== "" && value.toLowerCase() !== "n/a")
                     .map((value) => (KEY_ORDER.includes(key) ? value : `${key}: ${value}`)),
             }))
             .filter((label) => label.values.length > 0);
@@ -54,7 +54,7 @@
         {#if labels.length > 0}
             <div class="d-flex flex-wrap gap-1 mt-1">
                 {#each labels as label (label.key)}
-                    {#each label.values as value (value)}
+                    {#each label.values as value}
                         <span class="badge {label.badgeClass}" title={label.key}>{value}</span>
                     {/each}
                 {/each}
