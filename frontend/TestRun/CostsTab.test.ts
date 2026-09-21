@@ -84,6 +84,15 @@ describe("CostsTab.svelte", () => {
         expect(screen.getByText("spot")).toBeTruthy();
     });
 
+    it("distinguishes a failed read from a run without cost", async () => {
+        vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
+
+        render(CostsTab, { props: { runId: "run-1" } });
+
+        await waitFor(() => expect(screen.getByText(/Could not load the cost/)).toBeTruthy());
+        expect(screen.queryByText("No cost reported for this run.")).toBeNull();
+    });
+
     it("marks an item that leaked", async () => {
         stubCost(FULL_COST);
 

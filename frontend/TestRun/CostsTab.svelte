@@ -24,6 +24,7 @@
 
     let cost: RunCost | undefined = $state();
     let fetching = $state(true);
+    let failed = $state(false);
 
     const formatter = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
@@ -55,6 +56,7 @@
         try {
             cost = await fetchJson(`/api/v1/cost/run/${runId}`);
         } catch (e) {
+            failed = true;
             if (e instanceof Error) {
                 sendMessage("error", e.message, "CostsTab::fetchCost");
             } else {
@@ -74,6 +76,10 @@
 {#if fetching}
     <div class="text-center text-muted p-4">
         <span class="spinner-border spinner-border-sm"></span> Fetching costs...
+    </div>
+{:else if failed}
+    <div class="text-center text-danger p-4">
+        Could not load the cost of this run. Reload the page to try again.
     </div>
 {:else if reported && cost}
     <div class="p-2">

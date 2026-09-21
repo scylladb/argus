@@ -2,6 +2,8 @@ import logging
 import math
 from uuid import UUID
 
+from coodie.cql_builder import build_update, parse_filter_kwargs, parse_update_kwargs
+from coodie.sync import BatchQuery
 from pydantic import BaseModel, Field
 
 from argus.backend.error_handlers import DataValidationError
@@ -51,18 +53,29 @@ class RunCostService:
         if duplicates:
             raise DataValidationError(f"Cost item names must be unique within one payload: {', '.join(duplicates)}")
 
-        for item in items:
-            RunCost.find(run_id=run_id, name=item.name).update(
-                cost=item.cost,
-                category=item.category,
-                pricing_tier=item.pricing_tier,
-                leaked=item.leaked,
-            )
+        with BatchQuery() as batch:
+            for item in items:
+                batch.add(*self._item_write(run_id, item))
 
         actual_cost = self.recompute_actual_cost(run_id)
         return {"run_id": str(run_id), "submitted": len(items), "actual_cost": actual_cost}
 
-    def recompute_actual_cost(self, run_id: UUID) -> float | None:
+    @staticmethod
+    def _item_write(run_id: UUID, item: CostItemRequest) -> tuple[str, list]:
+        set_data, _ = parse_update_kwargs({
+            "cost": item.cost,
+            "category": item.category,
+            "pricing_tier": item.pricing_tier,
+            "leaked": item.leaked,
+        })
+        return build_update(
+            RunCost._get_table(),
+            RunCost._get_keyspace(),
+            set_data,
+            parse_filter_kwargs({"run_id": run_id, "name": item.name}),
+        )
+
+    def recompute_actual_cost(self, run_id: UUID, use_estimate: bool = False) -> float | None:
         run_id = self._run_id(run_id)
         rows = self._read_partition(run_id)
         if not rows:
@@ -71,10 +84,12 @@ class RunCostService:
         items = self._items(rows)
         if items:
             total = math.fsum(item.cost or 0.0 for item in items)
-        else:
+        elif use_estimate:
             total = rows[0].estimated_cost
             if total is None:
                 return None
+        else:
+            return None
 
         RunCost.find(run_id=run_id).update(actual_cost=total)
         return total
