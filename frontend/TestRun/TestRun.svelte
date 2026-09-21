@@ -131,6 +131,7 @@
         faClipboard,
         faCloud,
         faCodeBranch,
+        faCoins,
         faComments,
         faExclamationTriangle,
         faEye,
@@ -145,6 +146,7 @@
     import ResourcesInfo from "./ResourcesInfo.svelte";
     import NemesisTable from "./NemesisTable.svelte";
     import ActivityTab from "./ActivityTab.svelte";
+    import CostsTab from "./CostsTab.svelte";
     import TestRunInfo from "./TestRunInfo.svelte";
     import Screenshots from "./Screenshots.svelte";
     import TestRunComments from "./TestRunComments.svelte";
@@ -367,6 +369,9 @@
                     <button class="argus-tab" class:active={activeTab === "activity"} type="button" role="tab" onclick={() => setActiveTab("activity")}>
                         <Fa icon={faExclamationTriangle} /> Activity
                     </button>
+                    <button class="argus-tab" class:active={activeTab === "costs"} type="button" role="tab" onclick={() => setActiveTab("costs")}>
+                        <Fa icon={faCoins} /> Costs
+                    </button>
                 </div>
                 <div class="argus-tab-select">
                     <select onchange={(e) => setActiveTab(e.currentTarget.value)} value={activeTab}>
@@ -389,6 +394,7 @@
                         <option value="discuss">Discussion</option>
                         <option value="issues">Issues</option>
                         <option value="activity">Activity</option>
+                        <option value="costs">Costs</option>
                         <option value="sct-events">Events (Experimental)</option>
                     </select>
                 </div>
@@ -475,6 +481,11 @@
                 <div role="tabpanel" style:display={activeTab === "activity" ? "block" : "none"}>
                     {#if visitedTabs["activity"]}
                         <ActivityTab id={runId} />
+                    {/if}
+                </div>
+                <div role="tabpanel" style:display={activeTab === "costs" ? "block" : "none"}>
+                    {#if visitedTabs["costs"]}
+                        <CostsTab {runId} />
                     {/if}
                 </div>
             </div>
