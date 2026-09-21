@@ -2,8 +2,12 @@
     import Fa from "svelte-fa";
     import { sendMessage } from "../Stores/AlertStore";
     import { faLink } from "@fortawesome/free-solid-svg-icons";
-    import { GLOBAL_STATS_KEY, WIDGET_TYPES } from "../Common/ViewTypes";
-    import sha1 from "js-sha1";
+    import {
+        GLOBAL_STATS_KEY,
+        WIDGET_TYPES,
+        calculateWidgetStatsKey,
+        calculateWidgetVersionKey,
+    } from "../Common/ViewTypes";
     interface Props {
         view: any;
         stats?: any;
@@ -98,10 +102,6 @@
         });
     };
 
-    const calculateWidgetStatsKey = function (widget) {
-        return sha1((widget.filter ?? []).join(""));
-    };
-
     const filterViewForWidget = async function (widget) {
         let viewCopy = structuredClone(view);
         if (!widget.filter || widget.filter.length === 0) {
@@ -140,7 +140,7 @@
                         dashboardObjectType="view"
                         settings={widget.settings}
                         bind:stats={stats[calculateWidgetStatsKey(widget)]}
-                        bind:productVersion={versionDispatch[calculateWidgetStatsKey(widget)]}
+                        bind:productVersion={versionDispatch[calculateWidgetVersionKey(widget)]}
                         bind:clickedTests={clickedTests}
                         on:statsUpdate
                         on:testClick={(e) => handleTestClick(e.detail)}

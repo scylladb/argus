@@ -25,8 +25,7 @@ export class Widget {
     }
 }
 
-// sha1("")
-export const GLOBAL_STATS_KEY = "da39a3ee5e6b4b0d3255bfef95601890afd80709";
+export { GLOBAL_STATS_KEY, calculateWidgetStatsKey, calculateWidgetVersionKey } from "./WidgetStatsKey";
 
 export const WIDGET_TYPES = {
     UNSUPPORTED: {
