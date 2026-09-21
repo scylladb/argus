@@ -3,6 +3,7 @@ import ViewReleaseStats from "../Views/Widgets/ViewReleaseStats.svelte";
 import ViewTestDashboard from "../Views/Widgets/ViewTestDashboard.svelte";
 import ViewUnsupportedPlaceholder from "../Views/Widgets/ViewUnsupportedPlaceholder.svelte";
 import CheckValue from "../Views/WidgetSettingTypes/CheckValue.svelte";
+import ConfigParamFilterValue from "../Views/WidgetSettingTypes/ConfigParamFilterValue.svelte";
 import MultiSelectValue from "../Views/WidgetSettingTypes/MultiSelectValue.svelte";
 import MultiStringValue from "../Views/WidgetSettingTypes/MultiStringValue.svelte";
 import StringValue from "../Views/WidgetSettingTypes/StringValue.svelte";
@@ -61,6 +62,12 @@ export const WIDGET_TYPES = {
                 default: "",
                 help: "Target Version to Fetch with Stats",
                 displayName: "Target Version",
+            },
+            configParamFilters: {
+                type: ConfigParamFilterValue,
+                default: [],
+                help: "Only show runs whose config parameters match every row. Use \"Any\" to match any non-empty value.",
+                displayName: "Config Parameter Filters",
             },
         },
     },
