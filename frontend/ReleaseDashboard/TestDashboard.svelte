@@ -67,6 +67,8 @@
     import { Collapse } from "bootstrap";
     import { titleCase } from "../Common/TextUtils";
     import { compareVersions } from "../Common/versionSort";
+    import ConfigParamFilterBar from "./ConfigParamFilterBar.svelte";
+    import { configuredRows, toggleName } from "../Common/ConfigParamFilters";
     interface Props {
         dashboardObject: any;
         dashboardObjectType?: string;
@@ -241,6 +243,14 @@
 
     let collapseState = $state(loadCollapseState());
 
+    let paramFilterRows = $derived(configuredRows(settings.configParamFilters));
+    let paramFiltersOff = $state([]);
+
+    const handleParamFilterToggle = function (name) {
+        paramFiltersOff = toggleName(paramFiltersOff, name);
+        fetchStats(true);
+    };
+
 
     const fetchStats = async function (force = false) {
         return dashboardObjectType == "release" ? fetchReleaseStats(force) : fetchViewStats(force);
@@ -288,6 +298,7 @@
             imageId: imageId,
             includeNoVersion: new Number(versionsIncludeNoVersion),
             productVersion: productVersion ?? "",
+            paramFilterOff: paramFiltersOff,
         });
         let response = await fetch(PANEL_MODES.view.statRoute() + "?" + params);
         let json = await response.json();
@@ -575,6 +586,14 @@
         <div class="text center text-muted">
             Version pre-selected: {productVersion || settings.productVersion}
         </div>
+    {/if}
+    {#if dashboardObjectType == "view" && paramFilterRows.length > 0}
+        <ConfigParamFilterBar
+            rows={paramFilterRows}
+            offNames={paramFiltersOff}
+            ontoggle={handleParamFilterToggle}
+        />
+        <br>
     {/if}
     {#if stats}
         <div class="d-flex">
