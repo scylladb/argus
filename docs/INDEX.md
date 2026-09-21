@@ -34,13 +34,14 @@ The current priorities, and the known debt: lint coverage, the Python version fl
 
 ### Process Standards
 
-Located in `docs/standards/`
+The `qatools-sdlc` plugin holds the development flow and the review policy.
+`CLAUDE.md` names its skills and the install commands.
 
-#### Development Flow (`standards/development-flow.md`)
+#### Development Flow (`qatools-sdlc` plugin)
 The six stages of work in this repository: the artifact each stage produces, its path under `tasks/<KEY>/`, and its approver. The spec is the design review document. A maintainer judges it from the design drivers, the flow diagrams, and the contracts. The plan carries the files, the internals, and the tests. A bug fix writes `rca.md` in place of the spec: the root cause, the approaches with the selected one, and the regression test or the reason none exists. The engineer who runs the session approves it. A very small fix may skip the flow, and the pull request says so. Also covers the commit order that gates each stage on the artifact before it, the spike path for code that exists before any artifact does, and the Jira key that joins the task directory and the pull request.
 
-#### Review Policy (`standards/REVIEW.md`)
-The three review passes applied to every pull request: bugs and logic, security, and compliance against the task spec or rca, including the contracts the spec names and the statement of a skipped flow. Also holds the checks that remove a false report, including the Svelte 5 rune semantics and the self-contained CSS color pair. A review states an outcome for every pass. Findings do not block a merge. A maintainer approves it.
+#### Review Policy (`qatools-sdlc` plugin, `/qatools-sdlc:review`)
+The three review passes applied to every pull request: bugs and logic, security, and compliance against the task spec or rca, including the contracts the spec names, the order of the commits, the pull request body line, and the statement of a skipped flow. A review states an outcome for every pass. Findings do not block a merge. A maintainer approves it. The checks that shape a finding in this repository live in `standards/global/review-findings.md`.
 
 ### Global Standards
 
@@ -55,13 +56,16 @@ Python 3.12 target against a `py310` linter floor, 4-space indentation and a 120
 Let the code speak, comment sparingly, no change-history comments.
 
 #### Conventions (`standards/global/conventions.md`)
-Layer ownership for a new file, the documents to update on an architecture change, the commitlint rules enforced at `commit-msg` (type enum, required scope, header and body limits), pull request format with the `Fixes ARGUS-<n>` closing line, the `ai-assisted` label, SHA-pinned actions, committed lockfiles in all three ecosystems, uv as the only Python tool runner, secrets in gitignored config files, and non-blocking review feedback tracked as a follow-up issue.
+Layer ownership for a new file, the documents to update on an architecture change, the commitlint rules enforced at `commit-msg` (type enum, required scope, header and body limits), pull request format with the `closes <KEY>` or `refs <KEY>` last line, the `ai-assisted` label, SHA-pinned actions, committed lockfiles in all three ecosystems, uv as the only Python tool runner, secrets in gitignored config files, and non-blocking review feedback tracked as a follow-up issue.
 
 #### Error Handling (`standards/global/error-handling.md`)
 Typed exceptions (`APIException`, `DataValidationError`, `<Domain>Error`) with `raise ... from`, no blind except, raising instead of returning an error dictionary, handling at the boundary, failing fast because the database enforces nothing, graceful degradation when Jira, GitHub, Jenkins or the AI worker fails, retry with backoff, and resource cleanup.
 
 #### Minimal Implementation (`standards/global/minimal-implementation.md`)
 Build what you need, clear purpose, delete exploration artifacts, no future stubs, no speculative abstractions, review before commit, unused code is debt.
+
+#### Review Findings (`standards/global/review-findings.md`)
+The diff as the review boundary, up to five findings, the checks that remove a false report seen in this repository (full context, a concrete failure, runtime evidence, a repeated pattern, existing comments, migration code), the pointers to the Svelte 5 rune semantics and the CSS color pair, and the `not applicable — no task spec` outcome for a pull request that predates the flow.
 
 #### Validation (`standards/global/validation.md`)
 The database enforces nothing, so every rule lives in the application: Pydantic at the router boundary, business rules in the service, uniqueness through a secondary index read, reference checks before a write, escaping user content before a template renders it, and the same rule at every entry point.

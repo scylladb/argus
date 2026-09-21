@@ -24,11 +24,11 @@
 
 **Internals:** none.
 
-- [ ] Run `/qatools-sdlc:init`.
-- [ ] Delete `CLAUDE.md` lines 12 to 69 and place the plugin section there.
-- [ ] Run init a second time. `git status --short` shows the same files.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit.
+- [x] Run `/qatools-sdlc:init`.
+- [x] Delete `CLAUDE.md` lines 12 to 69 and place the plugin section there.
+- [x] Run init a second time. `git status --short` shows the same files.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit.
 
 ## Task 2 — Delete the copies
 
@@ -43,14 +43,14 @@
 
 **Internals:** none.
 
-- [ ] Write `review-findings.md` from the `Scope` and `Before you report a
+- [x] Write `review-findings.md` from the `Scope` and `Before you report a
   finding` sections of `docs/standards/REVIEW.md`, checks 1 to 5 and 8, and
   the `not applicable — no task spec` paragraph.
-- [ ] Delete the seven files.
-- [ ] `grep -rn "development-flow.md\|REVIEW.md\|tasks/templates\|review-pr" --exclude-dir=tasks --exclude-dir=node_modules --exclude-dir=.git .`
+- [x] Delete the seven files.
+- [x] `grep -rn "development-flow.md\|REVIEW.md\|tasks/templates\|review-pr" --exclude-dir=tasks --exclude-dir=node_modules --exclude-dir=.git .`
   lists only the pointers that Task 3 changes.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit.
 
 ## Task 3 — Point the documents at the plugin
 
@@ -74,7 +74,7 @@
 
 **Internals:** none.
 
-- [ ] Edit each file.
-- [ ] The grep of Task 2 lists nothing outside `tasks/`.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit.
+- [x] Edit each file.
+- [x] The grep of Task 2 lists nothing outside `tasks/`.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit.

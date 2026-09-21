@@ -54,8 +54,8 @@ the troubleshooting steps, see `docs/dev-setup.md`.
 | Topic | File |
 |---|---|
 | Everything | `docs/INDEX.md` |
-| Development flow and task artifacts | `docs/standards/development-flow.md` |
-| Pull request review | `docs/standards/REVIEW.md` |
+| Development flow and task artifacts | The `qatools-sdlc` plugin: `/qatools-sdlc:intent`, `spec`, `rca`, `plan` |
+| Pull request review | `/qatools-sdlc:review` and `docs/standards/global/review-findings.md` |
 | Coding style, conventions, errors, validation | `docs/standards/global/` |
 | Routers, models, queries, schema changes | `docs/standards/backend/` |
 | Svelte 5 components, CSS, layout | `docs/standards/frontend/` |
@@ -92,8 +92,9 @@ AI agent skills live in `skills/` and provide task-specific guidance with struct
 
 ## Implementation Plans
 
-Work writes its plan to `tasks/<KEY>/plan.md`. See
-`docs/standards/development-flow.md`.
+Work writes its plan to `tasks/<KEY>/plan.md` through `/qatools-sdlc:plan`.
+The `qatools-sdlc` plugin holds the development flow. `CLAUDE.md` names the
+skills and the install commands.
 
 `docs/plans/archive/` holds design documents from earlier work. They are a
 historical record, and no flow points at them.
