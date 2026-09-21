@@ -177,3 +177,62 @@ def test_apply_keeps_the_stored_map_when_the_description_has_no_block():
 
     assert apply_test_metadata(test, "A description with no block at all.") is False
     assert test.test_metadata["tier"] == "tier1"
+
+
+REAL_JENKINS_DESCRIPTION = (
+    "jenkins-pipelines/oss/tier1/gemini-1tb-10h.jenkinsfile\n"
+    "\n"
+    "Large-scale Gemini fuzz test comparing a 6-node mixed Scylla/oracle cluster against a 1TB "
+    "dataset, running ~8h of active Gemini stress with a large IO-worker pool and SisyphusMonkey "
+    "nemesis (excluding ENOSPC and node-isolation disruptions), to validate data consistency under "
+    "sustained mixed load and chaos at scale.\n"
+    "\n"
+    "### TestMetadata\n"
+    "tier: tier1\n"
+    "test_type: gemini\n"
+    "duration_class: medium\n"
+    "supported_backends: ['aws']"
+)
+
+JOB_DEFINITIONS_DESCRIPTION = """Runs the nightly longevity suite.
+
+### JobDefinitions
+folder-description: Cluster - Tier1 Longevities
+job-name: longevity
+
+Basic longevity test running cassandra-stress.
+
+### TestMetadata
+tier: tier1
+duration_class: n/a
+supported_backends: []
+"""
+
+
+def test_reads_a_description_a_jenkins_job_carries_today():
+    assert parse_test_metadata(REAL_JENKINS_DESCRIPTION) == {
+        "tier": "tier1",
+        "test_type": "gemini",
+        "duration_class": "medium",
+        "supported_backends": '["aws"]',
+        "description": (
+            "Large-scale Gemini fuzz test comparing a 6-node mixed Scylla/oracle cluster against a "
+            "1TB dataset, running ~8h of active Gemini stress with a large IO-worker pool and "
+            "SisyphusMonkey nemesis (excluding ENOSPC and node-isolation disruptions), to validate "
+            "data consistency under sustained mixed load and chaos at scale."
+        ),
+    }
+
+
+def test_takes_the_prose_below_a_job_definitions_block():
+    parsed = parse_test_metadata(JOB_DEFINITIONS_DESCRIPTION)
+
+    assert parsed["description"] == "Basic longevity test running cassandra-stress."
+    assert parsed["duration_class"] == "n/a"
+    assert parsed["supported_backends"] == "[]"
+
+
+def test_reads_a_block_whose_pairs_are_indented():
+    parsed = parse_test_metadata("### TestMetadata\n  tier: tier1\n  test_type: longevity\n")
+
+    assert parsed == {"tier": "tier1", "test_type": "longevity"}
