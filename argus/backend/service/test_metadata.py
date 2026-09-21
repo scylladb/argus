@@ -5,7 +5,7 @@ import re
 from argus.backend.models.web import ArgusTest
 
 HEADING_PATTERN = re.compile(r"^\s*#{1,6}\s*TestMetadata\s*:?\s*$", re.IGNORECASE)
-PAIR_PATTERN = re.compile(r"^([A-Za-z_][A-Za-z0-9_.-]*)\s*:\s*(.*)$")
+PAIR_PATTERN = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_.-]*)\s*:\s*(.*)$")
 JENKINSFILE_PATTERN = re.compile(r"^\S+\.jenkinsfile$", re.IGNORECASE)
 DESCRIPTION_KEY = "description"
 
