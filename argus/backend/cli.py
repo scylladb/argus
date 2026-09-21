@@ -16,7 +16,8 @@ from argus.backend.service.build_system_monitor import JenkinsMonitor
 from argus.backend.service.github_service import GithubService
 from argus.backend.service.jira_service import JiraService
 from argus.backend.util.config import Config
-from argus.backend.util.logsetup import setup_application_logging
+from argus.backend.util.console import StatusLine
+from argus.backend.util.logsetup import route_logging_to_status_line, setup_application_logging
 
 LOGGER = logging.getLogger(__name__)
 
@@ -65,10 +66,25 @@ def refresh_issues_command():
     refresh_issues()
 
 
+def format_scan_status(stats: dict) -> str:
+    return (f"[{stats['releases']}/{stats['releases_total']}] {stats['release']}"
+            f"  jobs {stats['jobs']}"
+            f"  groups +{stats['groups_created']}"
+            f"  tests +{stats['tests_created']} ~{stats['tests_updated']}")
+
+
 @cli.command("scan-jenkins")
 def scan_jenkins_command():
+    status = StatusLine()
+    if status.enabled:
+        route_logging_to_status_line(status, level=logging.WARNING)
     monitor = JenkinsMonitor()
-    monitor.collect()
+    monitor.on_progress = lambda stats: status.set(format_scan_status(stats))
+    try:
+        monitor.collect()
+    finally:
+        monitor.report_progress(force=True)
+        status.finish()
     click.echo("Done.")
 
 

@@ -91,6 +91,7 @@ def make_monitor(fake, releases=(), groups=(), tests=()):
     monitor._existing_tests = list(tests)
     monitor._filtered_groups = JenkinsMonitor.BUILD_SYSTEM_FILTERED_PREFIXES
     monitor._monitored_releases = JenkinsMonitor.JENKINS_MONITORED_RELEASES
+    monitor.init_progress()
     monitor.created_releases = []
     monitor.created_groups = []
     monitor.created_tests = []
