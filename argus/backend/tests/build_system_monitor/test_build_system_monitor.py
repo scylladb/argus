@@ -326,3 +326,36 @@ def test_update_writes_the_column_and_leaves_the_other_fields_alone(argus_db, fa
     assert reloaded.test_metadata == {"tier": "tier1"}
     assert reloaded.enabled is False
     assert reloaded.name == fake_test.name
+
+
+def test_a_refetch_that_fails_does_not_stop_the_next_release():
+    tree = release_tree("scylla-master", [folder("scylla-master/longevity", [{"_class": FOLDER_CLASS}])])
+    tree.update(release_tree("scylla-enterprise", [
+        folder("scylla-enterprise/longevity", [workflow_job("scylla-enterprise/longevity/a-test", DESCRIPTION)]),
+    ]))
+    fake = FakeJenkins(tree,
+                       errors={"job/scylla-master/job/longevity": RequestsConnectionError("boom")},
+                       releases=["scylla-master", "scylla-enterprise"])
+    monitor = make_monitor(fake, releases=[
+        stored_release("scylla-master"), stored_release("scylla-enterprise")])
+
+    monitor.collect()
+
+    assert [t.build_system_id for t in monitor.created_tests] == ["scylla-enterprise/longevity/a-test"]
+
+
+def test_drops_a_job_that_never_exposes_a_url_instead_of_looping():
+    tree = release_tree("scylla-master", [
+        folder("scylla-master/longevity", [{"_class": FOLDER_CLASS}]),
+    ])
+    tree["job/scylla-master/job/longevity"] = {
+        "_class": FOLDER_CLASS,
+        "jobs": [{"_class": FOLDER_CLASS}, workflow_job("scylla-master/longevity/a-test", DESCRIPTION)],
+    }
+    fake = FakeJenkins(tree, releases=["scylla-master"])
+    monitor = make_monitor(fake, releases=[stored_release("scylla-master")])
+
+    monitor.collect()
+
+    assert len([item for item, _ in fake.info_calls if item == "job/scylla-master/job/longevity"]) == 1
+    assert [t.build_system_id for t in monitor.created_tests] == ["scylla-master/longevity/a-test"]

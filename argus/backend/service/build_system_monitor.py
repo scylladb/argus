@@ -126,17 +126,25 @@ class JenkinsMonitor(ArgusTestsMonitor):
 
         return self._jenkins.get_info(item=item, query=self._jobs_query())
 
-    def _normalize_jobs(self, jobs: list[dict], path: list[str]) -> list[dict]:
+    def _normalize_jobs(self, jobs: list[dict], path: list[str], refetched: set[str] | None = None) -> list[dict]:
+        refetched = set() if refetched is None else refetched
+        normalized = []
         for job in jobs:
             if "url" not in job:
+                folder = "/".join(path)
+                if folder in refetched:
+                    LOGGER.error("Job below %s still carries no url after a refetch, dropping it: %s", folder, job)
+                    continue
+                refetched.add(folder)
                 LOGGER.warning("Job tree below %s is deeper than %s levels, fetching it again",
-                               "/".join(path), self.JOB_TREE_DEPTH)
-                return self._normalize_jobs(self._fetch_release_info("/".join(path))["jobs"], path)
+                               folder, self.JOB_TREE_DEPTH)
+                return self._normalize_jobs(self._fetch_release_info(folder)["jobs"], path, refetched)
             job["fullname"] = job.get("fullName") or "/".join([*path, job["name"]])
             if isinstance(job.get("jobs"), list):
-                job["jobs"] = self._normalize_jobs(job["jobs"], [*path, job["name"]])
+                job["jobs"] = self._normalize_jobs(job["jobs"], [*path, job["name"]], refetched)
+            normalized.append(job)
 
-        return jobs
+        return normalized
 
     def _refresh_test_metadata(self, test: ArgusTest, job: dict) -> None:
         try:
@@ -182,6 +190,10 @@ class JenkinsMonitor(ArgusTestsMonitor):
                 groups = self.collect_groups_for_release(jobs)
             except KeyError:
                 LOGGER.error("Empty release!\n %s", release)
+                continue
+            except Exception:
+                LOGGER.error("Unable to read the job tree of release %s, skipping",
+                             release["fullname"], exc_info=True)
                 continue
             folder_stack = [dict(parent_name="", parent_display_name="", group=g) for g in reversed(groups)]
             root_folder = {
