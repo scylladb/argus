@@ -1,4 +1,6 @@
 <script lang="ts">
+    import TestMetadata from "../Common/TestMetadata.svelte";
+
     interface Props {
         item?: any;
         isActive?: boolean;
@@ -31,7 +33,12 @@
 >
     <div class="d-flex">
         <div class="me-2"><span class="fw-bold">{ITEM_TYPES[item.type]}</span></div>
-        <div>{item.pretty_name || item.name}</div>
+        <div>
+            <div>{item.pretty_name || item.name}</div>
+            {#if item.type === "test"}
+                <TestMetadata metadata={item.test_metadata} />
+            {/if}
+        </div>
         <div class="ms-auto d-flex justify-content-end align-items-center text-sm">
             {#if item.test}
                 <div>

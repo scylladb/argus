@@ -4,6 +4,7 @@
     import { StatusBackgroundCSSClassMap } from "../Common/TestStatus";
     import { subUnderscores, titleCase } from "../Common/TextUtils";
     import { timestampToISODate } from "../Common/DateUtils";
+    import TestMetadata from "../Common/TestMetadata.svelte";
     import { faArrowDown, faArrowUp } from "@fortawesome/free-solid-svg-icons";
     import { faTimesCircle } from "@fortawesome/free-regular-svg-icons";
 
@@ -311,6 +312,7 @@
                                         class="rounded bg-main status-block m-1 d-flex flex-column overflow-hidden shadow-sm position-relative"
                                         role="button"
                                         tabindex="0"
+                                        title={test.test_metadata?.description ?? ""}
                                         class:d-none={shouldFilterIfParent(test, group, filterToParent) || shouldFilterIfExecuted(test, group, filterExecuted)}
                                         onkeypress={() => {
                                             onTestClick(test);
@@ -339,6 +341,9 @@
                                                     - <span class="fw-bold">#{testStats.buildNumber}</span> <span class="text-muted">({timestampToISODate(testStats.start_time).split(" ")[0]})</span>
                                                 {/if}
                                                 </div>
+                                            </div>
+                                            <div class="px-1 pb-1">
+                                                <TestMetadata metadata={test.test_metadata} compact={true} />
                                             </div>
                                         </div>
                                         {#if test.comment}
