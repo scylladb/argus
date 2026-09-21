@@ -154,10 +154,11 @@ def view_stats(view_id: str = Query(..., alias="viewId"), limited: bool = Query(
                image_id: str | None = Query(None, alias="imageId"),
                force: bool = Query(False),
                widget_id: Annotated[int | None, NoneIfEmpty, Query(alias="widgetId")] = None,
+               param_filter_off: list[str] = Query([], alias="paramFilterOff"),
                user: User = Depends(api_current_user)):
     collector = ViewStatsCollector(view_id=view_id, filter=version)
     stats = collector.collect(limited=limited, force=force, include_no_version=include_no_version,
-                              widget_id=widget_id, image_id=image_id)
+                              widget_id=widget_id, image_id=image_id, param_filter_off=param_filter_off)
 
     return APIResponse({
         "status": "ok",
