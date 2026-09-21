@@ -71,6 +71,28 @@ describe("TestMetadata", () => {
         expect(badgeTexts(container)).toContain("tier1");
     });
 
+    it("renders a repeated backend without throwing", () => {
+        const { container } = render(TestMetadata, {
+            metadata: { supported_backends: '["aws", "aws"]' },
+        });
+
+        expect(badgeTexts(container)).toEqual(["aws", "aws"]);
+    });
+
+    it("hides a value SCT published as n/a", () => {
+        const { container } = render(TestMetadata, {
+            metadata: { tier: "tier1", duration_class: "n/a" },
+        });
+
+        expect(badgeTexts(container)).toEqual(["tier1"]);
+    });
+
+    it("renders nothing when every value is n/a", () => {
+        const { container } = render(TestMetadata, { metadata: { duration_class: "n/a" } });
+
+        expect(container.textContent?.trim()).toBe("");
+    });
+
     it("skips a label whose value is empty", () => {
         const { container } = render(TestMetadata, { metadata: { tier: "", test_type: "longevity" } });
 
