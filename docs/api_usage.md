@@ -120,6 +120,54 @@ argus-client-generic trigger-jobs --api-key $key --version $version --plan_id $i
 `--job-info-file` is a .json file containing `common_params` and `params` parts of the payload, everything else is specified on the command line.
 
 
+```http
+GET /api/v1/run_configs/param_names
+```
+
+Searches the catalogue of flattened run configuration parameter names. SCT's
+keys arrive prefixed with the config name, as in `sct_config.unified_package`.
+
+| Parameter | Type | Description |
+| --------- | ---- | ------------|
+| query     | string  | case-insensitive substring; omit it to list from the start |
+| limit     | integer | 1 to 100, default 100 |
+
+```json
+{
+  "status": "ok",
+  "response": [
+    "sct_config.unified_package",
+    "sct_config.backend"
+  ]
+}
+```
+
+```http
+GET /api/v1/run_configs/param_values
+```
+
+Lists the distinct values a single parameter has taken.
+
+| Parameter | Type | Description |
+| --------- | ---- | ------------|
+| name      | string  | required, the parameter name |
+| query     | string  | case-sensitive **prefix** of the value |
+| limit     | integer | 1 to 100, default 100 |
+
+```json
+{
+  "status": "ok",
+  "response": [
+    "aws",
+    "gce"
+  ]
+}
+```
+
+Both endpoints back the config parameter filter of the Test Dashboard view
+widget (ARGUS-157).
+
+
 
 ```http
 POST /api/v1/client/testrun/{run_id}/cost/estimated
