@@ -46,15 +46,15 @@ page** render it.
 ```python
 class ArgusTest(Document):
     ...
-    test_metadata: Annotated[dict[str, str], NoneAsEmptyDict] = Field(default_factory=dict)
+    test_metadata: dict[str, str] = Field(default_factory=dict)
 ```
 
 ```sql
 ALTER TABLE argus_test_v2 ADD test_metadata map<text, text>;
 ```
 
-`sync-models` issues the DDL. An old row reads the column as NULL and the
-model turns it into an empty map.
+`sync-models` issues the DDL. An old row reads the column as NULL, and the
+mapper turns it into an empty map before the model sees it.
 
 ```mermaid
 sequenceDiagram
@@ -67,7 +67,7 @@ sequenceDiagram
     Cron->>Monitor: scan-jenkins
     Monitor->>DB: read all releases, groups, tests
     loop each monitored release not marked dormant
-        Monitor->>Jenkins: GET job/<release>/api/json?tree=jobs[fullName,_class,description,url,name,jobs[...]]
+        Monitor->>Jenkins: GET job/<release>/api/json?tree=jobs[fullName,displayName,description,url,name,jobs[...]]
         Jenkins-->>Monitor: job tree
         loop each workflow job
             Monitor->>Parser: parse(description)
@@ -112,9 +112,11 @@ Rules:
 ### Inputs
 
 ```
-GET <JENKINS_URL>/job/<release>/api/json?tree=jobs[fullName,_class,description,url,name,jobs[...]]
+GET <JENKINS_URL>/job/<release>/api/json?tree=jobs[fullName,displayName,description,url,name,jobs[...]]
     # one request per monitored release not marked dormant; nested nine levels
-    # fields used: fullName, _class, description, url, name, jobs
+    # fields used: fullName, displayName, description, url, name, jobs
+    # _class arrives on every object unrequested, and naming it in the tree
+    # risks losing it, so the tree leaves it out
 ```
 
 The description grammar SCT writes. Line endings are `\n` or `\r\n`.

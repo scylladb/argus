@@ -232,6 +232,7 @@ class ArgusTest(Document):
     build_system_url: Optional[str] = None
     plugin_name: Optional[str] = None
     plugin_subtype: Optional[str] = None
+    test_metadata: dict[str, str] = Field(default_factory=dict)
 
     class Settings:
         name = "argus_test_v2"
