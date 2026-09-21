@@ -1,15 +1,16 @@
 import logging
+import time
 from abc import ABC, abstractmethod
 import jenkins
 import click
 import re
 
-from coodie.exceptions import DocumentNotFound
-
 from argus.backend.db import ScyllaCluster
+from argus.backend.util.common import first
 from argus.backend.util.config import Config
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, ArgusTestException
 from argus.backend.service.release_manager import ReleaseManagerService
+from argus.backend.service.test_metadata import apply_test_metadata, parse_test_metadata
 
 LOGGER = logging.getLogger(__name__)
 
@@ -45,13 +46,15 @@ class ArgusTestsMonitor(ABC):
         return group
 
     def create_test(self, release: ArgusRelease, group: ArgusGroup,
-                    test_name: str, build_id: str, build_url: str) -> ArgusTest:
+                    test_name: str, build_id: str, build_url: str,
+                    test_metadata: dict[str, str] | None = None) -> ArgusTest:
         test = ArgusTest.model_construct()
         test.name = test_name
         test.group_id = group.id
         test.release_id = release.id
         test.build_system_id = build_id
         test.build_system_url = build_url
+        test.test_metadata = test_metadata or {}
         test.validate_build_system_id()
         test.save()
         ReleaseManagerService().move_test_runs(test)
@@ -93,35 +96,90 @@ class JenkinsMonitor(ArgusTestsMonitor):
         r"^sct-github-PRs-scan$",
     ]
 
+    JOB_TREE_FIELDS = "fullName,displayName,description,url,name"
+    JOB_TREE_DEPTH = 9
+    JENKINS_TIMEOUT = 60
+    DISCOVERY_FOLDER_DEPTH = 1
+    DISCOVERY_FOLDER_DEPTH_PER_REQUEST = 2
+
     def __init__(self) -> None:
         super().__init__()
         config = Config.load_yaml_config()
         self._jenkins = jenkins.Jenkins(url=config["JENKINS_URL"],
                                         username=config["JENKINS_USER"],
-                                        password=config["JENKINS_API_TOKEN"])
+                                        password=config["JENKINS_API_TOKEN"],
+                                        timeout=self.JENKINS_TIMEOUT)
         self._monitored_releases = self.JENKINS_MONITORED_RELEASES
 
     def _check_release_name(self, release_name: str):
         return any(re.match(pattern, release_name, re.IGNORECASE) for pattern in self._monitored_releases)
 
+    def _jobs_query(self) -> str:
+        tree = "jobs"
+        for _ in range(self.JOB_TREE_DEPTH):
+            tree = f"jobs[{self.JOB_TREE_FIELDS},{tree}]"
+
+        return f"?tree={tree}"
+
+    def _fetch_release_info(self, release_name: str) -> dict:
+        item = "/".join(f"job/{segment}" for segment in release_name.split("/"))
+
+        return self._jenkins.get_info(item=item, query=self._jobs_query())
+
+    def _normalize_jobs(self, jobs: list[dict], path: list[str]) -> list[dict]:
+        for job in jobs:
+            if "url" not in job:
+                LOGGER.warning("Job tree below %s is deeper than %s levels, fetching it again",
+                               "/".join(path), self.JOB_TREE_DEPTH)
+                return self._normalize_jobs(self._fetch_release_info("/".join(path))["jobs"], path)
+            job["fullname"] = job.get("fullName") or "/".join([*path, job["name"]])
+            if isinstance(job.get("jobs"), list):
+                job["jobs"] = self._normalize_jobs(job["jobs"], [*path, job["name"]])
+
+        return jobs
+
+    def _refresh_test_metadata(self, test: ArgusTest, job: dict) -> None:
+        try:
+            if apply_test_metadata(test, job.get("description")):
+                test.update(test_metadata=test.test_metadata)
+                LOGGER.info("Refreshed the metadata of test %s", test.build_system_id)
+        except Exception:
+            LOGGER.error("Unable to refresh the metadata of test %s", job["fullname"], exc_info=True)
+
     def collect(self):
         click.echo("Collecting new tests from jenkins")
-        all_jobs = self._jenkins.get_all_jobs()
+        all_jobs = self._jenkins.get_all_jobs(folder_depth=self.DISCOVERY_FOLDER_DEPTH,
+                                              folder_depth_per_request=self.DISCOVERY_FOLDER_DEPTH_PER_REQUEST)
         all_monitored_folders = [job for job in all_jobs if self._check_release_name(job["fullname"])]
         LOGGER.info("Will collect %s", [f["fullname"] for f in all_monitored_folders])
 
         for release in all_monitored_folders:
             LOGGER.info("Processing release %s", release["fullname"])
-            try:
-                saved_release = ArgusRelease.get(name=release["fullname"])
+            saved_release = first(self._existing_releases, release["fullname"], key=lambda r: r.name)
+            if saved_release:
                 LOGGER.info("Release %s exists", release["fullname"])
-            except DocumentNotFound:
+            else:
                 LOGGER.warning("Release %s does not exist, creating...", release["fullname"])
                 saved_release = self.create_release(release["fullname"])
                 self._existing_releases.append(saved_release)
 
+            if saved_release.dormant:
+                LOGGER.info("Release %s is dormant, skipping", saved_release.name)
+                continue
+
+            started_at = time.monotonic()
             try:
-                groups = self.collect_groups_for_release(release["jobs"])
+                release_info = self._fetch_release_info(release["fullname"])
+            except Exception:
+                LOGGER.error("Unable to fetch the job tree of release %s, skipping",
+                             release["fullname"], exc_info=True)
+                continue
+            LOGGER.info("Fetched the job tree of release %s in %.2fs",
+                        release["fullname"], time.monotonic() - started_at)
+
+            try:
+                jobs = self._normalize_jobs(release_info["jobs"], release["fullname"].split("/"))
+                groups = self.collect_groups_for_release(jobs)
             except KeyError:
                 LOGGER.error("Empty release!\n %s", release)
                 continue
@@ -133,7 +191,7 @@ class JenkinsMonitor(ArgusTestsMonitor):
                     "name": f"{release['fullname']}-root",
                     "displayName": "-- root directory --",
                     "fullname": release["fullname"],
-                    "jobs": self.collect_root_folder_jobs(release["jobs"]),
+                    "jobs": self.collect_root_folder_jobs(jobs),
                 }
             }
             folder_stack.append(root_folder)
@@ -150,8 +208,8 @@ class JenkinsMonitor(ArgusTestsMonitor):
                     LOGGER.warning(
                         "Group %s for release %s doesn't exist, creating...", group_name, saved_release.name)
                     try:
-                        display_name = group.get("displayName", self._jenkins.get_job_info(
-                            name=group["fullname"])["displayName"])
+                        display_name = group.get("displayName") or self._jenkins.get_job_info(
+                            name=group["fullname"])["displayName"]
                         display_name = display_name if not group_dict[
                             "parent_display_name"] else f"{group_dict['parent_display_name']} - {display_name}"
                     except Exception:
@@ -168,16 +226,17 @@ class JenkinsMonitor(ArgusTestsMonitor):
                         folder_stack.append(dict(parent_name=saved_group.name,
                                             parent_display_name=saved_group.pretty_name, group=job))
                     if "WorkflowJob" in job["_class"]:
-                        try:
-                            saved_test = filter(lambda t: t.build_system_id == job["fullname"], self._existing_tests)
-                            saved_test = next(saved_test)
+                        saved_test = first(self._existing_tests, job["fullname"], key=lambda t: t.build_system_id)
+                        if saved_test:
                             LOGGER.info("Test %s already exists. (id: %s)", saved_test.build_system_id, saved_test.id)
-                        except StopIteration:
+                            self._refresh_test_metadata(saved_test, job)
+                        else:
                             LOGGER.warning("Test %s for release %s (group %s) doesn't exist, creating...",
                                            job["name"], saved_release.name, saved_group.name)
                             try:
                                 saved_test = self.create_test(
-                                    saved_release, saved_group, job["name"], job["fullname"], job["url"])
+                                    saved_release, saved_group, job["name"], job["fullname"], job["url"],
+                                    test_metadata=parse_test_metadata(job.get("description")))
                                 self._existing_tests.append(saved_test)
                             except ArgusTestException:
                                 LOGGER.error("Unable to create test for build_id %s", job["fullname"], exc_info=True)
