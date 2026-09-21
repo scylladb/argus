@@ -158,5 +158,11 @@
         font-size: 11pt;
         padding: 1em;
         background-color: #f0f0f0;
+        color: #212529;
+    }
+
+    :global([data-bs-theme="dark"]) .code {
+        background-color: #1a1d21;
+        color: #dee2e6;
     }
 </style>
