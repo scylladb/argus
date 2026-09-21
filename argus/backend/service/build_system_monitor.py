@@ -1,6 +1,7 @@
 import logging
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 import jenkins
 import click
 import re
@@ -20,12 +21,34 @@ class ArgusTestsMonitor(ABC):
 
     ]
 
+    PROGRESS_INTERVAL = 0.1
+
     def __init__(self) -> None:
         self._cluster = ScyllaCluster.get()
         self._existing_releases = list(ArgusRelease.find())
         self._existing_groups = list(ArgusGroup.find())
         self._existing_tests = list(ArgusTest.find())
         self._filtered_groups: list[str] = self.BUILD_SYSTEM_FILTERED_PREFIXES
+        self.init_progress()
+
+    def init_progress(self) -> None:
+        self._last_progress = 0.0
+        self.stats = {
+            "release": "",
+            "releases": 0,
+            "releases_total": 0,
+            "jobs": 0,
+            "groups_created": 0,
+            "tests_created": 0,
+            "tests_updated": 0,
+        }
+        self.on_progress: Callable[[dict], None] = lambda stats: None
+
+    def report_progress(self, force: bool = False) -> None:
+        now = time.monotonic()
+        if force or now - self._last_progress >= self.PROGRESS_INTERVAL:
+            self._last_progress = now
+            self.on_progress(self.stats)
 
     def create_release(self, release_name: str):
         release = ArgusRelease.model_construct()
@@ -150,6 +173,7 @@ class JenkinsMonitor(ArgusTestsMonitor):
         try:
             if apply_test_metadata(test, job.get("description")):
                 test.update(test_metadata=test.test_metadata)
+                self.stats["tests_updated"] += 1
                 LOGGER.info("Refreshed the metadata of test %s", test.build_system_id)
         except Exception:
             LOGGER.error("Unable to refresh the metadata of test %s", job["fullname"], exc_info=True)
@@ -160,14 +184,18 @@ class JenkinsMonitor(ArgusTestsMonitor):
                                               folder_depth_per_request=self.DISCOVERY_FOLDER_DEPTH_PER_REQUEST)
         all_monitored_folders = [job for job in all_jobs if self._check_release_name(job["fullname"])]
         LOGGER.info("Will collect %s", [f["fullname"] for f in all_monitored_folders])
+        self.stats["releases_total"] = len(all_monitored_folders)
 
         for release in all_monitored_folders:
             LOGGER.info("Processing release %s", release["fullname"])
+            self.stats["release"] = release["fullname"]
+            self.stats["releases"] += 1
+            self.report_progress(force=True)
             saved_release = first(self._existing_releases, release["fullname"], key=lambda r: r.name)
             if saved_release:
                 LOGGER.info("Release %s exists", release["fullname"])
             else:
-                LOGGER.warning("Release %s does not exist, creating...", release["fullname"])
+                LOGGER.info("Release %s does not exist, creating...", release["fullname"])
                 saved_release = self.create_release(release["fullname"])
                 self._existing_releases.append(saved_release)
 
@@ -217,7 +245,7 @@ class JenkinsMonitor(ArgusTestsMonitor):
                     saved_group = next(saved_group)
                     LOGGER.info("Group %s already exists. (id: %s)", saved_group.build_system_id, saved_group.id)
                 except StopIteration:
-                    LOGGER.warning(
+                    LOGGER.info(
                         "Group %s for release %s doesn't exist, creating...", group_name, saved_release.name)
                     try:
                         display_name = group.get("displayName") or self._jenkins.get_job_info(
@@ -229,11 +257,14 @@ class JenkinsMonitor(ArgusTestsMonitor):
 
                     saved_group = self.create_group(saved_release, group_name, group["fullname"], display_name)
                     self._existing_groups.append(saved_group)
+                    self.stats["groups_created"] += 1
 
                 for job in group["jobs"]:
                     LOGGER.info("Processing job %s for release %s and group %s",
                                 job["fullname"], saved_group.name, saved_release.name)
                     saved_test = None
+                    self.stats["jobs"] += 1
+                    self.report_progress()
                     if "Folder" in job["_class"]:
                         folder_stack.append(dict(parent_name=saved_group.name,
                                             parent_display_name=saved_group.pretty_name, group=job))
@@ -243,13 +274,14 @@ class JenkinsMonitor(ArgusTestsMonitor):
                             LOGGER.info("Test %s already exists. (id: %s)", saved_test.build_system_id, saved_test.id)
                             self._refresh_test_metadata(saved_test, job)
                         else:
-                            LOGGER.warning("Test %s for release %s (group %s) doesn't exist, creating...",
-                                           job["name"], saved_release.name, saved_group.name)
+                            LOGGER.info("Test %s for release %s (group %s) doesn't exist, creating...",
+                                        job["name"], saved_release.name, saved_group.name)
                             try:
                                 saved_test = self.create_test(
                                     saved_release, saved_group, job["name"], job["fullname"], job["url"],
                                     test_metadata=parse_test_metadata(job.get("description")))
                                 self._existing_tests.append(saved_test)
+                                self.stats["tests_created"] += 1
                             except ArgusTestException:
                                 LOGGER.error("Unable to create test for build_id %s", job["fullname"], exc_info=True)
 
