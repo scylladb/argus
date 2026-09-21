@@ -62,6 +62,7 @@
             pretty_name: string,
             name: string,
             plugin_name: string,
+            test_metadata?: Record<string, string>,
         },
         group: {
             id: string,
@@ -141,8 +142,10 @@
         faRssSquare,
         faSpider,
         faTable,
+        faTags,
         faTimes,
     } from "@fortawesome/free-solid-svg-icons";
+    import TestMetadata from "../Common/TestMetadata.svelte";
     import ResourcesInfo from "./ResourcesInfo.svelte";
     import NemesisTable from "./NemesisTable.svelte";
     import ActivityTab from "./ActivityTab.svelte";
@@ -320,6 +323,9 @@
                     <button class="argus-tab" class:active={activeTab === "details"} type="button" role="tab" onclick={() => setActiveTab("details")}>
                         <Fa icon={faInfoCircle} /> Details
                     </button>
+                    <button class="argus-tab" class:active={activeTab === "testinfo"} type="button" role="tab" onclick={() => setActiveTab("testinfo")}>
+                        <Fa icon={faTags} /> Test Info
+                    </button>
                     <button class="argus-tab" class:active={activeTab === "setup"} type="button" role="tab" onclick={() => setActiveTab("setup")}>
                         <Fa icon={faCodeBranch} /> SCT Runtime
                     </button>
@@ -376,6 +382,7 @@
                 <div class="argus-tab-select">
                     <select onchange={(e) => setActiveTab(e.currentTarget.value)} value={activeTab}>
                         <option value="details">Details</option>
+                        <option value="testinfo">Test Info</option>
                         <option value="setup">SCT Runtime</option>
                         {#if testRun.subtest_name && Object.values(Subtests).includes(testRun.subtest_name)}
                             {@const meta = SubtestTabMeta[testRun.subtest_name]}
@@ -407,6 +414,17 @@
                         test={testInfo.test}
                         on:cloneComplete
                     />
+                </div>
+                <div role="tabpanel" style:display={activeTab === "testinfo" ? "block" : "none"}>
+                    {#if visitedTabs["testinfo"]}
+                        <div class="p-3">
+                            {#if Object.keys(testInfo.test.test_metadata ?? {}).length > 0}
+                                <TestMetadata metadata={testInfo.test.test_metadata} />
+                            {:else}
+                                <div class="text-muted">No metadata was collected for this job.</div>
+                            {/if}
+                        </div>
+                    {/if}
                 </div>
                 <div role="tabpanel" style:display={activeTab === "setup" ? "block" : "none"}>
                     {#if visitedTabs["setup"]}
