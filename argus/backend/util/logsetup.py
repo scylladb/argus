@@ -1,6 +1,9 @@
 import logging
+import sys
 from contextvars import ContextVar
 from logging.config import dictConfig
+
+from argus.backend.util.console import StatusLine, StatusLineHandler
 
 LOG_FORMAT_REQUEST = "[%(levelcolor)s%(levelname)s%(colorreset)s] %(grey)s<%(remote_addr)s - %(url)s - %(endpoint)s>%(colorreset)s - %(module)s::%(funcName)s - %(message)s"
 
@@ -108,3 +111,13 @@ def setup_application_logging(log_level=logging.INFO):
             },
         }
     })
+
+
+def route_logging_to_status_line(status: StatusLine, level=logging.WARNING) -> None:
+    """Send every configured logger through one handler that preserves the status line."""
+    handler = StatusLineHandler(status, stream=sys.stdout)
+    handler.setFormatter(ArgusRequestLogFormatter(LOG_FORMAT_REQUEST))
+    for name in ("argus", "argus_backend", "cassandra", "__main__"):
+        logger = logging.getLogger(name)
+        logger.handlers = [handler]
+        logger.setLevel(level)
