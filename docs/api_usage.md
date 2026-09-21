@@ -154,7 +154,8 @@ Submits the final cost of one or more named resources. Argus sums every item
 of the run into the run's actual cost. Send an item as soon as its price is
 known, and send nothing for a resource whose price is unknown, because a zero
 is stored as a real figure. An item is keyed by its name, so repeating a name
-replaces that item.
+replaces that item. One call is applied as a single batch, so either every item
+of it lands or none does.
 
 Accepts following payload:
 

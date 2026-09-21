@@ -7,6 +7,8 @@ from typing import Any
 from uuid import UUID
 
 
+from cassandra import DriverException
+from cassandra.cluster import NoHostAvailable
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.db import ScyllaCluster
@@ -135,7 +137,10 @@ class ClientService:
         run = model.load_test_run(UUID(run_id))
         run.finish_run(payload)
         run.save()
-        RunCostService().recompute_actual_cost(UUID(run_id))
+        try:
+            RunCostService().recompute_actual_cost(UUID(run_id), use_estimate=True)
+        except (DriverException, NoHostAvailable):
+            LOGGER.exception("Could not recompute the actual cost of run %s, the run is finalized", run_id)
 
         return "Finalized"
 

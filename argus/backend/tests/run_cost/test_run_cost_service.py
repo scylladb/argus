@@ -157,13 +157,47 @@ def test_rejects_a_repeated_name_within_one_payload(run_cost_service: RunCostSer
     assert run_cost_service.get_run_cost(run_id)["items"] == []
 
 
-def test_recompute_falls_back_to_the_estimate_when_no_item_was_reported(run_cost_service: RunCostService):
+def test_writes_every_item_of_one_submission_or_none(run_cost_service: RunCostService):
+    run_id = uuid.uuid4()
+
+    run_cost_service.submit_cost_items(run_id, [
+        _item("db-node-1", "db_node", 1.0),
+        _item("db-node-2", "db_node", 2.0),
+        _item("loader-1", "loader", 3.0),
+    ])
+
+    cost = run_cost_service.get_run_cost(run_id)
+    assert [item["name"] for item in cost["items"]] == ["db-node-1", "db-node-2", "loader-1"]
+    assert cost["actual_cost"] == pytest.approx(6.0)
+
+
+def test_recompute_falls_back_to_the_estimate_only_when_asked(run_cost_service: RunCostService):
+    run_id = uuid.uuid4()
+    run_cost_service.set_estimated_cost(run_id, 118.40)
+
+    run_cost_service.recompute_actual_cost(run_id, use_estimate=True)
+
+    assert run_cost_service.get_run_cost(run_id)["actual_cost"] == pytest.approx(118.40)
+
+
+def test_recompute_leaves_the_actual_cost_null_while_the_run_is_in_flight(run_cost_service: RunCostService):
     run_id = uuid.uuid4()
     run_cost_service.set_estimated_cost(run_id, 118.40)
 
     run_cost_service.recompute_actual_cost(run_id)
 
-    assert run_cost_service.get_run_cost(run_id)["actual_cost"] == pytest.approx(118.40)
+    assert run_cost_service.get_run_cost(run_id)["actual_cost"] is None
+
+
+def test_an_empty_submission_does_not_take_the_estimate_as_the_actual_cost(run_cost_service: RunCostService):
+    run_id = uuid.uuid4()
+    run_cost_service.set_estimated_cost(run_id, 118.40)
+
+    run_cost_service.submit_cost_items(run_id, [])
+
+    cost = run_cost_service.get_run_cost(run_id)
+    assert cost["actual_cost"] is None
+    assert cost["estimated_cost"] == pytest.approx(118.40)
 
 
 def test_recompute_leaves_a_run_without_any_cost_alone(run_cost_service: RunCostService):
