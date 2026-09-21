@@ -13,6 +13,7 @@
     import ReleasePlannerGridView from "./ReleasePlannerGridView.svelte";
     import { filterUser } from "../Common/SelectUtils";
     import ViewSelect from "../Views/ViewSelect.svelte";
+    import TestMetadata from "../Common/TestMetadata.svelte";
 
 
     let gridViewOpen = $state(false);
@@ -385,6 +386,7 @@
                         group: item.group?.pretty_name || item.group?.name,
                         type: item.type,
                         id: item.id,
+                        test_metadata: item.test_metadata,
                     };
                 })];
         testSearcherValue = undefined;
@@ -398,6 +400,7 @@
             release: item.release?.name,
             group: item.group?.pretty_name || item.group?.name,
             type: item.type,
+            test_metadata: item.test_metadata,
             id: item.id,
         }];
         testSearcherValue = undefined;
@@ -665,6 +668,9 @@
                     {/if}
                     {#if item.group}
                         <div class="text-muted text-sm">{item.group}</div>
+                    {/if}
+                    {#if item.type == "test"}
+                        <TestMetadata metadata={item.test_metadata} />
                     {/if}
                 </div>
                 <div class="ms-auto" style="min-width: 192px">
