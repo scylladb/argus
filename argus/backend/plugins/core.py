@@ -27,6 +27,8 @@ from argus.common.enums import TestInvestigationStatus, TestStatus
 
 LOGGER = logging.getLogger(__name__)
 
+DEFAULT_STATS_PER_PARTITION_LIMIT = 15
+
 
 class PluginModelBase(Document):
     class Settings:
@@ -55,7 +57,7 @@ class PluginModelBase(Document):
     logs: list[tuple[str, str]] = Field(default_factory=list)
 
     @classmethod
-    def _stats_query(cls) -> str:
+    def _stats_query(cls, per_partition_limit: int = DEFAULT_STATS_PER_PARTITION_LIMIT) -> str:
         raise NotImplementedError()
 
     def assign_categories(self):
@@ -124,9 +126,10 @@ class PluginModelBase(Document):
         return bound_query
 
     @classmethod
-    def get_stats_for_release(cls, release: ArgusRelease, build_ids=list[str]):
+    def get_stats_for_release(cls, release: ArgusRelease, build_ids=list[str],
+                              per_partition_limit: int = DEFAULT_STATS_PER_PARTITION_LIMIT):
         cluster = ScyllaCluster.get()
-        query = cluster.prepare(cls._stats_query())
+        query = cluster.prepare(cls._stats_query(per_partition_limit))
         futures = []
         step_size = 90
 

@@ -14,7 +14,7 @@ from coodie.sync import Document
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.run_config import RunConfigParam
 from argus.backend.models.web import ArgusRelease, ArgusTest, ReleaseDistinctVersions, ReleaseDistinctImages
-from argus.backend.plugins.core import PluginModelBase
+from argus.backend.plugins.core import DEFAULT_STATS_PER_PARTITION_LIMIT, PluginModelBase
 from argus.backend.plugins.sct.resource_setup import (
     RESOURCE_DERIVED_DB_NODE_BACKENDS,
     XCLOUD_BACKEND,
@@ -221,9 +221,9 @@ class SCTTestRun(PluginModelBase):
     test_method: Annotated[Optional[str], Ascii()] = None
 
     @classmethod
-    def _stats_query(cls) -> str:
+    def _stats_query(cls, per_partition_limit: int = DEFAULT_STATS_PER_PARTITION_LIMIT) -> str:
         return ("SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, nemesis_stats, "
-                f"assignee, end_time, investigation_status, heartbeat, build_number, scylla_version, cloud_setup FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT 15")
+                f"assignee, end_time, investigation_status, heartbeat, build_number, scylla_version, cloud_setup FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT {per_partition_limit}")
 
     @classmethod
     def load_test_run(cls, run_id: UUID) -> 'SCTTestRun':

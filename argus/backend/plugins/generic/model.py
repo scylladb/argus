@@ -8,7 +8,7 @@ from coodie.exceptions import DocumentNotFound
 
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import ArgusRelease
-from argus.backend.plugins.core import PluginModelBase
+from argus.backend.plugins.core import DEFAULT_STATS_PER_PARTITION_LIMIT, PluginModelBase
 from argus.backend.plugins.generic.types import GenericRunFinishRequest, GenericRunSubmitRequest
 from argus.backend.util.common import get_build_number
 from argus.common.enums import TestStatus
@@ -28,9 +28,9 @@ class GenericRun(PluginModelBase):
     sub_type: Optional[str] = None  # Used to tell which framework the GenericRun belongs to
 
     @classmethod
-    def _stats_query(cls) -> str:
+    def _stats_query(cls, per_partition_limit: int = DEFAULT_STATS_PER_PARTITION_LIMIT) -> str:
         return ("SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, "
-                f"assignee, end_time, investigation_status, heartbeat, build_number, scylla_version FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT 15")
+                f"assignee, end_time, investigation_status, heartbeat, build_number, scylla_version FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT {per_partition_limit}")
 
     @classmethod
     def get_distinct_product_versions(cls, release: ArgusRelease, cluster: ScyllaCluster = None) -> list[str]:
