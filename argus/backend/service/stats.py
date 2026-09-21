@@ -4,6 +4,7 @@ import json
 import logging
 
 from datetime import UTC, datetime
+from collections.abc import Sequence
 from typing import Any, TypedDict
 from uuid import UUID
 
@@ -12,7 +13,9 @@ from coodie.exceptions import DocumentNotFound
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.jira import JiraIssue
 from argus.backend.models.plan import ArgusReleasePlan
+from argus.backend.plugins.core import DEFAULT_STATS_PER_PARTITION_LIMIT
 from argus.backend.plugins.loader import all_plugin_models
+from argus.backend.service.run_config_params import RunConfigParamService, parse_filters
 from argus.backend.util.common import chunk, get_build_number, check_version
 from argus.common.enums import TestStatus, TestInvestigationStatus
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, \
@@ -21,6 +24,10 @@ from argus.backend.db import ScyllaCluster
 from argus.backend.util.encoders import ArgusJSONProvider
 
 LOGGER = logging.getLogger(__name__)
+
+# A widget narrowed by a config parameter needs a wider window, or a job that
+# alternates configurations has no matching run inside the default one.
+FILTERED_STATS_PER_PARTITION_LIMIT = 50
 
 
 def snapshot_filter_key(version: str | None, image_id: str | None, include_no_version: bool, limited: bool) -> str:
@@ -617,12 +624,22 @@ class ViewStatsCollector:
         self.view_id = UUID(view_id) if isinstance(view_id, str) else view_id
         self.filter = filter
 
-    def collect(self, limited=False, force=False, include_no_version=False, widget_id: int = None, image_id: str = None) -> dict:
+    def collect(self, limited=False, force=False, include_no_version=False, widget_id: int = None,
+                image_id: str = None, param_filter_off: Sequence[str] = ()) -> dict:
         self.view: ArgusUserView = ArgusUserView.get(id=self.view_id)
         widget: dict[str, Any] | None = None
         if isinstance(widget_id, int):
             settings = json.loads(self.view.widget_settings)
             widget = next((widget for widget in settings if widget["position"] == widget_id), None)
+
+        switched_off = set(param_filter_off)
+        param_filters = [
+            param for param in parse_filters((widget.get("settings") or {}).get("configParamFilters"))
+            if param.name not in switched_off
+        ] if widget else []
+        per_partition_limit = (FILTERED_STATS_PER_PARTITION_LIMIT if param_filters
+                               else DEFAULT_STATS_PER_PARTITION_LIMIT)
+
         all_tests: list[ArgusTest] = []
         for slice in chunk(self.view.tests):
             all_tests.extend(ArgusTest.find(id__in=slice).all())
@@ -631,7 +648,9 @@ class ViewStatsCollector:
             all_tests = [test for test in all_tests if any(str(getattr(test, key)) in widget["filter"] for key in ["id", "group_id", "release_id"])]
         build_ids = reduce(lambda acc, test: acc[test.plugin_name or "unknown"].append(test.build_system_id) or acc, all_tests, defaultdict(list))
         self.view_rows = [futures for plugin in all_plugin_models()
-                          for futures in plugin.get_stats_for_release(release=self.view, build_ids=build_ids.get(plugin._plugin_name, []))]
+                          for futures in plugin.get_stats_for_release(release=self.view,
+                                                                      build_ids=build_ids.get(plugin._plugin_name, []),
+                                                                      per_partition_limit=per_partition_limit)]
         self.view_rows = [row for future in self.view_rows for row in future.result()]
 
         if self.filter:
@@ -649,6 +668,11 @@ class ViewStatsCollector:
         self.view_rows = list(filter(expr, self.view_rows))
         if image_id:
             self.view_rows = list(filter(lambda row: _get_image(row) == image_id, self.view_rows))
+        if param_filters:
+            matching = RunConfigParamService().narrow_run_ids({row["id"] for row in self.view_rows}, param_filters)
+            self.view_rows = [row for row in self.view_rows if row["id"] in matching]
+            surviving_build_ids = {row["build_id"] for row in self.view_rows}
+            all_tests = [test for test in all_tests if test.build_system_id in surviving_build_ids]
         for row in self.view_rows:
             runs = self.runs_by_build_id.get(row["build_id"], [])
             runs.append(row)
