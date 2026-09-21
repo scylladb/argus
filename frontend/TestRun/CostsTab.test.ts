@@ -78,7 +78,7 @@ describe("CostsTab.svelte", () => {
         render(CostsTab, { props: { runId: "run-1" } });
 
         await waitFor(() => expect(screen.getByText("longevity-db-node-1")).toBeTruthy());
-        expect(screen.getByText("db_node")).toBeTruthy();
+        expect(screen.getByText("Database nodes")).toBeTruthy();
         expect(screen.getByText("$16.30")).toBeTruthy();
         expect(screen.getByText("$12.30")).toBeTruthy();
         expect(screen.getByText("spot")).toBeTruthy();
@@ -91,6 +91,21 @@ describe("CostsTab.svelte", () => {
 
         await waitFor(() => expect(screen.getByText(/Could not load the cost/)).toBeTruthy());
         expect(screen.queryByText("No cost reported for this run.")).toBeNull();
+    });
+
+    it("falls back to the raw name for a category it does not know", async () => {
+        stubCost({
+            estimated_cost: null,
+            actual_cost: 5,
+            items: [
+                { name: "gpu-box-1", category: "gpu_accelerator", cost: 5, pricing_tier: null, leaked: false },
+            ],
+            by_category: { gpu_accelerator: 5 },
+        });
+
+        render(CostsTab, { props: { runId: "run-1" } });
+
+        await waitFor(() => expect(screen.getByText("Gpu accelerator")).toBeTruthy());
     });
 
     it("marks an item that leaked", async () => {
