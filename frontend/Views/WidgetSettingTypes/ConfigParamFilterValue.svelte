@@ -19,9 +19,10 @@
 
     let { settingName, definition, settings = $bindable() }: Props = $props();
 
-    settings[settingName] = normalizeRows(settings[settingName] ?? definition.default ?? []);
-
+    let rows: ConfigParamFilterRow[] = $state(normalizeRows(settings[settingName] ?? definition.default ?? []));
     let duplicateAt: number = $state(-1);
+
+    settings[settingName] = rows;
 
     const lookup = async function (route: string, params: Record<string, string>): Promise<string[]> {
         try {
@@ -50,11 +51,11 @@
     };
 
     const replaceRow = function (index: number, row: ConfigParamFilterRow) {
-        settings[settingName] = settings[settingName].map((existing, idx) => (idx == index ? row : existing));
+        rows[index] = row;
     };
 
     const handleNameSelect = function (index: number, name: string) {
-        if (hasDuplicateName(settings[settingName], name, index)) {
+        if (hasDuplicateName(rows, name, index)) {
             duplicateAt = index;
             return;
         }
@@ -68,21 +69,21 @@
     };
 
     const handleValueSelect = function (index: number, value: string | null) {
-        replaceRow(index, { ...settings[settingName][index], value: value });
+        replaceRow(index, { ...rows[index], value: value });
     };
 
     const toggleAnyValue = function (index: number) {
-        const row = settings[settingName][index];
+        const row = rows[index];
         replaceRow(index, { ...row, value: row.value === null ? "" : null });
     };
 
     const addRow = function () {
-        settings[settingName] = [...settings[settingName], emptyRow()];
+        rows.push(emptyRow());
     };
 
     const removeRow = function (index: number) {
         duplicateAt = -1;
-        settings[settingName] = settings[settingName].filter((_, idx) => idx !== index);
+        rows.splice(index, 1);
     };
 
     const asOption = function (value: string | null) {
@@ -93,7 +94,7 @@
 <div>
     <div>{definition.displayName} <span title="{definition.help}"><Fa icon={faQuestionCircle}/></span></div>
 
-    {#each settings[settingName] as row, index}
+    {#each rows as row, index}
         <div class="row g-2 mb-2 align-items-center">
             <div class="col-5">
                 <Select
