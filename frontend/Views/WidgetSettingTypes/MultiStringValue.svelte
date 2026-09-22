@@ -13,27 +13,26 @@
     /** @type {Props} */
     let { settingName, definition, settings = $bindable() } = $props();
 
-    // Initialize settings if not already set
-    if (!settings[settingName]) {
-        settings[settingName] = definition.default || [];
-    }
+    let values = $state([...(settings[settingName] ?? definition.default ?? [])]);
+
+    settings[settingName] = values;
 
     function addNewString() {
-        settings[settingName] = [...settings[settingName], ""];
+        values.push("");
     }
 
     function removeString(index) {
-        settings[settingName] = settings[settingName].filter((_, i) => i !== index);
+        values.splice(index, 1);
     }
 </script>
 
 <div>
     <div>{definition.displayName} <span title="{definition.help}"><Fa icon={faQuestionCircle}/></span></div>
 
-    {#each settings[settingName] as value, index}
+    {#each values as value, index}
         <div class="input-group mb-2">
-            <input type="text" class="form-control" bind:value={settings[settingName][index]}>
-            <button class="btn btn-outline-danger" onclick={() => removeString(index)}>
+            <input type="text" class="form-control" bind:value={values[index]}>
+            <button class="btn btn-outline-danger" title="Remove this entry" onclick={() => removeString(index)}>
                 <Fa icon={faTrash}/>
             </button>
         </div>
