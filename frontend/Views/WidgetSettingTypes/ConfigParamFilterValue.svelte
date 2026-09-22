@@ -19,6 +19,8 @@
 
     let { settingName, definition, settings = $bindable() }: Props = $props();
 
+    const uid = $props.id();
+
     let rows: ConfigParamFilterRow[] = $state(normalizeRows(settings[settingName] ?? definition.default ?? []));
     let duplicateAt: number = $state(-1);
 
@@ -95,8 +97,8 @@
     <div>{definition.displayName} <span title="{definition.help}"><Fa icon={faQuestionCircle}/></span></div>
 
     {#each rows as row, index}
-        <div class="row g-2 mb-2 align-items-center">
-            <div class="col-5">
+        <div class="input-group param-row mb-2">
+            <div class="param-field">
                 <Select
                     --item-height="auto"
                     --item-line-height="auto"
@@ -111,10 +113,11 @@
                     </div>
                 </Select>
             </div>
-            <div class="col-5">
-                {#if row.value === null}
-                    <div class="form-control text-muted bg-light">{ANY_VALUE_LABEL}</div>
-                {:else}
+            <span class="input-group-text param-equals">=</span>
+            {#if row.value === null}
+                <span class="form-control d-flex align-items-center text-muted">{ANY_VALUE_LABEL}</span>
+            {:else}
+                <div class="param-field">
                     {#key row.name}
                         <Select
                             --item-height="auto"
@@ -131,28 +134,50 @@
                             </div>
                         </Select>
                     {/key}
-                {/if}
-            </div>
-            <div class="col-2 d-flex gap-1">
-                <button
-                    class="btn btn-sm"
-                    class:btn-primary={row.value === null}
-                    class:btn-outline-secondary={row.value !== null}
+                </div>
+            {/if}
+            <label class="input-group-text" for="{uid}-any-{index}">
+                <input
+                    class="form-check-input mt-0 me-2"
+                    type="checkbox"
+                    id="{uid}-any-{index}"
                     disabled={!row.name}
-                    title="Match any non-empty value of this parameter"
-                    onclick={() => toggleAnyValue(index)}
-                >Any</button>
-                <button class="btn btn-sm btn-outline-danger" title="Remove this filter" onclick={() => removeRow(index)}>
-                    <Fa icon={faTrash}/>
-                </button>
-            </div>
+                    checked={row.value === null}
+                    onchange={() => toggleAnyValue(index)}
+                >
+                <span class:text-muted={!row.name}>Any</span>
+            </label>
+            <button class="btn btn-danger" title="Remove this filter" onclick={() => removeRow(index)}>
+                <Fa icon={faTrash}/>
+            </button>
         </div>
         {#if duplicateAt === index}
             <div class="text-danger small mb-2">That parameter is already filtered.</div>
         {/if}
     {/each}
 
-    <button class="btn btn-outline-primary btn-sm" onclick={addRow}>
+    <button class="btn btn-primary btn-sm" onclick={addRow}>
         <Fa icon={faPlus}/> Add Parameter Filter
     </button>
 </div>
+
+<style>
+    .param-field {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .param-field :global(.svelte-select) {
+        --border-radius: 0;
+        --height: calc(1.5em + 0.75rem + 2px);
+        height: 100%;
+    }
+
+    .param-row .param-field:first-child :global(.svelte-select) {
+        --border-radius: var(--bs-border-radius) 0 0 var(--bs-border-radius);
+    }
+
+    .param-equals {
+        font-weight: 600;
+    }
+</style>

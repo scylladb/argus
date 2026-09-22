@@ -52,18 +52,6 @@ describe("ConfigParamFilterValue", () => {
         expect(DEFINITION.default).toEqual([]);
     });
 
-    it("renders a stored row, showing an any-value row as such", () => {
-        const { getByText } = mount([{ name: "sct_config.unified_package", value: null }]);
-
-        expect(getByText(ANY_VALUE_LABEL)).toBeTruthy();
-    });
-
-    it("normalizes a stored row with a blank value into an any-value row", () => {
-        const { settings } = mount([{ name: "cfg.a", value: "" }]);
-
-        expect(settings.configParamFilters).toEqual([{ name: "cfg.a", value: null }]);
-    });
-
     it("renders the new row immediately, without a remount", async () => {
         const { container, getByText } = mount();
 
@@ -100,6 +88,18 @@ describe("ConfigParamFilterValue", () => {
         }
     });
 
+    it("renders a stored row, showing an any-value row as such", () => {
+        const { getByText } = mount([{ name: "sct_config.unified_package", value: null }]);
+
+        expect(getByText(ANY_VALUE_LABEL)).toBeTruthy();
+    });
+
+    it("normalizes a stored row with a blank value into an any-value row", () => {
+        const { settings } = mount([{ name: "cfg.a", value: "" }]);
+
+        expect(settings.configParamFilters).toEqual([{ name: "cfg.a", value: null }]);
+    });
+
     it("removes a row", async () => {
         const { getByTitle, settings } = mount([{ name: "cfg.a", value: "x" }]);
 
@@ -109,18 +109,52 @@ describe("ConfigParamFilterValue", () => {
     });
 
     it("toggles a row between any-value and a concrete value", async () => {
-        const { getByText, settings } = mount([{ name: "cfg.a", value: "x" }]);
+        const { getByLabelText, settings } = mount([{ name: "cfg.a", value: "x" }]);
 
-        await fireEvent.click(getByText("Any"));
+        await fireEvent.click(getByLabelText("Any"));
         expect(settings.configParamFilters).toEqual([{ name: "cfg.a", value: null }]);
 
-        await fireEvent.click(getByText("Any"));
+        await fireEvent.click(getByLabelText("Any"));
         expect(settings.configParamFilters).toEqual([{ name: "cfg.a", value: "" }]);
     });
 
-    it("leaves the Any toggle disabled until a parameter is chosen", () => {
-        const { getByText } = mount([{ name: "", value: "" }]);
+    it("leaves the Any checkbox disabled until a parameter is chosen", () => {
+        const { getByLabelText } = mount([{ name: "", value: "" }]);
 
-        expect((getByText("Any") as HTMLButtonElement).disabled).toBe(true);
+        expect((getByLabelText("Any") as HTMLInputElement).disabled).toBe(true);
+    });
+
+    it("checks the Any box exactly when the row matches any value", () => {
+        const any = mount([{ name: "cfg.a", value: null }]);
+        expect((any.getByLabelText("Any") as HTMLInputElement).checked).toBe(true);
+
+        cleanup();
+
+        const concrete = mount([{ name: "cfg.a", value: "x" }]);
+        expect((concrete.getByLabelText("Any") as HTMLInputElement).checked).toBe(false);
+    });
+
+    it("lays a row out as one input group with an equals separator", () => {
+        const { container } = mount([{ name: "cfg.a", value: "x" }]);
+        const row = container.querySelector(".input-group");
+
+        expect(row).toBeTruthy();
+        expect(row?.textContent).toContain("=");
+    });
+
+    it("gives each Any checkbox its own id so two rows stay independent", () => {
+        const { container } = mount([{ name: "cfg.a", value: null }, { name: "cfg.b", value: null }]);
+        const ids = [...container.querySelectorAll("input[type=checkbox]")].map((i) => i.id);
+
+        expect(ids.filter(Boolean)).toHaveLength(2);
+        expect(new Set(ids).size).toBe(2);
+    });
+
+    it("uses solid buttons, not outlines", () => {
+        const { container } = mount([{ name: "cfg.a", value: "x" }]);
+
+        for (const button of container.querySelectorAll("button")) {
+            expect(button.className).not.toContain("btn-outline");
+        }
     });
 });
