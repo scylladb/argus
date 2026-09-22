@@ -64,6 +64,22 @@ describe("ConfigParamFilterValue", () => {
         expect(settings.configParamFilters).toEqual([{ name: "cfg.a", value: null }]);
     });
 
+    it("shows the chosen parameter name in the select", () => {
+        const { container } = mount([{ name: "sct_config.backend", value: "aws" }]);
+
+        expect(container.querySelector(".selected-item")?.textContent).toContain("sct_config.backend");
+    });
+
+    it("leaves the select input unstyled so the selection stays visible", () => {
+        // svelte-select's input is absolutely positioned over .selected-item; an opaque
+        // background such as Bootstrap's .form-control hides the chosen value.
+        const { container } = mount([{ name: "cfg.a", value: "x" }]);
+
+        for (const input of container.querySelectorAll(".svelte-select input")) {
+            expect(input.className).not.toContain("form-control");
+        }
+    });
+
     it("removes a row", async () => {
         const { getByTitle, settings } = mount([{ name: "cfg.a", value: "x" }]);
 
