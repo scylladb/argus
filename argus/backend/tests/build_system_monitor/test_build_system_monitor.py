@@ -360,3 +360,28 @@ def test_drops_a_job_that_never_exposes_a_url_instead_of_looping():
 
     assert len([item for item, _ in fake.info_calls if item == "job/scylla-master/job/longevity"]) == 1
     assert [t.build_system_id for t in monitor.created_tests] == ["scylla-master/longevity/a-test"]
+
+
+def test_a_group_write_failure_does_not_stop_the_next_release():
+    tree = {}
+    for name in ("scylla-master", "scylla-enterprise"):
+        tree.update(release_tree(name, [
+            folder(f"{name}/longevity", [workflow_job(f"{name}/longevity/a-test", DESCRIPTION)]),
+        ]))
+    monitor = make_monitor(FakeJenkins(tree, releases=["scylla-master", "scylla-enterprise"]),
+                           releases=[stored_release("scylla-master"), stored_release("scylla-enterprise")])
+    healthy_create_group = monitor.create_group
+    failed = []
+
+    def create_group(release, *args, **kwargs):
+        if release.name == "scylla-master":
+            failed.append(release.name)
+            raise RuntimeError("scylla write timeout")
+        return healthy_create_group(release, *args, **kwargs)
+
+    monitor.create_group = create_group
+
+    monitor.collect()
+
+    assert failed == ["scylla-master"]
+    assert [t.build_system_id for t in monitor.created_tests] == ["scylla-enterprise/longevity/a-test"]

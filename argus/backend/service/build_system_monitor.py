@@ -235,55 +235,63 @@ class JenkinsMonitor(ArgusTestsMonitor):
                 }
             }
             folder_stack.append(root_folder)
-            while len(folder_stack) != 0:
-                group_dict = folder_stack.pop()
-                group = group_dict["group"]
-                LOGGER.info("Processing group %s for release %s", group["name"], saved_release.name)
+            try:
+                self._walk_folder_stack(saved_release, folder_stack)
+            except Exception:
+                LOGGER.error("Unable to process the groups of release %s, skipping; the next scan retries it",
+                             release["fullname"], exc_info=True)
+                continue
+
+    def _walk_folder_stack(self, saved_release: ArgusRelease, folder_stack: list[dict]) -> None:
+        while len(folder_stack) != 0:
+            group_dict = folder_stack.pop()
+            group = group_dict["group"]
+            LOGGER.info("Processing group %s for release %s", group["name"], saved_release.name)
+            try:
+                group_name = group["name"] if not group_dict["parent_name"] else f"{group_dict['parent_name']}-{group['name']}"
+                saved_group = filter(lambda g: g.build_system_id == group["fullname"], self._existing_groups)
+                saved_group = next(saved_group)
+                LOGGER.info("Group %s already exists. (id: %s)", saved_group.build_system_id, saved_group.id)
+            except StopIteration:
+                LOGGER.info(
+                    "Group %s for release %s doesn't exist, creating...", group_name, saved_release.name)
                 try:
-                    group_name = group["name"] if not group_dict["parent_name"] else f"{group_dict['parent_name']}-{group['name']}"
-                    saved_group = filter(lambda g: g.build_system_id == group["fullname"], self._existing_groups)
-                    saved_group = next(saved_group)
-                    LOGGER.info("Group %s already exists. (id: %s)", saved_group.build_system_id, saved_group.id)
-                except StopIteration:
-                    LOGGER.info(
-                        "Group %s for release %s doesn't exist, creating...", group_name, saved_release.name)
-                    try:
-                        display_name = group.get("displayName") or self._jenkins.get_job_info(
-                            name=group["fullname"])["displayName"]
-                        display_name = display_name if not group_dict[
-                            "parent_display_name"] else f"{group_dict['parent_display_name']} - {display_name}"
-                    except Exception:
-                        display_name = None
+                    display_name = group.get("displayName") or self._jenkins.get_job_info(
+                        name=group["fullname"])["displayName"]
+                    display_name = display_name if not group_dict[
+                        "parent_display_name"] else f"{group_dict['parent_display_name']} - {display_name}"
+                except Exception:
+                    display_name = None
 
-                    saved_group = self.create_group(saved_release, group_name, group["fullname"], display_name)
-                    self._existing_groups.append(saved_group)
-                    self.stats["groups_created"] += 1
+                saved_group = self.create_group(saved_release, group_name, group["fullname"], display_name)
+                self._existing_groups.append(saved_group)
+                self.stats["groups_created"] += 1
 
-                for job in group["jobs"]:
-                    LOGGER.info("Processing job %s for release %s and group %s",
-                                job["fullname"], saved_group.name, saved_release.name)
-                    saved_test = None
-                    self.stats["jobs"] += 1
-                    self.report_progress()
-                    if "Folder" in job["_class"]:
-                        folder_stack.append(dict(parent_name=saved_group.name,
-                                            parent_display_name=saved_group.pretty_name, group=job))
-                    if "WorkflowJob" in job["_class"]:
-                        saved_test = first(self._existing_tests, job["fullname"], key=lambda t: t.build_system_id)
-                        if saved_test:
-                            LOGGER.info("Test %s already exists. (id: %s)", saved_test.build_system_id, saved_test.id)
-                            self._refresh_test_metadata(saved_test, job)
-                        else:
-                            LOGGER.info("Test %s for release %s (group %s) doesn't exist, creating...",
-                                        job["name"], saved_release.name, saved_group.name)
-                            try:
-                                saved_test = self.create_test(
-                                    saved_release, saved_group, job["name"], job["fullname"], job["url"],
-                                    test_metadata=parse_test_metadata(job.get("description")))
-                                self._existing_tests.append(saved_test)
-                                self.stats["tests_created"] += 1
-                            except ArgusTestException:
-                                LOGGER.error("Unable to create test for build_id %s", job["fullname"], exc_info=True)
+            for job in group["jobs"]:
+                LOGGER.info("Processing job %s for release %s and group %s",
+                            job["fullname"], saved_group.name, saved_release.name)
+                saved_test = None
+                self.stats["jobs"] += 1
+                self.report_progress()
+                if "Folder" in job["_class"]:
+                    folder_stack.append(dict(parent_name=saved_group.name,
+                                        parent_display_name=saved_group.pretty_name, group=job))
+                if "WorkflowJob" in job["_class"]:
+                    saved_test = first(self._existing_tests, job["fullname"], key=lambda t: t.build_system_id)
+                    if saved_test:
+                        LOGGER.info("Test %s already exists. (id: %s)", saved_test.build_system_id, saved_test.id)
+                        self._refresh_test_metadata(saved_test, job)
+                    else:
+                        LOGGER.info("Test %s for release %s (group %s) doesn't exist, creating...",
+                                    job["name"], saved_release.name, saved_group.name)
+                        try:
+                            saved_test = self.create_test(
+                                saved_release, saved_group, job["name"], job["fullname"], job["url"],
+                                test_metadata=parse_test_metadata(job.get("description")))
+                            self._existing_tests.append(saved_test)
+                            self.stats["tests_created"] += 1
+                        except ArgusTestException:
+                            LOGGER.error("Unable to create test for build_id %s", job["fullname"], exc_info=True)
 
     def collect_groups_for_release(self, jobs):
         groups = [folder for folder in jobs if "Folder" in folder["_class"] or "WorkflowMultiBranchProject" in folder["_class"]]
