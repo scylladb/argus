@@ -64,6 +64,26 @@ describe("ConfigParamFilterValue", () => {
         expect(settings.configParamFilters).toEqual([{ name: "cfg.a", value: null }]);
     });
 
+    it("renders the new row immediately, without a remount", async () => {
+        const { container, getByText } = mount();
+
+        expect(within(container).queryAllByTitle("Remove this filter")).toHaveLength(0);
+
+        await fireEvent.click(getByText(/Add Parameter Filter/));
+        expect(within(container).queryAllByTitle("Remove this filter")).toHaveLength(1);
+
+        await fireEvent.click(getByText(/Add Parameter Filter/));
+        expect(within(container).queryAllByTitle("Remove this filter")).toHaveLength(2);
+    });
+
+    it("drops the removed row from the markup immediately", async () => {
+        const { container } = mount([{ name: "cfg.a", value: "x" }, { name: "cfg.b", value: "y" }]);
+
+        await fireEvent.click(within(container).queryAllByTitle("Remove this filter")[0]);
+
+        expect(within(container).queryAllByTitle("Remove this filter")).toHaveLength(1);
+    });
+
     it("shows the chosen parameter name in the select", () => {
         const { container } = mount([{ name: "sct_config.backend", value: "aws" }]);
 
