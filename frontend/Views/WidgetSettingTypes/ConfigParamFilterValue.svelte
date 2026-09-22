@@ -99,7 +99,6 @@
                 <Select
                     --item-height="auto"
                     --item-line-height="auto"
-                    inputAttributes={{ class: "form-control" }}
                     value={asOption(row.name)}
                     placeholder="Parameter name"
                     loadOptions={nameLookup}
@@ -119,7 +118,6 @@
                         <Select
                             --item-height="auto"
                             --item-line-height="auto"
-                            inputAttributes={{ class: "form-control" }}
                             value={asOption(row.value)}
                             disabled={!row.name}
                             placeholder={row.name ? "Value" : "Pick a parameter first"}
