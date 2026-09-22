@@ -73,3 +73,15 @@ def test_a_log_record_is_written_above_the_restored_status_line():
 
     assert log_stream.getvalue() == "a warning\n"
     assert status_stream.getvalue() == f"scanning{ERASE}scanning"
+
+
+def test_one_shared_stream_keeps_the_record_above_the_line():
+    stream = FakeTerminal()
+    status = StatusLine(stream)
+    status.set("scanning")
+
+    handler = StatusLineHandler(status, stream=stream)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    handler.emit(logging.LogRecord("t", logging.WARNING, __file__, 1, "a warning", None, None))
+
+    assert stream.getvalue() == f"scanning{ERASE}a warning\nscanning"
