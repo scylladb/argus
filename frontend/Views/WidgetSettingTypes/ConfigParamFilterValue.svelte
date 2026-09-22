@@ -98,7 +98,7 @@
 
     {#each rows as row, index}
         <div class="input-group param-row mb-2">
-            <div class="param-field">
+            <div class="param-field" title={row.name}>
                 <Select
                     --item-height="auto"
                     --item-line-height="auto"
@@ -114,10 +114,10 @@
                 </Select>
             </div>
             <span class="input-group-text param-equals">=</span>
-            {#if row.value === null}
-                <span class="form-control d-flex align-items-center text-muted">{ANY_VALUE_LABEL}</span>
-            {:else}
-                <div class="param-field">
+            <div class="param-field" title={row.value ?? ANY_VALUE_LABEL}>
+                {#if row.value === null}
+                    <span class="form-control d-flex align-items-center text-muted">{ANY_VALUE_LABEL}</span>
+                {:else}
                     {#key row.name}
                         <Select
                             --item-height="auto"
@@ -134,8 +134,8 @@
                             </div>
                         </Select>
                     {/key}
-                </div>
-            {/if}
+                {/if}
+            </div>
             <label class="input-group-text" for="{uid}-any-{index}">
                 <input
                     class="form-check-input mt-0 me-2"
@@ -162,8 +162,19 @@
 </div>
 
 <style>
+    .param-row {
+        flex-wrap: nowrap;
+    }
+
+    /* flex-basis 0 so both fields split the row evenly whatever they hold, and
+       min-width 0 so a long name or URL truncates instead of widening the row. */
     .param-field {
-        flex: 1 1 auto;
+        flex: 1 1 0;
+        min-width: 0;
+    }
+
+    .param-field :global(.svelte-select),
+    .param-field :global(.value-container) {
         min-width: 0;
     }
 
@@ -171,6 +182,14 @@
         --border-radius: 0;
         --height: calc(1.5em + 0.75rem + 2px);
         height: 100%;
+    }
+
+    .param-field :global(.form-control) {
+        height: 100%;
+        border-radius: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .param-row .param-field:first-child :global(.svelte-select) {

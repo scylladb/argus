@@ -150,6 +150,20 @@ describe("ConfigParamFilterValue", () => {
         expect(new Set(ids).size).toBe(2);
     });
 
+    it("gives both sides of a row the same fixed-width field wrapper", () => {
+        const { container } = mount([{ name: "cfg.a", value: "x" }]);
+
+        expect(container.querySelectorAll(".input-group .param-field")).toHaveLength(2);
+    });
+
+    it("keeps truncated content readable through a title attribute", () => {
+        const url = "http://downloads.invalid/scylla-2026.0.18.tar.gz";
+        const { container } = mount([{ name: "sct_config.unified_package", value: url }]);
+        const titles = [...container.querySelectorAll(".param-field")].map((f) => f.getAttribute("title"));
+
+        expect(titles).toEqual(["sct_config.unified_package", url]);
+    });
+
     it("uses solid buttons, not outlines", () => {
         const { container } = mount([{ name: "cfg.a", value: "x" }]);
 
