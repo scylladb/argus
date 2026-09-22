@@ -6,10 +6,7 @@ from argus.backend.plugins.core import PluginInfoBase, PluginModelBase
 from argus.backend.plugins.sct.udt import (
     CloudInstanceDetails,
     CloudNodesInfo,
-    CloudResource,
     CloudSetupDetails,
-    EventsBySeverity,
-    NemesisRunInfo,
     NodeDescription,
     PackageVersion,
     PerformanceHDRHistogram
@@ -30,10 +27,7 @@ class PluginInfo(PluginInfoBase):
         SCTResource,
     ]
     all_types = [
-        NemesisRunInfo,
         NodeDescription,
-        EventsBySeverity,
-        CloudResource,
         CloudSetupDetails,
         CloudNodesInfo,
         CloudInstanceDetails,
