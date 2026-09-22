@@ -25,10 +25,7 @@ from argus.backend.plugins.sct.resource_setup import (
 from argus.backend.plugins.sct.udt import (
     CloudInstanceDetails,
     CloudNodesInfo,
-    CloudResource,
     CloudSetupDetails,
-    EventsBySeverity,
-    NemesisRunInfo,
     NodeDescription,
     PackageVersion,
     PerformanceHDRHistogram
@@ -183,12 +180,7 @@ class SCTTestRun(PluginModelBase):
     region_name: list[str] = Field(default_factory=list)
     cloud_setup: Optional[CloudSetupDetails] = None
 
-    # Test Runtime Resources
-    allocated_resources: list[CloudResource] = Field(default_factory=list)
-
     # Test Results
-    events: list[EventsBySeverity] = Field(default_factory=list)
-    nemesis_data: list[NemesisRunInfo] = Field(default_factory=list)
     nemesis_stats: dict[str, int] = Field(default_factory=dict)
     screenshots: list[str] = Field(default_factory=list)
 
@@ -415,15 +407,6 @@ class SCTTestRun(PluginModelBase):
         s.save()
         return True
 
-    def get_events_legacy(self) -> list[EventsBySeverity]:
-        """
-            Deprecated. To be replaced by new events system.
-        """
-        return self._get_events_legacy()
-
-    def _get_events_legacy(self) -> list[EventsBySeverity]:
-        return self.events
-
     @classmethod
     def get_events_limited(cls, run_id: UUID, before: datetime | None = None, after: datetime | None = None, severities: list[SCTEventSeverity] = None, per_partition_limit: int = 100) -> list[dict]:
         db = ScyllaCluster.get()
@@ -494,27 +477,6 @@ class SCTTestRun(PluginModelBase):
         val += 1
         stats[key] = val
         self.nemesis_stats = stats
-
-    def _add_new_event_type(self, event: EventsBySeverity):
-        self.events.append(event)
-
-    def _collect_event_message(self, event: EventsBySeverity, message: str):
-        if len(event.last_events) >= 100:
-            event.last_events = event.last_events[1:]
-
-        event.event_amount += 1
-        event.last_events.append(message)
-
-    def add_event(self, event_severity: str, event_message: str):
-        try:
-            event = next(filter(lambda v: v.severity ==
-                         event_severity, self.events))
-        except StopIteration:
-            event = EventsBySeverity(
-                severity=event_severity, event_amount=0, last_events=[])
-            self._add_new_event_type(event)
-
-        self._collect_event_message(event, event_message)
 
     def sut_timestamp(self, sut_package_name) -> float:
         """converts scylla-server date to timestamp and adds revision in sub-seconds precision to differentiate

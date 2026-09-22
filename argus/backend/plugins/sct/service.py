@@ -20,8 +20,6 @@ from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTJun
 from argus.common.sct_types import GeminiResultsRequest, PerformanceResultsRequest, RawEventPayload, ResourceUpdateRequest
 from argus.backend.plugins.sct.udt import (
     CloudInstanceDetails,
-    EventsBySeverity,
-    NemesisRunInfo,
     NodeDescription,
     PackageVersion,
     PerformanceHDRHistogram,
@@ -567,23 +565,9 @@ class SCTService:
 
     @staticmethod
     def submit_events(run_id: str, events: list[dict]) -> str:
-        # NOTE: Dummied out – EventsBySeverity column is being dropped.
-        # Kept for API compatibility with old clients. Events are submitted
-        # through the per-event ``event/submit`` endpoint instead.
+        # No-op. The events column is gone; kept for API compatibility with
+        # old clients. Events are submitted through ``event/submit`` instead.
         return "added"
-
-    @classmethod
-    def locate_coredumps(cls, run: SCTTestRun, events: list[EventsBySeverity]) -> list[CoredumpLink]:
-        flat_messages: list[str] = []
-        links = []
-        for es in events:
-            flat_messages.extend(es.last_events)
-        coredump_events = filter(
-            lambda v: "coredumpevent" in v.lower(), flat_messages)
-        for event in coredump_events:
-            if link := cls.create_coredump_link(event):
-                links.append(link)
-        return links
 
     @staticmethod
     def create_coredump_link(event_message: str, event_ts: datetime | None = None) -> CoredumpLink | None:

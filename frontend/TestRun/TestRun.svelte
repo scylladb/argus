@@ -79,7 +79,6 @@
         end_time: string,
         build_job_url: string,
         subtest_name: string,
-        events: any[],
         status: string,
         test_id: string,
         release_id: string,
@@ -355,7 +354,7 @@
                     <button class="argus-tab" class:active={activeTab === "sct-events"} type="button" role="tab" onclick={() => setActiveTab("sct-events")}>
                         <Fa icon={faRssSquare} /> Events
                     </button>
-                    {#if testRun.events.length > 0}
+                    {#if testRun.events?.length > 0}
                       <button class="argus-tab" class:active={activeTab === "events"} type="button" role="tab" onclick={() => setActiveTab("events")}>
                           <Fa icon={faRssSquare} /> Events (Legacy)
                       </button>
@@ -395,7 +394,9 @@
                             <option value="junit">Test Results</option>
                         {/if}
                         <option value="results">Results</option>
-                        <option value="events">Events</option>
+                        {#if testRun.events?.length > 0}
+                            <option value="events">Events (Legacy)</option>
+                        {/if}
                         <option value="nemesis">Nemesis</option>
                         <option value="logs">Logs</option>
                         <option value="discuss">Discussion</option>

@@ -1,12 +1,9 @@
 from time import time
-from typing import Annotated, Optional
+from typing import Optional
 
 from pydantic import Field
 
 from coodie.usertype import UserType
-
-from argus.backend.util.common import NoneAsEmptyList
-from argus.common.enums import ResourceState
 
 
 class PackageVersion(UserType):
@@ -62,28 +59,6 @@ class CloudSetupDetails(UserType):
         __type_name__ = "cloudsetupdetails"
 
 
-class CloudResource(UserType):
-    name: Optional[str] = None
-    state: str = Field(default=ResourceState.RUNNING.value)
-    resource_type: Optional[str] = None
-    instance_info: Optional[CloudInstanceDetails] = None
-
-    class Settings:
-        __type_name__ = "cloudresource_v3"
-
-    def get_instance_info(self) -> CloudInstanceDetails:
-        return self.instance_info
-
-
-class EventsBySeverity(UserType):
-    severity: str
-    event_amount: int
-    last_events: Annotated[list[str], NoneAsEmptyList] = Field(default_factory=list)
-
-    class Settings:
-        __type_name__ = "eventsbyseverity"
-
-
 class NodeDescription(UserType):
     name: str
     ip: Optional[str] = None
@@ -91,20 +66,6 @@ class NodeDescription(UserType):
 
     class Settings:
         __type_name__ = "nodedescription"
-
-
-class NemesisRunInfo(UserType):
-    class_name: Optional[str] = None
-    name: Optional[str] = None
-    duration: Optional[int] = None
-    target_node: Optional[NodeDescription] = None
-    status: Optional[str] = None
-    start_time: Optional[int] = None
-    end_time: Optional[int] = None
-    stack_trace: Optional[str] = None
-
-    class Settings:
-        __type_name__ = "nemesisruninfo"
 
 
 class PerformanceHDRHistogram(UserType):
