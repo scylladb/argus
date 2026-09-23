@@ -5,8 +5,9 @@
 ## Design drivers
 
 - `run_config_param` is keyed `((name, value)) -> run_id`. It answers "which
-  runs match" and nothing else; autocomplete and a presence test need key
-  shapes it does not have.
+  runs carry this exact value" well and nothing else; autocomplete and a
+  presence test need key shapes it does not have. It stays, and the concrete
+  match keeps reading it.
 - No read may scan the cluster. A `SELECT DISTINCT` and a whole-partition read
   of a high-cardinality parameter are both out.
 - The stats path runs on every dashboard poll, so the filter must cost reads
@@ -39,10 +40,15 @@
 
 ## Design
 
-`ClientService.parse_config_values` is the single point where a flattened
-parameter is written. It gains three sibling writes: the run's own row, the
-value index and the name catalogue. `RunConfigParam` keeps its shape and its
-writer, so nothing reading it today changes.
+Four tables, each answering one question. `ClientService.parse_config_values` is
+the single point where a flattened parameter is written, and it writes all four.
+
+| Question | Table | Read |
+|---|---|---|
+| Which runs carry `name = value`? | `run_config_param` | one partition, narrowed to the candidate run ids on the clustering key |
+| Does this run carry `name` at all? | `run_config_param_by_run_v1` | one point read per candidate run |
+| Which values has `name` taken? | `run_config_param_value_index_v1` | one bounded clustering range |
+| Which parameter names exist? | `run_config_param_name_v1` | one partition, `bucket = "all"` |
 
 ```mermaid
 flowchart LR
@@ -51,17 +57,44 @@ flowchart LR
     PCV --> BR[(run_config_param_by_run_v1)]
     PCV --> VI[(run_config_param_value_index_v1)]
     PCV --> NC[(run_config_param_name_v1)]
-    VM[View manager] -->|param_names / param_values| RCS[RunConfigParamService]
-    RCS --> NC
-    RCS --> VI
-    VD[Test Dashboard] -->|views/stats| VSC[ViewStatsCollector]
-    VSC --> RCS
-    RCS --> BR
+    NC -.->|param_names| VM[View manager]
+    VI -.->|param_values| VM
+    VM -->|configParamFilters| WS[(argus_user_view.widget_settings)]
+    WS -.-> VSC[ViewStatsCollector]
+    L -.->|concrete value| VSC
+    BR -.->|is set| VSC
+    BR -.->|get_config_params| RP[Run page]
 ```
 
-The match reads one partition per candidate run, so a concrete value and "any
-value" cost the same, and neither depends on how many runs carried the
-parameter.
+Configuring a widget reads only the two catalogues. Nothing about the runs is
+touched until the dashboard asks for stats.
+
+```mermaid
+sequenceDiagram
+    participant U as Maintainer
+    participant E as Filter editor
+    participant A as run_configs endpoints
+    participant V as views/update
+
+    U->>E: add a filter row
+    E->>A: param_names?query=
+    A-->>E: names from the catalogue partition
+    U->>E: pick a name
+    alt a concrete value
+        E->>A: param_values?name=&query=
+        A-->>E: a clustering range of that name's values
+        U->>E: pick a value
+    else any value
+        U->>E: tick Any, which stores null
+    end
+    U->>E: save the view
+    E->>V: widget_settings with configParamFilters
+    V->>V: parse_filters rejects a blank or duplicate row
+```
+
+The match runs after the version and image filters, when the candidate set is
+smallest. A concrete row costs one partition read for the whole set; only an
+"is set" row pays a read per candidate run.
 
 ```mermaid
 sequenceDiagram
@@ -69,6 +102,7 @@ sequenceDiagram
     participant C as ViewStatsCollector
     participant P as Plugin tables
     participant S as RunConfigParamService
+    participant L as run_config_param
     participant B as run_config_param_by_run_v1
 
     D->>C: viewId, widgetId, productVersion, paramFilterOff[]
@@ -77,8 +111,14 @@ sequenceDiagram
     P-->>C: run rows
     C->>C: apply the version filter, then the image filter
     C->>S: narrow_run_ids(surviving run ids, rows)
-    S->>B: one read per run: WHERE run_id = ? AND name IN ?
-    B-->>S: the run's values for those names
+    loop each concrete row
+        S->>L: WHERE name = ? AND value = ? AND run_id IN ?
+        L-->>S: the candidates carrying that value
+    end
+    opt any "is set" row
+        S->>B: per survivor: WHERE run_id = ? AND name IN ?
+        B-->>S: that run's values for those names
+    end
     S-->>C: the run ids that match every row
     C->>C: drop the rows, then the tests left with no row
 ```
@@ -89,7 +129,7 @@ Decision rules:
 |---|---|
 | A row's value is a string | The run's value for that name must equal it |
 | A row's value is `null` | The name must be present and its value outside `{"", "null", "None"}` |
-| The run has no row in the by-run table | It does not match |
+| The run carries no row for the name | It does not match |
 | A row carries a blank name | It is dropped before the filter runs |
 | `configParamFilters` is absent or empty | The stats output is what it is today, limit included |
 | `paramFilterOff` names a row the widget does not configure | It is ignored |
@@ -202,8 +242,9 @@ def get_stats_for_release(cls, release, build_ids=list[str], per_partition_limit
 
 The same filter on the release dashboard would reuse `RunConfigParamService`
 whole, so `narrow_run_ids` stays free of any view concept. `run_config_param`
-stays in place and still written; once nothing reads it, it can be dropped in
-favour of the by-run table.
+cannot be folded into the by-run table: it is the only one keyed to answer
+`name, value -> every run`, which the concrete match needs. Merging the four
+into fewer tables is a separate task.
 
 ---
 
