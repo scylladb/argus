@@ -3,13 +3,14 @@ import json
 import logging
 from dataclasses import asdict
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Iterator
 from uuid import UUID
 
 
 from cassandra import DriverException
 from cassandra.cluster import NoHostAvailable
 from coodie.exceptions import DocumentNotFound
+from coodie.sync import Document
 
 from argus.backend.db import ScyllaCluster
 from argus.backend.error_handlers import DataValidationError
@@ -30,6 +31,7 @@ from argus.backend.plugins.loader import AVAILABLE_PLUGINS
 from argus.backend.events.event_processors import EVENT_PROCESSORS
 from argus.backend.service.results_service import ResultsService, Cell
 from argus.backend.service.run_cost_service import RunCostService
+from argus.backend.util.common import save_in_batches
 from argus.common.enums import TestStatus
 
 LOGGER = logging.getLogger(__name__)
@@ -279,7 +281,35 @@ class ClientService:
         return list(config_store)
 
     @staticmethod
-    def parse_config_values(name: str, config: str, run_id: str):
+    def _index_rows(param: tuple[UUID, str, str]) -> Iterator[Document]:
+        run_uuid, name, value = param
+
+        legacy = RunConfigParam.model_construct()
+        legacy.name = name
+        legacy.value = value
+        legacy.run_id = str(run_uuid)
+        yield legacy
+
+        by_run = RunConfigParamByRun.model_construct()
+        by_run.run_id = run_uuid
+        by_run.name = name
+        by_run.value = value
+        yield by_run
+
+        value_index = RunConfigParamValueIndex.model_construct()
+        value_index.name = name
+        value_index.value = value
+        yield value_index
+
+        if name not in _INDEXED_NAMES:
+            catalogue = RunConfigParamName.model_construct()
+            catalogue.bucket = NAME_BUCKET
+            catalogue.name = name
+            _INDEXED_NAMES.add(name)
+            yield catalogue
+
+    @staticmethod
+    def flatten_config(name: str, loaded: dict) -> list[tuple[str, str]]:
         def is_scalar(value: Any):
             match (value):
                 case list():
@@ -288,6 +318,20 @@ class ClientService:
                     return False
                 case _:
                     return True
+
+        loaded_items = [[f"{name.replace(".", "_").replace(" ", "_")}.", k, v] for k, v in list(loaded.items())]
+        scalars: list[tuple[str, str]] = []
+        for level, key, value in loaded_items:
+            if is_scalar(value):
+                scalars.append((f"{level}{key}", str(value) or "null"))
+            elif isinstance(value, dict):
+                loaded_items.extend([f"{level}{key}.", inner_key, value] for inner_key, value in value.items())
+            elif isinstance(value, list):
+                loaded_items.extend([f"{level}{key}.", str(idx), value] for idx, value in enumerate(value))
+        return scalars
+
+    @classmethod
+    def parse_config_values(cls, name: str, config: str, run_id: str):
         try:
             loaded: dict = json.loads(config)
         except json.JSONDecodeError:
@@ -298,42 +342,10 @@ class ClientService:
             LOGGER.warning("JSON Config for run %s does not begin with a top-level mapping, cannot continue parsing...", run_id)
             return
 
-        loaded_items = [[f"{name.replace(".", "_").replace(" ", "_")}.", k, v] for k, v in list(loaded.items())]
         run_uuid = UUID(run_id) if isinstance(run_id, str) else run_id
-        # Store flattened keys to a separate table for comparison purposes
-        for level, key, value in loaded_items:
-            if is_scalar(value):
-                param_name = f"{level}{key}"
-                param_value = str(value) or "null"
-
-                param = RunConfigParam.model_construct()
-                param.name = param_name
-                param.value = param_value
-                param.run_id = run_id
-                param.save()
-
-                by_run = RunConfigParamByRun.model_construct()
-                by_run.run_id = run_uuid
-                by_run.name = param_name
-                by_run.value = param_value
-                by_run.save()
-
-                value_index = RunConfigParamValueIndex.model_construct()
-                value_index.name = param_name
-                value_index.value = param_value
-                value_index.save()
-
-                if param_name not in _INDEXED_NAMES:
-                    catalogue = RunConfigParamName.model_construct()
-                    catalogue.bucket = NAME_BUCKET
-                    catalogue.name = param_name
-                    catalogue.save()
-                    _INDEXED_NAMES.add(param_name)
-            else:
-                if isinstance(value, dict):
-                    loaded_items.extend([f"{level}{key}.", inner_key, value] for inner_key, value in value.items())
-                elif isinstance(value, list):
-                    loaded_items.extend([f"{level}{key}.", str(idx), value] for idx, value in enumerate(value))
+        scalars = cls.flatten_config(name, loaded)
+        written = save_in_batches(((run_uuid, key, value) for key, value in scalars), cls._index_rows)
+        LOGGER.debug("Indexed %s config parameters for run %s in %s rows", len(scalars), run_id, written)
 
     @classmethod
     def submit_config(cls, run_id: str, config_name: str, config_content: str) -> bool:
