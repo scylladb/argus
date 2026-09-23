@@ -28,6 +28,15 @@ def planning_service():
     return PlanningService()
 
 
+@pytest.fixture(autouse=True)
+def delete_created_plans():
+    existing_ids = {plan.id for plan in ArgusReleasePlan.find().all()}
+    yield
+    for plan in ArgusReleasePlan.find().all():
+        if plan.id not in existing_ids:
+            plan.delete()
+
+
 def _create_payload(release, tests=None, groups=None, options=None):
     suffix = uuid.uuid4().hex[:8]
     return {

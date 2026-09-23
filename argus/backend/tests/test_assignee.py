@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from datetime import UTC, datetime
+import time
 import uuid
 from unittest.mock import patch
 
@@ -7,7 +8,7 @@ import pytest
 from argus.backend.tests.conftest import g
 
 from argus.backend.models.plan import ArgusReleasePlan
-from argus.backend.models.web import User, UserRoles
+from argus.backend.models.web import ArgusTest, User, UserRoles
 from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.service.testrun import TestRunService
 
@@ -22,6 +23,15 @@ def jenkins_returns(requested_by_user: str | None):
     with patch(JENKINS_TARGET) as service_class:
         service_class.return_value.get_requested_by_user.return_value = requested_by_user
         yield service_class.return_value.get_requested_by_user
+
+
+@pytest.fixture
+def fake_test(release_manager_service) -> ArgusTest:
+    name = f"assignee_{time.time_ns()}"
+    release = release_manager_service.create_release(name, name, False)
+    group = release_manager_service.create_group(name, name, build_system_id=name, release_id=str(release.id))
+    return release_manager_service.create_test(name, name, name, name, group_id=str(group.id),
+                                               release_id=str(release.id), plugin_name="scylla-cluster-tests")
 
 
 @pytest.fixture
