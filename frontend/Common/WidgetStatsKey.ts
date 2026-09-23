@@ -13,3 +13,7 @@ export const calculateWidgetStatsKey = function (widget): string {
     const narrowed = configuredRows(widget.settings?.configParamFilters).length > 0;
     return sha1(narrowed ? `${base}#${widget.position}` : base);
 };
+
+export const firstAvailableStats = function (stats: Record<string, unknown>): unknown {
+    return Object.values(stats ?? {}).find((value) => value !== undefined);
+};

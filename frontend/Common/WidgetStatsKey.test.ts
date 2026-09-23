@@ -3,6 +3,7 @@ import {
     GLOBAL_STATS_KEY,
     calculateWidgetStatsKey,
     calculateWidgetVersionKey,
+    firstAvailableStats,
 } from "./WidgetStatsKey";
 
 const widget = (overrides = {}) => ({ position: 1, type: "testDashboard", filter: [], settings: {}, ...overrides });
@@ -50,5 +51,17 @@ describe("calculateWidgetVersionKey", () => {
         const narrowed = widget({ settings: { configParamFilters: [{ name: "cfg.a", value: "x" }] } });
 
         expect(calculateWidgetVersionKey(narrowed)).toBe(GLOBAL_STATS_KEY);
+    });
+});
+
+describe("firstAvailableStats", () => {
+    it("returns nothing when no bucket has stats", () => {
+        expect(firstAvailableStats({})).toBeUndefined();
+        expect(firstAvailableStats(undefined as never)).toBeUndefined();
+        expect(firstAvailableStats({ a: undefined })).toBeUndefined();
+    });
+
+    it("returns the first bucket that has stats", () => {
+        expect(firstAvailableStats({ a: undefined, b: { total: 3 }, c: { total: 9 } })).toEqual({ total: 3 });
     });
 });
