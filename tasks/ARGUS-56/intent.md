@@ -97,9 +97,6 @@ an error. The old submission endpoint answers as it always did.
 The argusAI v1 embedding worker. It reads the legacy column, it is no longer
 the running process, and retiring it is handled separately.
 
-The `EventsTab.svelte` component and the legacy Events tab it renders. They
-stop being reachable, and removing them is a follow-up.
-
 Dropping the user-defined types from the keyspace. The types stop being used;
 the CQL `DROP TYPE` is not part of this task.
 

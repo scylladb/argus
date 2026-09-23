@@ -22,7 +22,8 @@
   before the table existed.
 - `sct_test_run` no longer carries `events`, `nemesis_data` or
   `allocated_resources`.
-- The model fields and the code that served them are gone.
+- The model fields and the code that served them are gone, along with the run
+  page's legacy tab and the CLI's event summary, which read that shape.
 - The legacy submission endpoint answers exactly as it does today.
 - The drop is re-runnable and refuses to run out of order.
 
@@ -30,8 +31,8 @@
 
 - Retiring the argusAI v1 embedding worker. It reads the legacy column and is
   no longer the running process.
-- Deleting `EventsTab.svelte` and the components it owns. The legacy tab stops
-  being reachable; the files stay.
+- Rebuilding the CLI's event summary from `sct_event`. The row goes; restoring
+  it is a follow-up.
 - `DROP TYPE` for the user-defined types that stop being used.
 - Re-parsing event message text. Messages move across unchanged.
 - Restoring the three keys to `/api/v1/client/.../run_data`, which dumps the
@@ -165,8 +166,8 @@ Unchanged and still called by other modules: `get_events_limited`,
 
 ## Deferred work
 
-`EventsTab.svelte`, `RawEvent.svelte` and `StructuredEvent.svelte` become
-unreachable and should be deleted once the legacy tab is confirmed unused.
+The `argus run get` event summary row and its `events_summary` JSON field are
+removed rather than rebuilt. A follow-up builds them again from `sct_event`.
 
 The CQL user-defined types `cloudresource_v3`, `eventsbyseverity` and the
 nemesis run info type stay in the keyspace. A `DROP TYPE` is only possible once
