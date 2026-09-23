@@ -2,6 +2,7 @@
     import { faQuestionCircle, faPlus, faTrash } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
     import Select from "svelte-select";
+    import { onDestroy } from "svelte";
     import queryString from "query-string";
     import {
         ANY_VALUE_LABEL,
@@ -20,6 +21,7 @@
     let { settingName, definition, settings = $bindable() }: Props = $props();
 
     const uid = $props.id();
+    const SEARCH_DEBOUNCE_MS = 750;
 
     let rows: ConfigParamFilterRow[] = $state(normalizeRows(settings[settingName] ?? definition.default ?? []));
     let duplicateAt: number = $state(-1);
@@ -88,6 +90,13 @@
         rows.splice(index, 1);
     };
 
+    onDestroy(() => {
+        const kept = rows.filter((row, index) => row.name && rows.findIndex((r) => r.name === row.name) === index);
+        if (kept.length !== rows.length) {
+            settings[settingName] = kept;
+        }
+    });
+
     const asOption = function (value: string | null) {
         return value ? { value: value, label: value } : undefined;
     };
@@ -102,6 +111,7 @@
                 <Select
                     --item-height="auto"
                     --item-line-height="auto"
+                    debounceWait={SEARCH_DEBOUNCE_MS}
                     value={asOption(row.name)}
                     placeholder="Parameter name"
                     loadOptions={nameLookup}
@@ -122,6 +132,7 @@
                         <Select
                             --item-height="auto"
                             --item-line-height="auto"
+                            debounceWait={SEARCH_DEBOUNCE_MS}
                             value={asOption(row.value)}
                             disabled={!row.name}
                             placeholder={row.name ? "Value" : "Pick a parameter first"}
@@ -152,7 +163,7 @@
             </button>
         </div>
         {#if duplicateAt === index}
-            <div class="text-danger small mb-2">That parameter is already filtered.</div>
+            <div class="text-danger small mb-2">That parameter is already filtered. This row was left unchanged.</div>
         {/if}
     {/each}
 

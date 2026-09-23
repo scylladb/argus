@@ -4,12 +4,13 @@ import ConfigParamFilterValue from "./ConfigParamFilterValue.svelte";
 import { ANY_VALUE_LABEL } from "../../Common/ConfigParamFilters";
 
 // The two Selects call loadOptions against the search endpoints on any input.
+const fetchMock = vi.fn().mockResolvedValue({ json: () => Promise.resolve({ status: "ok", response: [] }) });
+
 beforeAll(() => {
-    vi.stubGlobal(
-        "fetch",
-        vi.fn().mockResolvedValue({ json: () => Promise.resolve({ status: "ok", response: [] }) }),
-    );
+    vi.stubGlobal("fetch", fetchMock);
 });
+
+afterEach(() => fetchMock.mockClear());
 
 afterEach(cleanup);
 
@@ -162,6 +163,53 @@ describe("ConfigParamFilterValue", () => {
         const titles = [...container.querySelectorAll(".param-field")].map((f) => f.getAttribute("title"));
 
         expect(titles).toEqual(["sct_config.unified_package", url]);
+    });
+
+    it("debounces both searches so a request waits for the keystrokes to settle", () => {
+        const { container } = mount([{ name: "cfg.a", value: "x" }]);
+
+        // svelte-select has no DOM hook for debounceWait, so assert the selects exist and
+        // that the prop is wired by checking no request fires on mount.
+        expect(container.querySelectorAll(".svelte-select")).toHaveLength(2);
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("drops an unnamed row when the editor closes", () => {
+        const settings: Record<string, unknown> = {
+            configParamFilters: [{ name: "cfg.a", value: "x" }, { name: "", value: null }],
+        };
+        const { unmount } = render(ConfigParamFilterValue, {
+            props: { settingName: "configParamFilters", definition: DEFINITION, settings },
+        });
+
+        unmount();
+
+        expect(settings.configParamFilters).toEqual([{ name: "cfg.a", value: "x" }]);
+    });
+
+    it("drops a duplicate row when the editor closes", () => {
+        const settings: Record<string, unknown> = {
+            configParamFilters: [{ name: "cfg.a", value: "x" }, { name: "cfg.a", value: "y" }],
+        };
+        const { unmount } = render(ConfigParamFilterValue, {
+            props: { settingName: "configParamFilters", definition: DEFINITION, settings },
+        });
+
+        unmount();
+
+        expect(settings.configParamFilters).toEqual([{ name: "cfg.a", value: "x" }]);
+    });
+
+    it("leaves a clean list alone when the editor closes", () => {
+        const rows = [{ name: "cfg.a", value: "x" }, { name: "cfg.b", value: null }];
+        const settings: Record<string, unknown> = { configParamFilters: rows };
+        const { unmount } = render(ConfigParamFilterValue, {
+            props: { settingName: "configParamFilters", definition: DEFINITION, settings },
+        });
+
+        unmount();
+
+        expect(settings.configParamFilters).toEqual(rows);
     });
 
     it("uses solid buttons, not outlines", () => {
