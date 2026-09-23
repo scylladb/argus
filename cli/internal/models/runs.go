@@ -113,13 +113,6 @@ type CloudResource struct {
 	InstanceInfo *CloudInstanceDetails `json:"instance_info"`
 }
 
-// EventsBySeverity corresponds to the EventsBySeverity Cassandra UDT.
-type EventsBySeverity struct {
-	Severity    SCTEventSeverity `json:"severity"`
-	EventAmount int              `json:"event_amount"`
-	LastEvents  []string         `json:"last_events"`
-}
-
 // NodeDescription corresponds to the NodeDescription Cassandra UDT.
 type NodeDescription struct {
 	Name   string `json:"name"`
@@ -244,9 +237,8 @@ type SCTTestRun struct {
 	AllocatedResources []CloudResource `json:"allocated_resources"`
 
 	// Test Results
-	Events      []EventsBySeverity `json:"events"`
-	NemesisData []NemesisRunInfo   `json:"nemesis_data"`
-	Screenshots []string           `json:"screenshots"`
+	NemesisData []NemesisRunInfo `json:"nemesis_data"`
+	Screenshots []string         `json:"screenshots"`
 
 	// Subtest
 	SubtestName string `json:"subtest_name"`
@@ -945,16 +937,6 @@ func (d RunDetails) Rows() [][]string {
 		}
 	}
 
-	// Event summary: count per severity.
-	eventSummary := ""
-	if len(r.Events) > 0 {
-		parts := make([]string, 0, len(r.Events))
-		for _, ev := range r.Events {
-			parts = append(parts, fmt.Sprintf("%s: %d", ev.Severity, ev.EventAmount))
-		}
-		eventSummary = strings.Join(parts, "  |  ")
-	}
-
 	// Nemesis summary: count by status.
 	nemesisSummary := ""
 	if len(r.NemesisData) > 0 {
@@ -998,7 +980,6 @@ func (d RunDetails) Rows() [][]string {
 		{"Instance Type", instanceType},
 		{"Node Amount", fmt.Sprint(nodeAmount)},
 		{"--- Summary ---", ""},
-		{"Events", eventSummary},
 		{"Nemesis", nemesisSummary},
 	}
 
@@ -1047,7 +1028,6 @@ type runDetailsJSON struct {
 	InstanceType string `json:"instance_type,omitempty"`
 	NodeAmount   int    `json:"node_amount,omitempty"`
 	// Summary section
-	Events  string `json:"events_summary,omitempty"`
 	Nemesis string `json:"nemesis_summary,omitempty"`
 }
 
@@ -1074,15 +1054,6 @@ func (d RunDetails) MarshalJSON() ([]byte, error) {
 			instanceType = r.CloudSetup.DBNode.InstanceType
 			nodeAmount = r.CloudSetup.DBNode.NodeAmount
 		}
-	}
-
-	eventSummary := ""
-	if len(r.Events) > 0 {
-		parts := make([]string, 0, len(r.Events))
-		for _, ev := range r.Events {
-			parts = append(parts, fmt.Sprintf("%s: %d", ev.Severity, ev.EventAmount))
-		}
-		eventSummary = strings.Join(parts, "  |  ")
 	}
 
 	nemesisSummary := ""
@@ -1124,7 +1095,6 @@ func (d RunDetails) MarshalJSON() ([]byte, error) {
 		BranchName:          r.BranchName,
 		InstanceType:        instanceType,
 		NodeAmount:          nodeAmount,
-		Events:              eventSummary,
 		Nemesis:             nemesisSummary,
 	})
 }
