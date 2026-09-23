@@ -64,12 +64,26 @@ A read survives either order: an unrestricted `find()` selects `*`, and coodie
 builds the document with `model_construct`, which discards row keys the model
 does not declare. Only a write is ordered.
 
+The backfill writes a run's events as byte-budgeted chunks, executed serially.
+A chunk goes out as one batch; a chunk holding a single event goes out as a
+plain `INSERT`. That split matters because an event is not bounded in size —
+a gemini event runs past 1 MB — and a batch is bounded twice by the server,
+at `batch_size_warn_threshold_in_kb` and `batch_size_fail_threshold_in_kb`.
+A lone `INSERT` is bound by neither, only by `max_mutation_size`, so the one
+shape the batch path cannot carry is exactly the shape that does not need it.
+
+A run is the unit of recovery. Its in-flight id sits in the state file beside
+the paging state, so an interrupted run's partial writes are purged and the
+run is migrated again rather than left half-written.
+
 | Condition | Behavior |
 |---|---|
 | `sct_event` holds no rows | The drop script refuses and exits non-zero |
 | A column is already gone | The script introspects first, so the drop is a no-op |
 | An old worker writes after the drop | Fails on every `save()`; the ordering above is what prevents it |
 | `sync-models` runs between deploy and drop | Logs schema drift, issues no DDL, never re-adds a column |
+| A single event exceeds the batch threshold | Written as its own `INSERT`, which the threshold does not bound |
+| A chunk is rejected mid-run | The run's partial writes are purged, the run is reported, the scan continues |
 | `events` is absent from the run response | The run page renders without the legacy tab |
 
 ## Contracts
