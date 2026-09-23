@@ -272,6 +272,7 @@ class TunneledSession(requests.Session):
 
             tunnel = SSHTunnel(key_path=key_path)
             config, local_port, establish_reason = self._establish_any(tunnel, config)
+            key_rejected = False
 
             if local_port is None and not force_refresh:
                 # The cached config may name a proxy that has since been
@@ -285,6 +286,7 @@ class TunneledSession(requests.Session):
                     extra_headers=extra_headers,
                 )
                 if fresh is not None:
+                    key_rejected = key_rejected or tunnel.sshd_rejected_key
                     tunnel.shutdown()
                     tunnel = SSHTunnel(key_path=fresh_key_path)
                     config, local_port, establish_reason = self._establish_any(tunnel, fresh)
@@ -293,7 +295,7 @@ class TunneledSession(requests.Session):
 
             if local_port is None or config is None:
                 tunnel.shutdown()
-                if getattr(tunnel, "sshd_rejected_key", False):
+                if key_rejected or tunnel.sshd_rejected_key:
                     delete_cached_tunnel_state(self._run_id)
                 self._teardown(establish_reason or "failed to establish tunnel")
                 return
