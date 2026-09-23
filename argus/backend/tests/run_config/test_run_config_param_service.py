@@ -5,6 +5,7 @@ import pytest
 from argus.backend.error_handlers import DataValidationError
 from argus.backend.models.run_config import (
     NAME_BUCKET,
+    RunConfigParam,
     RunConfigParamByRun,
     RunConfigParamName,
     RunConfigParamValueIndex,
@@ -17,12 +18,19 @@ from argus.backend.service.run_config_params import (
 
 
 def store_params(run_id, params: dict[str, str | None]) -> None:
+    """Write the same rows parse_config_values does, so both read paths are covered."""
     for name, value in params.items():
-        row = RunConfigParamByRun.model_construct()
-        row.run_id = run_id
-        row.name = name
-        row.value = value
-        row.save()
+        by_run = RunConfigParamByRun.model_construct()
+        by_run.run_id = run_id
+        by_run.name = name
+        by_run.value = value
+        by_run.save()
+
+        legacy = RunConfigParam.model_construct()
+        legacy.name = name
+        legacy.value = value if value is not None else "null"
+        legacy.run_id = str(run_id)
+        legacy.save()
 
 
 def test_parse_filters_reads_a_concrete_value_and_an_any_value_row():
@@ -43,6 +51,11 @@ def test_parse_filters_drops_a_blank_row():
 
 def test_parse_filters_coerces_a_non_string_value():
     assert parse_filters([{"name": "cfg.count", "value": 10}]) == [ConfigParamFilter(name="cfg.count", value="10")]
+
+
+def test_parse_filters_reads_an_empty_value_as_any_value():
+    """The editor stores "" when a row leaves Any unticked without a value picked."""
+    assert parse_filters([{"name": "cfg.a", "value": ""}]) == [ConfigParamFilter(name="cfg.a", value=None)]
 
 
 def test_parse_filters_accepts_nothing():

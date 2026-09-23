@@ -11,10 +11,12 @@ from argus.backend.error_handlers import DataValidationError
 from argus.backend.models.run_config import (
     EMPTY_PARAM_VALUES,
     NAME_BUCKET,
+    RunConfigParam,
     RunConfigParamByRun,
     RunConfigParamName,
     RunConfigParamValueIndex,
 )
+from argus.backend.util.common import chunk
 
 LOGGER = logging.getLogger(__name__)
 
@@ -47,9 +49,9 @@ def parse_filters(raw: Any) -> list[ConfigParamFilter]:
             raise DataValidationError(f"Duplicate config parameter filter for {name}")
         seen.add(name)
         value = row.get("value")
-        if value is not None and not isinstance(value, str):
+        if value is not None:
             value = str(value)
-        filters.append(ConfigParamFilter(name=name, value=value))
+        filters.append(ConfigParamFilter(name=name, value=value or None))
     return filters
 
 
@@ -79,22 +81,46 @@ class RunConfigParamService:
         return [row.value for row in finder.limit(limit).all()]
 
     def narrow_run_ids(self, run_ids: Iterable[UUID], filters: Sequence[ConfigParamFilter]) -> set[UUID]:
-        candidates = list(run_ids)
+        candidates = set(run_ids)
         if not filters:
-            return set(candidates)
+            return candidates
         if not candidates:
             return set()
 
+        for param in (f for f in filters if f.value is not None):
+            candidates = self._narrow_by_value(candidates, param)
+            if not candidates:
+                return set()
+
+        presence = [f for f in filters if f.value is None]
+        if presence:
+            candidates = self._narrow_by_presence(candidates, presence)
+        return candidates
+
+    @staticmethod
+    def _narrow_by_value(candidates: set[UUID], param: ConfigParamFilter) -> set[UUID]:
+        """One partition read of run_config_param, narrowed to the candidates on the clustering key."""
+        by_str = {str(run_id): run_id for run_id in candidates}
+        matched: set[UUID] = set()
+        for slice_ in chunk(by_str.keys()):
+            rows = RunConfigParam.find(name=param.name, value=param.value, run_id__in=list(slice_)).all()
+            matched.update(by_str[row.run_id] for row in rows if row.run_id in by_str)
+        return matched
+
+    def _narrow_by_presence(self, candidates: set[UUID], filters: Sequence[ConfigParamFilter]) -> set[UUID]:
+        """One point read per candidate run; the only shape the by-run table can answer."""
+        ordered = list(candidates)
         names = sorted({param.name for param in filters})
         query = self.database.prepare(
             f"SELECT name, value FROM {RunConfigParamByRun.table_name()} WHERE run_id = ? AND name IN ?"
         )
         results = execute_concurrent_with_args(
-            self.database.session, query, [(run_id, names) for run_id in candidates], concurrency=CONCURRENCY
+            self.database.session, query, [(run_id, names) for run_id in ordered],
+            concurrency=CONCURRENCY, raise_on_first_error=False,
         )
 
         matched: set[UUID] = set()
-        for run_id, (success, rows) in zip(candidates, results):
+        for run_id, (success, rows) in zip(ordered, results):
             if not success:
                 LOGGER.warning("Config parameter lookup failed for run %s: %s", run_id, rows)
                 continue
