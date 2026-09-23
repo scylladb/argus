@@ -564,12 +564,6 @@ class SCTService:
         return result["count"]
 
     @staticmethod
-    def submit_events(run_id: str, events: list[dict]) -> str:
-        # No-op. The events column is gone; kept for API compatibility with
-        # old clients. Events are submitted through ``event/submit`` instead.
-        return "added"
-
-    @staticmethod
     def create_coredump_link(event_message: str, event_ts: datetime | None = None) -> CoredumpLink | None:
         core_pattern = r"corefile_url=(?P<url>.+)$"
         ts_pattern = r"^(?P<ts>\d{4}-\d{2}-\d{2} ([\d:]*)\.\d{3})"

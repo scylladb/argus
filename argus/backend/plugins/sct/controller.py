@@ -219,13 +219,12 @@ def sct_nemesis_finalize(run_id: str, payload: NemesisRequest, user: User = Depe
 def sct_events_submit(run_id: str, payload: EventsSubmitRequest,
                       user: User = Depends(api_current_user)):
     """
-        Legacy endpoint. Deprecated, accepted and discarded.
-        Events are submitted through event/submit.
+        Legacy endpoint. The payload is accepted and discarded; old clients
+        still call it. Events are submitted through event/submit.
     """
-    result = SCTService.submit_events(run_id=run_id, events=payload.events)
     return APIResponse({
         "status": "ok",
-        "response": result
+        "response": "added"
     })
 
 
