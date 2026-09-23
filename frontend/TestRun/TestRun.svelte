@@ -155,7 +155,6 @@
     import RunInvestigationStatusButton from "./RunInvestigationStatusButton.svelte";
     import RunAssigneeSelector from "./RunAssigneeSelector.svelte";
     import HeartbeatIndicator from "./HeartbeatIndicator.svelte";
-    import EventsTab from "./EventsTab.svelte";
     import ArtifactTab from "./ArtifactTab.svelte";
     import IssueTab, { submitIssue } from "./IssueTab.svelte";
     import { SubtestTabBodyComponents, SubtestTabMeta, Subtests } from "./SCTSubTests/Subtest";
@@ -348,11 +347,6 @@
                     <button class="argus-tab" class:active={activeTab === "sct-events"} type="button" role="tab" onclick={() => setActiveTab("sct-events")}>
                         <Fa icon={faRssSquare} /> Events
                     </button>
-                    {#if testRun.events?.length > 0}
-                      <button class="argus-tab" class:active={activeTab === "events"} type="button" role="tab" onclick={() => setActiveTab("events")}>
-                          <Fa icon={faRssSquare} /> Events (Legacy)
-                      </button>
-                    {/if}
                     <button class="argus-tab" class:active={activeTab === "nemesis"} type="button" role="tab" onclick={() => setActiveTab("nemesis")}>
                         <Fa icon={faSpider} /> Nemesis
                     </button>
@@ -387,16 +381,13 @@
                             <option value="junit">Test Results</option>
                         {/if}
                         <option value="results">Results</option>
-                        {#if testRun.events?.length > 0}
-                            <option value="events">Events (Legacy)</option>
-                        {/if}
                         <option value="nemesis">Nemesis</option>
                         <option value="logs">Logs</option>
                         <option value="discuss">Discussion</option>
                         <option value="issues">Issues</option>
                         <option value="activity">Activity</option>
                         <option value="costs">Costs</option>
-                        <option value="sct-events">Events (Experimental)</option>
+                        <option value="sct-events">Events</option>
                     </select>
                 </div>
             <div class="argus-tab-content" id="nav-tabContent-{runId}">
@@ -448,11 +439,6 @@
                 <div role="tabpanel" style:display={activeTab === "results" ? "block" : "none"}>
                     {#if visitedTabs["results"]}
                         <ResultsTab id={runId} test_id={testInfo.test.id} />
-                    {/if}
-                </div>
-                <div role="tabpanel" style:display={activeTab === "events" ? "block" : "none"}>
-                    {#if visitedTabs["events"]}
-                        <EventsTab {testRun} on:issueAttach={(e) => submitIssue(e.detail.url, runId, testInfo.test.id)} />
                     {/if}
                 </div>
                 <div role="tabpanel" style:display={activeTab === "sct-events" ? "block" : "none"}>
