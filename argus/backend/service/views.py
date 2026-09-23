@@ -1,4 +1,5 @@
 import datetime
+import json
 import logging
 from functools import partial, reduce
 from typing import TypedDict
@@ -6,11 +7,12 @@ from uuid import UUID
 
 from coodie.exceptions import DocumentNotFound
 
-from argus.backend.error_handlers import APIException
+from argus.backend.error_handlers import APIException, DataValidationError
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.pytest import PytestResultTable
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, ArgusUserView, User
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS, all_plugin_models
+from argus.backend.service.run_config_params import parse_filters
 from argus.backend.service.test_lookup import TestLookup
 from argus.backend.util.common import chunk
 
@@ -30,6 +32,19 @@ class ViewUpdateRequest(TypedDict):
     plan_id: str | None
 
 
+def validate_widget_settings(widget_settings: str) -> None:
+    """Reject a widget the stats path could not read back."""
+    try:
+        widgets = json.loads(widget_settings or "[]")
+    except json.JSONDecodeError as exc:
+        raise DataValidationError("widget_settings is not valid JSON") from exc
+    if not isinstance(widgets, list):
+        return
+    for widget in widgets:
+        if isinstance(widget, dict):
+            parse_filters((widget.get("settings") or {}).get("configParamFilters"))
+
+
 class UserViewService:
     def create_view(self, name: str, items: list[str], widget_settings: str, user: User, description: str = None, display_name: str = None, plan_id: UUID = None) -> ArgusUserView:
         try:
@@ -38,6 +53,7 @@ class UserViewService:
                 f"View with name {name} already exists: {name_check.id}", name, name_check, name_check.id)
         except DocumentNotFound:
             pass
+        validate_widget_settings(widget_settings)
         view = ArgusUserView.model_construct()
         view.name = name
         view.display_name = display_name or name
@@ -88,6 +104,7 @@ class UserViewService:
         view.description = update_data["description"]
         view.plan_id = UUID(update_data["plan_id"]) if update_data.get("plan_id", None) else None
         view.display_name = update_data["display_name"]
+        validate_widget_settings(update_data["widget_settings"])
         view.widget_settings = update_data["widget_settings"]
         view.tests = []
         view.release_ids = []

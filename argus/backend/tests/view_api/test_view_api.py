@@ -292,3 +292,50 @@ def test_widget_routes_are_not_shadowed_by_view_id_rules(api_client):
     res = api_client.get("/api/v1/views/widgets/pytest/results").json()
     assert res["status"] == "ok"
     assert res.get("response", {}).get("exception") != "ValueError"
+
+
+def _widgets(config_param_filters):
+    return json.dumps([{
+        "position": 1, "type": "testDashboard", "filter": [],
+        "settings": {"configParamFilters": config_param_filters},
+    }])
+
+
+def test_create_view_rejects_duplicate_config_param_filter_names(api_client, view_name):
+    res = _create_view(api_client, view_name, settings=_widgets([
+        {"name": "sct_config.backend", "value": "aws"},
+        {"name": "sct_config.backend", "value": "gce"},
+    ]))
+
+    assert res["status"] == "error"
+
+
+def test_create_view_rejects_a_non_list_config_param_filter(api_client, view_name):
+    res = _create_view(api_client, view_name, settings=_widgets({"name": "cfg.a"}))
+
+    assert res["status"] == "error"
+
+
+def test_create_view_accepts_a_valid_config_param_filter(api_client, view_name):
+    res = _create_view(api_client, view_name, settings=_widgets([{"name": "cfg.a", "value": None}]))
+
+    assert res["status"] == "ok"
+
+
+def test_update_view_rejects_duplicate_config_param_filter_names(api_client, view_name, fake_test):
+    created = _create_view(api_client, view_name)
+    res = api_client.post("/api/v1/views/update", json={
+        "viewId": created["response"]["id"],
+        "updateData": {
+            "name": view_name,
+            "description": "",
+            "display_name": view_name,
+            "items": [f"test:{fake_test.id}"],
+            "widget_settings": _widgets([
+                {"name": "cfg.a", "value": "1"},
+                {"name": "cfg.a", "value": "2"},
+            ]),
+        },
+    }).json()
+
+    assert res["status"] == "error"
