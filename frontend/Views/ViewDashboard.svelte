@@ -8,6 +8,7 @@
         calculateWidgetStatsKey,
         calculateWidgetVersionKey,
     } from "../Common/ViewTypes";
+    import { firstAvailableStats } from "../Common/WidgetStatsKey";
     interface Props {
         view: any;
         stats?: any;
@@ -22,6 +23,18 @@
         embedded = false
     }: Props = $props();
     let clickedTests = $state({});
+
+    // A widget narrowed by a config parameter writes its own bucket, so a view whose only
+    // test dashboard is narrowed leaves GLOBAL_STATS_KEY empty. The stat bar and the plan
+    // header read that key, so mirror the first bucket that does have stats into it.
+    $effect(() => {
+        if (stats[GLOBAL_STATS_KEY] === undefined) {
+            const fallback = firstAvailableStats(stats);
+            if (fallback !== undefined) {
+                stats[GLOBAL_STATS_KEY] = fallback;
+            }
+        }
+    });
     let resolvedTests = [];
     const versionDispatch = $state({
         [GLOBAL_STATS_KEY]: productVersion,
