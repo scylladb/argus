@@ -1,23 +1,18 @@
-"""Backfill ``run_config_param_by_run_v1``, ``run_config_param_value_index_v1``
-and ``run_config_param_name_v1`` from the raw configs in ``run_configuration``.
+"""Backfill the ARGUS-157 config parameter indexes from ``run_configuration``.
 
-ARGUS-157 added three index tables next to ``run_config_param``:
+Fills three tables for every config already submitted:
 
-- ``run_config_param_by_run_v1`` — every parameter of one run in one partition,
-  which the widget filter reads once per candidate run and which
-  ``SCTTestRun.get_config_params()`` reads in place of a full table scan.
+- ``run_config_param_by_run_v1`` — every parameter of one run, in one partition.
 - ``run_config_param_value_index_v1`` — the distinct values of one parameter.
 - ``run_config_param_name_v1`` — the catalogue of parameter names.
 
-``run_config_param`` is keyed ``((name, value)) -> run_id``, so rebuilding a
-by-run view from it means scanning it whole. ``run_configuration`` is keyed by
-``run_id`` and holds the raw config, so this replays
-``ClientService.parse_config_values`` over it instead: the scan is resumable per
-run, and a run whose config was submitted before the parser existed gets its
-parameters for the first time.
+It pages ``run_configuration``, which holds the raw config keyed by ``run_id``,
+and replays ``ClientService.parse_config_values`` over each row. A run whose
+config predates the parser gets its parameters for the first time.
 
-Every write is an upsert, so re-running is safe. A config whose content is not
-JSON is logged and skipped, exactly as the parser does.
+Every write is an upsert, so re-running is safe, and the scan is resumable per
+run. A config whose content is not JSON is logged and skipped, as the parser
+does.
 
 Run it after ``sync-models`` has created the three tables, and before deploying
 anything that reads them.
