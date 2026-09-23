@@ -5,6 +5,7 @@ import os
 from typing import Callable, Iterable, TypeVar
 from uuid import UUID
 
+from coodie.sync import BatchQuery, Document
 from pydantic import BeforeValidator
 
 T = TypeVar('T')
@@ -70,3 +71,52 @@ def check_version(filter_string: str, version: str) -> bool:
         return True
 
     return False
+
+
+# Scylla rejects a batch over 64 KiB by default, so flush well below that.
+BATCH_MAX_BYTES = 48 * 1024
+BATCH_MAX_STATEMENTS = 200
+
+
+class SizedBatchQuery(BatchQuery):
+    """An unlogged BatchQuery that flushes itself before it outgrows the server limit."""
+
+    def __init__(self, max_statements: int = BATCH_MAX_STATEMENTS, max_bytes: int = BATCH_MAX_BYTES) -> None:
+        super().__init__(logged=False)
+        self.max_statements = max_statements
+        self.max_bytes = max_bytes
+        self.pending = 0
+        self.pending_bytes = 0
+        self.batches = 0
+
+    def add(self, stmt: str, params: list) -> None:
+        cost = len(stmt) + sum(len(str(param)) for param in params if param is not None)
+        if self.pending and (self.pending >= self.max_statements or self.pending_bytes + cost > self.max_bytes):
+            self.flush()
+        super().add(stmt, params)
+        self.pending += 1
+        self.pending_bytes += cost
+
+    def flush(self) -> None:
+        if not self.pending:
+            return
+        self.execute()
+        self.batches += 1
+        self.pending = 0
+        self.pending_bytes = 0
+
+
+def save_in_batches(items: Iterable[T], to_documents: Callable[[T], Iterable[Document]],
+                    max_statements: int = BATCH_MAX_STATEMENTS, max_bytes: int = BATCH_MAX_BYTES) -> int:
+    """Save every document ``to_documents`` yields, in batches bounded by count and size.
+
+    Returns the number of documents written.
+    """
+    batch = SizedBatchQuery(max_statements, max_bytes)
+    saved = 0
+    for item in items:
+        for document in to_documents(item):
+            document.save(batch=batch)
+            saved += 1
+    batch.flush()
+    return saved
