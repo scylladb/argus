@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 from collections.abc import Callable, Iterator
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 try:
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -29,19 +30,19 @@ LOGGER = logging.getLogger(__name__)
 
 TUNNELING_SUBDIR = "argus_tunneling"
 DIRNAME_EXPIRY_SEPARATOR = ".exp"
+STAGING_DIR_PREFIX = ".staging-"
 LOCAL_FALLBACK_TTL = timedelta(hours=24)
-_RUN_ID_SAFE_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
 
 
-def _sanitize_run_id(run_id: str) -> str:
-    run_id = str(run_id).strip()
-    if not run_id:
-        raise ValueError("run_id must not be empty")
-    return "".join(char if char in _RUN_ID_SAFE_CHARS else "_" for char in run_id)
+def _canonical_run_id(run_id: UUID | str) -> str:
+    try:
+        return str(UUID(str(run_id)))
+    except ValueError as exc:
+        raise ValueError(f"run_id must be a UUID, got {run_id!r}") from exc
 
 
-def _dirname_for(run_id: str, expires_at: datetime) -> str:
-    return f"{_sanitize_run_id(run_id)}{DIRNAME_EXPIRY_SEPARATOR}{int(expires_at.timestamp())}"
+def _dirname_for(run_id: UUID | str, expires_at: datetime) -> str:
+    return f"{_canonical_run_id(run_id)}{DIRNAME_EXPIRY_SEPARATOR}{int(expires_at.timestamp())}"
 
 
 def _parse_dirname(entry: str) -> tuple[str, datetime] | None:
@@ -75,14 +76,14 @@ def _iter_key_entries(root: str) -> Iterator[tuple[str, str, datetime]]:
             yield (entry, *parsed)
 
 
-def find_existing_key_dir(run_id: str) -> TunnelStatePaths | None:
+def find_existing_key_dir(run_id: UUID | str) -> TunnelStatePaths | None:
     root = tunneling_root()
-    sanitized = _sanitize_run_id(run_id)
+    canonical = _canonical_run_id(run_id)
     now = datetime.now(tz=timezone.utc)
 
     newest: tuple[datetime, str] | None = None
     for entry, prefix, expires_at in _iter_key_entries(root):
-        if prefix != sanitized or now >= expires_at:
+        if prefix != canonical or now >= expires_at:
             continue
         if newest is None or expires_at > newest[0]:
             newest = (expires_at, entry)
@@ -92,7 +93,7 @@ def find_existing_key_dir(run_id: str) -> TunnelStatePaths | None:
     return _paths_for_dir(os.path.join(root, newest[1]))
 
 
-def build_key_location(run_id: str, expires_at: datetime | None) -> TunnelStatePaths:
+def build_key_location(run_id: UUID | str, expires_at: datetime | None) -> TunnelStatePaths:
     resolved_expiry = expires_at or (datetime.now(tz=timezone.utc) + LOCAL_FALLBACK_TTL)
     root = tunneling_root()
     return _paths_for_dir(os.path.join(root, _dirname_for(run_id, resolved_expiry)))
@@ -102,7 +103,7 @@ def delete_key_dir(paths: TunnelStatePaths) -> None:
     shutil.rmtree(paths.state_dir, ignore_errors=True)
 
 
-def delete_cached_tunnel_state(run_id: str) -> None:
+def delete_cached_tunnel_state(run_id: UUID | str) -> None:
     try:
         paths = find_existing_key_dir(run_id)
     except ValueError:
@@ -120,8 +121,13 @@ def sweep_stale_tunnel_keys() -> None:
         delete_key_dir(_paths_for_dir(os.path.join(root, entry)))
 
 
-def generate_and_register_key(run_id: str, register: Callable[[str], TunnelConfig]) -> tuple[TunnelConfig, str]:
-    staging_dir = tempfile.mkdtemp(prefix="argus-tunnel-key-")
+def generate_and_register_key(
+    run_id: UUID | str, register: Callable[[str], TunnelConfig]
+) -> tuple[TunnelConfig, str]:
+    _canonical_run_id(run_id)
+    root = tunneling_root()
+    os.makedirs(root, mode=0o700, exist_ok=True)
+    staging_dir = tempfile.mkdtemp(prefix=STAGING_DIR_PREFIX, dir=root)
     staging_paths = _paths_for_dir(staging_dir)
     try:
         _generate_keypair(staging_paths)
@@ -129,12 +135,18 @@ def generate_and_register_key(run_id: str, register: Callable[[str], TunnelConfi
             public_key = fh.read().strip()
 
         config = register(public_key)
+        write_tunnel_cache(staging_paths, config)
 
         final_paths = build_key_location(run_id, config.expires_at)
-        os.makedirs(final_paths.state_dir, mode=0o700, exist_ok=True)
-        shutil.move(staging_paths.private_key, final_paths.private_key)
-        shutil.move(staging_paths.public_key, final_paths.public_key)
-        write_tunnel_cache(final_paths, config)
+        try:
+            os.rename(staging_dir, final_paths.state_dir)
+        except OSError:
+            if not os.path.isdir(final_paths.state_dir):
+                raise
+            published = read_cached_tunnel_config(final_paths)
+            if published is None or not os.path.exists(final_paths.private_key):
+                raise
+            return published, final_paths.private_key
         return config, final_paths.private_key
     finally:
         shutil.rmtree(staging_dir, ignore_errors=True)

@@ -47,8 +47,6 @@ class SSHTunnel:
         return self._local_port
 
     def establish(self, config: TunnelConfig) -> tuple[int | None, str | None]:
-        self.sshd_rejected_key = False
-
         if self._preflight_error is not None:
             LOGGER.warning(self._preflight_error)
             return None, self._preflight_error
@@ -101,7 +99,7 @@ class SSHTunnel:
                 )
                 continue
 
-            self.sshd_rejected_key = is_sshd_key_rejection(error_text)
+            self.sshd_rejected_key = self.sshd_rejected_key or is_sshd_key_rejection(error_text)
             reason = f"establish attempt {attempt} failed: {error_text or 'unknown error'}"
             LOGGER.warning("SSH tunnel %s", reason)
             _unlink(known_hosts_path)
