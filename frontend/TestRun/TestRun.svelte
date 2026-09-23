@@ -192,6 +192,10 @@
     let jUnitFetched = $state(false);
     let jUnitResults: JUnitReport[] = $state([]);
 
+    // The events tab answers to both keys: the removed legacy tab wrote
+    // /tests/<plugin>/<run_id>/events into the address bar.
+    const eventsTabActive = $derived(activeTab === "sct-events" || activeTab === "events");
+
     // Track which tabs have been visited
     let visitedTabs: Record<string, boolean> = $state({});
     visitedTabs[tab.toLowerCase() || "details"] = true;
@@ -350,7 +354,7 @@
                     <button class="argus-tab" class:active={activeTab === "results"} type="button" role="tab" onclick={() => setActiveTab("results")}>
                         <Fa icon={faTable} /> Results
                     </button>
-                    <button class="argus-tab" class:active={activeTab === "sct-events"} type="button" role="tab" onclick={() => setActiveTab("sct-events")}>
+                    <button class="argus-tab" class:active={eventsTabActive} type="button" role="tab" onclick={() => setActiveTab("sct-events")}>
                         <Fa icon={faRssSquare} /> Events
                     </button>
                     <button class="argus-tab" class:active={activeTab === "nemesis"} type="button" role="tab" onclick={() => setActiveTab("nemesis")}>
@@ -373,7 +377,7 @@
                     </button>
                 </div>
                 <div class="argus-tab-select">
-                    <select onchange={(e) => setActiveTab(e.currentTarget.value)} value={activeTab}>
+                    <select onchange={(e) => setActiveTab(e.currentTarget.value)} value={eventsTabActive ? "sct-events" : activeTab}>
                         <option value="details">Details</option>
                         <option value="testinfo">Test Info</option>
                         <option value="setup">SCT Runtime</option>
@@ -459,8 +463,8 @@
                         <ResultsTab id={runId} test_id={testInfo.test.id} />
                     {/if}
                 </div>
-                <div role="tabpanel" style:display={activeTab === "sct-events" ? "block" : "none"}>
-                    {#if visitedTabs["sct-events"]}
+                <div role="tabpanel" style:display={eventsTabActive ? "block" : "none"}>
+                    {#if visitedTabs["sct-events"] || visitedTabs["events"]}
                         <SctEvents {testRun} nemeses={testRun.nemesis_data} issueAttach={(url) => submitIssue(url, runId, testInfo.test.id)}/>
                     {/if}
                 </div>
