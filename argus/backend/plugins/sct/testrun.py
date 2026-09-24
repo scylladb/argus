@@ -29,7 +29,7 @@ from argus.backend.plugins.sct.udt import (
     PackageVersion,
     PerformanceHDRHistogram
 )
-from argus.backend.util.common import chunk, get_build_number
+from argus.backend.util.common import chunk, get_build_number, select_rows
 from argus.common.enums import ResourceState
 
 LOGGER = logging.getLogger(__name__)
@@ -234,26 +234,17 @@ class SCTTestRun(PluginModelBase):
         if rows:
             return sorted([r.version for r in rows], reverse=True)
         # Fallback: index not yet populated — scan GSI directly
-        cluster = ScyllaCluster.get()
-        statement = cluster.prepare(f"SELECT scylla_version FROM {cls.table_name()} WHERE release_id = ?")
-        result = cluster.session.execute(query=statement, parameters=(release.id,))
-        unique_versions = {r["scylla_version"] for r in result if r["scylla_version"]}
-        return sorted(list(unique_versions), reverse=True)
+        versions = cls.find(release_id=release.id).only("scylla_version").values_list("scylla_version").all()
+        return sorted({version for (version,) in versions if version}, reverse=True)
 
     @classmethod
-    def get_version_data_for_release(cls, release_name: str):
-        cluster = ScyllaCluster.get()
+    def get_version_data_for_release(cls, release_name: str) -> list[dict]:
         release = ArgusRelease.get(name=release_name)
-        query = cluster.prepare(f"SELECT scylla_version, packages, status FROM {
-                                cls.table_name()} WHERE release_id = ?")
-        rows = cluster.session.execute(query=query, parameters=(release.id,))
-
-        return list(rows)
+        return select_rows(cls.find(release_id=release.id), "scylla_version", "packages", "status")
 
     @staticmethod
-    def get_image(row: dict):
-        if cs := row.get("cloud_setup"):
-            return cs.db_node.image_id
+    def get_image(cloud_setup) -> str | None:
+        return cloud_setup.db_node.image_id if cloud_setup else None
 
     @classmethod
     def get_distinct_cloud_images_for_release(cls, release: ArgusRelease):
@@ -261,11 +252,8 @@ class SCTTestRun(PluginModelBase):
         if rows:
             return sorted([r.image_id for r in rows], reverse=True)
         # Fallback: index not yet populated — scan GSI + deserialize UDTs directly
-        cluster = ScyllaCluster.get()
-        statement = cluster.prepare(f"SELECT cloud_setup FROM {cls.table_name()} WHERE release_id = ?")
-        result = cluster.session.execute(query=statement, parameters=(release.id,))
-        unique_images = {cls.get_image(r) for r in result if cls.get_image(r)}
-        return sorted(list(unique_images), reverse=True)
+        setups = cls.find(release_id=release.id).only("cloud_setup").values_list("cloud_setup").all()
+        return sorted({image for (setup,) in setups if (image := cls.get_image(setup))}, reverse=True)
 
     @classmethod
     def get_distinct_cloud_images_for_view(cls, tests: list[ArgusTest]):
@@ -280,20 +268,17 @@ class SCTTestRun(PluginModelBase):
         rows = []
         for future in futures:
             rows.extend(future.result())
-        unique_images = {cls.get_image(r) for r in rows if cls.get_image(r)}
+        unique_images = {image for r in rows if (image := cls.get_image(r["cloud_setup"]))}
 
-        return sorted(list(unique_images), reverse=True)
+        return sorted(unique_images, reverse=True)
 
     @classmethod
-    def get_perf_results_for_test_name(cls, build_id: str, start_time: float, test_name: str):
-        cluster = ScyllaCluster.get()
-        query = cluster.prepare(f"SELECT build_id, packages, scylla_version, test_name, perf_op_rate_average, perf_op_rate_total, "
-                                "perf_avg_latency_99th, perf_avg_latency_mean, perf_total_errors, id, start_time, build_job_url, build_number"
-                                f" FROM {cls.table_name()} WHERE build_id = ? AND start_time < ? AND test_name = ? ALLOW FILTERING")
-        rows = cluster.session.execute(
-            query=query, parameters=(build_id, start_time, test_name))
-
-        return list(rows)
+    def get_perf_results_for_test_name(cls, build_id: str, start_time: datetime, test_name: str) -> list[dict]:
+        columns = ("build_id", "packages", "scylla_version", "test_name", "perf_op_rate_average", "perf_op_rate_total",
+                   "perf_avg_latency_99th", "perf_avg_latency_mean", "perf_total_errors", "id", "start_time",
+                   "build_job_url", "build_number")
+        query = cls.find(build_id=build_id, start_time__lt=start_time, test_name=test_name).allow_filtering()
+        return select_rows(query, *columns)
 
     @classmethod
     def init_sct_run(cls, req: SCTTestRunSubmissionRequest):

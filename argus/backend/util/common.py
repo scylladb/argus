@@ -5,7 +5,7 @@ import os
 from typing import Callable, Iterable, TypeVar
 from uuid import UUID
 
-from coodie.sync import BatchQuery, Document
+from coodie.sync import BatchQuery, Document, QuerySet
 from pydantic import BeforeValidator
 
 T = TypeVar('T')
@@ -31,6 +31,10 @@ def first(iterable, value, key: Callable = None, predicate: Callable = None):
         elif elem == value:
             return elem
     return None
+
+
+def select_rows(query: QuerySet, *columns: str) -> list[dict]:
+    return [dict(zip(columns, row)) for row in query.only(*columns).values_list(*columns).all()]
 
 
 def chunk(iterable: Iterable[T], slice_size=90) -> list[list[T]]:
