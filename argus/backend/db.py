@@ -29,16 +29,23 @@ def await_all_pages(driver_future) -> asyncio.Future:
     done: asyncio.Future = loop.create_future()
     rows: list = []
 
+    def resolve(setter, value):
+        if not done.done():
+            setter(value)
+
     def on_page(page):
-        if page is not None:
-            rows.extend(page)
-        if driver_future.has_more_pages:
-            driver_future.start_fetching_next_page()
-        else:
-            loop.call_soon_threadsafe(done.set_result, rows)
+        try:
+            if page is not None:
+                rows.extend(page)
+            if driver_future.has_more_pages:
+                driver_future.start_fetching_next_page()
+            else:
+                loop.call_soon_threadsafe(resolve, done.set_result, rows)
+        except Exception as exc:  # noqa: BLE001 - the driver swallows callback errors
+            loop.call_soon_threadsafe(resolve, done.set_exception, exc)
 
     def on_error(exc):
-        loop.call_soon_threadsafe(done.set_exception, exc)
+        loop.call_soon_threadsafe(resolve, done.set_exception, exc)
 
     driver_future.add_callbacks(on_page, on_error)
     return done

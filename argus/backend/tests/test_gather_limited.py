@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 
 import pytest
 
@@ -44,3 +45,21 @@ async def test_gather_limited_propagates_the_first_exception():
 
     with pytest.raises(ValueError, match="boom"):
         await gather_limited([_sleep_then(0.02, 1), fail_after(0.001), _sleep_then(0.03, 2)], limit=2)
+
+
+async def test_cancelling_the_caller_closes_the_queued_coroutines():
+    started = asyncio.Event()
+
+    async def wait_forever(index):
+        started.set()
+        await asyncio.sleep(3600)
+        return index
+
+    queued = [wait_forever(i) for i in range(4)]
+    task = asyncio.ensure_future(gather_limited(queued, limit=1))
+    await started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert all(inspect.getcoroutinestate(coro) == inspect.CORO_CLOSED for coro in queued)

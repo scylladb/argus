@@ -44,8 +44,13 @@ async def gather_limited(coros: Iterable[Awaitable[T]], limit: int = 50) -> list
     semaphore = asyncio.Semaphore(limit)
 
     async def run(coro: Awaitable[T]) -> T:
-        async with semaphore:
-            return await coro
+        try:
+            async with semaphore:
+                return await coro
+        except asyncio.CancelledError:
+            if hasattr(coro, "close"):
+                coro.close()
+            raise
 
     return list(await asyncio.gather(*(run(coro) for coro in coros)))
 
