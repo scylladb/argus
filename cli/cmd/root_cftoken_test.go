@@ -144,6 +144,22 @@ func TestEnsureCFToken_Interactive_ExpiringTokenIsRefreshed(t *testing.T) {
 	assert.Equal(t, fresh, got)
 }
 
+// When cloudflared hands back the same expiring token, the refresh did not
+// happen and the user is told.
+func TestEnsureCFToken_Interactive_UnrefreshedTokenWarns(t *testing.T) {
+	t.Setenv("HOME", t.TempDir()) // no cache file to set aside
+	now := time.Now()
+	expiring := testJWT(t, now.Add(time.Minute), now.Add(-24*time.Hour))
+	fakeCloudflaredOnPATH(t, expiring, expiring)
+
+	var logs bytes.Buffer
+	ctx := contextWithLogger(context.Background(), zerolog.New(&logs))
+	got, err := ensureCFToken(ctx, "https://argus.example.com", true)
+	require.NoError(t, err)
+	assert.Equal(t, expiring, got)
+	assert.Contains(t, logs.String(), "about to expire")
+}
+
 func TestBuildAPIClientRaw_NonInteractive_OldValidTokenAttachedAsCookie(t *testing.T) {
 	cfModeTestEnv(t)
 	now := time.Now()

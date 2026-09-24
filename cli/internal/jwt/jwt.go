@@ -30,25 +30,6 @@ type claims struct {
 	Exp int64 `json:"exp"`
 }
 
-// IsExpired reports whether the JWT token string has passed its expiry time.
-// It does NOT verify the token signature — callers must only pass tokens that
-// were obtained from trusted sources (e.g. directly from cloudflared).
-//
-// Returns (true, nil) when the token is expired.
-// Returns (false, nil) when the token is still valid.
-// Returns (false, err) when the token cannot be parsed.
-func IsExpired(tokenStr string) (bool, error) {
-	c, err := parseClaims(tokenStr)
-	if err != nil {
-		return false, err
-	}
-	if c.Exp == 0 {
-		// No expiry claim — treat as not expired.
-		return false, nil
-	}
-	return time.Now().Unix() >= c.Exp, nil
-}
-
 // ExpiresAt returns the token's "exp" claim, or the zero time when absent.
 func ExpiresAt(tokenStr string) (time.Time, error) {
 	c, err := parseClaims(tokenStr)

@@ -285,9 +285,10 @@ func uploadReplay(
 
 	resp, err := client.DoStream(req)
 	packErr := <-packErrCh
-	if err != nil && errors.Is(packErr, io.ErrClosedPipe) {
-		// Request rejected before the body was read; the pipe error is a
-		// consequence, not the cause.
+	if errors.Is(packErr, io.ErrClosedPipe) {
+		// The HTTP side closed the body before reading all of it: the request
+		// was rejected, or the server answered early. err or resp holds the
+		// cause.
 		packErr = nil
 	}
 	if packErr != nil {
