@@ -60,6 +60,10 @@
 
 ### Task A3 — Apply two discarded `.filter()` results
 
+Outcome: `get_assignee_for_test` and `get_assignee_for_group` had no caller
+anywhere in the repository, so they were deleted rather than fixed; only the
+client config lookup received the fix and its test.
+
 **Files:**
 - Modify: `argus/backend/service/planner_service.py:599, 609`,
   `argus/backend/service/client_service.py:250`
@@ -322,6 +326,10 @@ line stating the serial-depth change.
 
 ### Task C1 — `gather_limited`
 
+Outcome: the helper and its first caller landed inside the flip commits
+(`refactor(models): switch the documents to coodie.aio`) because the fan-out
+reads rewritten there needed it; this task kept only the test.
+
 **Files:** `argus/backend/util/common.py`; test `argus/backend/tests/util/test_common.py`
 (order preserved, in-flight never exceeds `limit`, first exception propagates).
 Already introduced in B2 for `get_versions_by_run_ids`; this task adds the
@@ -444,3 +452,19 @@ clients, the paging bridge). Commit `docs(architecture): describe the async exec
 - Before/after medians with `curl -w "%{time_total}"` on `/api/v1/views/stats`,
   `/api/v1/release/stats/v2?...&force=1`, a run page and the four widgets;
   the fetch/collect log lines.
+
+## Outcomes recorded after the build
+
+- `test_backfill_migration_is_idempotent` and its `migration` fixture were
+  removed in the flip: the test executed `scripts/migration/migration_2026-04-22.py`,
+  a frozen sync script that cannot run against the aio models and will not run
+  again.
+- The review found four items and they were fixed on the branch: one SMTP
+  conversation at a time per `Email` (concurrent mention sends shared a
+  connection), an exception guard in the paging callback of `await_all_pages`,
+  `gather_limited` closing the coroutines it never started on cancellation, and
+  the SCT event submit route fanning out through `gather_limited`.
+- Behaviour changes that ride with the refactor, for the pull request body:
+  `_exclude_disabled_tests` drops an unknown test id instead of raising, and
+  the GitHub and Jira local lookups no longer swallow a driver error behind a
+  bare `except`.
