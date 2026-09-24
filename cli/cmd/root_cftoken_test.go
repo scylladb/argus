@@ -133,7 +133,7 @@ func TestEnsureCFToken_NonInteractive_ExpiredTokenIsAnError(t *testing.T) {
 }
 
 func TestEnsureCFToken_Interactive_ExpiringTokenIsRefreshed(t *testing.T) {
-	t.Setenv("HOME", t.TempDir()) // keep dropCachedCFToken away from the real cache
+	t.Setenv("HOME", t.TempDir()) // keep stashCachedCFToken away from the real cache
 	now := time.Now()
 	expiring := testJWT(t, now.Add(time.Minute), now.Add(-24*time.Hour))
 	fresh := testJWT(t, now.Add(24*time.Hour), now)

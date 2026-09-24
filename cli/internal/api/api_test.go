@@ -682,6 +682,23 @@ func TestClient_WithCFTokenUnavailable_ClosesStreamingBody(t *testing.T) {
 	}
 }
 
+// A canceled request returns the context error, so no re-login starts.
+func TestClient_WithCFTokenUnavailable_CanceledContext(t *testing.T) {
+	t.Parallel()
+
+	client, err := api.New("https://argus.example.com", api.WithCFTokenUnavailable(errors.New("login canceled")))
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req, err := client.NewRequest(ctx, http.MethodGet, "/api/v1/version", nil)
+	require.NoError(t, err)
+
+	_, err = client.Do(req)
+	require.ErrorIs(t, err, context.Canceled)
+	assert.NotErrorIs(t, err, api.ErrUnauthorized)
+}
+
 func TestClient_WithCFTokenUnavailable_NilIsNoop(t *testing.T) {
 	t.Parallel()
 

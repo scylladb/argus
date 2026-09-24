@@ -298,6 +298,11 @@ func (c *Client) preflight(req *http.Request) error {
 	if req.Body != nil {
 		_ = req.Body.Close()
 	}
+	if err := req.Context().Err(); err != nil {
+		// A canceled command is not an auth failure, so the auth-retry layer
+		// must not start a re-login for it.
+		return err
+	}
 	return fmt.Errorf("%w: %w: no Cloudflare Access token to attach: %w", ErrUnauthorized, ErrCFChallenge, c.cfTokenErr)
 }
 
