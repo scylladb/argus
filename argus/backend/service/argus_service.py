@@ -1,4 +1,5 @@
 import asyncio
+from collections import defaultdict
 from dataclasses import dataclass
 import subprocess
 import json
@@ -320,9 +321,9 @@ class ArgusService:
         return [run for runs in per_plugin for run in runs if run["start_time"] >= validity_period]
 
     async def get_planned_jobs_for_user(self, user: User):
-        owned_plans = list(await ArgusReleasePlan.find(owner=user.id).allow_filtering().all())
-        participating_plans = list(
-            await ArgusReleasePlan.find(participants__contains=user.id).allow_filtering().all()
+        owned_plans, participating_plans = await asyncio.gather(
+            ArgusReleasePlan.find(owner=user.id).allow_filtering().all(),
+            ArgusReleasePlan.find(participants__contains=user.id).allow_filtering().all(),
         )
         unique_plans: list[ArgusReleasePlan] = list({plan for plan in [*owned_plans, *participating_plans]})
 
@@ -334,22 +335,30 @@ class ArgusService:
             if user.id in plan.participants:
                 jobs = filter(lambda test: plan.assignee_mapping.get(test) == user.id, plan.tests)
                 user_jobs.extend(jobs)
-        resolved: list[ArgusTest] = []
-        for batch in chunk(set(user_jobs)):
-            resolved.extend(await ArgusTest.find(id__in=batch).all())
+        test_batches = await asyncio.gather(*(ArgusTest.find(id__in=batch).all() for batch in chunk(set(user_jobs))))
+        resolved: list[ArgusTest] = [test for batch in test_batches for test in batch]
 
-        last_runs: dict[UUID, PluginModelBase] = {}
+        tests_by_plugin: dict[str, list[ArgusTest]] = defaultdict(list)
         for test in resolved:
-            try:
-                if not test.plugin_name:
-                    last_runs[test.id] = None
-                    continue
-                last_runs[test.id] = await AVAILABLE_PLUGINS[test.plugin_name].model.find(
-                    build_id=test.build_system_id).limit(1).first()
-            except DocumentNotFound:
-                last_runs[test.id] = None
+            if test.plugin_name:
+                tests_by_plugin[test.plugin_name].append(test)
+        run_queries = [
+            (plugin_name, AVAILABLE_PLUGINS[plugin_name].model.find(
+                build_id__in=[test.build_system_id for test in batch]).per_partition_limit(1).all())
+            for plugin_name, tests in tests_by_plugin.items()
+            for batch in chunk(tests)
+        ]
+        run_batches = await asyncio.gather(*(query for _, query in run_queries))
+        last_runs: dict[tuple[str, str], PluginModelBase] = {
+            (plugin_name, run.build_id): run
+            for (plugin_name, _), runs in zip(run_queries, run_batches)
+            for run in runs
+        }
 
-        return [{**test.model_dump(), "last_run": last_runs.get(test.id)} for test in resolved if test.enabled]
+        return [
+            {**test.model_dump(), "last_run": last_runs.get((test.plugin_name, test.build_system_id))}
+            for test in resolved if test.enabled
+        ]
 
     # TODO: Remove - legacy scheduling, superseded by release planner
     async def get_schedules_for_user(self, user: User) -> list[dict]:
