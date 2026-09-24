@@ -16,7 +16,6 @@ from cassandra.util import uuid_from_time
 from coodie.sync import BatchQuery
 from coodie.exceptions import DocumentNotFound
 
-from argus.backend.db import ScyllaCluster
 from argus.backend.util.config import Config
 
 from argus.backend.models.pytest import PytestResultTable
@@ -581,33 +580,26 @@ class TestRunService:
 
         fun = VALID_FUNCTIONS[aggr_function]
 
-        db = ScyllaCluster.get()
-        query_values = [test_name]
         if field_name not in PytestResultTable.model_fields.keys():
             raise TestRunServiceException(f"Invalid fixed column: {field_name}", field_name)
-        raw_query = f"SELECT {fun}({field_name}) FROM pytest_v2 WHERE name = ?"
+        results = PytestResultTable.find(name=test_name)
 
         status = query.pop("status", None)
         period = query.pop("since", None)
         if status:
-            raw_query += " AND status = ?"
-            query_values.append(status)
+            results = results.filter(status=status)
 
         if not status and period:
-            raw_query += " AND status IN ?"
-            query_values.append([s.value for s in PytestStatus])
+            results = results.filter(status__in=[s.value for s in PytestStatus])
 
         if period:
             try:
                 since = datetime.fromtimestamp(int(period))
             except ValueError:
                 raise TestRunServiceException("Malformed timestamp value")
-            raw_query += " AND id >= ?"
-            query_values.append(since)
+            results = results.filter(id__gte=since)
 
-        q = db.prepare(raw_query)
-        stmt = q.bind(values=query_values)
-        res = next(iter(db.session.execute(stmt).one().values()))
+        res = results.aggregate(result=f"{fun}({field_name})")["result"]
 
         return {
             test_name: {
