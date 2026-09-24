@@ -13,7 +13,6 @@ import magic
 import requests
 from botocore.exceptions import ClientError
 from cassandra.util import uuid_from_time
-from cassandra.query import BatchStatement, ConsistencyLevel
 from coodie.sync import BatchQuery
 from coodie.exceptions import DocumentNotFound
 
@@ -527,19 +526,16 @@ class TestRunService:
         if not reason:
             raise TestRunServiceException("Reason for ignore cannot be empty")
 
-        cluster = ScyllaCluster.get()
-        batch = BatchStatement(consistency_level=ConsistencyLevel.QUORUM)
+        batch = BatchQuery()
         event_batch = BatchQuery()
         jobs_affected = 0
         for job in plugin.model.get_jobs_meta_by_test_id(test.id):
             if job["status"] != TestStatus.PASSED and job["investigation_status"] == TestInvestigationStatus.NOT_INVESTIGATED:
-                batch.add(
-                    plugin.model.prepare_investigation_status_update_query(
-                        build_id=job["build_id"],
-                        start_time=job["start_time"],
-                        new_status=TestInvestigationStatus.IGNORED
-                    )
-                )
+                batch.add(*plugin.model.prepare_investigation_status_update_query(
+                    build_id=job["build_id"],
+                    start_time=job["start_time"],
+                    new_status=TestInvestigationStatus.IGNORED,
+                ))
 
                 ArgusEvent(
                     release_id=job["release_id"],
@@ -558,7 +554,7 @@ class TestRunService:
 
                 jobs_affected += 1
 
-        cluster.session.execute(batch)
+        batch.execute()
         event_batch.execute()
         invalidate_release_snapshots(test.release_id)
         return jobs_affected

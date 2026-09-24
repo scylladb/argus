@@ -11,6 +11,7 @@ from pydantic import Field
 from coodie import ClusteringKey, Indexed, PrimaryKey
 from coodie.sync import Document
 from coodie.usertype import UserType
+from coodie.cql_builder import build_update, parse_filter_kwargs, parse_update_kwargs
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.db import ScyllaCluster
@@ -115,13 +116,15 @@ class PluginModelBase(Document):
         return list(rows)
 
     @classmethod
-    def prepare_investigation_status_update_query(cls, build_id: str, start_time: datetime, new_status: TestInvestigationStatus):
-        cluster = ScyllaCluster.get()
-        query = cluster.prepare(
-            f"UPDATE {cls.table_name()} SET investigation_status = ? WHERE build_id = ? AND start_time = ?")
-        bound_query = query.bind(values=(new_status.value, build_id, start_time))
-
-        return bound_query
+    def prepare_investigation_status_update_query(cls, build_id: str, start_time: datetime,
+                                                  new_status: TestInvestigationStatus) -> tuple[str, list]:
+        set_data, _ = parse_update_kwargs({"investigation_status": new_status.value})
+        return build_update(
+            cls._get_table(),
+            cls._get_keyspace(),
+            set_data,
+            parse_filter_kwargs({"build_id": build_id, "start_time": start_time}),
+        )
 
     @classmethod
     def get_stats_for_release(cls, release: ArgusRelease, build_ids: list[str]) -> list[dict]:
