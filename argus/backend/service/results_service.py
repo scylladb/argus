@@ -4,7 +4,7 @@ import math
 import operator
 from collections import defaultdict
 from datetime import datetime, timezone
-from functools import partial, cache
+from functools import partial
 from typing import List, Dict, Any
 from uuid import UUID, uuid4
 
@@ -395,6 +395,7 @@ class ResultsService:
 
     def __init__(self):
         self.cluster = ScyllaCluster.get()
+        self._runs_details: dict[UUID, RunsDetails] = {}
 
     def _remove_duplicate_packages(self, packages: List[PackageVersion]) -> List[PackageVersion]:
         """removes scylla packages that are considered as duplicates:
@@ -409,8 +410,9 @@ class ResultsService:
         packages = [p for p in packages if p.name not in packages_to_remove]
         return packages
 
-    @cache
     def _get_runs_details(self, test_id: UUID) -> RunsDetails:
+        if (details := self._runs_details.get(test_id)) is not None:
+            return details
         plugin_query = self.cluster.prepare("SELECT id, plugin_name FROM argus_test_v2 WHERE id = ?")
         plugin_name = self.cluster.session.execute(plugin_query, parameters=(test_id,)).one()['plugin_name']
         plugin = TestRunService().get_plugin(plugin_name)
@@ -420,7 +422,9 @@ class ResultsService:
         ignored_runs = [row["id"] for row in rows if row["investigation_status"].lower() == "ignored"]
         packages = {row["id"]: self._remove_duplicate_packages(
             row["packages"]) for row in rows if row["packages"] and row["id"] not in ignored_runs}
-        return RunsDetails(ignored=ignored_runs, packages=packages)
+        details = RunsDetails(ignored=ignored_runs, packages=packages)
+        self._runs_details[test_id] = details
+        return details
 
     def _get_tables_metadata(self, test_id: UUID) -> list[ArgusGenericResultMetadata]:
         query_fields = ["name", "description", "columns_meta", "rows_meta", "validation_rules", "sut_package_name"]
