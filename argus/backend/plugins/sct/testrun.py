@@ -479,15 +479,20 @@ class SCTTestRun(PluginModelBase):
     @classmethod
     async def get_run_response(cls, run_id: UUID) -> dict | None:
         try:
-            run = await cls.get(id=run_id)
+            run, junit_reports, nemesis_data, allocated_resources = await asyncio.gather(
+                cls.get(id=run_id),
+                SCTJunitReports.find(test_id=run_id).all(),
+                SCTNemesis.find(run_id=run_id).all(),
+                SCTResource.find(run_id=run_id).all(),
+            )
         except DocumentNotFound:
             return None
         response = run.model_dump()
         if run.cloud_setup and run.cloud_setup.backend == XCLOUD_BACKEND and response.get("cloud_setup"):
             response["cloud_setup"].update(await run.get_xcloud_details())
-        response["junit_reports"] = await SCTJunitReports.find(test_id=run_id).all()
-        response["nemesis_data"] = await SCTNemesis.find(run_id=run.id).all()
-        response["allocated_resources"] = await SCTResource.find(run_id=run_id).all()
+        response["junit_reports"] = junit_reports
+        response["nemesis_data"] = nemesis_data
+        response["allocated_resources"] = allocated_resources
         return response
 
     @staticmethod
