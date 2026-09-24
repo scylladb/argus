@@ -1,3 +1,4 @@
+import asyncio
 import re
 import logging
 from collections import defaultdict
@@ -44,6 +45,9 @@ class GithubService:
     def get_plugin(self, plugin_name: str) -> PluginInfoBase | None:
         return self.plugins.get(plugin_name)
 
+    async def _client(self) -> Github | None:
+        return await asyncio.to_thread(lambda: self.gh)
+
     def get_installation_token(self):
         self._refresh_installation_token()
         return Config.load_yaml_config().get("GITHUB_ACCESS_TOKEN")
@@ -52,31 +56,34 @@ class GithubService:
         # TODO: To be replaced by JWT refreshing logic once we have Github App in place
         pass
 
-    def refresh_stale_issues(self):
+    async def refresh_stale_issues(self):
         try:
-            last_ran = RuntimeStore.get(key=self.LAST_RAN_KEY)
+            last_ran = await RuntimeStore.get(key=self.LAST_RAN_KEY)
         except DocumentNotFound:
             last_ran = RuntimeStore(key=self.LAST_RAN_KEY)
             last_ran.value = datetime(year=2020, month=1, day=1, hour=0, minute=0, tzinfo=UTC)
-            last_ran.save()
+            await last_ran.save()
 
         LOGGER.info("Starting Github Issue sync...")
         check_time = datetime.now(tz=UTC)
 
-        all_issues: list[GithubIssue] = list(GithubIssue.find().all())
+        all_issues: list[GithubIssue] = await GithubIssue.find().all()
         issues_by_identifier = {
             f"{issue.owner.lower()}/{issue.repo.lower()}#{issue.number}": issue for issue in all_issues}
         touch_count = 0
 
         unique_repos = {f"{issue.owner}/{issue.repo}" for issue in all_issues}
+        gh = await self._client()
         for idx, repo in enumerate(unique_repos):
             LOGGER.info("[%s/%s] Fetching %s...", idx + 1, len(unique_repos), repo)
             try:
-                repo = self.gh.get_repo(repo)
+                repo = await asyncio.to_thread(gh.get_repo, repo)
             except Exception:
                 LOGGER.warning(f"Unable to fetch repo {repo}, skipping", exc_info=True)
                 continue
-            issues = repo.get_issues(since=last_ran.value, state="all", direction="desc", sort="created")
+            issues = await asyncio.to_thread(
+                lambda: list(repo.get_issues(since=last_ran.value, state="all", direction="desc", sort="created"))
+            )
             for issue_idx, issue in enumerate(issues):
                 match = re.match(
                     r"http(s)?://(www\.)?github\.com/(?P<owner>[\w\d]+)/"
@@ -96,14 +103,14 @@ class GithubService:
                     id=label.id, name=label.name, color=label.color, description=label.description) for label in issue.labels]
                 issue_to_update.assignees = [IssueAssignee(
                     login=assignee.login, html_url=assignee.html_url) for assignee in issue.assignees]
-                issue_to_update.save()
+                await issue_to_update.save()
                 touch_count += 1
 
         LOGGER.info("Finished. Updated %s out of %s issues", touch_count, len(all_issues))
         last_ran.value = check_time
-        last_ran.save()
+        await last_ran.save()
 
-    def get_issue(self, issue_url: str, user: User) -> tuple[GithubIssue, bool]:
+    async def get_issue(self, issue_url: str, user: User) -> tuple[GithubIssue, bool]:
         match = re.match(
             r"http(s)?://(www\.)?github\.com/(?P<owner>[\w\d]+)/"
             r"(?P<repo>[\w\d\-_]+)/(?P<type>issues|pull)/(?P<issue_number>\d+)(/)?",
@@ -112,24 +119,25 @@ class GithubService:
         if not match:
             raise Exception("URL doesn't match Github schema")
 
-        existing = True
-        try:
-            issue = list(GithubIssue.find(url=issue_url).all())[0]
-        except:
-            issue = None
-            existing = False
+        rows = await GithubIssue.find(url=issue_url).all()
+        issue = rows[0] if rows else None
+        existing = issue is not None
         if not issue:
-            if not self.gh:
+            gh = await self._client()
+            if not gh:
                 raise Exception("Github Remote is disabled.")
             repo_id = f"{match.group('owner')}/{match.group('repo')}"
-            remote_repo = self.gh.get_repo(repo_id)
-            remote_issue = remote_repo.get_issue(int(match.group("issue_number")))
+            remote_repo = await asyncio.to_thread(gh.get_repo, repo_id)
+            remote_issue = await asyncio.to_thread(remote_repo.get_issue, int(match.group("issue_number")))
+            owner_name, repo_name = await asyncio.to_thread(
+                lambda: (remote_issue.repository.owner.name, remote_issue.repository.name)
+            )
 
             issue = GithubIssue.model_construct()
             issue.user_id = user.id
             issue.type = match.group("type")
-            issue.owner = remote_issue.repository.owner.name
-            issue.repo = remote_issue.repository.name
+            issue.owner = owner_name
+            issue.repo = repo_name
             issue.number = remote_issue.number
             issue.state = remote_issue.state
             issue.title = remote_issue.title
@@ -148,14 +156,14 @@ class GithubService:
                 a.html_url = assignee.html_url
                 issue.assignees.append(a)
 
-            issue.save()
+            await issue.save()
         return issue, existing
 
-    def submit_issue(self, issue_url: str, test_id: UUID, run_id: UUID, user: User, event_id: UUID | str = None):
-        test: ArgusTest = ArgusTest.get(id=test_id)
+    async def submit_issue(self, issue_url: str, test_id: UUID, run_id: UUID, user: User, event_id: UUID | str = None):
+        test: ArgusTest = await ArgusTest.get(id=test_id)
         plugin = self.get_plugin(plugin_name=test.plugin_name)
-        run = plugin.model.get(id=run_id)
-        issue, state = self.get_issue(issue_url, user)
+        run = await plugin.model.get(id=run_id)
+        issue, state = await self.get_issue(issue_url, user)
 
         link = IssueLink.model_construct()
         link.run_id = run.id
@@ -167,9 +175,9 @@ class GithubService:
         link.event_id = event_id
         link.type = "github"
 
-        link.save()
+        await link.save()
 
-        EventService.create_run_event(
+        await EventService.create_run_event(
             kind=ArgusEventTypes.TestRunIssueAdded,
             body={
                 "message": f"An issue titled \"{{title}}\" was {'attached' if state else 'added'} by {{username}}",
@@ -185,7 +193,7 @@ class GithubService:
             test_id=link.test_id
         )
 
-        invalidate_release_snapshots(test.release_id)
+        await invalidate_release_snapshots(test.release_id)
         response = {
             **issue.model_dump(),
             "title": issue.title,
@@ -194,12 +202,12 @@ class GithubService:
 
         return response
 
-    def resolve_issues(self, links: list[IssueLink], aggregate_by_issue: bool = False) -> list[dict]:
+    async def resolve_issues(self, links: list[IssueLink], aggregate_by_issue: bool = False) -> list[dict]:
         """Resolve GithubIssue records from pre-filtered links and build response dicts."""
         issues = reduce(lambda acc, link: acc[link.issue_id].append(link) or acc, links, defaultdict(list))
         resolved_issues = []
         for batch in chunk(issues.keys()):
-            resolved_issues.extend(GithubIssue.find(id__in=batch).all())
+            resolved_issues.extend(await GithubIssue.find(id__in=batch).all())
         if aggregate_by_issue:
             response = []
             for issue in resolved_issues:
@@ -212,13 +220,13 @@ class GithubService:
             response = [{**issue.model_dump(), **issues[issue.id][0].model_dump(), "subtype": "github" } for issue in resolved_issues]
         return response
 
-    def delete_issue(self, issue_id: UUID, run_id: UUID, user: User) -> dict:
-        issue: GithubIssue = GithubIssue.get(id=issue_id)
-        links = list(IssueLink.find(issue_id=issue_id).allow_filtering().all())
-        link: IssueLink = IssueLink.get(run_id=run_id, issue_id=issue_id)
+    async def delete_issue(self, issue_id: UUID, run_id: UUID, user: User) -> dict:
+        issue: GithubIssue = await GithubIssue.get(id=issue_id)
+        links = await IssueLink.find(issue_id=issue_id).allow_filtering().all()
+        link: IssueLink = await IssueLink.get(run_id=run_id, issue_id=issue_id)
         remaining_links = len(list(filter(lambda l: l.run_id != link.run_id and link.issue_id != issue_id, links)))
 
-        EventService.create_run_event(
+        await EventService.create_run_event(
             kind=ArgusEventTypes.TestRunIssueRemoved,
             body={
                 "message": "An issue titled \"{title}\" was removed by {username} from \"{run_id}\"",
@@ -235,16 +243,16 @@ class GithubService:
             test_id=link.test_id
         )
 
-        link.delete()
+        await link.delete()
         if remaining_links == 0:
-            issue.delete()
+            await issue.delete()
 
-        invalidate_release_snapshots(link.release_id)
+        await invalidate_release_snapshots(link.release_id)
         return {
             "deleted": issue_id if remaining_links == 0 else (link.run_id, link.issue_id)
         }
 
-    def validate_repo(self, repo: str, branch: str | None = None) -> tuple[bool, str]:
+    async def validate_repo(self, repo: str, branch: str | None = None) -> tuple[bool, str]:
         """
         Verify that a GitHub repository (and optionally a branch inside it) exists and is reachable.
 
@@ -254,8 +262,9 @@ class GithubService:
         if not match:
             return (False, f"'{repo}' is not a valid GitHub repository URL.")
 
+        gh = await self._client()
         try:
-            repository = self.gh.get_repo(match.group("full_name"))
+            repository = await asyncio.to_thread(gh.get_repo, match.group("full_name"))
         except UnknownObjectException:
             return (False, f"Repository '{repo}' not found or access denied.")
         except GithubException as e:
@@ -266,7 +275,7 @@ class GithubService:
             return (True, "Repository is valid.")
 
         try:
-            repository.get_branch(branch)
+            await asyncio.to_thread(repository.get_branch, branch)
             return (True, "Repository and branch are valid.")
         except UnknownObjectException:
             return (False, f"Branch '{branch}' not found in repository '{repo}'.")

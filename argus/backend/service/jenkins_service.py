@@ -1,3 +1,4 @@
+import asyncio
 import re
 import requests
 from typing import Any, NotRequired, TypedDict
@@ -96,7 +97,7 @@ class JenkinsService:
                  else param.get("defaultParameterValue", {}).get("value", "")}
                 for param in default_params if param["name"] != self.RESERVED_PARAMETER_NAME]
 
-    def retrieve_job_parameters(self, build_id: str, build_number: int | None,
+    async def retrieve_job_parameters(self, build_id: str, build_number: int | None,
                                 from_defaults: bool = False) -> list[Parameter]:
         """Return a job's parameters. When from_defaults is False the values are
         seeded from a past build instead: the given build_number, or the last
@@ -105,8 +106,8 @@ class JenkinsService:
         Cli: True
         Frontend: False
         """
-        job_info = self._jenkins.get_job_info(name=build_id)
-        raw_config = self._jenkins.get_job_config(name=build_id)
+        job_info = await asyncio.to_thread(self._jenkins.get_job_info, name=build_id)
+        raw_config = await asyncio.to_thread(self._jenkins.get_job_config, name=build_id)
         config = ET.fromstring(raw_config)
         parameter_defs = config.find("*//parameterDefinitions")
         if parameter_defs:
@@ -126,11 +127,13 @@ class JenkinsService:
                 if not next_build_number:
                     raise JenkinsServiceError("#noBuildsAvailable")
                 try:
-                    build_info = self._jenkins.get_build_info(name=build_id, number=next_build_number - 1)
+                    build_info = await asyncio.to_thread(
+                        self._jenkins.get_build_info, name=build_id, number=next_build_number - 1
+                    )
                 except jenkins.JenkinsException:
                     raise JenkinsServiceError("#noBuildsAvailable")
             else:
-                build_info = self._jenkins.get_build_info(name=build_id, number=build_number)
+                build_info = await asyncio.to_thread(self._jenkins.get_build_info, name=build_id, number=build_number)
             params = next((a for a in build_info["actions"] if a.get(
                 "_class", "#NONE") == "hudson.model.ParametersAction"), None)
             if params:
@@ -167,9 +170,9 @@ class JenkinsService:
                 if param_choices and param.get("value") not in param_choices:
                     params[idx]["value"] = param_choices[0]
 
-    def latest_build(self, build_id: str) -> int:
+    async def latest_build(self, build_id: str) -> int:
         try:
-            job_info = self._jenkins.get_job_info(name=build_id)
+            job_info = await asyncio.to_thread(self._jenkins.get_job_info, name=build_id)
             last_build = job_info.get("lastBuild")
             if not last_build:
                 return -1
@@ -177,14 +180,14 @@ class JenkinsService:
         except jenkins.JenkinsException:
             raise JenkinsServiceError("Job doesn't exist", build_id)
 
-    def next_build_number(self, build_id: str) -> int:
+    async def next_build_number(self, build_id: str) -> int:
         """Best-effort guess of the build number Jenkins will assign to the next
         build of ``build_id``. Used to hand out a stable Argus run link right
         after triggering, before the build leaves the queue. Returns ``-1`` when
         the number can't be determined (the trigger itself already succeeded, so
         this must never be fatal)."""
         try:
-            job_info = self._jenkins.get_job_info(name=build_id)
+            job_info = await asyncio.to_thread(self._jenkins.get_job_info, name=build_id)
             return job_info.get("nextBuildNumber", -1)
         except jenkins.JenkinsException:
             return -1
@@ -213,21 +216,21 @@ class JenkinsService:
                 f"provided: {', '.join(set_families)}."
             )
 
-    def get_releases_for_clone(self, test_id: str):
+    async def get_releases_for_clone(self, test_id: str):
         test_id = UUID(test_id)
         # TODO: Filtering based on origin location / user preferences
-        _: ArgusTest = ArgusTest.get(id=test_id)
+        _: ArgusTest = await ArgusTest.get(id=test_id)
 
-        releases = list(ArgusRelease.find().all())
+        releases = await ArgusRelease.find().all()
 
         return sorted(releases, key=lambda r: r.pretty_name if r.pretty_name else r.name)
 
-    def get_groups_for_release(self, release_id: str):
-        groups = list(ArgusGroup.find(release_id=release_id).all())
+    async def get_groups_for_release(self, release_id: str):
+        groups = await ArgusGroup.find(release_id=release_id).all()
 
         return sorted(groups, key=lambda g: g.pretty_name if g.pretty_name else g.name)
 
-    def _verify_sct_settings(self, new_settings: dict[str, str]) -> tuple[bool, str]:
+    async def _verify_sct_settings(self, new_settings: dict[str, str]) -> tuple[bool, str]:
         if not (match := re.match(GITHUB_REPO_RE, new_settings["gitRepo"])):
             return (False, "Repository doesn't conform to GitHub schema")
 
@@ -240,7 +243,8 @@ class JenkinsService:
             user = git_info["user"]
 
         token = Config.load_yaml_config().get("GITHUB_ACCESS_TOKEN")
-        response = requests.get(
+        response = await asyncio.to_thread(
+            requests.get,
             url=f"https://api.github.com/repos/{user}/{repo}/contents/{new_settings['pipelineFile']}?ref={new_settings['gitBranch']}",
             headers={
                 "Accept": "application/vnd.github+json",
@@ -260,32 +264,33 @@ class JenkinsService:
 
         return (False, "Generic Error")
 
-    def verify_job_settings(self, build_id: str, new_settings: dict[str, str]) -> tuple[bool, str]:
+    async def verify_job_settings(self, build_id: str, new_settings: dict[str, str]) -> tuple[bool, str]:
         PLUGIN_MAP = {
             "scylla-cluster-tests": self._verify_sct_settings,
             # for now they match
             "sirenada": self._verify_sct_settings,
             "driver-matrix-tests": self._verify_sct_settings,
         }
-        test: ArgusTest = ArgusTest.get(build_system_id=build_id)
+        test: ArgusTest = await ArgusTest.get(build_system_id=build_id)
         plugin_name = test.plugin_name
 
-        validated, message = PLUGIN_MAP.get(plugin_name, lambda _: (True, ""))(new_settings)
+        verifier = PLUGIN_MAP.get(plugin_name)
+        validated, message = await verifier(new_settings) if verifier else (True, "")
 
         return {
             "validated": validated,
             "message": message,
         }
 
-    def get_advanced_settings(self, build_id: str):
-        test: ArgusTest = ArgusTest.get(build_system_id=build_id)
+    async def get_advanced_settings(self, build_id: str):
+        test: ArgusTest = await ArgusTest.get(build_system_id=build_id)
         plugin_name = test.plugin_name
 
         if not (plugin_settings := self.SETTINGS_CONFIG_MAP.get(plugin_name)):
             return {}
 
         settings = {}
-        raw_config = self._jenkins.get_job_config(name=build_id)
+        raw_config = await asyncio.to_thread(self._jenkins.get_job_config, name=build_id)
         config = ET.fromstring(raw_config)
 
         for setting, xpath in plugin_settings.items():
@@ -294,24 +299,26 @@ class JenkinsService:
 
         return settings
 
-    def adjust_job_settings(self, build_id: str, plugin_name: str, settings: dict[str, str]):
+    async def adjust_job_settings(self, build_id: str, plugin_name: str, settings: dict[str, str]):
         xpath_map = self.SETTINGS_CONFIG_MAP.get(plugin_name)
         if not xpath_map:
             return
 
-        config = self._jenkins.get_job_config(name=build_id)
+        config = await asyncio.to_thread(self._jenkins.get_job_config, name=build_id)
         xml = ET.fromstring(config)
         for setting, value in settings.items():
             element = xml.find(xpath_map[setting])
             element.text = value
 
         adjusted_config = ET.tostring(xml, encoding="unicode")
-        self._jenkins.reconfig_job(name=build_id, config_xml=adjusted_config)
+        await asyncio.to_thread(self._jenkins.reconfig_job, name=build_id, config_xml=adjusted_config)
 
-    def clone_job(self, current_test_id: str, new_name: str, target: str, group: str, advanced_settings: bool | dict[str, str]):
-        cloned_test: ArgusTest = ArgusTest.get(id=UUID(current_test_id))
-        target_release: ArgusRelease = ArgusRelease.get(id=UUID(target))
-        target_group: ArgusGroup = ArgusGroup.get(id=UUID(group))
+    async def clone_job(
+        self, current_test_id: str, new_name: str, target: str, group: str, advanced_settings: bool | dict[str, str]
+    ):
+        cloned_test: ArgusTest = await ArgusTest.get(id=UUID(current_test_id))
+        target_release: ArgusRelease = await ArgusRelease.get(id=UUID(target))
+        target_group: ArgusGroup = await ArgusGroup.get(id=UUID(group))
 
         if target_group.id == cloned_test.id and new_name == cloned_test.name:
             raise JenkinsServiceError("Unable to clone: source and destination are the same")
@@ -328,20 +335,20 @@ class JenkinsService:
         new_test.release_id = target_release.id
         new_test.plugin_name = cloned_test.plugin_name
 
-        old_config = self._jenkins.get_job_config(name=cloned_test.build_system_id)
+        old_config = await asyncio.to_thread(self._jenkins.get_job_config, name=cloned_test.build_system_id)
         LOGGER.info(old_config)
         xml = ET.fromstring(old_config)
         display_name = xml.find("displayName")
         if display_name:
             display_name.text = new_name
         new_config = ET.tostring(xml, encoding="unicode")
-        self._jenkins.create_job(name=jenkins_new_build_id, config_xml=new_config)
-        new_job_info = self._jenkins.get_job_info(name=jenkins_new_build_id)
+        await asyncio.to_thread(self._jenkins.create_job, name=jenkins_new_build_id, config_xml=new_config)
+        new_job_info = await asyncio.to_thread(self._jenkins.get_job_info, name=jenkins_new_build_id)
         new_test.build_system_url = new_job_info["url"]
-        new_test.save()
+        await new_test.save()
 
         if advanced_settings:
-            self.adjust_job_settings(build_id=jenkins_new_build_id,
+            await self.adjust_job_settings(build_id=jenkins_new_build_id,
                                      plugin_name=new_test.plugin_name, settings=advanced_settings)
 
         return {
@@ -349,14 +356,14 @@ class JenkinsService:
             "new_entity": new_test,
         }
 
-    def clone_build_job(self, build_id: str, params: dict[str, str], requested_by: User | None = None):
-        queue_item = self.build_job(build_id=build_id, params=params, requested_by=requested_by)
+    async def clone_build_job(self, build_id: str, params: dict[str, str], requested_by: User | None = None):
+        queue_item = await self.build_job(build_id=build_id, params=params, requested_by=requested_by)
         return {
             "queueItem": queue_item,
         }
 
-    def build_job(self, build_id: str, params: dict, user_override: str = None, requested_by: User | None = None):
-        queue_number = self._jenkins.build_job(build_id, {
+    async def build_job(self, build_id: str, params: dict, user_override: str = None, requested_by: User | None = None):
+        queue_number = await asyncio.to_thread(self._jenkins.build_job, build_id, {
             **params,
             # use the user's email as the default value for the requested by user parameter,
             # so it would align with how SCT default works, on runs not trigger by argus
@@ -364,8 +371,8 @@ class JenkinsService:
         })
         return queue_number
 
-    def get_queue_info(self, queue_item: int):
-        build_info = self._jenkins.get_queue_item(queue_item)
+    async def get_queue_info(self, queue_item: int):
+        build_info = await asyncio.to_thread(self._jenkins.get_queue_item, queue_item)
         LOGGER.info("%s", build_info)
         executable = build_info.get("executable")
         if executable:

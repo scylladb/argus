@@ -5,7 +5,8 @@ from argus.backend.models.web import ArgusEvent, ArgusEventTypes
 
 class EventService:
     @staticmethod
-    def create_run_event(kind: ArgusEventTypes, body: dict, user_id=None, run_id=None, release_id=None, group_id=None, test_id=None):
+    async def create_run_event(kind: ArgusEventTypes, body: dict, user_id=None, run_id=None, release_id=None,
+                               group_id=None, test_id=None):
         event = ArgusEvent.model_construct()
         event.release_id = release_id
         event.group_id = group_id
@@ -15,4 +16,4 @@ class EventService:
         event.body = json.dumps(body, ensure_ascii=True, separators=(',', ':'))
         event.kind = kind.value
         event.created_at = datetime.now(UTC)
-        event.save()
+        await event.save()
