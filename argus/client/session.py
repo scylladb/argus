@@ -18,7 +18,7 @@ from argus.client.tunnel import (
     TunnelConfig,
     canonical_run_id,
     delete_key_dir_of,
-    resolve_tunnel_config_with_reason,
+    resolve_tunnel_key,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -265,7 +265,7 @@ class TunneledSession(requests.Session):
             # forward session-level headers (e.g. Cloudflare Access tokens)
             # via extra_headers instead.
             extra_headers = dict(self.headers) if self.headers else None
-            config, key_path, config_reason = resolve_tunnel_config_with_reason(
+            config, key_path, config_reason = resolve_tunnel_key(
                 auth_token=self._auth_token,
                 base_url=self._original_base_url,
                 run_id=self._run_id,
@@ -285,7 +285,7 @@ class TunneledSession(requests.Session):
                     self._discard_rejected_key(key_path)
                 # The cached config may name a proxy that has since been
                 # retired. Re-fetch the live list once before giving up.
-                fresh, fresh_key_path, config_reason = resolve_tunnel_config_with_reason(
+                fresh, fresh_key_path, config_reason = resolve_tunnel_key(
                     auth_token=self._auth_token,
                     base_url=self._original_base_url,
                     run_id=self._run_id,

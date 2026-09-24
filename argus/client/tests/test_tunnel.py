@@ -97,7 +97,7 @@ def offline_tunnel_resolver(monkeypatch):
     """
     monkeypatch.setenv("ARGUS_TUNNEL_MIN_REQUESTS", "0")
     monkeypatch.setattr(
-        "argus.client.session.resolve_tunnel_config_with_reason",
+        "argus.client.session.resolve_tunnel_key",
         lambda **kwargs: (None, None, "tunnel resolution disabled in tests"),
     )
 
@@ -125,7 +125,7 @@ def test_resolve_tunnel_config_registers_and_caches(tunnel_state_dir, monkeypatc
 
     monkeypatch.setattr(tunnel_api, "_register_tunnel", lambda **kwargs: config)
 
-    resolved, key_path, _reason = tunnel_api.resolve_tunnel_config_with_reason(
+    resolved, key_path, _reason = tunnel_api.resolve_tunnel_key(
         auth_token="token", base_url="https://argus.example.com", run_id=RUN_ID
     )
     assert resolved is not None
@@ -142,7 +142,7 @@ def test_resolve_tunnel_config_registers_and_caches(tunnel_state_dir, monkeypatc
         "_get_tunnel_connection",
         lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not call GET when cache is valid")),
     )
-    cached, cached_key_path, _reason = tunnel_api.resolve_tunnel_config_with_reason(
+    cached, cached_key_path, _reason = tunnel_api.resolve_tunnel_key(
         auth_token="token", base_url="https://argus.example.com", run_id=RUN_ID
     )
     assert cached is not None
@@ -150,8 +150,8 @@ def test_resolve_tunnel_config_registers_and_caches(tunnel_state_dir, monkeypatc
     assert cached_key_path == key_path
 
 
-def test_resolve_tunnel_config_with_reason_rejects_an_empty_run_id(tunnel_state_dir):
-    config, key_path, reason = tunnel_api.resolve_tunnel_config_with_reason(
+def test_resolve_tunnel_key_rejects_an_empty_run_id(tunnel_state_dir):
+    config, key_path, reason = tunnel_api.resolve_tunnel_key(
         auth_token="token", base_url="https://argus.example.com", run_id=""
     )
 
@@ -177,7 +177,7 @@ def test_resolve_tunnel_config_refreshes_an_existing_key_via_get(tunnel_state_di
     )
     monkeypatch.setattr(tunnel_api, "_get_tunnel_connection", lambda **kwargs: refreshed)
 
-    config, key_path, _reason = tunnel_api.resolve_tunnel_config_with_reason(
+    config, key_path, _reason = tunnel_api.resolve_tunnel_key(
         auth_token="token", base_url="https://argus.example.com", run_id=RUN_ID, force_refresh=True
     )
 
@@ -207,7 +207,7 @@ def test_resolve_tunnel_config_reregisters_when_the_get_refresh_fails(tunnel_sta
     )
     monkeypatch.setattr(tunnel_api, "_register_tunnel", lambda **kwargs: registered)
 
-    config, key_path, _reason = tunnel_api.resolve_tunnel_config_with_reason(
+    config, key_path, _reason = tunnel_api.resolve_tunnel_key(
         auth_token="token", base_url="https://argus.example.com", run_id=RUN_ID, force_refresh=True
     )
 
@@ -222,7 +222,7 @@ def test_resolve_tunnel_config_reports_a_registration_failure(tunnel_state_dir, 
         lambda **kwargs: (_ for _ in ()).throw(tunnel_api.TunnelClientError("registration rejected")),
     )
 
-    config, key_path, reason = tunnel_api.resolve_tunnel_config_with_reason(
+    config, key_path, reason = tunnel_api.resolve_tunnel_key(
         auth_token="token", base_url="https://argus.example.com", run_id=RUN_ID
     )
 
@@ -401,7 +401,7 @@ def test_resolve_tunnel_config_sweeps_stale_siblings_before_registering(tunnel_s
     )
     monkeypatch.setattr(tunnel_api, "_register_tunnel", lambda **kwargs: config)
 
-    resolved, key_path, _reason = tunnel_api.resolve_tunnel_config_with_reason(
+    resolved, key_path, _reason = tunnel_api.resolve_tunnel_key(
         auth_token="token", base_url="https://argus.example.com", run_id=NEW_RUN_ID
     )
 
@@ -1055,7 +1055,7 @@ def test_argus_client_warns_and_falls_back_when_tunnel_setup_fails(requests_mock
     )
 
     monkeypatch.setattr(
-        "argus.client.session.resolve_tunnel_config_with_reason", lambda **kwargs: (None, None, "api unreachable")
+        "argus.client.session.resolve_tunnel_key", lambda **kwargs: (None, None, "api unreachable")
     )
 
     client = ArgusClient(
@@ -1130,7 +1130,7 @@ def test_monitor_thread_retries_tunnel_without_a_request(fast_tunnel_retry, monk
             return None, None, "first failure"
         return config, "/fake/key/path", None
 
-    monkeypatch.setattr("argus.client.session.resolve_tunnel_config_with_reason", _resolve)
+    monkeypatch.setattr("argus.client.session.resolve_tunnel_key", _resolve)
     monkeypatch.setattr("argus.client.session.SSHTunnel", _FakeTunnel)
 
     session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com", run_id=RUN_ID)
@@ -1249,7 +1249,7 @@ def test_session_fails_over_to_the_next_proxy(monkeypatch):
             return None
 
     monkeypatch.setattr(
-        "argus.client.session.resolve_tunnel_config_with_reason", lambda **kwargs: (config, "/fake/key/path", None)
+        "argus.client.session.resolve_tunnel_key", lambda **kwargs: (config, "/fake/key/path", None)
     )
     monkeypatch.setattr("argus.client.session.SSHTunnel", _FailFirstTunnel)
 
@@ -1286,7 +1286,7 @@ def test_session_gives_up_only_after_every_proxy(monkeypatch, caplog):
             return None
 
     monkeypatch.setattr(
-        "argus.client.session.resolve_tunnel_config_with_reason", lambda **kwargs: (config, "/fake/key/path", None)
+        "argus.client.session.resolve_tunnel_key", lambda **kwargs: (config, "/fake/key/path", None)
     )
     monkeypatch.setattr("argus.client.session.SSHTunnel", _AllDeadTunnel)
 
@@ -1341,7 +1341,7 @@ def test_session_reports_the_refresh_failure_when_the_retry_resolve_also_fails(m
             return config, "/fake/key/path", None
         return None, None, "second resolve failed"
 
-    monkeypatch.setattr("argus.client.session.resolve_tunnel_config_with_reason", _resolve)
+    monkeypatch.setattr("argus.client.session.resolve_tunnel_key", _resolve)
     monkeypatch.setattr("argus.client.session.SSHTunnel", _DeadTunnel)
 
     with caplog.at_level("WARNING"):
@@ -1378,7 +1378,7 @@ def test_short_lived_session_never_builds_a_tunnel(requests_mock, monkeypatch, t
         resolved["calls"] += 1
         return None, None, "should not be reached"
 
-    monkeypatch.setattr("argus.client.session.resolve_tunnel_config_with_reason", _resolve)
+    monkeypatch.setattr("argus.client.session.resolve_tunnel_key", _resolve)
 
     client = ArgusClient(
         auth_token="token",
@@ -1410,7 +1410,7 @@ def test_busy_session_builds_a_tunnel_once_it_crosses_the_threshold(requests_moc
 
     config = TunnelConfig.from_api_response(_api_response_with_proxies())
     monkeypatch.setattr(
-        "argus.client.session.resolve_tunnel_config_with_reason", lambda **kwargs: (config, "/fake/key/path", None)
+        "argus.client.session.resolve_tunnel_key", lambda **kwargs: (config, "/fake/key/path", None)
     )
     monkeypatch.setattr("argus.client.session.SSHTunnel", _FakeTunnel)
 
@@ -1459,7 +1459,7 @@ def test_crossing_the_threshold_wakes_the_monitor(requests_mock, monkeypatch):
 def test_retry_delay_escalates_and_caps(monkeypatch):
     monkeypatch.setenv("ARGUS_TUNNEL_RETRY_MIN_SECONDS", "30")
     monkeypatch.setenv("ARGUS_TUNNEL_RETRY_MAX_SECONDS", "120")
-    monkeypatch.setattr("argus.client.session.resolve_tunnel_config_with_reason", lambda **kwargs: (None, None, "down"))
+    monkeypatch.setattr("argus.client.session.resolve_tunnel_key", lambda **kwargs: (None, None, "down"))
 
     session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com", run_id=RUN_ID)
     try:
@@ -1486,7 +1486,7 @@ def test_request_falls_back_to_direct_without_blocking(requests_mock, monkeypatc
 
     requests_mock.get(tunnel_url, exc=tunnel_api.requests.ConnectionError("tunnel is dead"))
     requests_mock.get(direct_url, json={"status": "ok", "response": {}}, status_code=200)
-    monkeypatch.setattr("argus.client.session.resolve_tunnel_config_with_reason", lambda **kwargs: (None, None, "down"))
+    monkeypatch.setattr("argus.client.session.resolve_tunnel_key", lambda **kwargs: (None, None, "down"))
 
     client = ArgusClient(
         auth_token="token",
@@ -1512,7 +1512,7 @@ def test_request_does_not_mutate_caller_headers(requests_mock, monkeypatch):
     direct_url = "https://argus.scylladb.com/api/v1/client/testrun/test-type/test-id/get"
     tunnel_url = "http://127.0.0.1:9191/api/v1/client/testrun/test-type/test-id/get"
     requests_mock.get(tunnel_url, json={"status": "ok", "response": {}}, status_code=200)
-    monkeypatch.setattr("argus.client.session.resolve_tunnel_config_with_reason", lambda **kwargs: (None, None, "down"))
+    monkeypatch.setattr("argus.client.session.resolve_tunnel_key", lambda **kwargs: (None, None, "down"))
 
     session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com", run_id=RUN_ID)
     try:
@@ -1525,7 +1525,7 @@ def test_request_does_not_mutate_caller_headers(requests_mock, monkeypatch):
 
 
 def test_monitor_tears_down_a_suspect_tunnel(fast_tunnel_retry, monkeypatch):
-    monkeypatch.setattr("argus.client.session.resolve_tunnel_config_with_reason", lambda **kwargs: (None, None, "down"))
+    monkeypatch.setattr("argus.client.session.resolve_tunnel_key", lambda **kwargs: (None, None, "down"))
 
     session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com", run_id=RUN_ID)
     try:
@@ -1595,7 +1595,7 @@ def test_monitor_reestablishes_the_tunnel_after_the_process_dies(fast_tunnel_ret
         host_key_fingerprint="SHA256:test",
     )
     monkeypatch.setattr(
-        "argus.client.session.resolve_tunnel_config_with_reason", lambda **kwargs: (config, "/fake/key/path", None)
+        "argus.client.session.resolve_tunnel_key", lambda **kwargs: (config, "/fake/key/path", None)
     )
 
     session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com", run_id=RUN_ID)
@@ -1632,7 +1632,7 @@ def test_reconnect_is_immediate_and_does_not_wait_out_the_backoff(mortal_tunnel,
         host_key_fingerprint="SHA256:test",
     )
     monkeypatch.setattr(
-        "argus.client.session.resolve_tunnel_config_with_reason", lambda **kwargs: (config, "/fake/key/path", None)
+        "argus.client.session.resolve_tunnel_key", lambda **kwargs: (config, "/fake/key/path", None)
     )
 
     session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com", run_id=RUN_ID)
@@ -1671,7 +1671,7 @@ def test_request_failure_makes_the_monitor_rebuild_the_tunnel(
         host_key_fingerprint="SHA256:test",
     )
     monkeypatch.setattr(
-        "argus.client.session.resolve_tunnel_config_with_reason", lambda **kwargs: (config, "/fake/key/path", None)
+        "argus.client.session.resolve_tunnel_key", lambda **kwargs: (config, "/fake/key/path", None)
     )
 
     session = TunneledSession(auth_token="token", original_base_url="https://argus.scylladb.com", run_id=RUN_ID)
@@ -1817,7 +1817,7 @@ def test_argus_client_works_as_context_manager(requests_mock, monkeypatch, tmp_p
         status_code=200,
     )
     monkeypatch.setattr(
-        "argus.client.session.resolve_tunnel_config_with_reason",
+        "argus.client.session.resolve_tunnel_key",
         lambda **kwargs: (None, None, "api unreachable"),
     )
 
@@ -1842,7 +1842,7 @@ def test_backoff_does_not_wipe_cached_tunnel_state(tunnel_state_dir, monkeypatch
     _write_key_dir(key_dir)
 
     monkeypatch.setattr(
-        "argus.client.session.resolve_tunnel_config_with_reason",
+        "argus.client.session.resolve_tunnel_key",
         lambda **kwargs: (None, None, "transient failure"),
     )
 
@@ -1885,7 +1885,7 @@ def test_sshd_key_rejection_wipes_cached_tunnel_state(tunnel_state_dir, monkeypa
             return None
 
     monkeypatch.setattr(
-        "argus.client.session.resolve_tunnel_config_with_reason",
+        "argus.client.session.resolve_tunnel_key",
         lambda **kwargs: (config, os.path.join(key_dir, "key"), None),
     )
     monkeypatch.setattr("argus.client.session.SSHTunnel", _KeyRejectedTunnel)
@@ -1929,7 +1929,7 @@ def test_key_rejection_before_a_refresh_still_wipes_cached_tunnel_state(tunnel_s
             return None
 
     monkeypatch.setattr(
-        "argus.client.session.resolve_tunnel_config_with_reason",
+        "argus.client.session.resolve_tunnel_key",
         lambda **kwargs: (config, os.path.join(key_dir, "key"), None),
     )
     monkeypatch.setattr("argus.client.session.SSHTunnel", _RejectedThenTimedOutTunnel)
@@ -2114,7 +2114,7 @@ def test_get_refresh_keeps_the_cached_key_id(tunnel_state_dir, monkeypatch):
     tunnel_state.write_tunnel_cache(paths, _tunnel_config(expires_at=future, key_id="key-id"))
     monkeypatch.setattr(tunnel_api, "_get_tunnel_connection", lambda **kwargs: _tunnel_config())
 
-    config, _key_path, _reason = tunnel_api.resolve_tunnel_config_with_reason(
+    config, _key_path, _reason = tunnel_api.resolve_tunnel_key(
         auth_token="token", base_url="https://argus.example.com", run_id=RUN_ID, force_refresh=True
     )
 
@@ -2181,7 +2181,7 @@ def test_key_rejection_deletes_the_rejected_key_and_not_a_newer_one(tunnel_state
     rejected_dir, newer_dir = _two_key_dirs()
     keys = iter([os.path.join(rejected_dir, "key"), os.path.join(newer_dir, "key")])
     monkeypatch.setattr(
-        "argus.client.session.resolve_tunnel_config_with_reason",
+        "argus.client.session.resolve_tunnel_key",
         lambda **kwargs: (_tunnel_config(), next(keys), None),
     )
     monkeypatch.setattr(_ScriptedTunnel, "rejects", staticmethod(lambda key_path: key_path.startswith(rejected_dir)))
@@ -2206,7 +2206,7 @@ def test_rejected_key_is_deleted_before_the_refresh_resolves(tunnel_state_dir, m
             return _tunnel_config(), os.path.join(newer_dir, "key"), None
         return _tunnel_config(), os.path.join(rejected_dir, "key"), None
 
-    monkeypatch.setattr("argus.client.session.resolve_tunnel_config_with_reason", _resolve)
+    monkeypatch.setattr("argus.client.session.resolve_tunnel_key", _resolve)
     monkeypatch.setattr(_ScriptedTunnel, "rejects", staticmethod(lambda key_path: key_path.startswith(rejected_dir)))
     monkeypatch.setattr("argus.client.session.SSHTunnel", _ScriptedTunnel)
 
@@ -2222,7 +2222,7 @@ def test_a_second_rejection_within_the_interval_keeps_the_new_key(tunnel_state_d
     rejected_dir, newer_dir = _two_key_dirs()
     keys = iter([os.path.join(rejected_dir, "key"), os.path.join(newer_dir, "key")])
     monkeypatch.setattr(
-        "argus.client.session.resolve_tunnel_config_with_reason",
+        "argus.client.session.resolve_tunnel_key",
         lambda **kwargs: (_tunnel_config(), next(keys), None),
     )
     monkeypatch.setattr(_ScriptedTunnel, "rejects", staticmethod(lambda key_path: True))
@@ -2262,3 +2262,65 @@ def test_generic_cli_scopes_the_tunnel_by_the_run_id(monkeypatch, command):
     generic_cli.cli.main([*command, "--api-key", "token", "--id", RUN_ID, "--use-tunnel"], standalone_mode=False)
 
     assert seen["run_id"] == RUN_ID
+
+
+def test_resolve_tunnel_config_keeps_its_positional_arguments(tunnel_state_dir, monkeypatch):
+    config = _tunnel_config(expires_at=datetime.now(tz=timezone.utc) + timedelta(hours=6))
+    monkeypatch.setattr(tunnel_api, "_register_tunnel", lambda **kwargs: config)
+
+    resolved = tunnel_api.resolve_tunnel_config("token", "https://argus.example.com", True)
+
+    assert resolved == config
+
+
+def test_resolve_tunnel_config_with_reason_returns_the_config_and_the_reason(tunnel_state_dir, monkeypatch):
+    config = _tunnel_config(expires_at=datetime.now(tz=timezone.utc) + timedelta(hours=6))
+    monkeypatch.setattr(tunnel_api, "_register_tunnel", lambda **kwargs: config)
+
+    resolved, reason = tunnel_api.resolve_tunnel_config_with_reason("token", "https://argus.example.com")
+
+    assert resolved == config
+    assert reason is None
+
+
+def test_a_caller_without_a_run_id_shares_one_key(tunnel_state_dir, monkeypatch):
+    config = _tunnel_config(expires_at=datetime.now(tz=timezone.utc) + timedelta(hours=6))
+    monkeypatch.setattr(tunnel_api, "_register_tunnel", lambda **kwargs: config)
+
+    _config, key_path, _reason = tunnel_api.resolve_tunnel_key(auth_token="token", base_url="https://argus.example.com")
+    shared = tunnel_state.find_existing_key_dir()
+
+    assert shared is not None
+    assert key_path == shared.private_key
+    assert os.path.basename(shared.state_dir).startswith(f"{tunnel_state.SHARED_KEY_NAME}.exp")
+    assert tunnel_state.find_existing_key_dir(RUN_ID) is None
+
+
+def test_ssh_tunnel_without_a_key_path_uses_the_shared_key(tunnel_state_dir, monkeypatch):
+    monkeypatch.setattr(tunnel_ssh.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+    paths = tunnel_state.build_key_location(None, datetime.now(tz=timezone.utc) + timedelta(hours=6))
+    _write_key_dir(paths.state_dir)
+
+    assert tunnel_ssh.SSHTunnel()._key_path == paths.private_key
+
+
+def test_ssh_tunnel_without_any_key_reports_a_preflight_error(tunnel_state_dir, monkeypatch):
+    monkeypatch.setattr(tunnel_ssh.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    local_port, reason = tunnel_ssh.SSHTunnel().establish(_tunnel_config())
+
+    assert local_port is None
+    assert "no SSH private key" in reason
+
+
+def test_delete_cached_tunnel_state_without_a_run_id_deletes_only_the_shared_key(tunnel_state_dir):
+    future = datetime.now(tz=timezone.utc) + timedelta(hours=6)
+    shared = tunnel_state.build_key_location(None, future)
+    mine = tunnel_state.build_key_location(RUN_ID, future)
+    _write_key_dir(shared.state_dir)
+    _write_key_dir(mine.state_dir)
+
+    tunnel_state.delete_cached_tunnel_state()
+
+    assert not os.path.exists(shared.state_dir)
+    assert os.path.exists(mine.state_dir)
