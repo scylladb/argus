@@ -12,20 +12,20 @@ router = APIRouter(prefix="/widgets")
 
 
 @router.get("/graphs/graph_views", name="api.view_api.graphs.get_graph_views")
-def get_graph_views(view_id: UUID = Query(...),
+async def get_graph_views(view_id: UUID = Query(...),
                     start_date: datetime | None = Query(None),
                     end_date: datetime | None = Query(None),
                     user: User = Depends(api_current_user)):
-    view: ArgusUserView = ArgusUserView.get(id=view_id)
+    view: ArgusUserView = await ArgusUserView.get(id=view_id)
     service = ResultsService()
     response = {}
     tests_details = {}
 
     for test_id in view.tests:
         test_uuid = test_id
-        graph_views = service.get_argus_graph_views(test_uuid)
+        graph_views = await service.get_argus_graph_views(test_uuid)
         if graph_views:
-            test_name = ArgusTest.get(id=test_uuid).name
+            test_name = (await ArgusTest.get(id=test_uuid)).name
             tests_details[str(test_id)] = {"name": test_name}
         view_data = []
 
@@ -39,7 +39,7 @@ def get_graph_views(view_id: UUID = Query(...),
             # Get graphs data for these tables
             start_dt = start_date.astimezone(timezone.utc) if start_date else None
             end_dt = end_date.astimezone(timezone.utc) if end_date else None
-            graphs, ticks, releases_filters = service.get_test_graphs(
+            graphs, ticks, releases_filters = await service.get_test_graphs(
                 test_id=test_uuid,
                 start_date=start_dt,
                 end_date=end_dt,

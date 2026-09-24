@@ -20,7 +20,7 @@ class ChangePlanOwnerRequest(BaseModel):
 
 
 @router.get("/", name="api.planning_api.version")
-def version(user: User = Depends(api_current_user)):
+async def version(user: User = Depends(api_current_user)):
     result = PlanningService().version()
 
     return APIResponse({
@@ -30,9 +30,9 @@ def version(user: User = Depends(api_current_user)):
 
 
 @router.get("/plan/{plan_id}/copy/check", name="api.planning_api.is_plan_eligible_for_copy")
-def is_plan_eligible_for_copy(plan_id: UUID, release_id: UUID = Query(..., alias="releaseId"),
+async def is_plan_eligible_for_copy(plan_id: UUID, release_id: UUID = Query(..., alias="releaseId"),
                               user: User = Depends(api_current_user)):
-    result = PlanningService().check_plan_copy_eligibility(plan_id=plan_id, target_release_id=release_id)
+    result = await PlanningService().check_plan_copy_eligibility(plan_id=plan_id, target_release_id=release_id)
 
     return APIResponse({
         "status": "ok",
@@ -41,8 +41,8 @@ def is_plan_eligible_for_copy(plan_id: UUID, release_id: UUID = Query(..., alias
 
 
 @router.get("/release/{release_id}/gridview", name="api.planning_api.grid_view_for_release")
-def grid_view_for_release(release_id: UUID, user: User = Depends(api_current_user)):
-    result = PlanningService().get_gridview_for_release(release_id=release_id)
+async def grid_view_for_release(release_id: UUID, user: User = Depends(api_current_user)):
+    result = await PlanningService().get_gridview_for_release(release_id=release_id)
 
     return APIResponse({
         "status": "ok",
@@ -51,10 +51,10 @@ def grid_view_for_release(release_id: UUID, user: User = Depends(api_current_use
 
 
 @router.get("/search", name="api.planning_api.search_tests")
-def search_tests(query: str | None = Query(None), release_id: str | None = Query(None, alias="releaseId"),
+async def search_tests(query: str | None = Query(None), release_id: str | None = Query(None, alias="releaseId"),
                  user: User = Depends(api_current_user)):
     if query:
-        res = TestLookup.test_lookup(query, release_id=release_id)
+        res = await TestLookup.test_lookup(query, release_id=release_id)
     else:
         res = []
     return APIResponse({
@@ -67,8 +67,8 @@ def search_tests(query: str | None = Query(None), release_id: str | None = Query
 
 
 @router.get("/group/{group_id}/explode", name="api.planning_api.explode_group")
-def explode_group(group_id: str, user: User = Depends(api_current_user)):
-    res = TestLookup.explode_group(group_id=group_id)
+async def explode_group(group_id: str, user: User = Depends(api_current_user)):
+    res = await TestLookup.explode_group(group_id=group_id)
     return APIResponse({
         "status": "ok",
         "response": res
@@ -76,8 +76,8 @@ def explode_group(group_id: str, user: User = Depends(api_current_user)):
 
 
 @router.get("/plan/{plan_id}/get", name="api.planning_api.get_plan")
-def get_plan(plan_id: str, user: User = Depends(api_current_user)):
-    result = PlanningService().get_plan(plan_id)
+async def get_plan(plan_id: str, user: User = Depends(api_current_user)):
+    result = await PlanningService().get_plan(plan_id)
 
     return APIResponse({
         "status": "ok",
@@ -86,8 +86,8 @@ def get_plan(plan_id: str, user: User = Depends(api_current_user)):
 
 
 @router.get("/release/{release_id}/all", name="api.planning_api.get_plans_for_release")
-def get_plans_for_release(release_id: str, user: User = Depends(api_current_user)):
-    result = PlanningService().get_plans_for_release(release_id)
+async def get_plans_for_release(release_id: str, user: User = Depends(api_current_user)):
+    result = await PlanningService().get_plans_for_release(release_id)
 
     return APIResponse({
         "status": "ok",
@@ -96,8 +96,8 @@ def get_plans_for_release(release_id: str, user: User = Depends(api_current_user
 
 
 @router.post("/plan/create", name="api.planning_api.create_plan")
-def create_plan(payload: dict = Body(...), user: User = Depends(api_current_user)):
-    result = PlanningService().create_plan(payload, user)
+async def create_plan(payload: dict = Body(...), user: User = Depends(api_current_user)):
+    result = await PlanningService().create_plan(payload, user)
 
     return APIResponse({
         "status": "ok",
@@ -106,8 +106,8 @@ def create_plan(payload: dict = Body(...), user: User = Depends(api_current_user
 
 
 @router.post("/plan/update", name="api.planning_api.update_plan")
-def update_plan(payload: dict = Body(...), user: User = Depends(api_current_user)):
-    result = PlanningService().update_plan(payload, user)
+async def update_plan(payload: dict = Body(...), user: User = Depends(api_current_user)):
+    result = await PlanningService().update_plan(payload, user)
 
     return APIResponse({
         "status": "ok",
@@ -116,8 +116,8 @@ def update_plan(payload: dict = Body(...), user: User = Depends(api_current_user
 
 
 @router.post("/plan/copy", name="api.planning_api.copy_plan")
-def copy_plan(payload: CopyPlanPayload, user: User = Depends(api_current_user)):
-    result = PlanningService().copy_plan(payload, user)
+async def copy_plan(payload: CopyPlanPayload, user: User = Depends(api_current_user)):
+    result = await PlanningService().copy_plan(payload, user)
 
     return APIResponse({
         "status": "ok",
@@ -126,9 +126,9 @@ def copy_plan(payload: CopyPlanPayload, user: User = Depends(api_current_user)):
 
 
 @router.delete("/plan/{plan_id}/delete", name="api.planning_api.delete_plan")
-def delete_plan(plan_id: str, delete_view: bool = Query(False, alias="deleteView"),
+async def delete_plan(plan_id: str, delete_view: bool = Query(False, alias="deleteView"),
                 user: User = Depends(api_current_user)):
-    result = PlanningService().delete_plan(plan_id, delete_view=delete_view)
+    result = await PlanningService().delete_plan(plan_id, delete_view=delete_view)
 
     return APIResponse({
         "status": "ok",
@@ -137,9 +137,9 @@ def delete_plan(plan_id: str, delete_view: bool = Query(False, alias="deleteView
 
 
 @router.post("/plan/{plan_id}/owner/set", name="api.planning_api.change_plan_owner")
-def change_plan_owner(plan_id: str, payload: ChangePlanOwnerRequest,
+async def change_plan_owner(plan_id: str, payload: ChangePlanOwnerRequest,
                       user: User = Depends(api_current_user)):
-    result = PlanningService().change_plan_owner(plan_id=plan_id, new_owner=payload.newOwner)
+    result = await PlanningService().change_plan_owner(plan_id=plan_id, new_owner=payload.newOwner)
 
     return APIResponse({
         "status": "ok",
@@ -148,9 +148,9 @@ def change_plan_owner(plan_id: str, payload: ChangePlanOwnerRequest,
 
 
 @router.get("/plan/{plan_id}/resolve_entities", name="api.planning_api.resolve_plan_entities")
-def resolve_plan_entities(plan_id: str, user: User = Depends(api_current_user)):
+async def resolve_plan_entities(plan_id: str, user: User = Depends(api_current_user)):
     service = PlanningService()
-    result = service.resolve_plan(plan_id)
+    result = await service.resolve_plan(plan_id)
 
     return APIResponse({
         "status": "ok",
@@ -159,9 +159,9 @@ def resolve_plan_entities(plan_id: str, user: User = Depends(api_current_user)):
 
 
 @router.post("/plan/trigger", name="api.planning_api.trigger_jobs_for_plans")
-def trigger_jobs_for_plans(payload: dict = Body(...), user: User = Depends(api_current_user)):
+async def trigger_jobs_for_plans(payload: dict = Body(...), user: User = Depends(api_current_user)):
     service = PlanningService()
-    result = service.trigger_jobs(payload, user.username)
+    result = await service.trigger_jobs(payload, user.username)
 
     return APIResponse({
         "status": "ok",

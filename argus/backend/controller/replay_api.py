@@ -54,7 +54,7 @@ class EmptyRequest(APIException):
 
 
 @router.post("/ingest", name="api.client_api.replay_api.replay_ingest")
-def replay_ingest(asgi_request: Request, archive: bytes = Body(b""),
+async def replay_ingest(asgi_request: Request, archive: bytes = Body(b""),
                   dry_run: bool = Query(False),
                   create_missing_tests: bool = Query(False),
                   backfill_logs: bool = Query(True),
@@ -79,7 +79,7 @@ def replay_ingest(asgi_request: Request, archive: bytes = Body(b""),
         create_missing_tests=create_missing_tests,
         backfill_logs=backfill_logs,
     )
-    summary = service.ingest(archive, dry_run=dry_run)
+    summary = await service.ingest(archive, dry_run=dry_run)
 
     return APIResponse({
         "status": "ok",

@@ -11,10 +11,10 @@ router = APIRouter(prefix="/widgets")
 
 
 @router.get("/summary/versioned_runs", name="api.view_api.summary.get_versioned_runs")
-def get_versioned_runs(view_id: UUID = Query(...), user: User = Depends(api_current_user)):
-    view: ArgusUserView = ArgusUserView.get(id=view_id)
+async def get_versioned_runs(view_id: UUID = Query(...), user: User = Depends(api_current_user)):
+    view: ArgusUserView = await ArgusUserView.get(id=view_id)
     service = ResultsService()
-    versioned_runs = service.get_tests_by_version("scylla-server", view.tests)
+    versioned_runs = await service.get_tests_by_version("scylla-server", view.tests)
     return APIResponse({
         "status": "ok",
         "response": versioned_runs,
@@ -22,7 +22,7 @@ def get_versioned_runs(view_id: UUID = Query(...), user: User = Depends(api_curr
 
 
 @router.post("/summary/runs_results", name="api.view_api.summary.get_runs_results")
-def get_runs_results(versioned_runs: dict = Body(...), user: User = Depends(api_current_user)):
+async def get_runs_results(versioned_runs: dict = Body(...), user: User = Depends(api_current_user)):
     service = ResultsService()
     response = {}
     for test_id, test_methods in versioned_runs.items():
@@ -30,7 +30,7 @@ def get_runs_results(versioned_runs: dict = Body(...), user: User = Depends(api_
         for method, run in test_methods.items():
             response[test_id][method] = {}
             run_id = run['run_id']
-            response[test_id][method][run_id] = service.get_run_results(UUID(test_id), UUID(run_id), key_metrics=[
+            response[test_id][method][run_id] = await service.get_run_results(UUID(test_id), UUID(run_id), key_metrics=[
                 "P99 read", "P99 write", "duration", "Throughput write", "Throughput read", "allocs_per_op",
                 "cpu_cycles_per_op", "instructions_per_op", "logallocs_per_op"])
     return APIResponse({
