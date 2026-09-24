@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import Field
 from coodie import ClusteringKey, PrimaryKey, TinyInt
-from coodie.sync import Document
+from coodie.aio import Document
 
 
 class WidgetHighlights(Document):

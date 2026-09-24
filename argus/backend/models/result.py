@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import Field
 from coodie import Ascii, ClusteringKey, Double, Frozen, Indexed, PrimaryKey
-from coodie.sync import Document
+from coodie.aio import Document
 from coodie.usertype import UserType
 
 
@@ -124,7 +124,7 @@ class ArgusGenericResultMetadata(Document):
 
         return updated
 
-    def update_if_changed(self, new_data: dict) -> "ArgusGenericResultMetadata":
+    async def update_if_changed(self, new_data: dict) -> "ArgusGenericResultMetadata":
         """
         Updates table metadata if changed column/description or new rows were added.
         See that rows can only be added, not removed once was sent.
@@ -152,7 +152,7 @@ class ArgusGenericResultMetadata(Document):
                 updated = True
 
         if updated:
-            self.save()
+            await self.save()
         return self
 
 

@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 from pydantic import Field
 from coodie import Indexed, PrimaryKey
-from coodie.sync import Document
+from coodie.aio import Document
 
 from argus.backend.models.github_issue import IssueLabel
 

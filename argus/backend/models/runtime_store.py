@@ -2,7 +2,7 @@ from datetime import datetime, time
 from typing import Annotated, ClassVar, Optional
 
 from coodie import Ascii, Double, PrimaryKey
-from coodie.sync import Document
+from coodie.aio import Document
 
 
 class RuntimeStore(Document):
@@ -15,7 +15,7 @@ class RuntimeStore(Document):
 
         prop = RuntimeStore(key="my_property_value")
         prop.value = 0
-        prop.save()
+        await prop.save()
 
     """
     _type_map: ClassVar[dict[type, str]] = {

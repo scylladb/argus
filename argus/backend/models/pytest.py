@@ -6,7 +6,7 @@ from pydantic import Field
 from cassandra.util import uuid_from_time
 from cassandra.cluster import Session
 from coodie import ClusteringKey, Double, Indexed, PrimaryKey, TimeUUID
-from coodie.sync import Document
+from coodie.aio import Document
 
 from argus.common.enums import PytestStatus
 
