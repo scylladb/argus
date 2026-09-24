@@ -41,6 +41,16 @@ model, and optionally its own router, through the plugin layer.
   - `db.py` — session setup.
   - `cli.py` — maintenance commands: `sync-models`, `refresh-issues`,
     `scan-jenkins`.
+- **Execution model**: every route handler, auth dependency and service
+  method that touches ScyllaDB is a coroutine on the uvicorn event loop. The
+  models are `coodie.aio` documents; independent reads inside one request run
+  together under `asyncio.gather`, bounded by `gather_limited` where the width
+  follows the data. Jira, GitHub, Jenkins, SMTP, S3, JWKS and subprocess
+  calls run in a worker thread through `asyncio.to_thread`. `db.py` pages
+  every driver result through the asyncio bridge, so a result larger than one
+  driver page comes back whole. Raw CQL survives only where the mapper cannot
+  build the statement: a `WRITETIME` projection, two request-driven limits,
+  and the map-index DDL at schema sync.
 
 Two modules under `service/` are named `test_lookup.py` and
 `test_hierarchy.py`. They hold production lookup logic. `pyproject.toml` lists
