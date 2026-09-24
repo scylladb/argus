@@ -553,15 +553,7 @@ class SCTService:
 
     @staticmethod
     def count_events_by_severity(run_id: str, severity: SCTEventSeverity) -> int:
-        db = ScyllaCluster.get()
-        query = f"SELECT count(*) FROM {SCTEvent.table_name()
-                                        } WHERE run_id = ? AND severity IN ?"
-        params = [UUID(run_id), [SCTEventSeverity(severity).value]]
-
-        prepared = db.prepare(query)
-
-        result = db.session.execute(prepared, parameters=params).one()
-        return result["count"]
+        return SCTEvent.find(run_id=UUID(run_id), severity=SCTEventSeverity(severity).value).count()
 
     @staticmethod
     def create_coredump_link(event_message: str, event_ts: datetime | None = None) -> CoredumpLink | None:
