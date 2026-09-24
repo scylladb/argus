@@ -1,3 +1,4 @@
+import asyncio
 from enum import Enum
 import logging
 from datetime import UTC, datetime, timezone
@@ -8,9 +9,8 @@ from uuid import UUID, uuid4
 from pydantic import Field
 from coodie import Ascii, ClusteringKey, Double, Frozen, Indexed, PrimaryKey
 from coodie.exceptions import DocumentNotFound
-from coodie.sync import Document
+from coodie.aio import Document, execute_raw
 
-from argus.backend.db import ScyllaCluster
 from argus.backend.models.run_config import RunConfigParam
 from argus.backend.models.web import ArgusRelease, ArgusTest, ReleaseDistinctVersions, ReleaseDistinctImages
 from argus.backend.plugins.core import PluginModelBase
@@ -212,81 +212,77 @@ class SCTTestRun(PluginModelBase):
     test_method: Annotated[Optional[str], Ascii()] = None
 
     @classmethod
-    def _stats_query(cls) -> str:
-        return ("SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, nemesis_stats, "
-                f"assignee, end_time, investigation_status, heartbeat, build_number, scylla_version, cloud_setup FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT 15")
+    def _stats_columns(cls) -> tuple[str, ...]:
+        return ("id", "test_id", "group_id", "release_id", "status", "start_time", "build_job_url", "build_id",
+                "nemesis_stats", "assignee", "end_time", "investigation_status", "heartbeat", "build_number",
+                "scylla_version", "cloud_setup")
 
     @classmethod
-    def load_test_run(cls, run_id: UUID) -> 'SCTTestRun':
-        return cls.get(id=run_id)
+    async def load_test_run(cls, run_id: UUID) -> 'SCTTestRun':
+        return await cls.get(id=run_id)
 
     @classmethod
-    def submit_run(cls, request_data: dict) -> 'SCTTestRun':
+    async def submit_run(cls, request_data: dict) -> 'SCTTestRun':
         req = SCTTestRunSubmissionRequest(**request_data)
-        run = cls.from_sct_config(req=req)
-        run.invalidate_release_snapshot()
-        run.index_image(run)
+        run = await cls.from_sct_config(req=req)
+        await run.invalidate_release_snapshot()
+        await run.index_image(run)
         return run
 
     @classmethod
-    def get_distinct_product_versions(cls, release: ArgusRelease) -> list[str]:
-        rows = list(ReleaseDistinctVersions.find(release_id=release.id).all())
+    async def get_distinct_product_versions(cls, release: ArgusRelease) -> list[str]:
+        rows = await ReleaseDistinctVersions.find(release_id=release.id).all()
         if rows:
             return sorted([r.version for r in rows], reverse=True)
         # Fallback: index not yet populated — scan GSI directly
-        versions = cls.find(release_id=release.id).only("scylla_version").values_list("scylla_version").all()
+        versions = await cls.find(release_id=release.id).only("scylla_version").values_list("scylla_version").all()
         return sorted({version for (version,) in versions if version}, reverse=True)
 
     @classmethod
-    def get_version_data_for_release(cls, release_name: str) -> list[dict]:
-        release = ArgusRelease.get(name=release_name)
-        return select_rows(cls.find(release_id=release.id), "scylla_version", "packages", "status")
+    async def get_version_data_for_release(cls, release_name: str) -> list[dict]:
+        release = await ArgusRelease.get(name=release_name)
+        return await select_rows(cls.find(release_id=release.id), "scylla_version", "packages", "status")
 
     @staticmethod
     def get_image(cloud_setup) -> str | None:
         return cloud_setup.db_node.image_id if cloud_setup else None
 
     @classmethod
-    def get_distinct_cloud_images_for_release(cls, release: ArgusRelease):
-        rows = list(ReleaseDistinctImages.find(release_id=release.id).all())
+    async def get_distinct_cloud_images_for_release(cls, release: ArgusRelease) -> list[str]:
+        rows = await ReleaseDistinctImages.find(release_id=release.id).all()
         if rows:
             return sorted([r.image_id for r in rows], reverse=True)
         # Fallback: index not yet populated — scan GSI + deserialize UDTs directly
-        setups = cls.find(release_id=release.id).only("cloud_setup").values_list("cloud_setup").all()
+        setups = await cls.find(release_id=release.id).only("cloud_setup").values_list("cloud_setup").all()
         return sorted({image for (setup,) in setups if (image := cls.get_image(setup))}, reverse=True)
 
     @classmethod
-    def get_distinct_cloud_images_for_view(cls, tests: list[ArgusTest]):
-        cluster = ScyllaCluster.get()
-        statement = cluster.prepare(f"SELECT cloud_setup FROM {
-                                    cls.table_name()} WHERE build_id IN ?")
-        futures = []
-        for batch in chunk(tests):
-            futures.append(cluster.session.execute_async(query=statement,
-                           parameters=([t.build_system_id for t in batch],)))
-
-        rows = []
-        for future in futures:
-            rows.extend(future.result())
-        unique_images = {image for r in rows if (image := cls.get_image(r["cloud_setup"]))}
+    async def get_distinct_cloud_images_for_view(cls, tests: list[ArgusTest]) -> list[str]:
+        queries = [
+            cls.find(build_id__in=[t.build_system_id for t in batch])
+            .only("cloud_setup").values_list("cloud_setup").all()
+            for batch in chunk(tests)
+        ]
+        rows = [row for batch_rows in await asyncio.gather(*queries) for row in batch_rows]
+        unique_images = {image for (setup,) in rows if (image := cls.get_image(setup))}
 
         return sorted(unique_images, reverse=True)
 
     @classmethod
-    def get_perf_results_for_test_name(cls, build_id: str, start_time: datetime, test_name: str) -> list[dict]:
+    async def get_perf_results_for_test_name(cls, build_id: str, start_time: datetime, test_name: str) -> list[dict]:
         columns = ("build_id", "packages", "scylla_version", "test_name", "perf_op_rate_average", "perf_op_rate_total",
                    "perf_avg_latency_99th", "perf_avg_latency_mean", "perf_total_errors", "id", "start_time",
                    "build_job_url", "build_number")
         query = cls.find(build_id=build_id, start_time__lt=start_time, test_name=test_name).allow_filtering()
-        return select_rows(query, *columns)
+        return await select_rows(query, *columns)
 
     @classmethod
-    def init_sct_run(cls, req: SCTTestRunSubmissionRequest):
+    async def init_sct_run(cls, req: SCTTestRunSubmissionRequest):
         run = cls.model_construct()
         run.build_id = req.job_name
-        run.assign_categories()
+        await run.assign_categories()
         try:
-            run.assignee = run.get_scheduled_assignee()
+            run.assignee = await run.get_scheduled_assignee()
         except DocumentNotFound:
             run.assignee = None
         run.start_time = datetime.now(timezone.utc)
@@ -302,12 +298,12 @@ class SCTTestRun(PluginModelBase):
         return run
 
     @classmethod
-    def from_sct_config(cls, req: SCTTestRunSubmissionRequest):
+    async def from_sct_config(cls, req: SCTTestRunSubmissionRequest):
         try:
-            run = cls.get(id=UUID(req.run_id) if isinstance(req.run_id, str) else req.run_id)
+            run = await cls.get(id=UUID(req.run_id) if isinstance(req.run_id, str) else req.run_id)
         except DocumentNotFound:
-            run = cls.init_sct_run(req)
-            run.save()
+            run = await cls.init_sct_run(req)
+            await run.save()
 
         if req.sct_config:
             backend = req.sct_config.get("cluster_backend")
@@ -330,14 +326,14 @@ class SCTTestRun(PluginModelBase):
             run.config_files = req.sct_config.get("config_files")
             run.region_name = regions
             run.test_method = req.sct_config.get("test_method")
-            run.save()
+            await run.save()
 
         return run
 
-    def get_resources(self) -> list[SCTResource]:
-        return list(SCTResource.find(run_id=self.id).all())
+    async def get_resources(self) -> list[SCTResource]:
+        return await SCTResource.find(run_id=self.id).all()
 
-    def sync_db_node_setup_from_resources(self) -> bool:
+    async def sync_db_node_setup_from_resources(self) -> bool:
         """Derive ``cloud_setup.db_node`` instance type and node amount from registered DB resources.
 
         Only applies to backends where SCT cannot know these up front (Scylla Cloud picks them from
@@ -345,7 +341,7 @@ class SCTTestRun(PluginModelBase):
         """
         if not self.cloud_setup or self.cloud_setup.backend not in RESOURCE_DERIVED_DB_NODE_BACKENDS:
             return False
-        db_resources = [res for res in self.get_resources() if is_db_resource(res.resource_type)]
+        db_resources = [res for res in await self.get_resources() if is_db_resource(res.resource_type)]
         if not db_resources:
             return False
 
@@ -364,23 +360,21 @@ class SCTTestRun(PluginModelBase):
         self.cloud_setup = self.cloud_setup.model_copy(update={"db_node": db_node})
         return True
 
-    def get_nemeses(self) -> list[SCTNemesis]:
-        return list(SCTNemesis.find(run_id=self.id).all())
+    async def get_nemeses(self) -> list[SCTNemesis]:
+        return await SCTNemesis.find(run_id=self.id).all()
 
-    def get_config_params(self) -> dict[str, str]:
-        return {
-            param.name: param.value
-            for param in RunConfigParam.find(run_id=str(self.id)).allow_filtering().all()
-        }
+    async def get_config_params(self) -> dict[str, str]:
+        params = await RunConfigParam.find(run_id=str(self.id)).allow_filtering().all()
+        return {param.name: param.value for param in params}
 
-    def get_xcloud_details(self) -> dict[str, str | None]:
-        return xcloud_details_from_config_params(self.get_config_params())
+    async def get_xcloud_details(self) -> dict[str, str | None]:
+        return xcloud_details_from_config_params(await self.get_config_params())
 
     @classmethod
-    def get_stress_commands(cls, run_id: str) -> list[StressCommand]:
-        return list(StressCommand.find(run_id=UUID(run_id) if isinstance(run_id, str) else run_id).all())
+    async def get_stress_commands(cls, run_id: str) -> list[StressCommand]:
+        return await StressCommand.find(run_id=UUID(run_id) if isinstance(run_id, str) else run_id).all()
 
-    def add_stress_command(self, cmd: str, ts: float, log_name: str, loader_name: str):
+    async def add_stress_command(self, cmd: str, ts: float, log_name: str, loader_name: str):
         s = StressCommand.model_construct()
         s.run_id = self.id
         s.ts = datetime.fromtimestamp(ts)
@@ -388,14 +382,14 @@ class SCTTestRun(PluginModelBase):
         s.log_name = log_name
         s.node_name = loader_name
 
-        s.save()
+        await s.save()
         return True
 
     @classmethod
-    def get_events_limited(cls, run_id: UUID, before: datetime | None = None, after: datetime | None = None, severities: list[SCTEventSeverity] = None, per_partition_limit: int = 100) -> list[dict]:
-        db = ScyllaCluster.get()
-        query = f"SELECT * FROM {SCTEvent.table_name()
-                                 } WHERE run_id = ? AND severity IN ?"
+    async def get_events_limited(cls, run_id: UUID, before: datetime | None = None, after: datetime | None = None,
+                                 severities: list[SCTEventSeverity] = None,
+                                 per_partition_limit: int = 100) -> list[dict]:
+        query = f"SELECT * FROM {SCTEvent._get_keyspace()}.{SCTEvent.table_name()} WHERE run_id = ? AND severity IN ?"
         params = [run_id]
         if severities:
             severity_filter = [s.value for s in severities]
@@ -410,43 +404,42 @@ class SCTTestRun(PluginModelBase):
             params.append(after)
         query += " PER PARTITION LIMIT ?"
         params.append(per_partition_limit)
-        prepared = db.prepare(query)
 
-        result = db.session.execute(prepared, parameters=params).all()
+        result = await execute_raw(query, params)
 
-        return sorted(list(result), key=lambda evt: evt["ts"])
+        return sorted(result, key=lambda evt: evt["ts"])
 
-    def get_all_events(self):
-        return SCTEvent.find(run_id=self.id, severity__in=[s.value for s in list(SCTEventSeverity)]).all()
+    async def get_all_events(self):
+        return await SCTEvent.find(run_id=self.id, severity__in=[s.value for s in list(SCTEventSeverity)]).all()
 
-    def get_events_by_severity(self, severity: SCTEventSeverity | list[SCTEventSeverity]):
+    async def get_events_by_severity(self, severity: SCTEventSeverity | list[SCTEventSeverity]):
         if isinstance(severity, list):
-            return SCTEvent.find(run_id=self.id, severity__in=[s.value for s in severity]).all()
+            return await SCTEvent.find(run_id=self.id, severity__in=[s.value for s in severity]).all()
         else:
-            return SCTEvent.find(run_id=self.id, severity=severity.value).all()
+            return await SCTEvent.find(run_id=self.id, severity=severity.value).all()
 
-    def submit_product_version(self, version: str):
+    async def submit_product_version(self, version: str):
         if not self.version_source:
             self.scylla_version = version
         try:
-            new_assignee = self.get_assignment(version)
+            new_assignee = await self.get_assignment(version)
         except DocumentNotFound:
             new_assignee = None
         if new_assignee:
             self.assignee = new_assignee
-        self.index_version()
+        await self.index_version()
 
-    def finish_run(self, payload: dict = None):
+    async def finish_run(self, payload: dict = None):
         end_time = payload.get("end_time") if payload else None
         if end_time is not None:
             self.end_time = datetime.utcfromtimestamp(end_time)
         else:
             self.end_time = datetime.utcnow()
-        self.invalidate_release_snapshot()
-        self.index_version()
-        self.index_image(self)
+        await self.invalidate_release_snapshot()
+        await self.index_version()
+        await self.index_image(self)
 
-    def submit_logs(self, logs: list[dict]):
+    async def submit_logs(self, logs: list[dict]):
         for log in logs:
             if any(existing[0] == log["log_name"] for existing in self.logs):
                 continue
@@ -462,7 +455,7 @@ class SCTTestRun(PluginModelBase):
         stats[key] = val
         self.nemesis_stats = stats
 
-    def sut_timestamp(self, sut_package_name) -> float:
+    async def sut_timestamp(self, sut_package_name) -> float:
         """converts scylla-server date to timestamp and adds revision in sub-seconds precision to differentiate
         scylla versions from the same day. It's not perfect, but we don't know exact version time."""
 
@@ -484,30 +477,28 @@ class SCTTestRun(PluginModelBase):
                 f"{sut_package_name} package not found in packages - cannot determine SUT timestamp")
 
     @classmethod
-    def get_run_response(cls, run_id: UUID) -> dict | None:
+    async def get_run_response(cls, run_id: UUID) -> dict | None:
         try:
-            run = cls.get(id=run_id)
+            run = await cls.get(id=run_id)
         except DocumentNotFound:
             return None
         response = run.model_dump()
         if run.cloud_setup and run.cloud_setup.backend == XCLOUD_BACKEND and response.get("cloud_setup"):
-            response["cloud_setup"].update(run.get_xcloud_details())
-        response["junit_reports"] = list(
-            SCTJunitReports.find(test_id=run_id).all())
-        response["nemesis_data"] = list(SCTNemesis.find(run_id=run.id).all())
-        response["allocated_resources"] = list(
-            SCTResource.find(run_id=run_id).all())
+            response["cloud_setup"].update(await run.get_xcloud_details())
+        response["junit_reports"] = await SCTJunitReports.find(test_id=run_id).all()
+        response["nemesis_data"] = await SCTNemesis.find(run_id=run.id).all()
+        response["allocated_resources"] = await SCTResource.find(run_id=run_id).all()
         return response
 
     @staticmethod
-    def index_image(run: 'SCTTestRun') -> None:
+    async def index_image(run: 'SCTTestRun') -> None:
         if not run.release_id:
             return
         try:
             image_id = run.cloud_setup and run.cloud_setup.db_node and run.cloud_setup.db_node.image_id
             if not image_id:
                 return
-            ReleaseDistinctImages.create(release_id=run.release_id, image_id=image_id)
+            await ReleaseDistinctImages.create(release_id=run.release_id, image_id=image_id)
         except Exception:
             LOGGER.warning("Failed to index image for release %s", run.release_id, exc_info=True)
 

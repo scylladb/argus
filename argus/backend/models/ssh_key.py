@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 
 from pydantic import Field
 from coodie import Indexed, PrimaryKey
-from coodie.sync import Document
+from coodie.aio import Document
 
 
 def _utcnow_naive() -> datetime:

@@ -1,11 +1,12 @@
+import asyncio
 import base64
 from itertools import islice
 import logging
 import os
-from typing import Callable, Iterable, TypeVar
+from typing import Awaitable, Callable, Iterable, TypeVar
 from uuid import UUID
 
-from coodie.sync import QuerySet
+from coodie.aio import QuerySet
 
 from pydantic import BeforeValidator
 
@@ -34,8 +35,19 @@ def first(iterable, value, key: Callable = None, predicate: Callable = None):
     return None
 
 
-def select_rows(query: QuerySet, *columns: str) -> list[dict]:
-    return [dict(zip(columns, row)) for row in query.only(*columns).values_list(*columns).all()]
+async def select_rows(query: QuerySet, *columns: str) -> list[dict]:
+    rows = await query.only(*columns).values_list(*columns).all()
+    return [dict(zip(columns, row)) for row in rows]
+
+
+async def gather_limited(coros: Iterable[Awaitable[T]], limit: int = 50) -> list[T]:
+    semaphore = asyncio.Semaphore(limit)
+
+    async def run(coro: Awaitable[T]) -> T:
+        async with semaphore:
+            return await coro
+
+    return list(await asyncio.gather(*(run(coro) for coro in coros)))
 
 
 def chunk(iterable: Iterable[T], slice_size=90) -> list[list[T]]:

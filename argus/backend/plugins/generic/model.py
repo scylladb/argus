@@ -27,59 +27,60 @@ class GenericRun(PluginModelBase):
     sub_type: Optional[str] = None  # Used to tell which framework the GenericRun belongs to
 
     @classmethod
-    def _stats_query(cls) -> str:
-        return ("SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, "
-                f"assignee, end_time, investigation_status, heartbeat, build_number, scylla_version FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT 15")
+    def _stats_columns(cls) -> tuple[str, ...]:
+        return ("id", "test_id", "group_id", "release_id", "status", "start_time", "build_job_url", "build_id",
+                "assignee", "end_time", "investigation_status", "heartbeat", "build_number", "scylla_version")
 
     @classmethod
-    def get_distinct_product_versions(cls, release: ArgusRelease) -> list[str]:
-        versions = cls.find(release_id=release.id).only("scylla_version").values_list("scylla_version").all()
+    async def get_distinct_product_versions(cls, release: ArgusRelease) -> list[str]:
+        versions = await cls.find(release_id=release.id).only("scylla_version").values_list("scylla_version").all()
         return sorted({version for (version,) in versions if version}, reverse=True)
 
-    def submit_product_version(self, version: str):
+    async def submit_product_version(self, version: str):
         pattern = re.compile(r"((?P<short>[\w.\-~]+)-(?P<build>(0\.)?(?P<date>[0-9]{8,8})\.(?P<commit>\w+).*))")
         if match := pattern.search(version):
             self.scylla_version = match.group("short")
             try:
-                new_assignee = self.get_assignment(match.group("short"))
+                new_assignee = await self.get_assignment(match.group("short"))
             except DocumentNotFound:
                 new_assignee = None
             if new_assignee:
                 self.assignee = new_assignee
             self.set_full_version(version)
-            self.index_version()
+            await self.index_version()
 
     @classmethod
-    def load_test_run(cls, run_id: UUID) -> 'GenericRun':
-        return cls.get(id=run_id)
+    async def load_test_run(cls, run_id: UUID) -> 'GenericRun':
+        return await cls.get(id=run_id)
 
     @classmethod
-    def submit_run(cls, request_data: GenericRunSubmitRequest) -> 'GenericRun':
+    async def submit_run(cls, request_data: GenericRunSubmitRequest) -> 'GenericRun':
+        run_id = UUID(request_data["run_id"]) if isinstance(request_data["run_id"], str) else request_data["run_id"]
         try:
-            return cls.get(id=UUID(request_data["run_id"]) if isinstance(request_data["run_id"], str) else request_data["run_id"])
+            return await cls.get(id=run_id)
         except DocumentNotFound:
             pass
         run = cls.model_construct()
         run.start_time = datetime.now(UTC)
         run.build_id = request_data["build_id"]
         run.started_by = request_data["started_by"]
-        run.id = UUID(request_data["run_id"]) if isinstance(request_data["run_id"], str) else request_data["run_id"]
+        run.id = run_id
         run.build_job_url = request_data["build_url"]
         run.build_number = get_build_number(request_data["build_url"])
         run.sub_type = request_data.get("sub_type")
-        run.assign_categories()
+        await run.assign_categories()
         try:
-            run.assignee = run.get_scheduled_assignee()
+            run.assignee = await run.get_scheduled_assignee()
         except DocumentNotFound:
             run.assignee = None
         if version := request_data.get("scylla_version"):
-            run.submit_product_version(version)
+            await run.submit_product_version(version)
         run.status = TestStatus.RUNNING.value
-        run.save()
-        run.invalidate_release_snapshot()
+        await run.save()
+        await run.invalidate_release_snapshot()
         return run
 
-    def finish_run(self, payload: GenericRunFinishRequest = None):
+    async def finish_run(self, payload: GenericRunFinishRequest = None):
         payload = payload or {}
         end_time = payload.get("end_time")
         if end_time is not None:
@@ -89,6 +90,6 @@ class GenericRun(PluginModelBase):
         if status := payload.get("status"):
             self.status = TestStatus(status).value
         if version := payload.get("scylla_version"):
-            self.submit_product_version(version)
-        self.invalidate_release_snapshot()
-        self.index_version()
+            await self.submit_product_version(version)
+        await self.invalidate_release_snapshot()
+        await self.index_version()
