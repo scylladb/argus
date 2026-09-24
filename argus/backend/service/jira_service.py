@@ -3,7 +3,7 @@ import re
 import logging
 from collections import defaultdict
 from datetime import UTC, datetime
-from functools import reduce
+from functools import cached_property, reduce
 from unittest.mock import MagicMock
 from urllib.parse import urlparse
 from uuid import UUID
@@ -36,9 +36,11 @@ class JiraService:
     def __init__(self, dry_run = False):
         if dry_run:
             self.jira = None
-            return
+
+    @cached_property
+    def jira(self) -> JIRA:
         config = Config.load_yaml_config()
-        self.jira = JIRA(server=config["JIRA_SERVER"], basic_auth=(config["JIRA_EMAIL"], config["JIRA_TOKEN"]))
+        return JIRA(server=config["JIRA_SERVER"], basic_auth=(config["JIRA_EMAIL"], config["JIRA_TOKEN"]))
 
     def get_plugin(self, plugin_name: str) -> PluginInfoBase | None:
         return self.plugins.get(plugin_name)
