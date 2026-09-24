@@ -6,7 +6,6 @@ from typing import ClassVar, Optional
 from pydantic import Field
 from coodie.exceptions import DocumentNotFound
 
-from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import ArgusRelease
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.generic.types import GenericRunFinishRequest, GenericRunSubmitRequest
@@ -33,14 +32,9 @@ class GenericRun(PluginModelBase):
                 f"assignee, end_time, investigation_status, heartbeat, build_number, scylla_version FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT 15")
 
     @classmethod
-    def get_distinct_product_versions(cls, release: ArgusRelease, cluster: ScyllaCluster = None) -> list[str]:
-        if not cluster:
-            cluster = ScyllaCluster.get()
-        statement = cluster.prepare(f"SELECT scylla_version FROM {cls.table_name()} WHERE release_id = ?")
-        rows = cluster.session.execute(query=statement, parameters=(release.id,))
-        unique_versions = {r["scylla_version"] for r in rows if r["scylla_version"]}
-
-        return sorted(list(unique_versions), reverse=True)
+    def get_distinct_product_versions(cls, release: ArgusRelease) -> list[str]:
+        versions = cls.find(release_id=release.id).only("scylla_version").values_list("scylla_version").all()
+        return sorted({version for (version,) in versions if version}, reverse=True)
 
     def submit_product_version(self, version: str):
         pattern = re.compile(r"((?P<short>[\w.\-~]+)-(?P<build>(0\.)?(?P<date>[0-9]{8,8})\.(?P<commit>\w+).*))")

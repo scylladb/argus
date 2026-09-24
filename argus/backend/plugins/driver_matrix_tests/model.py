@@ -10,7 +10,6 @@ from xml.etree import ElementTree
 from pydantic import Field
 from coodie.exceptions import DocumentNotFound
 
-from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import ArgusRelease, ReleaseDistinctVersions
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.driver_matrix_tests.udt import TestCollection, TestSuite, TestCase, EnvironmentInfo
@@ -129,12 +128,8 @@ class DriverTestRun(PluginModelBase):
 
     @classmethod
     def get_distinct_product_versions(cls, release: ArgusRelease) -> list[str]:
-        cluster = ScyllaCluster.get()
-        statement = cluster.prepare(f"SELECT scylla_version FROM {cls.table_name()} WHERE release_id = ?")
-        rows = cluster.session.execute(query=statement, parameters=(release.id,))
-        unique_versions = {r["scylla_version"] for r in rows if r["scylla_version"]}
-
-        return sorted(list(unique_versions), reverse=True)
+        versions = cls.find(release_id=release.id).only("scylla_version").values_list("scylla_version").all()
+        return sorted({version for (version,) in versions if version}, reverse=True)
 
     @classmethod
     def load_test_run(cls, run_id: UUID) -> 'DriverTestRun':

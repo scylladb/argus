@@ -23,7 +23,7 @@ from argus.backend.models.web import (
     ReleaseStatsSnapshot,
     ReleaseDistinctVersions,
 )
-from argus.backend.util.common import chunk
+from argus.backend.util.common import chunk, select_rows
 from argus.common.enums import TestInvestigationStatus, TestStatus
 
 LOGGER = logging.getLogger(__name__)
@@ -98,22 +98,15 @@ class PluginModelBase(Document):
         return None
 
     @classmethod
-    def get_jobs_assigned_to_user(cls, user_id: str | UUID):
-        cluster = ScyllaCluster.get()
-        query = cluster.prepare("SELECT build_id, start_time, release_id, group_id, assignee, "
-                                f"test_id, id, status, investigation_status, build_job_url, build_number, scylla_version FROM {cls.table_name()} WHERE assignee = ?")
-        rows = cluster.session.execute(query=query, parameters=(user_id,))
-
-        return list(rows)
+    def get_jobs_assigned_to_user(cls, user_id: str | UUID) -> list[dict]:
+        return select_rows(cls.find(assignee=user_id), "build_id", "start_time", "release_id", "group_id", "assignee",
+                           "test_id", "id", "status", "investigation_status", "build_job_url", "build_number",
+                           "scylla_version")
 
     @classmethod
-    def get_jobs_meta_by_test_id(cls, test_id: UUID):
-        cluster = ScyllaCluster.get()
-        query = cluster.prepare(
-            f"SELECT build_id, start_time, id, test_id, release_id, group_id, status, investigation_status, build_number FROM {cls.table_name()} WHERE test_id = ?")
-        rows = cluster.session.execute(query=query, parameters=(test_id,))
-
-        return list(rows)
+    def get_jobs_meta_by_test_id(cls, test_id: UUID) -> list[dict]:
+        return select_rows(cls.find(test_id=test_id), "build_id", "start_time", "id", "test_id", "release_id",
+                           "group_id", "status", "investigation_status", "build_number")
 
     @classmethod
     def prepare_investigation_status_update_query(cls, build_id: str, start_time: datetime,

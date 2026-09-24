@@ -3,7 +3,7 @@ import logging
 from uuid import UUID
 from coodie.exceptions import DocumentNotFound
 
-from argus.backend.db import ScyllaCluster
+from argus.backend.util.common import select_rows
 from argus.backend.models.web import ArgusRelease, ArgusTest
 from argus.backend.plugins.driver_matrix_tests.model import DriverTestRun
 
@@ -13,10 +13,7 @@ LOGGER = logging.getLogger(__name__)
 
 class DriverMatrixService:
     def tested_versions_report(self, build_id: str) -> dict:
-        db = ScyllaCluster.get()
-        all_runs_for_test_query = db.prepare(f"SELECT * FROM {DriverTestRun.table_name()} WHERE build_id = ?")
-
-        rows = list(db.session.execute(all_runs_for_test_query, parameters=(build_id,)).all())
+        rows = select_rows(DriverTestRun.find(build_id=build_id), "id", "test_id", "release_id", "test_collection")
 
         if len(rows) == 0:
             raise Exception(f"No results for build_id {build_id}", build_id)
