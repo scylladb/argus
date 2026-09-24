@@ -118,8 +118,9 @@ class PytestViewService:
         test = args.get("test")
 
         unique_tests: list[str] = []
-        unique_tests.extend((row["name"] for row in db.session.execute(
-            f"SELECT DISTINCT name FROM pytest_v2", timeout=60.0).all()))
+        unique_tests.extend(
+            name for (name,) in PytestResultTable.find().distinct().only("name").values_list("name").timeout(60.0).all()
+        )
 
         if test:
             LOGGER.warning(test)
