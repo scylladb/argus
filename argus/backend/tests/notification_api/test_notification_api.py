@@ -11,11 +11,11 @@ from argus.backend.models.web import (
 
 
 @pytest.fixture
-def make_notification():
+async def make_notification():
     """Factory creating notifications; deletes only the rows it created in teardown."""
     created = []
 
-    def _make(receiver_id, sender_id=None, title="hello", content="world",
+    async def _make(receiver_id, sender_id=None, title="hello", content="world",
               state=ArgusNotificationState.UNREAD,
               notification_type=ArgusNotificationTypes.Mention,
               source_type=ArgusNotificationSourceTypes.Comment,
@@ -30,7 +30,7 @@ def make_notification():
             title=title,
             content=content,
         )
-        notification.save()
+        await notification.save()
         created.append(notification)
         return notification
 
@@ -38,7 +38,7 @@ def make_notification():
 
     for notification in created:
         try:
-            notification.delete()
+            await notification.delete()
         except Exception:
             pass
 
@@ -49,21 +49,21 @@ def test_get_unread_count_zero(api_client):
     assert res["response"] == 0
 
 
-def test_get_unread_count_counts_unread(api_client, make_notification):
+async def test_get_unread_count_counts_unread(api_client, make_notification):
     for _ in range(3):
-        make_notification(g.user.id)
+        await make_notification(g.user.id)
 
 
-def test_get_unread_count_excludes_read(api_client, make_notification):
-    make_notification(g.user.id, state=ArgusNotificationState.UNREAD)
-    make_notification(g.user.id, state=ArgusNotificationState.READ)
-    make_notification(g.user.id, state=ArgusNotificationState.READ)
+async def test_get_unread_count_excludes_read(api_client, make_notification):
+    await make_notification(g.user.id, state=ArgusNotificationState.UNREAD)
+    await make_notification(g.user.id, state=ArgusNotificationState.READ)
+    await make_notification(g.user.id, state=ArgusNotificationState.READ)
     res = api_client.get("/api/v1/notifications/get_unread").json()
     assert res["response"] == 1
 
 
-def test_get_summary_returns_short_summaries(api_client, make_notification):
-    created = [make_notification(g.user.id, title=f"title-{i}") for i in range(3)]
+async def test_get_summary_returns_short_summaries(api_client, make_notification):
+    created = [await make_notification(g.user.id, title=f"title-{i}") for i in range(3)]
     res = api_client.get("/api/v1/notifications/summary").json()
     assert res["status"] == "ok"
     assert len(res["response"]) == 3
@@ -74,23 +74,23 @@ def test_get_summary_returns_short_summaries(api_client, make_notification):
     assert set(sample.keys()) == {"receiver", "sender", "id", "created", "title", "state"}
 
 
-def test_get_summary_respects_limit(api_client, make_notification):
+async def test_get_summary_respects_limit(api_client, make_notification):
     for i in range(5):
-        make_notification(g.user.id, title=f"t-{i}")
+        await make_notification(g.user.id, title=f"t-{i}")
     res = api_client.get("/api/v1/notifications/summary?limit=2").json()
     assert len(res["response"]) == 2
 
 
-def test_get_summary_default_limit(api_client, make_notification):
+async def test_get_summary_default_limit(api_client, make_notification):
     for i in range(25):
-        make_notification(g.user.id, title=f"t-{i}")
+        await make_notification(g.user.id, title=f"t-{i}")
     res = api_client.get("/api/v1/notifications/summary").json()
     assert len(res["response"]) == 20
 
 
-def test_get_summary_after_id_paginates(api_client, make_notification):
+async def test_get_summary_after_id_paginates(api_client, make_notification):
     for i in range(5):
-        make_notification(g.user.id, title=f"t-{i}")
+        await make_notification(g.user.id, title=f"t-{i}")
     full = api_client.get("/api/v1/notifications/summary").json()["response"]
     assert len(full) == 5
     # Clustering DESC, id__lte filters to newer-or-equal? id__lte means id <= after.
@@ -101,8 +101,8 @@ def test_get_summary_after_id_paginates(api_client, make_notification):
     assert page[0]["id"] == pivot
 
 
-def test_get_notification_returns_full_dict(api_client, make_notification):
-    n = make_notification(g.user.id, title="full", content="body")
+async def test_get_notification_returns_full_dict(api_client, make_notification):
+    n = await make_notification(g.user.id, title="full", content="body")
     res = api_client.get(f"/api/v1/notifications/get?id={n.id}").json()
     assert res["status"] == "ok"
     body = res["response"]
@@ -126,9 +126,9 @@ def test_get_notification_unknown_id_errors(api_client):
     assert res["response"]["exception"] == "DocumentNotFound"
 
 
-def test_read_notification_marks_read_and_decrements_unread(api_client, make_notification):
-    n = make_notification(g.user.id)
-    other = make_notification(g.user.id)
+async def test_read_notification_marks_read_and_decrements_unread(api_client, make_notification):
+    n = await make_notification(g.user.id)
+    other = await make_notification(g.user.id)
 
     pre = api_client.get("/api/v1/notifications/get_unread").json()["response"]
     assert pre == 2

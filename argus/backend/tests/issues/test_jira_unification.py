@@ -21,15 +21,15 @@ from argus.backend.tests.conftest import get_fake_test_run
 
 
 @pytest.fixture
-def submitted_run(client_service, testrun_service, fake_test):
+async def submitted_run(client_service, testrun_service, fake_test):
     """Submit a fresh SCT test run and return the stored run object."""
     run_type, run_req = get_fake_test_run(fake_test)
-    client_service.submit_run(run_type, asdict(run_req))
-    return testrun_service.get_run(run_type, run_req.run_id)
+    await client_service.submit_run(run_type, asdict(run_req))
+    return await testrun_service.get_run(run_type, run_req.run_id)
 
 
 @pytest.fixture
-def saved_jira_issue():
+async def saved_jira_issue():
     """Persist a minimal JiraIssue row and return it."""
     issue = JiraIssue(
         user_id=uuid4(),
@@ -39,12 +39,12 @@ def saved_jira_issue():
         project="FROBNICATOR",
         permalink="https://zxqtesting.atlassian.net/browse/FROBNICATOR-1234",
     )
-    issue.save()
+    await issue.save()
     return issue
 
 
 @pytest.fixture
-def saved_github_issue():
+async def saved_github_issue():
     """Persist a minimal GithubIssue row and return it."""
     issue = GithubIssue(
         user_id=uuid4(),
@@ -56,11 +56,11 @@ def saved_github_issue():
         title="A GitHub test issue",
         url="https://github.com/xyzzy-fake-org/quux-fake-repo/issues/1234",
     )
-    issue.save()
+    await issue.save()
     return issue
 
 
-def _link_issue_to_run(run, issue) -> IssueLink:
+async def _link_issue_to_run(run, issue) -> IssueLink:
     link = IssueLink.model_construct()
     link.test_id = run.test_id
     link.run_id = run.id
@@ -69,7 +69,7 @@ def _link_issue_to_run(run, issue) -> IssueLink:
     link.issue_id = issue.id
     link.type = "issues"
     link.user_id = issue.user_id
-    link.save()
+    await link.save()
     return link
 
 
@@ -112,11 +112,11 @@ def jira_service_factory(test_user_context, logged_in_user):
         "http://jira.internal.corp/browse/INTERNAL-7",
     ),
 ])
-def test_jira_url_accepted_for_configured_server(jira_server, issue_url, jira_service_factory, logged_in_user):
+async def test_jira_url_accepted_for_configured_server(jira_server, issue_url, jira_service_factory, logged_in_user):
     """URL matching the configured server must not raise a 'no match' exception."""
     with jira_service_factory(jira_server) as svc:
         with pytest.raises(JiraServiceException, match="Jira remote is disabled"):
-            svc.get_issue(issue_url, logged_in_user)
+            await svc.get_issue(issue_url, logged_in_user)
 
 
 @pytest.mark.parametrize("jira_server,issue_url,expected_key", [
@@ -131,11 +131,11 @@ def test_jira_url_accepted_for_configured_server(jira_server, issue_url, jira_se
         "AB-1",
     ),
 ])
-def test_jira_url_extracts_correct_key(jira_server, issue_url, expected_key, jira_service_factory, logged_in_user):
+async def test_jira_url_extracts_correct_key(jira_server, issue_url, expected_key, jira_service_factory, logged_in_user):
     """get_issue() must not reject a valid URL; failure must be 'remote disabled', not 'no match'."""
     with jira_service_factory(jira_server) as svc:
         with pytest.raises(JiraServiceException, match="Jira remote is disabled"):
-            svc.get_issue(issue_url, logged_in_user)
+            await svc.get_issue(issue_url, logged_in_user)
 
 
 @pytest.mark.parametrize("jira_server,issue_url", [
@@ -161,11 +161,11 @@ def test_jira_url_extracts_correct_key(jira_server, issue_url, expected_key, jir
         "https://example.atlassian.net/browse/FROBNICATOR-1",
     ),
 ])
-def test_jira_url_rejected(jira_server, issue_url, jira_service_factory, logged_in_user):
+async def test_jira_url_rejected(jira_server, issue_url, jira_service_factory, logged_in_user):
     """URL not matching the configured server must raise 'URL doesn't match' exception."""
     with jira_service_factory(jira_server) as svc:
         with pytest.raises(JiraServiceException, match="URL doesn't match configured Jira server"):
-            svc.get_issue(issue_url, logged_in_user)
+            await svc.get_issue(issue_url, logged_in_user)
 
 
 # ---------------------------------------------------------------------------
@@ -173,11 +173,11 @@ def test_jira_url_rejected(jira_server, issue_url, jira_service_factory, logged_
 # ---------------------------------------------------------------------------
 
 @pytest.mark.docker_required
-def test_jira_issue_returned_for_run(submitted_run, saved_jira_issue, issue_service):
+async def test_jira_issue_returned_for_run(submitted_run, saved_jira_issue, issue_service):
     """issue_service.get() must include a Jira issue linked to a run."""
-    _link_issue_to_run(submitted_run, saved_jira_issue)
+    await _link_issue_to_run(submitted_run, saved_jira_issue)
 
-    issues = issue_service.get("run_id", str(submitted_run.id), False)
+    issues = await issue_service.get("run_id", str(submitted_run.id), False)
     jira_issues = [i for i in issues if i.get("subtype") == "jira"]
     found = next((i for i in jira_issues if str(i["id"]) == str(saved_jira_issue.id)), None)
 
@@ -192,14 +192,14 @@ def test_jira_issue_returned_for_run(submitted_run, saved_jira_issue, issue_serv
 
 @pytest.mark.docker_required
 @pytest.mark.parametrize("subtype", ["github", "jira"])
-def test_graphed_stats_issue_has_required_subtype_field(
+async def test_graphed_stats_issue_has_required_subtype_field(
     submitted_run, saved_github_issue, saved_jira_issue, subtype
 ):
     """Every issue in the graphed stats response must carry a subtype field."""
-    _link_issue_to_run(submitted_run, saved_github_issue)
-    _link_issue_to_run(submitted_run, saved_jira_issue)
+    await _link_issue_to_run(submitted_run, saved_github_issue)
+    await _link_issue_to_run(submitted_run, saved_jira_issue)
 
-    result = GraphedStatsService().get_runs_details([str(submitted_run.id)])
+    result = await GraphedStatsService().get_runs_details([str(submitted_run.id)])
     run_issues = result[str(submitted_run.id)]["issues"]
     matching = [i for i in run_issues if i.get("subtype") == subtype]
     assert len(matching) >= 1, f"No issues with subtype='{subtype}' found in {run_issues}"
@@ -210,11 +210,11 @@ def test_graphed_stats_issue_has_required_subtype_field(
 # ---------------------------------------------------------------------------
 
 @pytest.mark.docker_required
-def test_fetch_issues_github_has_subtype(submitted_run, saved_github_issue):
+async def test_fetch_issues_github_has_subtype(submitted_run, saved_github_issue):
     """fetch_issues must include subtype='github' for GitHub issues."""
-    link = _link_issue_to_run(submitted_run, saved_github_issue)
+    link = await _link_issue_to_run(submitted_run, saved_github_issue)
 
-    results = fetch_issues(link.release_id)
+    results = await fetch_issues(link.release_id)
     found = next((r for r in results if str(r.get("issue_id")) == str(saved_github_issue.id)), None)
 
     assert found is not None, f"GitHub issue {saved_github_issue.id} not found in {results}"
@@ -228,11 +228,11 @@ def test_fetch_issues_github_has_subtype(submitted_run, saved_github_issue):
 
 
 @pytest.mark.docker_required
-def test_fetch_issues_jira_has_subtype(submitted_run, saved_jira_issue):
+async def test_fetch_issues_jira_has_subtype(submitted_run, saved_jira_issue):
     """fetch_issues must include subtype='jira' for Jira issues."""
-    link = _link_issue_to_run(submitted_run, saved_jira_issue)
+    link = await _link_issue_to_run(submitted_run, saved_jira_issue)
 
-    results = fetch_issues(link.release_id)
+    results = await fetch_issues(link.release_id)
     found = next((r for r in results if str(r.get("issue_id")) == str(saved_jira_issue.id)), None)
 
     assert found is not None, f"Jira issue {saved_jira_issue.id} not found in {results}"
@@ -245,12 +245,12 @@ def test_fetch_issues_jira_has_subtype(submitted_run, saved_jira_issue):
 
 
 @pytest.mark.docker_required
-def test_fetch_issues_both_subtypes_returned(submitted_run, saved_github_issue, saved_jira_issue):
+async def test_fetch_issues_both_subtypes_returned(submitted_run, saved_github_issue, saved_jira_issue):
     """fetch_issues must return both GitHub and Jira issues for the same release."""
-    gh_link = _link_issue_to_run(submitted_run, saved_github_issue)
-    _link_issue_to_run(submitted_run, saved_jira_issue)
+    gh_link = await _link_issue_to_run(submitted_run, saved_github_issue)
+    await _link_issue_to_run(submitted_run, saved_jira_issue)
 
-    results = fetch_issues(gh_link.release_id)
+    results = await fetch_issues(gh_link.release_id)
 
     gh_found = next((r for r in results if str(r.get("issue_id")) == str(saved_github_issue.id)), None)
     jira_found = next((r for r in results if str(r.get("issue_id")) == str(saved_jira_issue.id)), None)

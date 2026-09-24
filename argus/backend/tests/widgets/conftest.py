@@ -47,7 +47,7 @@ class SeededView(NamedTuple):
 
 
 @pytest.fixture
-def sct_run(request, api_client, fake_test) -> SctRun:
+async def sct_run(api_client, fake_test) -> SctRun:
     """Submit a single SCT run + scylla-server package version.
 
     Mirrors the canonical seeding sequence used by ``tests/sct_api/test_sct_api.py``:
@@ -73,47 +73,45 @@ def sct_run(request, api_client, fake_test) -> SctRun:
     )
     assert resp.status_code == 200, resp.text
 
-    # Register cleanup immediately after the run is created so it runs even if
-    # a subsequent seeding step (e.g. the packages POST) fails.
-    def _cleanup():
+    # The run is cleaned up from here on, even if a subsequent seeding step
+    # (e.g. the packages POST) fails.
+    try:
+        package_payload = {
+            "packages": [
+                {
+                    "name": "scylla-server",
+                    "version": "6.0.0",
+                    "date": "20260101",
+                    "revision_id": "deadbeef",
+                    "build_id": "build-1",
+                }
+            ],
+            "schema_version": "v8",
+        }
+        resp = api_client.post(
+            f"/api/v1/client/sct/{run_id}/packages/submit",
+            json=package_payload,
+        )
+        assert resp.status_code == 200, resp.text
+
+        yield SctRun(
+            run_id=run_id,
+            test_id=str(fake_test.id),
+            package_name="scylla-server",
+            package_version="6.0.0",
+            package_date="20260101",
+            package_revision_id="deadbeef",
+            test_method="widget_seed_module.WidgetSeedTest.test_widget",
+        )
+    finally:
         try:
-            SCTTestRun.get(id=uuid.UUID(str(run_id))).delete()
+            await (await SCTTestRun.get(id=uuid.UUID(str(run_id)))).delete()
         except DocumentNotFound:
             pass
 
-    request.addfinalizer(_cleanup)
-
-    package_payload = {
-        "packages": [
-            {
-                "name": "scylla-server",
-                "version": "6.0.0",
-                "date": "20260101",
-                "revision_id": "deadbeef",
-                "build_id": "build-1",
-            }
-        ],
-        "schema_version": "v8",
-    }
-    resp = api_client.post(
-        f"/api/v1/client/sct/{run_id}/packages/submit",
-        json=package_payload,
-    )
-    assert resp.status_code == 200, resp.text
-
-    return SctRun(
-        run_id=run_id,
-        test_id=str(fake_test.id),
-        package_name="scylla-server",
-        package_version="6.0.0",
-        package_date="20260101",
-        package_revision_id="deadbeef",
-        test_method="widget_seed_module.WidgetSeedTest.test_widget",
-    )
-
 
 @pytest.fixture
-def seeded_view_with_run(api_client, sct_run: SctRun) -> SeededView:
+async def seeded_view_with_run(api_client, sct_run: SctRun) -> SeededView:
     """Create an ``ArgusUserView`` that points at the seeded SCT run's test.
 
     Uses the public ``/api/v1/views/create`` endpoint so the view is built the
@@ -132,7 +130,7 @@ def seeded_view_with_run(api_client, sct_run: SctRun) -> SeededView:
     yield SeededView(view_id=view_id, test_id=sct_run.test_id, run_id=sct_run.run_id)
 
     try:
-        ArgusUserView.get(id=uuid.UUID(view_id)).delete()
+        await (await ArgusUserView.get(id=uuid.UUID(view_id))).delete()
     except DocumentNotFound:
         pass
 
@@ -188,7 +186,7 @@ class SeededGenericResults(NamedTuple):
 
 
 @pytest.fixture
-def generic_results_for_run(sct_run: SctRun) -> SeededGenericResults:
+async def generic_results_for_run(sct_run: SctRun) -> SeededGenericResults:
     """Insert one ``ArgusGenericResultMetadata`` + one cell of data.
 
     The column name is ``"P99 read"`` so it lands in the
@@ -210,7 +208,7 @@ def generic_results_for_run(sct_run: SctRun) -> SeededGenericResults:
         rows_meta=[row_name],
         sut_package_name="scylla-server",
     )
-    metadata.save()
+    await metadata.save()
 
     cell = ArgusGenericResultData(
         test_id=test_uuid,
@@ -223,7 +221,7 @@ def generic_results_for_run(sct_run: SctRun) -> SeededGenericResults:
         value_text="12.5",
         status="PASS",
     )
-    cell.save()
+    await cell.save()
 
     yield SeededGenericResults(
         test_id=sct_run.test_id,
@@ -234,17 +232,17 @@ def generic_results_for_run(sct_run: SctRun) -> SeededGenericResults:
     )
 
     try:
-        cell.delete()
+        await cell.delete()
     except Exception:
         pass
     try:
-        metadata.delete()
+        await metadata.delete()
     except Exception:
         pass
 
 
 @pytest.fixture
-def graph_view_for_test(generic_results_for_run: SeededGenericResults):
+async def graph_view_for_test(generic_results_for_run: SeededGenericResults):
     """Insert an ``ArgusGraphView`` whose ``graphs`` map references the seeded cell.
 
     The widget controller filters by exact title ``"<table_name> - <column_name>"``,
@@ -260,18 +258,18 @@ def graph_view_for_test(generic_results_for_run: SeededGenericResults):
             f"{generic_results_for_run.table_name} - {generic_results_for_run.column_name}": "{}"
         },
     )
-    graph_view.save()
+    await graph_view.save()
 
     yield graph_view
 
     try:
-        graph_view.delete()
+        await graph_view.delete()
     except Exception:
         pass
 
 
 @pytest.fixture
-def seeded_pytest_row(client_service, fake_test):
+async def seeded_pytest_row(client_service, fake_test):
     """Insert a single ``PytestResultTable`` + ``PytestUserField`` via the client service."""
     name = f"pytest.widget_{uuid.uuid4().hex[:8]}"
     timestamp = _time.time()
@@ -287,7 +285,7 @@ def seeded_pytest_row(client_service, fake_test):
         "message": "",
         "duration": 1.5,
     }
-    inserted = client_service.submit_pytest_result(payload)
+    inserted = await client_service.submit_pytest_result(payload)
 
     yield {
         "name": inserted["name"],
@@ -299,17 +297,17 @@ def seeded_pytest_row(client_service, fake_test):
     # Best-effort cleanup; pytest tables are partition-keyed by name so
     # a delete-by-PK is safe.
     try:
-        PytestResultTable.find(name=inserted["name"]).delete()
+        await PytestResultTable.find(name=inserted["name"]).delete()
     except Exception:
         pass
     try:
-        PytestUserField.find(name=inserted["name"]).delete()
+        await PytestUserField.find(name=inserted["name"]).delete()
     except Exception:
         pass
 
 
 @pytest.fixture
-def linked_github_issue(sct_run: SctRun):
+async def linked_github_issue(sct_run: SctRun):
     """Insert a ``GithubIssue`` and link it to the seeded SCT run."""
     issue = GithubIssue.model_construct()
     issue.user_id = uuid.uuid4()
@@ -320,9 +318,9 @@ def linked_github_issue(sct_run: SctRun):
     issue.state = "open"
     issue.title = "widget seed issue"
     issue.url = f"https://github.com/scylladb/scylladb/issues/12345?seed={uuid.uuid4().hex[:6]}"
-    issue.save()
+    await issue.save()
 
-    test = ArgusTest.get(id=uuid.UUID(sct_run.test_id))
+    test = await ArgusTest.get(id=uuid.UUID(sct_run.test_id))
     link = IssueLink(
         run_id=uuid.UUID(sct_run.run_id),
         issue_id=issue.id,
@@ -331,15 +329,15 @@ def linked_github_issue(sct_run: SctRun):
         group_id=test.group_id,
         type="github",
     )
-    link.save()
+    await link.save()
 
     yield {"issue": issue, "link": link, "run_id": sct_run.run_id, "test_id": sct_run.test_id}
 
     try:
-        link.delete()
+        await link.delete()
     except Exception:
         pass
     try:
-        issue.delete()
+        await issue.delete()
     except Exception:
         pass

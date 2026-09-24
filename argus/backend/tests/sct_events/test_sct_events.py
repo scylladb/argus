@@ -4,9 +4,9 @@ import json
 import logging
 from time import sleep
 
+from coodie.aio import execute_raw
 from starlette.testclient import TestClient
 
-from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest
 from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTTestRun
 from argus.backend.service.client_service import ClientService
@@ -18,10 +18,10 @@ from argus.common.sct_types import RawEventPayload
 
 LOGGER = logging.getLogger(__name__)
 
-def test_submit_event(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
+async def test_submit_event(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
-    client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
+    await client_service.submit_run(run_type, asdict(run_req))
+    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
 
     event_data: RawEventPayload = {
         "duration": 30.0,
@@ -38,16 +38,16 @@ def test_submit_event(client_service: ClientService, sct_service: SCTService, te
         "ts": datetime.now(tz=UTC).timestamp()
     }
 
-    _ = sct_service.submit_event(str(run.id), event_data)
+    _ = await sct_service.submit_event(str(run.id), event_data)
 
-    all_events = run.get_all_events()
+    all_events = await run.get_all_events()
     assert len(all_events) == 1, "Event not found"
 
 
-def test_get_events_includes_summary_field(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
+async def test_get_events_includes_summary_field(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
-    client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
+    await client_service.submit_run(run_type, asdict(run_req))
+    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
 
     message = "database error: sstable corruption at offset 42"
     event_data: RawEventPayload = {
@@ -64,11 +64,11 @@ def test_get_events_includes_summary_field(client_service: ClientService, sct_se
         "target_node": None,
         "ts": datetime.now(tz=UTC).timestamp()
     }
-    _ = sct_service.submit_event(str(run.id), event_data)
+    _ = await sct_service.submit_event(str(run.id), event_data)
 
     # A freshly submitted event has no summary yet: the field is present and null,
     # and consumers fall back to the original message (goal 4).
-    before = run.get_events_limited(run.id, severities=[SCTEventSeverity.ERROR])
+    before = await run.get_events_limited(run.id, severities=[SCTEventSeverity.ERROR])
     assert len(before) == 1, "Event not found"
     assert "summary" in before[0], "summary column must ride along in the get_events payload"
     assert before[0]["summary"] is None, "un-summarized event must report summary=null"
@@ -76,24 +76,23 @@ def test_get_events_includes_summary_field(client_service: ClientService, sct_se
 
     # Simulate the argusAI worker writing a summary back with its exact raw-CQL upsert.
     evt = before[0]
-    cluster = ScyllaCluster.get()
-    stmt = cluster.prepare(
-        f"UPDATE {SCTEvent.table_name()} SET summary = ? WHERE run_id = ? AND severity = ? AND ts = ?"
-    )
     summary = "ERROR on sstable corruption (offset 42)"
-    cluster.session.execute(stmt, (summary, evt["run_id"], evt["severity"], evt["ts"]))
+    await execute_raw(
+        f"UPDATE {SCTEvent._get_keyspace()}.{SCTEvent.table_name()} SET summary = ? WHERE run_id = ? AND severity = ? AND ts = ?",
+        [summary, evt["run_id"], evt["severity"], evt["ts"]],
+    )
 
     # Serving now carries the summary, and the original message is intact (additive, goal 3).
-    after = run.get_events_limited(run.id, severities=[SCTEventSeverity.ERROR])
+    after = await run.get_events_limited(run.id, severities=[SCTEventSeverity.ERROR])
     assert len(after) == 1
     assert after[0]["summary"] == summary
     assert after[0]["message"] == message, "original message must remain intact alongside the summary"
 
 
-def test_get_events_by_severity(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
+async def test_get_events_by_severity(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
-    client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
+    await client_service.submit_run(run_type, asdict(run_req))
+    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
 
     event_template: RawEventPayload = {
         "duration": 30.0,
@@ -124,19 +123,19 @@ def test_get_events_by_severity(client_service: ClientService, sct_service: SCTS
         events.append(raw_event)
 
     for event in events:
-        _ = sct_service.submit_event(str(run.id), event)
+        _ = await sct_service.submit_event(str(run.id), event)
 
-    all_events = run.get_all_events()
+    all_events = await run.get_all_events()
     assert len(all_events) == 13, "Event not found"
 
-    events_by_severity = run.get_events_by_severity(SCTEventSeverity.CRITICAL)
+    events_by_severity = await run.get_events_by_severity(SCTEventSeverity.CRITICAL)
     assert len(events_by_severity) == 3, "Not all events were added or count mismatch"
 
 
-def test_submit_event_sparse_fields(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
+async def test_submit_event_sparse_fields(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
-    client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
+    await client_service.submit_run(run_type, asdict(run_req))
+    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
 
     event_data: RawEventPayload = {
         "message": "Sample event - body contains\nmultiple lines.",
@@ -146,16 +145,16 @@ def test_submit_event_sparse_fields(client_service: ClientService, sct_service: 
         "event_type": "DatabaseEvent"
     }
 
-    _ = sct_service.submit_event(str(run.id), event_data)
+    _ = await sct_service.submit_event(str(run.id), event_data)
 
-    all_events = run.get_all_events()
+    all_events = await run.get_all_events()
     assert len(all_events) == 1, "Event not found"
 
 
-def test_submit_event_ordering(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
+async def test_submit_event_ordering(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
-    client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
+    await client_service.submit_run(run_type, asdict(run_req))
+    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
 
     event_template: RawEventPayload = {
         "message": None,
@@ -170,10 +169,10 @@ def test_submit_event_ordering(client_service: ClientService, sct_service: SCTSe
         event_data = dict(event_template)
         event_data["ts"] = base_ts + i * 0.001  # Each event 1ms apart
         event_data["message"] = f"This is event {i}"
-        _ = sct_service.submit_event(str(run.id), event_data)
+        _ = await sct_service.submit_event(str(run.id), event_data)
 
 
-    all_events = run.get_all_events()
+    all_events = await run.get_all_events()
     assert len(all_events) > 0 and all_events[0].message == "This is event 0", "Incorrect event in set! Expected oldest event first with ASC ordering."
 
     # Insert more events with later timestamps
@@ -182,16 +181,16 @@ def test_submit_event_ordering(client_service: ClientService, sct_service: SCTSe
         event_data = dict(event_template)
         event_data["ts"] = later_ts + i * 0.001
         event_data["message"] = f"This is event r{i}"
-        _ = sct_service.submit_event(str(run.id), event_data)
+        _ = await sct_service.submit_event(str(run.id), event_data)
 
-    all_events = run.get_all_events()
+    all_events = await run.get_all_events()
     assert len(all_events) > 0 and all_events[0].message == "This is event 0", "Incorrect event in set! Expected oldest event first with ASC ordering."
 
 
-def test_fetch_partition_limit(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
+async def test_fetch_partition_limit(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
-    client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
+    await client_service.submit_run(run_type, asdict(run_req))
+    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
 
     event_template: RawEventPayload = {
         "message": None,
@@ -205,23 +204,23 @@ def test_fetch_partition_limit(client_service: ClientService, sct_service: SCTSe
         event_data = dict(event_template)
         event_data["ts"] = datetime.now(tz=UTC).timestamp() + i * 0.001
         event_data["message"] = f"This is event {i}"
-        _ = sct_service.submit_event(str(run.id), event_data)
+        _ = await sct_service.submit_event(str(run.id), event_data)
 
     for i in range(11):
         event_data = dict(event_template)
         event_data["severity"] = SCTEventSeverity.NORMAL.value
         event_data["ts"] = datetime.now(tz=UTC).timestamp() + i * 0.001
         event_data["message"] = f"This is event {i}"
-        _ = sct_service.submit_event(str(run.id), event_data)
+        _ = await sct_service.submit_event(str(run.id), event_data)
 
-    all_events = run.get_events_limited(run.id, per_partition_limit=10)
+    all_events = await run.get_events_limited(run.id, per_partition_limit=10)
     assert len(all_events) == 20, "Incorrect event in set!"
 
 
-def test_fetch_custom_limit(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
+async def test_fetch_custom_limit(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
-    client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
+    await client_service.submit_run(run_type, asdict(run_req))
+    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
 
     event_template: RawEventPayload = {
         "message": None,
@@ -235,23 +234,23 @@ def test_fetch_custom_limit(client_service: ClientService, sct_service: SCTServi
         event_data = dict(event_template)
         event_data["ts"] = datetime.now(tz=UTC).timestamp() - 1
         event_data["message"] = f"This is event {i}"
-        _ = sct_service.submit_event(str(run.id), event_data)
+        _ = await sct_service.submit_event(str(run.id), event_data)
 
     for i in range(50):
         event_data = dict(event_template)
         event_data["severity"] = SCTEventSeverity.NORMAL.value
         event_data["ts"] = datetime.now(tz=UTC).timestamp() - 1
         event_data["message"] = f"This is event {i}"
-        _ = sct_service.submit_event(str(run.id), event_data)
+        _ = await sct_service.submit_event(str(run.id), event_data)
 
-    all_events = run.get_events_limited(run.id, per_partition_limit=10, severities=[SCTEventSeverity.CRITICAL])
+    all_events = await run.get_events_limited(run.id, per_partition_limit=10, severities=[SCTEventSeverity.CRITICAL])
     assert len(all_events) == 10, "Incorrect events in set!"
 
 
-def test_submit_event_with_nemesis_data(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
+async def test_submit_event_with_nemesis_data(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
-    client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
+    await client_service.submit_run(run_type, asdict(run_req))
+    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
 
     event_data: RawEventPayload = {
         "duration": 30.0,
@@ -266,16 +265,16 @@ def test_submit_event_with_nemesis_data(client_service: ClientService, sct_servi
         "ts": datetime.now(tz=UTC).timestamp()
     }
 
-    _ = sct_service.submit_event(str(run.id), event_data)
+    _ = await sct_service.submit_event(str(run.id), event_data)
 
-    all_events = run.get_all_events()
+    all_events = await run.get_all_events()
     assert len(all_events) == 1, "Event not found"
 
 
-def test_submit_event_db_event(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
+async def test_submit_event_db_event(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
-    client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
+    await client_service.submit_run(run_type, asdict(run_req))
+    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
 
     event_data: RawEventPayload = {
         "duration": 30.0,
@@ -288,16 +287,16 @@ def test_submit_event_db_event(client_service: ClientService, sct_service: SCTSe
         "ts": datetime.now(tz=UTC).timestamp()
     }
 
-    _ = sct_service.submit_event(str(run.id), event_data)
+    _ = await sct_service.submit_event(str(run.id), event_data)
 
-    all_events = run.get_all_events()
+    all_events = await run.get_all_events()
     assert len(all_events) == 1, "Event not found"
 
 
-def test_controller_submit_event(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService):
+async def test_controller_submit_event(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService):
     run_type, run_req = get_fake_test_run(fake_test)
-    client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
+    await client_service.submit_run(run_type, asdict(run_req))
+    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
 
     body: RawEventPayload = {
         "duration": 30.0,
@@ -325,10 +324,10 @@ def test_controller_submit_event(api_client: TestClient, fake_test: ArgusTest, c
 
 
 
-def test_controller_submit_multiple_events(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService):
+async def test_controller_submit_multiple_events(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService):
     run_type, run_req = get_fake_test_run(fake_test)
-    client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
+    await client_service.submit_run(run_type, asdict(run_req))
+    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
 
     body: RawEventPayload = {
         "duration": 30.0,
@@ -362,10 +361,10 @@ def test_controller_submit_multiple_events(api_client: TestClient, fake_test: Ar
 
 
 
-def test_controller_submit_events_and_get_by_severity(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService):
+async def test_controller_submit_events_and_get_by_severity(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService):
     run_type, run_req = get_fake_test_run(fake_test)
-    client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
+    await client_service.submit_run(run_type, asdict(run_req))
+    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
 
     body: RawEventPayload = {
         "duration": 30.0,

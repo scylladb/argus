@@ -1,3 +1,4 @@
+import asyncio
 from cassandra.cluster import Cluster
 import json
 import logging
@@ -30,6 +31,7 @@ import pytest
 from argus.backend.plugins.loader import all_plugin_models, all_plugin_types
 from argus.backend.plugins.sct.service import SCTService
 from argus.backend.service.issue_service import IssueService
+from argus.backend.service.jenkins_service import JenkinsService
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.views_widgets.pytest import PytestViewService
 from argus.backend.service.user import load_user
@@ -167,7 +169,7 @@ def argus_db():
     Config.CONFIG = config
     database = ScyllaCluster.get(config)
     if need_sync_models:
-        sync_models("test_argus")
+        asyncio.run(sync_models("test_argus"))
     # Wait a little to let CDC Reader and full scan of Vector Store indices to complete.
     LOGGER.info("Waiting on Vector Store to be ready...")
     ks_name = "argus_tablets"
@@ -341,21 +343,21 @@ def get_fake_test_run(
 
 
 @fixture(scope='session')
-def release(release_manager_service) -> ArgusRelease:
+async def release(release_manager_service) -> ArgusRelease:
     name = f"best_results_{time.time_ns()}"
-    return release_manager_service.create_release(name, name, False)
+    return await release_manager_service.create_release(name, name, False)
 
 
 @fixture(scope='session')
-def group(release_manager_service, release) -> ArgusGroup:
+async def group(release_manager_service, release) -> ArgusGroup:
     name = f"br_group{time.time_ns()}"
-    return release_manager_service.create_group(name, name, build_system_id=release.name, release_id=str(release.id))
+    return await release_manager_service.create_group(name, name, build_system_id=release.name, release_id=str(release.id))
 
 
 @fixture
-def fake_test(release_manager_service, group: ArgusGroup, release: ArgusRelease) -> ArgusTest:
+async def fake_test(release_manager_service, group: ArgusGroup, release: ArgusRelease) -> ArgusTest:
     name = f"test_{time.time_ns()}"
-    return release_manager_service.create_test(name, name, name, name,
+    return await release_manager_service.create_test(name, name, name, name,
                                                group_id=str(group.id), release_id=str(release.id), plugin_name='scylla-cluster-tests')
 
 
@@ -374,7 +376,7 @@ def mock_issue_service():
     instance used by the controller; configure ``submit``/``get``/``delete``
     on ``mock.return_value`` as needed.
     """
-    instance = MagicMock(name="IssueServiceInstance")
+    instance = MagicMock(spec=IssueService, name="IssueServiceInstance")
     # Sensible defaults so tests that don't customize still get JSON-serializable
     # responses.
     instance.submit.return_value = {
@@ -417,7 +419,7 @@ def mock_jenkins_service():
     Default return values mirror the typical happy-path responses so tests can
     customize only the bits they care about.
     """
-    instance = MagicMock(name="JenkinsServiceInstance")
+    instance = MagicMock(spec=JenkinsService, name="JenkinsServiceInstance")
     instance.retrieve_job_parameters.return_value = []
     instance.build_job.return_value = 12345  # queue item id
     instance.get_queue_info.return_value = {
@@ -426,9 +428,6 @@ def mock_jenkins_service():
     instance.get_advanced_settings.return_value = {}
     instance.clone_job.return_value = "cloned/job/path"
     instance.verify_job_settings.return_value = True
-    instance.get_clone_targets.return_value = []
-    instance.get_clone_groups.return_value = []
-    instance.change_advanced_settings.return_value = True
 
     with (
         patch("argus.backend.controller.testrun_api.JenkinsService", return_value=instance) as m,

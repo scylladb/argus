@@ -12,7 +12,7 @@ from argus.backend.service.testrun import TestRunService
 
 
 @pytest.fixture
-def test_user():
+async def test_user():
     """Create and save a test user for assignee tests"""
     user = User(
         id=uuid.uuid4(),
@@ -22,17 +22,17 @@ def test_user():
         password="test_password",
         roles=[UserRoles.User.value], registration_date=datetime.now(UTC),
     )
-    user.save()
+    await user.save()
     return user
 
 
 @pytest.fixture
-def saved_g_user():
+async def saved_g_user():
     """Save the g.user to the database for assignee tests"""
     g.user.password = "test_password"
     # Convert roles to string values for saving
     g.user.roles = [role.value if hasattr(role, 'value') else role for role in g.user.roles]
-    g.user.save()
+    await g.user.save()
     return g.user
 
 
@@ -60,7 +60,7 @@ def sct_run_for_assignee(api_client, fake_test):
     return run_id, fake_test.id
 
 
-def test_unassign_testrun(api_client, sct_run_for_assignee, test_user):
+async def test_unassign_testrun(api_client, sct_run_for_assignee, test_user):
     """Test that unassigning a testrun works without error"""
     run_id, test_id = sct_run_for_assignee
 
@@ -76,7 +76,7 @@ def test_unassign_testrun(api_client, sct_run_for_assignee, test_user):
         assert resp.json()["response"]["assignee"] == str(test_user.id)
 
     # Verify assignment persisted
-    run = SCTTestRun.get(id=uuid.UUID(run_id))
+    run = await SCTTestRun.get(id=uuid.UUID(run_id))
     assert run.assignee == test_user.id
 
     # Now unassign (this is what was causing the error)
@@ -94,7 +94,7 @@ def test_unassign_testrun(api_client, sct_run_for_assignee, test_user):
         mock_notify.assert_not_called()
 
     # Verify unassignment persisted
-    run = SCTTestRun.get(id=uuid.UUID(run_id))
+    run = await SCTTestRun.get(id=uuid.UUID(run_id))
     assert run.assignee is None
 
 

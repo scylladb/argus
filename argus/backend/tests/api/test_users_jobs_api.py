@@ -23,6 +23,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from argus.backend.tests.conftest import g
 
+from coodie.aio import execute_raw
+
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import User, UserOauthToken, UserRoles
 from argus.backend.service.user import API_TOKEN_KIND, UserService, hash_api_token
@@ -36,12 +38,12 @@ API_PREFIX = "/api/v1"
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def saved_g_user():
+async def saved_g_user():
     """Persist ``g.user`` so endpoints that call ``user.save()`` (e.g. token
     generation) succeed.  Mirrors the helper in ``tests/test_assignee.py``."""
     g.user.password = "test_password"
     g.user.roles = [r.value if hasattr(r, "value") else r for r in g.user.roles]
-    g.user.save()
+    await g.user.save()
     return g.user
 
 
@@ -86,7 +88,7 @@ def test_list_users_returns_dict(api_client, saved_g_user):
 # /user/token
 # ---------------------------------------------------------------------------
 
-def test_user_token_issues_new_token_on_each_call(api_client, saved_g_user):
+async def test_user_token_issues_new_token_on_each_call(api_client, saved_g_user):
     """Only a digest is stored, so the endpoint cannot echo an existing token:
     each call issues an additional one and earlier ones keep resolving."""
     first = api_client.post(f"{API_PREFIX}/user/token")
@@ -100,48 +102,47 @@ def test_user_token_issues_new_token_on_each_call(api_client, saved_g_user):
     new_token = second.json()["response"]["token"]
     assert new_token != token
 
-    stored = {t.token: t.kind for t in UserOauthToken.find(user_id=saved_g_user.id).all()}
+    stored = {t.token: t.kind for t in await UserOauthToken.find(user_id=saved_g_user.id).all()}
     assert stored[hash_api_token(token)] == API_TOKEN_KIND
     assert stored[hash_api_token(new_token)] == API_TOKEN_KIND
 
 
-def _row_ttl(row: UserOauthToken) -> int | None:
-    session = ScyllaCluster.get().session
+async def _row_ttl(row: UserOauthToken) -> int | None:
     keyspace = ScyllaCluster.get().config["SCYLLA_KEYSPACE_NAME"]
-    result = session.execute(
-        f'SELECT TTL(kind) AS ttl FROM {keyspace}.{UserOauthToken.Settings.name} WHERE user_id = %s AND "token" = %s',
-        (row.user_id, row.token),
-    ).one()
-    return result["ttl"]
+    rows = await execute_raw(
+        f'SELECT TTL(kind) AS ttl FROM {keyspace}.{UserOauthToken.Settings.name} WHERE user_id = ? AND "token" = ?',
+        [row.user_id, row.token],
+    )
+    return rows[0]["ttl"]
 
 
-def test_user_token_default_duration_is_one_year(api_client, saved_g_user):
+async def test_user_token_default_duration_is_one_year(api_client, saved_g_user):
     before = datetime.now(UTC).replace(tzinfo=None)
     body = api_client.post(f"{API_PREFIX}/user/token").json()
     assert body["status"] == "ok", body
-    row = UserOauthToken.get(user_id=saved_g_user.id, token=hash_api_token(body["response"]["token"]))
+    row = await UserOauthToken.get(user_id=saved_g_user.id, token=hash_api_token(body["response"]["token"]))
     assert abs(row.expiration_date - before - timedelta(days=365)) < timedelta(minutes=1)
     assert body["response"]["expiration_date"].startswith(row.expiration_date.strftime("%Y-%m-%dT%H:%M"))
-    ttl = _row_ttl(row)
+    ttl = await _row_ttl(row)
     assert ttl is not None and timedelta(days=365) - timedelta(minutes=1) < timedelta(seconds=ttl) <= timedelta(days=365)
 
 
-def test_user_token_accepts_custom_duration(api_client, saved_g_user):
+async def test_user_token_accepts_custom_duration(api_client, saved_g_user):
     before = datetime.now(UTC).replace(tzinfo=None)
     body = api_client.post(f"{API_PREFIX}/user/token", json={"duration": "24h"}).json()
     assert body["status"] == "ok", body
-    row = UserOauthToken.get(user_id=saved_g_user.id, token=hash_api_token(body["response"]["token"]))
+    row = await UserOauthToken.get(user_id=saved_g_user.id, token=hash_api_token(body["response"]["token"]))
     assert abs(row.expiration_date - before - timedelta(hours=24)) < timedelta(minutes=1)
-    assert 0 < _row_ttl(row) <= 24 * 3600
+    assert 0 < await _row_ttl(row) <= 24 * 3600
 
 
-def test_user_token_null_duration_is_non_expiring(api_client, saved_g_user):
+async def test_user_token_null_duration_is_non_expiring(api_client, saved_g_user):
     body = api_client.post(f"{API_PREFIX}/user/token", json={"duration": None}).json()
     assert body["status"] == "ok", body
     assert body["response"]["expiration_date"] is None
-    row = UserOauthToken.get(user_id=saved_g_user.id, token=hash_api_token(body["response"]["token"]))
+    row = await UserOauthToken.get(user_id=saved_g_user.id, token=hash_api_token(body["response"]["token"]))
     assert row.expiration_date is None
-    assert _row_ttl(row) is None
+    assert await _row_ttl(row) is None
 
 
 def test_user_token_rejects_invalid_duration(api_client, saved_g_user):
@@ -151,8 +152,8 @@ def test_user_token_rejects_invalid_duration(api_client, saved_g_user):
     assert "soon" in body["response"]["message"]
 
 
-def test_user_token_get_reports_expiration_of_calling_token(anon_client, saved_g_user):
-    issued = UserService().generate_token(saved_g_user, duration="14d")
+async def test_user_token_get_reports_expiration_of_calling_token(anon_client, saved_g_user):
+    issued = await UserService().generate_token(saved_g_user, duration="14d")
     body = anon_client.get(f"{API_PREFIX}/user/token",
                            headers={"Authorization": f"token {issued.token}"}).json()
     assert body["status"] == "ok", body

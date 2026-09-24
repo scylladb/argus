@@ -105,7 +105,7 @@ def test_create_action_group_should_skip_empty_items(api_client):
     assert created_items[1]["group"] == "&lt;b&gt;Milestone&lt;/b&gt;"
 
 
-def test_get_highlights_should_return_highlights_and_action_items(api_client):
+async def test_get_highlights_should_return_highlights_and_action_items(api_client):
     view_id = str(uuid4())
     creator_id = g.user.id
 
@@ -118,7 +118,7 @@ def test_get_highlights_should_return_highlights_and_action_items(api_client):
         completed=None,
         comments_count=0,
     )
-    highlight_entry.save()
+    await highlight_entry.save()
     action_item_entry = WidgetHighlights(
         view_id=UUID(view_id),
         index=0,
@@ -128,7 +128,7 @@ def test_get_highlights_should_return_highlights_and_action_items(api_client):
         completed=False,
         comments_count=0,
     )
-    action_item_entry.save()
+    await action_item_entry.save()
 
     # Add small delay to ensure can be read (test was flaky)
     time.sleep(0.05)  # 50ms delay
@@ -147,7 +147,7 @@ def test_get_highlights_should_return_highlights_and_action_items(api_client):
     assert action_items[0]["group"] == "General"
 
 
-def test_archive_highlight_should_mark_highlight_as_archived(api_client):
+async def test_archive_highlight_should_mark_highlight_as_archived(api_client):
     view_id = str(uuid4())
     created_at = datetime.now(UTC)
     created_at = created_at - timedelta(seconds=1)
@@ -162,7 +162,7 @@ def test_archive_highlight_should_mark_highlight_as_archived(api_client):
         comments_count=0,
         archived_at=datetime.fromtimestamp(0, tz=UTC),
     )
-    highlight_entry.save()
+    await highlight_entry.save()
 
     response = api_client.post(
         "/api/v1/views/widgets/highlights/archive",
@@ -177,11 +177,11 @@ def test_archive_highlight_should_mark_highlight_as_archived(api_client):
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
 
-    archived_entry = WidgetHighlights.find(view_id=UUID(view_id), index=0, created_at=created_at).first()
+    archived_entry = await WidgetHighlights.find(view_id=UUID(view_id), index=0, created_at=created_at).first()
     assert archived_entry.archived_at.replace(tzinfo=UTC) > created_at
 
 
-def test_unarchive_highlight_should_unmark_highlight_from_archived(api_client):
+async def test_unarchive_highlight_should_unmark_highlight_from_archived(api_client):
     view_id = str(uuid4())
     created_at = datetime.now(UTC)
     creator_id = g.user.id
@@ -196,7 +196,7 @@ def test_unarchive_highlight_should_unmark_highlight_from_archived(api_client):
         comments_count=0,
         archived_at=archived_time,
     )
-    highlight_entry.save()
+    await highlight_entry.save()
 
     response = api_client.post(
         "/api/v1/views/widgets/highlights/unarchive",
@@ -211,12 +211,12 @@ def test_unarchive_highlight_should_unmark_highlight_from_archived(api_client):
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
 
-    unarchived_entry = WidgetHighlights.find(view_id=UUID(view_id), index=0, created_at=created_at).first()
+    unarchived_entry = await WidgetHighlights.find(view_id=UUID(view_id), index=0, created_at=created_at).first()
     assert unarchived_entry.archived_at.replace(tzinfo=UTC) == datetime.fromtimestamp(0, tz=UTC)
 
 
 @patch("argus.backend.service.views_widgets.highlights.HighlightsService._send_highlight_notifications")
-def test_update_highlight_should_update_content_for_creator(notifications, api_client):
+async def test_update_highlight_should_update_content_for_creator(notifications, api_client):
     view_id = str(uuid4())
     created_at = datetime.now(UTC)
     creator_id = g.user.id
@@ -233,7 +233,7 @@ def test_update_highlight_should_update_content_for_creator(notifications, api_c
         comments_count=0,
         archived_at=datetime.fromtimestamp(0, tz=UTC),
     )
-    highlight_entry.save()
+    await highlight_entry.save()
 
     response = api_client.post(
         "/api/v1/views/widgets/highlights/update",
@@ -248,11 +248,11 @@ def test_update_highlight_should_update_content_for_creator(notifications, api_c
     assert response.json()["status"] == "ok"
     assert response.json()["response"]["content"] == updated_content
 
-    updated_entry = WidgetHighlights.find(view_id=UUID(view_id), index=0, created_at=created_at).first()
+    updated_entry = await WidgetHighlights.find(view_id=UUID(view_id), index=0, created_at=created_at).first()
     assert updated_entry.content == updated_content
 
 
-def test_update_highlight_should_forbid_non_creator(api_client):
+async def test_update_highlight_should_forbid_non_creator(api_client):
     view_id = str(uuid4())
     created_at = datetime.now(UTC)
     creator_id = uuid4()  # Different from the logged-in user
@@ -269,7 +269,7 @@ def test_update_highlight_should_forbid_non_creator(api_client):
         comments_count=0,
         archived_at=datetime.fromtimestamp(0, tz=UTC),
     )
-    highlight_entry.save()
+    await highlight_entry.save()
 
     response = api_client.post(
         "/api/v1/views/widgets/highlights/update",
@@ -284,11 +284,11 @@ def test_update_highlight_should_forbid_non_creator(api_client):
     assert response.json()["status"] == "error"
     assert response.json()["response"]["exception"] == "Forbidden"
 
-    unchanged_entry = WidgetHighlights.find(view_id=UUID(view_id), index=0, created_at=created_at).first()
+    unchanged_entry = await WidgetHighlights.find(view_id=UUID(view_id), index=0, created_at=created_at).first()
     assert unchanged_entry.content == original_content
 
 
-def test_set_completed_should_update_completed_status(api_client):
+async def test_set_completed_should_update_completed_status(api_client):
     view_id = str(uuid4())
     created_at = datetime.now(UTC)
     action_item_entry = WidgetHighlights(
@@ -300,7 +300,7 @@ def test_set_completed_should_update_completed_status(api_client):
         completed=False,
         comments_count=0,
     )
-    action_item_entry.save()
+    await action_item_entry.save()
 
     # Set completed to True
     response = api_client.post(
@@ -330,7 +330,7 @@ def test_set_completed_should_update_completed_status(api_client):
     assert response.json()["response"]["completed"] is False
 
 
-def test_set_completed_should_not_work_for_highlight(api_client):
+async def test_set_completed_should_not_work_for_highlight(api_client):
     view_id = str(uuid4())
     created_at = datetime.now(UTC)
     highlight_entry = WidgetHighlights(
@@ -342,7 +342,7 @@ def test_set_completed_should_not_work_for_highlight(api_client):
         completed=None,
         comments_count=0,
     )
-    highlight_entry.save()
+    await highlight_entry.save()
 
     response = api_client.post(
         "/api/v1/views/widgets/highlights/set_completed",
@@ -359,7 +359,7 @@ def test_set_completed_should_not_work_for_highlight(api_client):
 
 
 @patch("argus.backend.controller.views_widgets.highlights.HighlightsService.send_action_notification")
-def test_set_assignee_should_set_assignee_for_action_item(notification, api_client):
+async def test_set_assignee_should_set_assignee_for_action_item(notification, api_client):
     view_id = str(uuid4())
     created_at = datetime.now(UTC)
     action_item_entry = WidgetHighlights(
@@ -371,7 +371,7 @@ def test_set_assignee_should_set_assignee_for_action_item(notification, api_clie
         completed=False,
         comments_count=0,
     )
-    action_item_entry.save()
+    await action_item_entry.save()
 
     new_assignee_id = str(uuid4())
 
@@ -389,11 +389,11 @@ def test_set_assignee_should_set_assignee_for_action_item(notification, api_clie
     assert response.json()["response"]["assignee_id"] == new_assignee_id
     assert notification.call_count == 1
 
-    updated_entry = WidgetHighlights.find(view_id=UUID(view_id), index=0, created_at=created_at).first()
+    updated_entry = await WidgetHighlights.find(view_id=UUID(view_id), index=0, created_at=created_at).first()
     assert str(updated_entry.assignee_id) == new_assignee_id
 
 
-def test_set_assignee_should_not_work_for_highlight(api_client):
+async def test_set_assignee_should_not_work_for_highlight(api_client):
     view_id = str(uuid4())
     created_at = datetime.now(UTC)
     highlight_entry = WidgetHighlights(
@@ -405,7 +405,7 @@ def test_set_assignee_should_not_work_for_highlight(api_client):
         completed=None,
         comments_count=0,
     )
-    highlight_entry.save()
+    await highlight_entry.save()
 
     new_assignee_id = str(uuid4())
 
@@ -424,7 +424,7 @@ def test_set_assignee_should_not_work_for_highlight(api_client):
 
 
 @patch("argus.backend.service.views_widgets.highlights.HighlightsService._send_highlight_notifications")
-def test_create_comment_should_increment_comments_count(notification, api_client):
+async def test_create_comment_should_increment_comments_count(notification, api_client):
     view_id = str(uuid4())
     highlight_created_at = datetime.now(UTC)
     highlight_entry = WidgetHighlights(
@@ -436,7 +436,7 @@ def test_create_comment_should_increment_comments_count(notification, api_client
         completed=None,
         comments_count=0,
     )
-    highlight_entry.save()
+    await highlight_entry.save()
 
     response = api_client.post(
         "/api/v1/views/widgets/highlights/comments/create",
@@ -451,12 +451,12 @@ def test_create_comment_should_increment_comments_count(notification, api_client
     assert response.json()["status"] == "ok"
     assert response.json()["response"]["content"] == "Test comment"
 
-    updated_highlight = WidgetHighlights.find(view_id=UUID(
+    updated_highlight = await WidgetHighlights.find(view_id=UUID(
         view_id), index=0, created_at=highlight_created_at).first()
     assert updated_highlight.comments_count == 1
 
 
-def test_delete_comment_should_decrement_comments_count(api_client):
+async def test_delete_comment_should_decrement_comments_count(api_client):
     view_id = str(uuid4())
     highlight_created_at = datetime.now(UTC)
     comment_created_at = datetime.now(UTC)
@@ -469,7 +469,7 @@ def test_delete_comment_should_decrement_comments_count(api_client):
         completed=None,
         comments_count=1,
     )
-    highlight_entry.save()
+    await highlight_entry.save()
     comment_entry = WidgetComment(
         view_id=UUID(view_id),
         index=0,
@@ -478,7 +478,7 @@ def test_delete_comment_should_decrement_comments_count(api_client):
         creator_id=g.user.id,
         content="Test comment",
     )
-    comment_entry.save()
+    await comment_entry.save()
 
     response = api_client.post(
         "/api/v1/views/widgets/highlights/comments/delete",
@@ -492,13 +492,13 @@ def test_delete_comment_should_decrement_comments_count(api_client):
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
 
-    updated_highlight = WidgetHighlights.find(view_id=UUID(
+    updated_highlight = await WidgetHighlights.find(view_id=UUID(
         view_id), index=0, created_at=highlight_created_at).first()
     assert updated_highlight.comments_count == 0
 
 
 @patch("argus.backend.service.views_widgets.highlights.HighlightsService._send_highlight_notifications")
-def test_update_comment_should_modify_content(notification, api_client):
+async def test_update_comment_should_modify_content(notification, api_client):
     view_id = str(uuid4())
     highlight_created_at = datetime.now(UTC)
     comment_created_at = datetime.now(UTC)
@@ -514,7 +514,7 @@ def test_update_comment_should_modify_content(notification, api_client):
         completed=None,
         comments_count=1,
     )
-    highlight_entry.save()
+    await highlight_entry.save()
     comment_entry = WidgetComment(
         view_id=UUID(view_id),
         index=0,
@@ -523,7 +523,7 @@ def test_update_comment_should_modify_content(notification, api_client):
         creator_id=g.user.id,
         content=comment_content,
     )
-    comment_entry.save()
+    await comment_entry.save()
 
     response = api_client.post(
         "/api/v1/views/widgets/highlights/comments/update",
@@ -540,7 +540,7 @@ def test_update_comment_should_modify_content(notification, api_client):
     assert response.json()["response"]["content"] == updated_content
 
 
-def test_get_comments_should_return_list_of_comments(api_client):
+async def test_get_comments_should_return_list_of_comments(api_client):
     view_id = str(uuid4())
     highlight_created_at = datetime.now(UTC)
     comment_created_at = datetime.now(UTC)
@@ -553,7 +553,7 @@ def test_get_comments_should_return_list_of_comments(api_client):
         completed=None,
         comments_count=1,
     )
-    highlight_entry.save()
+    await highlight_entry.save()
     comment_entry = WidgetComment(
         view_id=UUID(view_id),
         index=0,
@@ -562,7 +562,7 @@ def test_get_comments_should_return_list_of_comments(api_client):
         creator_id=g.user.id,
         content="Test comment",
     )
-    comment_entry.save()
+    await comment_entry.save()
 
     response = api_client.get(
         f"/api/v1/views/widgets/highlights/comments?view_id={view_id}&index=0&created_at={highlight_created_at.timestamp()}")

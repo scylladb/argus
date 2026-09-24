@@ -93,13 +93,13 @@ def test_resolve_view_tests_unknown_id_errors(api_client):
     assert str(missing_id) in res["response"]["message"]
 
 
-def test_service_get_view_by_name_unknown_name_raises_user_view_exception():
+async def test_service_get_view_by_name_unknown_name_raises_user_view_exception():
     missing_name = f"view_{uuid.uuid4().hex[:12]}"
     with pytest.raises(UserViewException, match=missing_name):
-        UserViewService().get_view_by_name(missing_name)
+        await UserViewService().get_view_by_name(missing_name)
 
 
-def test_all_views_filters_by_user(api_client, view_name):
+async def test_all_views_filters_by_user(api_client, view_name):
     res = _create_view(api_client, view_name)
     view_id = res["response"]["id"]
 
@@ -112,7 +112,7 @@ def test_all_views_filters_by_user(api_client, view_name):
         password="pw",
         roles=[UserRoles.User.value], registration_date=datetime.now(UTC),
     )
-    other.save()
+    await other.save()
     other_listing = api_client.get(f"/api/v1/views/all?userId={other.id}").json()
     assert other_listing["status"] == "ok"
     assert view_id not in {v["id"] for v in other_listing["response"]}

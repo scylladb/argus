@@ -36,7 +36,7 @@ def _make_public_key() -> str:
     return pub.public_bytes(Encoding.OpenSSH, PublicFormat.OpenSSH).decode("utf-8")
 
 
-def _seed_key(user_id, tunnel_id, public_key: str, fingerprint: str, ttl: int = 86400) -> SSHTunnelKey:
+async def _seed_key(user_id, tunnel_id, public_key: str, fingerprint: str, ttl: int = 86400) -> SSHTunnelKey:
     """Insert a key the way ``register_tunnel`` does.
 
     The scoped proxy-host role cannot call the register endpoint, so these
@@ -53,11 +53,11 @@ def _seed_key(user_id, tunnel_id, public_key: str, fingerprint: str, ttl: int = 
         created_at=now_utc,
         expires_at=expires_at,
     )
-    key.save(ttl=ttl)
+    await key.save(ttl=ttl)
     return key
 
 
-def _make_active_config(**overrides) -> ProxyTunnelConfig:
+async def _make_active_config(**overrides) -> ProxyTunnelConfig:
     """Create and persist a ProxyTunnelConfig with is_active=True."""
     defaults = dict(
         id=uuid4(),
@@ -71,15 +71,15 @@ def _make_active_config(**overrides) -> ProxyTunnelConfig:
         is_active=True,
     )
     defaults.update(overrides)
-    return ProxyTunnelConfig.create(**defaults)
+    return await ProxyTunnelConfig.create(**defaults)
 
 
 def _json_post(client: TestClient, url: str, payload: dict) -> object:
     return client.post(url, json=payload,)
 
 
-def _active_config_ids() -> list:
-    return [cfg.id for cfg in ProxyTunnelConfig.find().all() if cfg.is_active]
+async def _active_config_ids() -> list:
+    return [cfg.id for cfg in await ProxyTunnelConfig.find().all() if cfg.is_active]
 
 
 # ---------------------------------------------------------------------------
@@ -87,23 +87,23 @@ def _active_config_ids() -> list:
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def active_config(argus_db) -> ProxyTunnelConfig:
-    previous_active_ids = _active_config_ids()
+async def active_config(argus_db) -> ProxyTunnelConfig:
+    previous_active_ids = await _active_config_ids()
     for cfg_id in previous_active_ids:
-        cfg = ProxyTunnelConfig.get(id=cfg_id)
-        cfg.update(is_active=False)
+        cfg = await ProxyTunnelConfig.get(id=cfg_id)
+        await cfg.update(is_active=False)
 
-    config = _make_active_config(service_user_id=g.user.id)
+    config = await _make_active_config(service_user_id=g.user.id)
     yield config
     try:
-        config.delete()
+        await config.delete()
     except Exception:
         pass
 
     for cfg_id in previous_active_ids:
         try:
-            cfg = ProxyTunnelConfig.get(id=cfg_id)
-            cfg.update(is_active=True)
+            cfg = await ProxyTunnelConfig.get(id=cfg_id)
+            await cfg.update(is_active=True)
         except Exception:
             pass
 
@@ -124,17 +124,17 @@ def normal_user_identity():
     g.user.roles = previous_roles
 
 
-def _deactivate_all_configs() -> list:
-    cfg_ids = _active_config_ids()
+async def _deactivate_all_configs() -> list:
+    cfg_ids = await _active_config_ids()
     for cfg_id in cfg_ids:
-        ProxyTunnelConfig.get(id=cfg_id).update(is_active=False)
+        await (await ProxyTunnelConfig.get(id=cfg_id)).update(is_active=False)
     return cfg_ids
 
 
-def _restore_active_configs(cfg_ids: list):
+async def _restore_active_configs(cfg_ids: list):
     for cfg_id in cfg_ids:
         try:
-            ProxyTunnelConfig.get(id=cfg_id).update(is_active=True)
+            await (await ProxyTunnelConfig.get(id=cfg_id)).update(is_active=True)
         except Exception:
             pass
 
@@ -160,8 +160,8 @@ def test_get_tunnel_connection_success(api_client: TestClient, argus_db, active_
 
 
 @pytest.mark.docker_required
-def test_get_tunnel_connection_select_specific_host(api_client: TestClient, argus_db, active_config):
-    second = _make_active_config(is_active=True)
+async def test_get_tunnel_connection_select_specific_host(api_client: TestClient, argus_db, active_config):
+    second = await _make_active_config(is_active=True)
     try:
         resp = api_client.get(f"{API_PREFIX}/tunnel?proxy_host={second.host}")
         assert resp.status_code == 200
@@ -170,15 +170,15 @@ def test_get_tunnel_connection_select_specific_host(api_client: TestClient, argu
         assert body["response"]["proxy_host"] == second.host
     finally:
         try:
-            second.delete()
+            await second.delete()
         except Exception:
             pass
 
 
 @pytest.mark.docker_required
-def test_get_tunnel_connection_returns_stable_primary_and_failover_list(api_client: TestClient, argus_db, active_config):
+async def test_get_tunnel_connection_returns_stable_primary_and_failover_list(api_client: TestClient, argus_db, active_config):
     """One user always gets the same primary, plus every proxy for failover."""
-    second = _make_active_config(is_active=True)
+    second = await _make_active_config(is_active=True)
     try:
         resp1 = api_client.get(f"{API_PREFIX}/tunnel")
         resp2 = api_client.get(f"{API_PREFIX}/tunnel")
@@ -195,21 +195,21 @@ def test_get_tunnel_connection_returns_stable_primary_and_failover_list(api_clie
                     "target_port", "host_key_fingerprint", "tunnel_id"} <= set(entry)
     finally:
         try:
-            second.delete()
+            await second.delete()
         except Exception:
             pass
 
 
 @pytest.mark.docker_required
-def test_get_tunnel_connection_no_active_config_returns_error(api_client: TestClient, argus_db):
-    previous_active_ids = _deactivate_all_configs()
+async def test_get_tunnel_connection_no_active_config_returns_error(api_client: TestClient, argus_db):
+    previous_active_ids = await _deactivate_all_configs()
     try:
         resp = api_client.get(f"{API_PREFIX}/tunnel")
         assert resp.status_code == 200
         assert resp.json()["status"] == "error"
         assert "No active proxy tunnel configuration" in resp.json()["response"]["message"]
     finally:
-        _restore_active_configs(previous_active_ids)
+        await _restore_active_configs(previous_active_ids)
 
 
 # ---------------------------------------------------------------------------
@@ -217,7 +217,7 @@ def test_get_tunnel_connection_no_active_config_returns_error(api_client: TestCl
 # ---------------------------------------------------------------------------
 
 @pytest.mark.docker_required
-def test_register_tunnel_success(api_client: TestClient, argus_db, active_config):
+async def test_register_tunnel_success(api_client: TestClient, argus_db, active_config):
     """A valid POST /ssh/tunnel should return 200 with proxy connection details."""
     payload = {"public_key": _make_public_key()}
     resp = _json_post(api_client, f"{API_PREFIX}/tunnel", payload)
@@ -237,7 +237,7 @@ def test_register_tunnel_success(api_client: TestClient, argus_db, active_config
     assert "tunnel_id" in data
 
     # Verify the key was actually persisted in the DB
-    key = SSHTunnelKey.get(id=UUID(data["key_id"]))
+    key = await SSHTunnelKey.get(id=UUID(data["key_id"]))
     assert key.fingerprint.startswith("SHA256:")
 
 
@@ -307,10 +307,10 @@ def test_register_tunnel_unauthenticated(argus_db, active_config, anon_client):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.docker_required
-def test_get_authorized_keys_success(api_client: TestClient, argus_db, active_config, ssh_tunnel_server_identity):
+async def test_get_authorized_keys_success(api_client: TestClient, argus_db, active_config, ssh_tunnel_server_identity):
     """GET /ssh/keys should return 200 with plain-text content."""
     pub_key = _make_public_key()
-    _seed_key(g.user.id, active_config.id, pub_key, "SHA256:test-one")
+    await _seed_key(g.user.id, active_config.id, pub_key, "SHA256:test-one")
 
     resp = api_client.get(f"{API_PREFIX}/keys")
 
@@ -321,12 +321,12 @@ def test_get_authorized_keys_success(api_client: TestClient, argus_db, active_co
 
 
 @pytest.mark.docker_required
-def test_get_authorized_keys_fingerprint_param_scopes_response(api_client: TestClient, argus_db, active_config, ssh_tunnel_server_identity):
+async def test_get_authorized_keys_fingerprint_param_scopes_response(api_client: TestClient, argus_db, active_config, ssh_tunnel_server_identity):
     """The ?fingerprint= query param reaches the service and narrows the result."""
     wanted = _make_public_key()
     other = _make_public_key()
     for pub_key in (wanted, other):
-        _seed_key(g.user.id, active_config.id, pub_key, _derive_fingerprint(pub_key))
+        await _seed_key(g.user.id, active_config.id, pub_key, _derive_fingerprint(pub_key))
 
     resp = api_client.get(f"{API_PREFIX}/keys", params={"fingerprint": _derive_fingerprint(wanted)})
 
@@ -349,7 +349,7 @@ def test_get_authorized_keys_rejects_malformed_fingerprint(api_client: TestClien
 @pytest.mark.docker_required
 def test_get_authorized_keys_returns_plain_text_on_an_internal_error(api_client: TestClient, argus_db, active_config, ssh_tunnel_server_identity, monkeypatch):
     """A driver fault must not reach sshd as a 200 with a JSON body either."""
-    def _boom(self, fingerprint=None):
+    async def _boom(self, fingerprint=None):
         raise RuntimeError("secondary index is missing")
 
     monkeypatch.setattr(TunnelService, "get_authorized_keys", _boom)
@@ -371,16 +371,16 @@ def test_get_authorized_keys_forbidden_for_normal_user(api_client, argus_db, act
 
 
 @pytest.mark.docker_required
-def test_get_authorized_keys_with_multiple_active_configs(api_client: TestClient, argus_db, active_config, ssh_tunnel_server_identity):
+async def test_get_authorized_keys_with_multiple_active_configs(api_client: TestClient, argus_db, active_config, ssh_tunnel_server_identity):
     """API should still return keys when multiple active tunnel configs are present."""
     from datetime import UTC, datetime
 
-    second = _make_active_config(is_active=True)
+    second = await _make_active_config(is_active=True)
     try:
         key_one = _make_public_key()
         key_two = _make_public_key()
         now_utc = datetime.now(tz=UTC).replace(tzinfo=None)
-        SSHTunnelKey.find().ttl(86400).create(
+        await SSHTunnelKey.find().ttl(86400).create(
             id=uuid4(),
             user_id=g.user.id,
             tunnel_id=active_config.id,
@@ -389,7 +389,7 @@ def test_get_authorized_keys_with_multiple_active_configs(api_client: TestClient
             created_at=now_utc,
             expires_at=now_utc,
         )
-        SSHTunnelKey.find().ttl(86400).create(
+        await SSHTunnelKey.find().ttl(86400).create(
             id=uuid4(),
             user_id=g.user.id,
             tunnel_id=second.id,
@@ -406,16 +406,16 @@ def test_get_authorized_keys_with_multiple_active_configs(api_client: TestClient
         assert key_two.strip() in keys_text
     finally:
         try:
-            second.delete()
+            await second.delete()
         except Exception:
             pass
 
 
 @pytest.mark.docker_required
-def test_get_authorized_keys_empty_when_no_keys(api_client: TestClient, argus_db, active_config, ssh_tunnel_server_identity):
+async def test_get_authorized_keys_empty_when_no_keys(api_client: TestClient, argus_db, active_config, ssh_tunnel_server_identity):
     """GET /ssh/keys for an empty database should return empty text."""
-    for row in SSHTunnelKey.find().all():
-        row.delete()
+    for row in await SSHTunnelKey.find().all():
+        await row.delete()
     resp = api_client.get(f"{API_PREFIX}/keys")
     assert resp.status_code == 200
     assert resp.content.decode("utf-8").strip() == ""
@@ -443,7 +443,7 @@ def test_ssh_tunnel_server_role_cannot_call_other_api(api_client, argus_db, ssh_
 # ---------------------------------------------------------------------------
 
 @pytest.mark.docker_required
-def test_get_user_keys_returns_only_current_user(api_client: TestClient, argus_db, active_config):
+async def test_get_user_keys_returns_only_current_user(api_client: TestClient, argus_db, active_config):
     from datetime import UTC, datetime
 
     own_key = _make_public_key()
@@ -451,7 +451,7 @@ def test_get_user_keys_returns_only_current_user(api_client: TestClient, argus_d
 
     foreign_key = _make_public_key()
     now_utc = datetime.now(tz=UTC).replace(tzinfo=None)
-    SSHTunnelKey.find().ttl(86400).create(
+    await SSHTunnelKey.find().ttl(86400).create(
         id=uuid4(),
         user_id=uuid4(),
         tunnel_id=active_config.id,
@@ -472,17 +472,17 @@ def test_get_user_keys_returns_only_current_user(api_client: TestClient, argus_d
 
 
 @pytest.mark.docker_required
-def test_get_user_keys_can_filter_by_tunnel(api_client: TestClient, argus_db, active_config):
+async def test_get_user_keys_can_filter_by_tunnel(api_client: TestClient, argus_db, active_config):
     from datetime import UTC, datetime
 
     own_key = _make_public_key()
     _json_post(api_client, f"{API_PREFIX}/tunnel", {"public_key": own_key})
 
-    second = _make_active_config(is_active=True)
+    second = await _make_active_config(is_active=True)
     try:
         other_tunnel_key = _make_public_key()
         now_utc = datetime.now(tz=UTC).replace(tzinfo=None)
-        SSHTunnelKey.find().ttl(86400).create(
+        await SSHTunnelKey.find().ttl(86400).create(
             id=uuid4(),
             user_id=g.user.id,
             tunnel_id=second.id,
@@ -500,6 +500,6 @@ def test_get_user_keys_can_filter_by_tunnel(api_client: TestClient, argus_db, ac
         assert other_tunnel_key.strip() not in keys
     finally:
         try:
-            second.delete()
+            await second.delete()
         except Exception:
             pass

@@ -51,10 +51,10 @@ def _b64(value: str) -> str:
 
 
 @pytest.fixture
-def driver_matrix_test(release_manager_service, group: ArgusGroup, release: ArgusRelease) -> ArgusTest:
+async def driver_matrix_test(release_manager_service, group: ArgusGroup, release: ArgusRelease) -> ArgusTest:
     """A function-scoped ArgusTest registered against the driver-matrix-tests plugin."""
     name = f"dmt_test_{time.time_ns()}"
-    return release_manager_service.create_test(
+    return await release_manager_service.create_test(
         name, name, name, name,
         group_id=str(group.id), release_id=str(release.id),
         plugin_name=RUN_TYPE,

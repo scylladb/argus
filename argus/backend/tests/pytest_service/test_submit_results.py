@@ -7,7 +7,7 @@ from argus.backend.service.client_service import ClientService
 from argus.backend.service.testrun import TestRunService
 
 
-def test_valid_results(client_service: ClientService, pv_service: PytestViewService):
+async def test_valid_results(client_service: ClientService, pv_service: PytestViewService):
 
     sample_data = {
         "name": "testSuite::test_sample",
@@ -24,17 +24,17 @@ def test_valid_results(client_service: ClientService, pv_service: PytestViewServ
         }
     }
 
-    result = client_service.submit_pytest_result(sample_data)
+    result = await client_service.submit_pytest_result(sample_data)
 
     assert sample_data["name"] == result["name"]
     assert datetime.fromtimestamp(sample_data["timestamp"], tz=UTC) == result["id"]
 
-    fields = pv_service.get_user_fields_for_result(result["name"], result["id"].isoformat())
+    fields = await pv_service.get_user_fields_for_result(result["name"], result["id"].isoformat())
 
     assert fields == sample_data["user_fields"]
 
 
-def test_avg_duration(testrun_service: TestRunService, client_service: ClientService):
+async def test_avg_duration(testrun_service: TestRunService, client_service: ClientService):
 
     sample_data = {
         "name": "testSuite::test_sample_duration_avg",
@@ -55,14 +55,14 @@ def test_avg_duration(testrun_service: TestRunService, client_service: ClientSer
     sample_tests = [{**sample_data, "timestamp": 1753687331.758162 + (i*10), "duration": durations[i]} for i in  range(3)]
 
     for sample in sample_tests:
-        client_service.submit_pytest_result(sample)
+        await client_service.submit_pytest_result(sample)
 
-    result = testrun_service.get_pytest_test_field_stats(sample_data["name"], "duration", "avg", {})
+    result = await testrun_service.get_pytest_test_field_stats(sample_data["name"], "duration", "avg", {})
 
     assert sum(durations)/len(durations) == result[sample_data["name"]]["duration"]["avg"]
 
 
-def test_avg_duration_with_status_query(testrun_service: TestRunService, client_service: ClientService):
+async def test_avg_duration_with_status_query(testrun_service: TestRunService, client_service: ClientService):
 
     sample_data = {
         "name": "testSuite::test_sample_duration_avg",
@@ -83,17 +83,17 @@ def test_avg_duration_with_status_query(testrun_service: TestRunService, client_
     sample_tests = [{**sample_data, "timestamp": 1753687331.758162 + (i*10), "duration": durations[i]} for i in  range(3)]
 
     for sample in sample_tests:
-        client_service.submit_pytest_result(sample)
+        await client_service.submit_pytest_result(sample)
 
-    result = testrun_service.get_pytest_test_field_stats(sample_data["name"], "duration", "avg", {})
+    result = await testrun_service.get_pytest_test_field_stats(sample_data["name"], "duration", "avg", {})
 
     assert sum(durations)/len(durations) == result[sample_data["name"]]["duration"]["avg"]
 
-    result = testrun_service.get_pytest_test_field_stats(sample_data["name"], "duration", "avg", {"status": "passed"})
+    result = await testrun_service.get_pytest_test_field_stats(sample_data["name"], "duration", "avg", {"status": "passed"})
     assert sum(durations)/len(durations) == result[sample_data["name"]]["duration"]["avg"]
 
 
-def test_avg_duration_with_time_query(testrun_service: TestRunService, client_service: ClientService):
+async def test_avg_duration_with_time_query(testrun_service: TestRunService, client_service: ClientService):
 
     sample_data = {
         "name": "testSuite::test_sample_duration_avg",
@@ -115,17 +115,17 @@ def test_avg_duration_with_time_query(testrun_service: TestRunService, client_se
     sample_tests = [{**sample_data, "timestamp": 1753687331.758162 + (i*10), "duration": durations[i]} for i in  range(3)]
 
     for sample in sample_tests:
-        client_service.submit_pytest_result(sample)
+        await client_service.submit_pytest_result(sample)
 
-    result = testrun_service.get_pytest_test_field_stats(sample_data["name"], "duration", "avg", {})
+    result = await testrun_service.get_pytest_test_field_stats(sample_data["name"], "duration", "avg", {})
 
     assert sum(durations)/len(durations) == result[sample_data["name"]]["duration"]["avg"]
 
-    result = testrun_service.get_pytest_test_field_stats(sample_data["name"], "duration", "avg", {"since": since})
+    result = await testrun_service.get_pytest_test_field_stats(sample_data["name"], "duration", "avg", {"since": since})
     assert sum(durations)/len(durations) == result[sample_data["name"]]["duration"]["avg"]
 
 
-def test_avg_duration_with_status_and_time_query(testrun_service: TestRunService, client_service: ClientService):
+async def test_avg_duration_with_status_and_time_query(testrun_service: TestRunService, client_service: ClientService):
 
     sample_data = {
         "name": "testSuite::test_sample_duration_avg",
@@ -147,11 +147,11 @@ def test_avg_duration_with_status_and_time_query(testrun_service: TestRunService
     sample_tests = [{**sample_data, "timestamp": 1753687331.758162 + (i*10), "duration": durations[i]} for i in  range(3)]
 
     for sample in sample_tests:
-        client_service.submit_pytest_result(sample)
+        await client_service.submit_pytest_result(sample)
 
-    result = testrun_service.get_pytest_test_field_stats(sample_data["name"], "duration", "avg", {})
+    result = await testrun_service.get_pytest_test_field_stats(sample_data["name"], "duration", "avg", {})
 
     assert sum(durations)/len(durations) == result[sample_data["name"]]["duration"]["avg"]
 
-    result = testrun_service.get_pytest_test_field_stats(sample_data["name"], "duration", "avg", {"status": "passed", "since": since})
+    result = await testrun_service.get_pytest_test_field_stats(sample_data["name"], "duration", "avg", {"status": "passed", "since": since})
     assert sum(durations)/len(durations) == result[sample_data["name"]]["duration"]["avg"]

@@ -40,7 +40,7 @@ def test_update_validation_rules():
     assert metadata.validation_rules["col1"][-1].best_pct == 95.0
 
 
-def test_update_if_changed():
+async def test_update_if_changed():
     metadata = ArgusGenericResultMetadata(
         test_id=generate_random_test_id(),
         name="Test Metadata",
@@ -56,7 +56,7 @@ def test_update_if_changed():
         "rows_meta": ["row1"],
         "sut_package_name": "new_package",
     }
-    updated_metadata = metadata.update_if_changed(new_data)
+    updated_metadata = await metadata.update_if_changed(new_data)
     assert updated_metadata.name == "Updated Metadata"
     assert updated_metadata.sut_package_name == "new_package"
     assert len(updated_metadata.columns_meta) == 1
@@ -64,7 +64,7 @@ def test_update_if_changed():
     assert len(updated_metadata.validation_rules["col1"]) == 2  # keep also the old rule
 
 
-def test_no_update_on_same_data():
+async def test_no_update_on_same_data():
     metadata = ArgusGenericResultMetadata(
         test_id=generate_random_test_id(),
         name="Test Metadata",
@@ -80,11 +80,11 @@ def test_no_update_on_same_data():
         "rows_meta": ["row1", "row2"]
     }
     with patch.object(ArgusGenericResultMetadata, 'save', autospec=True) as mock_save:
-        metadata.update_if_changed(new_data)
+        await metadata.update_if_changed(new_data)
         assert not mock_save.called
 
 
-def test_adding_new_rows():
+async def test_adding_new_rows():
     metadata = ArgusGenericResultMetadata(
         test_id=generate_random_test_id(),
         name="Test Metadata",
@@ -94,7 +94,7 @@ def test_adding_new_rows():
         rows_meta=["row1"]
     )
     new_data = {"rows_meta": ["row2", "row3"]}
-    updated_metadata = metadata.update_if_changed(new_data)
+    updated_metadata = await metadata.update_if_changed(new_data)
     assert len(updated_metadata.rows_meta) == 3
     assert "row2" in updated_metadata.rows_meta
     assert "row3" in updated_metadata.rows_meta
