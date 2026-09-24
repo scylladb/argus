@@ -229,7 +229,7 @@ class TunnelService:
 
         existing = next(
             (
-                row for row in SSHTunnelKey.find(user_id=user.id)
+                row for row in SSHTunnelKey.find(user_id=user.id).all()
                 if row.fingerprint == fingerprint and row.tunnel_id == config.id
             ),
             None,
