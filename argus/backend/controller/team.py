@@ -33,8 +33,8 @@ class TeamMotdEditRequest(BaseModel):
 
 
 @router.post("/create", name="api.team_api.team_create")
-def team_create(payload: TeamCreateRequest, user: User = Depends(api_current_user)):
-    result = TeamManagerService().create_team(
+async def team_create(payload: TeamCreateRequest, user: User = Depends(api_current_user)):
+    result = await TeamManagerService().create_team(
         name=payload.name,
         leader=payload.leader,
         members=payload.members,
@@ -47,8 +47,8 @@ def team_create(payload: TeamCreateRequest, user: User = Depends(api_current_use
 
 
 @router.get("/{team_id}/get", name="api.team_api.team_get")
-def team_get(team_id: UUID, user: User = Depends(api_current_user)):
-    result = TeamManagerService().get_team_by_id(team_id)
+async def team_get(team_id: UUID, user: User = Depends(api_current_user)):
+    result = await TeamManagerService().get_team_by_id(team_id)
 
     return APIResponse({
         "status": "ok",
@@ -57,8 +57,8 @@ def team_get(team_id: UUID, user: User = Depends(api_current_user)):
 
 
 @router.delete("/{team_id}/delete", name="api.team_api.team_delete")
-def team_delete(team_id: UUID, user: User = Depends(api_current_user)):
-    TeamManagerService().delete_team(team_id, user)
+async def team_delete(team_id: UUID, user: User = Depends(api_current_user)):
+    await TeamManagerService().delete_team(team_id, user)
 
     return APIResponse({
         "status": "ok",
@@ -70,8 +70,8 @@ def team_delete(team_id: UUID, user: User = Depends(api_current_user)):
 
 
 @router.post("/{team_id}/edit", name="api.team_api.team_edit")
-def team_edit(team_id: UUID, payload: TeamEditRequest, user: User = Depends(api_current_user)):
-    team = TeamManagerService().edit_team(
+async def team_edit(team_id: UUID, payload: TeamEditRequest, user: User = Depends(api_current_user)):
+    team = await TeamManagerService().edit_team(
         team_id=payload.id,
         name=payload.name,
         members=payload.members,
@@ -89,9 +89,9 @@ def team_edit(team_id: UUID, payload: TeamEditRequest, user: User = Depends(api_
 
 
 @router.post("/{team_id}/motd/edit", name="api.team_api.team_edit_motd")
-def team_edit_motd(team_id: UUID, payload: TeamMotdEditRequest,
+async def team_edit_motd(team_id: UUID, payload: TeamMotdEditRequest,
                    user: User = Depends(api_current_user)):
-    TeamManagerService().edit_team_motd(
+    await TeamManagerService().edit_team_motd(
         team_id=payload.id,
         message=payload.motd,
         user=user,
@@ -107,8 +107,8 @@ def team_edit_motd(team_id: UUID, payload: TeamMotdEditRequest,
 
 
 @router.get("/user/{user_id}/teams", name="api.team_api.user_teams")
-def user_teams(user_id: UUID, user: User = Depends(api_current_user)):
-    result = TeamManagerService().get_users_teams(user_id=user_id)
+async def user_teams(user_id: UUID, user: User = Depends(api_current_user)):
+    result = await TeamManagerService().get_users_teams(user_id=user_id)
 
     return APIResponse({
         "status": "ok",
@@ -117,9 +117,9 @@ def user_teams(user_id: UUID, user: User = Depends(api_current_user)):
 
 
 @router.get("/user/{user_id}/jobs", name="api.team_api.user_jobs")
-def user_jobs(user_id: UUID, user: User = Depends(api_current_user)):
-    target = User.get(id=user_id)
-    result = list(ArgusService().get_jobs_for_user(target))
+async def user_jobs(user_id: UUID, user: User = Depends(api_current_user)):
+    target = await User.get(id=user_id)
+    result = await ArgusService().get_jobs_for_user(target)
 
     return APIResponse({
         "status": "ok",
@@ -128,9 +128,9 @@ def user_jobs(user_id: UUID, user: User = Depends(api_current_user)):
 
 
 @router.get("/user/{user_id}/planned_jobs", name="api.team_api.user_planned_jobs")
-def user_planned_jobs(user_id: UUID, user: User = Depends(api_current_user)):
-    target = User.get(id=user_id)
-    result = list(ArgusService().get_planned_jobs_for_user(target))
+async def user_planned_jobs(user_id: UUID, user: User = Depends(api_current_user)):
+    target = await User.get(id=user_id)
+    result = await ArgusService().get_planned_jobs_for_user(target)
 
     return APIResponse({
         "status": "ok",
@@ -139,8 +139,8 @@ def user_planned_jobs(user_id: UUID, user: User = Depends(api_current_user)):
 
 
 @router.get("/leader/{user_id}/teams", name="api.team_api.leader_teams")
-def leader_teams(user_id: UUID, user: User = Depends(api_current_user)):
-    result = TeamManagerService().get_teams_for_user(user_id=user_id)
+async def leader_teams(user_id: UUID, user: User = Depends(api_current_user)):
+    result = await TeamManagerService().get_teams_for_user(user_id=user_id)
 
     return APIResponse({
         "status": "ok",

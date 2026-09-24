@@ -154,7 +154,7 @@ def build_metrics_router(current_user_dependency: Callable) -> APIRouter:
     router = APIRouter()
 
     @router.get("/metrics", name=METRICS_ENDPOINT_NAME, dependencies=dependencies)
-    def metrics_view():
+    async def metrics_view():
         payload, content_type = render_metrics()
         return Response(payload, media_type=content_type)
 

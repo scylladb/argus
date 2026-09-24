@@ -19,10 +19,10 @@ class ReadNotificationRequest(BaseModel):
 
 
 @router.get("/get", name="api.notifications.get_notification")
-def get_notification(notification_id: UUID = Query(..., alias="id"),
+async def get_notification(notification_id: UUID = Query(..., alias="id"),
                      user: User = Depends(api_current_user)):
     service = NotificationManagerService()
-    notification = service.get_notificaton(
+    notification = await service.get_notificaton(
         receiver=user.id, notification_id=notification_id)
     return APIResponse({
         "status": "ok",
@@ -31,9 +31,9 @@ def get_notification(notification_id: UUID = Query(..., alias="id"),
 
 
 @router.get("/get_unread", name="api.notifications.get_unread_count")
-def get_unread_count(user: User = Depends(api_current_user)):
+async def get_unread_count(user: User = Depends(api_current_user)):
     service = NotificationManagerService()
-    unread_count = service.get_unread_count(receiver=user.id)
+    unread_count = await service.get_unread_count(receiver=user.id)
     return APIResponse({
         "status": "ok",
         "response": unread_count
@@ -41,11 +41,11 @@ def get_unread_count(user: User = Depends(api_current_user)):
 
 
 @router.get("/summary", name="api.notifications.get_summary")
-def get_summary(after: str | None = Query(None, alias="afterId"),
+async def get_summary(after: str | None = Query(None, alias="afterId"),
                 limit: int = Query(20),
                 user: User = Depends(api_current_user)):
     service = NotificationManagerService()
-    notifications = service.get_notifications(
+    notifications = await service.get_notifications(
         receiver=user.id,
         limit=limit,
         after=after
@@ -57,9 +57,9 @@ def get_summary(after: str | None = Query(None, alias="afterId"),
 
 
 @router.post("/read", name="api.notifications.read_notification")
-def read_notification(payload: ReadNotificationRequest, user: User = Depends(api_current_user)):
+async def read_notification(payload: ReadNotificationRequest, user: User = Depends(api_current_user)):
     service = NotificationManagerService()
-    status = service.read_notification(
+    status = await service.read_notification(
         receiver=user.id, notification_id=payload.id)
 
     return APIResponse({

@@ -27,12 +27,12 @@ def _authenticated_redirect(asgi_request: Request) -> RedirectResponse:
 
 @router.get("/register", name="auth.register")
 @router.post("/register", name="auth.register")
-def register(asgi_request: Request):
+async def register(asgi_request: Request):
     return RedirectResponse(url_for(asgi_request, "auth.login"), status_code=302)
 
 
 @router.get("/login", name="auth.login")
-def login(asgi_request: Request, user: User | None = Depends(load_user)):
+async def login(asgi_request: Request, user: User | None = Depends(load_user)):
     if user:
         return _authenticated_redirect(asgi_request)
 
@@ -43,7 +43,7 @@ def login(asgi_request: Request, user: User | None = Depends(load_user)):
 
 
 @router.post("/login", name="auth.login")
-def login_post(asgi_request: Request, username: str = Form(...), password: str = Form(...),
+async def login_post(asgi_request: Request, username: str = Form(...), password: str = Form(...),
                user: User | None = Depends(load_user)):
     if user:
         return _authenticated_redirect(asgi_request)
@@ -55,7 +55,7 @@ def login_post(asgi_request: Request, username: str = Form(...), password: str =
         if "password" not in config.get("LOGIN_METHODS", []):
             raise UserServiceException("Password Login is disabled")
         try:
-            account: User = User.get(username=username)
+            account: User = await User.get(username=username)
         except DocumentNotFound:
             raise UserServiceException("User not found")
 
@@ -72,10 +72,10 @@ def login_post(asgi_request: Request, username: str = Form(...), password: str =
 
 
 @router.post("/login/cf", name="auth.cf_login")
-def cf_login(asgi_request: Request,
+async def cf_login(asgi_request: Request,
              cf_access_jwt: str | None = Header(None, alias="Cf-Access-Jwt-Assertion")):
     config = asgi_request.app.state.config
-    res = UserService().cf_login_or_register(cf_access_jwt, asgi_request.session, config)
+    res = await UserService().cf_login_or_register(cf_access_jwt, asgi_request.session, config)
     if not res["redirect_optional"]:
         return RedirectResponse(url_for(asgi_request, res["redirect_to"]), status_code=302)
     if redirect_target := asgi_request.session.pop("redirect_target", None):
@@ -84,35 +84,35 @@ def cf_login(asgi_request: Request,
 
 
 @router.post("/profile/api/token/generate", name="auth.generate_api_token")
-def generate_api_token(asgi_request: Request, user: User = Depends(ui_current_user)):
-    asgi_request.session["token_generated"] = UserService().generate_token(user).token
+async def generate_api_token(asgi_request: Request, user: User = Depends(ui_current_user)):
+    asgi_request.session["token_generated"] = (await UserService().generate_token(user)).token
     return RedirectResponse(url_for(asgi_request, "main.profile"), status_code=302)
 
 
 @router.get("/admin/impersonate", name="auth.switch_user")
-def switch_user(asgi_request: Request, user: User = Depends(ui_require_roles(UserRoles.Admin))):
-    users = UserService().get_users_privileged(service_only=True)
+async def switch_user(asgi_request: Request, user: User = Depends(ui_require_roles(UserRoles.Admin))):
+    users = await UserService().get_users_privileged(service_only=True)
     return templates.TemplateResponse(asgi_request, "auth/user_switch.html.j2", {"users": users})
 
 
 @router.post("/admin/impersonate", name="auth.switch_user")
-def switch_user_post(asgi_request: Request, user_id: str | None = Form(None),
+async def switch_user_post(asgi_request: Request, user_id: str | None = Form(None),
                      user: User = Depends(ui_require_roles(UserRoles.Admin))):
     if not user_id:
         flash(asgi_request, "No user id", category="error")
         return RedirectResponse(url_for(asgi_request, "main.profile"), status_code=302)
-    UserService().set_user_impersonation(user_id, asgi_request.session, user)
+    await UserService().set_user_impersonation(user_id, asgi_request.session, user)
     return RedirectResponse(url_for(asgi_request, "main.profile"), status_code=302)
 
 
 @router.post("/admin/impersonate/stop", name="auth.stop_impersonation")
-def stop_impersonation(asgi_request: Request, user: User = Depends(ui_current_user)):
-    UserService().stop_user_impersonation(asgi_request.session)
+async def stop_impersonation(asgi_request: Request, user: User = Depends(ui_current_user)):
+    await UserService().stop_user_impersonation(asgi_request.session)
     return RedirectResponse(url_for(asgi_request, "main.profile"), status_code=302)
 
 
 @router.post("/logout", name="auth.logout")
-def logout(asgi_request: Request):
+async def logout(asgi_request: Request):
     asgi_request.session.clear()
     asgi_request.session["manual_logout"] = True
     return RedirectResponse(url_for(asgi_request, "auth.login"), status_code=302)
