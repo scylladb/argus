@@ -691,4 +691,4 @@ class ResultsService:
         return ArgusGraphView.get(test_id=test_id, id=view_id)
 
     def get_argus_graph_views(self, test_id: UUID) -> list[ArgusGraphView]:
-        return list(ArgusGraphView.find(test_id=test_id))
+        return ArgusGraphView.find(test_id=test_id).all()
