@@ -11,12 +11,12 @@ router = APIRouter(prefix="/widgets")
 
 
 @router.get("/nemesis_data", name="api.view_api.nemesis_stats.get_nemesis_data")
-def get_nemesis_data(view_id: UUID = Query(...), user: User = Depends(api_current_user)):
-    view: ArgusUserView = ArgusUserView.get(id=view_id)
+async def get_nemesis_data(view_id: UUID = Query(...), user: User = Depends(api_current_user)):
+    view: ArgusUserView = await ArgusUserView.get(id=view_id)
     service = NemesisStatsService()
     nemesis_data = []
     for test_id in view.tests:
-        data = service.get_nemesis_data(test_id)
+        data = await service.get_nemesis_data(test_id)
         nemesis_data.extend(data)
     return APIResponse({
         "status": "ok",

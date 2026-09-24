@@ -132,15 +132,15 @@ class ProxyTunnelActiveRequest(BaseModel):
 
 
 @router.get("/", name="admin.admin_api.index")
-def index(user: User = Depends(admin_user)):
+async def index(user: User = Depends(admin_user)):
     return APIResponse({
         "version": "v1"
     })
 
 
 @router.post("/release/create", name="admin.admin_api.create_release")
-def create_release(payload: CreateReleaseRequest, user: User = Depends(admin_user)):
-    release = ReleaseManagerService().create_release(**payload.model_dump())
+async def create_release(payload: CreateReleaseRequest, user: User = Depends(admin_user)):
+    release = await ReleaseManagerService().create_release(**payload.model_dump())
 
     return APIResponse({
         "status": "ok",
@@ -151,8 +151,8 @@ def create_release(payload: CreateReleaseRequest, user: User = Depends(admin_use
 
 
 @router.post("/release/set_perpetual", name="admin.admin_api.set_release_perpetual")
-def set_release_perpetual(payload: SetReleasePerpetualRequest, user: User = Depends(admin_user)):
-    result = ReleaseManagerService().set_release_perpetuality(**payload.model_dump())
+async def set_release_perpetual(payload: SetReleasePerpetualRequest, user: User = Depends(admin_user)):
+    result = await ReleaseManagerService().set_release_perpetuality(**payload.model_dump())
     return APIResponse({
         "status": "ok",
         "response": {
@@ -162,8 +162,8 @@ def set_release_perpetual(payload: SetReleasePerpetualRequest, user: User = Depe
 
 
 @router.post("/release/set_state", name="admin.admin_api.set_release_state")
-def set_release_state(payload: SetReleaseStateRequest, user: User = Depends(admin_user)):
-    result = ReleaseManagerService().set_release_state(**payload.model_dump())
+async def set_release_state(payload: SetReleaseStateRequest, user: User = Depends(admin_user)):
+    result = await ReleaseManagerService().set_release_state(**payload.model_dump())
 
     return APIResponse({
         "status": "ok",
@@ -174,8 +174,8 @@ def set_release_state(payload: SetReleaseStateRequest, user: User = Depends(admi
 
 
 @router.post("/release/set_dormant", name="admin.admin_api.set_release_dormancy")
-def set_release_dormancy(payload: SetReleaseDormancyRequest, user: User = Depends(admin_user)):
-    result = ReleaseManagerService().set_release_dormancy(**payload.model_dump())
+async def set_release_dormancy(payload: SetReleaseDormancyRequest, user: User = Depends(admin_user)):
+    result = await ReleaseManagerService().set_release_dormancy(**payload.model_dump())
 
     return APIResponse({
         "status": "ok",
@@ -186,8 +186,8 @@ def set_release_dormancy(payload: SetReleaseDormancyRequest, user: User = Depend
 
 
 @router.post("/release/edit", name="admin.admin_api.edit_release")
-def edit_release(payload: EditReleaseRequest, user: User = Depends(admin_user)):
-    result = ReleaseManagerService().edit_release(payload.model_dump())
+async def edit_release(payload: EditReleaseRequest, user: User = Depends(admin_user)):
+    result = await ReleaseManagerService().edit_release(payload.model_dump())
 
     return APIResponse({
         "status": "ok",
@@ -198,8 +198,8 @@ def edit_release(payload: EditReleaseRequest, user: User = Depends(admin_user)):
 
 
 @router.post("/release/delete", name="admin.admin_api.delete_release")
-def delete_release(payload: DeleteReleaseRequest, user: User = Depends(admin_user)):
-    result = ReleaseManagerService().delete_release(release_id=payload.releaseId)
+async def delete_release(payload: DeleteReleaseRequest, user: User = Depends(admin_user)):
+    result = await ReleaseManagerService().delete_release(release_id=payload.releaseId)
 
     return APIResponse({
         "status": "ok",
@@ -210,8 +210,8 @@ def delete_release(payload: DeleteReleaseRequest, user: User = Depends(admin_use
 
 
 @router.post("/group/create", name="admin.admin_api.create_group")
-def create_group(payload: CreateGroupRequest, user: User = Depends(admin_user)):
-    group = ReleaseManagerService().create_group(**payload.model_dump())
+async def create_group(payload: CreateGroupRequest, user: User = Depends(admin_user)):
+    group = await ReleaseManagerService().create_group(**payload.model_dump())
 
     return APIResponse({
         "status": "ok",
@@ -222,8 +222,8 @@ def create_group(payload: CreateGroupRequest, user: User = Depends(admin_user)):
 
 
 @router.post("/group/update", name="admin.admin_api.update_group")
-def update_group(payload: UpdateGroupRequest, user: User = Depends(admin_user)):
-    result = ReleaseManagerService().update_group(**payload.model_dump())
+async def update_group(payload: UpdateGroupRequest, user: User = Depends(admin_user)):
+    result = await ReleaseManagerService().update_group(**payload.model_dump())
     return APIResponse({
         "status": "ok",
         "response": {
@@ -233,8 +233,8 @@ def update_group(payload: UpdateGroupRequest, user: User = Depends(admin_user)):
 
 
 @router.post("/group/delete", name="admin.admin_api.delete_group")
-def delete_group(payload: DeleteGroupRequest, user: User = Depends(admin_user)):
-    result = ReleaseManagerService().delete_group(**payload.model_dump())
+async def delete_group(payload: DeleteGroupRequest, user: User = Depends(admin_user)):
+    result = await ReleaseManagerService().delete_group(**payload.model_dump())
 
     return APIResponse({
         "status": "ok",
@@ -245,8 +245,8 @@ def delete_group(payload: DeleteGroupRequest, user: User = Depends(admin_user)):
 
 
 @router.post("/test/create", name="admin.admin_api.create_test")
-def create_test(payload: CreateTestRequest, user: User = Depends(admin_user)):
-    test = ReleaseManagerService().create_test(**payload.model_dump())
+async def create_test(payload: CreateTestRequest, user: User = Depends(admin_user)):
+    test = await ReleaseManagerService().create_test(**payload.model_dump())
     return APIResponse({
         "status": "ok",
         "response": {
@@ -256,8 +256,8 @@ def create_test(payload: CreateTestRequest, user: User = Depends(admin_user)):
 
 
 @router.post("/test/update", name="admin.admin_api.update_test")
-def update_test(payload: UpdateTestRequest, user: User = Depends(admin_user)):
-    result = ReleaseManagerService().update_test(**payload.model_dump())
+async def update_test(payload: UpdateTestRequest, user: User = Depends(admin_user)):
+    result = await ReleaseManagerService().update_test(**payload.model_dump())
     return APIResponse({
         "status": "ok",
         "response": {
@@ -267,8 +267,8 @@ def update_test(payload: UpdateTestRequest, user: User = Depends(admin_user)):
 
 
 @router.post("/test/batch_move", name="admin.admin_api.batch_move_tests")
-def batch_move_tests(payload: BatchMoveTestsRequest, user: User = Depends(admin_user)):
-    result = ReleaseManagerService().batch_move_tests(**payload.model_dump())
+async def batch_move_tests(payload: BatchMoveTestsRequest, user: User = Depends(admin_user)):
+    result = await ReleaseManagerService().batch_move_tests(**payload.model_dump())
     return APIResponse({
         "status": "ok",
         "response": {
@@ -278,8 +278,8 @@ def batch_move_tests(payload: BatchMoveTestsRequest, user: User = Depends(admin_
 
 
 @router.post("/test/delete", name="admin.admin_api.delete_test")
-def delete_test(payload: DeleteTestRequest, user: User = Depends(admin_user)):
-    result = ReleaseManagerService().delete_test(**payload.model_dump())
+async def delete_test(payload: DeleteTestRequest, user: User = Depends(admin_user)):
+    result = await ReleaseManagerService().delete_test(**payload.model_dump())
 
     return APIResponse({
         "status": "ok",
@@ -290,8 +290,8 @@ def delete_test(payload: DeleteTestRequest, user: User = Depends(admin_user)):
 
 
 @router.get("/releases/get", name="admin.admin_api.get_releases")
-def get_releases(user: User = Depends(admin_user)):
-    releases = ReleaseManagerService().get_releases()
+async def get_releases(user: User = Depends(admin_user)):
+    releases = await ReleaseManagerService().get_releases()
     return APIResponse({
         "status": "ok",
         "response": releases
@@ -299,9 +299,9 @@ def get_releases(user: User = Depends(admin_user)):
 
 
 @router.get("/groups/get", name="admin.admin_api.get_groups_for_release")
-def get_groups_for_release(release_id: UUID = Query(..., alias="releaseId"),
+async def get_groups_for_release(release_id: UUID = Query(..., alias="releaseId"),
                            user: User = Depends(admin_user)):
-    groups = ReleaseManagerService().get_groups(release_id=release_id)
+    groups = await ReleaseManagerService().get_groups(release_id=release_id)
 
     return APIResponse({
         "status": "ok",
@@ -310,9 +310,9 @@ def get_groups_for_release(release_id: UUID = Query(..., alias="releaseId"),
 
 
 @router.get("/tests/get", name="admin.admin_api.get_tests_for_group")
-def get_tests_for_group(group_id: UUID = Query(..., alias="groupId"),
+async def get_tests_for_group(group_id: UUID = Query(..., alias="groupId"),
                         user: User = Depends(admin_user)):
-    tests = ReleaseManagerService().get_tests(group_id=group_id)
+    tests = await ReleaseManagerService().get_tests(group_id=group_id)
     return APIResponse({
         "status": "ok",
         "response": tests
@@ -320,8 +320,8 @@ def get_tests_for_group(group_id: UUID = Query(..., alias="groupId"),
 
 
 @router.post("/release/test/state/toggle", name="admin.admin_api.quick_toggle_test_enabled")
-def quick_toggle_test_enabled(payload: ToggleEntityStateRequest, user: User = Depends(admin_user)):
-    res = ReleaseManagerService().toggle_test_enabled(test_id=payload.entityId, new_state=payload.state)
+async def quick_toggle_test_enabled(payload: ToggleEntityStateRequest, user: User = Depends(admin_user)):
+    res = await ReleaseManagerService().toggle_test_enabled(test_id=payload.entityId, new_state=payload.state)
     return APIResponse({
         "status": "ok",
         "response": res
@@ -329,8 +329,8 @@ def quick_toggle_test_enabled(payload: ToggleEntityStateRequest, user: User = De
 
 
 @router.post("/release/group/state/toggle", name="admin.admin_api.quick_toggle_group_enabled")
-def quick_toggle_group_enabled(payload: ToggleEntityStateRequest, user: User = Depends(admin_user)):
-    res = ReleaseManagerService().toggle_group_enabled(group_id=payload.entityId, new_state=payload.state)
+async def quick_toggle_group_enabled(payload: ToggleEntityStateRequest, user: User = Depends(admin_user)):
+    res = await ReleaseManagerService().toggle_group_enabled(group_id=payload.entityId, new_state=payload.state)
     return APIResponse({
         "status": "ok",
         "response": res
@@ -338,8 +338,8 @@ def quick_toggle_group_enabled(payload: ToggleEntityStateRequest, user: User = D
 
 
 @router.get("/users", name="admin.admin_api.user_info")
-def user_info(user: User = Depends(admin_user)):
-    result = UserService().get_users_privileged()
+async def user_info(user: User = Depends(admin_user)):
+    result = await UserService().get_users_privileged()
 
     return APIResponse({
         "status": "ok",
@@ -348,10 +348,10 @@ def user_info(user: User = Depends(admin_user)):
 
 
 @router.post("/user/{user_id}/email/set", name="admin.admin_api.user_change_email")
-def user_change_email(user_id: UUID, payload: UserEmailChangeRequest,
+async def user_change_email(user_id: UUID, payload: UserEmailChangeRequest,
                       user: User = Depends(admin_user)):
-    target = User.get(id=user_id)
-    result = UserService().update_email(user=target, new_email=payload.newEmail)
+    target = await User.get(id=user_id)
+    result = await UserService().update_email(user=target, new_email=payload.newEmail)
 
     return APIResponse({
         "status": "ok",
@@ -360,8 +360,8 @@ def user_change_email(user_id: UUID, payload: UserEmailChangeRequest,
 
 
 @router.post("/user/{user_id}/delete", name="admin.admin_api.user_delete")
-def user_delete(user_id: str, user: User = Depends(admin_user)):
-    result = UserService().delete_user(user_id=user_id, current_user=user)
+async def user_delete(user_id: str, user: User = Depends(admin_user)):
+    result = await UserService().delete_user(user_id=user_id, current_user=user)
 
     return APIResponse({
         "status": "ok",
@@ -370,11 +370,11 @@ def user_delete(user_id: str, user: User = Depends(admin_user)):
 
 
 @router.post("/user/{user_id}/password/set", name="admin.admin_api.user_change_password")
-def user_change_password(user_id: UUID, payload: UserPasswordChangeRequest,
+async def user_change_password(user_id: UUID, payload: UserPasswordChangeRequest,
                          user: User = Depends(admin_user)):
-    target = User.get(id=user_id)
-    result = UserService().update_password(user=target, old_password="",
-                                           new_password=payload.newPassword, force=True)
+    target = await User.get(id=user_id)
+    result = await UserService().update_password(user=target, old_password="",
+                                                 new_password=payload.newPassword, force=True)
 
     return APIResponse({
         "status": "ok",
@@ -383,8 +383,8 @@ def user_change_password(user_id: UUID, payload: UserPasswordChangeRequest,
 
 
 @router.post("/user/{user_id}/admin/toggle", name="admin.admin_api.user_toggle_admin")
-def user_toggle_admin(user_id: str, user: User = Depends(admin_user)):
-    result = UserService().toggle_admin(user_id=user_id, current_user=user)
+async def user_toggle_admin(user_id: str, user: User = Depends(admin_user)):
+    result = await UserService().toggle_admin(user_id=user_id, current_user=user)
 
     return APIResponse({
         "status": "ok",
@@ -393,9 +393,9 @@ def user_toggle_admin(user_id: str, user: User = Depends(admin_user)):
 
 
 @router.get("/proxy-tunnel/config", name="admin.admin_api.get_proxy_tunnel_config")
-def get_proxy_tunnel_config(tunnel_id: str | None = Query(None),
+async def get_proxy_tunnel_config(tunnel_id: str | None = Query(None),
                             user: User = Depends(admin_user)):
-    config = TunnelService().get_proxy_tunnel_config(tunnel_id=tunnel_id)
+    config = await TunnelService().get_proxy_tunnel_config(tunnel_id=tunnel_id)
     return APIResponse({
         "status": "ok",
         "response": asdict(config) if config else None,
@@ -403,9 +403,9 @@ def get_proxy_tunnel_config(tunnel_id: str | None = Query(None),
 
 
 @router.get("/proxy-tunnel/configs", name="admin.admin_api.list_proxy_tunnel_configs")
-def list_proxy_tunnel_configs(active_only: bool | None = Query(None),
+async def list_proxy_tunnel_configs(active_only: bool | None = Query(None),
                               user: User = Depends(admin_user)):
-    configs = TunnelService().list_proxy_tunnel_configs(active_only=active_only)
+    configs = await TunnelService().list_proxy_tunnel_configs(active_only=active_only)
     return APIResponse({
         "status": "ok",
         "response": [asdict(row) for row in configs],
@@ -413,9 +413,9 @@ def list_proxy_tunnel_configs(active_only: bool | None = Query(None),
 
 
 @router.post("/proxy-tunnel/config", name="admin.admin_api.save_proxy_tunnel_config")
-def save_proxy_tunnel_config(payload: ProxyTunnelConfigRequest,
+async def save_proxy_tunnel_config(payload: ProxyTunnelConfigRequest,
                              user: User = Depends(admin_user)):
-    config = TunnelService().save_proxy_tunnel_config(payload.model_dump(exclude_unset=True))
+    config = await TunnelService().save_proxy_tunnel_config(payload.model_dump(exclude_unset=True))
     return APIResponse({
         "status": "ok",
         "response": asdict(config),
@@ -423,17 +423,17 @@ def save_proxy_tunnel_config(payload: ProxyTunnelConfigRequest,
 
 
 @router.delete("/proxy-tunnel/config/{tunnel_id}", name="admin.admin_api.delete_proxy_tunnel_config")
-def delete_proxy_tunnel_config(tunnel_id: UUID, payload: dict | None = Body(None),
+async def delete_proxy_tunnel_config(tunnel_id: UUID, payload: dict | None = Body(None),
                                user: User = Depends(admin_user)):
     delete_user_flag = bool((payload or {}).get("delete_user", False))
-    TunnelService().delete_proxy_tunnel_config(tunnel_id, delete_user=delete_user_flag)
+    await TunnelService().delete_proxy_tunnel_config(tunnel_id, delete_user=delete_user_flag)
     return APIResponse({"status": "ok", "response": {"deleted": True, "user_deleted": delete_user_flag}})
 
 
 @router.post("/proxy-tunnel/config/{tunnel_id}/active", name="admin.admin_api.set_proxy_tunnel_config_active")
-def set_proxy_tunnel_config_active(tunnel_id: UUID, payload: ProxyTunnelActiveRequest,
+async def set_proxy_tunnel_config_active(tunnel_id: UUID, payload: ProxyTunnelActiveRequest,
                                    user: User = Depends(admin_user)):
-    config = TunnelService().set_proxy_tunnel_config_active(tunnel_id, payload.is_active)
+    config = await TunnelService().set_proxy_tunnel_config_active(tunnel_id, payload.is_active)
     return APIResponse({
         "status": "ok",
         "response": asdict(config),
@@ -441,8 +441,8 @@ def set_proxy_tunnel_config_active(tunnel_id: UUID, payload: ProxyTunnelActiveRe
 
 
 @router.get("/ssh/keys", name="admin.admin_api.list_ssh_keys")
-def list_ssh_keys(user: User = Depends(admin_user)):
-    keys = TunnelService().list_keys()
+async def list_ssh_keys(user: User = Depends(admin_user)):
+    keys = await TunnelService().list_keys()
     return APIResponse({
         "status": "ok",
         "response": [asdict(row) for row in keys],
@@ -450,8 +450,8 @@ def list_ssh_keys(user: User = Depends(admin_user)):
 
 
 @router.delete("/ssh/keys/{key_id}", name="admin.admin_api.delete_ssh_key")
-def delete_ssh_key(key_id: UUID, user: User = Depends(admin_user)):
-    TunnelService().delete_key(key_id)
+async def delete_ssh_key(key_id: UUID, user: User = Depends(admin_user)):
+    await TunnelService().delete_key(key_id)
     return APIResponse({
         "status": "ok",
         "response": {

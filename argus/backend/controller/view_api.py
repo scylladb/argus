@@ -63,7 +63,7 @@ class DeleteViewRequest(BaseModel):
 
 
 @router.get("/", name="api.view_api.index")
-def index(user: User = Depends(api_current_user)):
+async def index(user: User = Depends(api_current_user)):
     return APIResponse({
         "status": "ok",
         "response": {
@@ -73,9 +73,9 @@ def index(user: User = Depends(api_current_user)):
 
 
 @router.post("/create", name="api.view_api.create_view")
-def create_view(payload: CreateViewRequest, user: User = Depends(api_current_user)):
+async def create_view(payload: CreateViewRequest, user: User = Depends(api_current_user)):
     service = UserViewService()
-    view = service.create_view(
+    view = await service.create_view(
         name=payload.name,
         items=payload.items,
         widget_settings=payload.settings,
@@ -90,9 +90,9 @@ def create_view(payload: CreateViewRequest, user: User = Depends(api_current_use
 
 
 @router.get("/get", name="api.view_api.get_view")
-def get_view(view_id: UUID = Query(..., alias="viewId"), user: User = Depends(api_current_user)):
+async def get_view(view_id: UUID = Query(..., alias="viewId"), user: User = Depends(api_current_user)):
     service = UserViewService()
-    view = service.get_view(view_id)
+    view = await service.get_view(view_id)
     return APIResponse({
         "status": "ok",
         "response": view
@@ -100,11 +100,11 @@ def get_view(view_id: UUID = Query(..., alias="viewId"), user: User = Depends(ap
 
 
 @router.get("/all", name="api.view_api.get_all_views")
-def get_all_views(user_id: Annotated[UUID | None, NoneIfEmpty, Query(alias="userId")] = None,
+async def get_all_views(user_id: Annotated[UUID | None, NoneIfEmpty, Query(alias="userId")] = None,
                   user: User = Depends(api_current_user)):
-    view_user = User.get(id=user_id) if user_id else None
+    view_user = await User.get(id=user_id) if user_id else None
     service = UserViewService()
-    views = service.get_all_views(view_user)
+    views = await service.get_all_views(view_user)
     return APIResponse({
         "status": "ok",
         "response": views
@@ -112,9 +112,9 @@ def get_all_views(user_id: Annotated[UUID | None, NoneIfEmpty, Query(alias="user
 
 
 @router.post("/update", name="api.view_api.update_view")
-def update_view(payload: UpdateViewRequest, user: User = Depends(api_current_user)):
+async def update_view(payload: UpdateViewRequest, user: User = Depends(api_current_user)):
     service = UserViewService()
-    res = service.update_view(view_id=payload.viewId, update_data=payload.updateData, user=user)
+    res = await service.update_view(view_id=payload.viewId, update_data=payload.updateData, user=user)
     return APIResponse({
         "status": "ok",
         "response": res
@@ -122,9 +122,9 @@ def update_view(payload: UpdateViewRequest, user: User = Depends(api_current_use
 
 
 @router.post("/delete", name="api.view_api.delete_view")
-def delete_view(payload: DeleteViewRequest, user: User = Depends(api_current_user)):
+async def delete_view(payload: DeleteViewRequest, user: User = Depends(api_current_user)):
     service = UserViewService()
-    res = service.delete_view(payload.viewId, user=user)
+    res = await service.delete_view(payload.viewId, user=user)
     return APIResponse({
         "status": "ok",
         "response": res
@@ -132,10 +132,10 @@ def delete_view(payload: DeleteViewRequest, user: User = Depends(api_current_use
 
 
 @router.get("/search", name="api.view_api.search_tests")
-def search_tests(query: str | None = Query(None), user: User = Depends(api_current_user)):
+async def search_tests(query: str | None = Query(None), user: User = Depends(api_current_user)):
     service = UserViewService()
     if query:
-        res = service.test_lookup(query)
+        res = await service.test_lookup(query)
     else:
         res = []
     return APIResponse({
@@ -148,7 +148,7 @@ def search_tests(query: str | None = Query(None), user: User = Depends(api_curre
 
 
 @router.get("/stats", name="api.view_api.view_stats")
-def view_stats(view_id: str = Query(..., alias="viewId"), limited: bool = Query(False),
+async def view_stats(view_id: str = Query(..., alias="viewId"), limited: bool = Query(False),
                version: str | None = Query(None, alias="productVersion"),
                include_no_version: bool = Query(True, alias="includeNoVersion"),
                image_id: str | None = Query(None, alias="imageId"),
@@ -156,8 +156,8 @@ def view_stats(view_id: str = Query(..., alias="viewId"), limited: bool = Query(
                widget_id: Annotated[int | None, NoneIfEmpty, Query(alias="widgetId")] = None,
                user: User = Depends(api_current_user)):
     collector = ViewStatsCollector(view_id=view_id, filter=version)
-    stats = collector.collect(limited=limited, force=force, include_no_version=include_no_version,
-                              widget_id=widget_id, image_id=image_id)
+    stats = await collector.collect(limited=limited, force=force, include_no_version=include_no_version,
+                                    widget_id=widget_id, image_id=image_id)
 
     return APIResponse({
         "status": "ok",
@@ -166,9 +166,9 @@ def view_stats(view_id: str = Query(..., alias="viewId"), limited: bool = Query(
 
 
 @router.get("/{view_id}/versions", name="api.view_api.view_versions")
-def view_versions(view_id: str, user: User = Depends(api_current_user)):
+async def view_versions(view_id: str, user: User = Depends(api_current_user)):
     service = UserViewService()
-    res = service.get_versions_for_view(view_id)
+    res = await service.get_versions_for_view(view_id)
     return APIResponse({
         "status": "ok",
         "response": res
@@ -176,9 +176,9 @@ def view_versions(view_id: str, user: User = Depends(api_current_user)):
 
 
 @router.get("/{view_id}/images", name="api.view_api.view_images")
-def view_images(view_id: str, user: User = Depends(api_current_user)):
+async def view_images(view_id: str, user: User = Depends(api_current_user)):
     service = UserViewService()
-    res = service.get_images_for_view(view_id)
+    res = await service.get_images_for_view(view_id)
     return APIResponse({
         "status": "ok",
         "response": res
@@ -186,9 +186,9 @@ def view_images(view_id: str, user: User = Depends(api_current_user)):
 
 
 @router.get("/{view_id}/resolve", name="api.view_api.view_resolve")
-def view_resolve(view_id: str, user: User = Depends(api_current_user)):
+async def view_resolve(view_id: str, user: User = Depends(api_current_user)):
     service = UserViewService()
-    res = service.resolve_view_for_edit(view_id)
+    res = await service.resolve_view_for_edit(view_id)
     return APIResponse({
         "status": "ok",
         "response": res
@@ -196,9 +196,9 @@ def view_resolve(view_id: str, user: User = Depends(api_current_user)):
 
 
 @router.get("/{view_id}/resolve/tests", name="api.view_api.view_resolve_tests")
-def view_resolve_tests(view_id: str, user: User = Depends(api_current_user)):
+async def view_resolve_tests(view_id: str, user: User = Depends(api_current_user)):
     service = UserViewService()
-    res = service.resolve_view_tests(view_id)
+    res = await service.resolve_view_tests(view_id)
     return APIResponse({
         "status": "ok",
         "response": res
@@ -206,9 +206,9 @@ def view_resolve_tests(view_id: str, user: User = Depends(api_current_user)):
 
 
 @router.get("/{view_id}/pytest/results", name="api.view_api.view_get_pytest_results")
-def view_get_pytest_results(view_id: str, user: User = Depends(api_current_user)):
+async def view_get_pytest_results(view_id: str, user: User = Depends(api_current_user)):
     service = UserViewService()
-    res = service.get_pytest_view_results(view_id)
+    res = await service.get_pytest_view_results(view_id)
     return APIResponse({
         "status": "ok",
         "response": res

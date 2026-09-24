@@ -90,13 +90,13 @@ class GithubRepoValidateRequest(BaseModel):
 
 
 @router.get("/test/{test_id}/runs", name="api.testrun_api.get_runs_for_test")
-def get_runs_for_test(test_id: UUID, limit: int = Query(10), before: float | None = Query(None),
+async def get_runs_for_test(test_id: UUID, limit: int = Query(10), before: float | None = Query(None),
                       after: float | None = Query(None), full: bool = Query(False),
                       additional_runs: list[UUID] = Query(default=[], alias="additionalRuns[]"),
                       user: User = Depends(api_current_user)):
     service = TestRunService()
-    runs = service.get_runs_by_test_id(test_id=test_id, additional_runs=additional_runs,
-                                       limit=limit, full=full, before=before, after=after)
+    runs = await service.get_runs_by_test_id(test_id=test_id, additional_runs=additional_runs,
+                                             limit=limit, full=full, before=before, after=after)
 
     return APIResponse({
         "status": "ok",
@@ -105,9 +105,9 @@ def get_runs_for_test(test_id: UUID, limit: int = Query(10), before: float | Non
 
 
 @router.get("/run/{run_id}/type", name="api.testrun_api.get_type_for_run")
-def get_type_for_run(run_id: str, user: User = Depends(api_current_user)):
+async def get_type_for_run(run_id: str, user: User = Depends(api_current_user)):
     service = TestRunService()
-    run_type = service.get_test_type_for_run(run_id)
+    run_type = await service.get_test_type_for_run(run_id)
 
     return APIResponse({
         "status": "ok",
@@ -118,9 +118,9 @@ def get_type_for_run(run_id: str, user: User = Depends(api_current_user)):
 
 
 @router.get("/run/{run_id}/activity", name="api.testrun_api.test_run_activity")
-def test_run_activity(run_id: UUID, user: User = Depends(api_current_user)):
+async def test_run_activity(run_id: UUID, user: User = Depends(api_current_user)):
     service = TestRunService()
-    activity = service.get_run_events(run_id=run_id)
+    activity = await service.get_run_events(run_id=run_id)
 
     return APIResponse({
         "status": "ok",
@@ -129,10 +129,10 @@ def test_run_activity(run_id: UUID, user: User = Depends(api_current_user)):
 
 
 @router.get("/run/{test_id}/{run_id}/fetch_results", name="api.testrun_api.fetch_results")
-def fetch_results(test_id: UUID, run_id: UUID,
+async def fetch_results(test_id: UUID, run_id: UUID,
                   include_hidden: bool = Query(False, alias="includeHidden"),
                   user: User = Depends(api_current_user)):
-    tables = ResultsService().get_run_results(test_id=test_id, run_id=run_id, include_hidden=include_hidden)
+    tables = await ResultsService().get_run_results(test_id=test_id, run_id=run_id, include_hidden=include_hidden)
     return APIResponse({
         "status": "ok",
         "tables": tables
@@ -140,10 +140,10 @@ def fetch_results(test_id: UUID, run_id: UUID,
 
 
 @router.post("/test/{test_id}/run/{run_id}/status/set", name="api.testrun_api.set_testrun_status")
-def set_testrun_status(test_id: UUID, run_id: UUID, payload: SetStatusRequest,
+async def set_testrun_status(test_id: UUID, run_id: UUID, payload: SetStatusRequest,
                        user: User = Depends(api_current_user)):
     service = TestRunService()
-    result = service.change_run_status(
+    result = await service.change_run_status(
         test_id=test_id,
         run_id=run_id,
         new_status=payload.status,
@@ -158,10 +158,10 @@ def set_testrun_status(test_id: UUID, run_id: UUID, payload: SetStatusRequest,
 
 @router.api_route("/tests/{plugin_name}/{run_id}/log/{log_name}/download", methods=["GET", "HEAD"],
                   name="api.testrun_api.download_log")
-def download_log(plugin_name: str, run_id: UUID, log_name: str,
+async def download_log(plugin_name: str, run_id: UUID, log_name: str,
                  user: User = Depends(api_current_user)):
     service = TestRunService()
-    result = service.get_log(
+    result = await service.get_log(
         plugin_name=plugin_name,
         run_id=run_id,
         log_name=log_name,
@@ -172,10 +172,10 @@ def download_log(plugin_name: str, run_id: UUID, log_name: str,
 
 @router.api_route("/tests/{plugin_name}/{run_id}/screenshot/{image_name}", methods=["GET", "HEAD"],
                   name="api.testrun_api.proxy_screenshot")
-def proxy_screenshot(plugin_name: str, run_id: UUID, image_name: str,
+async def proxy_screenshot(plugin_name: str, run_id: UUID, image_name: str,
                      user: User = Depends(api_current_user)):
     service = TestRunService()
-    result = service.proxy_stored_s3_image(
+    result = await service.proxy_stored_s3_image(
         plugin_name=plugin_name,
         run_id=run_id,
         image_name=image_name,
@@ -186,11 +186,11 @@ def proxy_screenshot(plugin_name: str, run_id: UUID, image_name: str,
 
 @router.post("/test/{test_id}/run/{run_id}/investigation_status/set",
              name="api.testrun_api.set_testrun_investigation_status")
-def set_testrun_investigation_status(test_id: UUID, run_id: UUID,
+async def set_testrun_investigation_status(test_id: UUID, run_id: UUID,
                                      payload: SetInvestigationStatusRequest,
                                      user: User = Depends(api_current_user)):
     service = TestRunService()
-    result = service.change_run_investigation_status(
+    result = await service.change_run_investigation_status(
         test_id=test_id,
         run_id=run_id,
         new_status=payload.investigation_status,
@@ -204,10 +204,10 @@ def set_testrun_investigation_status(test_id: UUID, run_id: UUID,
 
 
 @router.post("/test/{test_id}/run/{run_id}/assignee/set", name="api.testrun_api.set_testrun_assignee")
-def set_testrun_assignee(test_id: UUID, run_id: UUID, payload: SetAssigneeRequest,
+async def set_testrun_assignee(test_id: UUID, run_id: UUID, payload: SetAssigneeRequest,
                          user: User = Depends(api_current_user)):
     service = TestRunService()
-    result = service.change_run_assignee(
+    result = await service.change_run_assignee(
         test_id=test_id,
         run_id=run_id,
         new_assignee=UUID(payload.assignee) if payload.assignee != TestRunService.ASSIGNEE_PLACEHOLDER else None,
@@ -221,10 +221,10 @@ def set_testrun_assignee(test_id: UUID, run_id: UUID, payload: SetAssigneeReques
 
 
 @router.post("/test/{test_id}/run/{run_id}/issues/submit", name="api.testrun_api.issues_submit")
-def issues_submit(test_id: UUID, run_id: UUID, payload: IssueSubmitRequest,
+async def issues_submit(test_id: UUID, run_id: UUID, payload: IssueSubmitRequest,
                   user: User = Depends(api_current_user)):
     service = IssueService()
-    submit_result = service.submit(
+    submit_result = await service.submit(
         issue_url=payload.issue_url,
         test_id=test_id,
         run_id=run_id,
@@ -239,11 +239,11 @@ def issues_submit(test_id: UUID, run_id: UUID, payload: IssueSubmitRequest,
 
 @router.post("/test/{test_id}/run/{run_id}/issues/event/{event_id}/submit",
              name="api.testrun_api.issues_submit_for_event")
-def issues_submit_for_event(test_id: UUID, run_id: UUID, event_id: UUID,
+async def issues_submit_for_event(test_id: UUID, run_id: UUID, event_id: UUID,
                             payload: IssueSubmitRequest,
                             user: User = Depends(api_current_user)):
     service = IssueService()
-    submit_result = service.submit_for_sct_event(
+    submit_result = await service.submit_for_sct_event(
         issue_url=payload.issue_url,
         test_id=test_id,
         event_id=event_id,
@@ -258,14 +258,14 @@ def issues_submit_for_event(test_id: UUID, run_id: UUID, event_id: UUID,
 
 
 @router.get("/issues/get", name="api.testrun_api.issues_get")
-def issues_get(filter_key: str = Query(..., alias="filterKey"),
+async def issues_get(filter_key: str = Query(..., alias="filterKey"),
                key_value: UUID = Query(..., alias="id"),
                aggregate_by_issue: bool = Query(False, alias="aggregateByIssue"),
                product_version: str | None = Query(None, alias="productVersion"),
                include_no_version: bool = Query(False, alias="includeNoVersion"),
                user: User = Depends(api_current_user)):
     service = IssueService()
-    issues = service.get(
+    issues = await service.get(
         filter_key=filter_key,
         filter_id=key_value,
         aggregate_by_issue=aggregate_by_issue,
@@ -280,9 +280,9 @@ def issues_get(filter_key: str = Query(..., alias="filterKey"),
 
 
 @router.post("/issues/delete", name="api.testrun_api.issues_delete")
-def issues_delete(payload: IssueDeleteRequest, user: User = Depends(api_current_user)):
+async def issues_delete(payload: IssueDeleteRequest, user: User = Depends(api_current_user)):
     service = IssueService()
-    result = service.delete(issue_id=payload.issue_id, run_id=payload.run_id, user=user)
+    result = await service.delete(issue_id=payload.issue_id, run_id=payload.run_id, user=user)
 
     return APIResponse({
         "status": "ok",
@@ -291,9 +291,9 @@ def issues_delete(payload: IssueDeleteRequest, user: User = Depends(api_current_
 
 
 @router.get("/run/{run_id}/comments", name="api.testrun_api.get_testrun_comments")
-def get_testrun_comments(run_id: UUID, user: User = Depends(api_current_user)):
+async def get_testrun_comments(run_id: UUID, user: User = Depends(api_current_user)):
     service = TestRunService()
-    comments = service.get_run_comments(run_id=run_id)
+    comments = await service.get_run_comments(run_id=run_id)
 
     return APIResponse({
         "status": "ok",
@@ -302,9 +302,9 @@ def get_testrun_comments(run_id: UUID, user: User = Depends(api_current_user)):
 
 
 @router.get("/run/{run_id}/pytest/results", name="api.testrun_api.get_testrun_pytest_results")
-def get_testrun_pytest_results(run_id: UUID, user: User = Depends(api_current_user)):
+async def get_testrun_pytest_results(run_id: UUID, user: User = Depends(api_current_user)):
     service = TestRunService()
-    res = service.get_pytest_run_results(run_id=run_id)
+    res = await service.get_pytest_run_results(run_id=run_id)
 
     return APIResponse({
         "status": "ok",
@@ -315,9 +315,9 @@ def get_testrun_pytest_results(run_id: UUID, user: User = Depends(api_current_us
 # NOTE: declared after the specific /run/{run_id}/<suffix> routes — Starlette
 # matches in declaration order and this generic pattern would shadow them.
 @router.get("/run/{run_type}/{run_id}", name="api.testrun_api.get_testrun")
-def get_testrun(run_type: str, run_id: UUID, user: User = Depends(api_current_user)):
+async def get_testrun(run_type: str, run_id: UUID, user: User = Depends(api_current_user)):
     service = TestRunService()
-    test_run = service.get_run_response(run_type=run_type, run_id=run_id)
+    test_run = await service.get_run_response(run_type=run_type, run_id=run_id)
     return APIResponse({
         "status": "ok",
         "response": test_run
@@ -325,9 +325,9 @@ def get_testrun(run_type: str, run_id: UUID, user: User = Depends(api_current_us
 
 
 @router.get("/comment/{comment_id}/get", name="api.testrun_api.get_single_comment")
-def get_single_comment(comment_id: UUID, user: User = Depends(api_current_user)):
+async def get_single_comment(comment_id: UUID, user: User = Depends(api_current_user)):
     service = TestRunService()
-    comment = service.get_run_comment(comment_id=comment_id)
+    comment = await service.get_run_comment(comment_id=comment_id)
 
     return APIResponse({
         "status": "ok",
@@ -336,10 +336,10 @@ def get_single_comment(comment_id: UUID, user: User = Depends(api_current_user))
 
 
 @router.post("/test/{test_id}/run/{run_id}/comments/submit", name="api.testrun_api.submit_testrun_comment")
-def submit_testrun_comment(test_id: UUID, run_id: UUID, payload: CommentRequest,
+async def submit_testrun_comment(test_id: UUID, run_id: UUID, payload: CommentRequest,
                            user: User = Depends(api_current_user)):
     service = TestRunService()
-    result = service.post_run_comment(
+    result = await service.post_run_comment(
         test_id=test_id,
         run_id=run_id,
         message=payload.message,
@@ -356,11 +356,11 @@ def submit_testrun_comment(test_id: UUID, run_id: UUID, payload: CommentRequest,
 
 @router.post("/test/{test_id}/run/{run_id}/comment/{comment_id}/update",
              name="api.testrun_api.test_run_update_comment")
-def test_run_update_comment(test_id: UUID, run_id: UUID, comment_id: UUID,
+async def test_run_update_comment(test_id: UUID, run_id: UUID, comment_id: UUID,
                             payload: CommentRequest,
                             user: User = Depends(api_current_user)):
     service = TestRunService()
-    result = service.update_run_comment(
+    result = await service.update_run_comment(
         test_id=test_id,
         run_id=run_id,
         comment_id=comment_id,
@@ -378,10 +378,10 @@ def test_run_update_comment(test_id: UUID, run_id: UUID, comment_id: UUID,
 
 @router.post("/test/{test_id}/run/{run_id}/comment/{comment_id}/delete",
              name="api.testrun_api.test_run_delete_comment")
-def test_run_delete_comment(test_id: UUID, run_id: UUID, comment_id: UUID,
+async def test_run_delete_comment(test_id: UUID, run_id: UUID, comment_id: UUID,
                             user: User = Depends(api_current_user)):
     service = TestRunService()
-    result = service.delete_run_comment(
+    result = await service.delete_run_comment(
         test_id=test_id,
         run_id=run_id,
         comment_id=comment_id,
@@ -395,8 +395,8 @@ def test_run_delete_comment(test_id: UUID, run_id: UUID, comment_id: UUID,
 
 
 @router.post("/terminate_stuck_runs", name="api.testrun_api.sct_terminate_stuck_runs")
-def sct_terminate_stuck_runs(user: User = Depends(api_current_user)):
-    result = TestRunService().terminate_stuck_runs(user=user)
+async def sct_terminate_stuck_runs(user: User = Depends(api_current_user)):
+    result = await TestRunService().terminate_stuck_runs(user=user)
     return APIResponse({
         "status": "ok",
         "response": {
@@ -406,10 +406,10 @@ def sct_terminate_stuck_runs(user: User = Depends(api_current_user)):
 
 
 @router.post("/ignore_jobs", name="api.testrun_api.ignore_jobs")
-def ignore_jobs(payload: IgnoreJobsRequest, user: User = Depends(api_current_user)):
+async def ignore_jobs(payload: IgnoreJobsRequest, user: User = Depends(api_current_user)):
     service = TestRunService()
 
-    result = service.ignore_jobs(test_id=payload.testId, reason=payload.reason, user=user)
+    result = await service.ignore_jobs(test_id=payload.testId, reason=payload.reason, user=user)
 
     return APIResponse({
         "status": "ok",
@@ -420,11 +420,11 @@ def ignore_jobs(payload: IgnoreJobsRequest, user: User = Depends(api_current_use
 
 
 @router.post("/get_runs_by_test_id_run_id", name="api.testrun_api.get_runs_by_test_id_run_id")
-def get_runs_by_test_id_run_id(payload: list[tuple[UUID, UUID]] = Body(...),
+async def get_runs_by_test_id_run_id(payload: list[tuple[UUID, UUID]] = Body(...),
                                user: User = Depends(api_current_user)):
     service = TestRunService()
 
-    result = service.resolve_run_build_id_and_number_multiple(payload)
+    result = await service.resolve_run_build_id_and_number_multiple(payload)
 
     return APIResponse({
         "status": "ok",
@@ -435,10 +435,10 @@ def get_runs_by_test_id_run_id(payload: list[tuple[UUID, UUID]] = Body(...),
 
 
 @router.post("/jenkins/params", name="api.testrun_api.get_jenkins_job_params")
-def get_jenkins_job_params(payload: JenkinsParamsRequest, user: User = Depends(api_current_user)):
+async def get_jenkins_job_params(payload: JenkinsParamsRequest, user: User = Depends(api_current_user)):
     service = JenkinsService()
 
-    result = service.retrieve_job_parameters(
+    result = await service.retrieve_job_parameters(
         build_id=payload.buildId,
         build_number=payload.buildNumber,
         from_defaults=payload.fromDefaults,
@@ -453,7 +453,7 @@ def get_jenkins_job_params(payload: JenkinsParamsRequest, user: User = Depends(a
 
 
 @router.post("/jenkins/build", name="api.testrun_api.build_jenkins_job")
-def build_jenkins_job(payload: JenkinsBuildRequest, user: User = Depends(api_current_user)):
+async def build_jenkins_job(payload: JenkinsBuildRequest, user: User = Depends(api_current_user)):
     service = JenkinsService()
 
     # scylla-cluster-tests jobs require exactly one Scylla version source to be
@@ -461,14 +461,14 @@ def build_jenkins_job(payload: JenkinsBuildRequest, user: User = Depends(api_cur
     # caller (CLI/UI/API) gets a clear error instead of a broken run. Skipped
     # when the test/plugin can't be resolved (e.g. a brand-new job).
     try:
-        test = ArgusTest.get(build_system_id=payload.buildId)
+        test = await ArgusTest.get(build_system_id=payload.buildId)
     except DocumentNotFound:
         test = None
     if test and test.plugin_name == "scylla-cluster-tests":
         JenkinsService.validate_sct_version_source(payload.parameters)
 
-    result = service.build_job(build_id=payload.buildId, params=payload.parameters,
-                               requested_by=user)
+    result = await service.build_job(build_id=payload.buildId, params=payload.parameters,
+                                     requested_by=user)
 
     response = {
         "queueItem": result
@@ -477,7 +477,7 @@ def build_jenkins_job(payload: JenkinsBuildRequest, user: User = Depends(api_cur
     # number, so it can print a stable Argus run link without waiting for the
     # build to leave the queue. Omitted (not fatal) when it can't be resolved.
     if payload.includeBuildNumber:
-        next_build_number = service.next_build_number(build_id=payload.buildId)
+        next_build_number = await service.next_build_number(build_id=payload.buildId)
         if next_build_number > 0:
             response["nextBuildNumber"] = next_build_number
 
@@ -488,10 +488,10 @@ def build_jenkins_job(payload: JenkinsBuildRequest, user: User = Depends(api_cur
 
 
 @router.get("/jenkins/queue_info", name="api.testrun_api.get_queue_info")
-def get_queue_info(queue_item: int = Query(..., alias="queueItem"),
+async def get_queue_info(queue_item: int = Query(..., alias="queueItem"),
                    user: User = Depends(api_current_user)):
     service = JenkinsService()
-    result = service.get_queue_info(queue_item)
+    result = await service.get_queue_info(queue_item)
 
     return APIResponse({
         "status": "ok",
@@ -502,10 +502,10 @@ def get_queue_info(queue_item: int = Query(..., alias="queueItem"),
 
 
 @router.get("/jenkins/clone/targets", name="api.testrun_api.get_clone_targets")
-def get_clone_targets(test_id: str = Query(..., alias="testId"),
+async def get_clone_targets(test_id: str = Query(..., alias="testId"),
                       user: User = Depends(api_current_user)):
     service = JenkinsService()
-    result = service.get_releases_for_clone(test_id)
+    result = await service.get_releases_for_clone(test_id)
 
     return APIResponse({
         "status": "ok",
@@ -516,10 +516,10 @@ def get_clone_targets(test_id: str = Query(..., alias="testId"),
 
 
 @router.get("/jenkins/clone/groups", name="api.testrun_api.get_groups_for_target")
-def get_groups_for_target(target_id: str = Query(..., alias="targetId"),
+async def get_groups_for_target(target_id: str = Query(..., alias="targetId"),
                           user: User = Depends(api_current_user)):
     service = JenkinsService()
-    result = service.get_groups_for_release(target_id)
+    result = await service.get_groups_for_release(target_id)
 
     return APIResponse({
         "status": "ok",
@@ -530,10 +530,10 @@ def get_groups_for_target(target_id: str = Query(..., alias="targetId"),
 
 
 @router.post("/jenkins/clone/create", name="api.testrun_api.clone_jenkins_job")
-def clone_jenkins_job(payload: JenkinsCloneRequest, user: User = Depends(api_current_user)):
+async def clone_jenkins_job(payload: JenkinsCloneRequest, user: User = Depends(api_current_user)):
     service = JenkinsService()
 
-    result = service.clone_job(
+    result = await service.clone_job(
         current_test_id=payload.currentTestId,
         new_name=payload.newName,
         target=payload.target,
@@ -548,11 +548,11 @@ def clone_jenkins_job(payload: JenkinsCloneRequest, user: User = Depends(api_cur
 
 
 @router.post("/jenkins/clone/build", name="api.testrun_api.clone_build_jenkins_job")
-def clone_build_jenkins_job(payload: JenkinsBuildRequest, user: User = Depends(api_current_user)):
+async def clone_build_jenkins_job(payload: JenkinsBuildRequest, user: User = Depends(api_current_user)):
     service = JenkinsService()
 
-    result = service.clone_build_job(build_id=payload.buildId, params=payload.parameters,
-                                     requested_by=user)
+    result = await service.clone_build_job(build_id=payload.buildId, params=payload.parameters,
+                                           requested_by=user)
 
     return APIResponse({
         "status": "ok",
@@ -561,10 +561,10 @@ def clone_build_jenkins_job(payload: JenkinsBuildRequest, user: User = Depends(a
 
 
 @router.get("/jenkins/clone/settings", name="api.testrun_api.get_clone_job_advanced_settings")
-def get_clone_job_advanced_settings(build_id: str = Query(..., alias="buildId"),
+async def get_clone_job_advanced_settings(build_id: str = Query(..., alias="buildId"),
                                     user: User = Depends(api_current_user)):
     service = JenkinsService()
-    result = service.get_advanced_settings(build_id)
+    result = await service.get_advanced_settings(build_id)
 
     return APIResponse({
         "status": "ok",
@@ -573,11 +573,11 @@ def get_clone_job_advanced_settings(build_id: str = Query(..., alias="buildId"),
 
 
 @router.post("/jenkins/clone/settings/change", name="api.testrun_api.set_job_settings")
-def set_job_settings(payload: JenkinsSettingsChangeRequest, user: User = Depends(api_current_user)):
+async def set_job_settings(payload: JenkinsSettingsChangeRequest, user: User = Depends(api_current_user)):
     service = JenkinsService()
-    test = ArgusTest.get(build_system_id=payload.buildId)
-    result = service.adjust_job_settings(build_id=test.build_system_id,
-                                         plugin_name=test.plugin_name, settings=payload.settings)
+    test = await ArgusTest.get(build_system_id=payload.buildId)
+    result = await service.adjust_job_settings(build_id=test.build_system_id,
+                                               plugin_name=test.plugin_name, settings=payload.settings)
 
     return APIResponse({
         "status": "ok",
@@ -586,11 +586,11 @@ def set_job_settings(payload: JenkinsSettingsChangeRequest, user: User = Depends
 
 
 @router.post("/jenkins/clone/settings/validate", name="api.testrun_api.clone_validate_new_settings")
-def clone_validate_new_settings(payload: JenkinsSettingsValidateRequest,
+async def clone_validate_new_settings(payload: JenkinsSettingsValidateRequest,
                                 user: User = Depends(api_current_user)):
     service = JenkinsService()
 
-    result = service.verify_job_settings(build_id=payload.buildId, new_settings=payload.newSettings)
+    result = await service.verify_job_settings(build_id=payload.buildId, new_settings=payload.newSettings)
 
     return APIResponse({
         "status": "ok",
@@ -600,7 +600,7 @@ def clone_validate_new_settings(payload: JenkinsSettingsValidateRequest,
 
 @router.get("/pytest/{test_name}/stats/{field_name}/{aggr_function}",
             name="api.testrun_api.get_pytest_test_field_stats")
-def get_pytest_test_field_stats(asgi_request: Request, test_name: str, field_name: str,
+async def get_pytest_test_field_stats(asgi_request: Request, test_name: str, field_name: str,
                                 aggr_function: str, user: User = Depends(api_current_user)):
     """
         Method: GET
@@ -609,7 +609,7 @@ def get_pytest_test_field_stats(asgi_request: Request, test_name: str, field_nam
             field_name: a field inside PytestResultTable that supports aggregation, e.g. duration
             aggr_function: Supported: avg, count, min, max - which function to use for the aggregate
     """
-    result = TestRunService().get_pytest_test_field_stats(
+    result = await TestRunService().get_pytest_test_field_stats(
         test_name=test_name, field_name=field_name,
         aggr_function=aggr_function, query=dict(asgi_request.query_params))
 
@@ -620,10 +620,10 @@ def get_pytest_test_field_stats(asgi_request: Request, test_name: str, field_nam
 
 
 @router.get("/pytest/{test_name}/results", name="api.testrun_api.get_pytest_test_results")
-def get_pytest_test_results(test_name: str, before: float | None = Query(None),
+async def get_pytest_test_results(test_name: str, before: float | None = Query(None),
                             after: float | None = Query(None),
                             user: User = Depends(api_current_user)):
-    result = TestRunService().get_pytest_test_results(test_name=test_name, before=before, after=after)
+    result = await TestRunService().get_pytest_test_results(test_name=test_name, before=before, after=after)
 
     return APIResponse({
         "status": "ok",
@@ -632,10 +632,10 @@ def get_pytest_test_results(test_name: str, before: float | None = Query(None),
 
 
 @router.post("/github/repo/validate", name="api.testrun_api.byo_validation")
-def byo_validation(payload: GithubRepoValidateRequest, user: User = Depends(api_current_user)):
+async def byo_validation(payload: GithubRepoValidateRequest, user: User = Depends(api_current_user)):
     service = GithubService()
 
-    validated, message = service.validate_repo(payload.repo, payload.branch)
+    validated, message = await service.validate_repo(payload.repo, payload.branch)
 
     return APIResponse({
         "status": "ok",
