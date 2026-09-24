@@ -17,11 +17,12 @@ Scope (iteration 6 of the controller coverage matrix):
 
 import json
 import uuid
+from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
-from argus.backend.tests.conftest import g
+from argus.backend.tests.conftest import g, get_fake_test_run
 
 from coodie.aio import execute_raw
 
@@ -185,6 +186,37 @@ def test_user_planned_jobs_returns_list(api_client, saved_g_user):
     body = resp.json()
     assert body["status"] == "ok"
     assert isinstance(body["response"], list)
+
+
+async def test_user_planned_jobs_reports_the_latest_run_of_an_owned_plan_test(api_client, saved_g_user, release,
+                                                                            fake_test, client_service):
+    plan_payload = {
+        "name": f"planned_jobs_{uuid.uuid4().hex[:8]}",
+        "description": "planned jobs test plan",
+        "owner": str(saved_g_user.id),
+        "participants": [],
+        "target_version": "1.0",
+        "release_id": str(release.id),
+        "tests": [str(fake_test.id)],
+        "groups": [],
+        "assignments": {},
+    }
+    created = api_client.post(f"{API_PREFIX}/planning/plan/create", json=plan_payload).json()
+    assert created["status"] == "ok", created
+    plan_id = created["response"]["id"]
+    try:
+        run_type, older_run = get_fake_test_run(fake_test)
+        await client_service.submit_run(run_type, asdict(older_run))
+        run_type, latest_run = get_fake_test_run(fake_test)
+        await client_service.submit_run(run_type, asdict(latest_run))
+
+        body = api_client.get(f"{API_PREFIX}/user/planned_jobs").json()
+        assert body["status"] == "ok", body
+        jobs_by_test_id = {job["id"]: job for job in body["response"]}
+        assert jobs_by_test_id[str(fake_test.id)]["last_run"]["id"] == latest_run.run_id
+    finally:
+        deleted = api_client.delete(f"{API_PREFIX}/planning/plan/{plan_id}/delete", params={"deleteView": "true"}).json()
+        assert deleted["status"] == "ok", deleted
 
 
 # ---------------------------------------------------------------------------
