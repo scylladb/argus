@@ -9,7 +9,7 @@ from coodie.exceptions import DocumentNotFound
 from argus.backend.models.web import Team, User, UserRoles
 
 
-def _make_user() -> User:
+async def _make_user() -> User:
     user = User(
         id=uuid.uuid4(),
         username=f"team_user_{uuid.uuid4().hex[:8]}",
@@ -18,26 +18,26 @@ def _make_user() -> User:
         password="pw",
         roles=[UserRoles.User.value], registration_date=datetime.now(UTC),
     )
-    user.save()
+    await user.save()
     return user
 
 
 @pytest.fixture
-def team_member():
-    return _make_user()
+async def team_member():
+    return await _make_user()
 
 
 @pytest.fixture
-def team_member_2():
-    return _make_user()
+async def team_member_2():
+    return await _make_user()
 
 
 @pytest.fixture
-def create_team(api_client):
+async def create_team(api_client):
     """Factory that creates teams via the API and deletes only what it created."""
     created_ids = []
 
-    def _create(name=None, leader_id=None, members=None):
+    async def _create(name=None, leader_id=None, members=None):
         payload = {
             "name": name or f"team_{uuid.uuid4().hex[:8]}",
             "leader": str(leader_id or g.user.id),
@@ -52,13 +52,13 @@ def create_team(api_client):
 
     for team_id in created_ids:
         try:
-            Team.get(id=uuid.UUID(team_id)).delete()
+            await (await Team.get(id=uuid.UUID(team_id))).delete()
         except DocumentNotFound:
             pass
 
 
-def test_team_create_includes_leader_in_members(api_client, create_team, team_member):
-    res = create_team(members=[team_member.id])
+async def test_team_create_includes_leader_in_members(api_client, create_team, team_member):
+    res = await create_team(members=[team_member.id])
     assert res["status"] == "ok"
     team_id = res["response"]["id"]
     fetched = api_client.get(f"/api/v1/team/{team_id}/get").json()
@@ -75,8 +75,8 @@ def test_team_get_unknown_id_errors(api_client):
     assert "does not exist" in res["response"]["arguments"][0]
 
 
-def test_team_edit_updates_name_and_members(api_client, create_team, team_member, team_member_2):
-    created = create_team(members=[team_member.id])["response"]
+async def test_team_edit_updates_name_and_members(api_client, create_team, team_member, team_member_2):
+    created = (await create_team(members=[team_member.id]))["response"]
     team_id = created["id"]
 
     res = api_client.post(
@@ -98,9 +98,9 @@ def test_team_edit_updates_name_and_members(api_client, create_team, team_member
     assert str(team_member.id) not in member_ids
 
 
-def test_team_edit_by_non_leader_errors(api_client, create_team, team_member):
-    other_leader = _make_user()
-    created = create_team(leader_id=other_leader.id)["response"]
+async def test_team_edit_by_non_leader_errors(api_client, create_team, team_member):
+    other_leader = await _make_user()
+    created = (await create_team(leader_id=other_leader.id))["response"]
     team_id = created["id"]
 
     res = api_client.post(
@@ -111,8 +111,8 @@ def test_team_edit_by_non_leader_errors(api_client, create_team, team_member):
     assert "doesn't belong to the user" in res["response"]["arguments"][0]
 
 
-def test_team_edit_motd_success(api_client, create_team):
-    created = create_team()["response"]
+async def test_team_edit_motd_success(api_client, create_team):
+    created = (await create_team())["response"]
     team_id = created["id"]
 
     res = api_client.post(
@@ -125,9 +125,9 @@ def test_team_edit_motd_success(api_client, create_team):
     assert fetched["motd"] == "hello-team"
 
 
-def test_team_edit_motd_by_non_leader_errors(api_client, create_team):
-    other_leader = _make_user()
-    team_id = create_team(leader_id=other_leader.id)["response"]["id"]
+async def test_team_edit_motd_by_non_leader_errors(api_client, create_team):
+    other_leader = await _make_user()
+    team_id = (await create_team(leader_id=other_leader.id))["response"]["id"]
     res = api_client.post(
         f"/api/v1/team/{team_id}/motd/edit",
         json={"id": team_id, "motd": "nope"},
@@ -136,8 +136,8 @@ def test_team_edit_motd_by_non_leader_errors(api_client, create_team):
     assert "doesn't belong to the user" in res["response"]["arguments"][0]
 
 
-def test_team_delete_success(api_client, create_team):
-    team_id = create_team()["response"]["id"]
+async def test_team_delete_success(api_client, create_team):
+    team_id = (await create_team())["response"]["id"]
     res = api_client.delete(f"/api/v1/team/{team_id}/delete").json()
     assert res["status"] == "ok"
     assert res["response"]["status"] == "deleted"
@@ -146,9 +146,9 @@ def test_team_delete_success(api_client, create_team):
     assert after["status"] == "error"
 
 
-def test_team_delete_by_non_leader_errors(api_client, create_team):
-    other_leader = _make_user()
-    team_id = create_team(leader_id=other_leader.id)["response"]["id"]
+async def test_team_delete_by_non_leader_errors(api_client, create_team):
+    other_leader = await _make_user()
+    team_id = (await create_team(leader_id=other_leader.id))["response"]["id"]
     res = api_client.delete(f"/api/v1/team/{team_id}/delete").json()
     assert res["status"] == "error"
     assert "doesn't belong to the user" in res["response"]["arguments"][0]
@@ -160,27 +160,27 @@ def test_team_delete_unknown_id_errors(api_client):
     assert "doesn't exist" in res["response"]["arguments"][0]
 
 
-def test_leader_teams_lists_owned_teams(api_client, create_team):
-    a = create_team()["response"]["id"]
-    b = create_team()["response"]["id"]
+async def test_leader_teams_lists_owned_teams(api_client, create_team):
+    a = (await create_team())["response"]["id"]
+    b = (await create_team())["response"]["id"]
     res = api_client.get(f"/api/v1/team/leader/{g.user.id}/teams").json()
     assert res["status"] == "ok"
     ids = {t["id"] for t in res["response"]}
     assert {a, b}.issubset(ids)
 
 
-def test_leader_teams_other_user_empty(api_client, create_team):
-    create_team()
-    other = _make_user()
+async def test_leader_teams_other_user_empty(api_client, create_team):
+    await create_team()
+    other = await _make_user()
     res = api_client.get(f"/api/v1/team/leader/{other.id}/teams").json()
     assert res["status"] == "ok"
     assert res["response"] == []
 
 
-def test_user_teams_includes_owned_and_member(api_client, create_team, team_member):
-    owned = create_team()["response"]["id"]
-    other_leader = _make_user()
-    member_team = create_team(leader_id=other_leader.id, members=[g.user.id])["response"]["id"]
+async def test_user_teams_includes_owned_and_member(api_client, create_team, team_member):
+    owned = (await create_team())["response"]["id"]
+    other_leader = await _make_user()
+    member_team = (await create_team(leader_id=other_leader.id, members=[g.user.id]))["response"]["id"]
 
     res = api_client.get(f"/api/v1/team/user/{g.user.id}/teams").json()
     assert res["status"] == "ok"
@@ -189,15 +189,15 @@ def test_user_teams_includes_owned_and_member(api_client, create_team, team_memb
     assert member_team in ids
 
 
-def test_user_jobs_returns_empty_for_unassigned_user(api_client):
-    user = _make_user()
+async def test_user_jobs_returns_empty_for_unassigned_user(api_client):
+    user = await _make_user()
     res = api_client.get(f"/api/v1/team/user/{user.id}/jobs").json()
     assert res["status"] == "ok"
     assert res["response"] == []
 
 
-def test_user_planned_jobs_returns_empty_for_unassigned_user(api_client):
-    user = _make_user()
+async def test_user_planned_jobs_returns_empty_for_unassigned_user(api_client):
+    user = await _make_user()
     res = api_client.get(f"/api/v1/team/user/{user.id}/planned_jobs").json()
     assert res["status"] == "ok"
     assert res["response"] == []

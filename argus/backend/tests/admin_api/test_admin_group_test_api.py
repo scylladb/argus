@@ -35,9 +35,9 @@ API_PREFIX = "/api/v1"
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def admin_release(release_manager_service):
+async def admin_release(release_manager_service):
     name = f"adm9_rel_{time.time_ns()}"
-    return release_manager_service.create_release(name, name, False)
+    return await release_manager_service.create_release(name, name, False)
 
 
 @pytest.fixture

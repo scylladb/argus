@@ -32,7 +32,7 @@ class SampleTable(StaticGenericResultTable):
         }
 
 
-def test_submit_results_responds_ok_if_all_cells_pass(fake_test, client_service):
+async def test_submit_results_responds_ok_if_all_cells_pass(fake_test, client_service):
     run_type, run = get_fake_test_run(test=fake_test)
     results = SampleTable()
     results.sut_timestamp = 123
@@ -42,14 +42,14 @@ def test_submit_results_responds_ok_if_all_cells_pass(fake_test, client_service)
     ]
     for cell in sample_data:
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
-    client_service.submit_run(run_type, asdict(run))
-    response = client_service.submit_results(run_type, run.run_id, results.as_dict())
+    await client_service.submit_run(run_type, asdict(run))
+    response = await client_service.submit_results(run_type, run.run_id, results.as_dict())
     assert results.as_dict()["meta"]["sut_package_name"] == "test_package"
     assert response["status"] == "ok"
     assert response["message"] == "Results submitted"
 
 
-def test_submit_results_responds_with_error_when_cell_fails_validation(fake_test, client_service):
+async def test_submit_results_responds_with_error_when_cell_fails_validation(fake_test, client_service):
     run_type, run = get_fake_test_run(test=fake_test)
     results = SampleTable()
     results.sut_timestamp = 123
@@ -59,12 +59,12 @@ def test_submit_results_responds_with_error_when_cell_fails_validation(fake_test
     ]
     for cell in sample_data:
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
-    client_service.submit_run(run_type, asdict(run))
+    await client_service.submit_run(run_type, asdict(run))
     with pytest.raises(DataValidationError):
-        client_service.submit_results(run_type, run.run_id, results.as_dict())
+        await client_service.submit_results(run_type, run.run_id, results.as_dict())
 
 
-def test_submit_results_responds_with_error_when_cell_has_error(fake_test, client_service):
+async def test_submit_results_responds_with_error_when_cell_has_error(fake_test, client_service):
     run_type, run = get_fake_test_run(test=fake_test)
     results = SampleTable()
     results.sut_timestamp = 123
@@ -74,6 +74,6 @@ def test_submit_results_responds_with_error_when_cell_has_error(fake_test, clien
     ]
     for cell in sample_data:
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
-    client_service.submit_run(run_type, asdict(run))
+    await client_service.submit_run(run_type, asdict(run))
     with pytest.raises(DataValidationError):
-        client_service.submit_results(run_type, run.run_id, results.as_dict())
+        await client_service.submit_results(run_type, run.run_id, results.as_dict())

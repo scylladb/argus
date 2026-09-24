@@ -51,7 +51,7 @@ def results_to_dict(results):
     return actual_cells
 
 
-def test_can_track_validation_rules_changes(fake_test, client_service, results_service, release, group):
+async def test_can_track_validation_rules_changes(fake_test, client_service, results_service, release, group):
     run_type, run = get_fake_test_run(test=fake_test)
     results = SampleTable()
     results.sut_timestamp = 123
@@ -64,9 +64,9 @@ def test_can_track_validation_rules_changes(fake_test, client_service, results_s
     ]
     for cell in sample_data:
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
-    client_service.submit_run(run_type, asdict(run))
-    client_service.submit_results(run_type, run.run_id, results.as_dict())
-    run_results = results_service.get_run_results(fake_test.id, UUID(run.run_id))
+    await client_service.submit_run(run_type, asdict(run))
+    await client_service.submit_results(run_type, run.run_id, results.as_dict())
+    run_results = await results_service.get_run_results(fake_test.id, UUID(run.run_id))
     actual_cells = results_to_dict(run_results[0])
     # all results should be marked as passed
     for cell in sample_data:
@@ -90,10 +90,10 @@ def test_can_track_validation_rules_changes(fake_test, client_service, results_s
     ]
     for cell in sample_data:
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
-    client_service.submit_run(run_type, asdict(run))
+    await client_service.submit_run(run_type, asdict(run))
     with pytest.raises(DataValidationError):
-        client_service.submit_results(run_type, run.run_id, results.as_dict())
-    run_results = results_service.get_run_results(fake_test.id, UUID(run.run_id))
+        await client_service.submit_results(run_type, run.run_id, results.as_dict())
+    run_results = await results_service.get_run_results(fake_test.id, UUID(run.run_id))
     actual_cells = results_to_dict(run_results[0])
     for cell in sample_data:
         if cell.column == "text col name" or cell.column == "non tracked col name":
@@ -120,9 +120,9 @@ def test_can_track_validation_rules_changes(fake_test, client_service, results_s
     ]
     for cell in sample_data:
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
-    client_service.submit_run(run_type, asdict(run))
-    client_service.submit_results(run_type, run.run_id, results.as_dict())
-    run_results = results_service.get_run_results(fake_test.id, UUID(run.run_id))
+    await client_service.submit_run(run_type, asdict(run))
+    await client_service.submit_results(run_type, run.run_id, results.as_dict())
+    run_results = await results_service.get_run_results(fake_test.id, UUID(run.run_id))
     actual_cells = results_to_dict(run_results[0])
     for cell in sample_data:
         if cell.column == "text col name" or cell.column == "non tracked col name":
@@ -149,10 +149,10 @@ def test_can_track_validation_rules_changes(fake_test, client_service, results_s
     ]
     for cell in sample_data:
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
-    client_service.submit_run(run_type, asdict(run))
+    await client_service.submit_run(run_type, asdict(run))
     with pytest.raises(DataValidationError):
-        client_service.submit_results(run_type, run.run_id, results.as_dict())
-    run_results = results_service.get_run_results(fake_test.id, UUID(run.run_id))
+        await client_service.submit_results(run_type, run.run_id, results.as_dict())
+    run_results = await results_service.get_run_results(fake_test.id, UUID(run.run_id))
     actual_cells = results_to_dict(run_results[0])
     for cell in sample_data:
         if cell.column == "text col name" or cell.column == "non tracked col name":
@@ -196,9 +196,9 @@ def test_can_track_validation_rules_changes(fake_test, client_service, results_s
     ]
     for cell in sample_data:
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
-    client_service.submit_run(run_type, asdict(run))
-    client_service.submit_results(run_type, run.run_id, results.as_dict())
-    run_results = results_service.get_run_results(fake_test.id, UUID(run.run_id))
+    await client_service.submit_run(run_type, asdict(run))
+    await client_service.submit_results(run_type, run.run_id, results.as_dict())
+    run_results = await results_service.get_run_results(fake_test.id, UUID(run.run_id))
     actual_cells = results_to_dict(run_results[0])
     for cell in sample_data:
         if cell.column == "text col name":

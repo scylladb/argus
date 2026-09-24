@@ -2,8 +2,8 @@
 
 These tests do **not** require a live ScyllaDB. They exercise the archive
 parsing, ordering, normalisation, skip-list and create_missing_tests
-pre-step. Dispatch itself is verified by mocking the Flask app's
-``test_client`` -- we record the calls and return canned responses.
+pre-step. Dispatch itself is verified by injecting a mock ``httpx`` client
+-- we record the calls and return canned responses.
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import json
 import tarfile
 import zipfile
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import zstandard as zstd
@@ -112,7 +112,7 @@ def _make_service(
 ) -> ReplayService:
     """Service wired to a recording mock client (default: always-200)."""
     if client is None:
-        client = MagicMock()
+        client = AsyncMock()
         client.request.return_value = _Response(200, b'{"status":"ok"}')
     return ReplayService(
         client=client,
@@ -127,40 +127,40 @@ def _make_service(
 # archive parsing
 # ---------------------------------------------------------------------------
 
-def test_ingest_empty_archive_yields_empty_summary():
-    summary = _make_service().ingest(_make_archive({}))
+async def test_ingest_empty_archive_yields_empty_summary():
+    summary = await _make_service().ingest(_make_archive({}))
     assert summary.total == 0
     assert summary.processed == 0
 
 
-def test_ingest_rejects_corrupt_archive():
+async def test_ingest_rejects_corrupt_archive():
     with pytest.raises(ReplayServiceError):
-        _make_service().ingest(b"not a tar.zst archive")
+        await _make_service().ingest(b"not a tar.zst archive")
 
 
 @pytest.mark.parametrize("packer", [_make_tar, _make_targz, _make_zip, _make_archive])
-def test_ingest_accepts_each_supported_format(packer):
+async def test_ingest_accepts_each_supported_format(packer):
     archive = packer({
         "argus_replay_log_r_1.jsonl": [
             _rec("/testrun/$type/submit", ts=1,
                  location_params={"type": "generic"}, body={"run_id": "x"}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200, b'{"status":"ok"}')
-    summary = _make_service(client).ingest(archive)
+    summary = await _make_service(client).ingest(archive)
     assert summary.total == 1
     assert summary.succeeded == 1
     assert client.request.call_count == 1
 
 
-def test_ingest_rejects_unknown_format():
+async def test_ingest_rejects_unknown_format():
     # Long enough to clear all magic-byte checks but recognised by none.
     with pytest.raises(ReplayServiceError, match="unrecognised format"):
-        _make_service().ingest(b"hello world" * 60)
+        await _make_service().ingest(b"hello world" * 60)
 
 
-def test_ingest_skips_non_jsonl_members():
+async def test_ingest_skips_non_jsonl_members():
     archive_bytes = _make_archive({
         "argus_replay_log_r_1.jsonl": [
             _rec("/testrun/$type/submit", ts=1,
@@ -183,15 +183,15 @@ def test_ingest_skips_non_jsonl_members():
         tar.addfile(info, io.BytesIO(readme))
     archive = zstd.ZstdCompressor().compress(extra.getvalue())
 
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200, b'{"status":"ok"}')
-    summary = _make_service(client).ingest(archive)
+    summary = await _make_service(client).ingest(archive)
     assert summary.total == 1
     assert summary.succeeded == 1
     assert client.request.call_count == 1
 
 
-def test_ingest_skips_malformed_jsonl_lines():
+async def test_ingest_skips_malformed_jsonl_lines():
     tar_buf = io.BytesIO()
     payload = b'{"ts":1,"endpoint":"/testrun/$type/submit","location_params":{"type":"generic"},"body":{}}\n'
     payload += b"this is not json\n"
@@ -202,7 +202,7 @@ def test_ingest_skips_malformed_jsonl_lines():
         tar.addfile(info, io.BytesIO(payload))
     archive = zstd.ZstdCompressor().compress(tar_buf.getvalue())
 
-    summary = _make_service().ingest(archive)
+    summary = await _make_service().ingest(archive)
     assert summary.total == 2  # malformed line dropped
     assert summary.succeeded == 2
 
@@ -211,7 +211,7 @@ def test_ingest_skips_malformed_jsonl_lines():
 # ordering
 # ---------------------------------------------------------------------------
 
-def test_records_sorted_by_ts():
+async def test_records_sorted_by_ts():
     archive = _make_archive({
         "argus_replay_log_r_1.jsonl": [
             _rec("/sct/$id/event/submit", ts=30,
@@ -222,14 +222,14 @@ def test_records_sorted_by_ts():
                  location_params={"id": "X"}, body={"data": {"k": 2}}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200)
-    _make_service(client).ingest(archive)
+    await _make_service(client).ingest(archive)
     seen = [c.kwargs["json"]["data"]["k"] for c in client.request.call_args_list]
     assert seen == [1, 2, 3]
 
 
-def test_submit_run_is_ordered_first():
+async def test_submit_run_is_ordered_first():
     archive = _make_archive({
         "argus_replay_log_r_1.jsonl": [
             _rec("/sct/$id/event/submit", ts=5,
@@ -239,14 +239,14 @@ def test_submit_run_is_ordered_first():
                  body={"run_id": "X"}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200)
-    _make_service(client).ingest(archive)
+    await _make_service(client).ingest(archive)
     first_call_url = client.request.call_args_list[0].args[1]
     assert first_call_url == f"{CLIENT_ROUTE_PREFIX}/testrun/scylla-cluster-tests/submit"
 
 
-def test_terminal_set_status_runs_last():
+async def test_terminal_set_status_runs_last():
     archive = _make_archive({
         "argus_replay_log_r_1.jsonl": [
             _rec("/testrun/$type/$id/set_status", ts=5,
@@ -256,9 +256,9 @@ def test_terminal_set_status_runs_last():
                  location_params={"id": "X"}, body={"data": {}}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200)
-    _make_service(client).ingest(archive)
+    await _make_service(client).ingest(archive)
     urls = [c.args[1] for c in client.request.call_args_list]
     assert urls == [
         f"{CLIENT_ROUTE_PREFIX}/sct/X/event/submit",
@@ -266,7 +266,7 @@ def test_terminal_set_status_runs_last():
     ]
 
 
-def test_finalize_is_dispatched_and_runs_in_terminal_group():
+async def test_finalize_is_dispatched_and_runs_in_terminal_group():
     # ``finalize`` is the ONLY call that back-fills a generic (dtest/pytest)
     # run's terminal status/scylla_version/end_time. Regression guard: it must
     # be dispatched (not skipped) and ordered after every middle record, even
@@ -281,9 +281,9 @@ def test_finalize_is_dispatched_and_runs_in_terminal_group():
                  body={"run_id": "X"}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200)
-    _make_service(client).ingest(archive)
+    await _make_service(client).ingest(archive)
     urls = [c.args[1] for c in client.request.call_args_list]
     assert urls == [
         f"{CLIENT_ROUTE_PREFIX}/testrun/generic/X/submit_results",
@@ -298,7 +298,7 @@ def test_finalize_is_dispatched_and_runs_in_terminal_group():
     assert final_json["end_time"] == 5 / 1000
 
 
-def test_finalize_end_time_is_injected_from_ts_when_absent():
+async def test_finalize_end_time_is_injected_from_ts_when_absent():
     # ReplayRecord.ts is milliseconds (== _now_ns() // 1_000_000), so a ts of
     # 1_700_000_000_000ms must inject end_time == 1_700_000_000.0s.
     archive = _make_archive({
@@ -308,13 +308,13 @@ def test_finalize_end_time_is_injected_from_ts_when_absent():
                  body={"status": "passed"}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200)
-    _make_service(client).ingest(archive)
+    await _make_service(client).ingest(archive)
     assert client.request.call_args.kwargs["json"]["end_time"] == 1_700_000_000.0
 
 
-def test_finalize_preserves_explicit_end_time_in_body():
+async def test_finalize_preserves_explicit_end_time_in_body():
     # A finalize record that already carries end_time is left untouched.
     archive = _make_archive({
         "argus_replay_log_r_1.jsonl": [
@@ -323,13 +323,13 @@ def test_finalize_preserves_explicit_end_time_in_body():
                  body={"status": "passed", "end_time": 1234.5}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200)
-    _make_service(client).ingest(archive)
+    await _make_service(client).ingest(archive)
     assert client.request.call_args.kwargs["json"]["end_time"] == 1234.5
 
 
-def test_finalize_end_time_falls_back_to_last_seen_ts_when_own_ts_absent():
+async def test_finalize_end_time_falls_back_to_last_seen_ts_when_own_ts_absent():
     # The finalize record itself has no ts (e.g. reconstructed rather than
     # originally recorded) -- fall back to the highest ts seen anywhere in
     # the replay log for this run, not the replay moment, since recovering
@@ -346,16 +346,16 @@ def test_finalize_end_time_falls_back_to_last_seen_ts_when_own_ts_absent():
                  body={"status": "passed"}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200)
-    _make_service(client).ingest(archive)
+    await _make_service(client).ingest(archive)
     finalize_call = next(
         c for c in client.request.call_args_list
         if c.args[1].endswith("/finalize"))
     assert finalize_call.kwargs["json"]["end_time"] == 1_700_000_000.0
 
 
-def test_finalize_end_time_untouched_when_no_ts_anywhere_for_run():
+async def test_finalize_end_time_untouched_when_no_ts_anywhere_for_run():
     # No record for the run carries a ts at all -- end_time is left unset,
     # same as before this fallback existed, rather than injecting a bogus 0.
     archive = _make_archive({
@@ -365,13 +365,13 @@ def test_finalize_end_time_untouched_when_no_ts_anywhere_for_run():
                  body={"status": "passed"}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200)
-    _make_service(client).ingest(archive)
+    await _make_service(client).ingest(archive)
     assert "end_time" not in client.request.call_args.kwargs["json"]
 
 
-def test_finalize_runs_after_terminal_set_status():
+async def test_finalize_runs_after_terminal_set_status():
     # When both are present (the SCT flow emits set_status *and* finalize),
     # finalize still lands last so end_time is written after the status flip.
     archive = _make_archive({
@@ -384,9 +384,9 @@ def test_finalize_runs_after_terminal_set_status():
                  body={"new_status": "passed"}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200)
-    _make_service(client).ingest(archive)
+    await _make_service(client).ingest(archive)
     urls = [c.args[1] for c in client.request.call_args_list]
     assert urls == [
         f"{CLIENT_ROUTE_PREFIX}/testrun/scylla-cluster-tests/X/set_status",
@@ -394,7 +394,7 @@ def test_finalize_runs_after_terminal_set_status():
     ]
 
 
-def test_non_terminal_set_status_keeps_natural_order():
+async def test_non_terminal_set_status_keeps_natural_order():
     archive = _make_archive({
         "argus_replay_log_r_1.jsonl": [
             _rec("/testrun/$type/$id/set_status", ts=5,
@@ -404,9 +404,9 @@ def test_non_terminal_set_status_keeps_natural_order():
                  location_params={"id": "X"}, body={"data": {}}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200)
-    _make_service(client).ingest(archive)
+    await _make_service(client).ingest(archive)
     urls = [c.args[1] for c in client.request.call_args_list]
     assert urls == [
         f"{CLIENT_ROUTE_PREFIX}/testrun/t/X/set_status",
@@ -414,7 +414,7 @@ def test_non_terminal_set_status_keeps_natural_order():
     ]
 
 
-def test_heartbeats_collapse_to_last():
+async def test_heartbeats_collapse_to_last():
     archive = _make_archive({
         "argus_replay_log_r_1.jsonl": [
             _rec("/testrun/$type/$id/heartbeat", ts=5,
@@ -425,9 +425,9 @@ def test_heartbeats_collapse_to_last():
                  location_params={"type": "t", "id": "X"}, body={"hb": 3}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200)
-    _make_service(client).ingest(archive)
+    await _make_service(client).ingest(archive)
     assert client.request.call_count == 1
     # The "last" heartbeat is the one with the highest ts (20).
     assert client.request.call_args.kwargs["json"] == {"hb": 2}
@@ -437,7 +437,7 @@ def test_heartbeats_collapse_to_last():
 # URL reconstruction
 # ---------------------------------------------------------------------------
 
-def test_url_substitutes_location_params():
+async def test_url_substitutes_location_params():
     archive = _make_archive({
         "argus_replay_log_r_1.jsonl": [
             _rec("/sct/$id/resource/$name/terminate", ts=1,
@@ -445,15 +445,15 @@ def test_url_substitutes_location_params():
                  body={"reason": "manual"}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200)
-    _make_service(client).ingest(archive)
+    await _make_service(client).ingest(archive)
     assert client.request.call_args.args[1] == (
         f"{CLIENT_ROUTE_PREFIX}/sct/RUN/resource/node-1/terminate"
     )
 
 
-def test_double_slash_endpoint_is_normalised():
+async def test_double_slash_endpoint_is_normalised():
     archive = _make_archive({
         "argus_replay_log_r_1.jsonl": [
             _rec("/sct/$id//stress_cmd/submit", ts=1,
@@ -461,9 +461,9 @@ def test_double_slash_endpoint_is_normalised():
                  body={"cmd": "stress"}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200)
-    _make_service(client).ingest(archive)
+    await _make_service(client).ingest(archive)
     assert client.request.call_args.args[1] == (
         f"{CLIENT_ROUTE_PREFIX}/sct/RUN/stress_cmd/submit"
     )
@@ -473,17 +473,17 @@ def test_double_slash_endpoint_is_normalised():
 # auth header propagation
 # ---------------------------------------------------------------------------
 
-def test_auth_header_is_forwarded():
+async def test_auth_header_is_forwarded():
     archive = _make_archive({
         "argus_replay_log_r_1.jsonl": [
             _rec("/sct/$id/event/submit", ts=1,
                  location_params={"id": "X"}, body={"data": {}}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200)
     svc = _make_service(client, auth_header="token abc")
-    svc.ingest(archive)
+    await svc.ingest(archive)
     assert client.request.call_args.kwargs["headers"] == {"Authorization": "token abc"}
 
 
@@ -499,15 +499,15 @@ def test_finalize_is_not_in_skip_list():
 
 
 @pytest.mark.parametrize("endpoint", sorted(SKIP_ENDPOINTS))
-def test_skip_endpoints_are_not_dispatched(endpoint: str):
+async def test_skip_endpoints_are_not_dispatched(endpoint: str):
     archive = _make_archive({
         "argus_replay_log_r_1.jsonl": [
             _rec(endpoint, ts=1, location_params={"id": "X", "type": "t"},
                  body={}),
         ],
     })
-    client = MagicMock()
-    summary = _make_service(client).ingest(archive)
+    client = AsyncMock()
+    summary = await _make_service(client).ingest(archive)
     assert summary.skipped_no_replay == 1
     assert client.request.call_count == 0
 
@@ -516,48 +516,48 @@ def test_skip_endpoints_are_not_dispatched(endpoint: str):
 # response handling
 # ---------------------------------------------------------------------------
 
-def test_non_2xx_response_is_recorded_as_failure():
+async def test_non_2xx_response_is_recorded_as_failure():
     archive = _make_archive({
         "argus_replay_log_r_1.jsonl": [
             _rec("/sct/$id/event/submit", ts=1,
                  location_params={"id": "X"}, body={"data": {}}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(500, b"boom")
-    summary = _make_service(client).ingest(archive)
+    summary = await _make_service(client).ingest(archive)
     assert summary.failed == 1
     assert summary.succeeded == 0
     assert "HTTP 500" in summary.errors[0]["error"]
 
 
-def test_2xx_envelope_error_is_recorded_as_failure():
+async def test_2xx_envelope_error_is_recorded_as_failure():
     archive = _make_archive({
         "argus_replay_log_r_1.jsonl": [
             _rec("/sct/$id/event/submit", ts=1,
                  location_params={"id": "X"}, body={"data": {}}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200, {
         "status": "error",
         "response": {"exception": "ValueError", "arguments": ["bad input"]},
     })
-    summary = _make_service(client).ingest(archive)
+    summary = await _make_service(client).ingest(archive)
     assert summary.failed == 1
     assert "ValueError" in summary.errors[0]["error"]
 
 
-def test_client_open_exception_is_isolated():
+async def test_client_open_exception_is_isolated():
     archive = _make_archive({
         "argus_replay_log_r_1.jsonl": [
             _rec("/sct/$id/event/submit", ts=1, location_params={"id": "X"}, body={}),
             _rec("/sct/$id/event/submit", ts=2, location_params={"id": "Y"}, body={}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     client.request.side_effect = [RuntimeError("kaboom"), _Response(200, b'{"status":"ok"}')]
-    summary = _make_service(client).ingest(archive)
+    summary = await _make_service(client).ingest(archive)
     assert summary.failed == 1
     assert summary.succeeded == 1
     assert "RuntimeError" in summary.errors[0]["error"]
@@ -567,7 +567,7 @@ def test_client_open_exception_is_isolated():
 # dry_run
 # ---------------------------------------------------------------------------
 
-def test_dry_run_does_not_dispatch():
+async def test_dry_run_does_not_dispatch():
     archive = _make_archive({
         "argus_replay_log_r_1.jsonl": [
             _rec("/sct/$id/event/submit", ts=1, location_params={"id": "X"}, body={}),
@@ -575,8 +575,8 @@ def test_dry_run_does_not_dispatch():
                  location_params={"type": "generic"}, body={"run_id": "X"}),
         ],
     })
-    client = MagicMock()
-    summary = _make_service(client).ingest(archive, dry_run=True)
+    client = AsyncMock()
+    summary = await _make_service(client).ingest(archive, dry_run=True)
     assert summary.succeeded == 2
     assert client.request.call_count == 0
 
@@ -585,7 +585,7 @@ def test_dry_run_does_not_dispatch():
 # create_missing_tests pre-step
 # ---------------------------------------------------------------------------
 
-def test_create_missing_tests_invokes_hierarchy_on_submit_run():
+async def test_create_missing_tests_invokes_hierarchy_on_submit_run():
     archive = _make_archive({
         "argus_replay_log_r_1.jsonl": [
             _rec("/testrun/$type/submit", ts=1,
@@ -595,12 +595,12 @@ def test_create_missing_tests_invokes_hierarchy_on_submit_run():
                        "job_url": "https://jenkins.example/job/x"}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200, b'{"status":"ok"}')
     svc = _make_service(client, create_missing_tests=True)
     with patch("argus.backend.service.test_hierarchy.ensure_test_hierarchy") as ensure, \
          patch("argus.backend.service.client_service.ClientService"):
-        summary = svc.ingest(archive)
+        summary = await svc.ingest(archive)
     assert summary.succeeded == 1
     ensure.assert_called_once()
     kwargs = ensure.call_args.kwargs
@@ -608,7 +608,7 @@ def test_create_missing_tests_invokes_hierarchy_on_submit_run():
     assert kwargs["plugin_name"] == "scylla-cluster-tests"
 
 
-def test_create_missing_tests_disabled_by_default():
+async def test_create_missing_tests_disabled_by_default():
     archive = _make_archive({
         "argus_replay_log_r_1.jsonl": [
             _rec("/testrun/$type/submit", ts=1,
@@ -616,7 +616,7 @@ def test_create_missing_tests_disabled_by_default():
                  body={"run_id": "x", "build_id": "scylla-master/perf"}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200)
     svc = _make_service(client, create_missing_tests=False)
     # Patch the diagnosis to None (i.e. the test entity already exists) so
@@ -624,13 +624,13 @@ def test_create_missing_tests_disabled_by_default():
     # branch staying off, not about the pre-check.
     with patch.object(ReplayService, "_diagnose_missing_hierarchy", return_value=None), \
          patch("argus.backend.service.test_hierarchy.ensure_test_hierarchy") as ensure:
-        summary = svc.ingest(archive)
+        summary = await svc.ingest(archive)
     ensure.assert_not_called()
     assert client.request.call_count == 1
     assert summary.succeeded == 1
 
 
-def test_missing_hierarchy_pre_check_fails_record_with_diagnosis():
+async def test_missing_hierarchy_pre_check_fails_record_with_diagnosis():
     archive = _make_archive({
         "argus_replay_log_r_1.jsonl": [
             _rec("/testrun/$type/submit", ts=1,
@@ -639,7 +639,7 @@ def test_missing_hierarchy_pre_check_fails_record_with_diagnosis():
                        "job_name": "scylla-staging/dusan/longevity-test"}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200)
     svc = _make_service(client, create_missing_tests=False)
     diagnosis = (
@@ -648,7 +648,7 @@ def test_missing_hierarchy_pre_check_fails_record_with_diagnosis():
         "currently missing: release, group, test. ..."
     )
     with patch.object(ReplayService, "_diagnose_missing_hierarchy", return_value=diagnosis):
-        summary = svc.ingest(archive)
+        summary = await svc.ingest(archive)
     assert client.request.call_count == 0  # dispatch was blocked
     assert summary.failed == 1
     assert summary.succeeded == 0
@@ -657,7 +657,7 @@ def test_missing_hierarchy_pre_check_fails_record_with_diagnosis():
     assert summary.errors[0]["error"] == diagnosis
 
 
-def test_missing_hierarchy_pre_check_runs_in_dry_run():
+async def test_missing_hierarchy_pre_check_runs_in_dry_run():
     """dry_run still surfaces the diagnosis so users can preview what would
     fail without uploading -- the whole point of dry_run."""
     archive = _make_archive({
@@ -667,16 +667,16 @@ def test_missing_hierarchy_pre_check_runs_in_dry_run():
                  body={"run_id": "x", "job_name": "some/job"}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     svc = _make_service(client, create_missing_tests=False)
     with patch.object(ReplayService, "_diagnose_missing_hierarchy", return_value="diag"):
-        summary = svc.ingest(archive, dry_run=True)
+        summary = await svc.ingest(archive, dry_run=True)
     assert client.request.call_count == 0
     assert summary.failed == 1
     assert summary.errors[0]["error"] == "diag"
 
 
-def test_pre_check_exception_does_not_block_dispatch():
+async def test_pre_check_exception_does_not_block_dispatch():
     """If the pre-check itself raises (e.g. transient DB error), the dispatch
     still runs -- pre-check failures must never harden into outages."""
     archive = _make_archive({
@@ -686,19 +686,19 @@ def test_pre_check_exception_does_not_block_dispatch():
                  body={"run_id": "x", "job_name": "some/job"}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200)
     svc = _make_service(client, create_missing_tests=False)
     with patch.object(
         ReplayService, "_diagnose_missing_hierarchy",
         side_effect=RuntimeError("db down"),
     ):
-        summary = svc.ingest(archive)
+        summary = await svc.ingest(archive)
     assert client.request.call_count == 1
     assert summary.succeeded == 1
 
 
-def test_create_missing_tests_failure_does_not_abort_dispatch():
+async def test_create_missing_tests_failure_does_not_abort_dispatch():
     archive = _make_archive({
         "argus_replay_log_r_1.jsonl": [
             _rec("/testrun/$type/submit", ts=1,
@@ -706,20 +706,20 @@ def test_create_missing_tests_failure_does_not_abort_dispatch():
                  body={"run_id": "x", "job_name": "scylla-staging/dusan/lt"}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200, b'{"status":"ok"}')
     svc = _make_service(client, create_missing_tests=True)
     with patch(
         "argus.backend.service.test_hierarchy.ensure_test_hierarchy",
         side_effect=RuntimeError("db down"),
     ) as ensure:
-        summary = svc.ingest(archive)
+        summary = await svc.ingest(archive)
     ensure.assert_called_once()
     assert client.request.call_count == 1  # dispatch still ran
     assert summary.succeeded == 1
 
 
-def test_create_missing_tests_skips_when_no_build_id_in_body():
+async def test_create_missing_tests_skips_when_no_build_id_in_body():
     archive = _make_archive({
         "argus_replay_log_r_1.jsonl": [
             _rec("/testrun/$type/submit", ts=1,
@@ -727,11 +727,11 @@ def test_create_missing_tests_skips_when_no_build_id_in_body():
                  body={"run_id": "x"}),
         ],
     })
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200)
     svc = _make_service(client, create_missing_tests=True)
     with patch("argus.backend.service.test_hierarchy.ensure_test_hierarchy") as ensure:
-        svc.ingest(archive)
+        await svc.ingest(archive)
     ensure.assert_not_called()
 
 
@@ -752,24 +752,24 @@ def _patch_hierarchy_models(*, test_exists: bool,
     test_mock = MagicMock()
     test_mock.DoesNotExist = web.DocumentNotFound
     if test_exists:
-        test_mock.get.return_value = MagicMock()
+        test_mock.get = AsyncMock(return_value=MagicMock())
     else:
-        test_mock.get.side_effect = web.DocumentNotFound
+        test_mock.get = AsyncMock(side_effect=web.DocumentNotFound)
 
     release_mock = MagicMock()
     release_mock.DoesNotExist = web.DocumentNotFound
     if release_exists:
         rel = MagicMock(id="rel-id")
-        release_mock.get.return_value = rel
+        release_mock.get = AsyncMock(return_value=rel)
     else:
-        release_mock.get.side_effect = web.DocumentNotFound
+        release_mock.get = AsyncMock(side_effect=web.DocumentNotFound)
 
     group_mock = MagicMock()
     if release_exists and group_exists:
         g = MagicMock(build_system_id="scylla-staging/dusan")
-        group_mock.find.return_value.all.return_value = [g]
+        group_mock.find.return_value.all = AsyncMock(return_value=[g])
     else:
-        group_mock.find.return_value.all.return_value = []
+        group_mock.find.return_value.all = AsyncMock(return_value=[])
 
     return patch.multiple(
         "argus.backend.models.web",
@@ -785,28 +785,28 @@ def _submit_record(build_id: str) -> dict:
                 body={"run_id": "abc", "job_name": build_id})
 
 
-def test_diagnose_returns_none_when_test_exists():
+async def test_diagnose_returns_none_when_test_exists():
     patcher, _ = _patch_hierarchy_models(test_exists=True)
     with patcher:
-        result = ReplayService._diagnose_missing_hierarchy(
+        result = await ReplayService._diagnose_missing_hierarchy(
             _submit_record("scylla-staging/dusan/longevity-test")
         )
     assert result is None
 
 
-def test_diagnose_returns_none_when_no_build_id():
+async def test_diagnose_returns_none_when_no_build_id():
     # No DB lookup should be attempted; safe to call without patching models.
-    assert ReplayService._diagnose_missing_hierarchy(
+    assert await ReplayService._diagnose_missing_hierarchy(
         _rec("/testrun/$type/submit", ts=1,
              location_params={"type": "generic"},
              body={"run_id": "abc"})
     ) is None
 
 
-def test_diagnose_reports_all_three_missing_when_release_absent():
+async def test_diagnose_reports_all_three_missing_when_release_absent():
     patcher, _ = _patch_hierarchy_models(test_exists=False, release_exists=False)
     with patcher:
-        result = ReplayService._diagnose_missing_hierarchy(
+        result = await ReplayService._diagnose_missing_hierarchy(
             _submit_record("scylla-staging/dusan/longevity-test")
         )
     assert result is not None
@@ -817,24 +817,24 @@ def test_diagnose_reports_all_three_missing_when_release_absent():
     assert "--create-missing-tests" in result
 
 
-def test_diagnose_reports_group_and_test_missing_when_only_release_exists():
+async def test_diagnose_reports_group_and_test_missing_when_only_release_exists():
     patcher, _ = _patch_hierarchy_models(
         test_exists=False, release_exists=True, group_exists=False,
     )
     with patcher:
-        result = ReplayService._diagnose_missing_hierarchy(
+        result = await ReplayService._diagnose_missing_hierarchy(
             _submit_record("scylla-staging/dusan/longevity-test")
         )
     assert result is not None
     assert "currently missing: group, test" in result
 
 
-def test_diagnose_reports_only_test_missing_when_release_and_group_exist():
+async def test_diagnose_reports_only_test_missing_when_release_and_group_exist():
     patcher, _ = _patch_hierarchy_models(
         test_exists=False, release_exists=True, group_exists=True,
     )
     with patcher:
-        result = ReplayService._diagnose_missing_hierarchy(
+        result = await ReplayService._diagnose_missing_hierarchy(
             _submit_record("scylla-staging/dusan/longevity-test")
         )
     assert result is not None
@@ -844,12 +844,12 @@ def test_diagnose_reports_only_test_missing_when_release_and_group_exist():
     assert "group," not in result.split("currently missing:")[1]
 
 
-def test_diagnose_parses_two_segment_build_id():
+async def test_diagnose_parses_two_segment_build_id():
     """``release/test`` form: group becomes ``<release>-root`` per
     parse_build_id; group's build_system_id is the release name."""
     patcher, _ = _patch_hierarchy_models(test_exists=False, release_exists=False)
     with patcher:
-        result = ReplayService._diagnose_missing_hierarchy(
+        result = await ReplayService._diagnose_missing_hierarchy(
             _submit_record("scylla-master/perf")
         )
     assert result is not None
@@ -892,16 +892,16 @@ def _logs_archive(recorded_keys: list[str]) -> bytes:
     ]})
 
 
-def test_backfill_submits_only_missing_s3_objects():
+async def test_backfill_submits_only_missing_s3_objects():
     recorded = f"{_RUN_ID}/20260526_115014/db-node-0-1-15bb6cad.tar.zst"
     loader = f"{_RUN_ID}/20260526_115014/loader-set-15bb6cad.tar.zst"
     runner = f"{_RUN_ID}/20260526_115014/sct-runner-events-15bb6cad.tar.zst"
     s3 = _mock_s3([recorded, loader, runner])
 
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200, b'{"status":"ok"}')
     service = _make_service(client, backfill_logs=True, s3_client=s3)
-    summary = service.ingest(_logs_archive([recorded]))
+    summary = await service.ingest(_logs_archive([recorded]))
 
     # Listed the run's prefix once.
     s3.list_objects_v2.assert_called_once()
@@ -919,49 +919,49 @@ def test_backfill_submits_only_missing_s3_objects():
     assert summary.backfilled_logs == 2
 
 
-def test_backfill_can_be_disabled():
+async def test_backfill_can_be_disabled():
     # The ingest endpoint enables backfill by default; passing backfill_logs=False
     # (?backfill_logs=false) must suppress the S3 listing entirely.
     recorded = f"{_RUN_ID}/20260526_115014/db-node-0-1-15bb6cad.tar.zst"
     loader = f"{_RUN_ID}/20260526_115014/loader-set-15bb6cad.tar.zst"
     s3 = _mock_s3([recorded, loader])
 
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200, b'{"status":"ok"}')
     service = _make_service(client, backfill_logs=False, s3_client=s3)
-    summary = service.ingest(_logs_archive([recorded]))
+    summary = await service.ingest(_logs_archive([recorded]))
 
     s3.list_objects_v2.assert_not_called()
     assert summary.backfilled_logs == 0
 
 
-def test_backfill_noop_when_all_logs_already_present():
+async def test_backfill_noop_when_all_logs_already_present():
     recorded = f"{_RUN_ID}/20260526_115014/db-node-0-1-15bb6cad.tar.zst"
     s3 = _mock_s3([recorded])  # S3 has nothing new
 
-    client = MagicMock()
+    client = AsyncMock()
     client.request.return_value = _Response(200, b'{"status":"ok"}')
     service = _make_service(client, backfill_logs=True, s3_client=s3)
-    summary = service.ingest(_logs_archive([recorded]))
+    summary = await service.ingest(_logs_archive([recorded]))
 
     assert summary.backfilled_logs == 0
     # Only the single recorded logs/submit was dispatched.
     assert client.request.call_count == 1
 
 
-def test_backfill_skipped_on_dry_run():
+async def test_backfill_skipped_on_dry_run():
     recorded = f"{_RUN_ID}/20260526_115014/db-node-0-1-15bb6cad.tar.zst"
     loader = f"{_RUN_ID}/20260526_115014/loader-set-15bb6cad.tar.zst"
     s3 = _mock_s3([recorded, loader])
 
     service = _make_service(backfill_logs=True, s3_client=s3)
-    summary = service.ingest(_logs_archive([recorded]), dry_run=True)
+    summary = await service.ingest(_logs_archive([recorded]), dry_run=True)
 
     s3.list_objects_v2.assert_not_called()
     assert summary.backfilled_logs == 0
 
 
-def test_backfill_falls_back_to_sct_default_bucket_when_no_bucket_derivable():
+async def test_backfill_falls_back_to_sct_default_bucket_when_no_bucket_derivable():
     # Only a non-S3 link recorded -> no bucket to learn from, and no
     # REPLAY_LOG_BACKFILL_BUCKET config (no app context in tests) -- falls
     # back to SCT's own default bucket rather than silently skipping.
@@ -975,7 +975,7 @@ def test_backfill_falls_back_to_sct_default_bucket_when_no_bucket_derivable():
     s3 = _mock_s3([loader])
 
     service = _make_service(backfill_logs=True, s3_client=s3)
-    summary = service.ingest(archive)
+    summary = await service.ingest(archive)
 
     s3.list_objects_v2.assert_called_once_with(Bucket=_BUCKET, Prefix=f"{_RUN_ID}/")
     assert summary.backfilled_logs == 1

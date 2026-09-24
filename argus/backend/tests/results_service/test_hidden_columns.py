@@ -45,15 +45,15 @@ SAMPLE_CELLS = [
 
 
 @pytest.fixture
-def run_with_hidden_column(client_service, fake_test, release, group):
+async def run_with_hidden_column(client_service, fake_test, release, group):
     """Submit a run carrying one visible and one hidden column."""
     run_type, run = get_fake_test_run(test=fake_test)
     results = HiddenColumnTable()
     results.sut_timestamp = 123
     for cell in SAMPLE_CELLS:
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
-    client_service.submit_run(run_type, asdict(run))
-    client_service.submit_results(run_type, run.run_id, results.as_dict())
+    await client_service.submit_run(run_type, asdict(run))
+    await client_service.submit_results(run_type, run.run_id, results.as_dict())
     return UUID(run.run_id)
 
 
@@ -61,17 +61,17 @@ def _table_data(run_results):
     return run_results[0][HiddenColumnTable.Meta.name]
 
 
-def test_hidden_columns_excluded_by_default(results_service, fake_test, run_with_hidden_column):
-    table = _table_data(results_service.get_run_results(fake_test.id, run_with_hidden_column))
+async def test_hidden_columns_excluded_by_default(results_service, fake_test, run_with_hidden_column):
+    table = _table_data(await results_service.get_run_results(fake_test.id, run_with_hidden_column))
 
     # The service returns column metadata as UDT objects; the endpoint encodes them as dicts.
     assert [col.name for col in table["columns"]] == [VISIBLE_COLUMN]
     assert set(table["table_data"]["row"]) == {VISIBLE_COLUMN}
 
 
-def test_hidden_columns_included_when_requested(results_service, fake_test, run_with_hidden_column):
+async def test_hidden_columns_included_when_requested(results_service, fake_test, run_with_hidden_column):
     table = _table_data(
-        results_service.get_run_results(fake_test.id, run_with_hidden_column, include_hidden=True))
+        await results_service.get_run_results(fake_test.id, run_with_hidden_column, include_hidden=True))
 
     assert [col.name for col in table["columns"]] == [VISIBLE_COLUMN, HIDDEN_COLUMN]
     assert table["table_data"]["row"][HIDDEN_COLUMN]["value"] == 20

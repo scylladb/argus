@@ -15,10 +15,10 @@ from argus.backend.util.encoders import ArgusJSONEncoder
 
 
 
-def test_submit_simple_config(api_client: TestClient, client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
+async def test_submit_simple_config(api_client: TestClient, client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
-    client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
+    await client_service.submit_run(run_type, asdict(run_req))
+    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
 
     config = {
         "prop": {
@@ -46,10 +46,10 @@ def test_submit_simple_config(api_client: TestClient, client_service: ClientServ
     assert response.json()["response"]
 
 
-def test_get_config_properties(api_client: TestClient, client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
+async def test_get_config_properties(api_client: TestClient, client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
-    client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
+    await client_service.submit_run(run_type, asdict(run_req))
+    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
 
     config = {
         "prop": {
@@ -76,15 +76,15 @@ def test_get_config_properties(api_client: TestClient, client_service: ClientSer
     assert response.json()["status"] == "ok"
     assert response.json()["response"]
 
-    props = client_service.get_config_property(name="my_config.prop.inner.deep", value=10, run_id=run.id)
+    props = await client_service.get_config_property(name="my_config.prop.inner.deep", value=10, run_id=run.id)
     assert len(props) > 0
     assert props[0].value == "10"
 
 
-def test_get_configs_for_runs(api_client: TestClient, client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
+async def test_get_configs_for_runs(api_client: TestClient, client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
-    client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = testrun_service.get_run(run_type, run_req.run_id)
+    await client_service.submit_run(run_type, asdict(run_req))
+    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
 
     config = {
         "prop": {
@@ -112,17 +112,17 @@ def test_get_configs_for_runs(api_client: TestClient, client_service: ClientServ
         assert response.json()["status"] == "ok"
         assert response.json()["response"]
 
-    configs = client_service.get_all_configs(run.id)
+    configs = await client_service.get_all_configs(run.id)
     assert len(configs) == 2
     assert [cfg.name for cfg in configs] == ["another_config", "my_config"]
 
 
-def test_get_config_property_returns_only_the_run_asked_for(api_client: TestClient, client_service: ClientService, testrun_service: TestRunService, fake_test: ArgusTest):
+async def test_get_config_property_returns_only_the_run_asked_for(api_client: TestClient, client_service: ClientService, testrun_service: TestRunService, fake_test: ArgusTest):
     runs = []
     for _ in range(2):
         run_type, run_req = get_fake_test_run(fake_test)
-        client_service.submit_run(run_type, asdict(run_req))
-        runs.append(testrun_service.get_run(run_type, run_req.run_id))
+        await client_service.submit_run(run_type, asdict(run_req))
+        runs.append(await testrun_service.get_run(run_type, run_req.run_id))
     content = base64.encodebytes(json.dumps({"prop": {"inner": {"deep": 10}}}).encode("utf-8")).decode("utf-8")
     for run in runs:
         response = api_client.post(
@@ -132,6 +132,6 @@ def test_get_config_property_returns_only_the_run_asked_for(api_client: TestClie
         )
         assert response.json()["status"] == "ok"
 
-    props = client_service.get_config_property(name="my_config.prop.inner.deep", value=10, run_id=runs[0].id)
+    props = await client_service.get_config_property(name="my_config.prop.inner.deep", value=10, run_id=runs[0].id)
 
     assert [prop.run_id for prop in props] == [str(runs[0].id)]

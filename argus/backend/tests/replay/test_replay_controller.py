@@ -11,7 +11,7 @@ import io
 import json
 from datetime import UTC, datetime
 import tarfile
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import zstandard as zstd
@@ -93,6 +93,7 @@ def test_replay_ingest_returns_summary_for_valid_archive(client):
         "argus.backend.controller.replay_api.ReplayService"
     ) as mock_service_cls:
         instance = mock_service_cls.return_value
+        instance.ingest = AsyncMock(return_value=MagicMock())
         instance.ingest.return_value.as_dict.return_value = {
             "total": 1, "processed": 1, "succeeded": 1, "failed": 0,
             "skipped_no_replay": 0, "errors": [],
@@ -117,6 +118,7 @@ def test_replay_ingest_dry_run_flag_forwarded(client):
         "argus.backend.controller.replay_api.ReplayService"
     ) as mock_service_cls:
         instance = mock_service_cls.return_value
+        instance.ingest = AsyncMock(return_value=MagicMock())
         instance.ingest.return_value.as_dict.return_value = {
             "total": 0, "processed": 0, "succeeded": 0, "failed": 0,
             "skipped_no_replay": 0, "errors": [],
