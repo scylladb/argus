@@ -593,27 +593,6 @@ class PlanningService:
         invalidate_release_snapshots(plan.release_id)
         return True
 
-    def get_assignee_for_test(self, test_id: str | UUID, target_version: str = None) -> UUID | None:
-        dml = ArgusReleasePlan.find(tests__contains=test_id, completed=False)
-        if target_version:
-            dml.filter(target_version=target_version)
-        potential_plans: list[ArgusReleasePlan] = dml.allow_filtering().all()
-        for plan in potential_plans:
-            # Use the most recent plan
-            return plan.assignee_mapping.get(test_id, plan.owner)
-        return None
-
-    def get_assignee_for_group(self, group_id: str | UUID, target_version: str = None) -> UUID | None:
-        dml = ArgusReleasePlan.find(
-            groups__contains=group_id, completed=False)
-        if target_version:
-            dml.filter(target_version=target_version)
-        potential_plans: list[ArgusReleasePlan] = dml.allow_filtering().all()
-        for plan in potential_plans:
-            # Use the most recent plan
-            return plan.assignee_mapping.get(group_id, plan.owner)
-        return None
-
     def get_assignments_for_groups(self, release_id: str | UUID, version: str = None, plan_id: UUID = None) -> dict[str, UUID]:
         release_id = UUID(release_id) if isinstance(release_id, str) else release_id
         release: ArgusRelease = ArgusRelease.get(id=release_id)
