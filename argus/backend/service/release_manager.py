@@ -3,7 +3,6 @@ from typing import TypedDict
 from uuid import UUID
 from coodie.exceptions import DocumentNotFound
 
-from argus.backend.db import ScyllaCluster
 from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, ReleaseDistinctVersions, ReleaseDistinctImages, ReleaseStatsSnapshot, invalidate_release_snapshots
 
@@ -26,16 +25,7 @@ class ReleaseEditPayload(TypedDict):
 
 class ReleaseManagerService:
     def __init__(self) -> None:
-        self.session = ScyllaCluster.get_session()
-        self.database = ScyllaCluster.get()
-        self.runs_by_build_id_stmt = self.database.prepare(
-            "SELECT id, test_id, group_id, release_id, build_id, start_time "
-            f"FROM {SCTTestRun.table_name()} WHERE build_id = ?"
-        )
-        self.update_run_stmt = self.database.prepare(
-            f"UPDATE {SCTTestRun.table_name()} SET test_id = ?, group_id = ?, release_id = ? "
-            "WHERE build_id = ? AND start_time = ?"
-        )
+        pass
 
     def get_releases(self) -> list[ArgusRelease]:
         return list(ArgusRelease.find().all())
@@ -236,10 +226,8 @@ class ReleaseManagerService:
         return True
 
     def move_test_runs(self, test: ArgusTest) -> None:
-        run_rows = self.session.execute(self.runs_by_build_id_stmt, parameters=(
-            test.build_system_id,), execution_profile="read_fast")
-        for run in run_rows:
-            run["test_id"] = test.id
-            run["group_id"] = test.group_id
-            run["release_id"] = test.release_id
-            self.session.execute(self.update_run_stmt, parameters=run)
+        runs = SCTTestRun.find(build_id=test.build_system_id).only("build_id", "start_time") \
+            .values_list("build_id", "start_time").consistency("ONE").all()
+        for build_id, start_time in runs:
+            SCTTestRun.find(build_id=build_id, start_time=start_time).update(
+                test_id=test.id, group_id=test.group_id, release_id=test.release_id)
