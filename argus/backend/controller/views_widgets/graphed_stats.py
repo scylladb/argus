@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from argus.backend.models.web import ArgusUserView, User
 from argus.backend.service.user import api_current_user
 from argus.backend.service.views_widgets.graphed_stats import GraphedStatsService
+from argus.backend.util.common import gather_limited
 from argus.backend.util.encoders import APIResponse
 
 router = APIRouter(prefix="/widgets")
@@ -25,8 +26,8 @@ async def get_graphed_stats(view_id: UUID = Query(...), filters: str | None = Qu
         "nemesis_data": []
     }
 
-    for test_id in view.tests:
-        data = await service.get_graphed_stats(test_id, filters)
+    results = await gather_limited(service.get_graphed_stats(test_id, filters) for test_id in view.tests)
+    for data in results:
         response_data["test_runs"].extend(data["test_runs"])
         response_data["nemesis_data"].extend(data["nemesis_data"])
     return APIResponse({

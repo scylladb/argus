@@ -1,3 +1,4 @@
+import asyncio
 from collections import defaultdict
 from uuid import UUID
 
@@ -12,11 +13,9 @@ class NemesisStatsService:
             "id", "investigation_status", "packages").all()
         nemesis_data = []
 
-        nemesis_rows = []
-        for batch in chunk({r.id for r in rows}):
-            # Typically this should result in <100 runs per test, but
-            # we batch to make sure we don't exceed max cartesian product
-            nemesis_rows.extend(await SCTNemesis.find(run_id__in=batch).all())
+        nemesis_chunks = await asyncio.gather(
+            *(SCTNemesis.find(run_id__in=batch).all() for batch in chunk({r.id for r in rows})))
+        nemesis_rows = [row for rows_chunk in nemesis_chunks for row in rows_chunk]
 
         nemesis_runs_data = defaultdict(list)
         for row in nemesis_rows:
