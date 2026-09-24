@@ -1,3 +1,4 @@
+import asyncio
 from collections import defaultdict
 import logging
 from uuid import UUID
@@ -6,7 +7,7 @@ import re
 from argus.backend.plugins.sct.testrun import SCTNemesis, SCTTestRun
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.jira import JiraIssue
-from argus.backend.util.common import chunk
+from argus.backend.util.common import chunk, gather_limited
 from argus.backend.util.nemesis_map import get_nemesis_name
 
 LOGGER = logging.getLogger(__name__)
@@ -24,11 +25,9 @@ class GraphedStatsService:
             "status",
         ).all()
 
-        nemesis_rows = []
-        for batch in chunk({r.id for r in rows}):
-            # Typically this should result in <100 runs per test, but
-            # we batch to make sure we don't exceed max cartesian product
-            nemesis_rows.extend(await SCTNemesis.find(run_id__in=batch).all())
+        nemesis_chunks = await asyncio.gather(
+            *(SCTNemesis.find(run_id__in=batch).all() for batch in chunk({r.id for r in rows})))
+        nemesis_rows = [row for rows_chunk in nemesis_chunks for row in rows_chunk]
 
         nemesis_data = defaultdict(list)
         for row in nemesis_rows:
@@ -97,47 +96,45 @@ class GraphedStatsService:
 
         run_ids = [UUID(r) if isinstance(r, str) else r for r in run_ids]
 
-        # Step 1: Get issue links for all run_ids in batches
+        async def fetch_test_run(run_id: UUID):
+            try:
+                return await SCTTestRun.find(id=run_id).only(
+                    "id", "status", "build_id", "start_time", "assignee", "investigation_status", "build_number",
+                    "packages", "build_job_url").first()
+            except Exception as e:
+                LOGGER.error(f"Failed to fetch test run {run_id}: {str(e)}")
+                return None
+
+        link_chunks, fetched_runs = await asyncio.gather(
+            asyncio.gather(*(IssueLink.find(run_id__in=batch).only("run_id", "issue_id").all()
+                             for batch in chunk(run_ids))),
+            gather_limited(fetch_test_run(run_id) for run_id in run_ids),
+        )
+        test_runs = dict(zip(run_ids, fetched_runs))
+
         all_issue_links = {}
-        for batch_run_ids in chunk(run_ids):
-            batch_links = await IssueLink.find(run_id__in=batch_run_ids).only("run_id", "issue_id").all()
+        for link in (link for batch_links in link_chunks for link in batch_links):
+            all_issue_links.setdefault(str(link.run_id), []).append(link.issue_id)
 
-            for link in batch_links:
-                run_id_str = str(link.run_id)
-                if run_id_str not in all_issue_links:
-                    all_issue_links[run_id_str] = []
-                all_issue_links[run_id_str].append(link.issue_id)
-
-        # Step 2: Fetch all unique issue details
         all_issue_ids = set()
         for links in all_issue_links.values():
             all_issue_ids.update(links)
 
         issues_by_id = {}
         if all_issue_ids:
-            for batch_issue_ids in chunk(list(all_issue_ids)):
-                for issue in await GithubIssue.find(id__in=batch_issue_ids).only(
-                        "id", "state", "title", "number", "url").all():
-                    issues_by_id[issue.id] = issue
+            issue_chunks = list(chunk(list(all_issue_ids)))
+            github_chunks, jira_chunks = await asyncio.gather(
+                asyncio.gather(*(GithubIssue.find(id__in=batch).only("id", "state", "title", "number", "url").all()
+                                 for batch in issue_chunks)),
+                asyncio.gather(*(JiraIssue.find(id__in=batch).only("id", "state", "summary", "key", "permalink").all()
+                                 for batch in issue_chunks)),
+            )
+            for issue in (issue for batch in jira_chunks for issue in batch):
+                issues_by_id[issue.id] = issue
+            for issue in (issue for batch in github_chunks for issue in batch):
+                issues_by_id[issue.id] = issue
 
-            missing_ids = [id for id in all_issue_ids if id not in issues_by_id]
-            if missing_ids:
-                for batch_issue_ids in chunk(missing_ids):
-                    for issue in await JiraIssue.find(id__in=batch_issue_ids).only(
-                            "id", "state", "summary", "key", "permalink").all():
-                        issues_by_id[issue.id] = issue
-
-        # Step 3: Fetch test runs for all provided run_ids
-        test_runs = {}
-        for run_id in run_ids:
-            try:
-                test_run = await SCTTestRun.find(id=run_id).only(
-                    "id", "status", "build_id", "start_time", "assignee", "investigation_status", "build_number", "packages", "build_job_url").first()
-                test_runs[run_id] = test_run
-            except Exception as e:
-                LOGGER.error(f"Failed to fetch test run {run_id}: {str(e)}")
-
-        # Step 4: Build result with run and issue details
+        # Build result with run and issue details
         for run_id in run_ids:
             try:
                 test_run = test_runs.get(run_id)
