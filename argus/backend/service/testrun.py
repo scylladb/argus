@@ -377,13 +377,15 @@ class TestRunService:
         message_stripped = strip_html_tags(message)
 
         mentions = set(mentions)
-        for potential_mention in re.findall(self.RE_MENTION, message_stripped):
-            if mentioned_user := await User.exists_by_name(potential_mention.lstrip("@")):
-                mentions.add(mentioned_user) if mentioned_user.id != user.id else None
+        mentioned_users = await asyncio.gather(
+            *(User.exists_by_name(potential_mention.lstrip("@"))
+              for potential_mention in re.findall(self.RE_MENTION, message_stripped))
+        )
+        mentions.update(mentioned for mentioned in mentioned_users if mentioned and mentioned.id != user.id)
 
         test: ArgusTest = await ArgusTest.get(id=test_id)
         plugin = self.get_plugin(test.plugin_name)
-        release: ArgusRelease = await ArgusRelease.get(id=test.release_id)
+        release, run = await asyncio.gather(ArgusRelease.get(id=test.release_id), plugin.model.get(id=run_id))
         comment = ArgusTestRunComment.model_construct()
         comment.test_id = test.id
         comment.message = message_stripped
@@ -395,32 +397,32 @@ class TestRunService:
         comment.posted_at = int(time.time())
         await comment.save()
 
-        run: PluginModelBase = await plugin.model.get(id=run_id)
-        build_number = run.build_number
-        for mention in mentions:
-            params = {
-                "username": user.username,
-                "run_id": comment.test_run_id,
-                "test_id": test.id,
-                "build_id": run.build_id,
-                "build_number": build_number,
-            }
-            await self.notification_manager.send_notification(
+        notifications = [
+            self.notification_manager.send_notification(
                 receiver=mention.id,
                 sender=comment.user_id,
                 notification_type=ArgusNotificationTypes.Mention,
                 source_type=ArgusNotificationSourceTypes.Comment,
                 source_id=comment.id,
                 source_message=comment.message,
-                content_params=params
+                content_params={
+                    "username": user.username,
+                    "run_id": comment.test_run_id,
+                    "test_id": test.id,
+                    "build_id": run.build_id,
+                    "build_number": run.build_number,
+                },
             )
-
-        await EventService.create_run_event(kind=ArgusEventTypes.TestRunCommentPosted, body={
-            "message": "A comment was posted by {username}",
-            "username": user.username
-        }, user_id=user.id, run_id=run_id, release_id=release.id, test_id=test.id)
-
-        await invalidate_release_snapshots(release.id)
+            for mention in mentions
+        ]
+        await asyncio.gather(
+            *notifications,
+            EventService.create_run_event(kind=ArgusEventTypes.TestRunCommentPosted, body={
+                "message": "A comment was posted by {username}",
+                "username": user.username
+            }, user_id=user.id, run_id=run_id, release_id=release.id, test_id=test.id),
+            invalidate_release_snapshots(release.id),
+        )
         return await self.get_run_comments(run_id=run_id)
 
     async def delete_run_comment(self, comment_id: UUID, test_id: UUID, run_id: UUID, user: User):
