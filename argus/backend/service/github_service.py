@@ -2,7 +2,7 @@ import re
 import logging
 from collections import defaultdict
 from datetime import UTC, datetime
-from functools import reduce
+from functools import cached_property, reduce
 from unittest.mock import MagicMock
 from uuid import UUID
 from github import Github, Auth, GithubException, UnknownObjectException
@@ -35,9 +35,11 @@ class GithubService:
     def __init__(self, dry_run = False):
         if dry_run:
             self.gh = None
-            return
+
+    @cached_property
+    def gh(self) -> Github:
         auth = Auth.Token(token=self.get_installation_token())
-        self.gh = Github(auth=auth, per_page=1000)
+        return Github(auth=auth, per_page=1000)
 
     def get_plugin(self, plugin_name: str) -> PluginInfoBase | None:
         return self.plugins.get(plugin_name)
