@@ -9,11 +9,11 @@ from argus.backend.service.user import API_TOKEN_KIND, hash_api_token
 
 
 @pytest.fixture
-def db_admin(argus_db) -> User:
+async def db_admin(argus_db) -> User:
     user = User(id=uuid.uuid4(), username=f"auth-admin-{uuid.uuid4().hex[:8]}",
                 email="auth-admin@scylladb.com", password="irrelevant",
                 roles=[UserRoles.User.value, UserRoles.Admin.value], registration_date=datetime.now(UTC))
-    user.save()
+    await user.save()
     return user
 
 
@@ -61,14 +61,14 @@ def test_logout_clears_session_and_sets_manual_logout(anon_client, make_session_
     assert session.get("manual_logout") is True
 
 
-def test_generate_api_token_persists_and_redirects_to_profile(admin_client, db_admin, read_session):
+async def test_generate_api_token_persists_and_redirects_to_profile(admin_client, db_admin, read_session):
     res = admin_client.post("/auth/profile/api/token/generate", follow_redirects=False)
     assert res.status_code == 302
     assert "/profile" in res.headers["Location"]
 
     plaintext = read_session(admin_client).get("token_generated")
     assert plaintext
-    stored = UserOauthToken.get(user_id=db_admin.id, token=hash_api_token(plaintext))
+    stored = await UserOauthToken.get(user_id=db_admin.id, token=hash_api_token(plaintext))
     assert stored.kind == API_TOKEN_KIND
     assert stored.token != plaintext
 
@@ -99,13 +99,13 @@ def test_stop_impersonation_without_active_session_errors(admin_client):
     assert "/profile" in res.headers["Location"]
 
 
-def test_password_login_success_sets_user_id_in_session(anon_client, app_config, argus_db, read_session):
+async def test_password_login_success_sets_user_id_in_session(anon_client, app_config, argus_db, read_session):
     """Posting valid credentials with password login enabled stores user_id in session."""
     raw_password = "s3cret-pw"
     user = User(id=uuid.uuid4(), username=f"pw-user-{uuid.uuid4().hex[:8]}",
                 password=generate_password_hash(raw_password), roles=["ROLE_USER"], registration_date=datetime.now(UTC))
     user.email = f"{user.username}@scylladb.com"
-    user.save()
+    await user.save()
 
     original_methods = app_config.get("LOGIN_METHODS", [])
     app_config["LOGIN_METHODS"] = ["password"]
@@ -138,12 +138,12 @@ def test_password_login_disabled_flashes_error(anon_client, app_config, read_ses
         app_config["LOGIN_METHODS"] = original_methods
 
 
-def test_cf_login_with_valid_jwt_logs_in_existing_user(anon_client, argus_db,
+async def test_cf_login_with_valid_jwt_logs_in_existing_user(anon_client, argus_db,
                                                        mock_cf_access_payload, read_session):
     """CF JWT happy path: /auth/login/cf logs in matching @scylladb.com user."""
     user = User(id=uuid.uuid4(), username=f"cf-user-{uuid.uuid4().hex[:8]}", roles=["ROLE_USER"], password="", registration_date=datetime.now(UTC))
     user.email = f"{user.username}@scylladb.com"
-    user.save()
+    await user.save()
     mock_cf_access_payload.return_value = {"email": user.email}
 
     res = anon_client.post(
@@ -159,11 +159,11 @@ def test_cf_login_with_valid_jwt_logs_in_existing_user(anon_client, argus_db,
     assert session.get("auth_via_cf") is True
 
 
-def test_full_impersonation_flow(admin_client, db_admin, argus_db, read_session):
+async def test_full_impersonation_flow(admin_client, db_admin, argus_db, read_session):
     """Admin impersonates another user, then stops impersonation."""
     target = User(id=uuid.uuid4(), username=f"imp-{uuid.uuid4().hex[:8]}", roles=["ROLE_USER"], password="", registration_date=datetime.now(UTC))
     target.email = f"{target.username}@scylladb.com"
-    target.save()
+    await target.save()
 
     res = admin_client.post(
         "/auth/admin/impersonate",

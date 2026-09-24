@@ -10,7 +10,7 @@ from argus.backend.service.results_service import ResultsService
 
 
 @pytest.fixture
-def setup_data(argus_db):
+async def setup_data(argus_db):
     test_id = uuid4()
     table = ArgusGenericResultMetadata(
         test_id=test_id,
@@ -22,7 +22,7 @@ def setup_data(argus_db):
         validation_rules={}
     )
     data = [
-        ArgusGenericResultData(
+        await ArgusGenericResultData(
             test_id=test_id,
             name=table.name,
             run_id=uuid4(),
@@ -32,7 +32,7 @@ def setup_data(argus_db):
             value=100.0,
             status='UNSET'
         ).save(),
-        ArgusGenericResultData(
+        await ArgusGenericResultData(
             test_id=test_id,
             name=table.name,
             run_id=uuid4(),
@@ -42,7 +42,7 @@ def setup_data(argus_db):
             value=150.0,
             status='UNSET'
         ).save(),
-        ArgusGenericResultData(
+        await ArgusGenericResultData(
             test_id=test_id,
             name=table.name,
             run_id=uuid4(),
@@ -56,14 +56,14 @@ def setup_data(argus_db):
     return test_id, table, data
 
 
-def test_results_service_should_return_results_within_date_range(setup_data):
+async def test_results_service_should_return_results_within_date_range(setup_data):
     test_id, table, data = setup_data
     service = ResultsService()
 
     start_date = datetime.today() - timedelta(days=7)
     end_date = datetime.today() - timedelta(days=2)
 
-    filtered_data = service._get_tables_data(
+    filtered_data = await service._get_tables_data(
         test_id=test_id,
         table_name=table.name,
         ignored_runs=[],
@@ -75,14 +75,14 @@ def test_results_service_should_return_results_within_date_range(setup_data):
     assert filtered_data[0].value == 150.0
 
 
-def test_results_service_should_return_no_results_outside_date_range(setup_data):
+async def test_results_service_should_return_no_results_outside_date_range(setup_data):
     test_id, table, data = setup_data
     service = ResultsService()
 
     start_date = datetime.today() - timedelta(days=20)
     end_date = datetime.today() - timedelta(days=15)
 
-    filtered_data = service._get_tables_data(
+    filtered_data = await service._get_tables_data(
         test_id=test_id,
         table_name=table.name,
         ignored_runs=[],
@@ -93,11 +93,11 @@ def test_results_service_should_return_no_results_outside_date_range(setup_data)
     assert len(filtered_data) == 0
 
 
-def test_results_service_should_return_all_results_with_no_date_range(setup_data):
+async def test_results_service_should_return_all_results_with_no_date_range(setup_data):
     test_id, table, data = setup_data
     service = ResultsService()
 
-    filtered_data = service._get_tables_data(
+    filtered_data = await service._get_tables_data(
         test_id=test_id,
         table_name=table.name,
         ignored_runs=[]
@@ -106,7 +106,7 @@ def test_results_service_should_return_all_results_with_no_date_range(setup_data
     assert len(filtered_data) == 3
 
 
-def test_get_tests_by_version_groups_runs_correctly(argus_db):
+async def test_get_tests_by_version_groups_runs_correctly(argus_db):
     test_id1 = uuid4()
     test_id2 = uuid4()
     run_id1 = uuid4()
@@ -117,7 +117,7 @@ def test_get_tests_by_version_groups_runs_correctly(argus_db):
     pkg_v4_1 = PackageVersion(name='scylla', version='4.1', date='2021-02-01', revision_id='', build_id='')
 
     start_time = datetime.now(UTC)
-    SCTTestRun(
+    await SCTTestRun(
         id=run_id1,
         build_id='build_id1',
         build_job_url='http://jenkins/job/build_id1/',
@@ -127,7 +127,7 @@ def test_get_tests_by_version_groups_runs_correctly(argus_db):
         packages=[pkg_v4_0],
         start_time = start_time + timedelta(milliseconds=1)
     ).save()
-    SCTTestRun(
+    await SCTTestRun(
         id=run_id2,
         build_id='build_id1',
         build_job_url='http://jenkins/job/build_id1/',
@@ -137,7 +137,7 @@ def test_get_tests_by_version_groups_runs_correctly(argus_db):
         packages=[pkg_v4_0],
         start_time = start_time + timedelta(milliseconds=2)
     ).save()
-    SCTTestRun(
+    await SCTTestRun(
         id=run_id3,
         build_id='build_id1',
         build_job_url='http://jenkins/job/build_id1/',
@@ -147,7 +147,7 @@ def test_get_tests_by_version_groups_runs_correctly(argus_db):
         packages=[pkg_v4_0],
         start_time = start_time + timedelta(milliseconds=3)
     ).save()
-    SCTTestRun(
+    await SCTTestRun(
         id=run_id4,
         build_id='build_id1',
         build_job_url='http://jenkins/job/build_id1/',
@@ -161,8 +161,11 @@ def test_get_tests_by_version_groups_runs_correctly(argus_db):
     sut_package_name = 'scylla'
     test_ids = [test_id1, test_id2]
     service = ResultsService()
-    service._exclude_disabled_tests = lambda x: x
-    result = service.get_tests_by_version(sut_package_name, test_ids)
+    async def keep_all(test_ids):
+        return test_ids
+
+    service._exclude_disabled_tests = keep_all
+    result = await service.get_tests_by_version(sut_package_name, test_ids)
 
     expected_result = {'test_info': {str(test_id1): {'build_id': 'build_id1',
                                                      'name': None},
@@ -182,32 +185,32 @@ def test_get_tests_by_version_groups_runs_correctly(argus_db):
     assert result == expected_result
 
 
-def test_create_update_argus_graph_view_should_create() -> None:
+async def test_create_update_argus_graph_view_should_create() -> None:
     service = ResultsService()
     test_id = uuid4()
-    service.create_argus_graph_view(test_id, "MyView", "MyDescription")
-    result = service.get_argus_graph_views(test_id)[0]
+    await service.create_argus_graph_view(test_id, "MyView", "MyDescription")
+    result = (await service.get_argus_graph_views(test_id))[0]
     assert result is not None
     assert result.name == "MyView"
     assert result.description == "MyDescription"
     assert result.graphs == {}
 
 
-def test_create_update_argus_graph_view_should_update() -> None:
+async def test_create_update_argus_graph_view_should_update() -> None:
     service = ResultsService()
     test_id = uuid4()
-    graph_view = service.create_argus_graph_view(test_id, "OldName", "OldDesc")
-    service.update_argus_graph_view(test_id, graph_view.id, "NewName", "NewDesc", {"graph2": "new_data"})
-    updated = service.get_argus_graph_views(test_id)[0]
+    graph_view = await service.create_argus_graph_view(test_id, "OldName", "OldDesc")
+    await service.update_argus_graph_view(test_id, graph_view.id, "NewName", "NewDesc", {"graph2": "new_data"})
+    updated = (await service.get_argus_graph_views(test_id))[0]
     assert updated.name == "NewName"
     assert updated.description == "NewDesc"
     assert updated.graphs == {"graph2": "new_data"}
 
 
-def test_get_argus_graph_views_should_return_list() -> None:
+async def test_get_argus_graph_views_should_return_list() -> None:
     service = ResultsService()
     test_id = uuid4()
-    service.create_argus_graph_view(test_id, "View1", "Desc1")
-    service.create_argus_graph_view(test_id, "View2", "Desc2")
-    views = service.get_argus_graph_views(test_id)
+    await service.create_argus_graph_view(test_id, "View1", "Desc1")
+    await service.create_argus_graph_view(test_id, "View2", "Desc2")
+    views = await service.get_argus_graph_views(test_id)
     assert len(views) == 2

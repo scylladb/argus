@@ -56,7 +56,7 @@ def live_server(argus_db) -> str:
 
 
 @fixture(scope='session')
-def api_user(argus_db) -> User:
+async def api_user(argus_db) -> User:
     """A persisted user for real token auth.
 
     ``load_user`` resolves the Authorization header through the digest rows in
@@ -72,16 +72,16 @@ def api_user(argus_db) -> User:
         registration_date=datetime.now(UTC),
         roles=[UserRoles.User.value],
     )
-    user.save()
+    await user.save()
     yield user
-    user.delete()
+    await user.delete()
 
 
 @fixture(scope='session')
-def api_token(api_user) -> str:
+async def api_token(api_user) -> str:
     service = UserService()
-    yield service.generate_token(api_user).token
-    service.revoke_api_tokens(api_user)
+    yield (await service.generate_token(api_user)).token
+    await service.revoke_api_tokens(api_user)
 
 
 @fixture
@@ -123,24 +123,24 @@ def driver_matrix_client(make_client) -> ArgusDriverMatrixClient:
     return make_client(ArgusDriverMatrixClient, run_id=uuid.uuid4())
 
 
-def _plugin_test(release_manager_service: ReleaseManagerService, group: ArgusGroup,
+async def _plugin_test(release_manager_service: ReleaseManagerService, group: ArgusGroup,
                  release: ArgusRelease, plugin_name: str, prefix: str) -> ArgusTest:
     name = f"{prefix}_{time.time_ns()}"
-    return release_manager_service.create_test(name, name, name, name,
+    return await release_manager_service.create_test(name, name, name, name,
                                                group_id=str(group.id), release_id=str(release.id),
                                                plugin_name=plugin_name)
 
 
 @fixture
-def generic_test(release_manager_service, group: ArgusGroup, release: ArgusRelease) -> ArgusTest:
-    return _plugin_test(release_manager_service, group, release, "generic", "e2e_generic")
+async def generic_test(release_manager_service, group: ArgusGroup, release: ArgusRelease) -> ArgusTest:
+    return await _plugin_test(release_manager_service, group, release, "generic", "e2e_generic")
 
 
 @fixture
-def driver_matrix_test(release_manager_service, group: ArgusGroup, release: ArgusRelease) -> ArgusTest:
-    return _plugin_test(release_manager_service, group, release, "driver-matrix-tests", "e2e_dmt")
+async def driver_matrix_test(release_manager_service, group: ArgusGroup, release: ArgusRelease) -> ArgusTest:
+    return await _plugin_test(release_manager_service, group, release, "driver-matrix-tests", "e2e_dmt")
 
 
 @fixture
-def sirenada_test(release_manager_service, group: ArgusGroup, release: ArgusRelease) -> ArgusTest:
-    return _plugin_test(release_manager_service, group, release, "sirenada", "e2e_sirenada")
+async def sirenada_test(release_manager_service, group: ArgusGroup, release: ArgusRelease) -> ArgusTest:
+    return await _plugin_test(release_manager_service, group, release, "sirenada", "e2e_sirenada")

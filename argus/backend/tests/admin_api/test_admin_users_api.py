@@ -27,16 +27,16 @@ ADMIN_PREFIX = "/admin/api/v1"
 
 
 @pytest.fixture
-def saved_g_user():
+async def saved_g_user():
     """Persist ``g.user`` so admin self-protection paths can compare ids."""
     g.user.password = "test_password"
     g.user.roles = [r.value if hasattr(r, "value") else r for r in g.user.roles]
-    g.user.save()
+    await g.user.save()
     return g.user
 
 
 @pytest.fixture
-def regular_user():
+async def regular_user():
     user = User(
         id=uuid.uuid4(),
         username=f"adm10_user_{uuid.uuid4().hex[:8]}",
@@ -45,7 +45,7 @@ def regular_user():
         password="hash:placeholder",
         roles=[UserRoles.User.value], registration_date=datetime.now(UTC),
     )
-    user.save()
+    await user.save()
     return user
 
 

@@ -149,21 +149,21 @@ def _service_with(fake):
     return service
 
 
-def test_next_build_number_returns_next():
+async def test_next_build_number_returns_next():
     service = _service_with(_FakeJenkins(job_info={"nextBuildNumber": 43}))
-    assert service.next_build_number("scylla-2026.2/longevity/longevity-100gb") == 43
+    assert await service.next_build_number("scylla-2026.2/longevity/longevity-100gb") == 43
 
 
-def test_next_build_number_missing_is_minus_one():
+async def test_next_build_number_missing_is_minus_one():
     # A job Jenkins reports without nextBuildNumber yields the sentinel -1.
     service = _service_with(_FakeJenkins(job_info={}))
-    assert service.next_build_number("scylla-2026.2/longevity/longevity-100gb") == -1
+    assert await service.next_build_number("scylla-2026.2/longevity/longevity-100gb") == -1
 
 
-def test_next_build_number_jenkins_error_is_non_fatal():
+async def test_next_build_number_jenkins_error_is_non_fatal():
     # A Jenkins error must not propagate: the trigger already succeeded.
     service = _service_with(_FakeJenkins(error=jenkins.JenkinsException("boom")))
-    assert service.next_build_number("scylla-2026.2/longevity/longevity-100gb") == -1
+    assert await service.next_build_number("scylla-2026.2/longevity/longevity-100gb") == -1
 
 
 def test_validate_sct_version_source_accepts_single_source():
@@ -240,9 +240,9 @@ def _params_service():
     return _service_with(fake)
 
 
-def test_retrieve_job_parameters_from_defaults_uses_job_config():
+async def test_retrieve_job_parameters_from_defaults_uses_job_config():
     # from_defaults ignores the last build and returns the configured defaults.
-    params = _params_service().retrieve_job_parameters("job", None, from_defaults=True)
+    params = await _params_service().retrieve_job_parameters("job", None, from_defaults=True)
     by_name = _params_by_name(params)
     assert by_name["scylla_version"]["value"] == "master:latest"
     # requested_by_user is always stripped from the returned set.
@@ -253,26 +253,26 @@ def test_retrieve_job_parameters_from_defaults_uses_job_config():
     assert by_name["billing_project"]["choices"] == ["", "sct", "qa", "perf"]
 
 
-def test_retrieve_job_parameters_from_defaults_ignores_missing_builds():
+async def test_retrieve_job_parameters_from_defaults_ignores_missing_builds():
     # A fresh job with no builds still yields its defaults (no build lookup).
     fake = _FakeJenkins(
         job_info={"property": _JOB_INFO_WITH_DEFAULTS["property"]},
         job_config=CONFIG_WITH_CHOICES,
     )
-    params = _service_with(fake).retrieve_job_parameters("job", None, from_defaults=True)
+    params = await _service_with(fake).retrieve_job_parameters("job", None, from_defaults=True)
     assert _params_by_name(params)["scylla_version"]["value"] == "master:latest"
 
 
-def test_retrieve_job_parameters_rebuild_uses_last_build():
+async def test_retrieve_job_parameters_rebuild_uses_last_build():
     # Default mode (from_defaults=False) seeds from the last build's parameters.
-    params = _params_service().retrieve_job_parameters("job", None, from_defaults=False)
+    params = await _params_service().retrieve_job_parameters("job", None, from_defaults=False)
     by_name = _params_by_name(params)
     assert by_name["scylla_version"]["value"] == "5.4:latest"
     assert by_name["billing_project"]["value"] == "qa"
     assert "requested_by_user" not in by_name
 
 
-def test_retrieve_job_parameters_rebuild_specific_build():
+async def test_retrieve_job_parameters_rebuild_specific_build():
     # A specific build number also uses the build's parameters.
-    params = _params_service().retrieve_job_parameters("job", 3, from_defaults=False)
+    params = await _params_service().retrieve_job_parameters("job", 3, from_defaults=False)
     assert _params_by_name(params)["scylla_version"]["value"] == "5.4:latest"
