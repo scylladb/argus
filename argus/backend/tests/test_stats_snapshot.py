@@ -34,7 +34,8 @@ from argus.backend.models.web import (
     ReleaseStatsSnapshot,
 )
 from argus.backend.service.stats import snapshot_filter_key, ReleaseStatsCollector
-from argus.backend.tests.conftest import get_fake_test_run
+from argus.backend.tests.conftest import g, get_fake_test_run
+from argus.common.enums import TestStatus
 
 
 # ---------------------------------------------------------------------------
@@ -479,3 +480,30 @@ def test_delete_release_removes_indexes_and_snapshots(argus_db, release_manager_
     assert list(ReleaseDistinctVersions.find(release_id=rid).all()) == []
     assert list(ReleaseDistinctImages.find(release_id=rid).all()) == []
     assert get_snapshots(rid) == []
+
+
+# ---------------------------------------------------------------------------
+# Plans and the version filter
+# ---------------------------------------------------------------------------
+
+@pytest.mark.docker_required
+def test_planned_test_without_runs_reads_not_run_when_no_version_filter(api_client, fake_test, release):
+    created = api_client.post("/api/v1/planning/plan/create", json={
+        "name": f"plan_{uuid.uuid4().hex[:8]}",
+        "description": "stats plan",
+        "owner": str(g.user.id),
+        "participants": [],
+        "target_version": "9.9",
+        "release_id": str(release.id),
+        "tests": [str(fake_test.id)],
+        "groups": [],
+        "assignments": {},
+    }).json()
+    assert created["status"] == "ok", created
+    try:
+        result = ReleaseStatsCollector(release.name).collect(force=True, include_no_version=True)
+    finally:
+        api_client.delete(f"/api/v1/planning/plan/{created['response']['id']}/delete?deleteView=true")
+
+    test_stats = result["groups"][str(fake_test.group_id)]["tests"][str(fake_test.id)]
+    assert test_stats["status"] == TestStatus.NOT_RUN

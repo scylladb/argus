@@ -340,7 +340,7 @@ class ReleaseStats:
 
         if not limited:
             plans: list[ArgusReleasePlan] = list(ArgusReleasePlan.find(release_id=self.release.id).all())
-            self.plans = plans if not filter else [plan for plan in plans if version_filter == plan.target_version]
+            self.plans = plans if not version_filter else [plan for plan in plans if version_filter == plan.target_version]
             # Legacy scheduling removed - no schedule rows to aggregate.
             self.test_schedules = defaultdict(list)
 
