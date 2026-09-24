@@ -36,8 +36,10 @@
   of the stats, run page and widget paths drops to a handful per request.
 - Jira, GitHub, Jenkins, SMTP, S3, JWKS, subprocess and file I/O run off the
   loop.
-- The four bugs found in the audit are fixed: the `filter` builtin test in
-  `ReleaseStats.collect`, two discarded `.filter()` results, duplicated view
+- The bugs found in the audit are fixed: the `filter` builtin test in
+  `ReleaseStats.collect`, the discarded `.filter()` result in the config
+  property lookup (the two planner assignee lookups with the same defect had
+  no caller and were deleted instead), duplicated view
   links in `IssueService.get`.
 - CLI commands, schema sync and the test suite work on the new model.
 
