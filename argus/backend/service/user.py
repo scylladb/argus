@@ -1,3 +1,5 @@
+import asyncio
+import pathlib
 from collections.abc import Mapping, MutableMapping
 from datetime import UTC, datetime, timedelta
 import hashlib
@@ -71,7 +73,6 @@ class UserService:
     EMAIL_RE = re.compile(r"^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$", re.IGNORECASE)
     def __init__(self) -> None:
         self.cluster = ScyllaCluster.get()
-        self.session = self.cluster.session
 
     @staticmethod
     def check_roles(roles: list[UserRoles] | UserRoles, user: User) -> bool:
@@ -85,10 +86,11 @@ class UserService:
                     return True
         return False
 
-    def github_callback(self, req_code: str, session: MutableMapping, config: Mapping) -> dict | None:
+    async def github_callback(self, req_code: str, session: MutableMapping, config: Mapping) -> dict | None:
         if "gh" not in config.get("LOGIN_METHODS", []):
             raise UserServiceException("Github Login is disabled")
-        oauth_response = requests.post(
+        oauth_response = await asyncio.to_thread(
+            requests.post,
             "https://github.com/login/oauth/access_token",
             headers={
                 "Accept": "application/json",
@@ -102,28 +104,31 @@ class UserService:
 
         oauth_data = oauth_response.json()
 
-        user_info = requests.get(
+        user_info = (await asyncio.to_thread(
+            requests.get,
             "https://api.github.com/user",
             headers={
                 "Accept": "application/json",
                 "Authorization": f"token {oauth_data.get('access_token')}"
             }
-        ).json()
-        email_info = requests.get(
+        )).json()
+        email_info = (await asyncio.to_thread(
+            requests.get,
             "https://api.github.com/user/emails",
             headers={
                 "Accept": "application/json",
                 "Authorization": f"token {oauth_data.get('access_token')}"
             }
-        ).json()
+        )).json()
 
-        organizations = requests.get(
+        organizations = (await asyncio.to_thread(
+            requests.get,
             "https://api.github.com/user/orgs",
             headers={
                 "Accept": "application/json",
                 "Authorization": f"token {oauth_data.get('access_token')}"
             }
-        ).json()
+        )).json()
 
         temp_password = None
         required_organizations = config.get("GITHUB_REQUIRED_ORGANIZATIONS")
@@ -135,7 +140,7 @@ class UserService:
                     "Not a member of a required organization or missing organization scope")
 
         try:
-            user = User.get(username=user_info.get("login"))
+            user = await User.get(username=user_info.get("login"))
         except DocumentNotFound:
             user = User.model_construct()
             user.username = user_info.get("login")
@@ -152,21 +157,21 @@ class UserService:
             user.password = generate_password_hash(temp_password)
 
             avatar_url: str = user_info.get("avatar_url")
-            avatar = requests.get(avatar_url).content
+            avatar = (await asyncio.to_thread(requests.get, avatar_url)).content
             avatar_name = avatar_url.split("/")[-1]
-            filename, filepath = self.save_profile_picture_to_disk(avatar_name, avatar, user.username)
+            filename, filepath = await self.save_profile_picture_to_disk(avatar_name, avatar, user.username)
 
             web_file = WebFileStorage.model_construct()
             web_file.filename = filename
             web_file.filepath = filepath
-            web_file.save()
+            await web_file.save()
             user.picture_id = web_file.id
-            user.save()
+            await user.save()
 
-        for token in UserOauthToken.find(user_id=user.id).all():
+        for token in await UserOauthToken.find(user_id=user.id).all():
             if token.kind == "github":
-                token.delete()
-        UserOauthToken(user_id=user.id, token=oauth_data.get('access_token'), kind="github").save()
+                await token.delete()
+        await UserOauthToken(user_id=user.id, token=oauth_data.get('access_token'), kind="github").save()
 
         redirect_target = session.get("redirect_target")
         session.clear()
@@ -179,10 +184,10 @@ class UserService:
             }
         return None
 
-    def cf_login_or_register(self, cf_access_jwt: str | None, session: MutableMapping, config: Mapping):
+    async def cf_login_or_register(self, cf_access_jwt: str | None, session: MutableMapping, config: Mapping):
         if cf_access_jwt and "cf" in config.get("LOGIN_METHODS", []):
             try:
-                res = _get_user_from_cf_access(cf_access_jwt, config)
+                res = await _get_user_from_cf_access(cf_access_jwt, config)
             except UserServiceException as exc:
                 session["manual_logout"] = True
                 raise exc
@@ -217,12 +222,12 @@ class UserService:
             "found": False,
         }
 
-    def get_users(self) -> dict:
-        users = User.find().all()
+    async def get_users(self) -> dict:
+        users = await User.find().all()
         return {str(user.id): user.to_json() for user in users}
 
-    def get_users_privileged(self, service_only: bool = False) -> dict:
-        users: list[User] = User.find().all()
+    async def get_users_privileged(self, service_only: bool = False) -> dict:
+        users: list[User] = await User.find().all()
         if service_only:
             users = [u for u in users if u.is_service_user()]
         users = {str(user.id): user.model_dump() for user in sorted(users, key=lambda u: u.username)}
@@ -231,33 +236,33 @@ class UserService:
 
         return users
 
-    def set_user_impersonation(self, user_id: str, session: MutableMapping, current_user: User) -> User:
+    async def set_user_impersonation(self, user_id: str, session: MutableMapping, current_user: User) -> User:
         if session.get("original_user"):
             raise UserServiceException("Cannot impersonate while already impersonating a user.")
 
-        user = User.get(id=UUID(user_id))
+        user = await User.get(id=UUID(user_id))
         session["original_user"] = str(current_user.id)
         session["user_id"] = str(user.id)
         return user
 
-    def stop_user_impersonation(self, session: MutableMapping) -> User:
+    async def stop_user_impersonation(self, session: MutableMapping) -> User:
         if not session.get("original_user"):
             raise UserServiceException("No impersonation in progress.")
 
         user_id = session.pop("original_user")
-        user = User.get(id=UUID(user_id))
+        user = await User.get(id=UUID(user_id))
         session["user_id"] = str(user.id)
         return user
 
     @staticmethod
-    def get_api_tokens(user: User) -> list[UserOauthToken]:
-        return [token for token in UserOauthToken.find(user_id=user.id).all() if token.kind == API_TOKEN_KIND]
+    async def get_api_tokens(user: User) -> list[UserOauthToken]:
+        return [token for token in await UserOauthToken.find(user_id=user.id).all() if token.kind == API_TOKEN_KIND]
 
-    def revoke_api_tokens(self, user: User) -> None:
-        for token in self.get_api_tokens(user):
-            token.delete()
+    async def revoke_api_tokens(self, user: User) -> None:
+        for token in await self.get_api_tokens(user):
+            await token.delete()
 
-    def generate_token(self, user: User, duration: str | None = DEFAULT_API_TOKEN_DURATION) -> IssuedToken:
+    async def generate_token(self, user: User, duration: str | None = DEFAULT_API_TOKEN_DURATION) -> IssuedToken:
         """Issue an additional API token for ``user`` valid for ``duration``.
 
         Only the HMAC digest is persisted, so this is the single moment the
@@ -268,23 +273,23 @@ class UserService:
         lifetime = parse_token_duration(duration)
         expiration_date = datetime.now(UTC).replace(tzinfo=None) + lifetime if lifetime else None
         new_token = secrets.token_hex(32)
-        UserOauthToken(
+        await UserOauthToken(
             user_id=user.id, token=hash_api_token(new_token), kind=API_TOKEN_KIND, expiration_date=expiration_date
         ).save(ttl=int(lifetime.total_seconds()) if lifetime else None)
         return IssuedToken(token=new_token, expiration_date=expiration_date)
 
-    def update_email(self, user: User, new_email: str):
-        if (existing := User.exists_by_email(new_email)) and existing.id != user.id:
+    async def update_email(self, user: User, new_email: str):
+        if (existing := await User.exists_by_email(new_email)) and existing.id != user.id:
             raise UserServiceException("This email is already taken.")
         if not self.EMAIL_RE.match(new_email):
             raise UserServiceException("Invalid email.")
         user.email = new_email
-        user.save()
+        await user.save()
 
         return True
 
-    def toggle_admin(self, user_id: str, current_user: User):
-        user: User = User.get(id=UUID(user_id))
+    async def toggle_admin(self, user_id: str, current_user: User):
+        user: User = await User.get(id=UUID(user_id))
 
         if user.id == current_user.id:
             raise UserServiceException("Cannot toggle admin role from yourself.")
@@ -296,11 +301,11 @@ class UserService:
         else:
             user.set_as_admin()
 
-        user.save()
+        await user.save()
         return True
 
 
-    def create_user(self, username: str, email: str, full_name: str,
+    async def create_user(self, username: str, email: str, full_name: str,
                     avatar: tuple[str, bytes] | None = None) -> dict:
 
         result = {
@@ -316,14 +321,14 @@ class UserService:
         }
         errors = False
 
-        if User.exists_by_name(username):
+        if await User.exists_by_name(username):
             result["form_feedback"]["username"] = ["is-invalid", "This username is already taken."]
             errors = True
         if "@" in username:
             result["form_feedback"]["username"] = ["is-invalid", "Cannot use '@' in the username."]
             errors = True
 
-        if User.exists_by_email(email):
+        if await User.exists_by_email(email):
             result["form_feedback"]["email"] = ["is-invalid", "This email is already taken."]
             errors = True
         if not self.EMAIL_RE.match(email):
@@ -351,18 +356,18 @@ class UserService:
                 raise UserServiceException(f"Expected image/*, got {avatar_mime} for user avatar.")
             avatar_ext = mimetypes.guess_extension(avatar_mime)
             filename = f"{username}_{datetime.now(tz=UTC).timestamp()}{avatar_ext}"
-            filename, filepath = self.save_profile_picture_to_disk(filename, content, user.username)
+            filename, filepath = await self.save_profile_picture_to_disk(filename, content, user.username)
 
             web_file = WebFileStorage.model_construct()
             web_file.filename = filename
             web_file.filepath = filepath
-            web_file.save()
+            await web_file.save()
             user.picture_id = web_file.id
 
         temp_password = gen_pass()
         user.password = generate_password_hash(temp_password)
 
-        user.save()
+        await user.save()
         result["user"] = user
         result["created"] = True
         result["temp_password"] = temp_password
@@ -370,19 +375,19 @@ class UserService:
 
         return result
 
-    def delete_user(self, user_id: str, current_user: User):
-        user: User = User.get(id=UUID(user_id))
+    async def delete_user(self, user_id: str, current_user: User):
+        user: User = await User.get(id=UUID(user_id))
         if user.id == current_user.id:
             raise UserServiceException("Cannot delete user that you are logged in as.")
 
         if user.is_admin():
             raise UserServiceException("Cannot delete admin users. Unset admin flag before deleting")
 
-        user.delete()
+        await user.delete()
 
         return True
 
-    def update_password(self, user: User, old_password: str, new_password: str, force=False):
+    async def update_password(self, user: User, old_password: str, new_password: str, force=False):
         if not check_password_hash(user.password, old_password) and not force:
             raise UserServiceException("Incorrect old password")
 
@@ -393,47 +398,46 @@ class UserService:
             raise UserServiceException("New password is too short")
 
         user.password = generate_password_hash(new_password)
-        user.save()
+        await user.save()
 
         return True
 
-    def change_username(self, user: User, new_username: str):
-        if (existing := User.exists_by_name(new_username)) and existing.id != user.id:
+    async def change_username(self, user: User, new_username: str):
+        if (existing := await User.exists_by_name(new_username)) and existing.id != user.id:
             raise UserServiceException("This username is already taken.")
         if "@" in new_username:
             raise UserServiceException("Cannot use '@' in the username")
         user.username = new_username
-        user.save()
+        await user.save()
 
-    def update_name(self, user: User, new_name: str):
+    async def update_name(self, user: User, new_name: str):
         user.full_name = new_name
-        user.save()
+        await user.save()
 
-    def save_profile_picture_to_disk(self, original_filename: str, filedata: bytes, suffix: str):
+    async def save_profile_picture_to_disk(self, original_filename: str, filedata: bytes, suffix: str):
         filename_fragment = hashlib.sha256(os.urandom(64)).hexdigest()[:10]
         filename = f"profile_{suffix}_{filename_fragment}"
         filepath = f"storage/profile_pictures/{filename}"
-        with open(filepath, "wb") as file:
-            file.write(filedata)
+        await asyncio.to_thread(pathlib.Path(filepath).write_bytes, filedata)
 
         return original_filename, filepath
 
-    def update_profile_picture(self, filename: str, filepath: str, user: User):
+    async def update_profile_picture(self, filename: str, filepath: str, user: User):
         web_file = WebFileStorage.model_construct()
         web_file.filename = filename
         web_file.filepath = filepath
-        web_file.save()
+        await web_file.save()
 
         try:
             if old_picture_id := user.picture_id:
-                old_file = WebFileStorage.get(id=old_picture_id)
+                old_file = await WebFileStorage.get(id=old_picture_id)
                 os.unlink(old_file.filepath)
-                old_file.delete()
+                await old_file.delete()
         except Exception as exc:
             print(exc)
 
         user.picture_id = web_file.id
-        user.save()
+        await user.save()
 
 
 def allow_ssh_tunnel_server_scope(view: Callable):
@@ -441,7 +445,7 @@ def allow_ssh_tunnel_server_scope(view: Callable):
     return view
 
 
-def load_user(asgi_request: Request) -> User | None:
+async def load_user(asgi_request: Request) -> User | None:
     """FastAPI counterpart of load_logged_in_user: resolves the request's
     user in the same order (token header, session user_id, anonymous) and
     sets request.state.user as a side effect."""
@@ -454,11 +458,11 @@ def load_user(asgi_request: Request) -> User | None:
             if auth_schema == "token":
                 digest = hash_api_token(auth_data[0])
                 api_token = next(
-                    (t for t in UserOauthToken.find(token=digest).all() if t.kind == API_TOKEN_KIND), None
+                    (t for t in await UserOauthToken.find(token=digest).all() if t.kind == API_TOKEN_KIND), None
                 )
                 if not api_token:
                     raise APIException("User not found for supplied token")
-                user = User.get(id=api_token.user_id)
+                user = await User.get(id=api_token.user_id)
         except IndexError as exception:
             raise APIException("Malformed authorization header") from exception
         except DocumentNotFound as exception:
@@ -466,7 +470,7 @@ def load_user(asgi_request: Request) -> User | None:
 
     if not user and (user_id := asgi_request.session.get("user_id")):
         try:
-            user = User.get(id=UUID(user_id))
+            user = await User.get(id=UUID(user_id))
         except DocumentNotFound:
             asgi_request.session.clear()
 
@@ -475,7 +479,7 @@ def load_user(asgi_request: Request) -> User | None:
     return user
 
 
-def api_current_user(asgi_request: Request, user: User | None = Depends(load_user)) -> User:
+async def api_current_user(asgi_request: Request, user: User | None = Depends(load_user)) -> User:
     """FastAPI counterpart of @api_login_required."""
     if user is None:
         raise AuthorizationError("Authorization required")
@@ -487,7 +491,7 @@ def api_current_user(asgi_request: Request, user: User | None = Depends(load_use
 def require_roles(needed_roles: list[UserRoles] | UserRoles):
     """FastAPI counterpart of @check_roles for API views."""
 
-    def dependency(user: User = Depends(api_current_user)) -> User:
+    async def dependency(user: User = Depends(api_current_user)) -> User:
         if not UserService.check_roles(needed_roles, user):
             raise AuthorizationError("Forbidden")
         return user
@@ -495,7 +499,7 @@ def require_roles(needed_roles: list[UserRoles] | UserRoles):
     return dependency
 
 
-def ui_current_user(asgi_request: Request, user: User | None = Depends(load_user)) -> User:
+async def ui_current_user(asgi_request: Request, user: User | None = Depends(load_user)) -> User:
     """FastAPI counterpart of @login_required for UI pages: anonymous users
     are flash-redirected to the login page with the original target saved."""
     if user is None:
@@ -512,7 +516,7 @@ def ui_current_user(asgi_request: Request, user: User | None = Depends(load_user
 def ui_require_roles(needed_roles: list[UserRoles] | UserRoles):
     """FastAPI counterpart of @check_roles for UI pages."""
 
-    def dependency(user: User = Depends(ui_current_user)) -> User:
+    async def dependency(user: User = Depends(ui_current_user)) -> User:
         if not UserService.check_roles(needed_roles, user):
             raise UIRedirect("main.home", flash_message=("error", "Not authorized to access this area"))
         return user
@@ -534,7 +538,7 @@ def is_ssh_tunnel_server_asgi_request_allowed(asgi_request: Request) -> bool:
     return bool(getattr(endpoint, "allow_ssh_tunnel_server_scope", False))
 
 
-def _get_cf_access_payload(token: str, config: Mapping) -> dict | None:
+async def _get_cf_access_payload(token: str, config: Mapping) -> dict | None:
     cf_domain = config.get("CLOUDFLARE_ACCESS_TEAM_DOMAIN")
     cf_aud = config.get("CLOUDFLARE_ACCESS_AUD")
     if not cf_domain or not cf_aud:
@@ -548,7 +552,7 @@ def _get_cf_access_payload(token: str, config: Mapping) -> dict | None:
 
     issuer = f"https://{cf_domain}"
     try:
-        signing_key = jwk_client.get_signing_key_from_jwt(token)
+        signing_key = await asyncio.to_thread(jwk_client.get_signing_key_from_jwt, token)
         payload = jwt.decode(
             token,
             signing_key.key,
@@ -565,8 +569,8 @@ def _get_cf_access_payload(token: str, config: Mapping) -> dict | None:
     return payload
 
 
-def _get_user_from_cf_access(token: str, config: Mapping) -> dict:
-    payload = _get_cf_access_payload(token, config)
+async def _get_user_from_cf_access(token: str, config: Mapping) -> dict:
+    payload = await _get_cf_access_payload(token, config)
     if not payload:
         raise UserServiceException("Invalid Cloudflare Access Payload")
     email = payload.get("email")
@@ -575,7 +579,7 @@ def _get_user_from_cf_access(token: str, config: Mapping) -> dict:
     if not email.lower().endswith("@scylladb.com"):
         raise UserServiceException("Email is external to scylladb.com")
     try:
-        user = User.get(email=email)
+        user = await User.get(email=email)
         return {
             "user": user,
             "payload": payload,

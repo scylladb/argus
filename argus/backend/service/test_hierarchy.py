@@ -73,33 +73,33 @@ def parse_build_id(build_id: str) -> tuple[str, str, str]:
     return (release, group, test)
 
 
-def _get_or_create_release(name: str) -> ArgusRelease:
+async def _get_or_create_release(name: str) -> ArgusRelease:
     try:
-        return ArgusRelease.get(name=name)
+        return await ArgusRelease.get(name=name)
     except DocumentNotFound:
         release = ArgusRelease.model_construct()
         release.name = name
-        release.save()
+        await release.save()
         LOGGER.info("Auto-created ArgusRelease %s", name)
         return release
 
 
-def _get_or_create_group(release: ArgusRelease, name: str, build_system_id: str) -> ArgusGroup:
+async def _get_or_create_group(release: ArgusRelease, name: str, build_system_id: str) -> ArgusGroup:
     # ArgusGroup has no unique constraint on (release_id, name), so we look up
     # by build_system_id which is the stable identifier from Jenkins.
-    for g in ArgusGroup.find(release_id=release.id).all():
+    for g in await ArgusGroup.find(release_id=release.id).all():
         if g.build_system_id == build_system_id:
             return g
     group = ArgusGroup.model_construct()
     group.release_id = release.id
     group.name = name
     group.build_system_id = build_system_id
-    group.save()
+    await group.save()
     LOGGER.info("Auto-created ArgusGroup %s (release=%s)", name, release.name)
     return group
 
 
-def _get_or_create_test(
+async def _get_or_create_test(
     release: ArgusRelease,
     group: ArgusGroup,
     name: str,
@@ -108,7 +108,7 @@ def _get_or_create_test(
     plugin_name: str | None,
 ) -> ArgusTest:
     try:
-        return ArgusTest.get(build_system_id=build_system_id)
+        return await ArgusTest.get(build_system_id=build_system_id)
     except DocumentNotFound:
         test = ArgusTest.model_construct()
         test.name = name
@@ -120,17 +120,17 @@ def _get_or_create_test(
         if plugin_name:
             test.plugin_name = plugin_name
         try:
-            test.validate_build_system_id()
+            await test.validate_build_system_id()
         except ArgusTestException:
             # Race: another process created the row between our get() and
             # save(). Re-fetch and return that one.
-            return ArgusTest.get(build_system_id=build_system_id)
-        test.save()
+            return await ArgusTest.get(build_system_id=build_system_id)
+        await test.save()
         LOGGER.info("Auto-created ArgusTest %s (build_id=%s)", name, build_system_id)
         return test
 
 
-def ensure_test_hierarchy(
+async def ensure_test_hierarchy(
     build_id: str,
     build_url: str | None = None,
     plugin_name: str | None = None,
@@ -151,6 +151,6 @@ def ensure_test_hierarchy(
     else:
         group_build_id = release_name
 
-    release = _get_or_create_release(release_name)
-    group = _get_or_create_group(release, group_name, group_build_id)
-    return _get_or_create_test(release, group, test_name, build_id, build_url, plugin_name)
+    release = await _get_or_create_release(release_name)
+    group = await _get_or_create_group(release, group_name, group_build_id)
+    return await _get_or_create_test(release, group, test_name, build_id, build_url, plugin_name)

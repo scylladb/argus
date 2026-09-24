@@ -1,4 +1,5 @@
 from uuid import UUID
+import asyncio
 import base64
 from dataclasses import asdict, dataclass
 from io import BytesIO
@@ -42,7 +43,7 @@ class Partial():
             "has_data": True,
         }
 
-    def create_context(self, options: dict[str, Any]) -> dict[str, Any]:
+    async def create_context(self, options: dict[str, Any]) -> dict[str, Any]:
         raise NotImplementedError()
 
     def default_options(self) ->  dict[str, Any]:
@@ -51,7 +52,7 @@ class Partial():
 
 class Header(Partial):
     TEMPLATE_PATH = "email/partials/header.html.j2"
-    def create_context(self, options: dict[str, Any]):
+    async def create_context(self, options: dict[str, Any]):
         return {
             **self.default_options(),
         }
@@ -69,7 +70,7 @@ class Header(Partial):
 class Main(Partial):
     TEMPLATE_PATH = "email/partials/main.html.j2"
 
-    def create_context(self, options: dict[str, Any]) -> dict[str, Any]:
+    async def create_context(self, options: dict[str, Any]) -> dict[str, Any]:
         return {
             **self.default_options(),
         }
@@ -94,7 +95,7 @@ class Main(Partial):
 
 class Packages(Partial):
     TEMPLATE_PATH = "email/partials/packages.html.j2"
-    def create_context(self, options: dict[str, Any]):
+    async def create_context(self, options: dict[str, Any]):
         return {
             **self.default_options(),
             "has_data": len(self.test_run.packages) > 0,
@@ -111,7 +112,7 @@ class Packages(Partial):
 
 class Logs(Partial):
     TEMPLATE_PATH = "email/partials/logs.html.j2"
-    def create_context(self, options: dict[str, Any]):
+    async def create_context(self, options: dict[str, Any]):
         return {
             **self.default_options(),
             "has_data": len(self.test_run.logs) > 0,
@@ -130,7 +131,7 @@ class Logs(Partial):
 
 class Screenshots(Partial):
     TEMPLATE_PATH = "email/partials/screenshots.html.j2"
-    def create_context(self, options: dict[str, Any]):
+    async def create_context(self, options: dict[str, Any]):
         return {
             **self.default_options(),
             "has_data": len(self.test_run.screenshots) > 0,
@@ -146,8 +147,8 @@ class Screenshots(Partial):
 
 class Cloud(Partial):
     TEMPLATE_PATH = "email/partials/cloud.html.j2"
-    def create_context(self, options: dict[str, Any]):
-        resources = list(filter(lambda res: res.resource_type != "sct-runner", self.test_run.get_resources()))
+    async def create_context(self, options: dict[str, Any]):
+        resources = list(filter(lambda res: res.resource_type != "sct-runner", await self.test_run.get_resources()))
         return {
             **self.default_options(),
             "has_data": len(list(filter(lambda r: r.state == "running", resources))) > 0,
@@ -164,9 +165,9 @@ class Cloud(Partial):
 
 class Nemesis(Partial):
     TEMPLATE_PATH = "email/partials/nemesis.html.j2"
-    def create_context(self, options: dict[str, Any]):
+    async def create_context(self, options: dict[str, Any]):
         status_filter = options.get("status_filter") or ["failed", "succeeded"]
-        nemesis = list(filter(lambda nem: nem.status in status_filter, SCTNemesis.find(run_id=self.test_run.id).all()))
+        nemesis = [nem for nem in await SCTNemesis.find(run_id=self.test_run.id).all() if nem.status in status_filter]
         return {
             **self.default_options(),
             "run_id": self.test_run.id,
@@ -184,10 +185,11 @@ class Nemesis(Partial):
 
 class Events(Partial):
     TEMPLATE_PATH = "email/partials/events.html.j2"
-    def create_context(self, options: dict[str, Any]):
+    async def create_context(self, options: dict[str, Any]):
         severities = [SCTEventSeverity(s) for s in options.get("severity_filter", ["CRITICAL",  "ERROR"])]
         limit = options.get("amount_per_severity", 25)
-        events = self.test_run.get_events_limited(self.test_run.id, severities=severities, per_partition_limit=limit)
+        events = await self.test_run.get_events_limited(self.test_run.id, severities=severities,
+                                                        per_partition_limit=limit)
         return {
             **self.default_options(),
             "events": events,
@@ -202,8 +204,8 @@ class Events(Partial):
 
 class GenericResults(Partial):
     TEMPLATE_PATH = "email/partials/generic_results.html.j2"
-    def create_context(self, options: dict[str, Any]):
-        results = ResultsService().get_run_results(run_id=self.test_run.id, test_id=self.test_run.test_id)
+    async def create_context(self, options: dict[str, Any]):
+        results = await ResultsService().get_run_results(run_id=self.test_run.id, test_id=self.test_run.test_id)
         table_filter: list[str] = options.get("table_filter", [])
         final_tables = set()
         tables = [next(iter(t.keys())) for t in results]
@@ -234,7 +236,7 @@ class GenericResults(Partial):
 
 class Unsupported(Partial):
     TEMPLATE_PATH = "email/partials/unsupported.html.j2"
-    def create_context(self, options: dict[str, Any]):
+    async def create_context(self, options: dict[str, Any]):
         return {
             **self.default_options(),
             **options
@@ -248,7 +250,7 @@ class Unsupported(Partial):
 
 class CustomHtml(Partial):
     TEMPLATE_PATH = "email/partials/custom_html.html.j2"
-    def create_context(self, options: dict[str, Any]):
+    async def create_context(self, options: dict[str, Any]):
         return {
             **self.default_options(),
             **options,
@@ -263,7 +265,7 @@ class CustomHtml(Partial):
 
 class CustomTable(Partial):
     TEMPLATE_PATH = "email/partials/custom_table.html.j2"
-    def create_context(self, options: dict[str, Any]):
+    async def create_context(self, options: dict[str, Any]):
         return {
             **self.default_options(),
             **options,
@@ -344,10 +346,10 @@ class EmailService:
         else:
             self.sender = self.SENDER
 
-    def send_report(self, request_data: RawReportSendRequest) -> bool:
+    async def send_report(self, request_data: RawReportSendRequest) -> bool:
         req = ReportSendRequest(**request_data)
         try:
-            report = self.create_report(req)
+            report = await self.create_report(req)
         except Exception as exc:
             raise EmailServiceException("Error during template render", exc.args)
         attachments = []
@@ -359,25 +361,27 @@ class EmailService:
             }
             attachments.append(attachment)
         try:
-            self.sender.send(req.title, report, recipients=req.recipients, html=True, attachments=attachments)
+            await asyncio.to_thread(self.sender.send, req.title, report, recipients=req.recipients, html=True,
+                                    attachments=attachments)
         except Exception as exc:
             raise EmailServiceException("Error sending email report", exc.args)
         return True
 
-    def display_report(self, request_data: RawReportSendRequest) -> str:
+    async def display_report(self, request_data: RawReportSendRequest) -> str:
         req = ReportSendRequest(**request_data)
-        return self.create_report(req)
+        return await self.create_report(req)
 
-    def create_report(self, request: ReportSendRequest) -> str:
-        run: SCTTestRun = SCTTestRun.get(id=UUID(request.run_id) if isinstance(request.run_id, str) else request.run_id)
+    async def create_report(self, request: ReportSendRequest) -> str:
+        run_id = UUID(request.run_id) if isinstance(request.run_id, str) else request.run_id
+        run: SCTTestRun = await SCTTestRun.get(id=run_id)
         partials = []
         for section in request.sections if len(request.sections) > 0 else DEFAULT_SECTIONS:
             if isinstance(section, dict):
                 partial = PARTIALS.get(section["type"], PARTIALS["unsupported"])(section_type=section["type"], test_run=run)
-                partials.append(partial.create_context(section["options"]))
+                partials.append(await partial.create_context(section["options"]))
             elif isinstance(section, str):
                 partial = PARTIALS.get(section, PARTIALS["unsupported"])(section_type=section, test_run=run)
-                partials.append(partial.create_context({}))
+                partials.append(await partial.create_context({}))
         if request.title == "#auto":
             request.title = f"[{run.status.upper()}] {run.build_id}#{run.build_number}: {run.start_time.strftime("%d/%m/%Y %H:%M:%S")}"
         request.sections = partials

@@ -10,7 +10,7 @@ from argus.backend.util.common import check_version, chunk
 LOGGER = logging.getLogger(__name__)
 
 
-def build_version_map(links: list[IssueLink]) -> dict[UUID, str | None]:
+async def build_version_map(links: list[IssueLink]) -> dict[UUID, str | None]:
     """Resolve scylla_version for run_ids by looking up only the correct plugin table.
 
     1. Batch-fetch ArgusTest records to learn each test's plugin_name.
@@ -21,7 +21,7 @@ def build_version_map(links: list[IssueLink]) -> dict[UUID, str | None]:
     unique_test_ids = {link.test_id for link in links}
     test_plugin_map: dict[UUID, str] = {}
     for batch in chunk(unique_test_ids):
-        for test in ArgusTest.find(id__in=batch).only("id", "plugin_name").all():
+        for test in await ArgusTest.find(id__in=batch).only("id", "plugin_name").all():
             test_plugin_map[test.id] = test.plugin_name
 
     # run_id → plugin model, grouped (deduplicated)
@@ -37,12 +37,12 @@ def build_version_map(links: list[IssueLink]) -> dict[UUID, str | None]:
         plugin = AVAILABLE_PLUGINS.get(plugin_name)
         if not plugin:
             continue
-        resolved = plugin.model.get_versions_by_run_ids(run_ids)
+        resolved = await plugin.model.get_versions_by_run_ids(run_ids)
         version_map.update(resolved)
     return version_map
 
 
-def filter_links_by_version(
+async def filter_links_by_version(
     links: list[IssueLink],
     product_version: str,
     include_no_version: bool = False,
@@ -54,7 +54,7 @@ def filter_links_by_version(
     and querying only the correct plugin table for each run.
     """
     if version_map is None:
-        version_map = build_version_map(links)
+        version_map = await build_version_map(links)
 
     def matches(link: IssueLink) -> bool:
         run_version = version_map.get(link.run_id)
