@@ -4,7 +4,7 @@ from functools import reduce
 from pprint import pformat
 import re
 import logging
-from typing import NamedTuple, TypedDict
+from typing import TypedDict
 from uuid import UUID
 from time import sleep, time
 
@@ -145,8 +145,6 @@ class PytestViewService:
             after = datetime.fromtimestamp(int(after), tz=UTC)
             query_filters.append(("id >= ?", after))
 
-        prepared = db.prepare(db_query)
-        results: list[NamedTuple] = []
         if isinstance(enabled_statuses, list) and len(enabled_statuses) > 0:
             query_filters.append(("status in ?", enabled_statuses))
 
