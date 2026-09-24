@@ -5,7 +5,7 @@ from uuid import UUID
 from pydantic import Field
 from cassandra.util import uuid_from_time
 from coodie import Ascii, Indexed, PrimaryKey, TimeUUID
-from coodie.sync import Document
+from coodie.aio import Document
 
 
 class ArgusReleasePlan(Document):
