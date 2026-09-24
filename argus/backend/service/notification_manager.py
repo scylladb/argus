@@ -116,8 +116,9 @@ class ArgusDBNotificationSaver(NotificationSenderBase):
                                 source_type: ArgusNotificationSourceTypes, source_id: UUID, title: str | None = None,
                                 content: str | None = None, content_params: dict | None = None) -> ArgusNotification:
         new_notification = ArgusNotification.model_construct()
-        for user in [sender, receiver]:
-            if not await self._check_user(user_id=user):
+        users = [sender, receiver]
+        for user, exists in zip(users, await asyncio.gather(*(self._check_user(user_id=user) for user in users))):
+            if not exists:
                 raise NotificationManagerException(f"UserId {user} not found in the database", user)
 
         new_notification.sender = sender
@@ -154,8 +155,7 @@ class EmailNotificationServiceSender(NotificationSenderBase):
                                 content_params: dict | None = None):
         try:
             content_params = content_params or {}
-            receiver_user = await self.get_user(receiver)
-            sender_user = await self.get_user(sender)
+            receiver_user, sender_user = await asyncio.gather(self.get_user(receiver), self.get_user(sender))
             subject = title if title else self._get_title_for_notification_type(notification_type)
             content_params.update({
                                   "sender": sender_user.full_name,
