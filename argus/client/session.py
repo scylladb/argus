@@ -174,7 +174,9 @@ class TunneledSession(requests.Session):
     with no restart.
     """
 
-    def __init__(self, auth_token: str, original_base_url: str, run_id: str, max_retries: int = 3) -> None:
+    def __init__(
+        self, auth_token: str, original_base_url: str, run_id: str | None = None, max_retries: int = 3
+    ) -> None:
         super().__init__()
         adapter = _build_retry_adapter(max_retries)
         self.mount("http://", adapter)
@@ -533,17 +535,6 @@ class TunneledSession(requests.Session):
         super().close()
 
 
-def _resolve_tunnel_run_id(run_id: str | None) -> str | None:
-    if not run_id:
-        LOGGER.warning("SSH tunnel requested with no run_id to scope its key by; using a direct connection")
-        return None
-    try:
-        return canonical_run_id(run_id)
-    except ValueError:
-        LOGGER.warning("SSH tunnel requested with run_id %r, which is not a UUID; using a direct connection", run_id)
-        return None
-
-
 def create_session(
     auth_token: str,
     base_url: str,
@@ -551,12 +542,17 @@ def create_session(
     max_retries: int = 3,
     run_id: str | None = None,
 ) -> requests.Session:
-    tunnel_run_id = _resolve_tunnel_run_id(run_id) if _resolve_use_tunnel(use_tunnel) else None
-    if tunnel_run_id is not None:
-        session = TunneledSession(
-            auth_token=auth_token, original_base_url=base_url, run_id=tunnel_run_id, max_retries=max_retries
-        )
-    else:
+    session: requests.Session | None = None
+    if _resolve_use_tunnel(use_tunnel):
+        try:
+            tunnel_run_id = canonical_run_id(run_id) if run_id else None
+        except ValueError:
+            LOGGER.warning("SSH tunnel requested with run_id %r, which is not a UUID; using a direct connection", run_id)
+        else:
+            session = TunneledSession(
+                auth_token=auth_token, original_base_url=base_url, run_id=tunnel_run_id, max_retries=max_retries
+            )
+    if session is None:
         session = _build_retry_session(max_retries)
     # Both branches, so that a job which never opens a tunnel, or which falls
     # back to a direct connection, is still named in the backend metrics.

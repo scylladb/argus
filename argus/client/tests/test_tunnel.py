@@ -2324,3 +2324,37 @@ def test_delete_cached_tunnel_state_without_a_run_id_deletes_only_the_shared_key
 
     assert not os.path.exists(shared.state_dir)
     assert os.path.exists(mine.state_dir)
+
+
+def test_create_session_without_a_run_id_tunnels_with_the_shared_key(monkeypatch):
+    session = session_mod.create_session(auth_token="token", base_url="https://argus.example.com", use_tunnel=True)
+    try:
+        assert isinstance(session, TunneledSession)
+        assert session._run_id is None
+    finally:
+        session.close()
+
+
+def test_generic_cli_trigger_jobs_tunnels_with_the_shared_key(monkeypatch, tmp_path):
+    seen: dict = {}
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            seen.update(kwargs)
+
+        def __enter__(self):
+            return Mock()
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(generic_cli, "ArgusGenericClient", _FakeClient)
+    job_info = tmp_path / "jobs.json"
+    job_info.write_text("{}", encoding="utf-8")
+
+    generic_cli.cli.main(
+        ["trigger-jobs", "--api-key", "token", "--job-info-file", str(job_info), "--use-tunnel"], standalone_mode=False
+    )
+
+    assert seen["use_tunnel"] is True
+    assert seen.get("run_id") is None
