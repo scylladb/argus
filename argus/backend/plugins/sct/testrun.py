@@ -2,7 +2,6 @@ from enum import Enum
 import logging
 from datetime import UTC, datetime, timezone
 from dataclasses import dataclass, field
-from threading import Lock
 from typing import Annotated, ClassVar, Optional
 from uuid import UUID, uuid4
 

@@ -12,7 +12,6 @@ from argus.backend.util.config import Config
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS, all_plugin_models
-from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.service.notification_manager import NotificationManagerService
 from argus.backend.models.web import (
     ArgusRelease,
@@ -43,14 +42,7 @@ class ScheduleUpdateRequest:
 class ArgusService:
     def __init__(self, database_session=None):
         self.session = database_session if database_session else ScyllaCluster.get_session()
-        self.database = ScyllaCluster.get()
         self.notification_manager = NotificationManagerService()
-        self.build_id_and_url_statement = self.database.prepare(
-            f"SELECT build_id, build_job_url, test_id FROM {SCTTestRun.table_name()} WHERE id = ?"
-        )  # TODO: transfer to PluginModelBase
-        self.scylla_versions_by_release = self.database.prepare(
-            f"SELECT scylla_version FROM {SCTTestRun.table_name()} WHERE release_id = ?"
-        )  # TODO: Moved to PluginModelBase
 
     def get_version(self) -> str:
         try:
