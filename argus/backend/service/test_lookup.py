@@ -1,9 +1,10 @@
 
 
+import asyncio
 from functools import partial
 import re
 from urllib.parse import unquote
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable
 from uuid import UUID
 
 from coodie.aio import Document
@@ -42,12 +43,8 @@ class TestLookup:
 
     @classmethod
     async def find_run(cls, run_id: UUID) -> PluginModelBase | None:
-        for model in all_plugin_models():
-            try:
-                return await model.get(id=run_id)
-            except DocumentNotFound:
-                pass
-        return None
+        runs = await asyncio.gather(*(model.find_one(id=run_id) for model in all_plugin_models()))
+        return next((run for run in runs if run is not None), None)
 
     @classmethod
     def query_to_uuid(cls, query: str) -> UUID | None:
@@ -82,18 +79,23 @@ class TestLookup:
             return None
 
     @classmethod
+    async def _dump_resolved(cls, resolver: Callable[[UUID], Awaitable[Document | None]],
+                             entity_id: UUID | None) -> dict | None:
+        return (await resolver(entity_id)).model_dump() if entity_id else None
+
+    @classmethod
     async def make_single_run_response(cls, run_id: UUID) -> list[dict[str, Any]]:
         run = await cls.find_run(run_id)
         if run:
             run = run.model_dump()
             run["type"] = "run"
-            run["test"] = (await cls.resolve_run_test(run["test_id"])).model_dump() if run["test_id"] else None
+            run["test"], run["group"], run["release"] = await asyncio.gather(
+                cls._dump_resolved(cls.resolve_run_test, run["test_id"]),
+                cls._dump_resolved(cls.resolve_run_group, run["group_id"]),
+                cls._dump_resolved(cls.resolve_run_release, run["release_id"]),
+            )
             if run["test"]:
                 name = run["test"]["name"]
-            run["group"] = (await cls.resolve_run_group(run["group_id"])).model_dump() if run["group_id"] else None
-            run["release"] = (
-                (await cls.resolve_run_release(run["release_id"])).model_dump() if run["release_id"] else None
-            )
             run["name"] = f"{name}#{run['build_number']}"
 
             return [run]
@@ -155,17 +157,16 @@ class TestLookup:
             if facet in facet_funcs.keys():
                 search_func = facet_wrapper(query_func=search_func, facet_query=value, facet_type=facet)
 
-        if release_id:
-            all_releases = [await ArgusRelease.get(id=release_id)]
-        else:
-            all_releases = await ArgusRelease.find().all()
         tests_query = ArgusTest.find()
         groups_query = ArgusGroup.find()
         if release_id:
             tests_query = tests_query.filter(release_id=release_id)
             groups_query = groups_query.filter(release_id=release_id)
-        all_tests = await tests_query.all()
-        all_groups = await groups_query.all()
+            releases_query = ArgusRelease.get(id=release_id)
+        else:
+            releases_query = ArgusRelease.find().all()
+        releases, all_tests, all_groups = await asyncio.gather(releases_query, tests_query.all(), groups_query.all())
+        all_releases = [releases] if release_id else releases
         release_by_id = {release.id: partial(cls.index_mapper, type="release")(release) for release in all_releases}
         group_by_id = {group.id: partial(cls.index_mapper, type="group")(group) for group in all_groups}
         index = [cls.index_mapper(t) for t in all_tests]

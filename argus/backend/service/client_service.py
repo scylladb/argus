@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import json
 import logging
@@ -190,41 +191,22 @@ class ClientService:
         Returns the test run itself, test info (test, group, release), comments, and activity.
         """
         run_uuid = UUID(run_id)
-        run = None
-        plugin_name = None
-
-        for name, plugin in AVAILABLE_PLUGINS.items():
-            model = plugin.model
-            try:
-                run = await model.get(id=run_uuid)
-                plugin_name = name
-                break
-            except DocumentNotFound:
-                continue
+        runs = await asyncio.gather(*(plugin.model.find_one(id=run_uuid) for plugin in AVAILABLE_PLUGINS.values()))
+        plugin_name, run = next(((name, run) for name, run in zip(AVAILABLE_PLUGINS, runs) if run), (None, None))
 
         if not run:
             raise ClientException(f"Test run {run_id} not found in any plugin model")
 
         run_data = run.model_dump()
 
-        test_info = {}
-        if run.test_id:
-            try:
-                test = await ArgusTest.get(id=run.test_id)
-                group = await ArgusGroup.get(id=test.group_id)
-                release = await ArgusRelease.get(id=test.release_id)
-                test_info = {
-                    "test": test.model_dump(),
-                    "group": group.model_dump(),
-                    "release": release.model_dump(),
-                }
-            except Exception:
-                LOGGER.warning("Failed to fetch test info for run %s (test_id=%s)", run_id, run.test_id)
+        test_info, comments, all_events = await asyncio.gather(
+            self._get_run_test_info(run_id, run.test_id),
+            ArgusTestRunComment.find(test_run_id=run_uuid).all(),
+            ArgusEvent.find(run_id=run_uuid).all(),
+        )
+        comments_data = [c.model_dump() for c in sorted(comments, key=lambda c: c.posted_at)]
 
-        comments = sorted(await ArgusTestRunComment.find(test_run_id=run_uuid).all(), key=lambda c: c.posted_at)
-        comments_data = [c.model_dump() for c in comments]
-
-        all_events = sorted(await ArgusEvent.find(run_id=run_uuid).all(), key=lambda ev: ev.created_at)
+        all_events = sorted(all_events, key=lambda ev: ev.created_at)
         activity = {
             "run_id": run_uuid,
             "raw_events": [event.model_dump() for event in all_events],
@@ -241,6 +223,22 @@ class ClientService:
             "comments": comments_data,
             "activity": activity,
         }
+
+    @staticmethod
+    async def _get_run_test_info(run_id: str, test_id: UUID | None) -> dict:
+        if not test_id:
+            return {}
+        try:
+            test = await ArgusTest.get(id=test_id)
+            group, release = await asyncio.gather(ArgusGroup.get(id=test.group_id), ArgusRelease.get(id=test.release_id))
+            return {
+                "test": test.model_dump(),
+                "group": group.model_dump(),
+                "release": release.model_dump(),
+            }
+        except Exception:
+            LOGGER.warning("Failed to fetch test info for run %s (test_id=%s)", run_id, test_id)
+            return {}
 
     @staticmethod
     async def get_config_property(name: str, value: Any | str, run_id: str = None) -> list[RunConfigParam]:

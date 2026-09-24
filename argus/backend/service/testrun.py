@@ -98,13 +98,10 @@ class TestRunService:
 
     async def get_test_type_for_run(self, run_id: str) -> str:
         run_id = UUID(run_id) if isinstance(run_id, str) else run_id
-        for name, plugin in AVAILABLE_PLUGINS.items():
-            try:
-                run = await plugin.model.get(id=run_id)
-                if run:
-                    return name
-            except DocumentNotFound:
-                continue
+        runs = await asyncio.gather(*(plugin.model.find_one(id=run_id) for plugin in AVAILABLE_PLUGINS.values()))
+        for name, run in zip(AVAILABLE_PLUGINS, runs):
+            if run:
+                return name
         return "unknown-does-not-exist"
 
     async def get_run_response(self, run_type: str, run_id: UUID) -> dict | None:

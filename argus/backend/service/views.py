@@ -151,32 +151,34 @@ class UserViewService:
         return await self.resolve_tests_by_id(view.tests)
 
     async def resolve_tests_by_id(self, test_ids: list[str | UUID]) -> list[ArgusTest]:
-        tests = []
-        for batch in chunk(test_ids):
-            tests.extend(await ArgusTest.find(id__in=batch).all())
-
-        return tests
+        batches = await asyncio.gather(*(ArgusTest.find(id__in=batch).all() for batch in chunk(test_ids)))
+        return [test for batch in batches for test in batch]
 
     async def batch_resolve_entity(self, entity, param_name: str, entity_ids: list[UUID]) -> list:
-        result = []
-        for batch in chunk(entity_ids):
-            result.extend(await entity.find(**{f"{param_name}__in": batch}).allow_filtering().all())
-        return result
+        batches = await asyncio.gather(
+            *(entity.find(**{f"{param_name}__in": batch}).allow_filtering().all() for batch in chunk(entity_ids))
+        )
+        return [row for batch in batches for row in batch]
 
     async def refresh_stale_view(self, view: ArgusUserView):
         if view.plan_id:
             try:
                 plan = await ArgusReleasePlan.get(id=view.plan_id)
-                view.tests = [test.id for test in await self.resolve_tests_by_id(plan.tests)]
-                view.group_ids = plan.groups
             except DocumentNotFound:
                 LOGGER.warning("Dangling view %s from non-existent release plan %s", view.id, view.plan_id)
                 return view
+            view.group_ids = plan.groups
+            tests_query = self.resolve_tests_by_id(plan.tests)
         else:
-            view.tests = [test.id for test in await self.resolve_view_tests(view.id)]
-        all_tests = set(view.tests)
-        all_tests.update(test.id for test in await self.batch_resolve_entity(ArgusTest, "group_id", view.group_ids))
-        all_tests.update(test.id for test in await self.batch_resolve_entity(ArgusTest, "release_id", view.release_ids))
+            tests_query = self.resolve_view_tests(view.id)
+        tests, group_tests, release_tests = await asyncio.gather(
+            tests_query,
+            self.batch_resolve_entity(ArgusTest, "group_id", view.group_ids),
+            self.batch_resolve_entity(ArgusTest, "release_id", view.release_ids),
+        )
+        all_tests = {test.id for test in tests}
+        all_tests.update(test.id for test in group_tests)
+        all_tests.update(test.id for test in release_tests)
         view.tests = list(all_tests)
         view.last_updated = datetime.datetime.utcnow()
         await view.save()
