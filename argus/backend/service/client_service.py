@@ -260,7 +260,7 @@ class ClientService:
         if run_id:
             dml = dml.filter(run_id=str(run_id))
 
-        return list(dml.all())
+        return dml.all()
 
     @staticmethod
     def get_config_store(run_id: str, config_name: str) -> RunConfiguration:

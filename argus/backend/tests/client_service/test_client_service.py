@@ -115,3 +115,23 @@ def test_get_configs_for_runs(api_client: TestClient, client_service: ClientServ
     configs = client_service.get_all_configs(run.id)
     assert len(configs) == 2
     assert [cfg.name for cfg in configs] == ["another_config", "my_config"]
+
+
+def test_get_config_property_returns_only_the_run_asked_for(api_client: TestClient, client_service: ClientService, testrun_service: TestRunService, fake_test: ArgusTest):
+    runs = []
+    for _ in range(2):
+        run_type, run_req = get_fake_test_run(fake_test)
+        client_service.submit_run(run_type, asdict(run_req))
+        runs.append(testrun_service.get_run(run_type, run_req.run_id))
+    content = base64.encodebytes(json.dumps({"prop": {"inner": {"deep": 10}}}).encode("utf-8")).decode("utf-8")
+    for run in runs:
+        response = api_client.post(
+            f"/api/v1/client/{run.id}/config/submit",
+            content=json.dumps({"name": "my_config", "content": content, "schema_version": "v8"}, cls=ArgusJSONEncoder),
+            headers={"content-type": "application/json"},
+        )
+        assert response.json()["status"] == "ok"
+
+    props = client_service.get_config_property(name="my_config.prop.inner.deep", value=10, run_id=runs[0].id)
+
+    assert [prop.run_id for prop in props] == [str(runs[0].id)]
