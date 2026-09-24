@@ -16,6 +16,7 @@ from argus.client.tunnel.models import (
     TunnelClientError,
     TunnelConfig,
 )
+from argus.client.tunnel.state import find_existing_key_dir
 
 LOGGER = logging.getLogger(__name__)
 
@@ -23,7 +24,10 @@ SSHD_REJECTED_KEY_MARKERS = ("permission denied", "too many authentication failu
 
 
 class SSHTunnel:
-    def __init__(self, key_path: str) -> None:
+    def __init__(self, key_path: str | None = None) -> None:
+        if key_path is None:
+            existing = find_existing_key_dir()
+            key_path = existing.private_key if existing is not None else None
         self._key_path = key_path
         self._process: subprocess.Popen[str] | None = None
         self._local_port: int | None = None
@@ -38,6 +42,8 @@ class SSHTunnel:
             return "ssh binary was not found on PATH"
         if shutil.which("ssh-keyscan") is None:
             return "ssh-keyscan binary was not found on PATH"
+        if self._key_path is None:
+            return "no SSH private key exists for the shared tunnel key"
         if not os.path.exists(self._key_path):
             return f"SSH private key does not exist: {self._key_path}"
         return None

@@ -1,6 +1,7 @@
 import logging
 from dataclasses import replace
 from typing import Any
+from uuid import UUID
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -37,20 +38,20 @@ def _create_api_session() -> requests.Session:
 def resolve_tunnel_config(
     auth_token: str,
     base_url: str,
-    run_id: str,
     force_refresh: bool = False,
     ttl_seconds: int | None = None,
     session: requests.Session | None = None,
     extra_headers: dict[str, str] | None = None,
+    run_id: UUID | str | None = None,
 ) -> TunnelConfig | None:
-    config, _key_path, _reason = resolve_tunnel_config_with_reason(
+    config, _key_path, _reason = resolve_tunnel_key(
         auth_token=auth_token,
         base_url=base_url,
-        run_id=run_id,
         force_refresh=force_refresh,
         ttl_seconds=ttl_seconds,
         session=session,
         extra_headers=extra_headers,
+        run_id=run_id,
     )
     return config
 
@@ -58,11 +59,32 @@ def resolve_tunnel_config(
 def resolve_tunnel_config_with_reason(
     auth_token: str,
     base_url: str,
-    run_id: str,
     force_refresh: bool = False,
     ttl_seconds: int | None = None,
     session: requests.Session | None = None,
     extra_headers: dict[str, str] | None = None,
+    run_id: UUID | str | None = None,
+) -> tuple[TunnelConfig | None, str | None]:
+    config, _key_path, reason = resolve_tunnel_key(
+        auth_token=auth_token,
+        base_url=base_url,
+        force_refresh=force_refresh,
+        ttl_seconds=ttl_seconds,
+        session=session,
+        extra_headers=extra_headers,
+        run_id=run_id,
+    )
+    return config, reason
+
+
+def resolve_tunnel_key(
+    auth_token: str,
+    base_url: str,
+    force_refresh: bool = False,
+    ttl_seconds: int | None = None,
+    session: requests.Session | None = None,
+    extra_headers: dict[str, str] | None = None,
+    run_id: UUID | str | None = None,
 ) -> tuple[TunnelConfig | None, str | None, str | None]:
     """
     Resolve tunnel configuration while keeping Cloudflare bootstrap calls minimal.
@@ -74,7 +96,7 @@ def resolve_tunnel_config_with_reason(
 
     Returns ``(config, private_key_path, reason)``. ``run_id`` names the
     on-disk key directory so two runs on the same host never share or race on
-    one keypair — each generates and registers its own.
+    one keypair. Without a ``run_id``, every caller on the host shares one key.
     """
     try:
         existing = find_existing_key_dir(run_id)

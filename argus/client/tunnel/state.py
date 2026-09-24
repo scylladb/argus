@@ -31,6 +31,7 @@ LOGGER = logging.getLogger(__name__)
 TUNNELING_SUBDIR = "argus_tunneling"
 DIRNAME_EXPIRY_SEPARATOR = ".exp"
 STAGING_DIR_PREFIX = ".staging-"
+SHARED_KEY_NAME = "shared"
 LOCAL_FALLBACK_TTL = timedelta(hours=24)
 
 
@@ -41,8 +42,12 @@ def canonical_run_id(run_id: UUID | str) -> str:
         raise ValueError(f"run_id must be a UUID, got {run_id!r}") from exc
 
 
-def _dirname_for(run_id: UUID | str, expires_at: datetime) -> str:
-    return f"{canonical_run_id(run_id)}{DIRNAME_EXPIRY_SEPARATOR}{int(expires_at.timestamp())}"
+def _key_name(run_id: UUID | str | None) -> str:
+    return SHARED_KEY_NAME if run_id is None else canonical_run_id(run_id)
+
+
+def _dirname_for(run_id: UUID | str | None, expires_at: datetime) -> str:
+    return f"{_key_name(run_id)}{DIRNAME_EXPIRY_SEPARATOR}{int(expires_at.timestamp())}"
 
 
 def _parse_dirname(entry: str) -> tuple[str, datetime] | None:
@@ -76,9 +81,9 @@ def _iter_key_entries(root: str) -> Iterator[tuple[str, str, datetime]]:
             yield (entry, *parsed)
 
 
-def find_existing_key_dir(run_id: UUID | str) -> TunnelStatePaths | None:
+def find_existing_key_dir(run_id: UUID | str | None = None) -> TunnelStatePaths | None:
     root = tunneling_root()
-    canonical = canonical_run_id(run_id)
+    canonical = _key_name(run_id)
     now = datetime.now(tz=timezone.utc)
 
     newest: tuple[datetime, str] | None = None
@@ -99,7 +104,7 @@ def _holds_keypair(paths: TunnelStatePaths) -> bool:
     return os.path.isfile(paths.private_key) and os.path.isfile(paths.public_key)
 
 
-def build_key_location(run_id: UUID | str, expires_at: datetime | None) -> TunnelStatePaths:
+def build_key_location(run_id: UUID | str | None, expires_at: datetime | None) -> TunnelStatePaths:
     resolved_expiry = expires_at or (datetime.now(tz=timezone.utc) + LOCAL_FALLBACK_TTL)
     root = tunneling_root()
     return _paths_for_dir(os.path.join(root, _dirname_for(run_id, resolved_expiry)))
@@ -121,7 +126,7 @@ def delete_key_dir_of(private_key: str) -> bool:
     return True
 
 
-def delete_cached_tunnel_state(run_id: UUID | str) -> None:
+def delete_cached_tunnel_state(run_id: UUID | str | None = None) -> None:
     try:
         paths = find_existing_key_dir(run_id)
     except ValueError:
@@ -140,9 +145,9 @@ def sweep_stale_tunnel_keys() -> None:
 
 
 def generate_and_register_key(
-    run_id: UUID | str, register: Callable[[str], TunnelConfig]
+    run_id: UUID | str | None, register: Callable[[str], TunnelConfig]
 ) -> tuple[TunnelConfig, str]:
-    canonical_run_id(run_id)
+    _key_name(run_id)
     root = tunneling_root()
     os.makedirs(root, mode=0o700, exist_ok=True)
     staging_dir = tempfile.mkdtemp(prefix=STAGING_DIR_PREFIX, dir=root)
