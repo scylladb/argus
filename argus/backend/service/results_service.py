@@ -13,6 +13,8 @@ from coodie.exceptions import DocumentNotFound
 
 from argus.backend.db import ScyllaCluster
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ArgusBestResultData, ColumnMetadata, ArgusGraphView
+from argus.backend.models.web import ArgusTest
+from argus.backend.util.common import chunk, select_rows
 from argus.backend.plugins.sct.udt import PackageVersion
 from argus.backend.service.testrun import TestRunService
 
@@ -413,12 +415,9 @@ class ResultsService:
     def _get_runs_details(self, test_id: UUID) -> RunsDetails:
         if (details := self._runs_details.get(test_id)) is not None:
             return details
-        plugin_query = self.cluster.prepare("SELECT id, plugin_name FROM argus_test_v2 WHERE id = ?")
-        plugin_name = self.cluster.session.execute(plugin_query, parameters=(test_id,)).one()['plugin_name']
+        plugin_name = select_rows(ArgusTest.find(id=test_id), "plugin_name")[0]["plugin_name"]
         plugin = TestRunService().get_plugin(plugin_name)
-        runs_details_query = self.cluster.prepare(
-            f"SELECT id, investigation_status, packages FROM {plugin.model.table_name()} WHERE test_id = ?")
-        rows = self.cluster.session.execute(runs_details_query, parameters=(test_id,)).all()
+        rows = select_rows(plugin.model.find(test_id=test_id), "id", "investigation_status", "packages")
         ignored_runs = [row["id"] for row in rows if row["investigation_status"].lower() == "ignored"]
         packages = {row["id"]: self._remove_duplicate_packages(
             row["packages"]) for row in rows if row["packages"] and row["id"] not in ignored_runs}
@@ -427,40 +426,27 @@ class ResultsService:
         return details
 
     def _get_tables_metadata(self, test_id: UUID) -> list[ArgusGenericResultMetadata]:
-        query_fields = ["name", "description", "columns_meta", "rows_meta", "validation_rules", "sut_package_name"]
-        raw_query = (f"SELECT {','.join(query_fields)}"
-                     f" FROM generic_result_metadata_v1 WHERE test_id = ?")
-        query = self.cluster.prepare(raw_query)
-        tables_meta = self.cluster.session.execute(query=query, parameters=(test_id,))
+        tables_meta = select_rows(ArgusGenericResultMetadata.find(test_id=test_id),
+                                  "name", "description", "columns_meta", "rows_meta", "validation_rules", "sut_package_name")
         return [ArgusGenericResultMetadata(test_id=test_id, **table) for table in tables_meta]
 
     def _get_tables_data(self, test_id: UUID, table_name: str, ignored_runs: list[RunId],
                          start_date: datetime | None = None, end_date: datetime | None = None) -> list[ArgusGenericResultData]:
-        query_fields = ["run_id", "column", "row", "value", "status", "sut_timestamp"]
-        raw_query = (f"SELECT {','.join(query_fields)}"
-                     f" FROM generic_result_data_v1 WHERE test_id = ? AND name = ?")
-
-        parameters = [test_id, table_name]
-
+        query = ArgusGenericResultData.find(test_id=test_id, name=table_name)
         if start_date:
-            raw_query += " AND sut_timestamp >= ?"
-            parameters.append(start_date)
+            query = query.filter(sut_timestamp__gte=start_date)
         if end_date:
-            raw_query += " AND sut_timestamp <= ?"
-            parameters.append(end_date)
-
+            query = query.filter(sut_timestamp__lte=end_date)
         if start_date or end_date:
-            raw_query += " ALLOW FILTERING"
-        query = self.cluster.prepare(raw_query)
-        data = self.cluster.session.execute(query=query, parameters=tuple(parameters))
+            query = query.allow_filtering()
+        data = select_rows(query, "run_id", "column", "row", "value", "status", "sut_timestamp")
         return [ArgusGenericResultData(test_id=test_id, name=table_name, **cell)
                 for cell in data if cell["run_id"] not in ignored_runs]
 
     def get_table_metadata(self, test_id: UUID, table_name: str) -> ArgusGenericResultMetadata:
-        raw_query = ("SELECT * FROM generic_result_metadata_v1 WHERE test_id = ? AND name = ?")
-        query = self.cluster.prepare(raw_query)
-        table_meta = self.cluster.session.execute(query=query, parameters=(test_id, table_name))
-        return [ArgusGenericResultMetadata(**table) for table in table_meta][0] if table_meta else None
+        table_meta = select_rows(ArgusGenericResultMetadata.find(test_id=test_id, name=table_name),
+                                 *ArgusGenericResultMetadata.model_fields)
+        return ArgusGenericResultMetadata(**table_meta[0]) if table_meta else None
 
     def get_run_results(self, test_id: UUID, run_id: UUID, key_metrics: list[str] | None = None,
                         include_hidden: bool = False) -> list:
@@ -565,12 +551,8 @@ class ResultsService:
 
     def get_best_results(self, test_id: UUID, name: str) -> dict[str, List[BestResult]]:
         runs_details = self._get_runs_details(test_id)
-        query_fields = ["key", "value", "result_date", "run_id"]
-        raw_query = (f"SELECT {','.join(query_fields)}"
-                     f" FROM generic_result_best_v2 WHERE test_id = ? and name = ?")
-        query = self.cluster.prepare(raw_query)
-        best_results = [BestResult(**best) for best in self.cluster.session.execute(query=query, parameters=(test_id, name))
-                        if best["run_id"] not in runs_details.ignored]
+        rows = select_rows(ArgusBestResultData.find(test_id=test_id, name=name), "key", "value", "result_date", "run_id")
+        best_results = [BestResult(**best) for best in rows if best["run_id"] not in runs_details.ignored]
         best_results_map = defaultdict(list)
         for best in sorted(best_results, key=lambda x: x.result_date):
             best_results_map.setdefault(best.key, []).append(best)
@@ -600,8 +582,13 @@ class ResultsService:
         return best_results
 
     def _exclude_disabled_tests(self, test_ids: list[UUID]) -> list[UUID]:
-        is_enabled_query = self.cluster.prepare("SELECT id, enabled FROM argus_test_v2 WHERE id = ?")
-        return [test_id for test_id in test_ids if self.cluster.session.execute(is_enabled_query, parameters=(test_id,)).one()['enabled']]
+        enabled = {
+            test_id
+            for batch in chunk(test_ids)
+            for test_id, is_enabled in ArgusTest.find(id__in=batch).only("id", "enabled").values_list("id", "enabled").all()
+            if is_enabled
+        }
+        return [test_id for test_id in test_ids if test_id in enabled]
 
     def get_tests_by_version(self, sut_package_name: str, test_ids: list[UUID]) -> dict:
         """
@@ -618,14 +605,8 @@ class ResultsService:
         test_info = {}
         test_ids = self._exclude_disabled_tests(test_ids)
         for test_id in test_ids:
-            runs_details_query = self.cluster.prepare(
-                f"""
-                SELECT id, status, investigation_status, test_name, build_id, packages, test_method, started_by
-                FROM {plugin.model.table_name()}
-                WHERE test_id = ?
-                """
-            )
-            rows = self.cluster.session.execute(runs_details_query, parameters=(test_id,)).all()
+            rows = select_rows(plugin.model.find(test_id=test_id), "id", "status", "investigation_status", "test_name",
+                               "build_id", "packages", "test_method", "started_by")
             for row in rows:
                 if row["investigation_status"].lower() == "ignored":
                     continue
