@@ -2,12 +2,14 @@ import base64
 import datetime
 import json
 import time
+from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 import pytest
 
 from argus.backend.models.run_config import RunConfigParam
 from argus.backend.plugins.sct.service import SCTService
 from argus.backend.plugins.sct.testrun import SCTResource, SCTNemesis, SCTTestRun
+from argus.backend.tests.issues.test_issues import fake_remote_github_issue
 from argus.common.utils import clamp_ts_to_milliseconds
 
 API_PREFIX = "/api/v1/client/sct"
@@ -727,6 +729,34 @@ def test_similar_runs_info_for_run_without_issues(api_client, sct_run_id):
     assert "build_id" in info
     assert "start_time" in info
     assert info["issues"] == []
+
+
+async def test_similar_runs_info_lists_linked_github_issue(api_client, sct_run_id, fake_test, issue_service,
+                                                           logged_in_user):
+    repo = f"argus-{uuid4().hex[:8]}"
+    url = f"https://github.com/scylladb/{repo}/issues/3"
+    remote_repo = MagicMock(name="Repository")
+    remote_repo.get_issue.return_value = fake_remote_github_issue(owner="scylladb", repo=repo, number=3,
+                                                                  title="Similar failure")
+    remote_client = MagicMock(name="GithubClient")
+    remote_client.get_repo.return_value = remote_repo
+    with patch.object(issue_service.gh, "gh", remote_client):
+        await issue_service.submit(issue_url=url, test_id=fake_test.id, run_id=sct_run_id, user=logged_in_user)
+
+    resp = api_client.post(
+        "/api/v1/client/sct/similar_runs_info",
+        json={"run_ids": [sct_run_id]},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["status"] == "ok"
+    info = body["response"][sct_run_id]
+    assert info["build_id"].startswith(fake_test.build_system_id)
+    assert len(info["issues"]) == 1
+    assert info["issues"][0]["subtype"] == "github"
+    assert info["issues"][0]["number"] == 3
+    assert info["issues"][0]["repo"] == repo
+    assert info["issues"][0]["title"] == "Similar failure"
 
 
 def test_similar_runs_info_missing_run_ids(api_client):

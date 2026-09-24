@@ -1,5 +1,7 @@
+import asyncio
 import base64
 from dataclasses import dataclass
+import itertools
 from datetime import UTC, datetime
 import logging
 import math
@@ -728,50 +730,49 @@ class SCTService:
         """
         result = {}
 
+        async def fetch_run(run_id: str, label: str) -> SCTTestRun | None:
+            try:
+                return await SCTTestRun.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
+            except Exception as e:
+                LOGGER.debug(f"Failed to fetch {label} {run_id}: {str(e)}")
+                return None
+
         # Step 1: Get issue links for all run_ids in batches
         all_issue_links = {}
 
-        for batch_run_ids in chunk(run_ids):
-            batch_links = await IssueLink.find(
-                run_id__in=[UUID(r) if isinstance(r, str) else r for r in batch_run_ids]).all()
+        link_chunks = await asyncio.gather(*(
+            IssueLink.find(run_id__in=[UUID(r) if isinstance(r, str) else r for r in batch_run_ids]).all()
+            for batch_run_ids in chunk(run_ids)
+        ))
+        for link in itertools.chain.from_iterable(link_chunks):
+            run_id_str = str(link.run_id)
+            if run_id_str not in all_issue_links:
+                all_issue_links[run_id_str] = []
+            all_issue_links[run_id_str].append(link)
 
-            for link in batch_links:
-                run_id_str = str(link.run_id)
-                if run_id_str not in all_issue_links:
-                    all_issue_links[run_id_str] = []
-                all_issue_links[run_id_str].append(link)
-
-        # Step 2: Fetch all unique issue details
-        all_issue_ids = set()
-        for links in all_issue_links.values():
-            all_issue_ids.update(link.issue_id for link in links)
-
-        issues_by_id = {}
-        if all_issue_ids:
-            for batch_issue_ids in chunk(list(all_issue_ids)):
-                batch_issues = await GithubIssue.find(id__in=batch_issue_ids).all()
-
-                for issue in batch_issues:
-                    issues_by_id[issue.id] = issue
-
-            missing_ids = [id for id in all_issue_ids if id not in issues_by_id]
-            if missing_ids:
-                for batch_issue_ids in chunk(missing_ids):
-                    for issue in await JiraIssue.find(id__in=batch_issue_ids).all():
-                        issues_by_id[issue.id] = issue
-
-        # Step 3: Fetch test runs only for run_ids that have issue links (limiting to MAX_SIMILARS runs)
+        # Step 2: Fetch all unique issue details and the test runs that have issue links (limiting to MAX_SIMILARS runs)
+        all_issue_ids = list(dict.fromkeys(link.issue_id for links in all_issue_links.values() for link in links))
         runs_with_issues = list(all_issue_links.keys())
 
-        test_runs = {}
-        if runs_with_issues:
-            for run_id in runs_with_issues[:MAX_SIMILARS]:
-                try:
-                    test_run = await SCTTestRun.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
-                    test_runs[run_id] = test_run
-                except Exception as e:
-                    LOGGER.debug(f"Failed to fetch test run {
-                                 run_id}: {str(e)}")
+        issue_chunks = list(chunk(all_issue_ids))
+        github_chunks, jira_chunks, fetched_runs = await asyncio.gather(
+            asyncio.gather(*(GithubIssue.find(id__in=batch_issue_ids).all() for batch_issue_ids in issue_chunks)),
+            asyncio.gather(*(JiraIssue.find(id__in=batch_issue_ids).all() for batch_issue_ids in issue_chunks)),
+            asyncio.gather(*(fetch_run(run_id, "test run") for run_id in runs_with_issues[:MAX_SIMILARS])),
+        )
+
+        issues_by_id = {}
+        for issue in itertools.chain.from_iterable(jira_chunks):
+            issues_by_id[issue.id] = issue
+        for issue in itertools.chain.from_iterable(github_chunks):
+            issues_by_id[issue.id] = issue
+
+        # Step 3: Keep the test runs that were found
+        test_runs = {
+            run_id: test_run
+            for run_id, test_run in zip(runs_with_issues[:MAX_SIMILARS], fetched_runs)
+            if test_run is not None
+        }
 
         # Step 4: Assign run and issue details to result for runs with issues
         for run_id in runs_with_issues:
@@ -837,14 +838,13 @@ class SCTService:
             if additional_needed > 0:
                 additional_run_ids = remaining_run_ids[:additional_needed]
 
-                additional_test_runs = {}
-                for run_id in additional_run_ids:
-                    try:
-                        test_run = await SCTTestRun.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
-                        additional_test_runs[run_id] = test_run
-                    except Exception as e:
-                        LOGGER.debug(f"Failed to fetch additional test run {
-                                     run_id}: {str(e)}")
+                additional_test_runs = {
+                    run_id: test_run
+                    for run_id, test_run in zip(additional_run_ids, await asyncio.gather(*(
+                        fetch_run(run_id, "additional test run") for run_id in additional_run_ids
+                    )))
+                    if test_run is not None
+                }
 
                 for run_id in additional_run_ids:
                     try:
