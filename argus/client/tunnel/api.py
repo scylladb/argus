@@ -1,4 +1,5 @@
 import logging
+from dataclasses import replace
 from typing import Any
 
 import requests
@@ -41,8 +42,8 @@ def resolve_tunnel_config(
     ttl_seconds: int | None = None,
     session: requests.Session | None = None,
     extra_headers: dict[str, str] | None = None,
-) -> tuple[TunnelConfig | None, str | None]:
-    config, key_path, _reason = resolve_tunnel_config_with_reason(
+) -> TunnelConfig | None:
+    config, _key_path, _reason = resolve_tunnel_config_with_reason(
         auth_token=auth_token,
         base_url=base_url,
         run_id=run_id,
@@ -51,7 +52,7 @@ def resolve_tunnel_config(
         session=session,
         extra_headers=extra_headers,
     )
-    return config, key_path
+    return config
 
 
 def resolve_tunnel_config_with_reason(
@@ -81,15 +82,20 @@ def resolve_tunnel_config_with_reason(
         return None, None, str(exc)
 
     if existing is not None:
-        if not force_refresh:
-            cached = read_cached_tunnel_config(existing)
-            if cached is not None:
-                return cached, existing.private_key, None
+        cached = read_cached_tunnel_config(existing)
+        if cached is not None and not force_refresh:
+            return cached, existing.private_key, None
 
         try:
             config = _get_tunnel_connection(
                 auth_token=auth_token, base_url=base_url, session=session, extra_headers=extra_headers
             )
+            if cached is not None:
+                config = replace(
+                    config,
+                    key_id=config.key_id or cached.key_id,
+                    expires_at=config.expires_at or cached.expires_at,
+                )
             write_tunnel_cache(existing, config)
             return config, existing.private_key, None
         except TunnelClientError as exc:

@@ -46,6 +46,7 @@ def submit_run(api_key: str, base_url: str, use_tunnel: bool | None, log_dir: st
         log_dir=log_dir,
         extra_headers=extra_headers,
         use_tunnel=use_tunnel,
+        run_id=id,
     ) as client:
         client.submit_generic_run(build_id=build_id, run_id=id, started_by=started_by,
                                   build_url=build_url, scylla_version=scylla_version, sub_type=sub_type)
@@ -69,6 +70,7 @@ def finish_run(api_key: str, base_url: str, use_tunnel: bool | None, log_dir: st
         log_dir=log_dir,
         extra_headers=extra_headers,
         use_tunnel=use_tunnel,
+        run_id=id,
     ) as client:
         status = TestStatus(status)
         client.finalize_generic_run(run_id=id, status=status, scylla_version=scylla_version)

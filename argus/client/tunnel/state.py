@@ -34,7 +34,7 @@ STAGING_DIR_PREFIX = ".staging-"
 LOCAL_FALLBACK_TTL = timedelta(hours=24)
 
 
-def _canonical_run_id(run_id: UUID | str) -> str:
+def canonical_run_id(run_id: UUID | str) -> str:
     try:
         return str(UUID(str(run_id)))
     except ValueError as exc:
@@ -42,7 +42,7 @@ def _canonical_run_id(run_id: UUID | str) -> str:
 
 
 def _dirname_for(run_id: UUID | str, expires_at: datetime) -> str:
-    return f"{_canonical_run_id(run_id)}{DIRNAME_EXPIRY_SEPARATOR}{int(expires_at.timestamp())}"
+    return f"{canonical_run_id(run_id)}{DIRNAME_EXPIRY_SEPARATOR}{int(expires_at.timestamp())}"
 
 
 def _parse_dirname(entry: str) -> tuple[str, datetime] | None:
@@ -78,12 +78,14 @@ def _iter_key_entries(root: str) -> Iterator[tuple[str, str, datetime]]:
 
 def find_existing_key_dir(run_id: UUID | str) -> TunnelStatePaths | None:
     root = tunneling_root()
-    canonical = _canonical_run_id(run_id)
+    canonical = canonical_run_id(run_id)
     now = datetime.now(tz=timezone.utc)
 
     newest: tuple[datetime, str] | None = None
     for entry, prefix, expires_at in _iter_key_entries(root):
         if prefix != canonical or now >= expires_at:
+            continue
+        if not _holds_keypair(_paths_for_dir(os.path.join(root, entry))):
             continue
         if newest is None or expires_at > newest[0]:
             newest = (expires_at, entry)
@@ -91,6 +93,10 @@ def find_existing_key_dir(run_id: UUID | str) -> TunnelStatePaths | None:
     if newest is None:
         return None
     return _paths_for_dir(os.path.join(root, newest[1]))
+
+
+def _holds_keypair(paths: TunnelStatePaths) -> bool:
+    return os.path.isfile(paths.private_key) and os.path.isfile(paths.public_key)
 
 
 def build_key_location(run_id: UUID | str, expires_at: datetime | None) -> TunnelStatePaths:
@@ -101,6 +107,18 @@ def build_key_location(run_id: UUID | str, expires_at: datetime | None) -> Tunne
 
 def delete_key_dir(paths: TunnelStatePaths) -> None:
     shutil.rmtree(paths.state_dir, ignore_errors=True)
+
+
+def delete_key_dir_of(private_key: str) -> bool:
+    root = tunneling_root()
+    state_dir = os.path.dirname(os.path.abspath(private_key))
+    if os.path.dirname(state_dir) != os.path.abspath(root) or _parse_dirname(os.path.basename(state_dir)) is None:
+        LOGGER.warning("Refusing to delete %s: it is not an SSH tunnel key directory", state_dir)
+        return False
+    if not os.path.isdir(state_dir):
+        return False
+    shutil.rmtree(state_dir, ignore_errors=True)
+    return True
 
 
 def delete_cached_tunnel_state(run_id: UUID | str) -> None:
@@ -124,7 +142,7 @@ def sweep_stale_tunnel_keys() -> None:
 def generate_and_register_key(
     run_id: UUID | str, register: Callable[[str], TunnelConfig]
 ) -> tuple[TunnelConfig, str]:
-    _canonical_run_id(run_id)
+    canonical_run_id(run_id)
     root = tunneling_root()
     os.makedirs(root, mode=0o700, exist_ok=True)
     staging_dir = tempfile.mkdtemp(prefix=STAGING_DIR_PREFIX, dir=root)
