@@ -350,14 +350,14 @@ class ReleaseStats:
             **aggregated_investigation_status
         }
 
-    async def collect(self, rows: list[TestRunStatRow], limited=False, force=False, dict: dict | None = None,
-                      tests=None, version_filter: str = None) -> None:
+    def collect(self, fetched: FetchedStats, rows: list[TestRunStatRow], limited=False, force=False,
+                dict: dict | None = None, version_filter: str = None) -> None:
         self.forced_collection = force
         if not self.release.enabled and not force:
             return
 
         if not limited:
-            plans: list[ArgusReleasePlan] = await ArgusReleasePlan.find(release_id=self.release.id).all()
+            plans = fetched.plans
             self.plans = plans if not version_filter else [plan for plan in plans if version_filter == plan.target_version]
             # Legacy scheduling removed - no schedule rows to aggregate.
             self.test_schedules = defaultdict(list)
@@ -367,17 +367,16 @@ class ReleaseStats:
         if not limited or force:
             self.issues = reduce(
                 lambda acc, row: acc[row["run_id"]].append(row) or acc,
-                await fetch_issues(self.release.id),
+                fetched.linked_issues,
                 defaultdict(list)
             )
             self.comments = reduce(
                 lambda acc, row: acc[row.test_run_id].append(row) or acc,
-                await ArgusTestRunComment.find(release_id=self.release.id).all(),
+                fetched.comments,
                 defaultdict(list)
             )
-        self.all_tests = await ArgusTest.find(release_id=self.release.id).all() if not tests else tests
-        groups: list[ArgusGroup] = await ArgusGroup.find(release_id=self.release.id).all()
-        for group in groups:
+        self.all_tests = fetched.tests
+        for group in fetched.groups:
             if group.enabled:
                 stats = GroupStats(group=group, parent_release=self)
                 stats.collect(limited=limited)
@@ -550,28 +549,53 @@ class ReleaseStatsCollector:
         self.release_name = release_name
         self.release_version = release_version
 
+    async def _fetch(self, limited: bool, force: bool) -> FetchedStats:
+        release_id = self.release.id
+        collecting = self.release.enabled or force
+        tests, plans, links, comments, groups = await _gather_groups(
+            [ArgusTest.find(release_id=release_id).all()],
+            [ArgusReleasePlan.find(release_id=release_id).all()] if collecting and not limited else [],
+            [_fetch_links(release_id)] if collecting and (not limited or force) else [],
+            [ArgusTestRunComment.find(release_id=release_id).all()] if collecting and (not limited or force) else [],
+            [ArgusGroup.find(release_id=release_id).all()] if collecting else [],
+        )
+        all_tests: list[ArgusTest] = _flatten(tests)
+        build_ids = reduce(lambda acc, test: acc[test.plugin_name or "unknown"].append(
+            test.build_system_id) or acc, all_tests, defaultdict(list))
+        rows, linked_issues = await _gather_groups(
+            [plugin.get_stats_for_release(release=self.release, build_ids=build_ids.get(plugin._plugin_name, []))
+             for plugin in all_plugin_models()],
+            [_resolve_links(_flatten(links))],
+        )
+        return FetchedStats(
+            tests=all_tests,
+            rows=_flatten(rows),
+            plans=_flatten(plans),
+            linked_issues=linked_issues[0],
+            comments=_flatten(comments),
+            groups=_flatten(groups),
+            releases=[],
+        )
+
     async def collect(self, limited=False, force=False, include_no_version=False, image_id: str = None) -> dict:
         self.release: ArgusRelease = await ArgusRelease.get(name=self.release_name)
 
+        filter_key = snapshot_filter_key(self.release_version, image_id, include_no_version, limited)
         if not force:
-            filter_key = snapshot_filter_key(self.release_version, image_id, include_no_version, limited)
             try:
                 snapshot = await ReleaseStatsSnapshot.get(release_id=self.release.id, filter_key=filter_key)
                 return json.loads(snapshot.payload)
             except DocumentNotFound:
                 pass
-
-        all_tests: list[ArgusTest] = await ArgusTest.find(release_id=self.release.id).all()
-        build_ids = reduce(lambda acc, test: acc[test.plugin_name or "unknown"].append(
-            test.build_system_id) or acc, all_tests, defaultdict(list))
-        self.release_rows = []
-        for plugin in all_plugin_models():
-            self.release_rows.extend(await plugin.get_stats_for_release(
-                release=self.release, build_ids=build_ids.get(plugin._plugin_name, [])))
         if self.release.dormant and not force:
             return {
                 "dormant": True
             }
+
+        fetch_start = time.perf_counter()
+        fetched = await self._fetch(limited, force)
+        collect_start = time.perf_counter()
+        self.release_rows = fetched.rows
         if self.release_version:
             if include_no_version:
                 def expr(row): return check_version(self.release_version, row["scylla_version"]) or not row["scylla_version"]
@@ -605,11 +629,13 @@ class ReleaseStatsCollector:
             self.release_dict[row["build_id"]] = runs
 
         self.release_stats = ReleaseStats(release=self.release)
-        await self.release_stats.collect(rows=self.release_rows, limited=limited, force=force,
-                                         dict=self.release_dict, tests=all_tests, version_filter=self.release_version)
+        self.release_stats.collect(fetched, rows=self.release_rows, limited=limited, force=force,
+                                   dict=self.release_dict, version_filter=self.release_version)
         result = self.release_stats.to_dict()
+        LOGGER.info("release stats %s: fetch %.0f ms, collect %.0f ms, rows %d", self.release.id,
+                    (collect_start - fetch_start) * 1000, (time.perf_counter() - collect_start) * 1000,
+                    len(fetched.rows))
 
-        filter_key = snapshot_filter_key(self.release_version, image_id, include_no_version, limited)
         try:
             await ReleaseStatsSnapshot.create(
                 release_id=self.release.id,
