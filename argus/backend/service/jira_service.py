@@ -13,7 +13,7 @@ from argus.backend.models.jira import JiraIssue
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.runtime_store import RuntimeStore
-from argus.backend.models.web import ArgusEventTypes, ArgusTest, ArgusUserView, User, invalidate_release_snapshots
+from argus.backend.models.web import ArgusEventTypes, ArgusTest, User, invalidate_release_snapshots
 from argus.backend.models.github_issue import IssueLink, IssueLabel
 from argus.backend.plugins.core import PluginInfoBase
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS
@@ -165,26 +165,6 @@ class JiraService:
         }
 
         return response
-
-    def _get_jira_issues_for_view(self, view_id: UUID | str) -> list[IssueLink]:
-        view_id = UUID(view_id) if isinstance(view_id, str) else view_id
-        view: ArgusUserView = ArgusUserView.get(id=view_id)
-        links = []
-        for batch in chunk(view.tests):
-            links.extend(IssueLink.find(test_id__in=batch).allow_filtering().all())
-
-        return links
-
-    def get_issues(self, filter_key: str, filter_id: UUID, aggregate_by_issue: bool = False) -> list[dict]:
-        if filter_key not in ["release_id", "group_id", "test_id", "run_id", "user_id", "view_id", "event_id"]:
-            raise Exception(
-                "filter_key can only be one of: \"release_id\", \"group_id\", \"test_id\", \"run_id\", \"user_id\", \"view_id\", \"event_id\""
-            )
-        if filter_key == "view_id":
-            links = list(self._get_jira_issues_for_view(filter_id))
-        else:
-            links = list(IssueLink.find(**{filter_key: filter_id}).allow_filtering().all())
-        return self.resolve_issues(links, aggregate_by_issue)
 
     def resolve_issues(self, links: list[IssueLink], aggregate_by_issue: bool = False) -> list[dict]:
         """Resolve JiraIssue records from pre-filtered links and build response dicts."""

@@ -2,7 +2,8 @@ from uuid import UUID
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.github_issue import GithubIssue, IssueLink
-from argus.backend.models.web import User
+from argus.backend.models.web import ArgusUserView, User
+from argus.backend.util.common import chunk
 from argus.backend.util.config import Config
 from argus.backend.service.github_service import GithubService
 from argus.backend.service.issue_utils import build_version_map, filter_links_by_version
@@ -27,10 +28,12 @@ class IssueService:
                 "filter_key can only be one of: \"release_id\", \"group_id\", \"test_id\", \"run_id\", \"user_id\", \"view_id\", \"event_id\""
             )
         if filter_key == "view_id":
-            gh_links = list(self.gh._get_github_issues_for_view(filter_id))
-            jira_links = list(self.jira._get_jira_issues_for_view(filter_id))
-            return gh_links + jira_links
-        return list(IssueLink.find(**{filter_key: filter_id}).allow_filtering().all())
+            view: ArgusUserView = ArgusUserView.get(id=filter_id)
+            links = []
+            for batch in chunk(view.tests):
+                links.extend(IssueLink.find(test_id__in=batch).allow_filtering().all())
+            return links
+        return IssueLink.find(**{filter_key: filter_id}).allow_filtering().all()
 
     def get(
         self,

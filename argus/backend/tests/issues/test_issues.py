@@ -598,3 +598,32 @@ def test_delete_jira_issue_link_falls_through_to_jira_backend(run: SCTTestRun, m
     assert len(removed) == 1
     assert removed[0]["url"] == url
     assert removed[0]["title"] == "Deletable"
+
+
+# ---------------------------------------------------------------------------
+# Reading the issues of a view
+# ---------------------------------------------------------------------------
+
+
+def test_get_by_view_returns_each_link_once(api_client, run: SCTTestRun, mocked_issue_service: IssueService, logged_in_user: User):
+    repo = f"argus-{unique_suffix()}"
+    url = f"https://github.com/scylladb/{repo}/issues/7"
+    remote_repo = MagicMock(name="Repository")
+    remote_repo.get_issue.return_value = fake_remote_github_issue(owner="scylladb", repo=repo, number=7, title="View Issue")
+    mocked_issue_service.gh.gh.get_repo.return_value = remote_repo
+    mocked_issue_service.submit(issue_url=url, test_id=run.test_id, run_id=run.id, user=logged_in_user)
+    created = api_client.post("/api/v1/views/create", json={
+        "name": f"issues_view_{unique_suffix()}", "items": [f"test:{run.test_id}"], "settings": "{}",
+    }).json()
+    assert created["status"] == "ok", created
+    view_id = created["response"]["id"]
+
+    try:
+        aggregated = mocked_issue_service.get("view_id", view_id, aggregate_by_issue=True)
+        flat = mocked_issue_service.get("view_id", view_id)
+    finally:
+        api_client.post("/api/v1/views/delete", json={"viewId": view_id})
+
+    assert len(aggregated) == 1
+    assert len(aggregated[0]["links"]) == 1
+    assert len(flat) == 1
