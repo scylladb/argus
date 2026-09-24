@@ -156,12 +156,14 @@ class TestLookup:
         if release_id:
             all_releases = [ArgusRelease.get(id=release_id)]
         else:
-            all_releases = ArgusRelease.find()
-        all_tests = ArgusTest.find()
-        all_groups = ArgusGroup.find()
+            all_releases = ArgusRelease.find().all()
+        tests_query = ArgusTest.find()
+        groups_query = ArgusGroup.find()
         if release_id:
-            all_tests = all_tests.filter(release_id=release_id)
-            all_groups = all_groups.filter(release_id=release_id)
+            tests_query = tests_query.filter(release_id=release_id)
+            groups_query = groups_query.filter(release_id=release_id)
+        all_tests = tests_query.all()
+        all_groups = groups_query.all()
         release_by_id = {release.id: partial(cls.index_mapper, type="release")(release) for release in all_releases}
         group_by_id = {group.id: partial(cls.index_mapper, type="group")(group) for group in all_groups}
         index = [cls.index_mapper(t) for t in all_tests]

@@ -75,7 +75,7 @@ class PluginModelBase(Document):
         associated_test: ArgusTest = ArgusTest.get(build_system_id=self.build_id)
         associated_release: ArgusRelease = ArgusRelease.get(id=associated_test.release_id)
 
-        plans: list[ArgusReleasePlan] = list(ArgusReleasePlan.find(release_id=associated_release.id))
+        plans: list[ArgusReleasePlan] = ArgusReleasePlan.find(release_id=associated_release.id).all()
 
         if version:
             plans = [plan for plan in plans if plan.target_version == version]

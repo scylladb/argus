@@ -376,7 +376,7 @@ class HighlightsService:
         return ActionItem.from_db_model(entry)
 
     def get_highlights(self, view_id: UUID, index: int) -> tuple[list[Highlight], list[ActionItem]]:
-        entries = WidgetHighlights.find(view_id=view_id, index=index)
+        entries = WidgetHighlights.find(view_id=view_id, index=index).all()
         highlights = [Highlight.from_db_model(entry) for entry in entries if entry.completed is None]
         action_items = [ActionItem.from_db_model(entry) for entry in entries if entry.completed is not None]
         return highlights, action_items
@@ -448,7 +448,7 @@ class HighlightsService:
 
     def get_comments(self, view_id: UUID, index: int, highlight_created_at: float) -> list[Comment]:
         highlight_created_at = datetime.fromtimestamp(highlight_created_at, tz=UTC)
-        comments = WidgetComment.find(view_id=view_id, index=index, highlight_at=highlight_created_at)
+        comments = WidgetComment.find(view_id=view_id, index=index, highlight_at=highlight_created_at).all()
         return [Comment.from_db_model(c) for c in comments]
 
     def send_action_notification(self, sender_id: UUID, username: str, view_id: UUID, assignee_id: UUID, action: str):

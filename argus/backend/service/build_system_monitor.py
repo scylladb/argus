@@ -25,9 +25,9 @@ class ArgusTestsMonitor(ABC):
 
     def __init__(self) -> None:
         self._cluster = ScyllaCluster.get()
-        self._existing_releases = list(ArgusRelease.find())
-        self._existing_groups = list(ArgusGroup.find())
-        self._existing_tests = list(ArgusTest.find())
+        self._existing_releases = ArgusRelease.find().all()
+        self._existing_groups = ArgusGroup.find().all()
+        self._existing_tests = ArgusTest.find().all()
         self._filtered_groups: list[str] = self.BUILD_SYSTEM_FILTERED_PREFIXES
         self.init_progress()
 

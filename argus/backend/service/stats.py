@@ -170,7 +170,7 @@ def _fetch_multiple_release_queries(entity, releases: list[str]):
 
 def fetch_issues(release: list[UUID] | UUID):
     if isinstance(release, UUID):
-        links = IssueLink.find(release_id=release)
+        links = IssueLink.find(release_id=release).all()
     else:
         links = _fetch_multiple_release_queries(IssueLink, release)
 
