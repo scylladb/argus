@@ -1,3 +1,4 @@
+import asyncio
 import copy
 import logging
 import math
@@ -14,7 +15,7 @@ from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ArgusBestResultData, ColumnMetadata, ArgusGraphView
 from argus.backend.models.web import ArgusTest
-from argus.backend.util.common import chunk, select_rows
+from argus.backend.util.common import chunk, gather_limited, select_rows
 from argus.backend.plugins.sct.udt import PackageVersion
 from argus.backend.service.testrun import TestRunService
 
@@ -396,7 +397,7 @@ def create_chartjs(table: ArgusGenericResultMetadata, data: list[ArgusGenericRes
 class ResultsService:
 
     def __init__(self):
-        self._runs_details: dict[UUID, RunsDetails] = {}
+        self._runs_details: dict[UUID, asyncio.Future[RunsDetails]] = {}
 
     def _remove_duplicate_packages(self, packages: List[PackageVersion]) -> List[PackageVersion]:
         """removes scylla packages that are considered as duplicates:
@@ -412,17 +413,18 @@ class ResultsService:
         return packages
 
     async def _get_runs_details(self, test_id: UUID) -> RunsDetails:
-        if (details := self._runs_details.get(test_id)) is not None:
-            return details
+        if (pending := self._runs_details.get(test_id)) is None:
+            pending = self._runs_details[test_id] = asyncio.ensure_future(self._load_runs_details(test_id))
+        return await pending
+
+    async def _load_runs_details(self, test_id: UUID) -> RunsDetails:
         plugin_name = (await select_rows(ArgusTest.find(id=test_id), "plugin_name"))[0]["plugin_name"]
         plugin = TestRunService().get_plugin(plugin_name)
         rows = await select_rows(plugin.model.find(test_id=test_id), "id", "investigation_status", "packages")
         ignored_runs = [row["id"] for row in rows if row["investigation_status"].lower() == "ignored"]
         packages = {row["id"]: self._remove_duplicate_packages(
             row["packages"]) for row in rows if row["packages"] and row["id"] not in ignored_runs}
-        details = RunsDetails(ignored=ignored_runs, packages=packages)
-        self._runs_details[test_id] = details
-        return details
+        return RunsDetails(ignored=ignored_runs, packages=packages)
 
     async def _get_tables_metadata(self, test_id: UUID) -> list[ArgusGenericResultMetadata]:
         tables_meta = await select_rows(ArgusGenericResultMetadata.find(test_id=test_id), "name", "description",
@@ -455,9 +457,10 @@ class ResultsService:
                      f"FROM {ArgusGenericResultData._get_keyspace()}.{ArgusGenericResultData.table_name()} "
                      "WHERE test_id = ? AND run_id = ? AND name = ?")
         tables_meta = await self._get_tables_metadata(test_id=test_id)
+        tables_cells = await asyncio.gather(*(execute_raw(raw_query, [test_id, run_id, table.name])
+                                              for table in tables_meta))
         table_entries = []
-        for table in tables_meta:
-            cells = await execute_raw(raw_query, [test_id, run_id, table.name])
+        for table, cells in zip(tables_meta, tables_cells):
             if key_metrics:
                 cells = [cell for cell in cells if cell['column'] in key_metrics]
             if not cells:
@@ -520,21 +523,24 @@ class ResultsService:
 
     async def get_test_graphs(self, test_id: UUID, start_date: datetime | None = None,
                               end_date: datetime | None = None, table_names: list[str] | None = None):
-        runs_details = await self._get_runs_details(test_id)
-        tables_meta = await self._get_tables_metadata(test_id=test_id)
+        runs_details, tables_meta = await asyncio.gather(self._get_runs_details(test_id),
+                                                         self._get_tables_metadata(test_id=test_id))
 
         if table_names:
             tables_meta = [table for table in tables_meta if table.name in table_names]
 
+        tables_results = await asyncio.gather(*(
+            asyncio.gather(
+                self._get_tables_data(test_id=test_id, table_name=table.name, ignored_runs=runs_details.ignored,
+                                      start_date=start_date, end_date=end_date),
+                self.get_best_results(test_id=test_id, name=table.name, runs_details=runs_details))
+            for table in tables_meta))
+
         graphs = []
         releases_filters = set()
-        for table in tables_meta:
-            data = await self._get_tables_data(test_id=test_id, table_name=table.name,
-                                               ignored_runs=runs_details.ignored, start_date=start_date,
-                                               end_date=end_date)
+        for table, (data, best_results) in zip(tables_meta, tables_results):
             if not data:
                 continue
-            best_results = await self.get_best_results(test_id=test_id, name=table.name)
             main_package = tables_meta[0].sut_package_name
             if not main_package:
                 main_package = _identify_most_changed_package(
@@ -550,8 +556,10 @@ class ResultsService:
         """Verify if results for given test id exist at all."""
         return bool(await ArgusGenericResultMetadata.find(test_id=test_id).only("name").limit(1).all())
 
-    async def get_best_results(self, test_id: UUID, name: str) -> dict[str, List[BestResult]]:
-        runs_details = await self._get_runs_details(test_id)
+    async def get_best_results(self, test_id: UUID, name: str,
+                               runs_details: RunsDetails | None = None) -> dict[str, List[BestResult]]:
+        if runs_details is None:
+            runs_details = await self._get_runs_details(test_id)
         rows = await select_rows(ArgusBestResultData.find(test_id=test_id, name=name),
                                  "key", "value", "result_date", "run_id")
         best_results = [BestResult(**best) for best in rows if best["run_id"] not in runs_details.ignored]
@@ -605,9 +613,11 @@ class ResultsService:
         result = defaultdict(lambda: defaultdict(dict))
         test_info = {}
         test_ids = await self._exclude_disabled_tests(test_ids)
-        for test_id in test_ids:
-            rows = await select_rows(plugin.model.find(test_id=test_id), "id", "status", "investigation_status",
-                                     "test_name", "build_id", "packages", "test_method", "started_by")
+        rows_per_test = await gather_limited(
+            select_rows(plugin.model.find(test_id=test_id), "id", "status", "investigation_status",
+                        "test_name", "build_id", "packages", "test_method", "started_by")
+            for test_id in test_ids)
+        for test_id, rows in zip(test_ids, rows_per_test):
             for row in rows:
                 if row["investigation_status"].lower() == "ignored":
                     continue
