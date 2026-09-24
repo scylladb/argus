@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass
 import subprocess
 import json
@@ -7,7 +8,6 @@ from types import NoneType
 from uuid import UUID
 from coodie.exceptions import DocumentNotFound
 
-from argus.backend.db import ScyllaCluster
 from argus.backend.util.config import Config
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.plugins.core import PluginModelBase
@@ -40,30 +40,34 @@ class ScheduleUpdateRequest:
 
 
 class ArgusService:
-    def __init__(self, database_session=None):
-        self.session = database_session if database_session else ScyllaCluster.get_session()
+    def __init__(self):
         self.notification_manager = NotificationManagerService()
 
-    def get_version(self) -> str:
+    async def get_version(self) -> str:
         try:
-            proc = subprocess.run(["git", "rev-parse", "HEAD"], check=True, capture_output=True)
+            proc = await asyncio.to_thread(
+                subprocess.run, ["git", "rev-parse", "HEAD"], check=True, capture_output=True
+            )
         except subprocess.CalledProcessError:
             proc = None
         if proc:
             return proc.stdout.decode(encoding="utf-8").strip()
         else:
             try:
-                with open("./.argus_version", 'rt', encoding="utf-8") as version_file:
-                    version = version_file.read().strip()
-                return version
+                return await asyncio.to_thread(self._read_version_file)
             except FileNotFoundError:
                 return "version_unknown"
 
-    def create_release(self, payload: dict) -> dict:
+    @staticmethod
+    def _read_version_file() -> str:
+        with open("./.argus_version", 'rt', encoding="utf-8") as version_file:
+            return version_file.read().strip()
+
+    async def create_release(self, payload: dict) -> dict:
         response = {}
         for release_name in payload:
             try:
-                ArgusRelease.get(name=release_name)
+                await ArgusRelease.get(name=release_name)
                 response[release_name] = {
                     "status": "error",
                     "message": f"Release {release_name} already exists"
@@ -74,33 +78,33 @@ class ArgusService:
 
             new_release = ArgusRelease.model_construct()
             new_release.name = release_name
-            new_release.save()
+            await new_release.save()
             response[release_name] = {}
-            response[release_name]["groups"] = self.create_groups(
+            response[release_name]["groups"] = await self.create_groups(
                 groups=payload[release_name]["groups"],
                 parent_release_id=new_release.id
             )
 
         return response
 
-    def create_groups(self, groups: dict, parent_release_id) -> dict:
+    async def create_groups(self, groups: dict, parent_release_id) -> dict:
         response = {}
         for group_name, group_definition in groups.items():
             new_group = ArgusGroup.model_construct()
             new_group.release_id = parent_release_id
             new_group.name = group_name
             new_group.pretty_name = group_definition.get("pretty_name")
-            new_group.save()
+            await new_group.save()
             response[group_name] = {}
             response[group_name]["status"] = "created"
-            response[group_name]["tests"] = self.create_tests(
+            response[group_name]["tests"] = await self.create_tests(
                 tests=group_definition.get("tests", []),
                 parent_group_id=new_group.id,
                 parent_release_id=parent_release_id
             )
         return response
 
-    def create_tests(self, tests: dict, parent_group_id: UUID, parent_release_id: UUID) -> dict:
+    async def create_tests(self, tests: dict, parent_group_id: UUID, parent_release_id: UUID) -> dict:
         response = {}
 
         for test_name in tests:
@@ -108,66 +112,68 @@ class ArgusService:
             new_test.release_id = parent_release_id
             new_test.group_id = parent_group_id
             new_test.name = test_name
-            new_test.save()
+            await new_test.save()
             response[test_name] = "created"
 
         return response
 
-    def get_comment(self, comment_id: UUID) -> ArgusTestRunComment | None:
+    async def get_comment(self, comment_id: UUID) -> ArgusTestRunComment | None:
         try:
-            return ArgusTestRunComment.get(id=comment_id)
+            return await ArgusTestRunComment.get(id=comment_id)
         except DocumentNotFound:
             return None
 
-    def get_releases(self):
-        releases = list(ArgusRelease.find().all())
+    async def get_releases(self):
+        releases = list(await ArgusRelease.find().all())
         releases = sorted(releases, key=lambda r: r.name)
         releases = sorted(releases, key=lambda r: r.dormant)
         return releases
 
-    def get_groups(self, release_id: UUID) -> list[ArgusGroup]:
-        groups = list(ArgusGroup.find(release_id=release_id).all())
+    async def get_groups(self, release_id: UUID) -> list[ArgusGroup]:
+        groups = list(await ArgusGroup.find(release_id=release_id).all())
         return sorted(groups, key=lambda g: g.pretty_name if g.pretty_name else g.name)
 
-    def get_tests(self, group_id: UUID) -> list[ArgusTest]:
-        return list(ArgusTest.find(group_id=group_id).all())
+    async def get_tests(self, group_id: UUID) -> list[ArgusTest]:
+        return list(await ArgusTest.find(group_id=group_id).all())
 
-    def get_test_info(self, test_id: UUID) -> dict:
-        test = ArgusTest.get(id=test_id)
-        group = ArgusGroup.get(id=test.group_id)
-        release = ArgusRelease.get(id=test.release_id)
+    async def get_test_info(self, test_id: UUID) -> dict:
+        test = await ArgusTest.get(id=test_id)
+        group = await ArgusGroup.get(id=test.group_id)
+        release = await ArgusRelease.get(id=test.release_id)
         return {
             "test": test.model_dump(),
             "group": group.model_dump(),
             "release": release.model_dump(),
         }
 
-    def get_data_for_release_dashboard(self, release_name: str):
-        release = ArgusRelease.get(name=release_name)
-        release_groups = ArgusGroup.find(release_id=release.id).all()
-        release_tests = ArgusTest.find(release_id=release.id).all()
+    async def get_data_for_release_dashboard(self, release_name: str):
+        release = await ArgusRelease.get(name=release_name)
+        release_groups = await ArgusGroup.find(release_id=release.id).all()
+        release_tests = await ArgusTest.find(release_id=release.id).all()
 
         return release, release_groups, release_tests
 
-    def get_distinct_release_versions(self, release_id: UUID | str) -> list[str]:
+    async def get_distinct_release_versions(self, release_id: UUID | str) -> list[str]:
         release_id = UUID(release_id) if isinstance(release_id, str) else release_id
-        release = ArgusRelease.get(id=release_id)
-        unique_versions = {ver for plugin in all_plugin_models()
-                           for ver in plugin.get_distinct_product_versions(release=release)}
+        release = await ArgusRelease.get(id=release_id)
+        per_plugin = await asyncio.gather(
+            *(plugin.get_distinct_product_versions(release=release) for plugin in all_plugin_models())
+        )
+        unique_versions = {ver for versions in per_plugin for ver in versions}
 
         return sorted(list(unique_versions), reverse=True)
 
-    def get_distinct_release_images(self, release_id: UUID | str) -> list[str]:
+    async def get_distinct_release_images(self, release_id: UUID | str) -> list[str]:
         release_id = UUID(release_id) if isinstance(release_id, str) else release_id
-        release = ArgusRelease.get(id=release_id)
-        images = AVAILABLE_PLUGINS["scylla-cluster-tests"].model.get_distinct_cloud_images_for_release(release)
+        release = await ArgusRelease.get(id=release_id)
+        images = await AVAILABLE_PLUGINS["scylla-cluster-tests"].model.get_distinct_cloud_images_for_release(release)
 
         return images
 
-    def fetch_release_activity(self, release_name: str) -> dict:
+    async def fetch_release_activity(self, release_name: str) -> dict:
         response = {}
-        release = ArgusRelease.get(name=release_name)
-        all_events = ArgusEvent.find(release_id=release.id).all()
+        release = await ArgusRelease.get(name=release_name)
+        all_events = await ArgusEvent.find(release_id=release.id).all()
         all_events = sorted(all_events, key=lambda ev: ev.created_at)
         response["release_id"] = release.id
         response["raw_events"] = [event.model_dump() for event in all_events]
@@ -176,33 +182,33 @@ class ArgusService:
         return response
 
     # TODO: Remove - legacy scheduling, superseded by release planner
-    def assign_runs_for_scheduled_test(self, schedule, test_id: UUID, new_assignee: UUID):
+    async def assign_runs_for_scheduled_test(self, schedule, test_id: UUID, new_assignee: UUID):
         """Legacy scheduling removed - kept as a stub for API compatibility."""
         return None
 
     # TODO: Remove - legacy scheduling, superseded by release planner
-    def assign_runs_for_scheduled_group(self, schedule, group_id: UUID, new_assignee: UUID):
+    async def assign_runs_for_scheduled_group(self, schedule, group_id: UUID, new_assignee: UUID):
         """Legacy scheduling removed - kept as a stub for API compatibility."""
         return None
 
     # TODO: Remove - legacy scheduling, superseded by release planner
-    def submit_new_schedule(self, release: str | UUID, start_time: str, end_time: str, tests: list[str | UUID],
+    async def submit_new_schedule(self, release: str | UUID, start_time: str, end_time: str, tests: list[str | UUID],
                             groups: list[str | UUID], assignees: list[str | UUID], tag: str, comments: dict[str, str] | None, group_ids: dict[str, str] | None) -> dict:
         """Legacy scheduling removed - kept as a stub for API compatibility."""
         return {}
 
     # TODO: Remove - legacy scheduling, superseded by release planner
-    def get_schedules_for_release(self, release_id: str | UUID) -> dict:
+    async def get_schedules_for_release(self, release_id: str | UUID) -> dict:
         """Legacy scheduling removed - kept as a stub for API compatibility."""
         return {"schedules": []}
 
     # TODO: Remove - legacy scheduling, superseded by release planner
-    def update_schedule_assignees(self, payload: dict) -> dict:
+    async def update_schedule_assignees(self, payload: dict) -> dict:
         """Legacy scheduling removed - kept as a stub for API compatibility."""
         return {}
 
     # TODO: Remove - legacy scheduling, superseded by release planner
-    def update_schedule_comment(self, payload: dict) -> dict:
+    async def update_schedule_comment(self, payload: dict) -> dict:
         new_comment = payload.get("newComment")
         release_id = payload.get("releaseId")
         group_id = payload.get("groupId")
@@ -222,12 +228,12 @@ class ArgusService:
         group_id = UUID(group_id) if isinstance(group_id, str) else group_id
         test_id = UUID(test_id) if isinstance(test_id, str) else test_id
         try:
-            comment = ReleasePlannerComment.get(release=release_id, group=group_id, test=test_id)
+            comment = await ReleasePlannerComment.get(release=release_id, group=group_id, test=test_id)
         except DocumentNotFound:
             comment = ReleasePlannerComment(release=release_id, group=group_id, test=test_id)
 
         comment.comment = new_comment
-        comment.save()
+        await comment.save()
 
         return {
             "releaseId": release_id,
@@ -237,23 +243,23 @@ class ArgusService:
         }
 
     # TODO: Remove - legacy scheduling, superseded by release planner
-    def update_schedule(self, release_id: UUID | str, schedule_id: UUID | str, old_tests: list[UUID | str], new_tests: list[UUID | str], comments: dict[str, str], assignee: UUID | str):
+    async def update_schedule(self, release_id: UUID | str, schedule_id: UUID | str, old_tests: list[UUID | str], new_tests: list[UUID | str], comments: dict[str, str], assignee: UUID | str):
         """Legacy scheduling removed - kept as a stub for API compatibility."""
         return True
 
     # TODO: Remove - legacy scheduling, superseded by release planner
-    def delete_schedule(self, payload: dict) -> dict:
+    async def delete_schedule(self, payload: dict) -> dict:
         """Legacy scheduling removed - kept as a stub for API compatibility."""
         return {}
 
-    def get_planner_data(self, release_id: UUID | str) -> dict:
+    async def get_planner_data(self, release_id: UUID | str) -> dict:
 
         release_id = UUID(release_id) if isinstance(release_id, str) else release_id
-        release = ArgusRelease.get(id=release_id)
-        release_comments = list(ReleasePlannerComment.find(release=release.id).all())
-        groups = ArgusGroup.find(release_id=release.id).all()
+        release = await ArgusRelease.get(id=release_id)
+        release_comments = list(await ReleasePlannerComment.find(release=release.id).all())
+        groups = await ArgusGroup.find(release_id=release.id).all()
         groups_by_group_id = {str(group.id): group.model_dump() for group in groups if group.enabled}
-        tests = ArgusTest.find(release_id=release.id).all()
+        tests = await ArgusTest.find(release_id=release.id).all()
         tests = [t.model_dump() for t in tests if t.enabled]
         tests_by_group = {}
         for test in tests:
@@ -281,41 +287,43 @@ class ArgusService:
         return response
 
     # TODO: Remove - legacy scheduling, superseded by release planner
-    def _batch_get_schedules_from_ids(self, release_id: UUID, schedule_ids: list[UUID]) -> list:
+    async def _batch_get_schedules_from_ids(self, release_id: UUID, schedule_ids: list[UUID]) -> list:
         """Legacy scheduling removed - kept as a stub for API compatibility."""
         return []
 
-    def get_groups_assignees(self, release_id: UUID | str, version: str = None, plan_id: UUID = None):
+    async def get_groups_assignees(self, release_id: UUID | str, version: str = None, plan_id: UUID = None):
         release_id = UUID(release_id) if isinstance(release_id, str) else release_id
-        release = ArgusRelease.get(id=release_id)
-        if assignments := PlanningService().get_assignments_for_groups(release_id, version, plan_id):
+        release = await ArgusRelease.get(id=release_id)
+        if assignments := await PlanningService().get_assignments_for_groups(release_id, version, plan_id):
             return assignments
 
         # Legacy scheduling removed - no fallback source of assignments.
         return {}
 
-    def get_tests_assignees(self, group_id: UUID | str, version: str = None, plan_id: UUID = None):
+    async def get_tests_assignees(self, group_id: UUID | str, version: str = None, plan_id: UUID = None):
         group_id = UUID(group_id) if isinstance(group_id, str) else group_id
-        group = ArgusGroup.get(id=group_id)
+        group = await ArgusGroup.get(id=group_id)
 
-        release = ArgusRelease.get(id=group.release_id)
-        if assignments := PlanningService().get_assignments_for_tests(group_id, version, plan_id):
+        release = await ArgusRelease.get(id=group.release_id)
+        if assignments := await PlanningService().get_assignments_for_tests(group_id, version, plan_id):
             return assignments
 
         # Legacy scheduling removed - no fallback source of assignments.
         return {}
 
-    def get_jobs_for_user(self, user: User):
+    async def get_jobs_for_user(self, user: User) -> list[dict]:
         today = datetime.datetime.now()
         validity_period = today - datetime.timedelta(days=Config.load_yaml_config().get("JOB_VALIDITY_PERIOD_DAYS", 30))
-        for plugin in all_plugin_models():
-            for run in plugin.get_jobs_assigned_to_user(user_id=user.id):
-                if run["start_time"] >= validity_period:
-                    yield run
+        per_plugin = await asyncio.gather(
+            *(plugin.get_jobs_assigned_to_user(user_id=user.id) for plugin in all_plugin_models())
+        )
+        return [run for runs in per_plugin for run in runs if run["start_time"] >= validity_period]
 
-    def get_planned_jobs_for_user(self, user: User):
-        owned_plans = list(ArgusReleasePlan.find(owner=user.id).allow_filtering().all())
-        participating_plans = list(ArgusReleasePlan.find(participants__contains=user.id).allow_filtering().all())
+    async def get_planned_jobs_for_user(self, user: User):
+        owned_plans = list(await ArgusReleasePlan.find(owner=user.id).allow_filtering().all())
+        participating_plans = list(
+            await ArgusReleasePlan.find(participants__contains=user.id).allow_filtering().all()
+        )
         unique_plans: list[ArgusReleasePlan] = list({plan for plan in [*owned_plans, *participating_plans]})
 
         user_jobs = []
@@ -328,7 +336,7 @@ class ArgusService:
                 user_jobs.extend(jobs)
         resolved: list[ArgusTest] = []
         for batch in chunk(set(user_jobs)):
-            resolved.extend(ArgusTest.find(id__in=batch).all())
+            resolved.extend(await ArgusTest.find(id__in=batch).all())
 
         last_runs: dict[UUID, PluginModelBase] = {}
         for test in resolved:
@@ -336,20 +344,22 @@ class ArgusService:
                 if not test.plugin_name:
                     last_runs[test.id] = None
                     continue
-                last_runs[test.id] = AVAILABLE_PLUGINS[test.plugin_name].model.find(build_id=test.build_system_id).limit(1).first()
+                last_runs[test.id] = await AVAILABLE_PLUGINS[test.plugin_name].model.find(
+                    build_id=test.build_system_id).limit(1).first()
             except DocumentNotFound:
                 last_runs[test.id] = None
 
         return [{**test.model_dump(), "last_run": last_runs.get(test.id)} for test in resolved if test.enabled]
 
     # TODO: Remove - legacy scheduling, superseded by release planner
-    def get_schedules_for_user(self, user: User) -> list[dict]:
+    async def get_schedules_for_user(self, user: User) -> list[dict]:
         """Legacy scheduling removed - kept as a stub for API compatibility."""
         return []
 
-    def get_planner_comment_by_test(self, test_id):
+    async def get_planner_comment_by_test(self, test_id):
         try:
-            test = ArgusTest.get(id=test_id)
-            return ReleasePlannerComment.get(test=test.id, release=test.release_id, group=test.group_id).comment
+            test = await ArgusTest.get(id=test_id)
+            comment = await ReleasePlannerComment.get(test=test.id, release=test.release_id, group=test.group_id)
+            return comment.comment
         except DocumentNotFound:
             return ""

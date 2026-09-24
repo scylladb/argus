@@ -27,63 +27,64 @@ class ReleaseManagerService:
     def __init__(self) -> None:
         pass
 
-    def get_releases(self) -> list[ArgusRelease]:
-        return list(ArgusRelease.find().all())
+    async def get_releases(self) -> list[ArgusRelease]:
+        return await ArgusRelease.find().all()
 
-    def get_groups(self, release_id: UUID) -> list[ArgusGroup]:
-        return list(ArgusGroup.find(release_id=release_id).all())
+    async def get_groups(self, release_id: UUID) -> list[ArgusGroup]:
+        return await ArgusGroup.find(release_id=release_id).all()
 
-    def get_tests(self, group_id: UUID) -> list[ArgusTest]:
-        return list(ArgusTest.find(group_id=group_id).all())
+    async def get_tests(self, group_id: UUID) -> list[ArgusTest]:
+        return await ArgusTest.find(group_id=group_id).all()
 
-    def toggle_test_enabled(self, test_id: UUID, new_state: bool) -> bool:
+    async def toggle_test_enabled(self, test_id: UUID, new_state: bool) -> bool:
         test_id = UUID(test_id) if isinstance(test_id, str) else test_id
-        test: ArgusTest = ArgusTest.get(id=test_id)
+        test: ArgusTest = await ArgusTest.get(id=test_id)
         test.enabled = new_state
-        test.save()
-        invalidate_release_snapshots(test.release_id)
+        await test.save()
+        await invalidate_release_snapshots(test.release_id)
         return test
 
-    def toggle_group_enabled(self, group_id: UUID, new_state: bool) -> bool:
+    async def toggle_group_enabled(self, group_id: UUID, new_state: bool) -> bool:
         group_id = UUID(group_id) if isinstance(group_id, str) else group_id
-        test: ArgusGroup = ArgusGroup.get(id=group_id)
+        test: ArgusGroup = await ArgusGroup.get(id=group_id)
         test.enabled = new_state
-        test.save()
-        invalidate_release_snapshots(test.release_id)
+        await test.save()
+        await invalidate_release_snapshots(test.release_id)
         return test
 
-    def create_release(self, release_name: str, pretty_name: str, perpetual: bool) -> ArgusRelease:
+    async def create_release(self, release_name: str, pretty_name: str, perpetual: bool) -> ArgusRelease:
         try:
-            release = ArgusRelease.get(name=release_name)
+            release = await ArgusRelease.get(name=release_name)
         except DocumentNotFound:
             release = ArgusRelease.model_construct()
             release.name = release_name
             release.pretty_name = pretty_name
             release.perpetual = perpetual
 
-            release.save()
+            await release.save()
         else:
             raise ReleaseManagerException(
                 f"Release {release_name} already exists!", release_name)
 
         return release
 
-    def create_group(self, group_name: str, pretty_name: str, build_system_id: str,
+    async def create_group(self, group_name: str, pretty_name: str, build_system_id: str,
                      release_id: str) -> ArgusGroup:
-        release = ArgusRelease.get(id=UUID(release_id))
+        release = await ArgusRelease.get(id=UUID(release_id))
 
         new_group = ArgusGroup.model_construct()
         new_group.name = group_name
         new_group.pretty_name = pretty_name
         new_group.release_id = release.id
         new_group.build_system_id = build_system_id
-        new_group.save()
-        invalidate_release_snapshots(release.id)
+        await new_group.save()
+        await invalidate_release_snapshots(release.id)
         return new_group
 
-    def create_test(self, test_name, pretty_name, build_id, build_url, group_id, release_id, plugin_name) -> ArgusTest:
-        release = ArgusRelease.get(id=UUID(release_id))
-        group = ArgusGroup.get(id=UUID(group_id))
+    async def create_test(self, test_name, pretty_name, build_id, build_url, group_id, release_id,
+                          plugin_name) -> ArgusTest:
+        release = await ArgusRelease.get(id=UUID(release_id))
+        group = await ArgusGroup.get(id=UUID(group_id))
 
         new_test = ArgusTest.model_construct()
         new_test.name = test_name
@@ -93,52 +94,53 @@ class ReleaseManagerService:
         new_test.group_id = group.id
         new_test.plugin_name = plugin_name
         new_test.build_system_url = build_url
-        new_test.validate_build_system_id()
-        new_test.save()
-        self.move_test_runs(new_test)
-        invalidate_release_snapshots(release.id)
+        await new_test.validate_build_system_id()
+        await new_test.save()
+        await self.move_test_runs(new_test)
+        await invalidate_release_snapshots(release.id)
         return new_test
 
-    def delete_group(self, group_id: str, delete_tests: bool = True, new_group_id: str = "") -> bool:
-        group_to_delete = ArgusGroup.get(id=UUID(group_id))
+    async def delete_group(self, group_id: str, delete_tests: bool = True, new_group_id: str = "") -> bool:
+        group_to_delete = await ArgusGroup.get(id=UUID(group_id))
 
         tests_to_change = ArgusTest.find(
             group_id=group_to_delete.id)
         if delete_tests:
-            for test in tests_to_change.all():
-                test.delete()
+            for test in await tests_to_change.all():
+                await test.delete()
         else:
-            new_group = ArgusGroup.get(id=UUID(new_group_id))
-            for test in tests_to_change.all():
+            new_group = await ArgusGroup.get(id=UUID(new_group_id))
+            for test in await tests_to_change.all():
                 test.group_id = new_group.id
-                test.save()
+                await test.save()
 
-        group_to_delete.delete()
-        invalidate_release_snapshots(group_to_delete.release_id)
+        await group_to_delete.delete()
+        await invalidate_release_snapshots(group_to_delete.release_id)
         return True
 
-    def delete_test(self, test_id: str) -> bool:
-        test_to_delete = ArgusTest.get(id=UUID(test_id) if isinstance(test_id, str) else test_id)
-        test_to_delete.delete()
-        invalidate_release_snapshots(test_to_delete.release_id)
+    async def delete_test(self, test_id: str) -> bool:
+        test_to_delete = await ArgusTest.get(id=UUID(test_id) if isinstance(test_id, str) else test_id)
+        await test_to_delete.delete()
+        await invalidate_release_snapshots(test_to_delete.release_id)
         return True
 
-    def update_group(self, group_id: str, name: str, pretty_name: str, enabled: bool, build_system_id: str) -> bool:
-        group = ArgusGroup.get(id=UUID(group_id))
+    async def update_group(self, group_id: str, name: str, pretty_name: str, enabled: bool,
+                           build_system_id: str) -> bool:
+        group = await ArgusGroup.get(id=UUID(group_id))
 
         group.name = name
         group.build_system_id = build_system_id
         group.pretty_name = pretty_name
         group.enabled = enabled
 
-        group.save()
-        invalidate_release_snapshots(group.release_id)
+        await group.save()
+        await invalidate_release_snapshots(group.release_id)
         return True
 
-    def update_test(self, test_id: str, name: str, pretty_name: str, plugin_name: str,
+    async def update_test(self, test_id: str, name: str, pretty_name: str, plugin_name: str,
                     enabled: bool, build_system_id: str, build_system_url: str, group_id) -> bool:
-        test: ArgusTest = ArgusTest.get(id=UUID(test_id))
-        group = ArgusGroup.get(id=UUID(group_id))
+        test: ArgusTest = await ArgusTest.get(id=UUID(test_id))
+        group = await ArgusGroup.get(id=UUID(group_id))
 
         test.name = name
         test.pretty_name = pretty_name
@@ -150,36 +152,37 @@ class ReleaseManagerService:
             test.group_id = group.id
             LOGGER.info("Relocating old test runs into a new group")
 
-        test.validate_build_system_id()
-        test.save()
-        self.move_test_runs(test)
-        invalidate_release_snapshots(test.release_id)
+        await test.validate_build_system_id()
+        await test.save()
+        await self.move_test_runs(test)
+        await invalidate_release_snapshots(test.release_id)
         return True
 
-    def set_release_state(self, release_id: str, state: bool) -> bool:
-        release = ArgusRelease.get(id=UUID(release_id))
+    async def set_release_state(self, release_id: str, state: bool) -> bool:
+        release = await ArgusRelease.get(id=UUID(release_id))
         release.enabled = state
-        release.save()
-        invalidate_release_snapshots(release.id)
+        await release.save()
+        await invalidate_release_snapshots(release.id)
         return True
 
-    def set_release_dormancy(self, release_id: str, dormant: bool) -> bool:
-        release = ArgusRelease.get(id=UUID(release_id))
+    async def set_release_dormancy(self, release_id: str, dormant: bool) -> bool:
+        release = await ArgusRelease.get(id=UUID(release_id))
         release.dormant = dormant
-        release.save()
-        invalidate_release_snapshots(release.id)
+        await release.save()
+        await invalidate_release_snapshots(release.id)
         return True
 
-    def set_release_perpetuality(self, release_id: str, perpetual: bool) -> bool:
-        release = ArgusRelease.get(id=UUID(release_id))
+    async def set_release_perpetuality(self, release_id: str, perpetual: bool) -> bool:
+        release = await ArgusRelease.get(id=UUID(release_id))
         release.perpetual = perpetual
-        release.save()
-        invalidate_release_snapshots(release.id)
+        await release.save()
+        await invalidate_release_snapshots(release.id)
         return True
 
-    def edit_release(self, payload: ReleaseEditPayload) -> bool:
+    async def edit_release(self, payload: ReleaseEditPayload) -> bool:
 
-        release: ArgusRelease = ArgusRelease.get(id=UUID(payload["id"]) if isinstance(payload["id"], str) else payload["id"])
+        release_id = UUID(payload["id"]) if isinstance(payload["id"], str) else payload["id"]
+        release: ArgusRelease = await ArgusRelease.get(id=release_id)
         release.pretty_name = payload["pretty_name"]
         release.perpetual = payload["perpetual"]
         release.enabled = payload["enabled"]
@@ -187,47 +190,48 @@ class ReleaseManagerService:
         release.description = payload["description"]
         release.valid_version_regex = payload["valid_version_regex"]
 
-        release.save()
-        invalidate_release_snapshots(release.id)
+        await release.save()
+        await invalidate_release_snapshots(release.id)
         return True
 
-    def delete_release(self, release_id: str) -> bool:
+    async def delete_release(self, release_id: str) -> bool:
 
-        release: ArgusRelease = ArgusRelease.get(id=UUID(release_id) if isinstance(release_id, str) else release_id)
+        release_id = UUID(release_id) if isinstance(release_id, str) else release_id
+        release: ArgusRelease = await ArgusRelease.get(id=release_id)
 
         release_groups = ArgusGroup.find(release_id=release.id)
         release_tests = ArgusTest.find(release_id=release.id)
 
-        for entity in [*release_groups.all(), *release_tests.all()]:
-            entity.delete()
+        for entity in [*await release_groups.all(), *await release_tests.all()]:
+            await entity.delete()
 
         # Clean up denormalized index tables so no orphaned rows remain
-        for row in ReleaseDistinctVersions.find(release_id=release.id).all():
-            row.delete()
-        for row in ReleaseDistinctImages.find(release_id=release.id).all():
-            row.delete()
-        for row in ReleaseStatsSnapshot.find(release_id=release.id).all():
-            row.delete()
+        for row in await ReleaseDistinctVersions.find(release_id=release.id).all():
+            await row.delete()
+        for row in await ReleaseDistinctImages.find(release_id=release.id).all():
+            await row.delete()
+        for row in await ReleaseStatsSnapshot.find(release_id=release.id).all():
+            await row.delete()
 
-        release.delete()
+        await release.delete()
         return True
 
-    def batch_move_tests(self, new_group_id: str, tests: list[str]) -> bool:
-        group = ArgusGroup.get(id=UUID(new_group_id))
+    async def batch_move_tests(self, new_group_id: str, tests: list[str]) -> bool:
+        group = await ArgusGroup.get(id=UUID(new_group_id))
 
-        tests: list[ArgusTest] = [ArgusTest.get(id=UUID(test_id)) for test_id in tests]
+        tests: list[ArgusTest] = [await ArgusTest.get(id=UUID(test_id)) for test_id in tests]
 
         for test in tests:
             test.group_id = group.id
-            test.save()
-            self.move_test_runs(test)
+            await test.save()
+            await self.move_test_runs(test)
 
-        invalidate_release_snapshots(group.release_id)
+        await invalidate_release_snapshots(group.release_id)
         return True
 
-    def move_test_runs(self, test: ArgusTest) -> None:
-        runs = SCTTestRun.find(build_id=test.build_system_id).only("build_id", "start_time") \
+    async def move_test_runs(self, test: ArgusTest) -> None:
+        runs = await SCTTestRun.find(build_id=test.build_system_id).only("build_id", "start_time") \
             .values_list("build_id", "start_time").consistency("ONE").all()
         for build_id, start_time in runs:
-            SCTTestRun.find(build_id=build_id, start_time=start_time).update(
+            await SCTTestRun.find(build_id=build_id, start_time=start_time).update(
                 test_id=test.id, group_id=test.group_id, release_id=test.release_id)

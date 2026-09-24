@@ -1,19 +1,14 @@
 from collections import defaultdict
 from uuid import UUID
 
-
-from argus.backend.db import ScyllaCluster
 from argus.backend.util.common import chunk
 from argus.backend.plugins.sct.testrun import SCTNemesis, SCTTestRun
 from argus.backend.util.nemesis_map import get_nemesis_name
 
 
 class NemesisStatsService:
-    def __init__(self) -> None:
-        self.cluster = ScyllaCluster.get()
-
-    def get_nemesis_data(self, test_id: UUID):
-        rows = SCTTestRun.find(test_id=test_id).only(
+    async def get_nemesis_data(self, test_id: UUID):
+        rows = await SCTTestRun.find(test_id=test_id).only(
             "id", "investigation_status", "packages").all()
         nemesis_data = []
 
@@ -21,7 +16,7 @@ class NemesisStatsService:
         for batch in chunk({r.id for r in rows}):
             # Typically this should result in <100 runs per test, but
             # we batch to make sure we don't exceed max cartesian product
-            nemesis_rows.extend(SCTNemesis.find(run_id__in=batch).all())
+            nemesis_rows.extend(await SCTNemesis.find(run_id__in=batch).all())
 
         nemesis_runs_data = defaultdict(list)
         for row in nemesis_rows:

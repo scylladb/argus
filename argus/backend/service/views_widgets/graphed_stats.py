@@ -3,7 +3,6 @@ import logging
 from uuid import UUID
 import json
 import re
-from argus.backend.db import ScyllaCluster
 from argus.backend.plugins.sct.testrun import SCTNemesis, SCTTestRun
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.jira import JiraIssue
@@ -14,11 +13,8 @@ LOGGER = logging.getLogger(__name__)
 
 
 class GraphedStatsService:
-    def __init__(self) -> None:
-        self.cluster = ScyllaCluster.get()
-
-    def get_graphed_stats(self, test_id: UUID, filters=None):
-        rows = list(SCTTestRun.find(test_id=test_id).only(
+    async def get_graphed_stats(self, test_id: UUID, filters=None):
+        rows = await SCTTestRun.find(test_id=test_id).only(
             "build_id",
             "start_time",
             "end_time",
@@ -26,13 +22,13 @@ class GraphedStatsService:
             "investigation_status",
             "packages",
             "status",
-        ).all())
+        ).all()
 
         nemesis_rows = []
         for batch in chunk({r.id for r in rows}):
             # Typically this should result in <100 runs per test, but
             # we batch to make sure we don't exceed max cartesian product
-            nemesis_rows.extend(SCTNemesis.find(run_id__in=batch).all())
+            nemesis_rows.extend(await SCTNemesis.find(run_id__in=batch).all())
 
         nemesis_data = defaultdict(list)
         for row in nemesis_rows:
@@ -85,7 +81,7 @@ class GraphedStatsService:
 
         return release_data
 
-    def get_runs_details(self, run_ids: list[str]):
+    async def get_runs_details(self, run_ids: list[str]):
         """Get detailed information for provided test runs including assignee and attached issues.
 
         Args:
@@ -104,7 +100,7 @@ class GraphedStatsService:
         # Step 1: Get issue links for all run_ids in batches
         all_issue_links = {}
         for batch_run_ids in chunk(run_ids):
-            batch_links = IssueLink.find(run_id__in=batch_run_ids).only("run_id", "issue_id").all()
+            batch_links = await IssueLink.find(run_id__in=batch_run_ids).only("run_id", "issue_id").all()
 
             for link in batch_links:
                 run_id_str = str(link.run_id)
@@ -120,14 +116,14 @@ class GraphedStatsService:
         issues_by_id = {}
         if all_issue_ids:
             for batch_issue_ids in chunk(list(all_issue_ids)):
-                for issue in GithubIssue.find(id__in=batch_issue_ids).only(
+                for issue in await GithubIssue.find(id__in=batch_issue_ids).only(
                         "id", "state", "title", "number", "url").all():
                     issues_by_id[issue.id] = issue
 
             missing_ids = [id for id in all_issue_ids if id not in issues_by_id]
             if missing_ids:
                 for batch_issue_ids in chunk(missing_ids):
-                    for issue in JiraIssue.find(id__in=batch_issue_ids).only(
+                    for issue in await JiraIssue.find(id__in=batch_issue_ids).only(
                             "id", "state", "summary", "key", "permalink").all():
                         issues_by_id[issue.id] = issue
 
@@ -135,7 +131,7 @@ class GraphedStatsService:
         test_runs = {}
         for run_id in run_ids:
             try:
-                test_run = SCTTestRun.find(id=run_id).only(
+                test_run = await SCTTestRun.find(id=run_id).only(
                     "id", "status", "build_id", "start_time", "assignee", "investigation_status", "build_number", "packages", "build_job_url").first()
                 test_runs[run_id] = test_run
             except Exception as e:

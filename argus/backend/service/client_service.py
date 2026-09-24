@@ -11,7 +11,6 @@ from cassandra import DriverException
 from cassandra.cluster import NoHostAvailable
 from coodie.exceptions import DocumentNotFound
 
-from argus.backend.db import ScyllaCluster
 from argus.backend.error_handlers import DataValidationError
 from argus.backend.models.pytest import PytestResultTable, PytestSubmitData, PytestUserField
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData
@@ -35,21 +34,18 @@ class ClientException(Exception):
 class ClientService:
     PLUGINS = {name: plugin.model for name, plugin in AVAILABLE_PLUGINS.items()}
 
-    def __init__(self) -> None:
-        self.cluster = ScyllaCluster.get()
-
     def get_model(self, run_type: str) -> PluginModelBase:
         cls = self.PLUGINS.get(run_type)
         if not cls:
             raise ClientException(f"Unsupported run type: {run_type}", run_type)
         return cls
 
-    def submit_run(self, run_type: str, request_data: dict) -> str:
+    async def submit_run(self, run_type: str, request_data: dict) -> str:
         model = self.get_model(run_type)
-        model.submit_run(request_data=request_data)
+        await model.submit_run(request_data=request_data)
         return "Created"
 
-    def submit_pytest_result(self, request_data: PytestSubmitData) -> dict[str, str | UUID]:
+    async def submit_pytest_result(self, request_data: PytestSubmitData) -> dict[str, str | UUID]:
 
         new_result = PytestResultTable.model_construct()
         new_result.name = request_data["name"]
@@ -72,7 +68,8 @@ class ClientService:
             fields.append(f)
 
         try:
-            run: GenericRun = AVAILABLE_PLUGINS.get("generic").model.find(id=new_result.run_id).only("id", "release_id", "test_id").first()
+            run: GenericRun = await AVAILABLE_PLUGINS.get("generic").model.find(
+                id=new_result.run_id).only("id", "release_id", "test_id").first()
             if run is None:
                 raise DocumentNotFound(f"Run {new_result.run_id} not found")
             new_result.release_id = run.release_id
@@ -80,74 +77,75 @@ class ClientService:
         except DocumentNotFound:
             LOGGER.warning("RunId %s does not exist - result will be not be indexed for a release/view", new_result.run_id)
 
-        new_result.save()
-        [f.save() for f in fields]
+        await new_result.save()
+        for f in fields:
+            await f.save()
         return {
             "name": new_result.name,
             "id": new_result.id,
         }
 
-    def get_run(self, run_type: str, run_id: str):
+    async def get_run(self, run_type: str, run_id: str):
         run_id = UUID(run_id) if isinstance(run_id, str) else run_id
         model = self.get_model(run_type)
         try:
-            run = model.get(id=run_id)
+            run = await model.get(id=run_id)
         except DocumentNotFound:
             return None
         return run
 
-    def heartbeat(self, run_type: str, run_id: str) -> int:
+    async def heartbeat(self, run_type: str, run_id: str) -> int:
         model = self.get_model(run_type)
-        run = model.load_test_run(UUID(run_id))
+        run = await model.load_test_run(UUID(run_id))
         run.update_heartbeat()
-        run.save()
+        await run.save()
         return run.heartbeat
 
-    def get_run_status(self, run_type: str, run_id: str) -> str:
+    async def get_run_status(self, run_type: str, run_id: str) -> str:
         model = self.get_model(run_type)
-        run = model.load_test_run(UUID(run_id))
+        run = await model.load_test_run(UUID(run_id))
         return run.status
 
-    def update_run_status(self, run_type: str, run_id: str, new_status: str) -> str:
+    async def update_run_status(self, run_type: str, run_id: str, new_status: str) -> str:
         model = self.get_model(run_type)
-        run = model.load_test_run(UUID(run_id))
+        run = await model.load_test_run(UUID(run_id))
         run.change_status(new_status=TestStatus(new_status))
-        run.save()
+        await run.save()
 
         return run.status
 
-    def submit_product_version(self, run_type: str, run_id: str, version: str) -> str:
+    async def submit_product_version(self, run_type: str, run_id: str, version: str) -> str:
         model = self.get_model(run_type)
-        run = model.load_test_run(UUID(run_id))
-        run.submit_product_version(version)
-        run.save()
+        run = await model.load_test_run(UUID(run_id))
+        await run.submit_product_version(version)
+        await run.save()
 
         return "Submitted"
 
-    def submit_logs(self, run_type: str, run_id: str, logs: list[dict]) -> str:
+    async def submit_logs(self, run_type: str, run_id: str, logs: list[dict]) -> str:
         model = self.get_model(run_type)
-        run = model.load_test_run(UUID(run_id))
-        run.submit_logs(logs)
-        run.save()
+        run = await model.load_test_run(UUID(run_id))
+        await run.submit_logs(logs)
+        await run.save()
 
         return "Submitted"
 
-    def finish_run(self, run_type: str, run_id: str, payload: dict | None = None) -> str:
+    async def finish_run(self, run_type: str, run_id: str, payload: dict | None = None) -> str:
         model = self.get_model(run_type)
-        run = model.load_test_run(UUID(run_id))
-        run.finish_run(payload)
-        run.save()
+        run = await model.load_test_run(UUID(run_id))
+        await run.finish_run(payload)
+        await run.save()
         try:
-            RunCostService().recompute_actual_cost(UUID(run_id), use_estimate=True)
+            await RunCostService().recompute_actual_cost(UUID(run_id), use_estimate=True)
         except (DriverException, NoHostAvailable):
             LOGGER.exception("Could not recompute the actual cost of run %s, the run is finalized", run_id)
 
         return "Finalized"
 
-    def submit_results(self, run_type: str, run_id: str, results: dict) -> dict[str, str]:
+    async def submit_results(self, run_type: str, run_id: str, results: dict) -> dict[str, str]:
         model = self.get_model(run_type)
         try:
-            run = model.load_test_run(UUID(run_id))
+            run = await model.load_test_run(UUID(run_id))
         except DocumentNotFound:
             return {"status": "error", "response": {
                 "exception": "DoesNotExist",
@@ -156,18 +154,19 @@ class ClientService:
         table_name = results["meta"]["name"]
         results_service = ResultsService()
         cells = [Cell(**cell) for cell in results["results"]]
-        table_metadata = results_service.get_table_metadata(test_id=run.test_id, table_name=table_name)
+        table_metadata = await results_service.get_table_metadata(test_id=run.test_id, table_name=table_name)
         if table_metadata:
-            table_metadata = table_metadata.update_if_changed(results["meta"])
+            table_metadata = await table_metadata.update_if_changed(results["meta"])
         else:
             table_metadata = ArgusGenericResultMetadata(test_id=run.test_id, **results["meta"])
-            table_metadata.save()
+            await table_metadata.save()
         if results.get("sut_timestamp", 0) == 0:
-            results["sut_timestamp"] = run.sut_timestamp(results.get(
+            results["sut_timestamp"] = await run.sut_timestamp(results.get(
                 'sut_package_name', 'scylla-server'))  # automatic sut_timestamp
         results["sut_timestamp"] = datetime.fromtimestamp(results["sut_timestamp"])
-        best_results = results_service.update_best_results(test_id=run.test_id, table_name=table_name, table_metadata=table_metadata,
-                                                           cells=cells, run_id=run_id)
+        best_results = await results_service.update_best_results(test_id=run.test_id, table_name=table_name,
+                                                                 table_metadata=table_metadata, cells=cells,
+                                                                 run_id=run_id)
         table_name = results["meta"]["name"]
         sut_timestamp = results["sut_timestamp"]
         result_failed = False
@@ -175,17 +174,17 @@ class ClientService:
             cell.update_cell_status_based_on_rules(table_metadata, best_results)
             if cell.status == "ERROR":
                 result_failed = True
-            ArgusGenericResultData(test_id=run.test_id,
-                                   run_id=run.id,
-                                   name=table_name,
-                                   sut_timestamp=sut_timestamp,
-                                   **asdict(cell)
-                                   ).save()
+            await ArgusGenericResultData(test_id=run.test_id,
+                                         run_id=run.id,
+                                         name=table_name,
+                                         sut_timestamp=sut_timestamp,
+                                         **asdict(cell)
+                                         ).save()
         if result_failed:
             raise DataValidationError()
         return {"status": "ok", "message": "Results submitted"}
 
-    def get_run_info(self, run_id: str) -> dict:
+    async def get_run_info(self, run_id: str) -> dict:
         """Search all plugin models for a test run by run_id and return full details.
 
         Returns the test run itself, test info (test, group, release), comments, and activity.
@@ -197,7 +196,7 @@ class ClientService:
         for name, plugin in AVAILABLE_PLUGINS.items():
             model = plugin.model
             try:
-                run = model.get(id=run_uuid)
+                run = await model.get(id=run_uuid)
                 plugin_name = name
                 break
             except DocumentNotFound:
@@ -211,9 +210,9 @@ class ClientService:
         test_info = {}
         if run.test_id:
             try:
-                test = ArgusTest.get(id=run.test_id)
-                group = ArgusGroup.get(id=test.group_id)
-                release = ArgusRelease.get(id=test.release_id)
+                test = await ArgusTest.get(id=run.test_id)
+                group = await ArgusGroup.get(id=test.group_id)
+                release = await ArgusRelease.get(id=test.release_id)
                 test_info = {
                     "test": test.model_dump(),
                     "group": group.model_dump(),
@@ -222,10 +221,10 @@ class ClientService:
             except Exception:
                 LOGGER.warning("Failed to fetch test info for run %s (test_id=%s)", run_id, run.test_id)
 
-        comments = sorted(ArgusTestRunComment.find(test_run_id=run_uuid).all(), key=lambda c: c.posted_at)
+        comments = sorted(await ArgusTestRunComment.find(test_run_id=run_uuid).all(), key=lambda c: c.posted_at)
         comments_data = [c.model_dump() for c in comments]
 
-        all_events = sorted(ArgusEvent.find(run_id=run_uuid).all(), key=lambda ev: ev.created_at)
+        all_events = sorted(await ArgusEvent.find(run_id=run_uuid).all(), key=lambda ev: ev.created_at)
         activity = {
             "run_id": run_uuid,
             "raw_events": [event.model_dump() for event in all_events],
@@ -244,18 +243,18 @@ class ClientService:
         }
 
     @staticmethod
-    def get_config_property(name: str, value: Any | str, run_id: str = None) -> list[RunConfigParam]:
+    async def get_config_property(name: str, value: Any | str, run_id: str = None) -> list[RunConfigParam]:
         dml = RunConfigParam.find(name=name, value=str(value))
         if run_id:
             dml = dml.filter(run_id=str(run_id))
 
-        return dml.all()
+        return await dml.all()
 
     @staticmethod
-    def get_config_store(run_id: str, config_name: str) -> RunConfiguration:
+    async def get_config_store(run_id: str, config_name: str) -> RunConfiguration:
         run_id = UUID(run_id) if isinstance(run_id, str) else run_id
         try:
-            config_store = RunConfiguration.get(run_id=run_id, name=config_name)
+            config_store = await RunConfiguration.get(run_id=run_id, name=config_name)
         except DocumentNotFound:
             config_store = RunConfiguration.model_construct()
             config_store.run_id = run_id
@@ -264,13 +263,12 @@ class ClientService:
         return config_store
 
     @staticmethod
-    def get_all_configs(run_id: str) -> list[RunConfiguration]:
+    async def get_all_configs(run_id: str) -> list[RunConfiguration]:
         run_id = UUID(run_id) if isinstance(run_id, str) else run_id
-        config_store = RunConfiguration.find(run_id=run_id).all()
-        return list(config_store)
+        return await RunConfiguration.find(run_id=run_id).all()
 
     @staticmethod
-    def parse_config_values(name: str, config: str, run_id: str):
+    async def parse_config_values(name: str, config: str, run_id: str):
         def is_scalar(value: Any):
             match (value):
                 case list():
@@ -297,7 +295,7 @@ class ClientService:
                 param.name = f"{level}{key}"
                 param.value = str(value) or "null"
                 param.run_id = run_id
-                param.save()
+                await param.save()
             else:
                 if isinstance(value, dict):
                     loaded_items.extend([f"{level}{key}.", inner_key, value] for inner_key, value in value.items())
@@ -305,11 +303,11 @@ class ClientService:
                     loaded_items.extend([f"{level}{key}.", str(idx), value] for idx, value in enumerate(value))
 
     @classmethod
-    def submit_config(cls, run_id: str, config_name: str, config_content: str) -> bool:
-        config_store = cls.get_config_store(run_id, config_name)
+    async def submit_config(cls, run_id: str, config_name: str, config_content: str) -> bool:
+        config_store = await cls.get_config_store(run_id, config_name)
         decoded_config = str(base64.decodebytes(bytes(config_content, encoding="utf-8")), encoding="utf-8")
 
         config_store.content = decoded_config
-        cls.parse_config_values(config_name, decoded_config, run_id)
-        config_store.save()
+        await cls.parse_config_values(config_name, decoded_config, run_id)
+        await config_store.save()
         return True

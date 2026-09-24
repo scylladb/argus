@@ -6,7 +6,7 @@ from urllib.parse import unquote
 from typing import Any, Callable
 from uuid import UUID
 
-from coodie.sync import Document
+from coodie.aio import Document
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest
@@ -24,11 +24,11 @@ class TestLookup:
         return mapped
 
     @classmethod
-    def explode_group(cls, group_id: UUID | str):
+    async def explode_group(cls, group_id: UUID | str):
         group_id = UUID(group_id) if isinstance(group_id, str) else group_id
-        group = ArgusGroup.get(id=group_id)
-        release = ArgusRelease.get(id=group.release_id)
-        tests = ArgusTest.find(group_id=group.id).all()
+        group = await ArgusGroup.get(id=group_id)
+        release = await ArgusRelease.get(id=group.release_id)
+        tests = await ArgusTest.find(group_id=group.id).all()
 
         exploded = []
         for test in tests:
@@ -41,10 +41,10 @@ class TestLookup:
         return exploded
 
     @classmethod
-    def find_run(self, run_id: UUID) -> PluginModelBase | None:
+    async def find_run(cls, run_id: UUID) -> PluginModelBase | None:
         for model in all_plugin_models():
             try:
-                return model.get(id=run_id)
+                return await model.get(id=run_id)
             except DocumentNotFound:
                 pass
         return None
@@ -58,40 +58,42 @@ class TestLookup:
             return None
 
     @classmethod
-    def resolve_run_test(cls, test_id: UUID) -> ArgusTest:
+    async def resolve_run_test(cls, test_id: UUID) -> ArgusTest:
         try:
-            test = ArgusTest.get(id=test_id)
+            test = await ArgusTest.get(id=test_id)
             return test
         except DocumentNotFound:
             return None
 
     @classmethod
-    def resolve_run_group(cls, group_id: UUID) -> ArgusGroup:
+    async def resolve_run_group(cls, group_id: UUID) -> ArgusGroup:
         try:
-            group = ArgusGroup.get(id=group_id)
+            group = await ArgusGroup.get(id=group_id)
             return group
         except DocumentNotFound:
             return None
 
     @classmethod
-    def resolve_run_release(cls, run_test_id: UUID) -> ArgusRelease:
+    async def resolve_run_release(cls, run_test_id: UUID) -> ArgusRelease:
         try:
-            release = ArgusRelease.get(id=run_test_id)
+            release = await ArgusRelease.get(id=run_test_id)
             return release
         except DocumentNotFound:
             return None
 
     @classmethod
-    def make_single_run_response(cls, run_id: UUID) -> list[dict[str, Any]]:
-        run = cls.find_run(run_id)
+    async def make_single_run_response(cls, run_id: UUID) -> list[dict[str, Any]]:
+        run = await cls.find_run(run_id)
         if run:
             run = run.model_dump()
             run["type"] = "run"
-            run["test"] = cls.resolve_run_test(run["test_id"]).model_dump() if run["test_id"] else None
+            run["test"] = (await cls.resolve_run_test(run["test_id"])).model_dump() if run["test_id"] else None
             if run["test"]:
                 name = run["test"]["name"]
-            run["group"] = cls.resolve_run_group(run["group_id"]).model_dump()if run["group_id"] else None
-            run["release"] = cls.resolve_run_release(run["release_id"]).model_dump() if run["release_id"] else None
+            run["group"] = (await cls.resolve_run_group(run["group_id"])).model_dump() if run["group_id"] else None
+            run["release"] = (
+                (await cls.resolve_run_release(run["release_id"])).model_dump() if run["release_id"] else None
+            )
             run["name"] = f"{name}#{run['build_number']}"
 
             return [run]
@@ -99,11 +101,11 @@ class TestLookup:
         return []
 
     @classmethod
-    def test_lookup(cls, query: str, release_id: UUID | str = None):
+    async def test_lookup(cls, query: str, release_id: UUID | str = None):
         if release_id:
             release_id = UUID(release_id) if isinstance(release_id, str) else release_id
         if uuid := cls.query_to_uuid(query):
-            return cls.make_single_run_response(uuid)
+            return await cls.make_single_run_response(uuid)
 
         def check_visibility(entity: dict):
             if entity["type"] == "release" and release_id:
@@ -154,16 +156,16 @@ class TestLookup:
                 search_func = facet_wrapper(query_func=search_func, facet_query=value, facet_type=facet)
 
         if release_id:
-            all_releases = [ArgusRelease.get(id=release_id)]
+            all_releases = [await ArgusRelease.get(id=release_id)]
         else:
-            all_releases = ArgusRelease.find().all()
+            all_releases = await ArgusRelease.find().all()
         tests_query = ArgusTest.find()
         groups_query = ArgusGroup.find()
         if release_id:
             tests_query = tests_query.filter(release_id=release_id)
             groups_query = groups_query.filter(release_id=release_id)
-        all_tests = tests_query.all()
-        all_groups = groups_query.all()
+        all_tests = await tests_query.all()
+        all_groups = await groups_query.all()
         release_by_id = {release.id: partial(cls.index_mapper, type="release")(release) for release in all_releases}
         group_by_id = {group.id: partial(cls.index_mapper, type="group")(group) for group in all_groups}
         index = [cls.index_mapper(t) for t in all_tests]
