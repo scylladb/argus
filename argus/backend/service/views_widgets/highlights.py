@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass
 from datetime import datetime, UTC
 from uuid import UUID
@@ -214,20 +215,25 @@ class HighlightsService:
     async def _process_mentions(self, content: str, current_user_id: UUID) -> set:
         """Process mentions from content and return set of users to notify."""
         content_stripped = strip_html_tags(content)
-        mentions = set()
-        for potential_mention in re.findall(self.RE_MENTION, content_stripped):
-            if user := await User.exists_by_name(potential_mention.lstrip("@")):
-                mentions.add(user) if user.id != current_user_id else None
+        users = await asyncio.gather(
+            *(User.exists_by_name(potential_mention.lstrip("@"))
+              for potential_mention in re.findall(self.RE_MENTION, content_stripped))
+        )
+        mentions = {user for user in users if user and user.id != current_user_id}
         return mentions, content_stripped
 
     async def _send_highlight_notifications(self, mentions: set, content: str, view_id: UUID, sender_id: UUID,
                                             is_action_item: bool, is_comment: bool = False):
         """Send notifications to mentioned users."""
-        view = await ArgusUserView.get(id=view_id)
+        lookups = [ArgusUserView.get(id=view_id)]
+        if mentions:
+            lookups.append(User.get(id=sender_id))
+        view, *sender = await asyncio.gather(*lookups)
         highlight_type = "action item" if is_action_item else "highlight"
-        sender_username = (await User.get(id=sender_id)).username if mentions else None
-        for mention in mentions:
-            await NotificationManagerService().send_notification(
+        sender_username = sender[0].username if sender else None
+        notification_manager = NotificationManagerService()
+        await asyncio.gather(*(
+            notification_manager.send_notification(
                 receiver=mention.id,
                 sender=sender_id,
                 notification_type=ArgusNotificationTypes.ViewHighlightMention,
@@ -243,6 +249,8 @@ class HighlightsService:
                     "message": content,
                 }
             )
+            for mention in mentions
+        ))
 
     async def create(
             self,
