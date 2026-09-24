@@ -548,9 +548,8 @@ class ReleaseStatsCollector:
         all_tests: list[ArgusTest] = list(ArgusTest.find(release_id=self.release.id).all())
         build_ids = reduce(lambda acc, test: acc[test.plugin_name or "unknown"].append(
             test.build_system_id) or acc, all_tests, defaultdict(list))
-        self.release_rows = [futures for plugin in all_plugin_models()
-                             for futures in plugin.get_stats_for_release(release=self.release, build_ids=build_ids.get(plugin._plugin_name, []))]
-        self.release_rows = [row for future in self.release_rows for row in future.result()]
+        self.release_rows = [row for plugin in all_plugin_models()
+                             for row in plugin.get_stats_for_release(release=self.release, build_ids=build_ids.get(plugin._plugin_name, []))]
         if self.release.dormant and not force:
             return {
                 "dormant": True
@@ -630,9 +629,8 @@ class ViewStatsCollector:
         if widget and widget.get("filter"):
             all_tests = [test for test in all_tests if any(str(getattr(test, key)) in widget["filter"] for key in ["id", "group_id", "release_id"])]
         build_ids = reduce(lambda acc, test: acc[test.plugin_name or "unknown"].append(test.build_system_id) or acc, all_tests, defaultdict(list))
-        self.view_rows = [futures for plugin in all_plugin_models()
-                          for futures in plugin.get_stats_for_release(release=self.view, build_ids=build_ids.get(plugin._plugin_name, []))]
-        self.view_rows = [row for future in self.view_rows for row in future.result()]
+        self.view_rows = [row for plugin in all_plugin_models()
+                          for row in plugin.get_stats_for_release(release=self.view, build_ids=build_ids.get(plugin._plugin_name, []))]
 
         if self.filter:
             if include_no_version:

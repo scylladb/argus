@@ -124,19 +124,14 @@ class PluginModelBase(Document):
         return bound_query
 
     @classmethod
-    def get_stats_for_release(cls, release: ArgusRelease, build_ids=list[str]):
+    def get_stats_for_release(cls, release: ArgusRelease, build_ids: list[str]) -> list[dict]:
         cluster = ScyllaCluster.get()
         query = cluster.prepare(cls._stats_query())
-        futures = []
-        step_size = 90
-
-        for step in range(0, ceil(len(build_ids) / step_size)):
-            start_pos = step*step_size
-            next_slice = build_ids[start_pos:start_pos+step_size]
-            futures.append(cluster.session.execute_async(query=query, parameters=(next_slice,),
-                                                         execution_profile="read_fast"))
-
-        return futures
+        futures = [
+            cluster.session.execute_async(query=query, parameters=(batch,), execution_profile="read_fast")
+            for batch in chunk(build_ids)
+        ]
+        return [row for future in futures for row in future.result()]
 
     @classmethod
     def get_run_meta_by_build_id(cls, build_id: str, limit: int = 10):
