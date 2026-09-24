@@ -1,4 +1,5 @@
 
+import asyncio
 import logging
 import datetime
 import json
@@ -17,7 +18,7 @@ from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, ArgusU
 from argus.backend.service.jenkins_service import JenkinsService
 from argus.backend.service.test_lookup import TestLookup
 from argus.backend.service.views import UserViewService
-from argus.backend.util.common import chunk
+from argus.backend.util.common import chunk, gather_limited
 
 
 LOGGER = logging.getLogger(__name__)
@@ -706,69 +707,66 @@ class PlanningService:
         test_ids = [test_id for plan in plans for test_id in plan.tests]
         group_ids = [group_id for plan in plans for group_id in plan.groups]
 
-        tests = []
-        for batch in chunk(test_ids):
-            tests.extend(await ArgusTest.find(id__in=batch).all())
-
-        for batch in (chunk(group_ids)):
-            tests.extend(await ArgusTest.find(
-                group_id__in=batch).allow_filtering().all())
-
-        tests = list({test for test in tests})
+        test_batches = await asyncio.gather(
+            *(ArgusTest.find(id__in=batch).all() for batch in chunk(test_ids)),
+            *(ArgusTest.find(group_id__in=batch).allow_filtering().all() for batch in chunk(group_ids)),
+        )
+        tests = list({test for batch in test_batches for test in batch})
 
         LOGGER.info("Will trigger %s tests...", len(tests))
 
         service = JenkinsService()
-        failures = []
-        successes = []
-        for test in tests:
-            try:
-                latest_build_number = await service.latest_build(
-                    test.build_system_id)
-                if latest_build_number == -1:
-                    failures.append(test.build_system_id)
-                    continue
-                raw_params = await service.retrieve_job_parameters(
-                    test.build_system_id, latest_build_number)
-                job_params = {param["name"]: param["value"]
-                              for param in raw_params if param.get("value")}
-                backend = job_params.get("backend")
-                match backend.split("-"):
-                    case ["aws", *_]:
-                        region_key = "region"
-                    case ["gce", *_]:
-                        region_key = "gce_datacenter"
-                    case ["azure", *_]:
-                        region_key = "azure_region_name"
-                    case ["oci", *_]:
-                        region_key = "oci_region_name"
-                    case _:
-                        raise PlannerServiceException(
-                            f"Unknown backend encountered: {backend}", backend)
-
-                job_params = None
-                for param_set in params:
-                    if param_set["test"] == "longevity" and backend == param_set["backend"]:
-                        job_params = dict(param_set)
-                        job_params.pop("type", None)
-                        region = job_params.pop("region", None)
-                        job_params[region_key] = region
-                        break
-                if not job_params:
-                    raise PlannerServiceException(
-                        f"Parameters not found for job {test.build_system_id}", test.build_system_id)
-                final_params = {**job_params, **common_params, **job_params}
-                queue_item = await service.build_job(
-                    test.build_system_id, final_params, username)
-                info = await service.get_queue_info(queue_item)
-                url = info.get("url", info.get("taskUrl", ""))
-                successes.append(url)
-            except Exception:
-                LOGGER.error("Failed to trigger %s",
-                             test.build_system_id, exc_info=True)
-                failures.append(test.build_system_id)
+        urls = await gather_limited(
+            (self._trigger_one(service, test, params, common_params, username) for test in tests), limit=5
+        )
 
         return {
-            "jobs": successes,
-            "failed_to_execute": failures,
+            "jobs": [url for url in urls if url is not None],
+            "failed_to_execute": [test.build_system_id for test, url in zip(tests, urls) if url is None],
         }
+
+    async def _trigger_one(self, service: JenkinsService, test: ArgusTest, params: list[dict],
+                           common_params: dict, username: str) -> str | None:
+        try:
+            latest_build_number = await service.latest_build(
+                test.build_system_id)
+            if latest_build_number == -1:
+                return None
+            raw_params = await service.retrieve_job_parameters(
+                test.build_system_id, latest_build_number)
+            job_params = {param["name"]: param["value"]
+                          for param in raw_params if param.get("value")}
+            backend = job_params.get("backend")
+            match backend.split("-"):
+                case ["aws", *_]:
+                    region_key = "region"
+                case ["gce", *_]:
+                    region_key = "gce_datacenter"
+                case ["azure", *_]:
+                    region_key = "azure_region_name"
+                case ["oci", *_]:
+                    region_key = "oci_region_name"
+                case _:
+                    raise PlannerServiceException(
+                        f"Unknown backend encountered: {backend}", backend)
+
+            job_params = None
+            for param_set in params:
+                if param_set["test"] == "longevity" and backend == param_set["backend"]:
+                    job_params = dict(param_set)
+                    job_params.pop("type", None)
+                    region = job_params.pop("region", None)
+                    job_params[region_key] = region
+                    break
+            if not job_params:
+                raise PlannerServiceException(
+                    f"Parameters not found for job {test.build_system_id}", test.build_system_id)
+            final_params = {**job_params, **common_params, **job_params}
+            queue_item = await service.build_job(
+                test.build_system_id, final_params, username)
+            info = await service.get_queue_info(queue_item)
+            return info.get("url", info.get("taskUrl", ""))
+        except Exception:
+            LOGGER.error("Failed to trigger %s",
+                         test.build_system_id, exc_info=True)
+            return None
