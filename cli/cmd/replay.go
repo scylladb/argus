@@ -284,7 +284,14 @@ func uploadReplay(
 	req.Header.Set("Content-Type", "application/x-tar-zstd")
 
 	resp, err := client.DoStream(req)
-	if packErr := <-packErrCh; packErr != nil {
+	packErr := <-packErrCh
+	if errors.Is(packErr, io.ErrClosedPipe) {
+		// The HTTP side closed the body before reading all of it: the request
+		// was rejected, or the server answered early. err or resp holds the
+		// cause.
+		packErr = nil
+	}
+	if packErr != nil {
 		if resp != nil {
 			_, _ = io.Copy(io.Discard, resp.Body)
 			_ = resp.Body.Close()

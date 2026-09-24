@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -19,11 +21,12 @@ import (
 )
 
 const (
-	// cfTokenMaxAge is the maximum time a Cloudflare Access JWT is considered
-	// fresh after it was issued. Tokens older than this trigger a new
-	// `cloudflared access login` even if the token's own "exp" claim has not
-	// yet been reached.
-	cfTokenMaxAge = 12 * time.Hour
+	// CFTokenExpiryMargin is how close to "exp" a cached CF token counts as
+	// expiring: interactive flows re-login, non-interactive ones warn.
+	CFTokenExpiryMargin = 5 * time.Minute
+
+	// staleSuffix marks a cached CF token file set aside during a re-login.
+	staleSuffix = ".stale"
 
 	// patDuration is the lifetime requested for API tokens issued by the CLI.
 	patDuration = "14d"
@@ -34,6 +37,9 @@ var (
 	// ErrGettingCFToken is returned when the cloudflared access token
 	// sub-command fails.
 	ErrGettingCFToken = errors.New("auth: getting cloudflare access token")
+
+	// ErrCFTokenExpired is returned when the cached CF token passed its "exp".
+	ErrCFTokenExpired = errors.New("auth: cached cloudflare access token is expired")
 
 	// ErrCFLogin is returned when the cloudflared access login sub-command
 	// fails or produces no recognisable JWT in its output.
@@ -125,33 +131,40 @@ func NewArgusService(argusURL, cloudflaredBin string, opts ...ArgusOption) *Argu
 	return s
 }
 
-// CachedCFToken reads the Cloudflare Access JWT from cloudflared's local
-// token cache (~/.cloudflared/) without any network call or browser
-// interaction.  It returns a non-expired, non-stale token on success, or an
-// error if the cached token is missing, expired, or older than [cfTokenMaxAge].
-//
-// This is intended for attaching the CF Access cookie to normal API requests
-// so they pass through Cloudflare Access to the backend.
-func (s *ArgusService) CachedCFToken(ctx context.Context) (string, error) {
+// CFToken is a Cloudflare Access JWT read from cloudflared's local cache.
+type CFToken struct {
+	Value     string
+	ExpiresAt time.Time // zero when the token carries no "exp"
+}
+
+// ExpiresWithin reports whether the token expires in less than d.
+func (t CFToken) ExpiresWithin(d time.Duration) bool {
+	return !t.ExpiresAt.IsZero() && time.Until(t.ExpiresAt) < d
+}
+
+// CachedCFToken reads the CF token from cloudflared's local cache without any
+// network call. It returns [ErrCFTokenExpired] once "exp" has passed.
+func (s *ArgusService) CachedCFToken(ctx context.Context) (CFToken, error) {
 	cached, err := s.runCFAccessToken(ctx)
 	if err != nil {
-		return "", err
+		return CFToken{}, err
 	}
-	expired, jwtErr := jwt.IsExpired(cached)
-	if jwtErr != nil {
-		return "", jwtErr
+	tok, err := newCFToken(cached)
+	if err != nil {
+		return CFToken{}, err
 	}
-	if expired {
-		return "", fmt.Errorf("%w: cached CF token is expired", ErrGettingCFToken)
+	if tok.ExpiresWithin(0) {
+		return CFToken{}, ErrCFTokenExpired
 	}
-	tooOld, ageErr := jwt.IsOlderThan(cached, cfTokenMaxAge)
-	if ageErr != nil {
-		return "", ageErr
+	return tok, nil
+}
+
+func newCFToken(value string) (CFToken, error) {
+	exp, err := jwt.ExpiresAt(value)
+	if err != nil {
+		return CFToken{}, err
 	}
-	if tooOld {
-		return "", fmt.Errorf("%w: cached CF token is older than %s", ErrGettingCFToken, cfTokenMaxAge)
-	}
-	return cached, nil
+	return CFToken{Value: value, ExpiresAt: exp}, nil
 }
 
 // Login obtains a Cloudflare Access token and, unless the keychain already
@@ -167,10 +180,11 @@ func (s *ArgusService) CachedCFToken(ctx context.Context) (string, error) {
 // first (e.g. by making a lightweight API call) and only call Login when
 // those credentials are known to be invalid.
 func (s *ArgusService) Login(ctx context.Context) error {
-	cfToken, err := s.GetOrFetchCFToken(ctx)
+	tok, err := s.GetOrFetchCFToken(ctx)
 	if err != nil {
 		return err
 	}
+	cfToken := tok.Value
 
 	if pat, patErr := keychain.LoadPAT(); patErr == nil {
 		valid, err := s.patIsValid(ctx, pat, cfToken)
@@ -295,33 +309,51 @@ func (s *ArgusService) fetchPAT(ctx context.Context, session, cfToken string) (s
 	return result.Token, nil
 }
 
-// GetOrFetchCFToken returns a valid CF Access JWT.  It first tries
-// `cloudflared access token --app <url>` which reads the token from
-// cloudflared's local token cache (~/.cloudflared/) without any network call
-// or browser interaction.  If that fails or the token is expired / too old,
-// it falls back to `cloudflared access login` which opens a browser.
-func (s *ArgusService) GetOrFetchCFToken(ctx context.Context) (string, error) {
-	// Try the fast, local-only `access token` subcommand first.
-	if cached, err := s.runCFAccessToken(ctx); err == nil {
-		expired, jwtErr := jwt.IsExpired(cached)
-		if jwtErr == nil && !expired {
-			// Also enforce a hard 12 h maximum regardless of what the token's
-			// own "exp" claim says — CF tokens can be issued with long
-			// lifetimes but we want to re-authenticate regularly.
-			tooOld, ageErr := jwt.IsOlderThan(cached, cfTokenMaxAge)
-			if ageErr == nil && !tooOld {
-				return cached, nil
-			}
+// GetOrFetchCFToken returns the cached CF token unless it is missing, expired
+// or expiring within [CFTokenExpiryMargin]; then it runs `cloudflared access
+// login`, which may open a browser. The result can still expire within the
+// margin when cloudflared hands back the cached token.
+func (s *ArgusService) GetOrFetchCFToken(ctx context.Context) (CFToken, error) {
+	cached, err := s.CachedCFToken(ctx)
+	if err == nil && !cached.ExpiresWithin(CFTokenExpiryMargin) {
+		return cached, nil
+	}
+	var stashed []string
+	if err == nil {
+		// `access login` reuses any unexpired cached token. Set it aside to
+		// force a real re-login, and put it back when the login fails.
+		stashed = s.stashCachedCFToken()
+	}
+	tok, err := s.runCFLogin(ctx)
+	for _, p := range stashed {
+		if err != nil {
+			err = errors.Join(err, os.Rename(p+staleSuffix, p))
+		} else {
+			_ = os.Remove(p + staleSuffix)
 		}
 	}
+	return tok, err
+}
 
-	// Fall back to the full browser-based login flow.
-	fresh, err := s.runCFLogin(ctx)
+// stashCachedCFToken renames cloudflared's cached token files for the Argus
+// host with [staleSuffix] and returns their original paths.
+func (s *ArgusService) stashCachedCFToken() []string {
+	u, err := url.Parse(s.argusURL)
 	if err != nil {
-		return "", err
+		return nil
 	}
-
-	return fresh, nil
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	matches, _ := filepath.Glob(filepath.Join(home, ".cloudflared", u.Hostname()+"-*-token"))
+	var stashed []string
+	for _, m := range matches {
+		if os.Rename(m, m+staleSuffix) == nil {
+			stashed = append(stashed, m)
+		}
+	}
+	return stashed
 }
 
 // runCFAccessToken runs:
@@ -360,7 +392,7 @@ func (s *ArgusService) runCFAccessToken(ctx context.Context) (string, error) {
 // success it prints a URL (for manual use) followed by the JWT on the last
 // non-empty line of stdout.  This function captures that output and returns
 // the JWT.
-func (s *ArgusService) runCFLogin(ctx context.Context) (string, error) {
+func (s *ArgusService) runCFLogin(ctx context.Context) (CFToken, error) {
 	cmd := exec.CommandContext(ctx, s.cloudflaredBin, //nolint:gosec
 		"access", "login",
 		"--no-verbose",
@@ -377,22 +409,26 @@ func (s *ArgusService) runCFLogin(ctx context.Context) (string, error) {
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Start(); err != nil {
-		return "", fmt.Errorf("%w: %w", ErrCFLogin, err)
+		return CFToken{}, fmt.Errorf("%w: %w", ErrCFLogin, err)
 	}
 
 	if err := cmd.Wait(); err != nil {
-		return "", fmt.Errorf("%w: %w\n%s", ErrCFLogin, err, out.String())
+		return CFToken{}, fmt.Errorf("%w: %w\n%s", ErrCFLogin, err, out.String())
 	}
 
 	// The JWT is the last non-empty line of stdout.  Print all lines except
 	// the token itself so the user sees the browser-URL prompt.
 	token := lastNonEmptyLine(out.String())
 	if token == "" {
-		return "", fmt.Errorf("%w: no token found in cloudflared output:\n%s", ErrCFLogin, out.String())
+		return CFToken{}, fmt.Errorf("%w: no token found in cloudflared output:\n%s", ErrCFLogin, out.String())
 	}
 	printCFLoginOutput(out.String(), token)
 
-	return token, nil
+	tok, err := newCFToken(token)
+	if err != nil {
+		return CFToken{}, fmt.Errorf("%w: %w", ErrCFLogin, err)
+	}
+	return tok, nil
 }
 
 // printCFLoginOutput writes every non-empty line from cloudflared stdout to

@@ -218,11 +218,21 @@ func buildAPIClientRaw(ctx context.Context, cfg *config.Config, extraOpts ...api
 	}
 
 	if cfg.UseCf && !cfBypass {
-		// Obtain a valid Cloudflare Access JWT via the cloudflared CLI.
-		// This is required for every request to pass through CF Access.
 		interactive := !NonInteractiveFrom(ctx)
-		if cfToken, err := ensureCFToken(ctx, cfg.URL, interactive); err == nil {
+		cfToken, err := ensureCFToken(ctx, cfg.URL, interactive)
+		switch {
+		case err == nil:
 			apiOpts = append(apiOpts, api.WithCFToken(cfToken))
+		case hasCFServiceTokenEnv():
+			// The service token below gets through Cloudflare Access instead.
+			log := LoggerFrom(ctx)
+			log.Debug().Err(err).Msg("no Cloudflare Access token; using the CF Access service token")
+		default:
+			// Client is still built so config/version/auth keep working; the
+			// first API call fails with the real cause.
+			log := LoggerFrom(ctx)
+			log.Warn().Err(err).Msg("no Cloudflare Access token available for API requests")
+			apiOpts = append(apiOpts, api.WithCFTokenUnavailable(err))
 		}
 	}
 
@@ -250,42 +260,44 @@ func buildAPIClientRaw(ctx context.Context, cfg *config.Config, extraOpts ...api
 	return client, nil
 }
 
+func hasCFServiceTokenEnv() bool {
+	return os.Getenv("ARGUS_CF_ACCESS_CLIENT_ID") != "" && os.Getenv("ARGUS_CF_ACCESS_CLIENT_SECRET") != ""
+}
+
 func envBoolTrue(name string) bool {
 	v := strings.TrimSpace(strings.ToLower(os.Getenv(name)))
 	return v == "1" || v == "true" || v == "yes" || v == "on"
 }
 
-// cachedCFToken attempts to read a valid Cloudflare Access JWT from
-// cloudflared's local token cache.  It locates the cloudflared binary (PATH
-// or managed cache) and delegates to [auth.ArgusService.CachedCFToken].
-//
-// When interactive is false (--non-interactive), it returns whatever the
-// cached token is (if any) without opening a browser.
+// ensureCFToken returns the CF token for API requests. Interactive mode
+// re-logins when the cached token is missing, expired or about to expire.
+// Non-interactive mode cannot, so it uses any unexpired token. Both modes warn
+// when the token they return is about to expire.
 func ensureCFToken(ctx context.Context, argusURL string, interactive bool) (string, error) {
 	cfSvc := services.NewCloudflaredService()
 	binPath, err := cfSvc.Ensure(ctx)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("locating cloudflared: %w", err)
 	}
 	argusSvc := auth.NewArgusService(argusURL, binPath)
 
-	// Try the fast path: read from cloudflared's local cache.
-	if cfToken, err := argusSvc.CachedCFToken(ctx); err == nil {
-		return cfToken, nil
+	var cfToken auth.CFToken
+	if interactive {
+		cfToken, err = argusSvc.GetOrFetchCFToken(ctx)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		cfToken, err = argusSvc.CachedCFToken(ctx)
+		if err != nil {
+			return "", fmt.Errorf("%w; run `argus auth` (or the command without --non-interactive) to log in again", err)
+		}
 	}
-
-	// Cached token is expired/missing/stale. If we can't interact with the
-	// user, return the error — the auth-retry layer will surface it.
-	if !interactive {
-		return "", fmt.Errorf("CF Access token is expired or missing; run `argus auth` or use --non-interactive=false")
+	if cfToken.ExpiresWithin(auth.CFTokenExpiryMargin) {
+		log := LoggerFrom(ctx)
+		log.Warn().Time("expires_at", cfToken.ExpiresAt).Msg("Cloudflare Access token is about to expire; run `argus auth`")
 	}
-
-	// Interactive: run the full cloudflared login flow (opens browser).
-	cfToken, loginErr := argusSvc.GetOrFetchCFToken(ctx)
-	if loginErr != nil {
-		return "", loginErr
-	}
-	return cfToken, nil
+	return cfToken.Value, nil
 }
 
 // isUnauthorizedErr reports whether err is (or wraps) an unauthorized /

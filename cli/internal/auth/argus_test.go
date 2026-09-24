@@ -138,8 +138,7 @@ func makeJWT(exp, iat int64) string {
 	return fmt.Sprintf("%s.%s.stub-signature", header, payloadB64)
 }
 
-// validJWT returns a JWT with an expiry 13 hours in the future and an iat of
-// now, so it passes the 12 h maximum-age cap enforced by IsOlderThan.
+// validJWT returns a JWT that expires 13 hours from now.
 func validJWT() string {
 	now := time.Now()
 	return makeJWT(now.Add(13*time.Hour).Unix(), now.Unix())
@@ -583,4 +582,114 @@ func TestArgusService_Login_ErrStartingProcess(t *testing.T) {
 	// The underlying exec error wraps ErrCFLogin (exec.Command fails with
 	// "no such file or directory" which surfaces through runCFLogin).
 	assert.ErrorIs(t, err, auth.ErrCFLogin)
+}
+
+// --------------------------------------------------------------------------
+// CachedCFToken / GetOrFetchCFToken expiry handling
+// --------------------------------------------------------------------------
+
+// expiringJWT returns a JWT that expires in one minute: inside CFTokenExpiryMargin.
+func expiringJWT() string { return makeJWT(time.Now().Add(time.Minute).Unix(), 0) }
+
+func TestArgusService_CachedCFToken_Valid(t *testing.T) {
+	tok := validJWT()
+	binPath := fakeCFBin(t, tok, 1, 0) // access login would fail: must not be needed
+	svc := auth.NewArgusService("https://argus.example.com", binPath)
+
+	got, err := svc.CachedCFToken(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, tok, got.Value)
+	assert.False(t, got.ExpiresWithin(auth.CFTokenExpiryMargin))
+}
+
+func TestArgusService_CachedCFToken_Expiring(t *testing.T) {
+	binPath := fakeCFBin(t, expiringJWT(), 1, 0)
+	svc := auth.NewArgusService("https://argus.example.com", binPath)
+
+	got, err := svc.CachedCFToken(t.Context())
+	require.NoError(t, err)
+	assert.True(t, got.ExpiresWithin(auth.CFTokenExpiryMargin))
+}
+
+func TestArgusService_CachedCFToken_Expired(t *testing.T) {
+	binPath := fakeCFBin(t, expiredJWT(), 1, 0)
+	svc := auth.NewArgusService("https://argus.example.com", binPath)
+
+	_, err := svc.CachedCFToken(t.Context())
+	assert.ErrorIs(t, err, auth.ErrCFTokenExpired)
+}
+
+func TestArgusService_CachedCFToken_AccessTokenFails(t *testing.T) {
+	binPath := fakeCFBin(t, validJWT(), 0, 1) // access token exits 1
+	svc := auth.NewArgusService("https://argus.example.com", binPath)
+
+	_, err := svc.CachedCFToken(t.Context())
+	require.ErrorIs(t, err, auth.ErrGettingCFToken)
+}
+
+// An old token that is not close to expiring is reused, regardless of age.
+func TestArgusService_GetOrFetchCFToken_ReusesOldValidToken(t *testing.T) {
+	now := time.Now()
+	old := makeJWT(now.Add(11*time.Hour).Unix(), now.Add(-13*time.Hour).Unix())
+	binPath := fakeCFBin(t, old, 1, 0)
+	svc := auth.NewArgusService("https://argus.example.com", binPath)
+
+	got, err := svc.GetOrFetchCFToken(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, old, got.Value)
+}
+
+// cfCacheFiles creates cloudflared app-token files named <host>-<aud>-token
+// under a temporary HOME and returns the Argus file and another host's file.
+func cfCacheFiles(t *testing.T) (argus, other string) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cacheDir := filepath.Join(home, ".cloudflared")
+	require.NoError(t, os.MkdirAll(cacheDir, 0o700))
+	argus = filepath.Join(cacheDir, "argus.example.com-abc123-token")
+	require.NoError(t, os.WriteFile(argus, []byte("cached"), 0o600))
+	other = filepath.Join(cacheDir, "other.example.com-abc123-token")
+	require.NoError(t, os.WriteFile(other, []byte("keep"), 0o600))
+	return argus, other
+}
+
+// An expiring token is removed from cloudflared's cache and replaced via login.
+func TestArgusService_GetOrFetchCFToken_ExpiringTokenTriggersLogin(t *testing.T) {
+	cached, other := cfCacheFiles(t)
+
+	fresh := validJWT()
+	binPath := fakeCFBinDualToken(t, expiringJWT(), fresh)
+	svc := auth.NewArgusService("https://argus.example.com", binPath)
+
+	got, err := svc.GetOrFetchCFToken(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, fresh, got.Value)
+	assert.NoFileExists(t, cached)
+	assert.NoFileExists(t, cached+".stale")
+	assert.FileExists(t, other)
+}
+
+// A failed re-login puts the expiring token back in cloudflared's cache.
+func TestArgusService_GetOrFetchCFToken_FailedLoginRestoresToken(t *testing.T) {
+	cached, _ := cfCacheFiles(t)
+
+	binPath := fakeCFBin(t, expiringJWT(), 1, 0) // access login exits 1
+	svc := auth.NewArgusService("https://argus.example.com", binPath)
+
+	_, err := svc.GetOrFetchCFToken(t.Context())
+	require.ErrorIs(t, err, auth.ErrCFLogin)
+	content, readErr := os.ReadFile(cached)
+	require.NoError(t, readErr)
+	assert.Equal(t, "cached", string(content))
+	assert.NoFileExists(t, cached+".stale")
+}
+
+// A login result that is not a JWT is a login failure.
+func TestArgusService_GetOrFetchCFToken_LoginOutputNotJWT(t *testing.T) {
+	binPath := fakeCFBinDualToken(t, expiredJWT(), "not-a-jwt")
+	svc := auth.NewArgusService("https://argus.example.com", binPath)
+
+	_, err := svc.GetOrFetchCFToken(t.Context())
+	require.ErrorIs(t, err, auth.ErrCFLogin)
 }
