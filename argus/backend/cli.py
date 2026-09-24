@@ -6,6 +6,7 @@ Run from the repository root:
     uv run python -m argus.backend.cli refresh-issues
     uv run python -m argus.backend.cli scan-jenkins
 """
+import asyncio
 import logging
 
 import click
@@ -32,38 +33,38 @@ def cli():
 @cli.command("sync-models")
 def sync_models_command():
     main_ks = ScyllaCluster.get().config["SCYLLA_KEYSPACE_NAME"]
-    sync_models(main_ks)
+    asyncio.run(sync_models(main_ks))
 
 
-def sync_models(main_ks: str):
+async def sync_models(main_ks: str):
     cluster = ScyllaCluster.get()
-    cluster.sync_core_tables()
+    await cluster.sync_core_tables()
     LOGGER.info("Synchronizing plugin types...")
     for user_type in all_plugin_types():
         LOGGER.info("Synchronizing plugin type %s...", user_type.__name__)
-        user_type.sync_type()
+        await user_type.sync_type_async()
     cluster.register_coodie_udts()
     LOGGER.info("Synchronizing plugin models...")
     for model in all_plugin_models(True):
         LOGGER.info("Synchronizing plugin model %s...", model.__name__)
-        model.sync_table()
+        await model.sync_table()
 
     LOGGER.info("Plugins ready.")
     cluster.sync_additional_schema()
     click.echo("All models synchronized.")
 
 
-def refresh_issues():
+async def refresh_issues():
     ScyllaCluster.get()
     gh = GithubService()
     j = JiraService()
-    gh.refresh_stale_issues()
-    j.refresh_stale_issues()
+    await gh.refresh_stale_issues()
+    await j.refresh_stale_issues()
 
 
 @cli.command("refresh-issues")
 def refresh_issues_command():
-    refresh_issues()
+    asyncio.run(refresh_issues())
 
 
 def format_scan_status(stats: dict) -> str:
@@ -81,7 +82,7 @@ def scan_jenkins_command():
     monitor = JenkinsMonitor()
     monitor.on_progress = lambda stats: status.set(format_scan_status(stats))
     try:
-        monitor.collect()
+        asyncio.run(monitor.collect())
     finally:
         monitor.report_progress(force=True)
         status.finish()
