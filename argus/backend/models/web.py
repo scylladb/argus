@@ -22,7 +22,7 @@ from argus.backend.models.result import (
 )
 from argus.backend.models.run_config import RunConfigParam, RunConfiguration
 from argus.backend.models.run_cost import RunCost
-from coodie.sync import Document
+from coodie.aio import Document
 
 from argus.backend.models.runtime_store import RuntimeStore
 from argus.backend.models.view_widgets import WidgetHighlights, WidgetComment
@@ -77,13 +77,13 @@ class User(Document):
         if UserRoles.Manager not in self.roles:
             self.roles.append(UserRoles.Manager.value)
 
-    def set_as_service_user(self) -> None:
+    async def set_as_service_user(self) -> None:
         self.service_user = True
-        self.save()
+        await self.save()
 
-    def set_as_normal_user(self) -> None:
+    async def set_as_normal_user(self) -> None:
         self.service_user = False
-        self.save()
+        await self.save()
 
     def is_service_user(self) -> bool:
         return bool(self.service_user)
@@ -92,9 +92,9 @@ class User(Document):
         return str(self.id)
 
     @classmethod
-    def exists(cls, user_id: UUID):
+    async def exists(cls, user_id: UUID):
         try:
-            user = cls.get(id=user_id)
+            user = await cls.get(id=user_id)
             if user:
                 return user
         except DocumentNotFound:
@@ -102,9 +102,9 @@ class User(Document):
         return None
 
     @classmethod
-    def exists_by_name(cls, name: str) -> Optional['User']:
+    async def exists_by_name(cls, name: str) -> Optional['User']:
         try:
-            user = cls.get(username=name)
+            user = await cls.get(username=name)
             if user:
                 return user
         except DocumentNotFound:
@@ -112,9 +112,9 @@ class User(Document):
         return None
 
     @classmethod
-    def exists_by_email(cls, email: str) -> Optional['User']:
+    async def exists_by_email(cls, email: str) -> Optional['User']:
         try:
-            user = cls.get(email=email)
+            user = await cls.get(email=email)
             if user:
                 return user
         except DocumentNotFound:
@@ -243,9 +243,9 @@ class ArgusTest(Document):
         else:
             return super().__eq__(other)
 
-    def validate_build_system_id(self):
+    async def validate_build_system_id(self):
         try:
-            t = ArgusTest.get(build_system_id=self.build_system_id)
+            t = await ArgusTest.get(build_system_id=self.build_system_id)
             if t.id != self.id:
                 raise ArgusTestException("Build Id is already used by another test", t.id, self.id)
         except DocumentNotFound:
@@ -411,7 +411,7 @@ class ReleaseDistinctImages(Document):
 _SNAPSHOT_LOGGER = logging.getLogger(__name__)
 
 
-def invalidate_release_snapshots(release_id: UUID) -> None:
+async def invalidate_release_snapshots(release_id: UUID) -> None:
     """Full-partition delete of all ReleaseStatsSnapshot rows for a release.
 
     Use this for structural or metadata changes that affect all filter
@@ -421,7 +421,7 @@ def invalidate_release_snapshots(release_id: UUID) -> None:
     is used only for run lifecycle events (submit/finish).
     """
     try:
-        ReleaseStatsSnapshot.find(release_id=release_id).delete()
+        await ReleaseStatsSnapshot.find(release_id=release_id).delete()
     except Exception:  # pylint: disable=broad-except
         _SNAPSHOT_LOGGER.warning("Failed to invalidate release snapshots for %s", release_id, exc_info=True)
 

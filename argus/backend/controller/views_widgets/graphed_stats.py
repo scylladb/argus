@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from argus.backend.models.web import ArgusUserView, User
 from argus.backend.service.user import api_current_user
 from argus.backend.service.views_widgets.graphed_stats import GraphedStatsService
+from argus.backend.util.common import gather_limited
 from argus.backend.util.encoders import APIResponse
 
 router = APIRouter(prefix="/widgets")
@@ -16,17 +17,17 @@ class RunsDetailsRequest(BaseModel):
 
 
 @router.get("/graphed_stats", name="api.view_api.graphed_stats.get_graphed_stats")
-def get_graphed_stats(view_id: UUID = Query(...), filters: str | None = Query(None),
+async def get_graphed_stats(view_id: UUID = Query(...), filters: str | None = Query(None),
                       user: User = Depends(api_current_user)):
-    view: ArgusUserView = ArgusUserView.get(id=view_id)
+    view: ArgusUserView = await ArgusUserView.get(id=view_id)
     service = GraphedStatsService()
     response_data = {
         "test_runs": [],
         "nemesis_data": []
     }
 
-    for test_id in view.tests:
-        data = service.get_graphed_stats(test_id, filters)
+    results = await gather_limited(service.get_graphed_stats(test_id, filters) for test_id in view.tests)
+    for data in results:
         response_data["test_runs"].extend(data["test_runs"])
         response_data["nemesis_data"].extend(data["nemesis_data"])
     return APIResponse({
@@ -36,10 +37,10 @@ def get_graphed_stats(view_id: UUID = Query(...), filters: str | None = Query(No
 
 
 @router.post("/runs_details", name="api.view_api.graphed_stats.get_runs_details")
-def get_runs_details(payload: RunsDetailsRequest, user: User = Depends(api_current_user)):
+async def get_runs_details(payload: RunsDetailsRequest, user: User = Depends(api_current_user)):
     """Get detailed information for provided test runs including assignee and attached issues."""
     service = GraphedStatsService()
-    result = service.get_runs_details(payload.run_ids)
+    result = await service.get_runs_details(payload.run_ids)
 
     return APIResponse({
         "status": "ok",

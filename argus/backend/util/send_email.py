@@ -1,5 +1,6 @@
 import logging
 import smtplib
+import threading
 from io import BytesIO
 from typing import List, Set, TypedDict
 from smtplib import SMTPException
@@ -31,6 +32,7 @@ class Email:
         self._server_host: str = ""
         self._server_port: int = 0
         self._connection: smtplib.SMTP | None = None
+        self._send_lock = threading.Lock()
         if init_connection:
             self._connect()
 
@@ -98,9 +100,10 @@ class Email:
         self._send_email(recipients, email)
 
     def _send_email(self, recipients, email):
-        if not self._is_connection_open():
-            self._connect()
-        self._connection.sendmail(self.sender, recipients, email)
+        with self._send_lock:
+            if not self._is_connection_open():
+                self._connect()
+            self._connection.sendmail(self.sender, recipients, email)
 
     def __del__(self):
         if self._connection:

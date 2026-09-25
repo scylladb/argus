@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import binascii
 import hashlib
@@ -174,7 +175,7 @@ class TunnelService:
     # Public key registration
     # ------------------------------------------------------------------
 
-    def register_tunnel(
+    async def register_tunnel(
         self,
         user: User,
         public_key: str,
@@ -206,7 +207,7 @@ class TunnelService:
 
         fingerprint = _derive_fingerprint(public_key)
 
-        configs = self._ordered_active_configs(user.id)
+        configs = await self._ordered_active_configs(user.id)
         config = configs[0]
         proxies = [self._to_endpoint(cfg) for cfg in configs]
 
@@ -229,7 +230,7 @@ class TunnelService:
 
         existing = next(
             (
-                row for row in SSHTunnelKey.find(user_id=user.id)
+                row for row in await SSHTunnelKey.find(user_id=user.id).all()
                 if row.fingerprint == fingerprint and row.tunnel_id == config.id
             ),
             None,
@@ -257,7 +258,7 @@ class TunnelService:
             created_at=now_utc,
             expires_at=expires_at,
         )
-        key.save(ttl=ttl)
+        await key.save(ttl=ttl)
 
         return TunnelRegistrationResponseDTO(
             key_id=key.id,
@@ -272,7 +273,7 @@ class TunnelService:
             proxies=proxies,
         )
 
-    def get_tunnel_connection(
+    async def get_tunnel_connection(
         self,
         user_id: UUID | str,
         proxy_host: str | None = None,
@@ -287,9 +288,9 @@ class TunnelService:
         If ``proxy_host`` is given, that host becomes the primary. The rest of
         the list still follows, so failover keeps working.
         """
-        configs = self._ordered_active_configs(user_id)
+        configs = await self._ordered_active_configs(user_id)
         if proxy_host:
-            pinned = self._get_active_config(proxy_host=proxy_host)
+            pinned = await self._get_active_config(proxy_host=proxy_host)
             configs = [pinned] + [cfg for cfg in configs if cfg.id != pinned.id]
 
         config = configs[0]
@@ -307,7 +308,7 @@ class TunnelService:
     # Authorised keys (used by the proxy host AuthorizedKeysCommand)
     # ------------------------------------------------------------------
 
-    def get_authorized_keys(self, fingerprint: str | None = None) -> str:
+    async def get_authorized_keys(self, fingerprint: str | None = None) -> str:
         """
         Return non-expired public keys in OpenSSH ``authorized_keys`` format
         (one key per line).
@@ -330,14 +331,14 @@ class TunnelService:
         """
         if fingerprint is not None:
             normalised = _normalise_fingerprint(fingerprint)
-            rows = SSHTunnelKey.find(fingerprint=normalised)
+            rows = await SSHTunnelKey.find(fingerprint=normalised).all()
         else:
             LOGGER.warning(
                 "authorized_keys requested without a fingerprint; the proxy host still runs the "
                 "old wrapper. Re-run the argus_tunnel role in qatools-deployments to scope "
                 "the lookup to one key."
             )
-            rows = SSHTunnelKey.find().all()
+            rows = await SSHTunnelKey.find().all()
 
         seen: set[str] = set()
         keys: list[str] = []
@@ -351,7 +352,9 @@ class TunnelService:
     # Key management (admin / informational)
     # ------------------------------------------------------------------
 
-    def list_keys(self, tunnel_id: UUID | str | None = None, user_id: UUID | str | None = None) -> list[SSHTunnelKeyDTO]:
+    async def list_keys(
+        self, tunnel_id: UUID | str | None = None, user_id: UUID | str | None = None
+    ) -> list[SSHTunnelKeyDTO]:
         """
         Return a list of dicts describing all non-expired keys.
 
@@ -376,7 +379,7 @@ class TunnelService:
         if tunnel_id is not None and user_id is None:
             query = query.filter(tunnel_id=tunnel_id)
 
-        rows = list(query.all())
+        rows = await query.all()
 
         if tunnel_id is not None and user_id is not None:
             rows = [row for row in rows if row.tunnel_id == tunnel_id]
@@ -385,23 +388,23 @@ class TunnelService:
 
         return [self._to_ssh_tunnel_key_dto(row) for row in rows]
 
-    def delete_key(self, key_id: UUID | str) -> None:
+    async def delete_key(self, key_id: UUID | str) -> None:
         """Delete a key. ScyllaDB removes the matching view row."""
         if not isinstance(key_id, UUID):
             key_id = UUID(str(key_id))
         try:
-            key = SSHTunnelKey.get(id=key_id)
+            key = await SSHTunnelKey.get(id=key_id)
         except DocumentNotFound:
             LOGGER.info("SSH key %s was already deleted or TTL-expired", key_id)
             return
 
-        key.delete()
+        await key.delete()
 
     # ------------------------------------------------------------------
     # Proxy tunnel config management
     # ------------------------------------------------------------------
 
-    def get_proxy_tunnel_config(self, tunnel_id: UUID | str | None = None) -> ProxyTunnelConfigDTO | None:
+    async def get_proxy_tunnel_config(self, tunnel_id: UUID | str | None = None) -> ProxyTunnelConfigDTO | None:
         """
         Return one active proxy tunnel config.
 
@@ -416,7 +419,7 @@ class TunnelService:
             if not isinstance(tunnel_id, UUID):
                 tunnel_id = UUID(str(tunnel_id))
             try:
-                config = ProxyTunnelConfig.get(id=tunnel_id)
+                config = await ProxyTunnelConfig.get(id=tunnel_id)
                 if not config.is_active:
                     return None
                 return self._to_proxy_tunnel_config_dto(config)
@@ -424,12 +427,12 @@ class TunnelService:
                 return None
 
         try:
-            config = self._get_active_config()
+            config = await self._get_active_config()
             return self._to_proxy_tunnel_config_dto(config)
         except TunnelServiceException:
             return None
 
-    def save_proxy_tunnel_config(self, payload: ProxyTunnelConfigPayload) -> ProxyTunnelCreateResponseDTO:
+    async def save_proxy_tunnel_config(self, payload: ProxyTunnelConfigPayload) -> ProxyTunnelCreateResponseDTO:
         """
         Create a new ``ProxyTunnelConfig`` entry.
 
@@ -457,12 +460,12 @@ class TunnelService:
 
         is_active = payload.get("is_active", True)
         port = int(payload["port"])
-        known_hosts_entry, _ = self._fetch_host_key(payload["host"], port)
+        known_hosts_entry, _ = await self._fetch_host_key(payload["host"], port)
 
         # Create a dedicated service user for this proxy host.
-        service_user, api_token = self._create_proxy_service_user(payload["host"])
+        service_user, api_token = await self._create_proxy_service_user(payload["host"])
 
-        config = ProxyTunnelConfig.create(
+        config = await ProxyTunnelConfig.create(
             id=uuid4(),
             host=payload["host"],
             port=port,
@@ -487,15 +490,15 @@ class TunnelService:
             api_token=api_token,
         )
 
-    def list_proxy_tunnel_configs(self, active_only: bool | None = None) -> list[ProxyTunnelConfigDTO]:
+    async def list_proxy_tunnel_configs(self, active_only: bool | None = None) -> list[ProxyTunnelConfigDTO]:
         """Return proxy tunnel configs, optionally filtered by active state."""
-        rows = list(ProxyTunnelConfig.find().all())
+        rows = await ProxyTunnelConfig.find().all()
         if active_only is not None:
             rows = [row for row in rows if bool(row.is_active) == active_only]
         rows = sorted(rows, key=lambda row: (row.host or "", str(row.id)))
         return [self._to_proxy_tunnel_config_dto(row) for row in rows]
 
-    def delete_proxy_tunnel_config(self, tunnel_id: UUID | str, delete_user: bool = False) -> None:
+    async def delete_proxy_tunnel_config(self, tunnel_id: UUID | str, delete_user: bool = False) -> None:
         """
         Permanently delete a proxy tunnel config.
 
@@ -514,40 +517,40 @@ class TunnelService:
         if not isinstance(tunnel_id, UUID):
             tunnel_id = UUID(str(tunnel_id))
         try:
-            config = ProxyTunnelConfig.get(id=tunnel_id)
+            config = await ProxyTunnelConfig.get(id=tunnel_id)
         except DocumentNotFound as exc:
             raise TunnelServiceException(f"Proxy tunnel config {tunnel_id} not found") from exc
 
         if config.service_user_id:
             try:
-                service_user = User.get(id=config.service_user_id)
+                service_user = await User.get(id=config.service_user_id)
             except DocumentNotFound:
                 service_user = None
             if service_user is not None:
-                UserService().revoke_api_tokens(service_user)
+                await UserService().revoke_api_tokens(service_user)
                 if delete_user:
-                    service_user.delete()
+                    await service_user.delete()
                 else:
                     if UserRoles.SSHTunnelServer.value in service_user.roles:
                         service_user.roles = [
                             role for role in service_user.roles
                             if role != UserRoles.SSHTunnelServer.value
                         ]
-                    service_user.save()
+                    await service_user.save()
 
-        config.delete()
+        await config.delete()
 
-    def set_proxy_tunnel_config_active(self, tunnel_id: UUID | str, is_active: bool) -> ProxyTunnelConfigDTO:
+    async def set_proxy_tunnel_config_active(self, tunnel_id: UUID | str, is_active: bool) -> ProxyTunnelConfigDTO:
         """Enable or disable a specific proxy tunnel config."""
         if not isinstance(tunnel_id, UUID):
             tunnel_id = UUID(str(tunnel_id))
         try:
-            config = ProxyTunnelConfig.get(id=tunnel_id)
+            config = await ProxyTunnelConfig.get(id=tunnel_id)
         except DocumentNotFound as exc:
             raise TunnelServiceException(f"Proxy tunnel config {tunnel_id} not found") from exc
 
-        config.update(is_active=is_active)
-        refreshed = ProxyTunnelConfig.get(id=tunnel_id)
+        await config.update(is_active=is_active)
+        refreshed = await ProxyTunnelConfig.get(id=tunnel_id)
         return self._to_proxy_tunnel_config_dto(refreshed)
 
     # ------------------------------------------------------------------
@@ -555,11 +558,11 @@ class TunnelService:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _get_active_configs() -> list[ProxyTunnelConfig]:
-        return [cfg for cfg in ProxyTunnelConfig.find().all() if cfg.is_active]
+    async def _get_active_configs() -> list[ProxyTunnelConfig]:
+        return [cfg for cfg in await ProxyTunnelConfig.find().all() if cfg.is_active]
 
     @staticmethod
-    def _fetch_host_key(host: str, port: int) -> tuple[str, str]:
+    async def _fetch_host_key(host: str, port: int) -> tuple[str, str]:
         """Run ssh-keyscan and return ``(known_hosts_entry, sha256_fingerprint)``.
 
         ``known_hosts_entry`` is the full ``host keytype keydata`` line suitable
@@ -568,7 +571,8 @@ class TunnelService:
         verification only.
         """
         try:
-            result = subprocess.run(
+            result = await asyncio.to_thread(
+                subprocess.run,
                 ["ssh-keyscan", "-p", str(port), "-t", "ed25519,ecdsa,rsa", host],
                 capture_output=True,
                 text=True,
@@ -618,8 +622,8 @@ class TunnelService:
             raise TunnelServiceException(f"Failed to fetch host key for {host}:{port}: {stderr}")
         raise TunnelServiceException(f"Failed to fetch host key for {host}:{port}")
 
-    def _get_active_config(self, proxy_host: str | None = None) -> ProxyTunnelConfig:
-        configs = self._get_active_configs()
+    async def _get_active_config(self, proxy_host: str | None = None) -> ProxyTunnelConfig:
+        configs = await self._get_active_configs()
         if not configs:
             raise TunnelServiceException(
                 "No active proxy tunnel configuration found. "
@@ -634,7 +638,7 @@ class TunnelService:
 
         return sorted(configs, key=lambda cfg: (cfg.host or "", str(cfg.id)))[0]
 
-    def _ordered_active_configs(self, user_id: UUID | str) -> list[ProxyTunnelConfig]:
+    async def _ordered_active_configs(self, user_id: UUID | str) -> list[ProxyTunnelConfig]:
         """
         Return every active proxy, ordered for ``user_id``, best choice first.
 
@@ -647,7 +651,7 @@ class TunnelService:
         - Minimal churn. Adding or retiring a proxy only moves the users that
           proxy owns. Rotating by ``hash % len`` would reassign everyone.
         """
-        configs = self._get_active_configs()
+        configs = await self._get_active_configs()
         if not configs:
             raise TunnelServiceException(
                 "No active proxy tunnel configuration found. "
@@ -674,7 +678,7 @@ class TunnelService:
         )
 
     @staticmethod
-    def _create_proxy_service_user(host: str) -> tuple[User, str]:
+    async def _create_proxy_service_user(host: str) -> tuple[User, str]:
         """
         Create (or re-use) a service ``User`` for the given proxy host and
         return ``(user, api_token)``.
@@ -688,18 +692,18 @@ class TunnelService:
         username = f"proxy-tunnel-{host}"
 
         # Re-use existing tunnel service user if it already exists.
-        existing = User.exists_by_name(username)
+        existing = await User.exists_by_name(username)
         if existing:
             if not existing.is_service_user() or not UserService.check_roles(UserRoles.SSHTunnelServer, existing):
                 raise TunnelServiceException(
                     f"User '{username}' already exists and is not a dedicated SSH tunnel service user"
                 )
-            if UserService.get_api_tokens(existing):
+            if await UserService.get_api_tokens(existing):
                 return existing, ""
-            return existing, UserService().generate_token(existing, duration=None).token
+            return existing, (await UserService().generate_token(existing, duration=None)).token
 
         now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
-        user = User.create(
+        user = await User.create(
             id=uuid4(),
             username=username,
             full_name=f"Proxy Tunnel Service User ({host})",
@@ -709,7 +713,7 @@ class TunnelService:
             roles=[UserRoles.SSHTunnelServer.value],
             service_user=True,
         )
-        return user, UserService().generate_token(user, duration=None).token
+        return user, (await UserService().generate_token(user, duration=None)).token
 
     @staticmethod
     def _to_ssh_tunnel_key_dto(row: SSHTunnelKey) -> SSHTunnelKeyDTO:

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Annotated
@@ -59,9 +60,9 @@ class UpdateGraphViewRequest(BaseModel):
 
 
 @router.get("/version", name="api.app_version")
-def app_version():
+async def app_version():
     service = ArgusService()
-    argus_version = service.get_version()
+    argus_version = await service.get_version()
     return APIResponse({
         "status": "ok",
         "response": {
@@ -71,11 +72,11 @@ def app_version():
 
 
 @router.get("/test/{build_id:path}/{build_number:int}", name="api.get_run_by_build")
-def get_run_by_build(asgi_request: Request, build_id: str, build_number: int,
+async def get_run_by_build(asgi_request: Request, build_id: str, build_number: int,
                      user: User = Depends(api_current_user)):
     # JSON sibling of main.get_run_by_build: resolve a run from its
     # build_system_id + Jenkins build number and return its id and Argus URL.
-    run = TestRunService().get_run_by_build_number(build_id, build_number)
+    run = await TestRunService().get_run_by_build_number(build_id, build_number)
     if not run:
         raise Exception(f"Run not found for {build_id} #{build_number}")
     run_path = url_for(asgi_request, "main.get_run_by_plugin",
@@ -91,10 +92,10 @@ def get_run_by_build(asgi_request: Request, build_id: str, build_number: int,
 
 
 @router.get("/releases", name="api.releases")
-def releases(force_all: bool = Query(False, alias="all"),
+async def releases(force_all: bool = Query(False, alias="all"),
              user: User = Depends(api_current_user)):
     service = ArgusService()
-    all_releases = service.get_releases()
+    all_releases = await service.get_releases()
     return APIResponse({
         "status": "ok",
         "response": [d.model_dump() for d in all_releases if d.enabled or force_all]
@@ -102,10 +103,10 @@ def releases(force_all: bool = Query(False, alias="all"),
 
 
 @router.get("/release/activity", name="api.release_activity")
-def release_activity(release_name: str = Query(..., alias="releaseName"),
+async def release_activity(release_name: str = Query(..., alias="releaseName"),
                      user: User = Depends(api_current_user)):
     service = ArgusService()
-    activity_data = service.fetch_release_activity(release_name)
+    activity_data = await service.fetch_release_activity(release_name)
 
     return APIResponse({
         "status": "ok",
@@ -114,10 +115,10 @@ def release_activity(release_name: str = Query(..., alias="releaseName"),
 
 
 @router.get("/release/planner/data", name="api.release_planner_data")
-def release_planner_data(release_id: UUID = Query(..., alias="releaseId"),
+async def release_planner_data(release_id: UUID = Query(..., alias="releaseId"),
                          user: User = Depends(api_current_user)):
     service = ArgusService()
-    planner_data = service.get_planner_data(release_id)
+    planner_data = await service.get_planner_data(release_id)
     return APIResponse({
         "status": "ok",
         "response": planner_data
@@ -125,9 +126,9 @@ def release_planner_data(release_id: UUID = Query(..., alias="releaseId"),
 
 
 @router.get("/release/{release_id}/versions", name="api.release_versions")
-def release_versions(release_id: UUID, user: User = Depends(api_current_user)):
+async def release_versions(release_id: UUID, user: User = Depends(api_current_user)):
     service = ArgusService()
-    distinct_versions = service.get_distinct_release_versions(release_id=release_id)
+    distinct_versions = await service.get_distinct_release_versions(release_id=release_id)
 
     return APIResponse({
         "status": "ok",
@@ -136,9 +137,9 @@ def release_versions(release_id: UUID, user: User = Depends(api_current_user)):
 
 
 @router.get("/release/{release_id}/pytest/results", name="api.release_pytest_results")
-def release_pytest_results(release_id: UUID, user: User = Depends(api_current_user)):
+async def release_pytest_results(release_id: UUID, user: User = Depends(api_current_user)):
     service = TestRunService()
-    res = service.get_pytest_release_results(release_id=release_id)
+    res = await service.get_pytest_release_results(release_id=release_id)
 
     return APIResponse({
         "status": "ok",
@@ -147,9 +148,9 @@ def release_pytest_results(release_id: UUID, user: User = Depends(api_current_us
 
 
 @router.get("/release/{release_id}/images", name="api.release_images")
-def release_images(release_id: UUID, user: User = Depends(api_current_user)):
+async def release_images(release_id: UUID, user: User = Depends(api_current_user)):
     service = ArgusService()
-    distinct_images = service.get_distinct_release_images(release_id=release_id)
+    distinct_images = await service.get_distinct_release_images(release_id=release_id)
 
     return APIResponse({
         "status": "ok",
@@ -158,9 +159,9 @@ def release_images(release_id: UUID, user: User = Depends(api_current_user)):
 
 
 @router.get("/release/planner/comment/get/test", name="api.get_planner_comment_by_test")
-def get_planner_comment_by_test(test_id: UUID = Query(..., alias="id")):
+async def get_planner_comment_by_test(test_id: UUID = Query(..., alias="id")):
     service = ArgusService()
-    planner_comments_by_test = service.get_planner_comment_by_test(test_id)
+    planner_comments_by_test = await service.get_planner_comment_by_test(test_id)
 
     return APIResponse({
         "status": "ok",
@@ -169,10 +170,10 @@ def get_planner_comment_by_test(test_id: UUID = Query(..., alias="id")):
 
 
 @router.post("/release/schedules/comment/update", name="api.release_schedules_comment_update")
-def release_schedules_comment_update(payload: dict = Body(...),
+async def release_schedules_comment_update(payload: dict = Body(...),
                                      user: User = Depends(api_current_user)):
     service = ArgusService()
-    comment_update_result = service.update_schedule_comment(payload)
+    comment_update_result = await service.update_schedule_comment(payload)
 
     return APIResponse({
         "status": "ok",
@@ -181,10 +182,10 @@ def release_schedules_comment_update(payload: dict = Body(...),
 
 
 @router.get("/release/schedules", name="api.release_schedules")
-def release_schedules(release: UUID = Query(..., alias="releaseId"),
+async def release_schedules(release: UUID = Query(..., alias="releaseId"),
                       user: User = Depends(api_current_user)):
     service = ArgusService()
-    release_schedules_data = service.get_schedules_for_release(release)
+    release_schedules_data = await service.get_schedules_for_release(release)
 
     return APIResponse({
         "status": "ok",
@@ -193,10 +194,10 @@ def release_schedules(release: UUID = Query(..., alias="releaseId"),
 
 
 @router.post("/release/schedules/assignee/update", name="api.release_schedules_assignee_update")
-def release_schedules_assignee_update(payload: dict = Body(...),
+async def release_schedules_assignee_update(payload: dict = Body(...),
                                       user: User = Depends(api_current_user)):
     service = ArgusService()
-    assignee_update_status = service.update_schedule_assignees(payload)
+    assignee_update_status = await service.update_schedule_assignees(payload)
 
     return APIResponse({
         "status": "ok",
@@ -205,12 +206,12 @@ def release_schedules_assignee_update(payload: dict = Body(...),
 
 
 @router.get("/release/assignees/groups", name="api.group_assignees")
-def group_assignees(release_id: UUID = Query(..., alias="releaseId"),
+async def group_assignees(release_id: UUID = Query(..., alias="releaseId"),
                     version: str | None = Query(None),
                     plan_id: Annotated[UUID | None, NoneIfEmpty, Query(alias="planId")] = None,
                     user: User = Depends(api_current_user)):
     service = ArgusService()
-    group_assignees_list = service.get_groups_assignees(release_id, version, plan_id)
+    group_assignees_list = await service.get_groups_assignees(release_id, version, plan_id)
 
     return APIResponse({
         "status": "ok",
@@ -219,12 +220,12 @@ def group_assignees(release_id: UUID = Query(..., alias="releaseId"),
 
 
 @router.get("/release/assignees/tests", name="api.tests_assignees")
-def tests_assignees(group_id: UUID = Query(..., alias="groupId"),
+async def tests_assignees(group_id: UUID = Query(..., alias="groupId"),
                     version: str | None = Query(None),
                     plan_id: Annotated[UUID | None, NoneIfEmpty, Query(alias="planId")] = None,
                     user: User = Depends(api_current_user)):
     service = ArgusService()
-    tests_assignees_list = service.get_tests_assignees(group_id, version, plan_id)
+    tests_assignees_list = await service.get_tests_assignees(group_id, version, plan_id)
 
     return APIResponse({
         "status": "ok",
@@ -233,10 +234,10 @@ def tests_assignees(group_id: UUID = Query(..., alias="groupId"),
 
 
 @router.post("/release/schedules/submit", name="api.release_schedules_submit")
-def release_schedules_submit(payload: dict = Body(...),
+async def release_schedules_submit(payload: dict = Body(...),
                              user: User = Depends(api_current_user)):
     service = ArgusService()
-    schedule_submit_result = service.submit_new_schedule(
+    schedule_submit_result = await service.submit_new_schedule(
         release=payload["releaseId"],
         start_time=payload["start"],
         end_time=payload["end"],
@@ -255,10 +256,10 @@ def release_schedules_submit(payload: dict = Body(...),
 
 
 @router.post("/release/schedules/delete", name="api.release_schedules_delete")
-def release_schedules_delete(payload: dict = Body(...),
+async def release_schedules_delete(payload: dict = Body(...),
                              user: User = Depends(api_current_user)):
     service = ArgusService()
-    schedule_delete_result = service.delete_schedule(payload)
+    schedule_delete_result = await service.delete_schedule(payload)
 
     return APIResponse({
         "status": "ok",
@@ -267,11 +268,11 @@ def release_schedules_delete(payload: dict = Body(...),
 
 
 @router.post("/release/schedules/update", name="api.release_schedule_update")
-def release_schedule_update(payload: dict = Body(...),
+async def release_schedule_update(payload: dict = Body(...),
                             user: User = Depends(api_current_user)):
     req = ScheduleUpdateRequest(**payload)
     service = ArgusService()
-    update_result = service.update_schedule(
+    update_result = await service.update_schedule(
         release_id=req.release_id,
         schedule_id=req.schedule_id,
         old_tests=req.old_tests,
@@ -287,11 +288,11 @@ def release_schedule_update(payload: dict = Body(...),
 
 
 @router.get("/groups", name="api.argus_groups")
-def argus_groups(release_id: UUID = Query(..., alias="releaseId"),
+async def argus_groups(release_id: UUID = Query(..., alias="releaseId"),
                  force_all: bool = Query(False, alias="all"),
                  user: User = Depends(api_current_user)):
     service = ArgusService()
-    groups = service.get_groups(release_id)
+    groups = await service.get_groups(release_id)
     result_groups = [group.model_dump() for group in groups if group.enabled or force_all]
 
     return APIResponse({
@@ -301,11 +302,11 @@ def argus_groups(release_id: UUID = Query(..., alias="releaseId"),
 
 
 @router.get("/tests", name="api.argus_tests")
-def argus_tests(group_id: UUID = Query(..., alias="groupId"),
+async def argus_tests(group_id: UUID = Query(..., alias="groupId"),
                 force_all: bool = Query(False, alias="all"),
                 user: User = Depends(api_current_user)):
     service = ArgusService()
-    tests = service.get_tests(group_id=group_id)
+    tests = await service.get_tests(group_id=group_id)
     result_tests = [t.model_dump() for t in tests if t.enabled or force_all]
 
     return APIResponse({
@@ -315,8 +316,8 @@ def argus_tests(group_id: UUID = Query(..., alias="groupId"),
 
 
 @router.get("/release/{release_id}/details", name="api.get_release_details")
-def get_release_details(release_id: UUID, user: User = Depends(api_current_user)):
-    release = ArgusRelease.get(id=release_id)
+async def get_release_details(release_id: UUID, user: User = Depends(api_current_user)):
+    release = await ArgusRelease.get(id=release_id)
     return APIResponse({
         "status": "ok",
         "response": release,
@@ -324,8 +325,8 @@ def get_release_details(release_id: UUID, user: User = Depends(api_current_user)
 
 
 @router.get("/group/{group_id}/details", name="api.get_group_details")
-def get_group_details(group_id: UUID, user: User = Depends(api_current_user)):
-    group = ArgusGroup.get(id=group_id)
+async def get_group_details(group_id: UUID, user: User = Depends(api_current_user)):
+    group = await ArgusGroup.get(id=group_id)
     return APIResponse({
         "status": "ok",
         "response": group,
@@ -333,8 +334,8 @@ def get_group_details(group_id: UUID, user: User = Depends(api_current_user)):
 
 
 @router.get("/test/{test_id}/details", name="api.get_test_details")
-def get_test_details(test_id: UUID, user: User = Depends(api_current_user)):
-    test = ArgusTest.get(id=test_id)
+async def get_test_details(test_id: UUID, user: User = Depends(api_current_user)):
+    test = await ArgusTest.get(id=test_id)
     return APIResponse({
         "status": "ok",
         "response": test
@@ -342,11 +343,11 @@ def get_test_details(test_id: UUID, user: User = Depends(api_current_user)):
 
 
 @router.post("/test/{test_id}/set_plugin", name="api.set_test_plugin")
-def set_test_plugin(test_id: UUID, payload: SetTestPluginRequest,
+async def set_test_plugin(test_id: UUID, payload: SetTestPluginRequest,
                     user: User = Depends(api_current_user)):
-    test: ArgusTest = ArgusTest.get(id=test_id)
+    test: ArgusTest = await ArgusTest.get(id=test_id)
     test.plugin_name = payload.plugin_name
-    test.save()
+    await test.save()
 
     return APIResponse({
         "status": "ok",
@@ -355,10 +356,10 @@ def set_test_plugin(test_id: UUID, payload: SetTestPluginRequest,
 
 
 @router.get("/test-info", name="api.test_info")
-def test_info(test_id: UUID = Query(..., alias="testId"),
+async def test_info(test_id: UUID = Query(..., alias="testId"),
               user: User = Depends(api_current_user)):
     service = ArgusService()
-    info = service.get_test_info(test_id=test_id)
+    info = await service.get_test_info(test_id=test_id)
 
     return APIResponse({
         "status": "ok",
@@ -368,7 +369,7 @@ def test_info(test_id: UUID = Query(..., alias="testId"),
 
 @router.get("/test-results", name="api.test_results")
 @router.head("/test-results", name="api.test_results")
-def test_results(asgi_request: Request, test_id: UUID = Query(..., alias="testId"),
+async def test_results(asgi_request: Request, test_id: UUID = Query(..., alias="testId"),
                  start_date: Annotated[datetime | None, NoneIfEmpty, Query(alias="startDate")] = None,
                  end_date: Annotated[datetime | None, NoneIfEmpty, Query(alias="endDate")] = None,
                  table_names: list[str] = Query(default=[], alias="tableNames[]"),
@@ -378,12 +379,12 @@ def test_results(asgi_request: Request, test_id: UUID = Query(..., alias="testId
 
     service = ResultsService()
     if asgi_request.method == "HEAD":
-        exists = service.is_results_exist(test_id=test_id)
+        exists = await service.is_results_exist(test_id=test_id)
         return Response(status_code=200 if exists else 404)
 
-    graphs, ticks, releases_filters = service.get_test_graphs(
+    graphs, ticks, releases_filters = await service.get_test_graphs(
         test_id=test_id, start_date=start_date, end_date=end_date, table_names=table_names)
-    graph_views = service.get_argus_graph_views(test_id=test_id)
+    graph_views = await service.get_argus_graph_views(test_id=test_id)
 
     return APIResponse({
         "status": "ok",
@@ -393,9 +394,9 @@ def test_results(asgi_request: Request, test_id: UUID = Query(..., alias="testId
 
 
 @router.post("/create-graph-view", name="api.create_graph_view")
-def create_graph_view(payload: CreateGraphViewRequest, user: User = Depends(api_current_user)):
+async def create_graph_view(payload: CreateGraphViewRequest, user: User = Depends(api_current_user)):
     service = ResultsService()
-    graph_view = service.create_argus_graph_view(
+    graph_view = await service.create_argus_graph_view(
         test_id=payload.testId, name=payload.name, description=payload.description)
     return APIResponse({
         "status": "ok",
@@ -404,9 +405,9 @@ def create_graph_view(payload: CreateGraphViewRequest, user: User = Depends(api_
 
 
 @router.post("/update-graph-view", name="api.update_graph_view")
-def update_graph_view(payload: UpdateGraphViewRequest, user: User = Depends(api_current_user)):
+async def update_graph_view(payload: UpdateGraphViewRequest, user: User = Depends(api_current_user)):
     service = ResultsService()
-    graph_view = service.update_argus_graph_view(
+    graph_view = await service.update_argus_graph_view(
         test_id=payload.testId, view_id=payload.id, name=payload.name,
         description=payload.description, graphs=payload.graphs)
     return APIResponse({
@@ -416,10 +417,10 @@ def update_graph_view(payload: UpdateGraphViewRequest, user: User = Depends(api_
 
 
 @router.get("/test_run/comment/get", name="api.get_test_run_comment")  # TODO: remove
-def get_test_run_comment(comment_id: UUID = Query(..., alias="commentId"),
+async def get_test_run_comment(comment_id: UUID = Query(..., alias="commentId"),
                          user: User = Depends(api_current_user)):
     service = ArgusService()
-    comment = service.get_comment(comment_id=comment_id)
+    comment = await service.get_comment(comment_id=comment_id)
     return APIResponse({
         "status": "ok",
         "response": comment if comment else False
@@ -427,8 +428,8 @@ def get_test_run_comment(comment_id: UUID = Query(..., alias="commentId"),
 
 
 @router.get("/users", name="api.user_info")
-def user_info(user: User = Depends(api_current_user)):
-    result = UserService().get_users()
+async def user_info(user: User = Depends(api_current_user)):
+    result = await UserService().get_users()
 
     return APIResponse({
         "status": "ok",
@@ -437,13 +438,13 @@ def user_info(user: User = Depends(api_current_user)):
 
 
 @router.get("/release/stats/v2", name="api.release_stats_v2")
-def release_stats_v2(release: str = Query(...), limited: bool = Query(...),
+async def release_stats_v2(release: str = Query(...), limited: bool = Query(...),
                      version: str | None = Query(None, alias="productVersion"),
                      image_id: str | None = Query(None, alias="imageId"),
                      include_no_version: bool = Query(True, alias="includeNoVersion"),
                      force: bool = Query(...),
                      user: User = Depends(api_current_user)):
-    stats = ReleaseStatsCollector(
+    stats = await ReleaseStatsCollector(
         release_name=release, release_version=version).collect(
             limited=limited,
             force=force,
@@ -458,19 +459,19 @@ def release_stats_v2(release: str = Query(...), limited: bool = Query(...),
 
 
 @router.get("/test_runs/poll", name="api.test_runs_poll")
-def test_runs_poll(user: User = Depends(api_current_user)):
+async def test_runs_poll(user: User = Depends(api_current_user)):
     raise APIException("This endpoint has been removed")
 
 
 @router.get("/test_run/poll", name="api.test_run_poll_single")
-def test_run_poll_single(user: User = Depends(api_current_user)):
+async def test_run_poll_single(user: User = Depends(api_current_user)):
     raise APIException("This endpoint has been removed")
 
 
 @router.post("/release/create", name="api.release_create")
-def release_create(payload: dict = Body(...), user: User = Depends(api_current_user)):
+async def release_create(payload: dict = Body(...), user: User = Depends(api_current_user)):
     service = ArgusService()
-    result = service.create_release(payload)
+    result = await service.create_release(payload)
 
     return APIResponse({
         "status": "ok",
@@ -479,9 +480,9 @@ def release_create(payload: dict = Body(...), user: User = Depends(api_current_u
 
 
 @router.get("/artifact/resolveSize", name="api.resolve_artifact_size")
-def resolve_artifact_size(link: str = Query(..., alias="l"),
+async def resolve_artifact_size(link: str = Query(..., alias="l"),
                           user: User = Depends(api_current_user)):
-    length = TestRunService().resolve_artifact_size(link)
+    length = await TestRunService().resolve_artifact_size(link)
 
     return APIResponse({
         "status": "ok",
@@ -492,10 +493,10 @@ def resolve_artifact_size(link: str = Query(..., alias="l"),
 
 
 @router.api_route("/s3/{bucket_name}/{bucket_path:path}", methods=["GET", "HEAD"], name="api.s3_generic_proxy")
-def s3_generic_proxy(bucket_name: str, bucket_path: str,
+async def s3_generic_proxy(bucket_name: str, bucket_path: str,
                      user: User = Depends(api_current_user)):
     service = TestRunService()
-    result = service.proxy_s3_file(
+    result = await service.proxy_s3_file(
         bucket_name=bucket_name,
         bucket_path=bucket_path
     )
@@ -508,7 +509,7 @@ class UserTokenRequest(BaseModel):
 
 
 @router.post("/user/token", name="api.user_token")
-def user_token(payload: UserTokenRequest = Body(default_factory=UserTokenRequest),
+async def user_token(payload: UserTokenRequest = Body(default_factory=UserTokenRequest),
                user: User = Depends(api_current_user)):
     """Issue an additional API token for the caller (used by ``argus auth login``).
 
@@ -516,7 +517,7 @@ def user_token(payload: UserTokenRequest = Body(default_factory=UserTokenRequest
     ``duration`` (e.g. ``60d``, ``24h``) defaults to 365 days; ``null`` issues a
     non-expiring token.
     """
-    issued = UserService().generate_token(user=user, duration=payload.duration)
+    issued = await UserService().generate_token(user=user, duration=payload.duration)
 
     return APIResponse({
         "status": "ok",
@@ -528,7 +529,7 @@ def user_token(payload: UserTokenRequest = Body(default_factory=UserTokenRequest
 
 
 @router.get("/user/token", name="api.user_token_info")
-def user_token_info(asgi_request: Request, user: User = Depends(api_current_user)):
+async def user_token_info(asgi_request: Request, user: User = Depends(api_current_user)):
     """Return the expiration of the API token that authenticated this request."""
     api_token = getattr(asgi_request.state, "api_token", None)
     if api_token is None:
@@ -543,9 +544,9 @@ def user_token_info(asgi_request: Request, user: User = Depends(api_current_user
 
 
 @router.get("/user/jobs", name="api.user_jobs")
-def user_jobs(user: User = Depends(api_current_user)):
+async def user_jobs(user: User = Depends(api_current_user)):
     service = ArgusService()
-    result = list(service.get_jobs_for_user(user=user))
+    result = await service.get_jobs_for_user(user=user)
 
     return APIResponse({
         "status": "ok",
@@ -554,9 +555,9 @@ def user_jobs(user: User = Depends(api_current_user)):
 
 
 @router.get("/user/planned_jobs", name="api.user_planned_jobs")
-def user_planned_jobs(user: User = Depends(api_current_user)):
+async def user_planned_jobs(user: User = Depends(api_current_user)):
     service = ArgusService()
-    result = list(service.get_planned_jobs_for_user(user=user))
+    result = await service.get_planned_jobs_for_user(user=user)
 
     return APIResponse({
         "status": "ok",
@@ -593,7 +594,7 @@ async def zeus_proxy(asgi_request: Request, endpoint: str,
         headers=headers, data=body)
     prepared = proxy_request.prepare()
 
-    response = session.send(prepared)
+    response = await asyncio.to_thread(session.send, prepared)
 
     return Response(response.content, status_code=response.status_code,
                     headers=dict(response.headers))

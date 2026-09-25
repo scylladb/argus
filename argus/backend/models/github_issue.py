@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 from pydantic import Field
 from coodie import BigInt, ClusteringKey, Indexed, PrimaryKey
-from coodie.sync import Document
+from coodie.aio import Document
 from coodie.usertype import UserType
 
 

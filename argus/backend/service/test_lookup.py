@@ -1,12 +1,13 @@
 
 
+import asyncio
 from functools import partial
 import re
 from urllib.parse import unquote
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable
 from uuid import UUID
 
-from coodie.sync import Document
+from coodie.aio import Document
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest
@@ -24,11 +25,11 @@ class TestLookup:
         return mapped
 
     @classmethod
-    def explode_group(cls, group_id: UUID | str):
+    async def explode_group(cls, group_id: UUID | str):
         group_id = UUID(group_id) if isinstance(group_id, str) else group_id
-        group = ArgusGroup.get(id=group_id)
-        release = ArgusRelease.get(id=group.release_id)
-        tests = ArgusTest.find(group_id=group.id).all()
+        group = await ArgusGroup.get(id=group_id)
+        release = await ArgusRelease.get(id=group.release_id)
+        tests = await ArgusTest.find(group_id=group.id).all()
 
         exploded = []
         for test in tests:
@@ -41,13 +42,9 @@ class TestLookup:
         return exploded
 
     @classmethod
-    def find_run(self, run_id: UUID) -> PluginModelBase | None:
-        for model in all_plugin_models():
-            try:
-                return model.get(id=run_id)
-            except DocumentNotFound:
-                pass
-        return None
+    async def find_run(cls, run_id: UUID) -> PluginModelBase | None:
+        runs = await asyncio.gather(*(model.find_one(id=run_id) for model in all_plugin_models()))
+        return next((run for run in runs if run is not None), None)
 
     @classmethod
     def query_to_uuid(cls, query: str) -> UUID | None:
@@ -58,40 +55,47 @@ class TestLookup:
             return None
 
     @classmethod
-    def resolve_run_test(cls, test_id: UUID) -> ArgusTest:
+    async def resolve_run_test(cls, test_id: UUID) -> ArgusTest:
         try:
-            test = ArgusTest.get(id=test_id)
+            test = await ArgusTest.get(id=test_id)
             return test
         except DocumentNotFound:
             return None
 
     @classmethod
-    def resolve_run_group(cls, group_id: UUID) -> ArgusGroup:
+    async def resolve_run_group(cls, group_id: UUID) -> ArgusGroup:
         try:
-            group = ArgusGroup.get(id=group_id)
+            group = await ArgusGroup.get(id=group_id)
             return group
         except DocumentNotFound:
             return None
 
     @classmethod
-    def resolve_run_release(cls, run_test_id: UUID) -> ArgusRelease:
+    async def resolve_run_release(cls, run_test_id: UUID) -> ArgusRelease:
         try:
-            release = ArgusRelease.get(id=run_test_id)
+            release = await ArgusRelease.get(id=run_test_id)
             return release
         except DocumentNotFound:
             return None
 
     @classmethod
-    def make_single_run_response(cls, run_id: UUID) -> list[dict[str, Any]]:
-        run = cls.find_run(run_id)
+    async def _dump_resolved(cls, resolver: Callable[[UUID], Awaitable[Document | None]],
+                             entity_id: UUID | None) -> dict | None:
+        return (await resolver(entity_id)).model_dump() if entity_id else None
+
+    @classmethod
+    async def make_single_run_response(cls, run_id: UUID) -> list[dict[str, Any]]:
+        run = await cls.find_run(run_id)
         if run:
             run = run.model_dump()
             run["type"] = "run"
-            run["test"] = cls.resolve_run_test(run["test_id"]).model_dump() if run["test_id"] else None
+            run["test"], run["group"], run["release"] = await asyncio.gather(
+                cls._dump_resolved(cls.resolve_run_test, run["test_id"]),
+                cls._dump_resolved(cls.resolve_run_group, run["group_id"]),
+                cls._dump_resolved(cls.resolve_run_release, run["release_id"]),
+            )
             if run["test"]:
                 name = run["test"]["name"]
-            run["group"] = cls.resolve_run_group(run["group_id"]).model_dump()if run["group_id"] else None
-            run["release"] = cls.resolve_run_release(run["release_id"]).model_dump() if run["release_id"] else None
             run["name"] = f"{name}#{run['build_number']}"
 
             return [run]
@@ -99,11 +103,11 @@ class TestLookup:
         return []
 
     @classmethod
-    def test_lookup(cls, query: str, release_id: UUID | str = None):
+    async def test_lookup(cls, query: str, release_id: UUID | str = None):
         if release_id:
             release_id = UUID(release_id) if isinstance(release_id, str) else release_id
         if uuid := cls.query_to_uuid(query):
-            return cls.make_single_run_response(uuid)
+            return await cls.make_single_run_response(uuid)
 
         def check_visibility(entity: dict):
             if entity["type"] == "release" and release_id:
@@ -153,15 +157,16 @@ class TestLookup:
             if facet in facet_funcs.keys():
                 search_func = facet_wrapper(query_func=search_func, facet_query=value, facet_type=facet)
 
+        tests_query = ArgusTest.find()
+        groups_query = ArgusGroup.find()
         if release_id:
-            all_releases = [ArgusRelease.get(id=release_id)]
+            tests_query = tests_query.filter(release_id=release_id)
+            groups_query = groups_query.filter(release_id=release_id)
+            releases_query = ArgusRelease.get(id=release_id)
         else:
-            all_releases = ArgusRelease.find()
-        all_tests = ArgusTest.find()
-        all_groups = ArgusGroup.find()
-        if release_id:
-            all_tests = all_tests.filter(release_id=release_id)
-            all_groups = all_groups.filter(release_id=release_id)
+            releases_query = ArgusRelease.find().all()
+        releases, all_tests, all_groups = await asyncio.gather(releases_query, tests_query.all(), groups_query.all())
+        all_releases = [releases] if release_id else releases
         release_by_id = {release.id: partial(cls.index_mapper, type="release")(release) for release in all_releases}
         group_by_id = {group.id: partial(cls.index_mapper, type="group")(group) for group in all_groups}
         index = [cls.index_mapper(t) for t in all_tests]

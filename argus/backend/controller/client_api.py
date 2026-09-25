@@ -40,8 +40,8 @@ class ConfigSubmitRequest(BaseModel):
 
 
 @router.get("/testrun/{run_id}/info", name="api.client_api.get_run_info")
-def get_run_info(run_id: str, user: User = Depends(api_current_user)):
-    result = ClientService().get_run_info(run_id=run_id)
+async def get_run_info(run_id: str, user: User = Depends(api_current_user)):
+    result = await ClientService().get_run_info(run_id=run_id)
     return APIResponse({
         "status": "ok",
         "response": result
@@ -49,8 +49,8 @@ def get_run_info(run_id: str, user: User = Depends(api_current_user)):
 
 
 @router.post("/testrun/{run_type}/submit", name="api.client_api.submit_run")
-def submit_run(run_type: str, payload: dict = Body(...), user: User = Depends(api_current_user)):
-    result = ClientService().submit_run(run_type=run_type, request_data=payload)
+async def submit_run(run_type: str, payload: dict = Body(...), user: User = Depends(api_current_user)):
+    result = await ClientService().submit_run(run_type=run_type, request_data=payload)
     return APIResponse({
         "status": "ok",
         "response": result
@@ -58,8 +58,8 @@ def submit_run(run_type: str, payload: dict = Body(...), user: User = Depends(ap
 
 
 @router.get("/testrun/{run_type}/{run_id}/get", name="api.client_api.get_run")
-def get_run(run_type: str, run_id: str, user: User = Depends(api_current_user)):
-    result = ClientService().get_run(run_type=run_type, run_id=run_id)
+async def get_run(run_type: str, run_id: str, user: User = Depends(api_current_user)):
+    result = await ClientService().get_run(run_type=run_type, run_id=run_id)
     return APIResponse({
         "status": "ok",
         "response": result
@@ -67,8 +67,8 @@ def get_run(run_type: str, run_id: str, user: User = Depends(api_current_user)):
 
 
 @router.post("/testrun/{run_type}/{run_id}/heartbeat", name="api.client_api.run_heartbeat")
-def run_heartbeat(run_type: str, run_id: str, user: User = Depends(api_current_user)):
-    result = ClientService().heartbeat(run_type=run_type, run_id=run_id)
+async def run_heartbeat(run_type: str, run_id: str, user: User = Depends(api_current_user)):
+    result = await ClientService().heartbeat(run_type=run_type, run_id=run_id)
     return APIResponse({
         "status": "ok",
         "response": result
@@ -76,8 +76,8 @@ def run_heartbeat(run_type: str, run_id: str, user: User = Depends(api_current_u
 
 
 @router.get("/testrun/{run_type}/{run_id}/get_status", name="api.client_api.run_get_status")
-def run_get_status(run_type: str, run_id: str, user: User = Depends(api_current_user)):
-    result = ClientService().get_run_status(run_type=run_type, run_id=run_id)
+async def run_get_status(run_type: str, run_id: str, user: User = Depends(api_current_user)):
+    result = await ClientService().get_run_status(run_type=run_type, run_id=run_id)
     return APIResponse({
         "status": "ok",
         "response": result
@@ -85,10 +85,10 @@ def run_get_status(run_type: str, run_id: str, user: User = Depends(api_current_
 
 
 @router.post("/testrun/{run_type}/{run_id}/set_status", name="api.client_api.run_set_status")
-def run_set_status(run_type: str, run_id: str, payload: SetStatusRequest,
+async def run_set_status(run_type: str, run_id: str, payload: SetStatusRequest,
                    user: User = Depends(api_current_user)):
-    result = ClientService().update_run_status(run_type=run_type, run_id=run_id,
-                                               new_status=payload.new_status)
+    result = await ClientService().update_run_status(run_type=run_type, run_id=run_id,
+                                                     new_status=payload.new_status)
     return APIResponse({
         "status": "ok",
         "response": result
@@ -97,9 +97,9 @@ def run_set_status(run_type: str, run_id: str, payload: SetStatusRequest,
 
 @router.post("/testrun/{run_type}/{run_id}/update_product_version",
              name="api.client_api.run_update_product_version")
-def run_update_product_version(run_type: str, run_id: str, payload: ProductVersionRequest,
+async def run_update_product_version(run_type: str, run_id: str, payload: ProductVersionRequest,
                                user: User = Depends(api_current_user)):
-    result = ClientService().submit_product_version(
+    result = await ClientService().submit_product_version(
         run_type=run_type, run_id=run_id, version=payload.product_version)
     return APIResponse({
         "status": "ok",
@@ -108,9 +108,9 @@ def run_update_product_version(run_type: str, run_id: str, payload: ProductVersi
 
 
 @router.post("/testrun/{run_type}/{run_id}/logs/submit", name="api.client_api.run_submit_logs")
-def run_submit_logs(run_type: str, run_id: str, payload: LogsSubmitRequest,
+async def run_submit_logs(run_type: str, run_id: str, payload: LogsSubmitRequest,
                     user: User = Depends(api_current_user)):
-    result = ClientService().submit_logs(run_type=run_type, run_id=run_id, logs=payload.logs)
+    result = await ClientService().submit_logs(run_type=run_type, run_id=run_id, logs=payload.logs)
     return APIResponse({
         "status": "ok",
         "response": result
@@ -118,10 +118,10 @@ def run_submit_logs(run_type: str, run_id: str, payload: LogsSubmitRequest,
 
 
 @router.post("/{run_id}/config/submit", name="api.client_api.submit_run_config")
-def submit_run_config(run_id: str, payload: ConfigSubmitRequest,
+async def submit_run_config(run_id: str, payload: ConfigSubmitRequest,
                       user: User = Depends(api_current_user)):
-    result = ClientService().submit_config(run_id, config_name=payload.name,
-                                           config_content=payload.content)
+    result = await ClientService().submit_config(run_id, config_name=payload.name,
+                                                 config_content=payload.content)
     return APIResponse({
         "status": "ok",
         "response": result
@@ -129,9 +129,9 @@ def submit_run_config(run_id: str, payload: ConfigSubmitRequest,
 
 
 @router.post("/testrun/{run_id}/cost/estimated", name="api.client_api.set_estimated_cost")
-def set_estimated_cost(run_id: UUID, payload: EstimatedCostRequest,
+async def set_estimated_cost(run_id: UUID, payload: EstimatedCostRequest,
                        user: User = Depends(api_current_user)):
-    result = RunCostService().set_estimated_cost(run_id, payload.value)
+    result = await RunCostService().set_estimated_cost(run_id, payload.value)
     return APIResponse({
         "status": "ok",
         "response": result
@@ -139,9 +139,9 @@ def set_estimated_cost(run_id: UUID, payload: EstimatedCostRequest,
 
 
 @router.post("/testrun/{run_id}/cost/items", name="api.client_api.submit_cost_items")
-def submit_cost_items(run_id: UUID, payload: CostItemsRequest,
+async def submit_cost_items(run_id: UUID, payload: CostItemsRequest,
                       user: User = Depends(api_current_user)):
-    result = RunCostService().submit_cost_items(run_id, payload.items)
+    result = await RunCostService().submit_cost_items(run_id, payload.items)
     return APIResponse({
         "status": "ok",
         "response": result
@@ -149,8 +149,8 @@ def submit_cost_items(run_id: UUID, payload: CostItemsRequest,
 
 
 @router.get("/{run_id}/config/all", name="api.client_api.get_all_run_configs")
-def get_all_run_configs(run_id: str, user: User = Depends(api_current_user)):
-    result = ClientService().get_all_configs(run_id)
+async def get_all_run_configs(run_id: str, user: User = Depends(api_current_user)):
+    result = await ClientService().get_all_configs(run_id)
     return APIResponse({
         "status": "ok",
         "response": result
@@ -158,9 +158,9 @@ def get_all_run_configs(run_id: str, user: User = Depends(api_current_user)):
 
 
 @router.post("/testrun/{run_type}/{run_id}/finalize", name="api.client_api.run_finalize")
-def run_finalize(run_type: str, run_id: str, payload: dict | None = Body(None),
+async def run_finalize(run_type: str, run_id: str, payload: dict | None = Body(None),
                  user: User = Depends(api_current_user)):
-    result = ClientService().finish_run(run_type=run_type, run_id=run_id, payload=payload)
+    result = await ClientService().finish_run(run_type=run_type, run_id=run_id, payload=payload)
     return APIResponse({
         "status": "ok",
         "response": result
@@ -168,15 +168,15 @@ def run_finalize(run_type: str, run_id: str, payload: dict | None = Body(None),
 
 
 @router.post("/testrun/{run_type}/{run_id}/submit_results", name="api.client_api.submit_results")
-def submit_results(run_type: str, run_id: str, payload: dict = Body(...),
+async def submit_results(run_type: str, run_id: str, payload: dict = Body(...),
                    user: User = Depends(api_current_user)):
     return APIResponse(
-        ClientService().submit_results(run_type=run_type, run_id=run_id, results=payload))
+        await ClientService().submit_results(run_type=run_type, run_id=run_id, results=payload))
 
 
 @router.post("/testrun/pytest/result/submit", name="api.client_api.submit_pytest_result")
-def submit_pytest_result(payload: dict = Body(...), user: User = Depends(api_current_user)):
-    result = ClientService().submit_pytest_result(request_data=payload)
+async def submit_pytest_result(payload: dict = Body(...), user: User = Depends(api_current_user)):
+    result = await ClientService().submit_pytest_result(request_data=payload)
     return APIResponse({
         "status": "ok",
         "response": result
@@ -185,7 +185,7 @@ def submit_pytest_result(payload: dict = Body(...), user: User = Depends(api_cur
 
 @router.get("/testrun/pytest/{test_name}/stats/{field_name}/{aggr_function}",
             name="api.client_api.get_pytest_test_field_stats")
-def get_pytest_test_field_stats(asgi_request: Request, test_name: str, field_name: str,
+async def get_pytest_test_field_stats(asgi_request: Request, test_name: str, field_name: str,
                                 aggr_function: str, user: User = Depends(api_current_user)):
     """
         Method: GET
@@ -194,7 +194,7 @@ def get_pytest_test_field_stats(asgi_request: Request, test_name: str, field_nam
             field_name: a field inside PytestResultTable that supports aggregation, e.g. duration
             aggr_function: Supported: avg, count, min, max - which function to use for the aggregate
     """
-    result = TestRunService().get_pytest_test_field_stats(
+    result = await TestRunService().get_pytest_test_field_stats(
         test_name=test_name, field_name=field_name,
         aggr_function=aggr_function, query=dict(asgi_request.query_params))
 
@@ -205,8 +205,8 @@ def get_pytest_test_field_stats(asgi_request: Request, test_name: str, field_nam
 
 
 @router.post("/testrun/report/email", name="api.client_api.send_email_report")
-def send_email_report(payload: dict = Body(...), user: User = Depends(api_current_user)):
-    result = EmailService().send_report(request_data=payload)
+async def send_email_report(payload: dict = Body(...), user: User = Depends(api_current_user)):
+    result = await EmailService().send_report(request_data=payload)
     return APIResponse({
         "status": "ok",
         "response": result
@@ -214,7 +214,7 @@ def send_email_report(payload: dict = Body(...), user: User = Depends(api_curren
 
 
 @router.post("/testrun/report", name="api.client_api.render_email_report")
-def render_email_report(payload: dict = Body(...), user: User = Depends(api_current_user)):
-    result = EmailService().display_report(request_data=payload)
+async def render_email_report(payload: dict = Body(...), user: User = Depends(api_current_user)):
+    result = await EmailService().display_report(request_data=payload)
     # the rendered report is returned as raw HTML, not the JSON envelope
     return HTMLResponse(result)

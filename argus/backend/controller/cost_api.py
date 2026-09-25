@@ -11,8 +11,8 @@ router = APIRouter(prefix="/cost")
 
 
 @router.get("/run/{run_id}", name="api.cost_api.get_run_cost")
-def get_run_cost(run_id: UUID, user: User = Depends(api_current_user)):
-    result = RunCostService().get_run_cost(run_id)
+async def get_run_cost(run_id: UUID, user: User = Depends(api_current_user)):
+    result = await RunCostService().get_run_cost(run_id)
     return APIResponse({
         "status": "ok",
         "response": result

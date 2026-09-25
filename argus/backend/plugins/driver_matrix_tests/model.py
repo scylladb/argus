@@ -10,7 +10,6 @@ from xml.etree import ElementTree
 from pydantic import Field
 from coodie.exceptions import DocumentNotFound
 
-from argus.backend.db import ScyllaCluster
 from argus.backend.models.web import ArgusRelease, ReleaseDistinctVersions
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.driver_matrix_tests.udt import TestCollection, TestSuite, TestCase, EnvironmentInfo
@@ -123,22 +122,18 @@ class DriverTestRun(PluginModelBase):
     }
 
     @classmethod
-    def _stats_query(cls) -> str:
-        return ("SELECT id, test_id, group_id, release_id, status, start_time, build_job_url, build_id, "
-                f"assignee, end_time, investigation_status, heartbeat, build_number, scylla_version FROM {cls.table_name()} WHERE build_id IN ? PER PARTITION LIMIT 15")
+    def _stats_columns(cls) -> tuple[str, ...]:
+        return ("id", "test_id", "group_id", "release_id", "status", "start_time", "build_job_url", "build_id",
+                "assignee", "end_time", "investigation_status", "heartbeat", "build_number", "scylla_version")
 
     @classmethod
-    def get_distinct_product_versions(cls, release: ArgusRelease) -> list[str]:
-        cluster = ScyllaCluster.get()
-        statement = cluster.prepare(f"SELECT scylla_version FROM {cls.table_name()} WHERE release_id = ?")
-        rows = cluster.session.execute(query=statement, parameters=(release.id,))
-        unique_versions = {r["scylla_version"] for r in rows if r["scylla_version"]}
-
-        return sorted(list(unique_versions), reverse=True)
+    async def get_distinct_product_versions(cls, release: ArgusRelease) -> list[str]:
+        versions = await cls.find(release_id=release.id).only("scylla_version").values_list("scylla_version").all()
+        return sorted({version for (version,) in versions if version}, reverse=True)
 
     @classmethod
-    def load_test_run(cls, run_id: UUID) -> 'DriverTestRun':
-        return cls.get(id=run_id)
+    async def load_test_run(cls, run_id: UUID) -> 'DriverTestRun':
+        return await cls.get(id=run_id)
 
     @classmethod
     def parse_driver_name(cls, raw_file_name: str) -> str:
@@ -155,37 +150,38 @@ class DriverTestRun(PluginModelBase):
         return "unknown_driver"
 
     @classmethod
-    def submit_run(cls, request_data: dict) -> 'DriverTestRun':
+    async def submit_run(cls, request_data: dict) -> 'DriverTestRun':
+        run_id = UUID(request_data["run_id"]) if isinstance(request_data["run_id"], str) else request_data["run_id"]
         try:
-            return cls.get(id=UUID(request_data["run_id"]) if isinstance(request_data["run_id"], str) else request_data["run_id"])
+            return await cls.get(id=run_id)
         except DocumentNotFound:
             pass
 
         if request_data["schema_version"] == "v2":
             req = DriverMatrixRunSubmissionRequestV2(**request_data)
         else:
-            return cls.submit_matrix_run(request_data)
+            return await cls.submit_matrix_run(request_data)
 
         run = cls.model_construct()
-        run.id = UUID(req.run_id) if isinstance(req.run_id, str) else req.run_id
+        run.id = run_id
         run.build_id = req.job_name
         run.build_job_url = req.job_url
         run.build_number = get_build_number(req.job_url)
         run.start_time = datetime.now(UTC)
-        run.assign_categories()
+        await run.assign_categories()
         try:
-            run.assignee = run.get_scheduled_assignee()
+            run.assignee = await run.get_scheduled_assignee()
         except Exception:
             run.assignee = None
 
         run.status = TestStatus.CREATED.value
-        run.save()
-        run.invalidate_release_snapshot()
+        await run.save()
+        await run.invalidate_release_snapshot()
         return run
 
     @classmethod
-    def submit_driver_result(cls, run_id: UUID, driver_name: str, driver_type: TestTypeType, xml_data: str):
-        run: DriverTestRun = cls.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
+    async def submit_driver_result(cls, run_id: UUID, driver_name: str, driver_type: TestTypeType, xml_data: str):
+        run: DriverTestRun = await cls.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
 
         if any(c.name == driver_name for c in run.test_collection):
             return run
@@ -196,12 +192,12 @@ class DriverTestRun(PluginModelBase):
         if run.status == TestStatus.CREATED:
             run.status = TestStatus.RUNNING.value
 
-        run.save()
+        await run.save()
         return run
 
     @classmethod
-    def submit_driver_failure(cls, run_id: UUID, driver_name: str, driver_type: TestTypeType, fail_message: str):
-        run: DriverTestRun = cls.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
+    async def submit_driver_failure(cls, run_id: UUID, driver_name: str, driver_type: TestTypeType, fail_message: str):
+        run: DriverTestRun = await cls.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
 
         if any(c.name == driver_name for c in run.test_collection):
             return run
@@ -218,12 +214,12 @@ class DriverTestRun(PluginModelBase):
         if run.status == TestStatus.CREATED:
             run.status = TestStatus.RUNNING.value
 
-        run.save()
+        await run.save()
         return run
 
     @classmethod
-    def submit_env_info(cls, run_id: UUID, env_data: str):
-        run: DriverTestRun = cls.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
+    async def submit_env_info(cls, run_id: UUID, env_data: str):
+        run: DriverTestRun = await cls.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
         env = run.parse_build_environment(env_data)
 
         existing_keys = {ei.key for ei in run.environment_info}
@@ -237,7 +233,7 @@ class DriverTestRun(PluginModelBase):
 
         run.scylla_version = env.get("scylla-version")
 
-        run.save()
+        await run.save()
         return run
 
     def parse_build_environment(self, raw_env: str) -> dict[str, str]:
@@ -345,16 +341,16 @@ class DriverTestRun(PluginModelBase):
         return test_collection
 
     @classmethod
-    def submit_matrix_run(cls, request_data):
+    async def submit_matrix_run(cls, request_data):
         # Legacy method
         req = DriverMatrixRunSubmissionRequest(**request_data)
         run = cls.model_construct()
         run.id = UUID(req.run_id) if isinstance(req.run_id, str) else req.run_id
         run.build_id = req.job_name
         run.build_job_url = req.job_url
-        run.assign_categories()
+        await run.assign_categories()
         try:
-            run.assignee = run.get_scheduled_assignee()
+            run.assignee = await run.get_scheduled_assignee()
         except Exception:
             run.assignee = None
         for key, value in req.test_environment.items():
@@ -405,7 +401,7 @@ class DriverTestRun(PluginModelBase):
             run.test_collection.append(collection)
 
         run.status = run._determine_run_status().value
-        run.save()
+        await run.save()
         return run
 
     def get_resources(self) -> list:
@@ -439,17 +435,17 @@ class DriverTestRun(PluginModelBase):
     def get_events(self) -> list:
         return []
 
-    def submit_product_version(self, version: str):
+    async def submit_product_version(self, version: str):
         self.scylla_version = version
         try:
-            new_assignee = self.get_assignment(version)
+            new_assignee = await self.get_assignment(version)
         except DocumentNotFound:
             new_assignee = None
         if new_assignee:
             self.assignee = new_assignee
-        self.index_version()
+        await self.index_version()
 
-    def finish_run(self, payload: dict = None):
+    async def finish_run(self, payload: dict = None):
         payload = payload or {}
         # ``end_time`` may be supplied (as an epoch timestamp) so replay can
         # preserve the run's original finish time; otherwise stamp it now.
@@ -462,8 +458,8 @@ class DriverTestRun(PluginModelBase):
             self.end_time = datetime.utcnow()
         status = payload.get("status", "passed")
         self.status = TestStatus(status).value
-        self.invalidate_release_snapshot()
-        self.index_version()
+        await self.invalidate_release_snapshot()
+        await self.index_version()
 
-    def submit_logs(self, logs: list[dict]):
+    async def submit_logs(self, logs: list[dict]):
         pass

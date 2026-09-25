@@ -21,7 +21,7 @@ class RegisterTunnelRequest(BaseModel):
 
 
 @router.post("/tunnel", name="api.client_api.ssh_api.register_tunnel")
-def register_tunnel(payload: RegisterTunnelRequest, user: User = Depends(api_current_user)):
+async def register_tunnel(payload: RegisterTunnelRequest, user: User = Depends(api_current_user)):
     """
     Register a client SSH public key and obtain proxy tunnel connection details.
 
@@ -32,7 +32,7 @@ def register_tunnel(payload: RegisterTunnelRequest, user: User = Depends(api_cur
                          Must be within [3600, 2592000] (1h..30d).
                          Default is 86400 (24h).
     """
-    result = TunnelService().register_tunnel(
+    result = await TunnelService().register_tunnel(
         user=user,
         public_key=payload.public_key,
         ttl_seconds=payload.ttl_seconds,
@@ -41,9 +41,9 @@ def register_tunnel(payload: RegisterTunnelRequest, user: User = Depends(api_cur
 
 
 @router.get("/tunnel", name="api.client_api.ssh_api.get_tunnel_connection")
-def get_tunnel_connection(proxy_host: str | None = Query(None),
+async def get_tunnel_connection(proxy_host: str | None = Query(None),
                           user: User = Depends(api_current_user)):
-    result = TunnelService().get_tunnel_connection(
+    result = await TunnelService().get_tunnel_connection(
         user_id=user.id,
         proxy_host=proxy_host,
     )
@@ -51,20 +51,20 @@ def get_tunnel_connection(proxy_host: str | None = Query(None),
 
 
 @router.get("/tunnel/keys", name="api.client_api.ssh_api.get_user_keys")
-def get_user_keys(tunnel_id: str | None = Query(None), user: User = Depends(api_current_user)):
+async def get_user_keys(tunnel_id: str | None = Query(None), user: User = Depends(api_current_user)):
     """
     Return SSH keys owned by the authenticated user.
 
     Optional query params:
     - tunnel_id: UUID of a specific tunnel to scope keys
     """
-    result = TunnelService().list_keys(tunnel_id=tunnel_id, user_id=user.id)
+    result = await TunnelService().list_keys(tunnel_id=tunnel_id, user_id=user.id)
     return APIResponse({"status": "ok", "response": [asdict(row) for row in result]})
 
 
 @router.get("/keys", name="api.client_api.ssh_api.get_authorized_keys")
 @allow_ssh_tunnel_server_scope
-def get_authorized_keys(fingerprint: str | None = Query(None),
+async def get_authorized_keys(fingerprint: str | None = Query(None),
                         user: User = Depends(require_roles([UserRoles.SSHTunnelServer, UserRoles.Admin]))):
     """
     Return non-expired SSH public keys in OpenSSH ``authorized_keys`` format
@@ -79,7 +79,7 @@ def get_authorized_keys(fingerprint: str | None = Query(None),
       still run the old wrapper omit it and get the full list.
     """
     try:
-        keys_text = TunnelService().get_authorized_keys(fingerprint=fingerprint)
+        keys_text = await TunnelService().get_authorized_keys(fingerprint=fingerprint)
     except TunnelServiceException as exc:
         # Answer in plain text. The shared JSON error handler replies 200, and
         # sshd would then read the JSON body as an authorized_keys file.

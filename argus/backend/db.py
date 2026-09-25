@@ -1,12 +1,11 @@
+import asyncio
 from functools import cached_property
 import logging
 from typing import Optional
 from cassandra.policies import WhiteListRoundRobinPolicy
 from cassandra import ConsistencyLevel
 from cassandra.cluster import ExecutionProfile, EXEC_PROFILE_DEFAULT, Cluster
-from cassandra.cluster import PreparedStatement
 from cassandra.cqlengine import connection
-from cassandra.query import dict_factory
 from cassandra.auth import PlainTextAuthProvider
 from coodie.drivers import register_driver
 from coodie.drivers.cassandra import CassandraDriver
@@ -17,6 +16,39 @@ from cassandra.cluster import UserTypeDoesNotExist
 from argus.backend.models.web import USED_MODELS, USED_TYPES
 
 LOGGER = logging.getLogger(__name__)
+
+
+def await_all_pages(driver_future) -> asyncio.Future:
+    """Resolve a driver ResponseFuture with every page of its result.
+
+    The driver hands a callback one page at a time; the coodie bridge keeps
+    only the first. Callbacks stay registered across pages, so one
+    registration walks them all.
+    """
+    loop = asyncio.get_running_loop()
+    done: asyncio.Future = loop.create_future()
+    rows: list = []
+
+    def resolve(setter, value):
+        if not done.done():
+            setter(value)
+
+    def on_page(page):
+        try:
+            if page is not None:
+                rows.extend(page)
+            if driver_future.has_more_pages:
+                driver_future.start_fetching_next_page()
+            else:
+                loop.call_soon_threadsafe(resolve, done.set_result, rows)
+        except Exception as exc:  # noqa: BLE001 - the driver swallows callback errors
+            loop.call_soon_threadsafe(resolve, done.set_exception, exc)
+
+    def on_error(exc):
+        loop.call_soon_threadsafe(resolve, done.set_exception, exc)
+
+    driver_future.add_callbacks(on_page, on_error)
+    return done
 
 
 class ArgusCoodieDriver(CassandraDriver):
@@ -37,6 +69,9 @@ class ArgusCoodieDriver(CassandraDriver):
                 # future coodie version; the instance is unusable.
                 raise
 
+    def _wrap_future(self, driver_future) -> asyncio.Future:
+        return await_all_pages(driver_future)
+
 
 class ScyllaCluster:
     APP_INSTANCE: Optional['ScyllaCluster'] = None
@@ -56,18 +91,6 @@ class ScyllaCluster:
                          execution_profiles={EXEC_PROFILE_DEFAULT: self.execution_profile},
                          retry_connect=True)
         self.cluster: Cluster = connection.get_cluster(connection='default')
-        self.prepared_statements = {}
-        self.read_exec_profile = ExecutionProfile(
-            consistency_level=ConsistencyLevel.ONE,
-            row_factory=dict_factory,
-            load_balancing_policy=self.lb_policy
-        )
-        self.read_named_tuple_exec_profile = ExecutionProfile(
-            consistency_level=ConsistencyLevel.ONE,
-            load_balancing_policy=self.lb_policy
-        )
-        self.cluster.add_execution_profile("read_fast", self.read_exec_profile)
-        self.cluster.add_execution_profile("read_fast_named_tuple", self.read_named_tuple_exec_profile)
         # Reuse cqlengine's already-open session: opening a new one here would
         # replay registered UDTs against a possibly not-yet-synced schema
         # (Cluster._session_register_user_types raises on fresh databases).
@@ -100,13 +123,9 @@ class ScyllaCluster:
     @classmethod
     def reconnect(cls):
         if cls.APP_INSTANCE:
-            old_statements = cls.APP_INSTANCE.prepared_statements
             config = cls.APP_INSTANCE.config
             cls.APP_INSTANCE.shutdown()
-            new_instance = cls.get(config)
-            for query, _ in old_statements.items():
-                new_instance.prepare(query)
-            return new_instance
+            return cls.get(config)
 
         return cls.get()
 
@@ -124,23 +143,16 @@ class ScyllaCluster:
             cls.APP_INSTANCE.cluster.shutdown()
             cls.APP_INSTANCE = None
 
-    def prepare(self, query: str) -> PreparedStatement:
-        if not (statement := self.prepared_statements.get(query)):
-            LOGGER.info("Unprepared statement %s, preparing...", query)
-            statement = self.session.prepare(query=query)
-            self.prepared_statements[query] = statement
-        return statement
-
-    def sync_core_tables(self):
+    async def sync_core_tables(self):
         for udt_type in USED_TYPES:
             LOGGER.info("Syncing type: %s..", udt_type.__name__)
-            udt_type.sync_type()
+            await udt_type.sync_type_async()
         self.register_coodie_udts()
         LOGGER.info("Core Types synchronized.")
 
         for document in USED_MODELS:
             LOGGER.info("Syncing model: %s..", document.__name__)
-            document.sync_table()
+            await document.sync_table()
 
         LOGGER.info("Core Models synchronized.")
 
@@ -150,7 +162,3 @@ class ScyllaCluster:
             if rule_func := getattr(model, "_sync_additional_rules", None):
                 rule_func(self.session)
         LOGGER.info("Syncing additional rules done.")
-
-    @classmethod
-    def get_session(cls):
-        return cls.get().session

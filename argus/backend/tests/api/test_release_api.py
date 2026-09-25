@@ -59,7 +59,7 @@ def _api_post(api_client, path: str, payload: dict):
 
 
 @pytest.fixture
-def saved_user():
+async def saved_user():
     """Create a real ``User`` row so assignee mutations have a valid receiver."""
     user = User(
         id=uuid.uuid4(),
@@ -69,32 +69,32 @@ def saved_user():
         password="test_password",
         roles=[UserRoles.User.value],
     )
-    user.save()
+    await user.save()
     return user
 
 
 @pytest.fixture
-def isolated_release(release_manager_service):
+async def isolated_release(release_manager_service):
     """Function-scoped release used by mutation tests so they cannot pollute
     the session-scoped ``release`` fixture (which is shared with read-only
     assertions)."""
     name = f"release_api_iso_{time.time_ns()}"
-    return release_manager_service.create_release(name, name, False)
+    return await release_manager_service.create_release(name, name, False)
 
 
 @pytest.fixture
-def isolated_group(release_manager_service, isolated_release):
+async def isolated_group(release_manager_service, isolated_release):
     name = f"release_api_iso_group_{time.time_ns()}"
-    return release_manager_service.create_group(
+    return await release_manager_service.create_group(
         name, name, build_system_id=isolated_release.name, release_id=str(
             isolated_release.id)
     )
 
 
 @pytest.fixture
-def isolated_test(release_manager_service, isolated_release, isolated_group):
+async def isolated_test(release_manager_service, isolated_release, isolated_group):
     name = f"release_api_iso_test_{time.time_ns()}"
-    return release_manager_service.create_test(
+    return await release_manager_service.create_test(
         name, name, name, name,
         group_id=str(isolated_group.id), release_id=str(isolated_release.id),
         plugin_name="scylla-cluster-tests",

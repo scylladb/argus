@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import logging
 from functools import partial, reduce
@@ -31,9 +32,10 @@ class ViewUpdateRequest(TypedDict):
 
 
 class UserViewService:
-    def create_view(self, name: str, items: list[str], widget_settings: str, user: User, description: str = None, display_name: str = None, plan_id: UUID = None) -> ArgusUserView:
+    async def create_view(self, name: str, items: list[str], widget_settings: str, user: User,
+                          description: str = None, display_name: str = None, plan_id: UUID = None) -> ArgusUserView:
         try:
-            name_check = ArgusUserView.get(name=name)
+            name_check = await ArgusUserView.get(name=name)
             raise UserViewException(
                 f"View with name {name} already exists: {name_check.id}", name, name_check, name_check.id)
         except DocumentNotFound:
@@ -45,16 +47,16 @@ class UserViewService:
         view.widget_settings = widget_settings
         view.plan_id = plan_id
         view.tests = []
-        entities = self.parse_view_entity_list(items)
+        entities = await self.parse_view_entity_list(items)
         view.tests = entities["tests"]
         view.release_ids = entities["release"]
         view.group_ids = entities["group"]
         view.user_id = user.id
 
-        view.save()
+        await view.save()
         return view
 
-    def parse_view_entity_list(self, entity_list: list[str]) -> dict[str, list[str]]:
+    async def parse_view_entity_list(self, entity_list: list[str]) -> dict[str, list[str]]:
         entities = {
             "release": [],
             "group": [],
@@ -64,21 +66,21 @@ class UserViewService:
             entity_type, entity_id = entity.split(":")
             match (entity_type):
                 case "release":
-                    entities["tests"].extend(t.id for t in ArgusTest.find(release_id=UUID(entity_id)).all())
+                    entities["tests"].extend(t.id for t in await ArgusTest.find(release_id=UUID(entity_id)).all())
                     entities["release"].append(UUID(entity_id))
                 case "group":
-                    entities["tests"].extend(t.id for t in ArgusTest.find(group_id=UUID(entity_id)).all())
+                    entities["tests"].extend(t.id for t in await ArgusTest.find(group_id=UUID(entity_id)).all())
                     entities["group"].append(UUID(entity_id))
                 case "test":
                     entities["tests"].append(UUID(entity_id))
         return entities
 
-    def test_lookup(self, query: str):
-        return TestLookup.test_lookup(query)
+    async def test_lookup(self, query: str):
+        return await TestLookup.test_lookup(query)
 
-    def update_view(self, view_id: str | UUID, update_data: ViewUpdateRequest, user: User) -> bool:
+    async def update_view(self, view_id: str | UUID, update_data: ViewUpdateRequest, user: User) -> bool:
         view_id = UUID(view_id) if isinstance(view_id, str) else view_id
-        view: ArgusUserView = ArgusUserView.get(id=view_id)
+        view: ArgusUserView = await ArgusUserView.get(id=view_id)
         if view.user_id != user.id and not user.is_admin():
             raise UserViewException("Unable to modify other users' views")
         for key in ["user_id", "id"]:
@@ -96,144 +98,152 @@ class UserViewService:
             entity_type, entity_id = entity.split(":")
             match (entity_type):
                 case "release":
-                    view.tests.extend(t.id for t in ArgusTest.find(release_id=UUID(entity_id)).all())
+                    view.tests.extend(t.id for t in await ArgusTest.find(release_id=UUID(entity_id)).all())
                     view.release_ids.append(UUID(entity_id))
                 case "group":
-                    view.tests.extend(t.id for t in ArgusTest.find(group_id=UUID(entity_id)).all())
+                    view.tests.extend(t.id for t in await ArgusTest.find(group_id=UUID(entity_id)).all())
                     view.group_ids.append(UUID(entity_id))
                 case "test":
                     view.tests.append(UUID(entity_id))
         view.last_updated = datetime.datetime.utcnow()
-        view.save()
+        await view.save()
         return True
 
-    def delete_view(self, view_id: str | UUID, user: User) -> bool:
+    async def delete_view(self, view_id: str | UUID, user: User) -> bool:
         view_id = UUID(view_id) if isinstance(view_id, str) else view_id
-        view = ArgusUserView.get(id=view_id)
+        view = await ArgusUserView.get(id=view_id)
         if view.user_id != user.id and not user.is_admin():
             raise UserViewException("Unable to modify other users' views")
-        view.delete()
+        await view.delete()
 
         return True
 
-    def get_view(self, view_id: str | UUID) -> ArgusUserView:
+    async def get_view(self, view_id: str | UUID) -> ArgusUserView:
         view_id = UUID(view_id) if isinstance(view_id, str) else view_id
         try:
-            view: ArgusUserView = ArgusUserView.get(id=view_id)
+            view: ArgusUserView = await ArgusUserView.get(id=view_id)
         except DocumentNotFound as exc:
             raise UserViewException(f"View {view_id} does not exist") from exc
         if datetime.datetime.utcnow() - (view.last_updated or datetime.datetime.fromtimestamp(0)) > datetime.timedelta(hours=1):
-            self.refresh_stale_view(view)
+            await self.refresh_stale_view(view)
         return view
 
-    def get_view_by_name(self, view_name: str) -> ArgusUserView:
+    async def get_view_by_name(self, view_name: str) -> ArgusUserView:
         try:
-            view: ArgusUserView = ArgusUserView.get(name=view_name)
+            view: ArgusUserView = await ArgusUserView.get(name=view_name)
         except DocumentNotFound as exc:
             raise UserViewException(f'View "{view_name}" does not exist') from exc
         if datetime.datetime.utcnow() - (view.last_updated or datetime.datetime.fromtimestamp(0)) > datetime.timedelta(hours=1):
-            self.refresh_stale_view(view)
+            await self.refresh_stale_view(view)
         return view
 
-    def get_all_views(self, user: User | None = None) -> list[ArgusUserView]:
+    async def get_all_views(self, user: User | None = None) -> list[ArgusUserView]:
         if user:
-            return list(ArgusUserView.find(user_id=user.id).all())
-        return list(ArgusUserView.find().all())
+            return list(await ArgusUserView.find(user_id=user.id).all())
+        return list(await ArgusUserView.find().all())
 
-    def resolve_view_tests(self, view_id: str | UUID) -> list[ArgusTest]:
+    async def resolve_view_tests(self, view_id: str | UUID) -> list[ArgusTest]:
         view_id = UUID(view_id) if isinstance(view_id, str) else view_id
         try:
-            view = ArgusUserView.get(id=view_id)
+            view = await ArgusUserView.get(id=view_id)
         except DocumentNotFound as exc:
             raise UserViewException(f"View {view_id} does not exist") from exc
-        return self.resolve_tests_by_id(view.tests)
+        return await self.resolve_tests_by_id(view.tests)
 
-    def resolve_tests_by_id(self, test_ids: list[str | UUID]) -> list[ArgusTest]:
-        tests = []
-        for batch in chunk(test_ids):
-            tests.extend(ArgusTest.find(id__in=batch).all())
+    async def resolve_tests_by_id(self, test_ids: list[str | UUID]) -> list[ArgusTest]:
+        batches = await asyncio.gather(*(ArgusTest.find(id__in=batch).all() for batch in chunk(test_ids)))
+        return [test for batch in batches for test in batch]
 
-        return tests
+    async def batch_resolve_entity(self, entity, param_name: str, entity_ids: list[UUID]) -> list:
+        batches = await asyncio.gather(
+            *(entity.find(**{f"{param_name}__in": batch}).allow_filtering().all() for batch in chunk(entity_ids))
+        )
+        return [row for batch in batches for row in batch]
 
-    def batch_resolve_entity(self, entity, param_name: str, entity_ids: list[UUID]) -> list:
-        result = []
-        for batch in chunk(entity_ids):
-            result.extend(entity.find(**{f"{param_name}__in": batch}).allow_filtering().all())
-        return result
-
-    def refresh_stale_view(self, view: ArgusUserView):
+    async def refresh_stale_view(self, view: ArgusUserView):
         if view.plan_id:
             try:
-                view.tests = [test.id for test in self.resolve_tests_by_id(ArgusReleasePlan.get(id=view.plan_id).tests)]
-                view.group_ids = ArgusReleasePlan.get(id=view.plan_id).groups
+                plan = await ArgusReleasePlan.get(id=view.plan_id)
             except DocumentNotFound:
                 LOGGER.warning("Dangling view %s from non-existent release plan %s", view.id, view.plan_id)
                 return view
+            view.group_ids = plan.groups
+            tests_query = self.resolve_tests_by_id(plan.tests)
         else:
-            view.tests = [test.id for test in self.resolve_view_tests(view.id)]
-        all_tests = set(view.tests)
-        all_tests.update(test.id for test in self.batch_resolve_entity(ArgusTest, "group_id", view.group_ids))
-        all_tests.update(test.id for test in self.batch_resolve_entity(ArgusTest, "release_id", view.release_ids))
+            tests_query = self.resolve_view_tests(view.id)
+        tests, group_tests, release_tests = await asyncio.gather(
+            tests_query,
+            self.batch_resolve_entity(ArgusTest, "group_id", view.group_ids),
+            self.batch_resolve_entity(ArgusTest, "release_id", view.release_ids),
+        )
+        all_tests = {test.id for test in tests}
+        all_tests.update(test.id for test in group_tests)
+        all_tests.update(test.id for test in release_tests)
         view.tests = list(all_tests)
         view.last_updated = datetime.datetime.utcnow()
-        view.save()
+        await view.save()
 
         return view
 
-    def resolve_releases_for_tests(self, tests: list[ArgusTest]):
+    async def resolve_releases_for_tests(self, tests: list[ArgusTest]):
         releases = []
         unique_release_ids = reduce(lambda releases, test: releases.add(test.release_id) or releases, tests, set())
         for batch in chunk(unique_release_ids):
-            releases.extend(ArgusRelease.find(id__in=batch).all())
+            releases.extend(await ArgusRelease.find(id__in=batch).all())
 
         return releases
 
-    def resolve_groups_for_tests(self, tests: list[ArgusTest]):
+    async def resolve_groups_for_tests(self, tests: list[ArgusTest]):
         releases = []
         unique_release_ids = reduce(lambda groups, test: groups.add(test.group_id) or groups, tests, set())
         for batch in chunk(unique_release_ids):
-            releases.extend(ArgusGroup.find(id__in=batch).all())
+            releases.extend(await ArgusGroup.find(id__in=batch).all())
 
         return releases
 
-    def get_pytest_view_results(self, view_id: str | UUID) -> list[PytestResultTable]:
+    async def get_pytest_view_results(self, view_id: str | UUID) -> list[PytestResultTable]:
         view_id = UUID(view_id) if isinstance(view_id, str) else view_id
 
-        view: ArgusUserView = ArgusUserView.get(id=view_id)
+        view: ArgusUserView = await ArgusUserView.get(id=view_id)
         tests: list[ArgusTest] = []
         for batch in chunk(view.tests):
-            tests.extend(ArgusTest.find(id__in=batch).all())
+            tests.extend(await ArgusTest.find(id__in=batch).all())
         tests = [test for test in tests if test.plugin_name == "generic"]
         results = []
         for batch in chunk(tests):
-            results.extend(PytestResultTable.find(test_id__in=[t.id for t in batch]).allow_filtering().all())
+            results.extend(
+                await PytestResultTable.find(test_id__in=[t.id for t in batch]).allow_filtering().all()
+            )
 
         return results
 
-    def get_versions_for_view(self, view_id: str | UUID) -> list[str]:
-        tests = self.resolve_view_tests(view_id)
-        unique_versions = {ver for plugin in all_plugin_models()
-                           for ver in plugin.get_distinct_versions_for_view(tests=tests)}
+    async def get_versions_for_view(self, view_id: str | UUID) -> list[str]:
+        tests = await self.resolve_view_tests(view_id)
+        per_plugin = await asyncio.gather(
+            *(plugin.get_distinct_versions_for_view(tests=tests) for plugin in all_plugin_models())
+        )
+        unique_versions = {ver for versions in per_plugin for ver in versions}
 
         return sorted(list(unique_versions), reverse=True)
 
-    def get_images_for_view(self, view_id: str | UUID) -> list[str]:
-        tests = self.resolve_view_tests(view_id)
-        images = AVAILABLE_PLUGINS["scylla-cluster-tests"].model.get_distinct_cloud_images_for_view(tests)
+    async def get_images_for_view(self, view_id: str | UUID) -> list[str]:
+        tests = await self.resolve_view_tests(view_id)
+        images = await AVAILABLE_PLUGINS["scylla-cluster-tests"].model.get_distinct_cloud_images_for_view(tests)
 
         return images
 
-    def resolve_view_for_edit(self, view_id: str | UUID) -> dict:
+    async def resolve_view_for_edit(self, view_id: str | UUID) -> dict:
         view_id = UUID(view_id) if isinstance(view_id, str) else view_id
-        view: ArgusUserView = ArgusUserView.get(id=view_id)
+        view: ArgusUserView = await ArgusUserView.get(id=view_id)
         resolved = view.model_dump()
-        view_groups = self.batch_resolve_entity(ArgusGroup, "id", view.group_ids)
-        view_releases = self.batch_resolve_entity(ArgusRelease, "id", view.release_ids)
-        view_tests = self.resolve_view_tests(view.id)
-        all_groups = {group.id: partial(TestLookup.index_mapper, type="group")(group)
-                      for group in self.resolve_releases_for_tests(view_tests)}
+        view_groups = await self.batch_resolve_entity(ArgusGroup, "id", view.group_ids)
+        view_releases = await self.batch_resolve_entity(ArgusRelease, "id", view.release_ids)
+        view_tests = await self.resolve_view_tests(view.id)
+        groups_for_tests, releases_for_tests = await asyncio.gather(
+            self.resolve_groups_for_tests(view_tests), self.resolve_releases_for_tests(view_tests))
+        all_groups = {group.id: partial(TestLookup.index_mapper, type="group")(group) for group in groups_for_tests}
         all_releases = {release.id: partial(TestLookup.index_mapper, type="release")(release)
-                        for release in self.resolve_releases_for_tests(view_tests)}
+                        for release in releases_for_tests}
         entities_by_id = {
             entity.id: partial(TestLookup.index_mapper, type="release" if isinstance(
                 entity, ArgusRelease) else "group")(entity)

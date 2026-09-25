@@ -19,7 +19,7 @@ from argus.common.sct_types import RawEventPayload
 from argusAI.event_similarity_processor_v2 import EventSimilarityProcessorV2
 
 
-def test_event_to_embedding_flow_should_create_embedding_for_error_event(
+async def test_event_to_embedding_flow_should_create_embedding_for_error_event(
     client_service: ClientService,
     sct_service: SCTService,
     testrun_service: TestRunService,
@@ -29,7 +29,7 @@ def test_event_to_embedding_flow_should_create_embedding_for_error_event(
     """Test that ERROR event creates unprocessed entry and processor generates embedding in ERROR table"""
     # Step 1: Create a test run
     run_type, run_req = get_fake_test_run(fake_test)
-    client_service.submit_run(run_type, asdict(run_req))
+    await client_service.submit_run(run_type, asdict(run_req))
 
     # Step 2: Submit an ERROR event
     event_data: RawEventPayload = {
@@ -47,14 +47,14 @@ def test_event_to_embedding_flow_should_create_embedding_for_error_event(
         "ts": datetime.now(tz=UTC).timestamp()
     }
 
-    sct_service.submit_event(str(run_req.run_id), event_data)
+    await sct_service.submit_event(str(run_req.run_id), event_data)
 
     # Step 3: Verify event was created in SCTEvent table
-    events = SCTEvent.find(run_id=UUID(str(run_req.run_id)), severity=SCTEventSeverity.ERROR.value).all()
+    events = await SCTEvent.find(run_id=UUID(str(run_req.run_id)), severity=SCTEventSeverity.ERROR.value).all()
     assert len(list(events)) == 1, "Event should be created in SCTEvent table"
 
     # Step 4: Verify unprocessed event was created
-    unprocessed_events = SCTUnprocessedEvent.find(
+    unprocessed_events = await SCTUnprocessedEvent.find(
         run_id=UUID(str(run_req.run_id)),
         severity=SCTEventSeverity.ERROR.value
     ).all()
@@ -71,7 +71,7 @@ def test_event_to_embedding_flow_should_create_embedding_for_error_event(
         processor._process_batch()
 
         # Check if our specific event has been processed
-        remaining = list(SCTUnprocessedEvent.find(
+        remaining = list(await SCTUnprocessedEvent.find(
             run_id=UUID(str(run_req.run_id)),
             severity=SCTEventSeverity.ERROR.value
         ).all())
@@ -82,24 +82,24 @@ def test_event_to_embedding_flow_should_create_embedding_for_error_event(
         raise AssertionError(f"Failed to process this test's event after {max_attempts} attempts")
 
     # Step 6: Verify embedding was stored in ERROR table for THIS test run
-    embeddings = SCTErrorEventEmbedding.find(run_id=UUID(str(run_req.run_id))).all()
+    embeddings = await SCTErrorEventEmbedding.find(run_id=UUID(str(run_req.run_id))).all()
     embedding_list = list(embeddings)
     assert len(embedding_list) == 1, "Embedding should be stored in ERROR table"
     assert len(embedding_list[0].embedding) > 0, "Embedding should have values"
 
     # Step 7: Verify no embedding in CRITICAL table for THIS test run
-    critical_embeddings = SCTCriticalEventEmbedding.find(run_id=UUID(str(run_req.run_id))).all()
+    critical_embeddings = await SCTCriticalEventEmbedding.find(run_id=UUID(str(run_req.run_id))).all()
     assert len(list(critical_embeddings)) == 0, "No embedding should be in CRITICAL table"
 
     # Step 8: Verify unprocessed event was removed for THIS test run
-    unprocessed_events_after = SCTUnprocessedEvent.find(
+    unprocessed_events_after = await SCTUnprocessedEvent.find(
         run_id=UUID(str(run_req.run_id)),
         severity=SCTEventSeverity.ERROR.value
     ).all()
     assert len(list(unprocessed_events_after)) == 0, "Unprocessed event should be removed"
 
 
-def test_event_to_embedding_flow_should_create_embedding_for_critical_event(
+async def test_event_to_embedding_flow_should_create_embedding_for_critical_event(
     client_service: ClientService,
     sct_service: SCTService,
     testrun_service: TestRunService,
@@ -109,7 +109,7 @@ def test_event_to_embedding_flow_should_create_embedding_for_critical_event(
     """Test that CRITICAL event creates unprocessed entry and processor generates embedding in CRITICAL table"""
     # Step 1: Create a test run
     run_type, run_req = get_fake_test_run(fake_test)
-    client_service.submit_run(run_type, asdict(run_req))
+    await client_service.submit_run(run_type, asdict(run_req))
 
     # Step 2: Submit a CRITICAL event
     event_data: RawEventPayload = {
@@ -120,10 +120,10 @@ def test_event_to_embedding_flow_should_create_embedding_for_critical_event(
         "event_type": "NodeFailure"
     }
 
-    sct_service.submit_event(str(run_req.run_id), event_data)
+    await sct_service.submit_event(str(run_req.run_id), event_data)
 
     # Step 3: Verify unprocessed event was created
-    unprocessed_events = SCTUnprocessedEvent.find(
+    unprocessed_events = await SCTUnprocessedEvent.find(
         run_id=UUID(str(run_req.run_id)),
         severity=SCTEventSeverity.CRITICAL.value
     ).all()
@@ -138,7 +138,7 @@ def test_event_to_embedding_flow_should_create_embedding_for_critical_event(
         processor._process_batch()
 
         # Check if our specific event has been processed
-        remaining = list(SCTUnprocessedEvent.find(
+        remaining = list(await SCTUnprocessedEvent.find(
             run_id=UUID(str(run_req.run_id)),
             severity=SCTEventSeverity.CRITICAL.value
         ).all())
@@ -149,17 +149,17 @@ def test_event_to_embedding_flow_should_create_embedding_for_critical_event(
         raise AssertionError(f"Failed to process this test's event after {max_attempts} attempts")
 
     # Step 5: Verify embedding was stored in CRITICAL table for THIS test run
-    embeddings = SCTCriticalEventEmbedding.find(run_id=UUID(str(run_req.run_id))).all()
+    embeddings = await SCTCriticalEventEmbedding.find(run_id=UUID(str(run_req.run_id))).all()
     embedding_list = list(embeddings)
     assert len(embedding_list) == 1, "Embedding should be stored in CRITICAL table"
     assert len(embedding_list[0].embedding) > 0, "Embedding should have values"
 
     # Step 6: Verify no embedding in ERROR table for THIS test run
-    error_embeddings = SCTErrorEventEmbedding.find(run_id=UUID(str(run_req.run_id))).all()
+    error_embeddings = await SCTErrorEventEmbedding.find(run_id=UUID(str(run_req.run_id))).all()
     assert len(list(error_embeddings)) == 0, "No embedding should be in ERROR table"
 
 
-def test_event_to_embedding_flow_should_not_create_unprocessed_for_warning_event(
+async def test_event_to_embedding_flow_should_not_create_unprocessed_for_warning_event(
     client_service: ClientService,
     sct_service: SCTService,
     testrun_service: TestRunService,
@@ -169,7 +169,7 @@ def test_event_to_embedding_flow_should_not_create_unprocessed_for_warning_event
     """Test that WARNING events do NOT create unprocessed entries"""
     # Step 1: Create a test run
     run_type, run_req = get_fake_test_run(fake_test)
-    client_service.submit_run(run_type, asdict(run_req))
+    await client_service.submit_run(run_type, asdict(run_req))
 
     # Step 2: Submit a WARNING event
     event_data: RawEventPayload = {
@@ -180,21 +180,21 @@ def test_event_to_embedding_flow_should_not_create_unprocessed_for_warning_event
         "event_type": "PerformanceWarning"
     }
 
-    sct_service.submit_event(str(run_req.run_id), event_data)
+    await sct_service.submit_event(str(run_req.run_id), event_data)
 
     # Step 3: Verify event was created in SCTEvent table
-    events = SCTEvent.find(run_id=UUID(str(run_req.run_id)), severity=SCTEventSeverity.WARNING.value).all()
+    events = await SCTEvent.find(run_id=UUID(str(run_req.run_id)), severity=SCTEventSeverity.WARNING.value).all()
     assert len(list(events)) == 1, "Event should be created in SCTEvent table"
 
     # Step 4: Verify NO unprocessed event was created
-    unprocessed_events = SCTUnprocessedEvent.find(
+    unprocessed_events = await SCTUnprocessedEvent.find(
         run_id=UUID(str(run_req.run_id)),
         severity=SCTEventSeverity.WARNING.value
     ).all()
     assert len(list(unprocessed_events)) == 0, "Unprocessed event should NOT be created for WARNING"
 
 
-def test_event_to_embedding_flow_should_process_multiple_events_into_separate_tables(
+async def test_event_to_embedding_flow_should_process_multiple_events_into_separate_tables(
     client_service: ClientService,
     sct_service: SCTService,
     testrun_service: TestRunService,
@@ -204,7 +204,7 @@ def test_event_to_embedding_flow_should_process_multiple_events_into_separate_ta
     """Test that processor handles multiple events and stores them in correct severity-specific tables"""
     # Step 1: Create a test run
     run_type, run_req = get_fake_test_run(fake_test)
-    client_service.submit_run(run_type, asdict(run_req))
+    await client_service.submit_run(run_type, asdict(run_req))
 
     # Step 2: Submit multiple ERROR events
     for i in range(3):
@@ -215,7 +215,7 @@ def test_event_to_embedding_flow_should_process_multiple_events_into_separate_ta
             "ts": datetime.now(tz=UTC).timestamp() + i,
             "event_type": "DatabaseEvent"
         }
-        sct_service.submit_event(str(run_req.run_id), event_data)
+        await sct_service.submit_event(str(run_req.run_id), event_data)
 
     # Step 3: Submit multiple CRITICAL events
     for i in range(2):
@@ -226,10 +226,10 @@ def test_event_to_embedding_flow_should_process_multiple_events_into_separate_ta
             "ts": datetime.now(tz=UTC).timestamp() + i + 100,
             "event_type": "CriticalFailure"
         }
-        sct_service.submit_event(str(run_req.run_id), event_data)
+        await sct_service.submit_event(str(run_req.run_id), event_data)
 
     # Step 4: Verify 5 unprocessed events were created
-    all_unprocessed = list(SCTUnprocessedEvent.find(run_id=UUID(str(run_req.run_id))).all())
+    all_unprocessed = list(await SCTUnprocessedEvent.find(run_id=UUID(str(run_req.run_id))).all())
     assert len(all_unprocessed) == 5, "Should have 5 unprocessed events"
 
     # Step 5: Run processor to process all events
@@ -241,7 +241,7 @@ def test_event_to_embedding_flow_should_process_multiple_events_into_separate_ta
         processor._process_batch(batch_size=100)
 
         # Check if our specific events have been processed
-        remaining = list(SCTUnprocessedEvent.find(run_id=UUID(str(run_req.run_id))).all())
+        remaining = list(await SCTUnprocessedEvent.find(run_id=UUID(str(run_req.run_id))).all())
 
         if len(remaining) == 0:
             break
@@ -249,18 +249,18 @@ def test_event_to_embedding_flow_should_process_multiple_events_into_separate_ta
         raise AssertionError(f"Failed to process all of this test's events after {max_attempts} attempts")
 
     # Step 6: Verify embeddings were stored in correct tables for THIS test run
-    error_embeddings = list(SCTErrorEventEmbedding.find(run_id=UUID(str(run_req.run_id))).all())
-    critical_embeddings = list(SCTCriticalEventEmbedding.find(run_id=UUID(str(run_req.run_id))).all())
+    error_embeddings = list(await SCTErrorEventEmbedding.find(run_id=UUID(str(run_req.run_id))).all())
+    critical_embeddings = list(await SCTCriticalEventEmbedding.find(run_id=UUID(str(run_req.run_id))).all())
 
     assert len(error_embeddings) == 3, "Should have 3 ERROR embeddings in ERROR table"
     assert len(critical_embeddings) == 2, "Should have 2 CRITICAL embeddings in CRITICAL table"
 
     # Step 7: Verify all unprocessed events were removed for THIS test run
-    remaining_unprocessed = list(SCTUnprocessedEvent.find(run_id=UUID(str(run_req.run_id))).all())
+    remaining_unprocessed = list(await SCTUnprocessedEvent.find(run_id=UUID(str(run_req.run_id))).all())
     assert len(remaining_unprocessed) == 0, "All unprocessed events should be removed"
 
 
-def test_dedup_marks_same_run_twin_despite_large_other_run_population(
+async def test_dedup_marks_same_run_twin_despite_large_other_run_population(
     client_service: ClientService,
     sct_service: SCTService,
     testrun_service: TestRunService,
@@ -295,11 +295,11 @@ def test_dedup_marks_same_run_twin_despite_large_other_run_population(
 
     # Create a run and submit two near-identical ERROR events (same message → same embedding).
     run_type, run_req = get_fake_test_run(fake_test)
-    client_service.submit_run(run_type, asdict(run_req))
+    await client_service.submit_run(run_type, asdict(run_req))
     message = "NoHostAvailable Unable to complete the operation ConnectionShutdown Bad file descriptor"
     first_ts = datetime.now(tz=UTC).timestamp()
     for offset in (0, 1):
-        sct_service.submit_event(
+        await sct_service.submit_event(
             str(run_req.run_id),
             {
                 "message": message,
@@ -315,7 +315,7 @@ def test_dedup_marks_same_run_twin_despite_large_other_run_population(
     for _ in range(max_attempts):
         processor._process_batch(batch_size=100)
         remaining = list(
-            SCTUnprocessedEvent.find(run_id=UUID(str(run_req.run_id)), severity=SCTEventSeverity.ERROR.value).all()
+            await SCTUnprocessedEvent.find(run_id=UUID(str(run_req.run_id)), severity=SCTEventSeverity.ERROR.value).all()
         )
         if len(remaining) == 0:
             break
@@ -323,7 +323,7 @@ def test_dedup_marks_same_run_twin_despite_large_other_run_population(
         raise AssertionError(f"Failed to process this test's events after {max_attempts} attempts")
 
     # Exactly one event is canonical; the other points to it via duplicate_id (order-independent).
-    events = list(SCTEvent.find(run_id=UUID(str(run_req.run_id)), severity=SCTEventSeverity.ERROR.value).all())
+    events = list(await SCTEvent.find(run_id=UUID(str(run_req.run_id)), severity=SCTEventSeverity.ERROR.value).all())
     assert len(events) == 2, "Both ERROR events should exist in SCTEvent"
     canonical = [e for e in events if e.duplicate_id is None]
     duplicates = [e for e in events if e.duplicate_id is not None]
@@ -332,11 +332,11 @@ def test_dedup_marks_same_run_twin_despite_large_other_run_population(
     assert duplicates[0].duplicate_id == canonical[0].event_id, "duplicate_id must point at the canonical event"
 
     # Only the canonical event is embedded for this run; the duplicate is not stored.
-    run_embeddings = list(SCTErrorEventEmbedding.find(run_id=UUID(str(run_req.run_id))).all())
+    run_embeddings = list(await SCTErrorEventEmbedding.find(run_id=UUID(str(run_req.run_id))).all())
     assert len(run_embeddings) == 1, "Only one embedding should be stored for the run (duplicate skipped)"
 
 
-def test_event_to_embedding_flow_should_handle_processing_errors_gracefully(
+async def test_event_to_embedding_flow_should_handle_processing_errors_gracefully(
     client_service: ClientService,
     sct_service: SCTService,
     testrun_service: TestRunService,
@@ -346,7 +346,7 @@ def test_event_to_embedding_flow_should_handle_processing_errors_gracefully(
     """Test that processor handles errors gracefully and removes problematic events"""
     # Step 1: Create a test run
     run_type, run_req = get_fake_test_run(fake_test)
-    client_service.submit_run(run_type, asdict(run_req))
+    await client_service.submit_run(run_type, asdict(run_req))
 
     # Step 2: Submit an event
     event_data: RawEventPayload = {
@@ -356,7 +356,7 @@ def test_event_to_embedding_flow_should_handle_processing_errors_gracefully(
         "ts": datetime.now(tz=UTC).timestamp(),
         "event_type": "TestEvent"
     }
-    sct_service.submit_event(str(run_req.run_id), event_data)
+    await sct_service.submit_event(str(run_req.run_id), event_data)
 
     # Step 3: Manually create an unprocessed event that points to non-existent event
     fake_run_id = uuid4()
@@ -364,7 +364,7 @@ def test_event_to_embedding_flow_should_handle_processing_errors_gracefully(
     fake_unprocessed.run_id = fake_run_id
     fake_unprocessed.severity = SCTEventSeverity.ERROR.value
     fake_unprocessed.ts = datetime.now(tz=UTC)
-    fake_unprocessed.save()
+    await fake_unprocessed.save()
 
     # Step 4: Run processor
     processor = embedding_processor
@@ -375,7 +375,7 @@ def test_event_to_embedding_flow_should_handle_processing_errors_gracefully(
     assert processor.error_count >= 1, "Should have at least one error"
 
     # Step 5: Verify the fake unprocessed event was still removed (to avoid infinite retries)
-    fake_unprocessed_after = list(SCTUnprocessedEvent.find(
+    fake_unprocessed_after = list(await SCTUnprocessedEvent.find(
         run_id=fake_run_id,
         severity=SCTEventSeverity.ERROR.value
     ).all())

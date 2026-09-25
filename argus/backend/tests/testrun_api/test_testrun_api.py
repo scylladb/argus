@@ -138,12 +138,12 @@ def test_set_investigation_status_missing_field_returns_error(api_client, submit
     assert resp.json()["status"] == "error"
 
 
-def test_set_assignee_persists_user_id(api_client, submitted_run, fake_test):
+async def test_set_assignee_persists_user_id(api_client, submitted_run, fake_test):
     rid, _ = submitted_run
     assignee = User(id=uuid4(), username=f"assignee_{uuid4().hex[:8]}",
                     full_name="Assignee User", email="a@example.com",
                     password="x", roles=[UserRoles.User.value], registration_date=datetime.now(UTC))
-    assignee.save()
+    await assignee.save()
 
     with patch("argus.backend.service.notification_manager.NotificationManagerService.send_notification"):
         resp = api_client.post(
@@ -158,12 +158,12 @@ def test_set_assignee_persists_user_id(api_client, submitted_run, fake_test):
     assert UUID(str(follow.json()["response"]["assignee"])) == assignee.id
 
 
-def test_set_assignee_placeholder_clears_assignee(api_client, submitted_run, fake_test):
+async def test_set_assignee_placeholder_clears_assignee(api_client, submitted_run, fake_test):
     rid, _ = submitted_run
     assignee = User(id=uuid4(), username=f"assignee_{uuid4().hex[:8]}",
                     full_name="Assignee User 2", email="a2@example.com",
                     password="x", roles=[UserRoles.User.value], registration_date=datetime.now(UTC))
-    assignee.save()
+    await assignee.save()
 
     with patch("argus.backend.service.notification_manager.NotificationManagerService.send_notification"):
         # First assign so old_assignee resolves to a real user when we clear it.
@@ -257,7 +257,7 @@ def test_update_run_comment_changes_message(api_client, submitted_run, fake_test
     assert "original" not in messages
 
 
-def test_delete_run_comment_removes_record(api_client, submitted_run, fake_test):
+async def test_delete_run_comment_removes_record(api_client, submitted_run, fake_test):
     rid, _ = submitted_run
     _post_comment(api_client, fake_test.id, rid, "to be deleted")
     listing = api_client.get(f"{API_PREFIX}/run/{rid}/comments").json()["response"]
@@ -272,7 +272,7 @@ def test_delete_run_comment_removes_record(api_client, submitted_run, fake_test)
     messages = [c["message"] for c in resp.json()["response"]]
     assert "to be deleted" not in messages
     with pytest.raises(DocumentNotFound):
-        ArgusTestRunComment.get(id=UUID(target["id"]))
+        await ArgusTestRunComment.get(id=UUID(target["id"]))
 
 
 # ---------------------------------------------------------------------------
@@ -382,18 +382,18 @@ def _submit_pytest_result(api_client, name: str, *, status: str = "passed",
 
 
 @pytest.fixture
-def cleanup_pytest_rows():
+async def cleanup_pytest_rows():
     """Yield a list to which tests append pytest result names; rows are deleted on teardown."""
     names: list[str] = []
     yield names
     from argus.backend.models.pytest import PytestResultTable, PytestUserField
     for name in names:
         try:
-            PytestResultTable.find(name=name).delete()
+            await PytestResultTable.find(name=name).delete()
         except Exception:
             pass
         try:
-            PytestUserField.find(name=name).delete()
+            await PytestUserField.find(name=name).delete()
         except Exception:
             pass
 

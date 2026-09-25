@@ -1,18 +1,21 @@
+import asyncio
 import copy
 import logging
 import math
 import operator
 from collections import defaultdict
 from datetime import datetime, timezone
-from functools import partial, cache
+from functools import partial
 from typing import List, Dict, Any
 from uuid import UUID, uuid4
 
 from dataclasses import dataclass
+from coodie.aio import execute_raw
 from coodie.exceptions import DocumentNotFound
 
-from argus.backend.db import ScyllaCluster
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ArgusBestResultData, ColumnMetadata, ArgusGraphView
+from argus.backend.models.web import ArgusTest
+from argus.backend.util.common import chunk, gather_limited, select_rows
 from argus.backend.plugins.sct.udt import PackageVersion
 from argus.backend.service.testrun import TestRunService
 
@@ -394,7 +397,7 @@ def create_chartjs(table: ArgusGenericResultMetadata, data: list[ArgusGenericRes
 class ResultsService:
 
     def __init__(self):
-        self.cluster = ScyllaCluster.get()
+        self._runs_details: dict[UUID, asyncio.Future[RunsDetails]] = {}
 
     def _remove_duplicate_packages(self, packages: List[PackageVersion]) -> List[PackageVersion]:
         """removes scylla packages that are considered as duplicates:
@@ -409,66 +412,55 @@ class ResultsService:
         packages = [p for p in packages if p.name not in packages_to_remove]
         return packages
 
-    @cache
-    def _get_runs_details(self, test_id: UUID) -> RunsDetails:
-        plugin_query = self.cluster.prepare("SELECT id, plugin_name FROM argus_test_v2 WHERE id = ?")
-        plugin_name = self.cluster.session.execute(plugin_query, parameters=(test_id,)).one()['plugin_name']
+    async def _get_runs_details(self, test_id: UUID) -> RunsDetails:
+        if (pending := self._runs_details.get(test_id)) is None:
+            pending = self._runs_details[test_id] = asyncio.ensure_future(self._load_runs_details(test_id))
+        return await pending
+
+    async def _load_runs_details(self, test_id: UUID) -> RunsDetails:
+        plugin_name = (await select_rows(ArgusTest.find(id=test_id), "plugin_name"))[0]["plugin_name"]
         plugin = TestRunService().get_plugin(plugin_name)
-        runs_details_query = self.cluster.prepare(
-            f"SELECT id, investigation_status, packages FROM {plugin.model.table_name()} WHERE test_id = ?")
-        rows = self.cluster.session.execute(runs_details_query, parameters=(test_id,)).all()
+        rows = await select_rows(plugin.model.find(test_id=test_id), "id", "investigation_status", "packages")
         ignored_runs = [row["id"] for row in rows if row["investigation_status"].lower() == "ignored"]
         packages = {row["id"]: self._remove_duplicate_packages(
             row["packages"]) for row in rows if row["packages"] and row["id"] not in ignored_runs}
         return RunsDetails(ignored=ignored_runs, packages=packages)
 
-    def _get_tables_metadata(self, test_id: UUID) -> list[ArgusGenericResultMetadata]:
-        query_fields = ["name", "description", "columns_meta", "rows_meta", "validation_rules", "sut_package_name"]
-        raw_query = (f"SELECT {','.join(query_fields)}"
-                     f" FROM generic_result_metadata_v1 WHERE test_id = ?")
-        query = self.cluster.prepare(raw_query)
-        tables_meta = self.cluster.session.execute(query=query, parameters=(test_id,))
+    async def _get_tables_metadata(self, test_id: UUID) -> list[ArgusGenericResultMetadata]:
+        tables_meta = await select_rows(ArgusGenericResultMetadata.find(test_id=test_id), "name", "description",
+                                        "columns_meta", "rows_meta", "validation_rules", "sut_package_name")
         return [ArgusGenericResultMetadata(test_id=test_id, **table) for table in tables_meta]
 
-    def _get_tables_data(self, test_id: UUID, table_name: str, ignored_runs: list[RunId],
-                         start_date: datetime | None = None, end_date: datetime | None = None) -> list[ArgusGenericResultData]:
-        query_fields = ["run_id", "column", "row", "value", "status", "sut_timestamp"]
-        raw_query = (f"SELECT {','.join(query_fields)}"
-                     f" FROM generic_result_data_v1 WHERE test_id = ? AND name = ?")
-
-        parameters = [test_id, table_name]
-
+    async def _get_tables_data(self, test_id: UUID, table_name: str, ignored_runs: list[RunId],
+                               start_date: datetime | None = None,
+                               end_date: datetime | None = None) -> list[ArgusGenericResultData]:
+        query = ArgusGenericResultData.find(test_id=test_id, name=table_name)
         if start_date:
-            raw_query += " AND sut_timestamp >= ?"
-            parameters.append(start_date)
+            query = query.filter(sut_timestamp__gte=start_date)
         if end_date:
-            raw_query += " AND sut_timestamp <= ?"
-            parameters.append(end_date)
-
+            query = query.filter(sut_timestamp__lte=end_date)
         if start_date or end_date:
-            raw_query += " ALLOW FILTERING"
-        query = self.cluster.prepare(raw_query)
-        data = self.cluster.session.execute(query=query, parameters=tuple(parameters))
+            query = query.allow_filtering()
+        data = await select_rows(query, "run_id", "column", "row", "value", "status", "sut_timestamp")
         return [ArgusGenericResultData(test_id=test_id, name=table_name, **cell)
                 for cell in data if cell["run_id"] not in ignored_runs]
 
-    def get_table_metadata(self, test_id: UUID, table_name: str) -> ArgusGenericResultMetadata:
-        raw_query = ("SELECT * FROM generic_result_metadata_v1 WHERE test_id = ? AND name = ?")
-        query = self.cluster.prepare(raw_query)
-        table_meta = self.cluster.session.execute(query=query, parameters=(test_id, table_name))
-        return [ArgusGenericResultMetadata(**table) for table in table_meta][0] if table_meta else None
+    async def get_table_metadata(self, test_id: UUID, table_name: str) -> ArgusGenericResultMetadata:
+        table_meta = await select_rows(ArgusGenericResultMetadata.find(test_id=test_id, name=table_name),
+                                       *ArgusGenericResultMetadata.model_fields)
+        return ArgusGenericResultMetadata(**table_meta[0]) if table_meta else None
 
-    def get_run_results(self, test_id: UUID, run_id: UUID, key_metrics: list[str] | None = None,
-                        include_hidden: bool = False) -> list:
+    async def get_run_results(self, test_id: UUID, run_id: UUID, key_metrics: list[str] | None = None,
+                              include_hidden: bool = False) -> list:
         query_fields = ["column", "row", "value", "value_text", "status"]
         raw_query = (f"SELECT {','.join(query_fields)}, WRITETIME(status) as ordering "
-                     f"FROM generic_result_data_v1 WHERE test_id = ? AND run_id = ? AND name = ?")
-        query = self.cluster.prepare(raw_query)
-        tables_meta = self._get_tables_metadata(test_id=test_id)
+                     f"FROM {ArgusGenericResultData._get_keyspace()}.{ArgusGenericResultData.table_name()} "
+                     "WHERE test_id = ? AND run_id = ? AND name = ?")
+        tables_meta = await self._get_tables_metadata(test_id=test_id)
+        tables_cells = await asyncio.gather(*(execute_raw(raw_query, [test_id, run_id, table.name])
+                                              for table in tables_meta))
         table_entries = []
-        for table in tables_meta:
-            cells = self.cluster.session.execute(query=query, parameters=(test_id, run_id, table.name))
-            cells = [dict(cell.items()) for cell in cells]
+        for table, cells in zip(tables_meta, tables_cells):
             if key_metrics:
                 cells = [cell for cell in cells if cell['column'] in key_metrics]
             if not cells:
@@ -529,21 +521,26 @@ class ResultsService:
 
         return [{entry['table_name']: entry['table_data']} for entry in table_entries]
 
-    def get_test_graphs(self, test_id: UUID, start_date: datetime | None = None, end_date: datetime | None = None, table_names: list[str] | None = None):
-        runs_details = self._get_runs_details(test_id)
-        tables_meta = self._get_tables_metadata(test_id=test_id)
+    async def get_test_graphs(self, test_id: UUID, start_date: datetime | None = None,
+                              end_date: datetime | None = None, table_names: list[str] | None = None):
+        runs_details, tables_meta = await asyncio.gather(self._get_runs_details(test_id),
+                                                         self._get_tables_metadata(test_id=test_id))
 
         if table_names:
             tables_meta = [table for table in tables_meta if table.name in table_names]
 
+        tables_results = await asyncio.gather(*(
+            asyncio.gather(
+                self._get_tables_data(test_id=test_id, table_name=table.name, ignored_runs=runs_details.ignored,
+                                      start_date=start_date, end_date=end_date),
+                self.get_best_results(test_id=test_id, name=table.name, runs_details=runs_details))
+            for table in tables_meta))
+
         graphs = []
         releases_filters = set()
-        for table in tables_meta:
-            data = self._get_tables_data(test_id=test_id, table_name=table.name, ignored_runs=runs_details.ignored,
-                                         start_date=start_date, end_date=end_date)
+        for table, (data, best_results) in zip(tables_meta, tables_results):
             if not data:
                 continue
-            best_results = self.get_best_results(test_id=test_id, name=table.name)
             main_package = tables_meta[0].sut_package_name
             if not main_package:
                 main_package = _identify_most_changed_package(
@@ -555,28 +552,28 @@ class ResultsService:
         ticks = calculate_graph_ticks(graphs)
         return graphs, ticks, list(releases_filters)
 
-    def is_results_exist(self, test_id: UUID):
+    async def is_results_exist(self, test_id: UUID):
         """Verify if results for given test id exist at all."""
-        return bool(ArgusGenericResultMetadata.find(test_id=test_id).only("name").limit(1).all())
+        return bool(await ArgusGenericResultMetadata.find(test_id=test_id).only("name").limit(1).all())
 
-    def get_best_results(self, test_id: UUID, name: str) -> dict[str, List[BestResult]]:
-        runs_details = self._get_runs_details(test_id)
-        query_fields = ["key", "value", "result_date", "run_id"]
-        raw_query = (f"SELECT {','.join(query_fields)}"
-                     f" FROM generic_result_best_v2 WHERE test_id = ? and name = ?")
-        query = self.cluster.prepare(raw_query)
-        best_results = [BestResult(**best) for best in self.cluster.session.execute(query=query, parameters=(test_id, name))
-                        if best["run_id"] not in runs_details.ignored]
+    async def get_best_results(self, test_id: UUID, name: str,
+                               runs_details: RunsDetails | None = None) -> dict[str, List[BestResult]]:
+        if runs_details is None:
+            runs_details = await self._get_runs_details(test_id)
+        rows = await select_rows(ArgusBestResultData.find(test_id=test_id, name=name),
+                                 "key", "value", "result_date", "run_id")
+        best_results = [BestResult(**best) for best in rows if best["run_id"] not in runs_details.ignored]
         best_results_map = defaultdict(list)
         for best in sorted(best_results, key=lambda x: x.result_date):
             best_results_map.setdefault(best.key, []).append(best)
         return best_results_map
 
-    def update_best_results(self, test_id: UUID, table_name: str, cells: list[Cell],
-                            table_metadata: ArgusGenericResultMetadata, run_id: str) -> dict[str, List[BestResult]]:
+    async def update_best_results(self, test_id: UUID, table_name: str, cells: list[Cell],
+                                  table_metadata: ArgusGenericResultMetadata,
+                                  run_id: str) -> dict[str, List[BestResult]]:
         """update best results for given test_id and table_name based on cells values - if any value is better than current best"""
         higher_is_better_map = {meta.name: meta.higher_is_better for meta in table_metadata.columns_meta}
-        best_results = self.get_best_results(test_id=test_id, name=table_name)
+        best_results = await self.get_best_results(test_id=test_id, name=table_name)
         for cell in cells:
             if cell.value is None:
                 # textual value, skip
@@ -591,15 +588,18 @@ class ResultsService:
             if current_best is None or is_better(current_best.value):
                 result_date = datetime.now(timezone.utc)
                 best_results[key].append(BestResult(key=key, value=cell.value, result_date=result_date, run_id=run_id))
-                ArgusBestResultData(test_id=test_id, name=table_name, key=key, value=cell.value, result_date=result_date,
-                                    run_id=run_id).save()
+                await ArgusBestResultData(test_id=test_id, name=table_name, key=key, value=cell.value,
+                                          result_date=result_date, run_id=run_id).save()
         return best_results
 
-    def _exclude_disabled_tests(self, test_ids: list[UUID]) -> list[UUID]:
-        is_enabled_query = self.cluster.prepare("SELECT id, enabled FROM argus_test_v2 WHERE id = ?")
-        return [test_id for test_id in test_ids if self.cluster.session.execute(is_enabled_query, parameters=(test_id,)).one()['enabled']]
+    async def _exclude_disabled_tests(self, test_ids: list[UUID]) -> list[UUID]:
+        enabled = set()
+        for batch in chunk(test_ids):
+            rows = await ArgusTest.find(id__in=batch).only("id", "enabled").values_list("id", "enabled").all()
+            enabled.update(test_id for test_id, is_enabled in rows if is_enabled)
+        return [test_id for test_id in test_ids if test_id in enabled]
 
-    def get_tests_by_version(self, sut_package_name: str, test_ids: list[UUID]) -> dict:
+    async def get_tests_by_version(self, sut_package_name: str, test_ids: list[UUID]) -> dict:
         """
         Get the latest run details for each test method, excluding ignored runs.
         Returns:
@@ -612,16 +612,12 @@ class ResultsService:
         plugin = TestRunService().get_plugin("scylla-cluster-tests")
         result = defaultdict(lambda: defaultdict(dict))
         test_info = {}
-        test_ids = self._exclude_disabled_tests(test_ids)
-        for test_id in test_ids:
-            runs_details_query = self.cluster.prepare(
-                f"""
-                SELECT id, status, investigation_status, test_name, build_id, packages, test_method, started_by
-                FROM {plugin.model.table_name()}
-                WHERE test_id = ?
-                """
-            )
-            rows = self.cluster.session.execute(runs_details_query, parameters=(test_id,)).all()
+        test_ids = await self._exclude_disabled_tests(test_ids)
+        rows_per_test = await gather_limited(
+            select_rows(plugin.model.find(test_id=test_id), "id", "status", "investigation_status",
+                        "test_name", "build_id", "packages", "test_method", "started_by")
+            for test_id in test_ids)
+        for test_id, rows in zip(test_ids, rows_per_test):
             for row in rows:
                 if row["investigation_status"].lower() == "ignored":
                     continue
@@ -660,16 +656,16 @@ class ResultsService:
             'test_info': test_info
         }
 
-    def create_argus_graph_view(self, test_id: UUID, name: str, description: str) -> ArgusGraphView:
+    async def create_argus_graph_view(self, test_id: UUID, name: str, description: str) -> ArgusGraphView:
         view_id = uuid4()
         graph_view = ArgusGraphView(test_id=test_id, id=view_id, name=name, description=description)
-        graph_view.save()
+        await graph_view.save()
         return graph_view
 
-    def update_argus_graph_view(self, test_id: UUID, view_id: UUID, name: str, description: str,
-                                graphs: dict[str, str]) -> ArgusGraphView:
+    async def update_argus_graph_view(self, test_id: UUID, view_id: UUID, name: str, description: str,
+                                      graphs: dict[str, str]) -> ArgusGraphView:
         try:
-            graph_view = ArgusGraphView.get(test_id=test_id, id=view_id)
+            graph_view = await ArgusGraphView.get(test_id=test_id, id=view_id)
         except DocumentNotFound:
             raise ValueError(f"GraphView with id {view_id} does not exist for test {test_id}")
 
@@ -678,17 +674,17 @@ class ResultsService:
         keys_to_remove = existing_keys - new_keys
 
         if keys_to_remove:
-            ArgusGraphView.find(test_id=test_id, id=view_id).update(graphs__remove=set(keys_to_remove))
+            await ArgusGraphView.find(test_id=test_id, id=view_id).update(graphs__remove=set(keys_to_remove))
 
         if graphs:
-            ArgusGraphView.find(test_id=test_id, id=view_id).update(graphs__update=graphs)
+            await ArgusGraphView.find(test_id=test_id, id=view_id).update(graphs__update=graphs)
 
-        ArgusGraphView.find(test_id=test_id, id=view_id).update(
+        await ArgusGraphView.find(test_id=test_id, id=view_id).update(
             name=name,
             description=description
         )
 
-        return ArgusGraphView.get(test_id=test_id, id=view_id)
+        return await ArgusGraphView.get(test_id=test_id, id=view_id)
 
-    def get_argus_graph_views(self, test_id: UUID) -> list[ArgusGraphView]:
-        return list(ArgusGraphView.find(test_id=test_id))
+    async def get_argus_graph_views(self, test_id: UUID) -> list[ArgusGraphView]:
+        return await ArgusGraphView.find(test_id=test_id).all()

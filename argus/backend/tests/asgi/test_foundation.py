@@ -5,11 +5,13 @@ Covers the pieces every controller relies on: the signed session cookie
 APIException contract, and request context in log lines.
 """
 from datetime import UTC, datetime
+import inspect
 import io
 import logging
 import uuid
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.routing import APIRoute
 from pytest import fixture
 from starlette.testclient import TestClient
 
@@ -23,22 +25,22 @@ probe = APIRouter(prefix="/asgi-probe")
 
 
 @probe.get("/me")
-def probe_me(user: User = Depends(api_current_user)):
+async def probe_me(user: User = Depends(api_current_user)):
     return {"status": "ok", "response": user.username}
 
 
 @probe.get("/admin-only")
-def probe_admin(user: User = Depends(require_roles(UserRoles.Admin))):
+async def probe_admin(user: User = Depends(require_roles(UserRoles.Admin))):
     return {"status": "ok", "response": user.username}
 
 
 @probe.get("/boom")
-def probe_boom():
+async def probe_boom():
     raise APIException("probe exploded", "with-argument")
 
 
 @probe.get("/session-write")
-def probe_session_write(request: Request):
+async def probe_session_write(request: Request):
     request.session["probe"] = "value"
     return {"status": "ok"}
 
@@ -59,12 +61,12 @@ def db_user_token() -> str:
 
 
 @fixture(scope="module")
-def db_user(argus_db, db_user_token) -> User:
+async def db_user(argus_db, db_user_token) -> User:
     user = User(id=uuid.uuid4(), username="asgi_probe_user", full_name="ASGI Probe",
                 email="asgi-probe@scylladb.com", roles=[UserRoles.User],
                 password="", registration_date=datetime.now(UTC))
-    user.save()
-    UserOauthToken(user_id=user.id, token=hash_api_token(db_user_token), kind=API_TOKEN_KIND).save()
+    await user.save()
+    await UserOauthToken(user_id=user.id, token=hash_api_token(db_user_token), kind=API_TOKEN_KIND).save()
     return user
 
 
@@ -153,3 +155,12 @@ def test_log_lines_carry_request_context(api_client):
     assert "[TraceId:" in output
     assert "/asgi-probe/boom?marker=ctx" in output
     assert "probe_boom" in output
+
+
+def test_every_route_handler_is_a_coroutine(asgi_app):
+    offenders = [
+        f"{route.path} -> {route.endpoint.__module__}.{route.endpoint.__qualname__}"
+        for route in asgi_app.routes
+        if isinstance(route, APIRoute) and not inspect.iscoroutinefunction(route.endpoint)
+    ]
+    assert offenders == [], "sync route handlers: " + ", ".join(offenders)

@@ -52,7 +52,7 @@ web-backend = [
   "boto3 ~= 1.38.9",
   "jira>=3.10.5",
   "zstandard >= 0.22.0",
-  "coodie>=1.7.3",
+  "coodie~=1.7.3",
   "fastapi>=0.141.1",
   "gunicorn>=26.0.0",
   "uvicorn>=0.40.0",
@@ -64,6 +64,7 @@ web-backend = [
   "prometheus-fastapi-instrumentator>=8.1.0",
   "python-multipart>=0.0.32",
   "timelength>=3.0.4",
+  "httpx2 >= 2.12.0",
 ]
 docker-image = ["supervisor ~= 4.2.4"]
 dev = [
@@ -81,9 +82,7 @@ dev = [
   "pytest-xdist ~= 3.7.0",
   "pytest-subtests ~= 0.14.1",
   "boto3-stubs ~= 1.38.9",
-  # starlette.testclient's transport; httpx is only pulled in transitively
-  # by the ai extra, and fastapi does not depend on either.
-  "httpx2 >= 2.12.0",
+  "pytest-asyncio >= 1.0",
 ]
 ai = [
   "chromadb >= 1.5.9",
@@ -137,6 +136,9 @@ ignore = "E226,E24,W50,W690,E402,E731"
 
 [tool.pytest.ini_options]
 markers = ["docker_required: this test requires docker and docker-compose"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 log_cli = true
 log_cli_level = "INFO"
 

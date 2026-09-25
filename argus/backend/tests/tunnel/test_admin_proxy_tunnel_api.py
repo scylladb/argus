@@ -19,21 +19,21 @@ def _json_post(client, url: str, payload: dict) -> object:
     return client.post(url, json=payload)
 
 
-def _active_config_ids() -> list:
-    return [cfg.id for cfg in ProxyTunnelConfig.find().all() if cfg.is_active]
+async def _active_config_ids() -> list:
+    return [cfg.id for cfg in await ProxyTunnelConfig.find().all() if cfg.is_active]
 
 
-def _deactivate_all_configs() -> list:
-    cfg_ids = _active_config_ids()
+async def _deactivate_all_configs() -> list:
+    cfg_ids = await _active_config_ids()
     for cfg_id in cfg_ids:
-        ProxyTunnelConfig.get(id=cfg_id).update(is_active=False)
+        await (await ProxyTunnelConfig.get(id=cfg_id)).update(is_active=False)
     return cfg_ids
 
 
-def _restore_active_configs(cfg_ids: list):
+async def _restore_active_configs(cfg_ids: list):
     for cfg_id in cfg_ids:
         try:
-            ProxyTunnelConfig.get(id=cfg_id).update(is_active=True)
+            await (await ProxyTunnelConfig.get(id=cfg_id)).update(is_active=True)
         except Exception:
             pass
 
@@ -46,18 +46,22 @@ def normal_user_identity():
     g.user.roles = previous_roles
 
 
+async def _fake_host_key(host, _port):
+    return f"{host} ssh-ed25519 AAAA{host}", f"SHA256:{host}"
+
+
 @pytest.fixture(autouse=True)
 def mock_host_fingerprint(monkeypatch):
     monkeypatch.setattr(
         TunnelService,
         "_fetch_host_key",
-        staticmethod(lambda host, _port: (f"{host} ssh-ed25519 AAAA{host}", f"SHA256:{host}")),
+        staticmethod(_fake_host_key),
     )
 
 
 @pytest.mark.docker_required
-def test_admin_can_save_and_get_proxy_tunnel_config(api_client, argus_db):
-    previous_active_ids = _deactivate_all_configs()
+async def test_admin_can_save_and_get_proxy_tunnel_config(api_client, argus_db):
+    previous_active_ids = await _deactivate_all_configs()
     created_config_id = None
 
     payload = {
@@ -101,17 +105,17 @@ def test_admin_can_save_and_get_proxy_tunnel_config(api_client, argus_db):
     finally:
         if created_config_id:
             try:
-                ProxyTunnelConfig.get(id=UUID(str(created_config_id))).delete()
+                await (await ProxyTunnelConfig.get(id=UUID(str(created_config_id)))).delete()
             except Exception:
                 pass
-        _restore_active_configs(previous_active_ids)
+        await _restore_active_configs(previous_active_ids)
 
 
 @pytest.mark.docker_required
-def test_admin_get_proxy_tunnel_config_without_id_is_non_mutating(api_client, argus_db):
+async def test_admin_get_proxy_tunnel_config_without_id_is_non_mutating(api_client, argus_db):
     first_cfg = None
     second_cfg = None
-    previous_active_ids = _deactivate_all_configs()
+    previous_active_ids = await _deactivate_all_configs()
     try:
         first_payload = {
             "host": f"proxy-admin-first-{uuid4().hex[:8]}.example.com",
@@ -148,20 +152,20 @@ def test_admin_get_proxy_tunnel_config_without_id_is_non_mutating(api_client, ar
     finally:
         if first_cfg:
             try:
-                ProxyTunnelConfig.get(id=UUID(str(first_cfg))).delete()
+                await (await ProxyTunnelConfig.get(id=UUID(str(first_cfg)))).delete()
             except Exception:
                 pass
         if second_cfg:
             try:
-                ProxyTunnelConfig.get(id=UUID(str(second_cfg))).delete()
+                await (await ProxyTunnelConfig.get(id=UUID(str(second_cfg)))).delete()
             except Exception:
                 pass
-        _restore_active_configs(previous_active_ids)
+        await _restore_active_configs(previous_active_ids)
 
 
 @pytest.mark.docker_required
-def test_admin_get_proxy_tunnel_config_ignores_inactive_tunnel_id(api_client, argus_db):
-    cfg = ProxyTunnelConfig.create(
+async def test_admin_get_proxy_tunnel_config_ignores_inactive_tunnel_id(api_client, argus_db):
+    cfg = await ProxyTunnelConfig.create(
         id=uuid4(),
         host=f"proxy-inactive-id-{uuid4().hex[:8]}.example.com",
         port=22,
@@ -179,19 +183,19 @@ def test_admin_get_proxy_tunnel_config_ignores_inactive_tunnel_id(api_client, ar
         assert resp.json()["response"] is None
     finally:
         try:
-            cfg.delete()
+            await cfg.delete()
         except Exception:
             pass
 
 
 @pytest.mark.docker_required
-def test_admin_can_list_and_delete_ssh_key(api_client, argus_db):
+async def test_admin_can_list_and_delete_ssh_key(api_client, argus_db):
     key_id = uuid4()
     tunnel_id = uuid4()
     now_utc = datetime.now(tz=UTC).replace(tzinfo=None)
     pub_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFj+zV+Y9lW7eGLtQ+uY1M4NeC+YABN9nDl2sjp4rU0m"
 
-    SSHTunnelKey.find().ttl(86400).create(
+    await SSHTunnelKey.find().ttl(86400).create(
         id=key_id,
         user_id=g.user.id,
         tunnel_id=tunnel_id,
@@ -213,11 +217,11 @@ def test_admin_can_list_and_delete_ssh_key(api_client, argus_db):
     assert delete_resp.json()["response"]["deleted"] is True
 
     with pytest.raises(DocumentNotFound):
-        SSHTunnelKey.get(id=key_id)
+        await SSHTunnelKey.get(id=key_id)
 
 
 @pytest.mark.docker_required
-def test_admin_can_list_and_toggle_proxy_tunnel_configs(api_client, argus_db):
+async def test_admin_can_list_and_toggle_proxy_tunnel_configs(api_client, argus_db):
     payload_active = {
         "host": f"proxy-list-active-{uuid4().hex[:8]}.example.com",
         "port": 22,
@@ -275,18 +279,18 @@ def test_admin_can_list_and_toggle_proxy_tunnel_configs(api_client, argus_db):
     finally:
         if active_id:
             try:
-                ProxyTunnelConfig.get(id=UUID(str(active_id))).delete()
+                await (await ProxyTunnelConfig.get(id=UUID(str(active_id)))).delete()
             except Exception:
                 pass
         if inactive_id:
             try:
-                ProxyTunnelConfig.get(id=UUID(str(inactive_id))).delete()
+                await (await ProxyTunnelConfig.get(id=UUID(str(inactive_id)))).delete()
             except Exception:
                 pass
 
 
 @pytest.mark.docker_required
-def test_admin_save_proxy_tunnel_config_rejects_username_collision(api_client, argus_db):
+async def test_admin_save_proxy_tunnel_config_rejects_username_collision(api_client, argus_db):
     host = f"proxy-collision-{uuid4().hex[:8]}.example.com"
     payload = {
         "host": host,
@@ -299,7 +303,7 @@ def test_admin_save_proxy_tunnel_config_rejects_username_collision(api_client, a
 
     username = f"proxy-tunnel-{host}"
     now_utc = datetime.now(tz=UTC).replace(tzinfo=None)
-    collision_user = User.create(
+    collision_user = await User.create(
         id=uuid4(),
         username=username,
         full_name="Conflicting User",
@@ -316,7 +320,7 @@ def test_admin_save_proxy_tunnel_config_rejects_username_collision(api_client, a
         assert "already exists and is not a dedicated SSH tunnel service user" in resp.json()["response"]["message"]
     finally:
         try:
-            collision_user.delete()
+            await collision_user.delete()
         except Exception:
             pass
 

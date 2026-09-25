@@ -28,7 +28,7 @@ issue_counter = itertools.count(1000)
 # ---------------------------------------------------------------------------
 
 
-def submit_run_with_version(
+async def submit_run_with_version(
     client_service: ClientService,
     testrun_service: TestRunService,
     fake_test: "ArgusTest",
@@ -36,21 +36,21 @@ def submit_run_with_version(
 ) -> SCTTestRun:
     """Submit a test run and optionally set its scylla_version."""
     run_type, run_request = get_fake_test_run(fake_test)
-    client_service.submit_run(run_type, asdict(run_request))
-    run: SCTTestRun = testrun_service.get_run(run_type, run_request.run_id)
+    await client_service.submit_run(run_type, asdict(run_request))
+    run: SCTTestRun = await testrun_service.get_run(run_type, run_request.run_id)
     if scylla_version is not None:
         run.scylla_version = scylla_version
-        run.save()
+        await run.save()
     return run
 
 
-def create_github_issue(
+async def create_github_issue(
     owner: str = "scylladb", repo: str = "argus", number: int | None = None, title: str = "Test Issue",
 ) -> GithubIssue:
     """Create and persist a GithubIssue."""
     if number is None:
         number = next(issue_counter)
-    return GithubIssue.create(
+    return await GithubIssue.create(
         user_id=uuid4(),
         type="issues",
         owner=owner,
@@ -62,13 +62,13 @@ def create_github_issue(
     )
 
 
-def create_jira_issue(
+async def create_jira_issue(
     key: str | None = None, summary: str = "Test Jira Issue", project: str = "SCYLLA",
 ) -> JiraIssue:
     """Create and persist a JiraIssue."""
     if key is None:
         key = f"SCYLLA-{next(issue_counter)}"
-    return JiraIssue.create(
+    return await JiraIssue.create(
         user_id=uuid4(),
         key=key,
         state="todo",
@@ -129,10 +129,10 @@ def expected_jira_issue(issue: JiraIssue) -> dict:
 def linked_github_issue(client_service, testrun_service, fake_test, issue_service, logged_in_user):
     """Factory fixture: call with (scylla_version, title) to get (run, issue) with a linked GitHub issue."""
 
-    def factory(scylla_version: str | None, title: str) -> tuple[SCTTestRun, GithubIssue]:
-        run = submit_run_with_version(client_service, testrun_service, fake_test, scylla_version=scylla_version)
-        issue = create_github_issue(title=title)
-        issue_service.submit(issue_url=issue.url, test_id=run.test_id, run_id=run.id, user=logged_in_user)
+    async def factory(scylla_version: str | None, title: str) -> tuple[SCTTestRun, GithubIssue]:
+        run = await submit_run_with_version(client_service, testrun_service, fake_test, scylla_version=scylla_version)
+        issue = await create_github_issue(title=title)
+        await issue_service.submit(issue_url=issue.url, test_id=run.test_id, run_id=run.id, user=logged_in_user)
         return run, issue
 
     return factory
@@ -142,10 +142,10 @@ def linked_github_issue(client_service, testrun_service, fake_test, issue_servic
 def linked_jira_issue(client_service, testrun_service, fake_test, issue_service, logged_in_user):
     """Factory fixture: call with (scylla_version, summary) to get (run, issue) with a linked Jira issue."""
 
-    def factory(scylla_version: str | None, summary: str) -> tuple[SCTTestRun, JiraIssue]:
-        run = submit_run_with_version(client_service, testrun_service, fake_test, scylla_version=scylla_version)
-        issue = create_jira_issue(summary=summary)
-        issue_service.submit(issue_url=issue.permalink, test_id=run.test_id, run_id=run.id, user=logged_in_user)
+    async def factory(scylla_version: str | None, summary: str) -> tuple[SCTTestRun, JiraIssue]:
+        run = await submit_run_with_version(client_service, testrun_service, fake_test, scylla_version=scylla_version)
+        issue = await create_jira_issue(summary=summary)
+        await issue_service.submit(issue_url=issue.permalink, test_id=run.test_id, run_id=run.id, user=logged_in_user)
         return run, issue
 
     return factory
@@ -175,8 +175,9 @@ EXPECTED_BUILDERS = {
         pytest.param(None, "2025.1", False, False, id="include_no_version_false"),
     ],
 )
-def test_get_issues_version_filter(
-    request: pytest.FixtureRequest,
+async def test_get_issues_version_filter(
+    linked_github_issue,
+    linked_jira_issue,
     issue_service: IssueService,
     issue_type: str,
     scylla_version: str | None,
@@ -185,11 +186,10 @@ def test_get_issues_version_filter(
     expects_match: bool,
 ):
     """Issues are filtered (or not) based on run version, product_version param, and include_no_version flag."""
-    fixture_name = f"linked_{issue_type}_issue"
-    factory = request.getfixturevalue(fixture_name)
-    run, issue = factory(scylla_version, f"{issue_type}: {scylla_version}")
+    factory = {"github": linked_github_issue, "jira": linked_jira_issue}[issue_type]
+    run, issue = await factory(scylla_version, f"{issue_type}: {scylla_version}")
 
-    results = issue_service.get(
+    results = await issue_service.get(
         filter_key="run_id",
         filter_id=run.id,
         aggregate_by_issue=True,
@@ -211,16 +211,16 @@ def test_get_issues_version_filter(
 # ---------------------------------------------------------------------------
 
 
-def test_get_issues_version_filter_with_release_filter_key(
+async def test_get_issues_version_filter_with_release_filter_key(
     issue_service: IssueService,
     linked_github_issue,
     release: "ArgusRelease",
 ):
     """Version filtering should work with filter_key='release_id' (the primary dashboard use case)."""
-    linked_github_issue("2025.2.1", "Release filter match")
-    linked_github_issue("2024.1.0", "Release filter no match")
+    await linked_github_issue("2025.2.1", "Release filter match")
+    await linked_github_issue("2024.1.0", "Release filter no match")
 
-    results = issue_service.get(
+    results = await issue_service.get(
         filter_key="release_id",
         filter_id=release.id,
         aggregate_by_issue=True,

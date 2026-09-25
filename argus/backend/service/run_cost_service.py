@@ -3,7 +3,7 @@ import math
 from uuid import UUID
 
 from coodie.cql_builder import build_update, parse_filter_kwargs, parse_update_kwargs
-from coodie.sync import BatchQuery
+from coodie.aio import AsyncBatchQuery
 from pydantic import BaseModel, Field
 
 from argus.backend.error_handlers import DataValidationError
@@ -34,30 +34,30 @@ class RunCostService:
         return UUID(run_id) if isinstance(run_id, str) else run_id
 
     @classmethod
-    def _read_partition(cls, run_id: UUID) -> list[RunCost]:
-        return list(RunCost.find(run_id=cls._run_id(run_id)).all())
+    async def _read_partition(cls, run_id: UUID) -> list[RunCost]:
+        return await RunCost.find(run_id=cls._run_id(run_id)).all()
 
     @staticmethod
     def _items(rows: list[RunCost]) -> list[RunCost]:
         return [row for row in rows if row.name]
 
-    def set_estimated_cost(self, run_id: UUID, value: float) -> dict:
+    async def set_estimated_cost(self, run_id: UUID, value: float) -> dict:
         run_id = self._run_id(run_id)
-        RunCost.find(run_id=run_id).update(estimated_cost=value)
+        await RunCost.find(run_id=run_id).update(estimated_cost=value)
         return {"run_id": str(run_id), "estimated_cost": value}
 
-    def submit_cost_items(self, run_id: UUID, items: list[CostItemRequest]) -> dict:
+    async def submit_cost_items(self, run_id: UUID, items: list[CostItemRequest]) -> dict:
         run_id = self._run_id(run_id)
         names = [item.name for item in items]
         duplicates = sorted({name for name in names if names.count(name) > 1})
         if duplicates:
             raise DataValidationError(f"Cost item names must be unique within one payload: {', '.join(duplicates)}")
 
-        with BatchQuery() as batch:
+        async with AsyncBatchQuery() as batch:
             for item in items:
                 batch.add(*self._item_write(run_id, item))
 
-        actual_cost = self.recompute_actual_cost(run_id)
+        actual_cost = await self.recompute_actual_cost(run_id)
         return {"run_id": str(run_id), "submitted": len(items), "actual_cost": actual_cost}
 
     @staticmethod
@@ -75,9 +75,9 @@ class RunCostService:
             parse_filter_kwargs({"run_id": run_id, "name": item.name}),
         )
 
-    def recompute_actual_cost(self, run_id: UUID, use_estimate: bool = False) -> float | None:
+    async def recompute_actual_cost(self, run_id: UUID, use_estimate: bool = False) -> float | None:
         run_id = self._run_id(run_id)
-        rows = self._read_partition(run_id)
+        rows = await self._read_partition(run_id)
         if not rows:
             return None
 
@@ -91,11 +91,11 @@ class RunCostService:
         else:
             return None
 
-        RunCost.find(run_id=run_id).update(actual_cost=total)
+        await RunCost.find(run_id=run_id).update(actual_cost=total)
         return total
 
-    def get_run_cost(self, run_id: UUID) -> dict:
-        rows = self._read_partition(run_id)
+    async def get_run_cost(self, run_id: UUID) -> dict:
+        rows = await self._read_partition(run_id)
         items = sorted(self._items(rows), key=lambda row: (row.category or "", row.name))
 
         by_category: dict[str, float] = {}

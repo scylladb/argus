@@ -93,13 +93,13 @@ def test_resolve_view_tests_unknown_id_errors(api_client):
     assert str(missing_id) in res["response"]["message"]
 
 
-def test_service_get_view_by_name_unknown_name_raises_user_view_exception():
+async def test_service_get_view_by_name_unknown_name_raises_user_view_exception():
     missing_name = f"view_{uuid.uuid4().hex[:12]}"
     with pytest.raises(UserViewException, match=missing_name):
-        UserViewService().get_view_by_name(missing_name)
+        await UserViewService().get_view_by_name(missing_name)
 
 
-def test_all_views_filters_by_user(api_client, view_name):
+async def test_all_views_filters_by_user(api_client, view_name):
     res = _create_view(api_client, view_name)
     view_id = res["response"]["id"]
 
@@ -112,7 +112,7 @@ def test_all_views_filters_by_user(api_client, view_name):
         password="pw",
         roles=[UserRoles.User.value], registration_date=datetime.now(UTC),
     )
-    other.save()
+    await other.save()
     other_listing = api_client.get(f"/api/v1/views/all?userId={other.id}").json()
     assert other_listing["status"] == "ok"
     assert view_id not in {v["id"] for v in other_listing["response"]}
@@ -292,3 +292,16 @@ def test_widget_routes_are_not_shadowed_by_view_id_rules(api_client):
     res = api_client.get("/api/v1/views/widgets/pytest/results").json()
     assert res["status"] == "ok"
     assert res.get("response", {}).get("exception") != "ValueError"
+
+
+def test_view_resolve_for_edit_names_the_group_of_a_test(api_client, view_name, fake_test, group, release):
+    created = _create_view(api_client, view_name, items=[f"test:{fake_test.id}"])
+    view_id = created["response"]["id"]
+
+    res = api_client.get(f"/api/v1/views/{view_id}/resolve").json()
+
+    assert res["status"] == "ok"
+    item = next(item for item in res["response"]["items"] if item["id"] == str(fake_test.id))
+    assert item["type"] == "test"
+    assert item["group"] == (group.pretty_name or group.name)
+    assert item["release"] == (release.pretty_name or release.name)

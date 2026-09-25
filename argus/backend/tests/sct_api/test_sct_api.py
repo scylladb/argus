@@ -2,12 +2,14 @@ import base64
 import datetime
 import json
 import time
+from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 import pytest
 
 from argus.backend.models.run_config import RunConfigParam
 from argus.backend.plugins.sct.service import SCTService
 from argus.backend.plugins.sct.testrun import SCTResource, SCTNemesis, SCTTestRun
+from argus.backend.tests.issues.test_issues import fake_remote_github_issue
 from argus.common.utils import clamp_ts_to_milliseconds
 
 API_PREFIX = "/api/v1/client/sct"
@@ -37,7 +39,7 @@ def sct_run_id(api_client, fake_test):
     return run_id
 
 
-def test_submit_packages(api_client, sct_run_id):
+async def test_submit_packages(api_client, sct_run_id):
     payload = {
         "packages": [
             {
@@ -58,23 +60,23 @@ def test_submit_packages(api_client, sct_run_id):
     assert resp.json()["status"] == "ok"
 
     # Verify model updated
-    run = SCTTestRun.get(id=UUID(sct_run_id))
+    run = await SCTTestRun.get(id=UUID(sct_run_id))
     assert any(p.name == "scylla-server" and p.version ==
                "6.0.0" for p in run.packages)
 
 
-def test_submit_packages_concurrent_submissions_keep_one_row(api_client, sct_run_id, monkeypatch):
+async def test_submit_packages_concurrent_submissions_keep_one_row(api_client, sct_run_id, monkeypatch):
     java_driver = {"name": "java-driver", "version": "3.11.5.7", "date": None, "revision_id": None, "build_id": None}
     scylla_bench = {"name": "scylla-bench", "version": "0.1.0", "date": None, "revision_id": None, "build_id": None}
     original_get = SCTTestRun.get
     interleaved = False
 
-    def get_then_submit_in_parallel(*args, **kwargs):
+    async def get_then_submit_in_parallel(*args, **kwargs):
         nonlocal interleaved
-        run = original_get(*args, **kwargs)
+        run = await original_get(*args, **kwargs)
         if not interleaved:
             interleaved = True
-            SCTService.submit_packages(sct_run_id, [java_driver, scylla_bench])
+            await SCTService.submit_packages(sct_run_id, [java_driver, scylla_bench])
         return run
 
     monkeypatch.setattr(SCTTestRun, "get", get_then_submit_in_parallel)
@@ -85,11 +87,11 @@ def test_submit_packages_concurrent_submissions_keep_one_row(api_client, sct_run
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"
 
-    run = original_get(id=UUID(sct_run_id))
+    run = await original_get(id=UUID(sct_run_id))
     assert [(p.name, p.version) for p in run.packages] == [("java-driver", "3.11.5.7"), ("scylla-bench", "0.1.0")]
 
 
-def test_submit_screenshots(api_client, sct_run_id):
+async def test_submit_screenshots(api_client, sct_run_id):
     payload = {
         "screenshot_links": ["https://grafana/snap/1", "https://grafana/snap/2"],
         "schema_version": "v8",
@@ -102,12 +104,12 @@ def test_submit_screenshots(api_client, sct_run_id):
     assert resp.json()["status"] == "ok"
 
     # Verify screenshots stored
-    run = SCTTestRun.get(id=UUID(sct_run_id))
+    run = await SCTTestRun.get(id=UUID(sct_run_id))
     assert "https://grafana/snap/1" in run.screenshots
     assert "https://grafana/snap/2" in run.screenshots
 
 
-def test_set_runner(api_client, sct_run_id):
+async def test_set_runner(api_client, sct_run_id):
     payload = {
         "public_ip": "1.2.3.4",
         "private_ip": "10.0.0.1",
@@ -124,12 +126,12 @@ def test_set_runner(api_client, sct_run_id):
     assert resp.json()["status"] == "ok"
 
     # Verify runner details persisted
-    run = SCTTestRun.get(id=UUID(sct_run_id))
+    run = await SCTTestRun.get(id=UUID(sct_run_id))
     assert run.sct_runner_host is not None
     assert run.sct_runner_host.provider == "aws"
     assert run.sct_runner_host.public_ip == "1.2.3.4"
     assert any(res.resource_type == "sct-runner" and res.name ==
-               "runner-1" for res in SCTResource.find(run_id=UUID(sct_run_id)).all())
+               "runner-1" for res in await SCTResource.find(run_id=UUID(sct_run_id)).all())
 
 
 def _create_resource(api_client, sct_run_id, resource_name="node-1", resource_type="db_node",
@@ -158,19 +160,19 @@ def _create_resource(api_client, sct_run_id, resource_name="node-1", resource_ty
     )
 
 
-def test_resource_create(api_client, sct_run_id):
+async def test_resource_create(api_client, sct_run_id):
     resp = _create_resource(api_client, sct_run_id)
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"
 
     # Verify resource persisted
-    res = SCTResource.get(run_id=UUID(sct_run_id), name="node-1")
+    res = await SCTResource.get(run_id=UUID(sct_run_id), name="node-1")
     assert res.resource_type == "db_node"
     assert res.instance_info.shards_amount == 8
     assert res.state == "running"
 
     # Non-xcloud backends keep whatever the config said, they are not derived from resources
-    run = SCTTestRun.get(id=UUID(sct_run_id))
+    run = await SCTTestRun.get(id=UUID(sct_run_id))
     assert run.cloud_setup.backend == "aws"
     assert run.cloud_setup.db_node.instance_type is None
     assert run.cloud_setup.db_node.node_amount is None
@@ -210,7 +212,7 @@ def _submit_sct_config(api_client, run_id: str, sct_config: dict) -> None:
     assert resp.json()["status"] == "ok"
 
 
-def test_xcloud_scaling_run_derives_db_node_setup_from_resources(api_client, fake_test):
+async def test_xcloud_scaling_run_derives_db_node_setup_from_resources(api_client, fake_test):
     run_id = _submit_xcloud_run(api_client, fake_test, {
         "xcloud_provider": "gce",
         "gce_datacenter": "us-east1",
@@ -220,7 +222,7 @@ def test_xcloud_scaling_run_derives_db_node_setup_from_resources(api_client, fak
         "n_db_nodes": 3,
     })
 
-    run = SCTTestRun.get(id=UUID(run_id))
+    run = await SCTTestRun.get(id=UUID(run_id))
     assert run.cloud_setup.backend == "xcloud"
     assert run.cloud_setup.db_node.image_id == "2025.3.0"
     assert run.cloud_setup.db_node.instance_type is None
@@ -230,7 +232,7 @@ def test_xcloud_scaling_run_derives_db_node_setup_from_resources(api_client, fak
     # loaders do not influence the DB node shape
     _create_resource(api_client, run_id, resource_name="loader-node-1", resource_type="loader",
                      instance_type="e2-standard-8")
-    run = SCTTestRun.get(id=UUID(run_id))
+    run = await SCTTestRun.get(id=UUID(run_id))
     assert run.cloud_setup.db_node.instance_type is None
     assert run.cloud_setup.db_node.node_amount is None
 
@@ -239,28 +241,28 @@ def test_xcloud_scaling_run_derives_db_node_setup_from_resources(api_client, fak
                      instance_type="i8g.large")
     _create_resource(api_client, run_id, resource_name="db-node-0-2", resource_type="scylla-db",
                      instance_type="i8g.large")
-    run = SCTTestRun.get(id=UUID(run_id))
+    run = await SCTTestRun.get(id=UUID(run_id))
     assert run.cloud_setup.db_node.instance_type == "i8g.large"
     assert run.cloud_setup.db_node.node_amount == 2
 
     # a scale-out with a different instance type is reflected too
     _create_resource(api_client, run_id, resource_name="db-node-0-3", resource_type="scylla-db",
                      instance_type="i8g.xlarge")
-    run = SCTTestRun.get(id=UUID(run_id))
+    run = await SCTTestRun.get(id=UUID(run_id))
     assert run.cloud_setup.db_node.instance_type == "i8g.large, i8g.xlarge"
     assert run.cloud_setup.db_node.node_amount == 3
 
     # re-registering an existing resource is a no-op
     _create_resource(api_client, run_id, resource_name="db-node-0-3", resource_type="scylla-db",
                      instance_type="i8g.xlarge")
-    assert SCTTestRun.get(id=UUID(run_id)).cloud_setup.db_node.node_amount == 3
+    assert (await SCTTestRun.get(id=UUID(run_id))).cloud_setup.db_node.node_amount == 3
 
-    response = SCTTestRun.get_run_response(UUID(run_id))
+    response = await SCTTestRun.get_run_response(UUID(run_id))
     assert response["cloud_setup"]["db_node"]["instance_type"] == "i8g.large, i8g.xlarge"
     assert response["cloud_setup"]["db_node"]["node_amount"] == 3
 
 
-def test_xcloud_standard_run_uses_configured_db_node_setup(api_client, fake_test):
+async def test_xcloud_standard_run_uses_configured_db_node_setup(api_client, fake_test):
     run_id = _submit_xcloud_run(api_client, fake_test, {
         "xcloud_provider": "aws",
         "region_name": "eu-west-1",
@@ -271,13 +273,13 @@ def test_xcloud_standard_run_uses_configured_db_node_setup(api_client, fake_test
         "instance_type_db": "i4i.large",
     })
 
-    run = SCTTestRun.get(id=UUID(run_id))
+    run = await SCTTestRun.get(id=UUID(run_id))
     assert run.cloud_setup.db_node.instance_type == "i4i.large"
     assert run.cloud_setup.db_node.node_amount == 3
     assert run.region_name == ["eu-west-1"]
 
 
-def test_xcloud_details_are_built_from_run_config_params_at_read_time(api_client, fake_test):
+async def test_xcloud_details_are_built_from_run_config_params_at_read_time(api_client, fake_test):
     sct_config = {
         "cluster_backend": "xcloud",
         "xcloud_provider": "gce",
@@ -289,19 +291,19 @@ def test_xcloud_details_are_built_from_run_config_params_at_read_time(api_client
     run_id = _submit_xcloud_run(api_client, fake_test, sct_config)
 
     # SCT submits the run first and its config right after; until then the descriptors are unknown
-    response = SCTTestRun.get_run_response(UUID(run_id))
+    response = await SCTTestRun.get_run_response(UUID(run_id))
     assert response["cloud_setup"]["backend"] == "xcloud"
     assert response["cloud_setup"]["cluster_type"] is None
     assert response["cloud_setup"]["network_type"] is None
-    assert not hasattr(SCTTestRun.get(id=UUID(run_id)).cloud_setup, "cluster_type")
+    assert not hasattr((await SCTTestRun.get(id=UUID(run_id))).cloud_setup, "cluster_type")
 
     _submit_sct_config(api_client, run_id, sct_config)
-    params = SCTTestRun.get(id=UUID(run_id)).get_config_params()
+    params = await (await SCTTestRun.get(id=UUID(run_id))).get_config_params()
     assert params["sct_config.cluster_backend"] == "xcloud"
     assert params["sct_config.xcloud_vpc_peering.enabled"] == "True"
-    assert RunConfigParam.find(name="sct_config.xcloud_scaling_config.Mode", value="xcloud", run_id=run_id).count() == 1
+    assert await RunConfigParam.find(name="sct_config.xcloud_scaling_config.Mode", value="xcloud", run_id=run_id).count() == 1
 
-    response = SCTTestRun.get_run_response(UUID(run_id))
+    response = await SCTTestRun.get_run_response(UUID(run_id))
     assert response["cloud_setup"]["cluster_type"] == "xcloud"
     assert response["cloud_setup"]["network_type"] == "private-vpc"
 
@@ -309,19 +311,19 @@ def test_xcloud_details_are_built_from_run_config_params_at_read_time(api_client
     other_config = {**sct_config, "xcloud_scaling_config": {}, "xcloud_vpc_peering": {"enabled": False}}
     other_run_id = _submit_xcloud_run(api_client, fake_test, other_config)
     _submit_sct_config(api_client, other_run_id, other_config)
-    response = SCTTestRun.get_run_response(UUID(other_run_id))
+    response = await SCTTestRun.get_run_response(UUID(other_run_id))
     assert response["cloud_setup"]["cluster_type"] == "standard"
     assert response["cloud_setup"]["network_type"] == "public"
 
 
-def test_non_xcloud_run_response_has_no_xcloud_descriptors(api_client, sct_run_id):
-    response = SCTTestRun.get_run_response(UUID(sct_run_id))
+async def test_non_xcloud_run_response_has_no_xcloud_descriptors(api_client, sct_run_id):
+    response = await SCTTestRun.get_run_response(UUID(sct_run_id))
     assert response["cloud_setup"]["backend"] == "aws"
     assert "cluster_type" not in response["cloud_setup"]
     assert "network_type" not in response["cloud_setup"]
 
 
-def test_resource_update_shards(api_client, sct_run_id):
+async def test_resource_update_shards(api_client, sct_run_id):
     # Ensure resource exists
     _create_resource(api_client, sct_run_id, resource_name="node-2")
     payload = {
@@ -336,11 +338,11 @@ def test_resource_update_shards(api_client, sct_run_id):
     assert resp.json()["status"] == "ok"
 
     # Verify shards updated
-    res = SCTResource.get(run_id=UUID(sct_run_id), name="node-2")
+    res = await SCTResource.get(run_id=UUID(sct_run_id), name="node-2")
     assert res.instance_info.shards_amount == 16
 
 
-def test_resource_update(api_client, sct_run_id):
+async def test_resource_update(api_client, sct_run_id):
     # Ensure resource exists
     _create_resource(api_client, sct_run_id, resource_name="node-3")
     payload = {"update_data": {"instance_info": {
@@ -353,11 +355,11 @@ def test_resource_update(api_client, sct_run_id):
     assert resp.json()["status"] == "ok"
 
     # Verify update applied
-    res = SCTResource.get(run_id=UUID(sct_run_id), name="node-3")
+    res = await SCTResource.get(run_id=UUID(sct_run_id), name="node-3")
     assert res.instance_info.shards_amount == 12
 
 
-def test_resource_terminate(api_client, sct_run_id):
+async def test_resource_terminate(api_client, sct_run_id):
     # Ensure resource exists
     _create_resource(api_client, sct_run_id, resource_name="node-4")
     payload = {"reason": "test-complete", "schema_version": "v8"}
@@ -369,13 +371,13 @@ def test_resource_terminate(api_client, sct_run_id):
     assert resp.json()["status"] == "ok"
 
     # Verify termination reflected in model
-    res = SCTResource.get(run_id=UUID(sct_run_id), name="node-4")
+    res = await SCTResource.get(run_id=UUID(sct_run_id), name="node-4")
     assert res.state == "terminated"
     assert res.instance_info.termination_reason == "test-complete"
     assert res.instance_info.termination_time and res.instance_info.termination_time > 0
 
 
-def test_nemesis_submit_and_finalize(api_client, sct_run_id):
+async def test_nemesis_submit_and_finalize(api_client, sct_run_id):
     submit_payload = {
         "nemesis": {
             "name": "ChaosMonkey",
@@ -396,8 +398,8 @@ def test_nemesis_submit_and_finalize(api_client, sct_run_id):
     assert resp.json()["status"] == "ok"
 
     # Verify nemesis created
-    run = SCTTestRun.get(id=UUID(sct_run_id))
-    nemesis_data = SCTNemesis.find(run_id=run.id).all()
+    run = await SCTTestRun.get(id=UUID(sct_run_id))
+    nemesis_data = await SCTNemesis.find(run_id=run.id).all()
     nem = next(n for n in nemesis_data if n.name ==
                "ChaosMonkey" and n.start_time == 123456)
     assert nem.status == "running"
@@ -418,8 +420,8 @@ def test_nemesis_submit_and_finalize(api_client, sct_run_id):
     assert resp.json()["status"] == "ok"
 
     # Verify nemesis finalized
-    run = SCTTestRun.get(id=UUID(sct_run_id))
-    nemesis_data = SCTNemesis.find(run_id=run.id).all()
+    run = await SCTTestRun.get(id=UUID(sct_run_id))
+    nemesis_data = await SCTNemesis.find(run_id=run.id).all()
     nem = next(n for n in nemesis_data if n.name ==
                "ChaosMonkey" and n.start_time == 123456)
     assert nem.status == "succeeded"
@@ -435,8 +437,8 @@ def test_nemesis_submit_and_finalize(api_client, sct_run_id):
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"
 
-    run = SCTTestRun.get(id=UUID(sct_run_id))
-    nemesis_data = SCTNemesis.find(run_id=run.id).all()
+    run = await SCTTestRun.get(id=UUID(sct_run_id))
+    nemesis_data = await SCTNemesis.find(run_id=run.id).all()
     nem = next(n for n in nemesis_data if n.name ==
                "ChaosMonkey" and n.start_time == 123456)
     assert nem.status == "succeeded"
@@ -444,7 +446,7 @@ def test_nemesis_submit_and_finalize(api_client, sct_run_id):
     assert dict(run.nemesis_stats or {}) == stats_after_first
 
 
-def test_stress_commands(api_client, sct_run_id):
+async def test_stress_commands(api_client, sct_run_id):
     payload = {
         "log_name": "example.log",
         "ts": clamp_ts_to_milliseconds(datetime.datetime.now(tz=datetime.UTC).timestamp()),
@@ -459,8 +461,8 @@ def test_stress_commands(api_client, sct_run_id):
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"
 
-    run: SCTTestRun = SCTTestRun.get(id=UUID(sct_run_id))
-    stress_cmds = run.get_stress_commands(run.id)
+    run: SCTTestRun = await SCTTestRun.get(id=UUID(sct_run_id))
+    stress_cmds = await run.get_stress_commands(run.id)
     assert len(stress_cmds) == 1
     assert stress_cmds[0].cmd == payload["cmd"]
     assert stress_cmds[0].ts.timestamp() == payload["ts"]
@@ -468,7 +470,7 @@ def test_stress_commands(api_client, sct_run_id):
     assert stress_cmds[0].node_name == payload["loader_name"]
 
 
-def test_submit_gemini_results(api_client, sct_run_id):
+async def test_submit_gemini_results(api_client, sct_run_id):
     payload = {
         "gemini_data": {
             "oracle_nodes_count": 1,
@@ -494,7 +496,7 @@ def test_submit_gemini_results(api_client, sct_run_id):
     assert resp.json()["status"] == "ok"
 
     # Verify gemini fields persisted
-    run = SCTTestRun.get(id=UUID(sct_run_id))
+    run = await SCTTestRun.get(id=UUID(sct_run_id))
     assert run.subtest_name == "gemini"
     assert run.gemini_command == "gemini run"
     assert run.gemini_status == "PASSED"
@@ -729,6 +731,34 @@ def test_similar_runs_info_for_run_without_issues(api_client, sct_run_id):
     assert info["issues"] == []
 
 
+async def test_similar_runs_info_lists_linked_github_issue(api_client, sct_run_id, fake_test, issue_service,
+                                                           logged_in_user):
+    repo = f"argus-{uuid4().hex[:8]}"
+    url = f"https://github.com/scylladb/{repo}/issues/3"
+    remote_repo = MagicMock(name="Repository")
+    remote_repo.get_issue.return_value = fake_remote_github_issue(owner="scylladb", repo=repo, number=3,
+                                                                  title="Similar failure")
+    remote_client = MagicMock(name="GithubClient")
+    remote_client.get_repo.return_value = remote_repo
+    with patch.object(issue_service.gh, "gh", remote_client):
+        await issue_service.submit(issue_url=url, test_id=fake_test.id, run_id=sct_run_id, user=logged_in_user)
+
+    resp = api_client.post(
+        "/api/v1/client/sct/similar_runs_info",
+        json={"run_ids": [sct_run_id]},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["status"] == "ok"
+    info = body["response"][sct_run_id]
+    assert info["build_id"].startswith(fake_test.build_system_id)
+    assert len(info["issues"]) == 1
+    assert info["issues"][0]["subtype"] == "github"
+    assert info["issues"][0]["number"] == 3
+    assert info["issues"][0]["repo"] == repo
+    assert info["issues"][0]["title"] == "Similar failure"
+
+
 def test_similar_runs_info_missing_run_ids(api_client):
     resp = api_client.post(
         "/api/v1/client/sct/similar_runs_info",
@@ -747,3 +777,33 @@ def test_similar_runs_info_invalid_run_ids_type(api_client):
     assert resp.status_code == 200
     assert resp.json()["status"] == "error"
     assert resp.json()["response"]["exception"] == "RequestValidationError"
+
+
+async def test_coredump_events_in_one_batch_keep_every_log_link(api_client, sct_run_id, testrun_service):
+    base_ts = time.time()
+    payload = {
+        "data": [
+            {
+                "run_id": sct_run_id,
+                "severity": "ERROR",
+                "ts": base_ts + offset,
+                "message": f"2026-09-25 10:00:0{offset}.000: (CoreDumpEvent Severity.ERROR) node={node}\n"
+                           f"corefile_url=https://storage.example.com/cores/{node}.core.zst",
+                "event_type": "CoreDumpEvent",
+                "node": node,
+            }
+            for offset, node in enumerate(("node-1", "node-2"))
+        ],
+        "schema_version": "v8",
+    }
+
+    resp = api_client.post(f"{API_PREFIX}/{sct_run_id}/event/submit", json=payload)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["response"] is True
+    run = await testrun_service.get_run("scylla-cluster-tests", sct_run_id)
+    links = sorted(link for _, link in run.logs)
+    assert links == [
+        "https://storage.example.com/cores/node-1.core.zst",
+        "https://storage.example.com/cores/node-2.core.zst",
+    ]

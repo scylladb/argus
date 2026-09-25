@@ -14,9 +14,9 @@ router = APIRouter(prefix="/driver_matrix")
 
 
 @router.get("/test_report", name="api.client_api.driver_matrix_api.driver_matrix_test_report")
-def driver_matrix_test_report(build_id: str = Query(..., alias="buildId"),
+async def driver_matrix_test_report(build_id: str = Query(..., alias="buildId"),
                               user: User = Depends(api_current_user)):
-    result = DriverMatrixService().tested_versions_report(build_id=build_id)
+    result = await DriverMatrixService().tested_versions_report(build_id=build_id)
     return APIResponse({
         "status": "ok",
         "response": result
@@ -24,9 +24,9 @@ def driver_matrix_test_report(build_id: str = Query(..., alias="buildId"),
 
 
 @router.post("/result/submit", name="api.client_api.driver_matrix_api.submit_result")
-def submit_result(payload: DriverMatrixSubmitResultRequest,
+async def submit_result(payload: DriverMatrixSubmitResultRequest,
                   user: User = Depends(api_current_user)):
-    result = DriverMatrixService().submit_driver_result(
+    result = await DriverMatrixService().submit_driver_result(
         driver_name=payload.driver_name, driver_type=payload.driver_type,
         run_id=payload.run_id, raw_xml=payload.raw_xml)
     return APIResponse({
@@ -36,9 +36,9 @@ def submit_result(payload: DriverMatrixSubmitResultRequest,
 
 
 @router.post("/result/fail", name="api.client_api.driver_matrix_api.submit_failure")
-def submit_failure(payload: DriverMatrixSubmitFailureRequest,
+async def submit_failure(payload: DriverMatrixSubmitFailureRequest,
                    user: User = Depends(api_current_user)):
-    result = DriverMatrixService().submit_driver_failure(
+    result = await DriverMatrixService().submit_driver_failure(
         driver_name=payload.driver_name, driver_type=payload.driver_type,
         run_id=payload.run_id, failure_reason=payload.failure_reason)
     return APIResponse({
@@ -48,8 +48,8 @@ def submit_failure(payload: DriverMatrixSubmitFailureRequest,
 
 
 @router.post("/env/submit", name="api.client_api.driver_matrix_api.submit_env")
-def submit_env(payload: DriverMatrixSubmitEnvRequest, user: User = Depends(api_current_user)):
-    result = DriverMatrixService().submit_env_info(run_id=payload.run_id, raw_env=payload.raw_env)
+async def submit_env(payload: DriverMatrixSubmitEnvRequest, user: User = Depends(api_current_user)):
+    result = await DriverMatrixService().submit_env_info(run_id=payload.run_id, raw_env=payload.raw_env)
     return APIResponse({
         "status": "ok",
         "response": result

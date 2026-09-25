@@ -1,4 +1,5 @@
 
+import asyncio
 import logging
 import datetime
 import json
@@ -17,7 +18,7 @@ from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, ArgusU
 from argus.backend.service.jenkins_service import JenkinsService
 from argus.backend.service.test_lookup import TestLookup
 from argus.backend.service.views import UserViewService
-from argus.backend.util.common import chunk
+from argus.backend.util.common import chunk, gather_limited
 
 
 LOGGER = logging.getLogger(__name__)
@@ -155,11 +156,11 @@ class PlanningService:
     def version(self):
         return "v1"
 
-    def _generate_plan_key(self, release_id: UUID | str) -> str:
+    async def _generate_plan_key(self, release_id: UUID | str) -> str:
         release_id = UUID(release_id) if isinstance(release_id, str) else release_id
-        release: ArgusRelease = ArgusRelease.get(id=release_id)
+        release: ArgusRelease = await ArgusRelease.get(id=release_id)
         candidate = f"{release.name}#1"
-        release_plans = list(ArgusReleasePlan.find(release_id=release.id).allow_filtering().all())
+        release_plans = list(await ArgusReleasePlan.find(release_id=release.id).allow_filtering().all())
         if len(release_plans) == 0:
             return candidate
         existing_keys = [int(p.key.split("#")[1]) for p in release_plans]
@@ -167,19 +168,19 @@ class PlanningService:
 
         return f"{release.name}#{previous_number+1}"
 
-    def _resolve_plan(self, ref: str | UUID) -> ArgusReleasePlan:
+    async def _resolve_plan(self, ref: str | UUID) -> ArgusReleasePlan:
         try:
-            return ArgusReleasePlan.get(id=UUID(str(ref)))
+            return await ArgusReleasePlan.get(id=UUID(str(ref)))
         except (ValueError, DocumentNotFound):
-            plan = ArgusReleasePlan.find(key=str(ref)).allow_filtering().first()
+            plan = await ArgusReleasePlan.find(key=str(ref)).allow_filtering().first()
             if not plan:
                 raise DocumentNotFound(f"Plan {ref} not found")
             return plan
 
-    def create_plan(self, payload: dict[str, Any], user: User) -> ArgusReleasePlan:
+    async def create_plan(self, payload: dict[str, Any], user: User) -> ArgusReleasePlan:
         plan_request = CreatePlanPayload(**payload)
 
-        existing = ArgusReleasePlan.find(
+        existing = await ArgusReleasePlan.find(
             name=plan_request.name, target_version=plan_request.target_version).allow_filtering().first()
         if existing:
             raise PlannerServiceException(
@@ -201,21 +202,21 @@ class PlanningService:
             plan.created_from = UUID(plan_request.created_from) if isinstance(
                 plan_request.created_from, str) else plan_request.created_from
         if not plan_request.view_id:
-            view = self.create_view_for_plan(plan, user)
+            view = await self.create_view_for_plan(plan, user)
             plan.view_id = view.id
         else:
             plan.view_id = UUID(plan_request.view_id) if isinstance(plan_request.view_id, str) else plan_request.view_id
-            view = self.update_view_for_plan(plan, existing=True)
+            view = await self.update_view_for_plan(plan, existing=True)
 
-        plan.key = self._generate_plan_key(plan.release_id)
-        plan.save()
-        invalidate_release_snapshots(plan.release_id)
+        plan.key = await self._generate_plan_key(plan.release_id)
+        await plan.save()
+        await invalidate_release_snapshots(plan.release_id)
         return plan
 
-    def update_plan(self, payload: dict[str, Any], user: User) -> bool:
+    async def update_plan(self, payload: dict[str, Any], user: User) -> bool:
         plan_request = PlanDiffPayload(**payload)
 
-        plan: ArgusReleasePlan = self._resolve_plan(plan_request.id)
+        plan: ArgusReleasePlan = await self._resolve_plan(plan_request.id)
 
         if plan_request.name is not None:
             plan.name = plan_request.name
@@ -230,7 +231,7 @@ class PlanningService:
         if plan_request.ends_at is not None:
             plan.ends_at = plan_request.ends_at
 
-        existing = ArgusReleasePlan.find(
+        existing = await ArgusReleasePlan.find(
             name=plan.name, target_version=plan.target_version).allow_filtering().first()
         if existing and existing.id != plan.id:
             raise PlannerServiceException(
@@ -298,34 +299,34 @@ class PlanningService:
             if plan_request.view_id != str(plan.view_id) if plan.view_id else True:
                 if plan.view_id:
                     try:
-                        old_view: ArgusUserView = ArgusUserView.get(
+                        old_view: ArgusUserView = await ArgusUserView.get(
                             id=plan.view_id)
                         old_view.plan_id = None
-                        old_view.save()
+                        await old_view.save()
                     except DocumentNotFound:
                         pass
                 plan.view_id = UUID(plan_request.view_id) if isinstance(plan_request.view_id, str) else plan_request.view_id
-            self.update_view_for_plan(plan, existing=True)
+            await self.update_view_for_plan(plan, existing=True)
         else:
             if plan.view_id:
-                self.update_view_for_plan(plan, existing=True)
+                await self.update_view_for_plan(plan, existing=True)
             else:
-                view = self.create_view_for_plan(plan, user)
+                view = await self.create_view_for_plan(plan, user)
                 plan.view_id = view.id
 
-        plan.save()
-        invalidate_release_snapshots(plan.release_id)
+        await plan.save()
+        await invalidate_release_snapshots(plan.release_id)
         return True
 
-    def update_view_for_plan(self, plan: ArgusReleasePlan, existing: bool = False) -> ArgusUserView:
+    async def update_view_for_plan(self, plan: ArgusReleasePlan, existing: bool = False) -> ArgusUserView:
         service = UserViewService()
-        release: ArgusRelease = ArgusRelease.get(id=plan.release_id)
+        release: ArgusRelease = await ArgusRelease.get(id=plan.release_id)
 
         version_str = f" ({
             plan.target_version}) " if plan.target_version else ""
         view_name = f"{release.name} {version_str}- {plan.name}"
 
-        view: ArgusUserView = ArgusUserView.get(id=plan.view_id)
+        view: ArgusUserView = await ArgusUserView.get(id=plan.view_id)
         if view.plan_id and view.plan_id != plan.id:
             raise PlannerServiceException(
                 "This view is already assigned to another plan.")
@@ -333,7 +334,7 @@ class PlanningService:
         settings = json.loads(view.widget_settings)
         items = [f"test:{tid}" for tid in plan.tests]
         items = [*items, *[f"group:{gid}" for gid in plan.groups]]
-        entities = service.parse_view_entity_list(items)
+        entities = await service.parse_view_entity_list(items)
         view.tests = entities["tests"]
         if not existing:
             view.display_name = view_name
@@ -349,13 +350,13 @@ class PlanningService:
             dash["settings"]["targetVersion"] = bool(plan.target_version)
 
         view.widget_settings = json.dumps(settings)
-        view.save()
-        service.refresh_stale_view(view)
+        await view.save()
+        await service.refresh_stale_view(view)
         return view
 
-    def create_view_for_plan(self, plan: ArgusReleasePlan, user: User) -> ArgusUserView:
+    async def create_view_for_plan(self, plan: ArgusReleasePlan, user: User) -> ArgusUserView:
         service = UserViewService()
-        release: ArgusRelease = ArgusRelease.get(id=plan.release_id)
+        release: ArgusRelease = await ArgusRelease.get(id=plan.release_id)
         items = [f"test:{tid}" for tid in plan.tests]
         items = [*items, *[f"group:{gid}" for gid in plan.groups]]
         version_str = f" ({
@@ -366,7 +367,7 @@ class PlanningService:
             settings[2]["settings"]["productVersion"] = plan.target_version
         else:
             settings[2]["settings"]["targetVersion"] = False
-        view = service.create_view(
+        view = await service.create_view(
             user=user,
             name=slugify(view_name),
             display_name=view_name,
@@ -377,31 +378,31 @@ class PlanningService:
             widget_settings=json.dumps(settings),
         )
 
-        view.save()
-        service.refresh_stale_view(view)
+        await view.save()
+        await service.refresh_stale_view(view)
         return view
 
-    def change_plan_owner(self, plan_id: UUID | str, new_owner: UUID | str) -> bool:
-        user: User = User.get(id=UUID(str(new_owner)))
-        plan: ArgusReleasePlan = self._resolve_plan(plan_id)
+    async def change_plan_owner(self, plan_id: UUID | str, new_owner: UUID | str) -> bool:
+        user: User = await User.get(id=UUID(str(new_owner)))
+        plan: ArgusReleasePlan = await self._resolve_plan(plan_id)
 
         plan.owner = user.id
         plan.last_updated = datetime.datetime.now(tz=datetime.UTC)
 
-        plan.save()
+        await plan.save()
         return True
 
-    def get_plan(self, plan_id: str | UUID) -> ArgusReleasePlan:
-        return self._resolve_plan(plan_id)
+    async def get_plan(self, plan_id: str | UUID) -> ArgusReleasePlan:
+        return await self._resolve_plan(plan_id)
 
-    def get_gridview_for_release(self, release_id: str | UUID) -> dict[str, dict]:
+    async def get_gridview_for_release(self, release_id: str | UUID) -> dict[str, dict]:
         release_id = UUID(release_id) if isinstance(release_id, str) else release_id
-        release = ArgusRelease.get(id=release_id)
+        release = await ArgusRelease.get(id=release_id)
         release = TestLookup.index_mapper(release, "release")
         groups: list[ArgusGroup] = list(
-            ArgusGroup.find(release_id=release_id).all())
+            await ArgusGroup.find(release_id=release_id).all())
         tests: list[ArgusTest] = list(
-            ArgusTest.find(release_id=release_id).all())
+            await ArgusTest.find(release_id=release_id).all())
 
         groups = {str(g.id): TestLookup.index_mapper(g, "group")
                   for g in groups if g.enabled}
@@ -425,27 +426,27 @@ class PlanningService:
 
         return res
 
-    def copy_plan(self, payload: CopyPlanPayload, user: User) -> ArgusReleasePlan:
+    async def copy_plan(self, payload: CopyPlanPayload, user: User) -> ArgusReleasePlan:
 
-        existing = ArgusReleasePlan.find(
+        existing = await ArgusReleasePlan.find(
             name=payload.plan.name, target_version=payload.plan.target_version).allow_filtering().first()
         if existing:
             raise PlannerServiceException(
                 f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing, payload)
 
-        original_plan: ArgusReleasePlan = self._resolve_plan(payload.plan.id)
-        target_release: ArgusRelease = ArgusRelease.get(
+        original_plan: ArgusReleasePlan = await self._resolve_plan(payload.plan.id)
+        target_release: ArgusRelease = await ArgusRelease.get(
             id=UUID(payload.targetReleaseId) if isinstance(payload.targetReleaseId, str) else payload.targetReleaseId)
-        original_release: ArgusRelease = ArgusRelease.get(
+        original_release: ArgusRelease = await ArgusRelease.get(
             id=original_plan.release_id)
 
-        original_tests: list[ArgusTest] = ArgusTest.find(
+        original_tests: list[ArgusTest] = await ArgusTest.find(
             id__in=original_plan.tests).all()
-        original_groups: list[ArgusGroup] = ArgusGroup.find(
+        original_groups: list[ArgusGroup] = await ArgusGroup.find(
             id__in=original_plan.groups).all()
-        target_tests: list[ArgusTest] = ArgusTest.find(
+        target_tests: list[ArgusTest] = await ArgusTest.find(
             release_id=target_release.id).all()
-        target_groups: list[ArgusGroup] = ArgusGroup.find(
+        target_groups: list[ArgusGroup] = await ArgusGroup.find(
             release_id=target_release.id).all()
 
         tests_by_build_id = {t.build_system_id: t for t in target_tests}
@@ -504,28 +505,28 @@ class PlanningService:
         new_plan.groups = new_groups
         new_plan.options = json.dumps(new_options)
         new_plan.target_version = payload.plan.target_version
-        view = self.create_view_for_plan(new_plan, user)
+        view = await self.create_view_for_plan(new_plan, user)
         new_plan.view_id = view.id
 
-        new_plan.key = self._generate_plan_key(target_release.id)
-        new_plan.save()
-        invalidate_release_snapshots(new_plan.release_id)
+        new_plan.key = await self._generate_plan_key(target_release.id)
+        await new_plan.save()
+        await invalidate_release_snapshots(new_plan.release_id)
         return new_plan
 
-    def check_plan_copy_eligibility(self, plan_id: str | UUID, target_release_id: str | UUID) -> dict:
+    async def check_plan_copy_eligibility(self, plan_id: str | UUID, target_release_id: str | UUID) -> dict:
         target_release_id = UUID(target_release_id) if isinstance(target_release_id, str) else target_release_id
-        target_release: ArgusRelease = ArgusRelease.get(id=target_release_id)
-        plan: ArgusReleasePlan = self._resolve_plan(plan_id)
-        original_release: ArgusRelease = ArgusRelease.get(id=plan.release_id)
+        target_release: ArgusRelease = await ArgusRelease.get(id=target_release_id)
+        plan: ArgusReleasePlan = await self._resolve_plan(plan_id)
+        original_release: ArgusRelease = await ArgusRelease.get(id=plan.release_id)
 
-        original_tests: list[ArgusTest] = ArgusTest.find(
+        original_tests: list[ArgusTest] = await ArgusTest.find(
             id__in=plan.tests).all()
-        original_groups: list[ArgusGroup] = ArgusGroup.find(
+        original_groups: list[ArgusGroup] = await ArgusGroup.find(
             id__in=plan.groups).all()
 
-        target_tests: list[ArgusTest] = ArgusTest.find(
+        target_tests: list[ArgusTest] = await ArgusTest.find(
             release_id=target_release.id).all()
-        target_groups: list[ArgusGroup] = ArgusGroup.find(
+        target_groups: list[ArgusGroup] = await ArgusGroup.find(
             release_id=target_release.id).all()
 
         tests_by_build_id = {t.build_system_id: t for t in target_tests}
@@ -565,65 +566,45 @@ class PlanningService:
             }
         }
 
-    def release_planner(self, release_name: str) -> dict[str, Any]:
-        release: ArgusRelease = ArgusRelease.get(name=release_name)
+    async def release_planner(self, release_name: str) -> dict[str, Any]:
+        release: ArgusRelease = await ArgusRelease.get(name=release_name)
 
-        plans: list[ArgusReleasePlan] = self.get_plans_for_release(release.id)
+        plans: list[ArgusReleasePlan] = await self.get_plans_for_release(release.id)
 
         return {
             "release": release,
             "plans": plans,
         }
 
-    def get_plans_for_release(self, release_id: str | UUID) -> list[ArgusReleasePlan]:
+    async def get_plans_for_release(self, release_id: str | UUID) -> list[ArgusReleasePlan]:
         release_id = UUID(release_id) if isinstance(release_id, str) else release_id
-        return list(ArgusReleasePlan.find(release_id=release_id).all())
+        return list(await ArgusReleasePlan.find(release_id=release_id).all())
 
-    def delete_plan(self, plan_id: str | UUID, delete_view: bool = True):
-        plan: ArgusReleasePlan = self._resolve_plan(plan_id)
+    async def delete_plan(self, plan_id: str | UUID, delete_view: bool = True):
+        plan: ArgusReleasePlan = await self._resolve_plan(plan_id)
         if plan.view_id:
-            view: ArgusUserView = ArgusUserView.get(id=plan.view_id)
+            view: ArgusUserView = await ArgusUserView.get(id=plan.view_id)
             if delete_view:
-                view.delete()
+                await view.delete()
             else:
                 view.plan_id = None
-                view.save()
+                await view.save()
 
-        plan.delete()
-        invalidate_release_snapshots(plan.release_id)
+        await plan.delete()
+        await invalidate_release_snapshots(plan.release_id)
         return True
 
-    def get_assignee_for_test(self, test_id: str | UUID, target_version: str = None) -> UUID | None:
-        dml = ArgusReleasePlan.find(tests__contains=test_id, completed=False)
-        if target_version:
-            dml.filter(target_version=target_version)
-        potential_plans: list[ArgusReleasePlan] = dml.allow_filtering().all()
-        for plan in potential_plans:
-            # Use the most recent plan
-            return plan.assignee_mapping.get(test_id, plan.owner)
-        return None
-
-    def get_assignee_for_group(self, group_id: str | UUID, target_version: str = None) -> UUID | None:
-        dml = ArgusReleasePlan.find(
-            groups__contains=group_id, completed=False)
-        if target_version:
-            dml.filter(target_version=target_version)
-        potential_plans: list[ArgusReleasePlan] = dml.allow_filtering().all()
-        for plan in potential_plans:
-            # Use the most recent plan
-            return plan.assignee_mapping.get(group_id, plan.owner)
-        return None
-
-    def get_assignments_for_groups(self, release_id: str | UUID, version: str = None, plan_id: UUID = None) -> dict[str, UUID]:
+    async def get_assignments_for_groups(self, release_id: str | UUID, version: str = None,
+                                         plan_id: UUID = None) -> dict[str, UUID]:
         release_id = UUID(release_id) if isinstance(release_id, str) else release_id
-        release: ArgusRelease = ArgusRelease.get(id=release_id)
+        release: ArgusRelease = await ArgusRelease.get(id=release_id)
         if not plan_id:
             plans: list[ArgusReleasePlan] = list(
-                ArgusReleasePlan.find(release_id=release.id).all())
+                await ArgusReleasePlan.find(release_id=release.id).all())
             plans = plans if not version else [
                 plan for plan in plans if plan.target_version == version]
         else:
-            plans = [ArgusReleasePlan.get(id=UUID(plan_id) if isinstance(plan_id, str) else plan_id)]
+            plans = [await ArgusReleasePlan.get(id=UUID(plan_id) if isinstance(plan_id, str) else plan_id)]
 
         all_assignments = {}
         for plan in reversed(plans):
@@ -633,17 +614,18 @@ class PlanningService:
 
         return all_assignments
 
-    def get_assignments_for_tests(self, group_id: str | UUID, version: str = None, plan_id: UUID | str = None) -> dict[str, UUID]:
+    async def get_assignments_for_tests(self, group_id: str | UUID, version: str = None,
+                                        plan_id: UUID | str = None) -> dict[str, UUID]:
         group_id = UUID(group_id) if isinstance(group_id, str) else group_id
-        group: ArgusGroup = ArgusGroup.get(id=group_id)
-        release: ArgusRelease = ArgusRelease.get(id=group.release_id)
+        group: ArgusGroup = await ArgusGroup.get(id=group_id)
+        release: ArgusRelease = await ArgusRelease.get(id=group.release_id)
         if not plan_id:
             plans: list[ArgusReleasePlan] = list(
-                ArgusReleasePlan.find(release_id=release.id).all())
+                await ArgusReleasePlan.find(release_id=release.id).all())
             plans = plans if not version else [
                 plan for plan in plans if plan.target_version == version]
         else:
-            plans = [ArgusReleasePlan.get(id=UUID(plan_id) if isinstance(plan_id, str) else plan_id)]
+            plans = [await ArgusReleasePlan.get(id=UUID(plan_id) if isinstance(plan_id, str) else plan_id)]
 
         all_assignments = {}
 
@@ -658,26 +640,26 @@ class PlanningService:
 
         return all_assignments
 
-    def complete_plan(self, plan_id: str | UUID) -> bool:
-        plan: ArgusReleasePlan = ArgusReleasePlan.get(id=UUID(str(plan_id)))
+    async def complete_plan(self, plan_id: str | UUID) -> bool:
+        plan: ArgusReleasePlan = await ArgusReleasePlan.get(id=UUID(str(plan_id)))
         plan.completed = True
 
-        plan.save()
-        invalidate_release_snapshots(plan.release_id)
+        await plan.save()
+        await invalidate_release_snapshots(plan.release_id)
         return plan.completed
 
-    def resolve_plan(self, plan_id: str | UUID) -> list[dict[str, Any]]:
-        plan: ArgusReleasePlan = self._resolve_plan(plan_id)
+    async def resolve_plan(self, plan_id: str | UUID) -> list[dict[str, Any]]:
+        plan: ArgusReleasePlan = await self._resolve_plan(plan_id)
 
-        release: ArgusRelease = ArgusRelease.get(id=plan.release_id)
+        release: ArgusRelease = await ArgusRelease.get(id=plan.release_id)
         tests: list[ArgusTest] = []
         for batch in chunk(plan.tests):
-            tests.extend(ArgusTest.find(id__in=batch).all())
-        test_groups: list[ArgusGroup] = ArgusGroup.find(
+            tests.extend(await ArgusTest.find(id__in=batch).all())
+        test_groups: list[ArgusGroup] = await ArgusGroup.find(
             id__in=list({t.group_id for t in tests})).all()
         test_groups = {g.id: g for g in test_groups}
         groups: list[ArgusGroup] = list(
-            ArgusGroup.find(id__in=plan.groups).all())
+            await ArgusGroup.find(id__in=plan.groups).all())
 
         mapped = [TestLookup.index_mapper(entity, "group" if isinstance(
             entity, ArgusGroup) else "test") for entity in [*tests, *groups]]
@@ -690,7 +672,7 @@ class PlanningService:
 
         return mapped
 
-    def trigger_jobs(self, payload: PlanTriggerPayload, username: str) -> bool:
+    async def trigger_jobs(self, payload: PlanTriggerPayload, username: str) -> bool:
 
         release_name = payload.get("release")
         plan_id = payload.get("plan_id")
@@ -700,14 +682,14 @@ class PlanningService:
 
         match condition_set:
             case (True, False, False):
-                release = ArgusRelease.get(name=release_name)
+                release = await ArgusRelease.get(name=release_name)
                 filter_expr = {"release_id": release.id}
             case (False, True, False):
                 filter_expr = {"id": UUID(plan_id) if isinstance(plan_id, str) else plan_id}
             case (False, False, True):
                 filter_expr = {"target_version": version}
             case (True, False, True):
-                release = ArgusRelease.get(name=release_name)
+                release = await ArgusRelease.get(name=release_name)
                 filter_expr = {"target_version": version,
                                "release_id": release.id}
             case _:
@@ -715,7 +697,7 @@ class PlanningService:
                     "No version, release name or plan id specified.", payload)
 
         plans: list[ArgusReleasePlan] = list(
-            ArgusReleasePlan.find(**filter_expr).allow_filtering().all())
+            await ArgusReleasePlan.find(**filter_expr).allow_filtering().all())
 
         if len(plans) == 0:
             return False, "No plans to trigger"
@@ -725,69 +707,66 @@ class PlanningService:
         test_ids = [test_id for plan in plans for test_id in plan.tests]
         group_ids = [group_id for plan in plans for group_id in plan.groups]
 
-        tests = []
-        for batch in chunk(test_ids):
-            tests.extend(ArgusTest.find(id__in=batch).all())
-
-        for batch in (chunk(group_ids)):
-            tests.extend(ArgusTest.find(
-                group_id__in=batch).allow_filtering().all())
-
-        tests = list({test for test in tests})
+        test_batches = await asyncio.gather(
+            *(ArgusTest.find(id__in=batch).all() for batch in chunk(test_ids)),
+            *(ArgusTest.find(group_id__in=batch).allow_filtering().all() for batch in chunk(group_ids)),
+        )
+        tests = list({test for batch in test_batches for test in batch})
 
         LOGGER.info("Will trigger %s tests...", len(tests))
 
         service = JenkinsService()
-        failures = []
-        successes = []
-        for test in tests:
-            try:
-                latest_build_number = service.latest_build(
-                    test.build_system_id)
-                if latest_build_number == -1:
-                    failures.append(test.build_system_id)
-                    continue
-                raw_params = service.retrieve_job_parameters(
-                    test.build_system_id, latest_build_number)
-                job_params = {param["name"]: param["value"]
-                              for param in raw_params if param.get("value")}
-                backend = job_params.get("backend")
-                match backend.split("-"):
-                    case ["aws", *_]:
-                        region_key = "region"
-                    case ["gce", *_]:
-                        region_key = "gce_datacenter"
-                    case ["azure", *_]:
-                        region_key = "azure_region_name"
-                    case ["oci", *_]:
-                        region_key = "oci_region_name"
-                    case _:
-                        raise PlannerServiceException(
-                            f"Unknown backend encountered: {backend}", backend)
-
-                job_params = None
-                for param_set in params:
-                    if param_set["test"] == "longevity" and backend == param_set["backend"]:
-                        job_params = dict(param_set)
-                        job_params.pop("type", None)
-                        region = job_params.pop("region", None)
-                        job_params[region_key] = region
-                        break
-                if not job_params:
-                    raise PlannerServiceException(
-                        f"Parameters not found for job {test.build_system_id}", test.build_system_id)
-                final_params = {**job_params, **common_params, **job_params}
-                queue_item = service.build_job(
-                    test.build_system_id, final_params, username)
-                info = service.get_queue_info(queue_item)
-                url = info.get("url", info.get("taskUrl", ""))
-                successes.append(url)
-            except Exception:
-                LOGGER.error("Failed to trigger %s",
-                             test.build_system_id, exc_info=True)
-                failures.append(test.build_system_id)
+        urls = await gather_limited(
+            (self._trigger_one(service, test, params, common_params, username) for test in tests), limit=5
+        )
 
         return {
-            "jobs": successes,
-            "failed_to_execute": failures,
+            "jobs": [url for url in urls if url is not None],
+            "failed_to_execute": [test.build_system_id for test, url in zip(tests, urls) if url is None],
         }
+
+    async def _trigger_one(self, service: JenkinsService, test: ArgusTest, params: list[dict],
+                           common_params: dict, username: str) -> str | None:
+        try:
+            latest_build_number = await service.latest_build(
+                test.build_system_id)
+            if latest_build_number == -1:
+                return None
+            raw_params = await service.retrieve_job_parameters(
+                test.build_system_id, latest_build_number)
+            job_params = {param["name"]: param["value"]
+                          for param in raw_params if param.get("value")}
+            backend = job_params.get("backend")
+            match backend.split("-"):
+                case ["aws", *_]:
+                    region_key = "region"
+                case ["gce", *_]:
+                    region_key = "gce_datacenter"
+                case ["azure", *_]:
+                    region_key = "azure_region_name"
+                case ["oci", *_]:
+                    region_key = "oci_region_name"
+                case _:
+                    raise PlannerServiceException(
+                        f"Unknown backend encountered: {backend}", backend)
+
+            job_params = None
+            for param_set in params:
+                if param_set["test"] == "longevity" and backend == param_set["backend"]:
+                    job_params = dict(param_set)
+                    job_params.pop("type", None)
+                    region = job_params.pop("region", None)
+                    job_params[region_key] = region
+                    break
+            if not job_params:
+                raise PlannerServiceException(
+                    f"Parameters not found for job {test.build_system_id}", test.build_system_id)
+            final_params = {**job_params, **common_params, **job_params}
+            queue_item = await service.build_job(
+                test.build_system_id, final_params, username)
+            info = await service.get_queue_info(queue_item)
+            return info.get("url", info.get("taskUrl", ""))
+        except Exception:
+            LOGGER.error("Failed to trigger %s",
+                         test.build_system_id, exc_info=True)
+            return None

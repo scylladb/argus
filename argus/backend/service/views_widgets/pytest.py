@@ -1,17 +1,17 @@
+import asyncio
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 from functools import reduce
 from pprint import pformat
 import re
 import logging
-from typing import NamedTuple, TypedDict
+from typing import TypedDict
 from uuid import UUID
 from time import sleep, time
 
 
 from humanize import naturaltime
 from cassandra.util import uuid_from_time, unix_time_from_uuid1
-from argus.backend.db import ScyllaCluster
 from argus.backend.models.pytest import PytestResultTable, PytestUserField
 from argus.backend.models.web import ArgusTest, ArgusUserView
 from argus.backend.plugins.generic.plugin import PluginInfo as GenericPluginInfo
@@ -28,19 +28,17 @@ class PytestResult(TypedDict):
 
 
 class PytestViewService:
-    def __init__(self) -> None:
-        self.cluster = ScyllaCluster.get()
-
     @staticmethod
     def stringify_result(result: dict) -> str:
         try:
-            return f"{result.name} {result.message or ''} {' '.join(f'{mark}' for mark in (result.markers or []))}".lower()
+            markers = " ".join(f"{mark}" for mark in (result["markers"] or []))
+            return f"{result['name']} {result['message'] or ''} {markers}".lower()
         except Exception as exc:
             LOGGER.error("%s", result, exc_info=True)
             raise exc
 
-    def get_user_fields_for_result(self, name: str, id: str):
-        field_rows = PytestUserField.find(
+    async def get_user_fields_for_result(self, name: str, id: str):
+        field_rows = await PytestUserField.find(
             name=name,  id=datetime.fromisoformat(id)).all()
         result = {row.field_name: row.field_value for row in field_rows}
 
@@ -58,11 +56,11 @@ class PytestViewService:
             return not res
         return res
 
-    def view_results(self, view_id: str | UUID, args):
-        return self.result_filter(args)
+    async def view_results(self, view_id: str | UUID, args):
+        return await self.result_filter(args)
 
-    def release_results(self, release_id: str | UUID, args):
-        return self.result_filter(args)
+    async def release_results(self, release_id: str | UUID, args):
+        return await self.result_filter(args)
 
     def prepare_pie_chart(self, hits: list[dict]) -> dict:
         def count_status(acc: dict, result: dict):
@@ -113,13 +111,13 @@ class PytestViewService:
             "datasets": datasets,
         }
 
-    def result_filter(self, args) -> PytestResult:
-        db = ScyllaCluster.get()
+    async def result_filter(self, args) -> PytestResult:
         test = args.get("test")
 
-        unique_tests: list[str] = []
-        unique_tests.extend((row["name"] for row in db.session.execute(
-            f"SELECT DISTINCT name FROM pytest_v2", timeout=60.0).all()))
+        unique_tests: list[str] = [
+            name for (name,) in
+            await PytestResultTable.find().distinct().only("name").values_list("name").timeout(60.0).all()
+        ]
 
         if test:
             LOGGER.warning(test)
@@ -134,44 +132,34 @@ class PytestViewService:
         filters = args.getlist("filters[]")
         markers = args.getlist("markers[]")
 
-        db_query = "SELECT test_id, id, name, run_id, message, session_timestamp, status, markers, duration, test_type FROM pytest_v2"
-        query_filters = []
+        columns = ("test_id", "id", "name", "run_id", "message", "session_timestamp", "status", "markers", "duration",
+                   "test_type")
+        query_filters = {}
 
         if before:
             before = datetime.fromtimestamp(int(before), tz=UTC)
-            query_filters.append(("id <= ?", before))
+            query_filters["id__lte"] = before
 
         if after:
             after = datetime.fromtimestamp(int(after), tz=UTC)
-            query_filters.append(("id >= ?", after))
+            query_filters["id__gte"] = after
 
-        prepared = db.prepare(db_query)
-        results: list[NamedTuple] = []
         if isinstance(enabled_statuses, list) and len(enabled_statuses) > 0:
-            query_filters.append(("status in ?", enabled_statuses))
+            query_filters["status__in"] = enabled_statuses
 
         results = []
         for sequential_batch in chunk(unique_tests, 1000):
-            futures = []
-            for partition_chunk in chunk(sequential_batch, 100):
-                parallel_filter = [*query_filters]
-                parallel_query = db_query
-                partition_filter = [
-                    ("name IN ?", partition_chunk), *parallel_filter]
-                parallel_query += " WHERE "
-                parallel_query += " AND ".join([f for f,
-                                               _ in partition_filter])
-                prepared = db.prepare(parallel_query)
-                future = db.session.execute_async(prepared, parameters=[
-                                                  p for _, p in partition_filter], timeout=60.0, execution_profile="read_fast_named_tuple")
-                futures.append(future)
-            results.extend(
-                [row for future in futures for row in future.result()])
+            batches = await asyncio.gather(*(
+                PytestResultTable.find(name__in=partition_chunk, **query_filters)
+                .only(*columns).values_list(*columns).consistency("ONE").timeout(60.0).all()
+                for partition_chunk in chunk(sequential_batch, 100)
+            ))
+            results.extend(dict(zip(columns, row)) for batch in batches for row in batch)
 
         if markers:
             for marker in markers:
                 results = [result for result in results if marker in (
-                    result.markers or [])]
+                    result["markers"] or [])]
         if query:
             pattern = re.compile(query.lower())
             results = [result for result in results if re.search(
@@ -179,29 +167,23 @@ class PytestViewService:
         user_fields = {}
 
         if filters:
-            base_filter_query = db.prepare(
-                "SELECT * FROM pytest_user_field WHERE name IN ? AND id IN ?")
-            futures = []
-            for batch in chunk((r.name,  r.id) for r in results):
-                future = db.session.execute_async(base_filter_query, parameters=[[b[0] for b in batch], [
-                                                  b[1] for b in batch]], timeout=60.0, execution_profile="read_fast")
-                futures.append(future)
-            filter_rows = [
-                row for future in futures for row in future.result()]
-            for row in filter_rows:
-                key = (row["name"], row["id"])
+            batches = await asyncio.gather(*(
+                PytestUserField.find(name__in=[r["name"] for r in batch], id__in=[r["id"] for r in batch])
+                .consistency("ONE").timeout(60.0).all()
+                for batch in chunk(results)
+            ))
+            for row in (row for batch in batches for row in batch):
+                key = (row.name, row.id)
                 val = user_fields.get(key, {})
-                val[row["field_name"]] = row["field_value"]
+                val[row.field_name] = row.field_value
                 user_fields[key] = val
-            results = [{**result._asdict(), "user_fields": user_fields.get(
-                (result.name, result.id), {})} for result in results]
+            results = [{**result, "user_fields": user_fields.get(
+                (result["name"], result["id"]), {})} for result in results]
             filters = [(f[0] == "!", f.lstrip("!").split("=", 1)[0],
                         f.lstrip("!").split("=", 1)[1]) for f in filters]
             for negated, field, value in filters:
                 results = [result for result in results if self.do_user_field_filter(
                     field, value, negated, result)]
-        else:
-            results = [result._asdict() for result in results]
 
         results = sorted(results, key=lambda r: r["id"], reverse=True)
         return {

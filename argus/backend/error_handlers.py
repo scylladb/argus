@@ -1,3 +1,4 @@
+import asyncio
 import base64
 from hashlib import sha256
 import logging
@@ -136,4 +137,4 @@ class DBErrorHandler():
 
 
 async def db_error_handler(_: Request, exception: Exception) -> JSONResponse:
-    return JSONResponse(DBErrorHandler.handle_db_errors(exception))
+    return JSONResponse(await asyncio.to_thread(DBErrorHandler.handle_db_errors, exception))

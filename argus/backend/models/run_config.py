@@ -2,7 +2,7 @@ from typing import Annotated, Optional
 from uuid import UUID
 
 from coodie import ClusteringKey, PrimaryKey
-from coodie.sync import Document
+from coodie.aio import Document
 
 
 class RunConfiguration(Document):

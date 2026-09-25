@@ -51,6 +51,7 @@ the app's existing read-only S3 credentials and the link-only log model
 (nothing is uploaded or hosted), and is idempotent, so the extra S3 list per
 ingest is the only cost when there is nothing to back-fill.
 """
+import asyncio
 import gzip
 import io
 import json
@@ -61,11 +62,10 @@ import zipfile
 from dataclasses import dataclass, field
 from typing import Iterable
 
+import httpx2
 import zstandard as zstd
 
 from coodie.exceptions import DocumentNotFound
-
-from starlette.testclient import TestClient
 
 from argus.backend.error_handlers import APIException
 from argus.backend.util.config import Config
@@ -192,27 +192,18 @@ class ReplayService:
     # ------------------------------------------------------------------
     # Entry point
     # ------------------------------------------------------------------
-    def ingest(self, archive_bytes: bytes, *, dry_run: bool = False) -> ReplaySummary:
-        records = list(self._extract_records(archive_bytes))
+    async def ingest(self, archive_bytes: bytes, *, dry_run: bool = False) -> ReplaySummary:
+        records = await asyncio.to_thread(lambda: list(self._extract_records(archive_bytes)))
         records = self._apply_ordering(records)
 
         summary = ReplaySummary(total=len(records))
         if records:
-            client = self._test_client()
-            last_seen_ts = self._compute_last_seen_ts(records)
-            for rec in records:
-                self._process_one(client, rec, summary, dry_run=dry_run, last_seen_ts=last_seen_ts)
-
-            # After the recorded calls are applied, optionally discover log
-            # archives that reached S3 but whose ``logs/submit`` was never
-            # recorded (e.g. loader/monitor/sct-runner bundles), and submit
-            # their links through the same dispatch path. Skipped on dry_run.
-            if self._backfill_logs and not dry_run:
-                backfill_records = self._build_log_backfill_records(records)
-                summary.total += len(backfill_records)
-                for rec in backfill_records:
-                    self._process_one(client, rec, summary, dry_run=dry_run, last_seen_ts=last_seen_ts)
-                    summary.backfilled_logs += len((rec.get("body") or {}).get("logs") or [])
+            client = self._async_client()
+            try:
+                await self._dispatch_all(client, records, summary, dry_run=dry_run)
+            finally:
+                if client is not self._client:
+                    await client.aclose()
 
         LOGGER.info(
             "Replay ingest complete: total=%d processed=%d ok=%d failed=%d skipped=%d "
@@ -223,8 +214,24 @@ class ReplayService:
         )
         return summary
 
-    def _test_client(self):
-        """Build the in-process TestClient to dispatch through.
+    async def _dispatch_all(self, client, records: list[dict], summary: ReplaySummary, *, dry_run: bool) -> None:
+        last_seen_ts = self._compute_last_seen_ts(records)
+        for rec in records:
+            await self._process_one(client, rec, summary, dry_run=dry_run, last_seen_ts=last_seen_ts)
+
+        # After the recorded calls are applied, optionally discover log
+        # archives that reached S3 but whose ``logs/submit`` was never
+        # recorded (e.g. loader/monitor/sct-runner bundles), and submit
+        # their links through the same dispatch path. Skipped on dry_run.
+        if self._backfill_logs and not dry_run:
+            backfill_records = await self._build_log_backfill_records(records)
+            summary.total += len(backfill_records)
+            for rec in backfill_records:
+                await self._process_one(client, rec, summary, dry_run=dry_run, last_seen_ts=last_seen_ts)
+                summary.backfilled_logs += len((rec.get("body") or {}).get("logs") or [])
+
+    def _async_client(self):
+        """Build the in-process ``httpx2.AsyncClient`` to dispatch through.
 
         The controller injects the running ASGI application; unit tests can
         inject a ready-made client instead.
@@ -233,7 +240,8 @@ class ReplayService:
             return self._client
         if self._app is None:
             raise ReplayServiceError("No application injected for replay dispatch")
-        return TestClient(self._app, raise_server_exceptions=False)
+        transport = httpx2.ASGITransport(app=self._app, raise_app_exceptions=False)
+        return httpx2.AsyncClient(transport=transport, base_url="http://replay")
 
     # ------------------------------------------------------------------
     # Archive handling
@@ -443,7 +451,7 @@ class ReplayService:
         return body.get("job_name") or body.get("build_id") or body.get("buildId")
 
     @staticmethod
-    def _diagnose_missing_hierarchy(record: dict) -> str | None:
+    async def _diagnose_missing_hierarchy(record: dict) -> str | None:
         """Pre-check for ``submit_run`` records on the default
         ``create_missing_tests=False`` path.
 
@@ -471,7 +479,7 @@ class ReplayService:
         from argus.backend.service.test_hierarchy import parse_build_id
 
         try:
-            ArgusTest.get(build_system_id=build_id)
+            await ArgusTest.get(build_system_id=build_id)
             return None
         except DocumentNotFound:
             pass
@@ -483,14 +491,14 @@ class ReplayService:
 
         missing: list[str] = []
         try:
-            release = ArgusRelease.get(name=release_name)
+            release = await ArgusRelease.get(name=release_name)
         except DocumentNotFound:
             release = None
             missing.append("release")
 
         group_found = False
         if release is not None:
-            for g in ArgusGroup.find(release_id=release.id).all():
+            for g in await ArgusGroup.find(release_id=release.id).all():
                 if g.build_system_id == group_build_id:
                     group_found = True
                     break
@@ -511,7 +519,7 @@ class ReplayService:
     # Hierarchy auto-create (pre-step for submit_run)
     # ------------------------------------------------------------------
     @staticmethod
-    def _ensure_hierarchy_for_submit_run(record: dict) -> None:
+    async def _ensure_hierarchy_for_submit_run(record: dict) -> None:
         """Auto-create the ``ArgusRelease/Group/Test`` triple referenced by a
         ``submit_run`` record's build identifier and, if a run row already
         exists for this ``run_id`` with empty categorical fields, back-fill
@@ -542,7 +550,7 @@ class ReplayService:
         from argus.backend.service.test_hierarchy import ensure_test_hierarchy
         from argus.backend.service.client_service import ClientService
 
-        test = ensure_test_hierarchy(
+        test = await ensure_test_hierarchy(
             build_id=build_id,
             build_url=build_url,
             plugin_name=run_type or None,
@@ -553,7 +561,7 @@ class ReplayService:
         try:
             model = ClientService().get_model(run_type)
             from uuid import UUID
-            run = model.get(id=UUID(run_id))
+            run = await model.get(id=UUID(run_id))
         except Exception:  # noqa: BLE001 -- DoesNotExist or unknown run_type
             return
 
@@ -568,7 +576,7 @@ class ReplayService:
             run.group_id = test.group_id
             changed = True
         if changed:
-            run.save()
+            await run.save()
             LOGGER.info(
                 "Back-filled categorical fields on existing run %s (test_id=%s)",
                 run_id, test.id,
@@ -625,16 +633,16 @@ class ReplayService:
         configured = Config.load_yaml_config().get("REPLAY_LOG_BACKFILL_BUCKET")
         return configured or _DEFAULT_LOG_BACKFILL_BUCKET
 
-    def _list_s3_run_objects(self, bucket: str, prefix: str) -> list[str]:
+    async def _list_s3_run_objects(self, bucket: str, prefix: str) -> list[str]:
         """Return every (non-directory) object key under ``prefix``, paginated."""
-        s3 = self._s3_client()
+        s3 = await asyncio.to_thread(self._s3_client)
         keys: list[str] = []
         continuation: str | None = None
         while True:
             kwargs = {"Bucket": bucket, "Prefix": prefix}
             if continuation:
                 kwargs["ContinuationToken"] = continuation
-            resp = s3.list_objects_v2(**kwargs)
+            resp = await asyncio.to_thread(s3.list_objects_v2, **kwargs)
             for obj in resp.get("Contents", []) or []:
                 key = obj.get("Key", "")
                 if key and not key.endswith("/"):
@@ -646,7 +654,7 @@ class ReplayService:
                 break
         return keys
 
-    def _build_log_backfill_records(self, records: list[dict]) -> list[dict]:
+    async def _build_log_backfill_records(self, records: list[dict]) -> list[dict]:
         """Synthesise ``logs/submit`` records for a run's S3 log archives that
         were uploaded but never recorded.
 
@@ -681,7 +689,7 @@ class ReplayService:
                     "log backfill: no S3 bucket derivable for run %s; skipping", run_id)
                 continue
             try:
-                keys = self._list_s3_run_objects(bucket, f"{run_id}/")
+                keys = await self._list_s3_run_objects(bucket, f"{run_id}/")
             except Exception:  # noqa: BLE001 -- isolate per run; S3 outage != ingest failure
                 LOGGER.exception(
                     "log backfill: listing s3://%s/%s/ failed", bucket, run_id)
@@ -713,7 +721,7 @@ class ReplayService:
     # ------------------------------------------------------------------
     # Per-record execution
     # ------------------------------------------------------------------
-    def _process_one(
+    async def _process_one(
         self,
         client,
         record: dict,
@@ -738,7 +746,7 @@ class ReplayService:
         # so the user can preview which records would fail.
         if not self._create_missing_tests and endpoint == "/testrun/$type/submit":
             try:
-                diagnosis = self._diagnose_missing_hierarchy(record)
+                diagnosis = await self._diagnose_missing_hierarchy(record)
             except Exception:  # noqa: BLE001
                 LOGGER.exception(
                     "Hierarchy pre-check failed for ts=%s; allowing dispatch to proceed", ts,
@@ -766,7 +774,7 @@ class ReplayService:
         # dispatch and surface its error.
         if self._create_missing_tests and endpoint == "/testrun/$type/submit":
             try:
-                self._ensure_hierarchy_for_submit_run(record)
+                await self._ensure_hierarchy_for_submit_run(record)
             except Exception:  # noqa: BLE001
                 LOGGER.exception(
                     "Hierarchy auto-create failed for ts=%s; continuing with dispatch", ts,
@@ -802,7 +810,7 @@ class ReplayService:
             headers["Authorization"] = self._auth_header
 
         try:
-            response = client.request(
+            response = await client.request(
                 method,
                 url,
                 params=params or None,

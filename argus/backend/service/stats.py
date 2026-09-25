@@ -1,10 +1,14 @@
+import asyncio
 from collections import defaultdict
+from dataclasses import dataclass
 from functools import reduce
+from itertools import islice
 import json
 import logging
+import time
 
 from datetime import UTC, datetime
-from typing import Any, TypedDict
+from typing import Any, Awaitable, TypedDict
 from uuid import UUID
 
 from coodie.exceptions import DocumentNotFound
@@ -17,7 +21,6 @@ from argus.backend.util.common import chunk, get_build_number, check_version
 from argus.common.enums import TestStatus, TestInvestigationStatus
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, \
     ArgusTestRunComment, ArgusUserView, ReleaseStatsSnapshot
-from argus.backend.db import ScyllaCluster
 from argus.backend.util.encoders import ArgusJSONProvider
 
 LOGGER = logging.getLogger(__name__)
@@ -160,27 +163,36 @@ def _get_image(row: dict):
         return cs.db_node.image_id
 
 
-def _fetch_multiple_release_queries(entity, releases: list[str]):
-    result_set = []
-    query = entity.find if hasattr(entity, "find") else entity.filter
-    for release_id in releases:
-        result_set.extend(query(release_id=release_id).all())
-    return result_set
+def _flatten(results: list[list]) -> list:
+    return [item for items in results for item in items]
 
 
-def fetch_issues(release: list[UUID] | UUID):
+async def _gather_groups(*groups: list[Awaitable]) -> list[list]:
+    results = iter(await asyncio.gather(*(coro for group in groups for coro in group)))
+    return [list(islice(results, len(group))) for group in groups]
+
+
+async def _fetch_multiple_release_queries(entity, releases: list[UUID]) -> list:
+    return _flatten(await asyncio.gather(*(entity.find(release_id=release_id).all() for release_id in releases)))
+
+
+async def _fetch_links(release: list[UUID] | UUID) -> list[IssueLink]:
     if isinstance(release, UUID):
-        links = IssueLink.find(release_id=release)
-    else:
-        links = _fetch_multiple_release_queries(IssueLink, release)
+        return await IssueLink.find(release_id=release).all()
+    return await _fetch_multiple_release_queries(IssueLink, release)
 
+
+async def _resolve_links(links: list[IssueLink]) -> list[dict]:
     unique_issues = {link.issue_id for link in links}
+    lookups = [
+        (subtype, model.find(id__in=batch).all())
+        for batch in chunk(unique_issues)
+        for subtype, model in (("github", GithubIssue), ("jira", JiraIssue))
+    ]
     resolved_issues = {}
-    for batch in chunk(unique_issues):
-        for issue in GithubIssue.find(id__in=batch).all():
-            resolved_issues[issue.id] = ("github", issue)
-        for issue in JiraIssue.find(id__in=batch).all():
-            resolved_issues[issue.id] = ("jira", issue)
+    for (subtype, _), issues in zip(lookups, await asyncio.gather(*(query for _, query in lookups))):
+        for issue in issues:
+            resolved_issues[issue.id] = (subtype, issue)
     linked_issues = []
     for link in links:
         linked = link.model_dump()
@@ -195,6 +207,21 @@ def fetch_issues(release: list[UUID] | UUID):
         linked_issues.append(linked)
 
     return linked_issues
+
+
+async def fetch_issues(release: list[UUID] | UUID) -> list[dict]:
+    return await _resolve_links(await _fetch_links(release))
+
+
+@dataclass
+class FetchedStats:
+    tests: list[ArgusTest]
+    rows: list[TestRunStatRow]
+    plans: list[ArgusReleasePlan]
+    linked_issues: list[dict]
+    comments: list[ArgusTestRunComment]
+    groups: list[ArgusGroup]
+    releases: list[ArgusRelease]
 
 
 class ViewStats:
@@ -242,19 +269,14 @@ class ViewStats:
             **aggregated_investigation_status
         }
 
-    def collect(self, rows: list[TestRunStatRow], limited=False, force=False, dict: dict[str, TestRunStatRow] | None = None, tests: list[ArgusTest] = None, version_filter: str = None) -> None:
+    def collect(self, fetched: FetchedStats, rows: list[TestRunStatRow], limited=False, force=False,
+                dict: dict[str, TestRunStatRow] | None = None, version_filter: str = None) -> None:
         self.forced_collection = force
-        all_release_ids = list({t.release_id for t in tests})
         if not limited:
-            if self.release.plan_id:
-                plan = ArgusReleasePlan.get(id=self.release.plan_id)
-                self.plans = [plan]
+            if self.release.plan_id or not version_filter:
+                self.plans = fetched.plans
             else:
-                plans_by_release = [ArgusReleasePlan.find(release_id=release_id).all()
-                                    for release_id in all_release_ids]
-                plans: list[ArgusReleasePlan] = [plan for plans in plans_by_release for plan in plans]
-                self.plans = plans if not version_filter else [
-                    plan for plan in plans if version_filter == plan.target_version]
+                self.plans = [plan for plan in fetched.plans if version_filter == plan.target_version]
             # Legacy scheduling removed - no schedule rows to aggregate.
             self.test_schedules = defaultdict(list)
 
@@ -263,22 +285,17 @@ class ViewStats:
         if not limited or force:
             self.issues = reduce(
                 lambda acc, row: acc[row["run_id"]].append(row) or acc,
-                fetch_issues(all_release_ids),
+                fetched.linked_issues,
                 defaultdict(list)
             )
             self.comments = reduce(
                 lambda acc, row: acc[row.test_run_id].append(row) or acc,
-                _fetch_multiple_release_queries(ArgusTestRunComment, all_release_ids),
+                fetched.comments,
                 defaultdict(list)
             )
-        self.all_tests = tests
-        groups = []
-        for slice in chunk(list({t.release_id for t in tests})):
-            self.releases.update({str(release.id): release for release in ArgusRelease.find(id__in=slice).all()})
-
-        for slice in chunk(list({t.group_id for t in tests})):
-            groups.extend(ArgusGroup.find(id__in=slice).all())
-        for group in groups:
+        self.all_tests = fetched.tests
+        self.releases = {str(release.id): release for release in fetched.releases}
+        for group in fetched.groups:
             if group.enabled:
                 stats = GroupStats(group=group, parent_release=self)
                 stats.collect(limited=limited)
@@ -333,14 +350,15 @@ class ReleaseStats:
             **aggregated_investigation_status
         }
 
-    def collect(self, rows: list[TestRunStatRow], limited=False, force=False, dict: dict | None = None, tests=None, version_filter: str = None) -> None:
+    def collect(self, fetched: FetchedStats, rows: list[TestRunStatRow], limited=False, force=False,
+                dict: dict | None = None, version_filter: str = None) -> None:
         self.forced_collection = force
         if not self.release.enabled and not force:
             return
 
         if not limited:
-            plans: list[ArgusReleasePlan] = list(ArgusReleasePlan.find(release_id=self.release.id).all())
-            self.plans = plans if not filter else [plan for plan in plans if version_filter == plan.target_version]
+            plans = fetched.plans
+            self.plans = plans if not version_filter else [plan for plan in plans if version_filter == plan.target_version]
             # Legacy scheduling removed - no schedule rows to aggregate.
             self.test_schedules = defaultdict(list)
 
@@ -349,17 +367,16 @@ class ReleaseStats:
         if not limited or force:
             self.issues = reduce(
                 lambda acc, row: acc[row["run_id"]].append(row) or acc,
-                fetch_issues(self.release.id),
+                fetched.linked_issues,
                 defaultdict(list)
             )
             self.comments = reduce(
                 lambda acc, row: acc[row.test_run_id].append(row) or acc,
-                ArgusTestRunComment.find(release_id=self.release.id).all(),
+                fetched.comments,
                 defaultdict(list)
             )
-        self.all_tests = ArgusTest.find(release_id=self.release.id).all() if not tests else tests
-        groups: list[ArgusGroup] = ArgusGroup.find(release_id=self.release.id).all()
-        for group in groups:
+        self.all_tests = fetched.tests
+        for group in fetched.groups:
             if group.enabled:
                 stats = GroupStats(group=group, parent_release=self)
                 stats.collect(limited=limited)
@@ -526,35 +543,59 @@ class TestStats:
 
 class ReleaseStatsCollector:
     def __init__(self, release_name: str, release_version: str | None = None) -> None:
-        self.database = ScyllaCluster.get()
-        self.session = self.database.get_session()
         self.release = None
         self.release_stats = None
         self.release_rows = []
         self.release_name = release_name
         self.release_version = release_version
 
-    def collect(self, limited=False, force=False, include_no_version=False, image_id: str = None) -> dict:
-        self.release: ArgusRelease = ArgusRelease.get(name=self.release_name)
+    async def _fetch(self, limited: bool, force: bool) -> FetchedStats:
+        release_id = self.release.id
+        collecting = self.release.enabled or force
+        tests, plans, links, comments, groups = await _gather_groups(
+            [ArgusTest.find(release_id=release_id).all()],
+            [ArgusReleasePlan.find(release_id=release_id).all()] if collecting and not limited else [],
+            [_fetch_links(release_id)] if collecting and (not limited or force) else [],
+            [ArgusTestRunComment.find(release_id=release_id).all()] if collecting and (not limited or force) else [],
+            [ArgusGroup.find(release_id=release_id).all()] if collecting else [],
+        )
+        all_tests: list[ArgusTest] = _flatten(tests)
+        build_ids = reduce(lambda acc, test: acc[test.plugin_name or "unknown"].append(
+            test.build_system_id) or acc, all_tests, defaultdict(list))
+        rows, linked_issues = await _gather_groups(
+            [plugin.get_stats_for_release(release=self.release, build_ids=build_ids.get(plugin._plugin_name, []))
+             for plugin in all_plugin_models()],
+            [_resolve_links(_flatten(links))],
+        )
+        return FetchedStats(
+            tests=all_tests,
+            rows=_flatten(rows),
+            plans=_flatten(plans),
+            linked_issues=linked_issues[0],
+            comments=_flatten(comments),
+            groups=_flatten(groups),
+            releases=[],
+        )
 
+    async def collect(self, limited=False, force=False, include_no_version=False, image_id: str = None) -> dict:
+        self.release: ArgusRelease = await ArgusRelease.get(name=self.release_name)
+
+        filter_key = snapshot_filter_key(self.release_version, image_id, include_no_version, limited)
         if not force:
-            filter_key = snapshot_filter_key(self.release_version, image_id, include_no_version, limited)
             try:
-                snapshot = ReleaseStatsSnapshot.get(release_id=self.release.id, filter_key=filter_key)
+                snapshot = await ReleaseStatsSnapshot.get(release_id=self.release.id, filter_key=filter_key)
                 return json.loads(snapshot.payload)
             except DocumentNotFound:
                 pass
-
-        all_tests: list[ArgusTest] = list(ArgusTest.find(release_id=self.release.id).all())
-        build_ids = reduce(lambda acc, test: acc[test.plugin_name or "unknown"].append(
-            test.build_system_id) or acc, all_tests, defaultdict(list))
-        self.release_rows = [futures for plugin in all_plugin_models()
-                             for futures in plugin.get_stats_for_release(release=self.release, build_ids=build_ids.get(plugin._plugin_name, []))]
-        self.release_rows = [row for future in self.release_rows for row in future.result()]
         if self.release.dormant and not force:
             return {
                 "dormant": True
             }
+
+        fetch_start = time.perf_counter()
+        fetched = await self._fetch(limited, force)
+        collect_start = time.perf_counter()
+        self.release_rows = fetched.rows
         if self.release_version:
             if include_no_version:
                 def expr(row): return check_version(self.release_version, row["scylla_version"]) or not row["scylla_version"]
@@ -587,17 +628,23 @@ class ReleaseStatsCollector:
             runs.append(row)
             self.release_dict[row["build_id"]] = runs
 
-        self.release_stats = ReleaseStats(release=self.release)
-        self.release_stats.collect(rows=self.release_rows, limited=limited, force=force,
-                                   dict=self.release_dict, tests=all_tests, version_filter=self.release_version)
-        result = self.release_stats.to_dict()
+        def build() -> tuple[ReleaseStats, dict]:
+            stats = ReleaseStats(release=self.release)
+            stats.collect(fetched, rows=self.release_rows, limited=limited, force=force,
+                          dict=self.release_dict, version_filter=self.release_version)
+            return stats, stats.to_dict()
 
-        filter_key = snapshot_filter_key(self.release_version, image_id, include_no_version, limited)
+        self.release_stats, result = await asyncio.to_thread(build)
+        LOGGER.info("release stats %s: fetch %.0f ms, collect %.0f ms, rows %d", self.release.id,
+                    (collect_start - fetch_start) * 1000, (time.perf_counter() - collect_start) * 1000,
+                    len(fetched.rows))
+
+        payload = await asyncio.to_thread(json.dumps, result, default=ArgusJSONProvider.default)
         try:
-            ReleaseStatsSnapshot.create(
+            await ReleaseStatsSnapshot.create(
                 release_id=self.release.id,
                 filter_key=filter_key,
-                payload=json.dumps(result, default=ArgusJSONProvider.default),
+                payload=payload,
                 generated_at=datetime.now(UTC),
             )
         except Exception:
@@ -608,8 +655,6 @@ class ReleaseStatsCollector:
 
 class ViewStatsCollector:
     def __init__(self, view_id: UUID, filter: str | None = None) -> None:
-        self.database = ScyllaCluster.get()
-        self.session = self.database.get_session()
         self.view = None
         self.view_stats = None
         self.view_rows = []
@@ -617,22 +662,50 @@ class ViewStatsCollector:
         self.view_id = UUID(view_id) if isinstance(view_id, str) else view_id
         self.filter = filter
 
-    def collect(self, limited=False, force=False, include_no_version=False, widget_id: int = None, image_id: str = None) -> dict:
-        self.view: ArgusUserView = ArgusUserView.get(id=self.view_id)
+    async def _fetch_plans(self, release_ids: list[UUID]) -> list[ArgusReleasePlan]:
+        if self.view.plan_id:
+            return [await ArgusReleasePlan.get(id=self.view.plan_id)]
+        return await _fetch_multiple_release_queries(ArgusReleasePlan, release_ids)
+
+    async def _fetch(self, limited: bool, force: bool, widget_id: int | None) -> FetchedStats:
+        self.view: ArgusUserView = await ArgusUserView.get(id=self.view_id)
         widget: dict[str, Any] | None = None
         if isinstance(widget_id, int):
             settings = json.loads(self.view.widget_settings)
             widget = next((widget for widget in settings if widget["position"] == widget_id), None)
-        all_tests: list[ArgusTest] = []
-        for slice in chunk(self.view.tests):
-            all_tests.extend(ArgusTest.find(id__in=slice).all())
+        all_tests: list[ArgusTest] = _flatten(
+            await asyncio.gather(*(ArgusTest.find(id__in=slice).all() for slice in chunk(self.view.tests))))
 
         if widget and widget.get("filter"):
             all_tests = [test for test in all_tests if any(str(getattr(test, key)) in widget["filter"] for key in ["id", "group_id", "release_id"])]
         build_ids = reduce(lambda acc, test: acc[test.plugin_name or "unknown"].append(test.build_system_id) or acc, all_tests, defaultdict(list))
-        self.view_rows = [futures for plugin in all_plugin_models()
-                          for futures in plugin.get_stats_for_release(release=self.view, build_ids=build_ids.get(plugin._plugin_name, []))]
-        self.view_rows = [row for future in self.view_rows for row in future.result()]
+        release_ids = list({t.release_id for t in all_tests})
+        group_ids = list({t.group_id for t in all_tests})
+        rows, plans, links, comments, releases, groups = await _gather_groups(
+            [plugin.get_stats_for_release(release=self.view, build_ids=build_ids.get(plugin._plugin_name, []))
+             for plugin in all_plugin_models()],
+            [] if limited else [self._fetch_plans(release_ids)],
+            [] if limited and not force else [_fetch_links(release_ids)],
+            [] if limited and not force else [_fetch_multiple_release_queries(ArgusTestRunComment, release_ids)],
+            [ArgusRelease.find(id__in=slice).all() for slice in chunk(release_ids)],
+            [ArgusGroup.find(id__in=slice).all() for slice in chunk(group_ids)],
+        )
+        return FetchedStats(
+            tests=all_tests,
+            rows=_flatten(rows),
+            plans=_flatten(plans),
+            linked_issues=await _resolve_links(_flatten(links)),
+            comments=_flatten(comments),
+            releases=_flatten(releases),
+            groups=_flatten(groups),
+        )
+
+    async def collect(self, limited=False, force=False, include_no_version=False, widget_id: int = None,
+                      image_id: str = None) -> dict:
+        fetch_start = time.perf_counter()
+        fetched = await self._fetch(limited, force, widget_id)
+        collect_start = time.perf_counter()
+        self.view_rows = fetched.rows
 
         if self.filter:
             if include_no_version:
@@ -654,7 +727,14 @@ class ViewStatsCollector:
             runs.append(row)
             self.runs_by_build_id[row["build_id"]] = runs
 
-        self.view_stats = ViewStats(release=self.view)
-        self.view_stats.collect(rows=self.view_rows, limited=limited, force=force,
-                                dict=self.runs_by_build_id, tests=all_tests, version_filter=self.filter)
-        return self.view_stats.to_dict()
+        def build() -> tuple[ViewStats, dict]:
+            stats = ViewStats(release=self.view)
+            stats.collect(fetched, rows=self.view_rows, limited=limited, force=force,
+                          dict=self.runs_by_build_id, version_filter=self.filter)
+            return stats, stats.to_dict()
+
+        self.view_stats, result = await asyncio.to_thread(build)
+        LOGGER.info("view stats %s: fetch %.0f ms, collect %.0f ms, rows %d", self.view_id,
+                    (collect_start - fetch_start) * 1000, (time.perf_counter() - collect_start) * 1000,
+                    len(fetched.rows))
+        return result
