@@ -777,3 +777,33 @@ def test_similar_runs_info_invalid_run_ids_type(api_client):
     assert resp.status_code == 200
     assert resp.json()["status"] == "error"
     assert resp.json()["response"]["exception"] == "RequestValidationError"
+
+
+async def test_coredump_events_in_one_batch_keep_every_log_link(api_client, sct_run_id, testrun_service):
+    base_ts = time.time()
+    payload = {
+        "data": [
+            {
+                "run_id": sct_run_id,
+                "severity": "ERROR",
+                "ts": base_ts + offset,
+                "message": f"2026-09-25 10:00:0{offset}.000: (CoreDumpEvent Severity.ERROR) node={node}\n"
+                           f"corefile_url=https://storage.example.com/cores/{node}.core.zst",
+                "event_type": "CoreDumpEvent",
+                "node": node,
+            }
+            for offset, node in enumerate(("node-1", "node-2"))
+        ],
+        "schema_version": "v8",
+    }
+
+    resp = api_client.post(f"{API_PREFIX}/{sct_run_id}/event/submit", json=payload)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["response"] is True
+    run = await testrun_service.get_run("scylla-cluster-tests", sct_run_id)
+    links = sorted(link for _, link in run.logs)
+    assert links == [
+        "https://storage.example.com/cores/node-1.core.zst",
+        "https://storage.example.com/cores/node-2.core.zst",
+    ]
