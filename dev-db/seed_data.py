@@ -11,6 +11,7 @@ Run from the repository root so that argus_web.yaml is found automatically.
 """
 
 import argparse
+import asyncio
 import json
 import logging
 import random
@@ -265,12 +266,12 @@ def maybe_create_keyspace(config: dict):
     cluster.shutdown()
 
 
-def setup_db():
+async def setup_db():
     """Connect to ScyllaDB and synchronize all table schemas."""
     LOGGER.info("Connecting to ScyllaDB...")
     cluster = ScyllaCluster.get()
     LOGGER.info("Syncing core tables and types...")
-    sync_models(cluster.config["SCYLLA_KEYSPACE_NAME"])
+    await sync_models(cluster.config["SCYLLA_KEYSPACE_NAME"])
     LOGGER.info("Schema sync complete.")
     return cluster
 
@@ -280,14 +281,14 @@ def setup_db():
 # ---------------------------------------------------------------------------
 
 
-def create_admin_user(username: str, password: str) -> User:
+async def create_admin_user(username: str, password: str) -> User:
     """Create an admin user with all roles."""
-    existing = list(User.find(username=username).limit(1))
+    existing = await User.find(username=username).limit(1).first()
     if existing:
         LOGGER.info("  User '%s' already exists, skipping.", username)
-        return existing[0]
+        return existing
 
-    user = User.create(
+    user = await User.create(
         id=uuid4(),
         username=username,
         full_name=username.title() + " User",
@@ -296,7 +297,7 @@ def create_admin_user(username: str, password: str) -> User:
         registration_date=datetime.now(UTC),
         roles=[UserRoles.User.value, UserRoles.Admin.value, UserRoles.Manager.value],
     )
-    api_token = UserService().generate_token(user, duration=None).token
+    api_token = (await UserService().generate_token(user, duration=None)).token
     COUNTS["users"] += 1
     LOGGER.info("  Created admin user '%s' (password: %s, api token: %s)", username, password, api_token)
     return user
@@ -307,18 +308,18 @@ def create_admin_user(username: str, password: str) -> User:
 # ---------------------------------------------------------------------------
 
 
-def create_release_hierarchy(admin_user: User, content: dict):
+async def create_release_hierarchy(admin_user: User, content: dict):
     """Create the seed release with groups and tests. Returns (release, groups_dict, tests_list)."""
     release_name = content["release_name"]
-    existing = list(ArgusRelease.find(name=release_name).limit(1))
+    existing = await ArgusRelease.find(name=release_name).limit(1).first()
     if existing:
         LOGGER.info("  Release '%s' already exists, skipping hierarchy creation.", release_name)
-        release = existing[0]
-        groups = {g.name: g for g in ArgusGroup.find(release_id=release.id).all()}
-        tests = list(ArgusTest.find(release_id=release.id).all())
+        release = existing
+        groups = {g.name: g for g in await ArgusGroup.find(release_id=release.id).all()}
+        tests = await ArgusTest.find(release_id=release.id).all()
         return release, groups, tests
 
-    release = ArgusRelease.create(
+    release = await ArgusRelease.create(
         id=uuid4(),
         name=release_name,
         pretty_name=content["release_pretty_name"],
@@ -334,7 +335,7 @@ def create_release_hierarchy(admin_user: User, content: dict):
     groups = {}
     tests = []
     for gdef in content["groups"]:
-        group = ArgusGroup.create(
+        group = await ArgusGroup.create(
             id=uuid4(),
             release_id=release.id,
             name=gdef["name"],
@@ -348,7 +349,7 @@ def create_release_hierarchy(admin_user: User, content: dict):
 
         for test_name, pretty_name in gdef["tests"]:
             build_system_id = f"{release_name}/{gdef['name']}/{test_name}"
-            test = ArgusTest.create(
+            test = await ArgusTest.create(
                 id=uuid4(),
                 group_id=group.id,
                 release_id=release.id,
@@ -371,17 +372,17 @@ def create_release_hierarchy(admin_user: User, content: dict):
 # ---------------------------------------------------------------------------
 
 
-def create_test_runs(tests: list[ArgusTest], admin_user: User, content: dict):
+async def create_test_runs(tests: list[ArgusTest], admin_user: User, content: dict):
     """Create SCT test runs per test, spread over the last 30 days."""
     run_profiles = content["run_profiles"]
     all_runs = []
     now = datetime.now(UTC)
 
     for test in tests:
-        existing = list(SCTTestRun.find(build_id=test.build_system_id).limit(1))
+        existing = await SCTTestRun.find(build_id=test.build_system_id).limit(1).first()
         if existing:
             LOGGER.info("  Runs for test '%s' already exist, skipping.", test.name)
-            runs = list(SCTTestRun.find(build_id=test.build_system_id).all())
+            runs = await SCTTestRun.find(build_id=test.build_system_id).all()
             all_runs.extend(runs)
             continue
 
@@ -394,7 +395,7 @@ def create_test_runs(tests: list[ArgusTest], admin_user: User, content: dict):
             )
             build_number = (i + 1) * 10 + random.randint(0, 9)
 
-            run = SCTTestRun.create(
+            run = await SCTTestRun.create(
                 build_id=test.build_system_id,
                 start_time=start,
                 id=uuid4(),
@@ -431,15 +432,15 @@ def create_test_runs(tests: list[ArgusTest], admin_user: User, content: dict):
 # ---------------------------------------------------------------------------
 
 
-def _events_exist_for_run(run_id) -> bool:
+async def _events_exist_for_run(run_id) -> bool:
     """Check whether any SCT events already exist for a run (across all severities)."""
     for severity in SCTEventSeverity:
-        if list(SCTEvent.find(run_id=run_id, severity=severity.value).limit(1)):
+        if await SCTEvent.find(run_id=run_id, severity=severity.value).limit(1).first():
             return True
     return False
 
 
-def create_sct_events(runs: list[SCTTestRun], content: dict):
+async def create_sct_events(runs: list[SCTTestRun], content: dict):
     """Create SCT events per run with varying severities.
 
     NOTE: The real event-submission path (sct/service.py) also enqueues
@@ -451,7 +452,7 @@ def create_sct_events(runs: list[SCTTestRun], content: dict):
     event_templates = content["event_templates"]
     min_events, max_events = content["events_per_run"]
 
-    if runs and _events_exist_for_run(runs[0].id):
+    if runs and await _events_exist_for_run(runs[0].id):
         LOGGER.info("  SCT events already exist, skipping.")
         return
 
@@ -470,7 +471,7 @@ def create_sct_events(runs: list[SCTTestRun], content: dict):
                 size=random.randint(50, 2000),
             )
 
-            SCTEvent.create(
+            await SCTEvent.create(
                 run_id=run.id,
                 severity=severity.value,
                 ts=ts,
@@ -489,10 +490,10 @@ def create_sct_events(runs: list[SCTTestRun], content: dict):
 # ---------------------------------------------------------------------------
 
 
-def create_argus_events(runs: list[SCTTestRun], admin_user: User):
+async def create_argus_events(runs: list[SCTTestRun], admin_user: User):
     """Create 1-2 Argus activity events per run."""
     if runs:
-        sample = list(ArgusEvent.find(run_id=runs[0].id).limit(1))
+        sample = await ArgusEvent.find(run_id=runs[0].id).limit(1).first()
         if sample:
             LOGGER.info("  Argus events already exist, skipping.")
             return
@@ -506,7 +507,7 @@ def create_argus_events(runs: list[SCTTestRun], admin_user: User):
                 "new_status": run.status,
             }
         )
-        ArgusEvent.create(
+        await ArgusEvent.create(
             id=uuid4(),
             release_id=run.release_id,
             group_id=run.group_id,
@@ -528,7 +529,7 @@ def create_argus_events(runs: list[SCTTestRun], admin_user: User):
                     "new_status": run.investigation_status,
                 }
             )
-            ArgusEvent.create(
+            await ArgusEvent.create(
                 id=uuid4(),
                 release_id=run.release_id,
                 group_id=run.group_id,
@@ -549,7 +550,7 @@ def create_argus_events(runs: list[SCTTestRun], admin_user: User):
 # ---------------------------------------------------------------------------
 
 
-def _seed_result_table(test: ArgusTest, table_def: dict, test_runs: list[SCTTestRun]):
+async def _seed_result_table(test: ArgusTest, table_def: dict, test_runs: list[SCTTestRun]):
     """Populate one result table for a single test (cells, best results, graph view)."""
     table_name = table_def["name"]
     columns = table_def["columns"]
@@ -559,11 +560,11 @@ def _seed_result_table(test: ArgusTest, table_def: dict, test_runs: list[SCTTest
     desc_template = table_def.get("description_template", "Results for {test_pretty_name}")
 
     # Check if metadata already exists
-    if list(ArgusGenericResultMetadata.find(test_id=test.id, name=table_name).limit(1)):
+    if await ArgusGenericResultMetadata.find(test_id=test.id, name=table_name).limit(1).first():
         LOGGER.info("  Result metadata for test '%s' already exists, skipping.", test.name)
         return
 
-    ArgusGenericResultMetadata.create(
+    await ArgusGenericResultMetadata.create(
         test_id=test.id,
         name=table_name,
         description=desc_template.format(test_pretty_name=test.pretty_name),
@@ -581,7 +582,7 @@ def _seed_result_table(test: ArgusTest, table_def: dict, test_runs: list[SCTTest
             lo, hi = value_ranges.get(col_name, (1.0, 100.0))
             for row_name in rows:
                 value = random.uniform(lo, hi)
-                ArgusGenericResultData.create(
+                await ArgusGenericResultData.create(
                     test_id=test.id,
                     name=table_name,
                     run_id=run.id,
@@ -600,7 +601,7 @@ def _seed_result_table(test: ArgusTest, table_def: dict, test_runs: list[SCTTest
                     best_values[key] = (value, run.start_time, run.id)
 
     for key, (value, result_date, run_id) in best_values.items():
-        ArgusBestResultData.create(
+        await ArgusBestResultData.create(
             test_id=test.id,
             name=table_name,
             result_date=result_date,
@@ -617,7 +618,7 @@ def _seed_result_table(test: ArgusTest, table_def: dict, test_runs: list[SCTTest
                 graphs[f"{row_name} {graph_col}"] = json.dumps(
                     {"table": table_name, "column": graph_col, "row": row_name}
                 )
-        ArgusGraphView.create(
+        await ArgusGraphView.create(
             test_id=test.id,
             id=uuid4(),
             name=f"{test.pretty_name} — Overview",
@@ -634,14 +635,14 @@ def _seed_result_table(test: ArgusTest, table_def: dict, test_runs: list[SCTTest
     )
 
 
-def create_result_data(tests: list[ArgusTest], all_runs: list[SCTTestRun], content: dict):
+async def create_result_data(tests: list[ArgusTest], all_runs: list[SCTTestRun], content: dict):
     """Create result metadata, data cells, best results, and graph views."""
     for table_def in content["result_tables"]:
         test_prefix = table_def["test_prefix"]
         matching = [t for t in tests if t.name.startswith(test_prefix)] if test_prefix else tests
         for test in matching:
             test_runs = [r for r in all_runs if r.test_id == test.id]
-            _seed_result_table(test, table_def, test_runs)
+            await _seed_result_table(test, table_def, test_runs)
 
 
 # ---------------------------------------------------------------------------
@@ -649,7 +650,7 @@ def create_result_data(tests: list[ArgusTest], all_runs: list[SCTTestRun], conte
 # ---------------------------------------------------------------------------
 
 
-def create_issues(runs: list[SCTTestRun], admin_user: User, content: dict):
+async def create_issues(runs: list[SCTTestRun], admin_user: User, content: dict):
     """Create sample GitHub/Jira issues and link them to failed runs."""
     failed_runs = [r for r in runs if r.status in (TestStatus.FAILED.value, TestStatus.ERROR.value)]
     if not failed_runs:
@@ -658,7 +659,7 @@ def create_issues(runs: list[SCTTestRun], admin_user: User, content: dict):
 
     # Check if issues already exist for any failed run
     for fr in failed_runs:
-        sample = list(IssueLink.find(run_id=fr.id).limit(1))
+        sample = await IssueLink.find(run_id=fr.id).limit(1).first()
         if sample:
             LOGGER.info("  Issues already exist, skipping.")
             return
@@ -667,7 +668,7 @@ def create_issues(runs: list[SCTTestRun], admin_user: User, content: dict):
 
     # GitHub issues
     for gh_def in content.get("github_issues", []):
-        gh_issue = GithubIssue.create(
+        gh_issue = await GithubIssue.create(
             id=uuid4(),
             user_id=admin_user.id,
             type="issues",
@@ -685,7 +686,7 @@ def create_issues(runs: list[SCTTestRun], admin_user: User, content: dict):
 
     # Jira issues
     for jira_def in content.get("jira_issues", []):
-        jira_issue = JiraIssue.create(
+        jira_issue = await JiraIssue.create(
             id=uuid4(),
             user_id=admin_user.id,
             summary=jira_def["summary"],
@@ -702,7 +703,7 @@ def create_issues(runs: list[SCTTestRun], admin_user: User, content: dict):
     # Link issues to failed runs (round-robin)
     for idx, (issue, issue_type) in enumerate(issues_to_link):
         target_run = failed_runs[idx % len(failed_runs)]
-        IssueLink.create(
+        await IssueLink.create(
             run_id=target_run.id,
             issue_id=issue.id,
             release_id=target_run.release_id,
@@ -726,66 +727,67 @@ def create_issues(runs: list[SCTTestRun], admin_user: User, content: dict):
 # ---------------------------------------------------------------------------
 
 
-def cleanup_seed_data(content: dict):
+async def cleanup_seed_data(content: dict):
     """Remove all data created by a previous seed run."""
     LOGGER.info("Cleaning up previous seed data...")
     release_name = content["release_name"]
 
-    releases = list(ArgusRelease.find(name=release_name).all())
+    releases = await ArgusRelease.find(name=release_name).all()
     if not releases:
         LOGGER.info("  No existing seed data found.")
         return
 
     release = releases[0]
-    tests = list(ArgusTest.find(release_id=release.id).all())
-    groups = list(ArgusGroup.find(release_id=release.id).all())
+    tests = await ArgusTest.find(release_id=release.id).all()
+    groups = await ArgusGroup.find(release_id=release.id).all()
 
     # Collect all result table names from content for cleanup
     result_table_names = [t["name"] for t in content.get("result_tables", [])]
 
     # Delete runs and their events/results
     for test in tests:
-        runs = list(SCTTestRun.find(build_id=test.build_system_id).all())
+        runs = await SCTTestRun.find(build_id=test.build_system_id).all()
         for run in runs:
             # SCT events — partition key is (run_id, severity), delete whole partitions
             for severity in SCTEventSeverity:
-                SCTEvent.find(run_id=run.id, severity=severity.value).delete()
+                await SCTEvent.find(run_id=run.id, severity=severity.value).delete()
 
             # Argus events
-            argus_events = list(ArgusEvent.find(run_id=run.id).all())
+            argus_events = await ArgusEvent.find(run_id=run.id).all()
             for ev in argus_events:
-                ev.delete()
+                await ev.delete()
 
             # Issue links
-            links = list(IssueLink.find(run_id=run.id).all())
+            links = await IssueLink.find(run_id=run.id).all()
             for link in links:
                 for model_cls in (GithubIssue, JiraIssue):
                     try:
-                        model_cls.get(id=link.issue_id).delete()
+                        issue = await model_cls.get(id=link.issue_id)
                     except DocumentNotFound:
-                        pass
-                link.delete()
+                        continue
+                    await issue.delete()
+                await link.delete()
 
-            run.delete()
+            await run.delete()
 
         # Delete result data
         for table_name in result_table_names:
-            for m in ArgusGenericResultMetadata.find(test_id=test.id, name=table_name).all():
-                m.delete()
-            ArgusGenericResultData.find(test_id=test.id, name=table_name).delete()
-            for b in ArgusBestResultData.find(test_id=test.id, name=table_name).all():
-                b.delete()
+            for m in await ArgusGenericResultMetadata.find(test_id=test.id, name=table_name).all():
+                await m.delete()
+            await ArgusGenericResultData.find(test_id=test.id, name=table_name).delete()
+            for b in await ArgusBestResultData.find(test_id=test.id, name=table_name).all():
+                await b.delete()
 
         # Delete graph views
-        for v in ArgusGraphView.find(test_id=test.id).all():
-            v.delete()
+        for v in await ArgusGraphView.find(test_id=test.id).all():
+            await v.delete()
 
-        test.delete()
+        await test.delete()
 
     for group in groups:
-        group.delete()
+        await group.delete()
 
-    release.delete()
+    await release.delete()
     LOGGER.info("  Cleanup complete.")
 
 
@@ -814,7 +816,7 @@ def print_summary(username: str, password: str):
 # ---------------------------------------------------------------------------
 
 
-def main():
+async def main():
     parser = argparse.ArgumentParser(
         description="Seed a local Argus dev database with synthetic data.",
     )
@@ -834,38 +836,38 @@ def main():
         maybe_create_keyspace(config)
 
     # Connect and sync schema
-    setup_db()
+    await setup_db()
 
     # Force cleanup
     if args.force:
-        cleanup_seed_data(content)
+        await cleanup_seed_data(content)
 
     LOGGER.info("")
     LOGGER.info("Seeding data...")
 
     LOGGER.info("[1/7] Creating admin user...")
-    admin_user = create_admin_user(args.username, args.password)
+    admin_user = await create_admin_user(args.username, args.password)
 
     LOGGER.info("[2/7] Creating release hierarchy...")
-    release, groups, tests = create_release_hierarchy(admin_user, content)
+    release, groups, tests = await create_release_hierarchy(admin_user, content)
 
     LOGGER.info("[3/7] Creating test runs...")
-    all_runs = create_test_runs(tests, admin_user, content)
+    all_runs = await create_test_runs(tests, admin_user, content)
 
     LOGGER.info("[4/7] Creating SCT events...")
-    create_sct_events(all_runs, content)
+    await create_sct_events(all_runs, content)
 
     LOGGER.info("[5/7] Creating activity events...")
-    create_argus_events(all_runs, admin_user)
+    await create_argus_events(all_runs, admin_user)
 
     LOGGER.info("[6/7] Creating performance result data...")
-    create_result_data(tests, all_runs, content)
+    await create_result_data(tests, all_runs, content)
 
     LOGGER.info("[7/7] Creating issues...")
-    create_issues(all_runs, admin_user, content)
+    await create_issues(all_runs, admin_user, content)
 
     print_summary(args.username, args.password)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
