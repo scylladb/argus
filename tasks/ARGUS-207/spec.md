@@ -49,7 +49,9 @@
   model or to `gunicorn.conf.py`.
 - No move of CPU-bound aggregation off the loop; this change adds the timing
   that decides it later.
-- No edit to `scripts/migration/*.py` or to `argusAI/`.
+- No edit to `argusAI/`, nor to the migration scripts that have run everywhere;
+  the two token scripts of 2026-09-08 still have a step to run, so they follow
+  the models.
 - No rewrite of admin and planner CRUD paths with single-digit round trips.
 - No frontend change, no API shape or status code change.
 - No new caching layer beyond the existing release stats snapshot.
