@@ -358,3 +358,16 @@ def test_validate_widget_settings_survives_settings_that_are_not_a_mapping():
     validate_widget_settings(json.dumps([{"type": "testDashboard", "settings": ["nope"]}]))
     validate_widget_settings(json.dumps([{"type": "testDashboard", "settings": None}]))
     validate_widget_settings(json.dumps(["nope"]))
+
+
+def test_view_resolve_for_edit_names_the_group_of_a_test(api_client, view_name, fake_test, group, release):
+    created = _create_view(api_client, view_name, items=[f"test:{fake_test.id}"])
+    view_id = created["response"]["id"]
+
+    res = api_client.get(f"/api/v1/views/{view_id}/resolve").json()
+
+    assert res["status"] == "ok"
+    item = next(item for item in res["response"]["items"] if item["id"] == str(fake_test.id))
+    assert item["type"] == "test"
+    assert item["group"] == (group.pretty_name or group.name)
+    assert item["release"] == (release.pretty_name or release.name)
