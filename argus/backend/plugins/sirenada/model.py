@@ -103,10 +103,7 @@ class SirenadaRun(PluginModelBase):
             run.build_number = get_build_number(request_data["build_job_url"])
             run.region = request_data["region"]
             run.status = TestStatus.PASSED.value
-            try:
-                run.assignee = run.get_scheduled_assignee()
-            except DocumentNotFound:
-                run.assignee = None
+            run.assignee = run.get_assignee()
 
         for raw_case in request_data["results"]:
             case = SirenadaTest(**raw_case)
