@@ -627,3 +627,23 @@ async def test_get_by_view_returns_each_link_once(api_client, run: SCTTestRun, m
     assert len(aggregated) == 1
     assert len(aggregated[0]["links"]) == 1
     assert len(flat) == 1
+
+
+async def test_delete_issue_link_keeps_the_issue_other_runs_link(
+    run: SCTTestRun, client_service: ClientService, testrun_service: TestRunService, fake_test: ArgusTest,
+    mocked_issue_service: IssueService, logged_in_user: User,
+):
+    other_run = await submit_run(client_service, testrun_service, fake_test)
+    repo = f"argus-{unique_suffix()}"
+    url = f"https://github.com/scylladb/{repo}/issues/77"
+    remote_repo = MagicMock(name="Repository")
+    remote_repo.get_issue.return_value = fake_remote_github_issue(owner="scylladb", repo=repo, number=77)
+    mocked_issue_service.gh.gh.get_repo.return_value = remote_repo
+    submitted = await mocked_issue_service.submit(issue_url=url, test_id=run.test_id, run_id=run.id, user=logged_in_user)
+    await mocked_issue_service.submit(issue_url=url, test_id=other_run.test_id, run_id=other_run.id, user=logged_in_user)
+
+    await mocked_issue_service.delete(issue_id=str(submitted["id"]), run_id=str(run.id), user=logged_in_user)
+
+    assert await mocked_issue_service.get("run_id", run.id) == []
+    remaining = await mocked_issue_service.get("run_id", other_run.id)
+    assert [issue["id"] for issue in remaining] == [submitted["id"]]
