@@ -1,4 +1,4 @@
-ARG PYTHON_VERSION=3.10.4-bullseye
+ARG PYTHON_VERSION=3.14-bookworm
 
 FROM python:${PYTHON_VERSION}
 ENV ROLLUP_ENV=production

@@ -17,10 +17,10 @@ Coding standards, conventions, and best practices organized by domain.
 Located in `docs/project/`
 
 ### Vision (`project/vision.md`)
-What Argus is and who uses it: a test tracking system for automated pipelines that hold long-running resources. Covers the current state (Python 3.12 with FastAPI on ScyllaDB, a Svelte 5 frontend, a Go CLI, Python AI workers), the purpose, the five test sources that report through the plugin layer, the three consumers, and where to read the current direction.
+What Argus is and who uses it: a test tracking system for automated pipelines that hold long-running resources. Covers the current state (Python 3.14 with FastAPI on ScyllaDB, a Svelte 5 frontend, a Go CLI, Python AI workers), the purpose, the five test sources that report through the plugin layer, the three consumers, and where to read the current direction.
 
 ### Tech Stack (`project/tech-stack.md`)
-Languages (Python 3.12, TypeScript and JavaScript, Go), backend and frontend frameworks, testing frameworks, ScyllaDB with the coodie document mapper, build tools and package management, containers, CI, hosting, linting and formatting, type checking, key dependencies, version management.
+Languages (Python 3.14, TypeScript and JavaScript, Go), backend and frontend frameworks, testing frameworks, ScyllaDB with the coodie document mapper, build tools and package management, containers, CI, hosting, linting and formatting, type checking, key dependencies, version management.
 
 ### Architecture (`project/architecture.md`)
 Layered web application with a plugin layer for test sources. Covers the web backend layers, the plugin contract, the frontend, the command line tool, the AI workers, the client library, data flow, data model rules, external integrations, configuration and deployment.
@@ -50,7 +50,7 @@ Located in `docs/standards/global/`
 These standards apply across the entire codebase, regardless of frontend/backend context.
 
 #### Coding Style (`standards/global/coding-style.md`)
-Python 3.12 target against a `py310` linter floor, 4-space indentation and a 120-character line width, the reach of Ruff (`exclude = ["argus/"]` leaves the web backend unchecked), the explicit preview rule set, the pre-commit hooks, the installed but unrun ESLint, Prettier and svelte-check, Python and frontend naming, no dead code, and no backward compatibility without a stated need.
+Python 3.14 target against a `py310` linter floor, 4-space indentation and a 120-character line width, the reach of Ruff (`exclude = ["argus/"]` leaves the web backend unchecked), the explicit preview rule set, the pre-commit hooks, the installed but unrun ESLint, Prettier and svelte-check, Python and frontend naming, no dead code, and no backward compatibility without a stated need.
 
 #### Commenting (`standards/global/commenting.md`)
 Let the code speak, comment sparingly, no change-history comments.

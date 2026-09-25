@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Python 3.12+
+- Python 3.14
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (Python package manager)
 - Node.js >= 22 with npm
 - Yarn (`npm -g install yarn`)
@@ -54,9 +54,6 @@ uv sync --extra web-backend --extra dev
 # Frontend
 yarn install
 ```
-
-> **Note:** `uv sync --all-extras` may fail on Python 3.14 due to
-> `onnxruntime`. Use the explicit extras above instead.
 
 ### 2. Create the config file
 
@@ -269,16 +266,6 @@ wrong ownership. See the permissions fix in the first-time setup section.
 
 ScyllaDB has authentication enabled. Always use `-u cassandra -p cassandra`
 when connecting via `cqlsh`.
-
-### `uv sync --all-extras` fails
-
-Use `uv sync --extra web-backend --extra dev` instead. The `onnxruntime`
-dependency may not build on your Python version. If you don't have
-Python 3.12 installed, `uv` can fetch it for you:
-
-```bash
-uv sync --python 3.12 --extra web-backend --extra dev
-```
 
 ### ScyllaDB crashes with `Could not setup Async I/O`
 
