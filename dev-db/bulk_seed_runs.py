@@ -11,6 +11,7 @@ Runs from the repository root so argus_web.yaml is found automatically.
 """
 
 import argparse
+import asyncio
 import logging
 import random
 from datetime import UTC, datetime, timedelta
@@ -48,21 +49,21 @@ IMAGE_IDS = [
 ]
 
 
-def setup_db():
+async def setup_db():
     Config.load_yaml_config()
     cluster = ScyllaCluster.get()
-    sync_models(cluster.config["SCYLLA_KEYSPACE_NAME"])
+    await sync_models(cluster.config["SCYLLA_KEYSPACE_NAME"])
     return cluster
 
 
-def bulk_seed(release_name: str, total_runs: int, batch_log: int = 500):
-    tests = list(ArgusTest.find(release_id=ArgusRelease.get(name=release_name).id).all())
+async def bulk_seed(release_name: str, total_runs: int, batch_log: int = 500):
+    release = await ArgusRelease.get(name=release_name)
+    tests = await ArgusTest.find(release_id=release.id).all()
     if not tests:
         LOGGER.error("No tests found for release '%s'", release_name)
         return
 
-    admin = list(User.find(username="admin").limit(1))
-    admin_user = admin[0] if admin else None
+    admin_user = await User.find(username="admin").limit(1).first()
 
     LOGGER.info("Found %d tests in release '%s'. Creating %d runs...", len(tests), release_name, total_runs)
     now = datetime.now(UTC)
@@ -79,7 +80,7 @@ def bulk_seed(release_name: str, total_runs: int, batch_log: int = 500):
         )
         build_number = random.randint(1, 9999)
 
-        SCTTestRun.create(
+        await SCTTestRun.create(
             build_id=test.build_system_id,
             start_time=start,
             id=uuid4(),
@@ -119,15 +120,15 @@ def bulk_seed(release_name: str, total_runs: int, batch_log: int = 500):
     LOGGER.info("Done. Created %d runs across %d tests.", created, len(tests))
 
 
-def main():
+async def main():
     parser = argparse.ArgumentParser(description="Bulk-seed test runs for performance testing.")
     parser.add_argument("--runs", type=int, default=1000, help="Number of runs to create (default: 1000)")
     parser.add_argument("--release", default="seed-release", help="Release name (default: seed-release)")
     args = parser.parse_args()
 
-    setup_db()
-    bulk_seed(args.release, args.runs)
+    await setup_db()
+    await bulk_seed(args.release, args.runs)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
