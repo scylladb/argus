@@ -1,3 +1,4 @@
+import asyncio
 import os
 import hashlib
 
@@ -59,7 +60,7 @@ async def login_post(asgi_request: Request, username: str = Form(...), password:
         except DocumentNotFound:
             raise UserServiceException("User not found")
 
-        if not check_password_hash(account.password, password):
+        if not await asyncio.to_thread(check_password_hash, account.password, password):
             raise UserServiceException("Incorrect Password")
 
         asgi_request.session.clear()
