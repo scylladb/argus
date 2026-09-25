@@ -15,7 +15,7 @@ spec and plan live in `tasks/<KEY>/`, and the Jira board holds the status.
 
 ### Python version floor
 `pyproject.toml` declares `requires-python = ">=3.10"` and Ruff sets
-`target-version = "py310"`, while all workflows pin 3.12. Raise the floor to
+`target-version = "py310"`, while all workflows pin 3.14. Raise the floor to
 match what CI tests.
 
 ### Tests need Docker

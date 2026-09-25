@@ -19,12 +19,10 @@ useradd -m -s /bin/bash argus
 sudo -iu argus
 ```
 
-Optional: install `pyenv` and create a virtualenv for this user:
+Install Python 3.14 for this user:
 
 ```bash
-pyenv install 3.12.0
-pyenv virtualenv argus
-pyenv activate argus
+uv python install 3.14
 ```
 
 Clone the repository somewhere the `argus` user can write to:
@@ -37,7 +35,7 @@ cd ~/app
 Install dependencies:
 
 ```bash
-uv sync --all-extras
+uv sync --python 3.14 --all-extras
 yarn install
 ```
 

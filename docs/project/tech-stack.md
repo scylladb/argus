@@ -7,12 +7,12 @@ pipelines that use long-running resources.
 
 ## Languages
 
-### Python 3.12
+### Python 3.14
 
 - **Usage**: about 283 files. The web backend, the client SDK, the AI workers
   and the maintenance scripts.
 - **Floor**: `pyproject.toml` sets `requires-python = ">=3.10"` and Ruff sets
-  `target-version = "py310"`. All three CI workflows pin 3.12.
+  `target-version = "py310"`. All three CI workflows pin 3.14.
 - **Style**: 4-space indentation and a 120-character line width.
 
 ### TypeScript and JavaScript

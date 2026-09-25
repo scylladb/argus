@@ -1,9 +1,9 @@
 ## Coding Style
 
 ### Python Target
-Python code targets 3.12. CI pins 3.12 in every workflow. `pyproject.toml`
+Python code targets 3.14. CI pins 3.14 in every workflow. `pyproject.toml`
 declares `requires-python = ">=3.10"` and Ruff sets `target-version = "py310"`,
-so a 3.11 or 3.12 syntax feature reads as an error to the linter.
+so a syntax feature newer than 3.10 reads as an error to the linter.
 
 ### Formatting
 4-space indentation and a 120-character line width. `ruff format` applies both.
