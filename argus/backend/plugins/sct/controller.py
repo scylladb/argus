@@ -1,4 +1,3 @@
-from argus.backend.util.common import gather_limited
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -272,11 +271,8 @@ async def sct_event_submit(run_id: str, payload: EventSubmitRequest,
         Submit an event or a collection of events
     """
     event_data = payload.data
-    if isinstance(event_data, list):
-        results = await gather_limited(SCTService.submit_event(run_id=run_id, raw_event=e) for e in event_data)
-        result = all(results)
-    else:
-        result = await SCTService.submit_event(run_id=run_id, raw_event=event_data)
+    events = event_data if isinstance(event_data, list) else [event_data]
+    result = await SCTService.submit_events(run_id=run_id, raw_events=events)
     return APIResponse({
         "status": "ok",
         "response": result
