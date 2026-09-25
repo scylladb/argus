@@ -628,19 +628,23 @@ class ReleaseStatsCollector:
             runs.append(row)
             self.release_dict[row["build_id"]] = runs
 
-        self.release_stats = ReleaseStats(release=self.release)
-        self.release_stats.collect(fetched, rows=self.release_rows, limited=limited, force=force,
-                                   dict=self.release_dict, version_filter=self.release_version)
-        result = self.release_stats.to_dict()
+        def build() -> tuple[ReleaseStats, dict]:
+            stats = ReleaseStats(release=self.release)
+            stats.collect(fetched, rows=self.release_rows, limited=limited, force=force,
+                          dict=self.release_dict, version_filter=self.release_version)
+            return stats, stats.to_dict()
+
+        self.release_stats, result = await asyncio.to_thread(build)
         LOGGER.info("release stats %s: fetch %.0f ms, collect %.0f ms, rows %d", self.release.id,
                     (collect_start - fetch_start) * 1000, (time.perf_counter() - collect_start) * 1000,
                     len(fetched.rows))
 
+        payload = await asyncio.to_thread(json.dumps, result, default=ArgusJSONProvider.default)
         try:
             await ReleaseStatsSnapshot.create(
                 release_id=self.release.id,
                 filter_key=filter_key,
-                payload=json.dumps(result, default=ArgusJSONProvider.default),
+                payload=payload,
                 generated_at=datetime.now(UTC),
             )
         except Exception:
@@ -723,10 +727,13 @@ class ViewStatsCollector:
             runs.append(row)
             self.runs_by_build_id[row["build_id"]] = runs
 
-        self.view_stats = ViewStats(release=self.view)
-        self.view_stats.collect(fetched, rows=self.view_rows, limited=limited, force=force,
-                                dict=self.runs_by_build_id, version_filter=self.filter)
-        result = self.view_stats.to_dict()
+        def build() -> tuple[ViewStats, dict]:
+            stats = ViewStats(release=self.view)
+            stats.collect(fetched, rows=self.view_rows, limited=limited, force=force,
+                          dict=self.runs_by_build_id, version_filter=self.filter)
+            return stats, stats.to_dict()
+
+        self.view_stats, result = await asyncio.to_thread(build)
         LOGGER.info("view stats %s: fetch %.0f ms, collect %.0f ms, rows %d", self.view_id,
                     (collect_start - fetch_start) * 1000, (time.perf_counter() - collect_start) * 1000,
                     len(fetched.rows))
