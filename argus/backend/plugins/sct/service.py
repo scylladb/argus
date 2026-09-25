@@ -27,7 +27,7 @@ from argus.backend.plugins.sct.udt import (
     PerformanceHDRHistogram,
 )
 from argus.backend.service.event_service import EventService
-from argus.backend.util.common import chunk
+from argus.backend.util.common import chunk, gather_limited
 from argus.backend.util.config import Config
 from argus.common.enums import NemesisStatus, ResourceState, TestStatus
 from argus.common.utils import clamp_ts_to_milliseconds
@@ -495,7 +495,17 @@ class SCTService:
         return "updated"
 
     @classmethod
-    async def submit_event(cls, run_id: str, raw_event: RawEventPayload):
+    async def submit_events(cls, run_id: str, raw_events: list[RawEventPayload]) -> bool:
+        links = await gather_limited(cls.submit_event(run_id=run_id, raw_event=raw_event) for raw_event in raw_events)
+        coredump_links = [link for link in links if link]
+        if coredump_links:
+            run: SCTTestRun = await SCTTestRun.get(id=UUID(run_id))
+            await run.submit_logs(coredump_links)
+            await run.save()
+        return True
+
+    @classmethod
+    async def submit_event(cls, run_id: str, raw_event: RawEventPayload) -> CoredumpLink | None:
         req = EventSubmitRequest(**raw_event)
 
         event = SCTEvent.model_construct()
@@ -520,11 +530,10 @@ class SCTService:
         event.known_issue = req.known_issue
 
         await event.save()
+        coredump_link = None
         try:
-            if event.event_type.lower() == "coredumpevent" and (link := cls.create_coredump_link(event.message, event.ts)):
-                run: SCTTestRun = await SCTTestRun.get(id=event.run_id)
-                await run.submit_logs([link])
-                await run.save()
+            if event.event_type.lower() == "coredumpevent":
+                coredump_link = cls.create_coredump_link(event.message, event.ts)
         except Exception:
             LOGGER.warning(
                 "Unable to parse event for coredump links.", exc_info=True)
@@ -542,7 +551,7 @@ class SCTService:
                 LOGGER.error(f"Failed to add event to unprocessed queue: {
                              e}", exc_info=True)
 
-        return True
+        return coredump_link
 
     @staticmethod
     async def get_events(run_id: str, limit: int, severities: list[str], before: str | None,
