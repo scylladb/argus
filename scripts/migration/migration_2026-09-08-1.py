@@ -22,6 +22,7 @@ argus_web.yaml the web application uses.
 """
 
 import argparse
+import asyncio
 import logging
 
 from argus.backend.db import ScyllaCluster
@@ -51,7 +52,7 @@ def _column_exists(keyspace: str, table: str, column: str) -> bool:
     return rows.one() is not None
 
 
-def migrate_api_tokens(keyspace: str, table: str) -> int:
+async def migrate_api_tokens(keyspace: str, table: str) -> int:
     if not _column_exists(keyspace, table, LEGACY_COLUMN):
         LOGGER.warning(
             "Column %s.%s.%s does not exist (already dropped?); nothing to migrate.", keyspace, table, LEGACY_COLUMN
@@ -64,7 +65,7 @@ def migrate_api_tokens(keyspace: str, table: str) -> int:
         plaintext = row[LEGACY_COLUMN]
         if not plaintext:
             continue
-        UserOauthToken(
+        await UserOauthToken(
             user_id=row["id"], token=hash_api_token(plaintext), kind=API_TOKEN_KIND, expiration_date=None
         ).save()
         migrated += 1
@@ -84,9 +85,9 @@ def drop_legacy_column(keyspace: str, table: str) -> None:
     LOGGER.warning("Dropped %s.%s.%s.", keyspace, table, LEGACY_COLUMN)
 
 
-def migrate(drop_legacy: bool = False) -> None:
+async def migrate(drop_legacy: bool = False) -> None:
     keyspace, table = _keyspace_and_table()
-    migrate_api_tokens(keyspace, table)
+    await migrate_api_tokens(keyspace, table)
     if drop_legacy:
         drop_legacy_column(keyspace, table)
     else:
@@ -104,4 +105,4 @@ if __name__ == "__main__":
         help=f"drop the plaintext {LEGACY_COLUMN} column and its index after migrating",
     )
     args = parser.parse_args()
-    migrate(drop_legacy=args.drop_legacy_column)
+    asyncio.run(migrate(drop_legacy=args.drop_legacy_column))

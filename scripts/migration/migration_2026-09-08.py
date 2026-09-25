@@ -19,6 +19,7 @@ The v1 table is left in place; drop it by hand once v2 is verified.
 ``token`` is a CQL reserved word: quote it (``"token"``) in any hand-written CQL.
 """
 
+import asyncio
 import logging
 
 from argus.backend.db import ScyllaCluster
@@ -45,7 +46,7 @@ def _table_exists(keyspace: str, table: str) -> bool:
     return rows.one() is not None
 
 
-def copy_tokens(keyspace: str) -> int:
+async def copy_tokens(keyspace: str) -> int:
     if not _table_exists(keyspace, LEGACY_TABLE):
         LOGGER.warning("Table %s.%s does not exist; nothing to copy.", keyspace, LEGACY_TABLE)
         return 0
@@ -56,19 +57,19 @@ def copy_tokens(keyspace: str) -> int:
         if not row["user_id"] or not row["token"] or not row["kind"]:
             LOGGER.warning("Skipping %s row %s: missing user_id, token or kind.", LEGACY_TABLE, row["id"])
             continue
-        UserOauthToken(user_id=row["user_id"], token=row["token"], kind=row["kind"], expiration_date=None).save()
+        await UserOauthToken(user_id=row["user_id"], token=row["token"], kind=row["kind"], expiration_date=None).save()
         copied += 1
     LOGGER.info("Copied %s tokens into %s.", copied, UserOauthToken.Settings.name)
     return copied
 
 
-def migrate() -> None:
+async def migrate() -> None:
     keyspace = _keyspace()
     LOGGER.info("Syncing %s.%s...", keyspace, UserOauthToken.Settings.name)
-    UserOauthToken.sync_table()
-    copy_tokens(keyspace)
+    await UserOauthToken.sync_table()
+    await copy_tokens(keyspace)
     LOGGER.info("Table %s.%s kept; drop it by hand once v2 is verified.", keyspace, LEGACY_TABLE)
 
 
 if __name__ == "__main__":
-    migrate()
+    asyncio.run(migrate())
