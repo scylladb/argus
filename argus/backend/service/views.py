@@ -239,10 +239,11 @@ class UserViewService:
         view_groups = await self.batch_resolve_entity(ArgusGroup, "id", view.group_ids)
         view_releases = await self.batch_resolve_entity(ArgusRelease, "id", view.release_ids)
         view_tests = await self.resolve_view_tests(view.id)
-        all_groups = {group.id: partial(TestLookup.index_mapper, type="group")(group)
-                      for group in await self.resolve_releases_for_tests(view_tests)}
+        groups_for_tests, releases_for_tests = await asyncio.gather(
+            self.resolve_groups_for_tests(view_tests), self.resolve_releases_for_tests(view_tests))
+        all_groups = {group.id: partial(TestLookup.index_mapper, type="group")(group) for group in groups_for_tests}
         all_releases = {release.id: partial(TestLookup.index_mapper, type="release")(release)
-                        for release in await self.resolve_releases_for_tests(view_tests)}
+                        for release in releases_for_tests}
         entities_by_id = {
             entity.id: partial(TestLookup.index_mapper, type="release" if isinstance(
                 entity, ArgusRelease) else "group")(entity)

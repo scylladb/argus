@@ -292,3 +292,16 @@ def test_widget_routes_are_not_shadowed_by_view_id_rules(api_client):
     res = api_client.get("/api/v1/views/widgets/pytest/results").json()
     assert res["status"] == "ok"
     assert res.get("response", {}).get("exception") != "ValueError"
+
+
+def test_view_resolve_for_edit_names_the_group_of_a_test(api_client, view_name, fake_test, group, release):
+    created = _create_view(api_client, view_name, items=[f"test:{fake_test.id}"])
+    view_id = created["response"]["id"]
+
+    res = api_client.get(f"/api/v1/views/{view_id}/resolve").json()
+
+    assert res["status"] == "ok"
+    item = next(item for item in res["response"]["items"] if item["id"] == str(fake_test.id))
+    assert item["type"] == "test"
+    assert item["group"] == (group.pretty_name or group.name)
+    assert item["release"] == (release.pretty_name or release.name)
