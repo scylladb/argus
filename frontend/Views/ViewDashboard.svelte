@@ -2,8 +2,13 @@
     import Fa from "svelte-fa";
     import { sendMessage } from "../Stores/AlertStore";
     import { faLink } from "@fortawesome/free-solid-svg-icons";
-    import { GLOBAL_STATS_KEY, WIDGET_TYPES } from "../Common/ViewTypes";
-    import sha1 from "js-sha1";
+    import {
+        GLOBAL_STATS_KEY,
+        WIDGET_TYPES,
+        calculateWidgetStatsKey,
+        calculateWidgetVersionKey,
+    } from "../Common/ViewTypes";
+    import { firstAvailableStats } from "../Common/WidgetStatsKey";
     interface Props {
         view: any;
         stats?: any;
@@ -18,6 +23,18 @@
         embedded = false
     }: Props = $props();
     let clickedTests = $state({});
+
+    // A widget narrowed by a config parameter writes its own bucket, so a view whose only
+    // test dashboard is narrowed leaves GLOBAL_STATS_KEY empty. The stat bar and the plan
+    // header read that key, so mirror the first bucket that does have stats into it.
+    $effect(() => {
+        if (stats[GLOBAL_STATS_KEY] === undefined) {
+            const fallback = firstAvailableStats(stats);
+            if (fallback !== undefined) {
+                stats[GLOBAL_STATS_KEY] = fallback;
+            }
+        }
+    });
     let resolvedTests = [];
     const versionDispatch = $state({
         [GLOBAL_STATS_KEY]: productVersion,
@@ -98,10 +115,6 @@
         });
     };
 
-    const calculateWidgetStatsKey = function (widget) {
-        return sha1((widget.filter ?? []).join(""));
-    };
-
     const filterViewForWidget = async function (widget) {
         let viewCopy = structuredClone(view);
         if (!widget.filter || widget.filter.length === 0) {
@@ -140,7 +153,7 @@
                         dashboardObjectType="view"
                         settings={widget.settings}
                         bind:stats={stats[calculateWidgetStatsKey(widget)]}
-                        bind:productVersion={versionDispatch[calculateWidgetStatsKey(widget)]}
+                        bind:productVersion={versionDispatch[calculateWidgetVersionKey(widget)]}
                         bind:clickedTests={clickedTests}
                         on:statsUpdate
                         on:testClick={(e) => handleTestClick(e.detail)}

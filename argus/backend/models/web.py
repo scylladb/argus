@@ -20,7 +20,13 @@ from argus.backend.models.result import (
     ColumnMetadata,
     ValidationRules,
 )
-from argus.backend.models.run_config import RunConfigParam, RunConfiguration
+from argus.backend.models.run_config import (
+    RunConfigParam,
+    RunConfigParamByRun,
+    RunConfigParamName,
+    RunConfigParamValueIndex,
+    RunConfiguration,
+)
 from argus.backend.models.run_cost import RunCost
 from coodie.sync import Document
 
@@ -461,6 +467,9 @@ USED_MODELS: list[type[Document]] = [
     ReleaseDistinctImages,
     RunConfiguration,
     RunConfigParam,
+    RunConfigParamByRun,
+    RunConfigParamValueIndex,
+    RunConfigParamName,
     RunCost,
     ErrorEventEmbeddings,  # to be deprecated
     CriticalEventEmbeddings,  # to be deprecated
