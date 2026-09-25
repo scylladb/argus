@@ -196,7 +196,7 @@ class JiraService:
         issue: JiraIssue = await JiraIssue.get(id=issue_id)
         links = await IssueLink.find(issue_id=issue_id).allow_filtering().all()
         link: IssueLink = await IssueLink.get(run_id=run_id, issue_id=issue_id)
-        remaining_links = len(list(filter(lambda l: l.run_id != link.run_id and link.issue_id != issue_id, links)))
+        remaining_links = len([other for other in links if other.run_id != link.run_id])
 
         await EventService.create_run_event(
             kind=ArgusEventTypes.TestRunIssueRemoved,
