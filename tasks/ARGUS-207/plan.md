@@ -468,3 +468,10 @@ clients, the paging bridge). Commit `docs(architecture): describe the async exec
   `_exclude_disabled_tests` drops an unknown test id instead of raising, and
   the GitHub and Jira local lookups no longer swallow a driver error behind a
   bare `except`.
+- The pull request review added seven items, all fixed on the branch: coredump
+  links written once per event batch, password hashing off the loop, the stats
+  build off the loop, the two pre-existing bugs (issue deletion with links on
+  other runs, group names in the view editor), the two 2026-09-08 token
+  migration scripts and the four `dev-db` scripts ported to the aio models. The
+  `dev-db` scripts were checked statically and need one run against a dev
+  database.
