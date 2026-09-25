@@ -154,7 +154,7 @@ class UserService:
             user.registration_date = datetime.utcnow()
             user.roles = ["ROLE_USER"]
             temp_password = gen_pass()
-            user.password = generate_password_hash(temp_password)
+            user.password = await asyncio.to_thread(generate_password_hash, temp_password)
 
             avatar_url: str = user_info.get("avatar_url")
             avatar = (await asyncio.to_thread(requests.get, avatar_url)).content
@@ -365,7 +365,7 @@ class UserService:
             user.picture_id = web_file.id
 
         temp_password = gen_pass()
-        user.password = generate_password_hash(temp_password)
+        user.password = await asyncio.to_thread(generate_password_hash, temp_password)
 
         await user.save()
         result["user"] = user
@@ -388,7 +388,7 @@ class UserService:
         return True
 
     async def update_password(self, user: User, old_password: str, new_password: str, force=False):
-        if not check_password_hash(user.password, old_password) and not force:
+        if not await asyncio.to_thread(check_password_hash, user.password, old_password) and not force:
             raise UserServiceException("Incorrect old password")
 
         if not new_password:
@@ -397,7 +397,7 @@ class UserService:
         if len(new_password) < 5:
             raise UserServiceException("New password is too short")
 
-        user.password = generate_password_hash(new_password)
+        user.password = await asyncio.to_thread(generate_password_hash, new_password)
         await user.save()
 
         return True
