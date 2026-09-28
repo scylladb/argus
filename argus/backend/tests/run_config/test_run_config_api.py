@@ -1,14 +1,16 @@
+import json
 from uuid import uuid4
 
-from argus.backend.models.run_config import NAME_BUCKET, RunConfigParamName, RunConfigParamValueIndex
+from argus.backend.service.client_service import ClientService
+
+
+def index_config(params: dict, config_name: str = "sct_config") -> None:
+    ClientService.parse_config_values(config_name, json.dumps(params), str(uuid4()))
 
 
 def test_param_names_returns_the_envelope(api_client, argus_db):
     unique = uuid4().hex
-    row = RunConfigParamName.model_construct()
-    row.bucket = NAME_BUCKET
-    row.name = f"sct_config.{unique}"
-    row.save()
+    index_config({unique: "present"})
 
     response = api_client.get(f"/api/v1/run_configs/param_names?query={unique}")
 
@@ -18,14 +20,11 @@ def test_param_names_returns_the_envelope(api_client, argus_db):
 
 
 def test_param_values_returns_the_envelope(api_client, argus_db):
-    name = f"sct_config.{uuid4().hex}"
+    key = uuid4().hex
     for value in ("aws", "gce"):
-        row = RunConfigParamValueIndex.model_construct()
-        row.name = name
-        row.value = value
-        row.save()
+        index_config({key: value})
 
-    response = api_client.get(f"/api/v1/run_configs/param_values?name={name}&query=a")
+    response = api_client.get(f"/api/v1/run_configs/param_values?name=sct_config.{key}&query=a")
 
     assert response.status_code == 200, response.text
     assert response.json()["status"] == "ok"
