@@ -47,11 +47,9 @@
 
 - No driver change (no acsylla), no lifespan hook, no change to the worker
   model or to `gunicorn.conf.py`.
-- No move of CPU-bound aggregation off the loop; this change adds the timing
-  that decides it later.
 - No edit to `argusAI/`, nor to the migration scripts that have run everywhere;
-  the two token scripts of 2026-09-08 still have a step to run, so they follow
-  the models.
+  `migration_2026-09-08-1.py` still has its `--drop-legacy-column` step to run,
+  so it alone follows the models.
 - No rewrite of admin and planner CRUD paths with single-digit round trips.
 - No frontend change, no API shape or status code change.
 - No new caching layer beyond the existing release stats snapshot.
@@ -232,7 +230,7 @@ Every other service method keeps its name and parameters and gains `async`.
 | Risk | Response |
 |---|---|
 | The `_wrap_future` override targets a private coodie hook | Pin `coodie ~= 1.7`; a `docker_required` test reads >5000 rows through an aio Document; file the paging gap upstream |
-| CPU aggregation over thousands of rows now serialises on the worker loop; gunicorn kills a worker blocked past 120 s | The fetch/collect log line measures it; moving `collect()` to a thread is deferred until the numbers say so |
+| CPU aggregation over thousands of rows would serialise on the worker loop; gunicorn kills a worker blocked past 120 s | Both collectors run the filter, collect, `to_dict` and snapshot JSON steps in one `asyncio.to_thread` call; the fetch/collect log line measures both phases |
 | Prepared-statement growth from coodie's per-shape preparation | IN lists chunked at 90; request-driven limits stay raw; watch the driver's `Unprepared statement` log in the smoke test |
 | Callers that subscript dict rows get Documents or tuples | Model methods rebuild dicts with `dict(zip(cols, row))`; `ArgusGenericResultMetadata` is built through its constructor so its `__init__` runs |
 | `MagicMock` without `spec` returns non-awaitables | The Jenkins and issue service mocks get `spec=` |
@@ -241,8 +239,6 @@ Every other service method keeps its name and parameters and gains `async`.
 
 ## Deferred work
 
-- Moving the stats `collect()` phase to a worker thread, decided from the
-  fetch/collect timing this change adds.
 - An upstream coodie fix for multi-page async results, after which the
   `_wrap_future` override goes.
 - The admin and planner CRUD paths with a handful of serial reads
