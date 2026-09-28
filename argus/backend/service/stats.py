@@ -591,7 +591,7 @@ class ReleaseStatsCollector:
         if not force:
             try:
                 snapshot = await ReleaseStatsSnapshot.get(release_id=self.release.id, filter_key=filter_key)
-                return json.loads(snapshot.payload)
+                return await asyncio.to_thread(json.loads, snapshot.payload)
             except DocumentNotFound:
                 pass
         if self.release.dormant and not force:
@@ -602,40 +602,41 @@ class ReleaseStatsCollector:
         fetch_start = time.perf_counter()
         fetched = await self._fetch(limited, force)
         collect_start = time.perf_counter()
-        self.release_rows = fetched.rows
-        if self.release_version:
-            if include_no_version:
-                def expr(row): return check_version(self.release_version, row["scylla_version"]) or not row["scylla_version"]
-            elif self.release_version == "!noVersion":
-                def expr(row): return not row["scylla_version"]
-            else:
-                def expr(row): return check_version(self.release_version, row["scylla_version"])
-        else:
-            if include_no_version:
-                def expr(row): return row
-            else:
-                def expr(row): return row["scylla_version"]
-        self.release_rows = list(filter(expr, self.release_rows))
-        if image_id:
-            def filter_for_image(row: dict):
-                setup = row.get("cloud_setup")
-                if not setup:
-                    return False
-                db_node = setup.db_node
-                if not db_node:
-                    return False
-                image = db_node.image_id
-
-                return image == image_id
-
-            self.release_rows = list(filter(filter_for_image, self.release_rows))
-        self.release_dict = {}
-        for row in self.release_rows:
-            runs = self.release_dict.get(row["build_id"], [])
-            runs.append(row)
-            self.release_dict[row["build_id"]] = runs
 
         def build() -> tuple[ReleaseStats, dict]:
+            self.release_rows = fetched.rows
+            if self.release_version:
+                if include_no_version:
+                    def expr(row): return check_version(self.release_version, row["scylla_version"]) or not row["scylla_version"]
+                elif self.release_version == "!noVersion":
+                    def expr(row): return not row["scylla_version"]
+                else:
+                    def expr(row): return check_version(self.release_version, row["scylla_version"])
+            else:
+                if include_no_version:
+                    def expr(row): return row
+                else:
+                    def expr(row): return row["scylla_version"]
+            self.release_rows = list(filter(expr, self.release_rows))
+            if image_id:
+                def filter_for_image(row: dict):
+                    setup = row.get("cloud_setup")
+                    if not setup:
+                        return False
+                    db_node = setup.db_node
+                    if not db_node:
+                        return False
+                    image = db_node.image_id
+
+                    return image == image_id
+
+                self.release_rows = list(filter(filter_for_image, self.release_rows))
+            self.release_dict = {}
+            for row in self.release_rows:
+                runs = self.release_dict.get(row["build_id"], [])
+                runs.append(row)
+                self.release_dict[row["build_id"]] = runs
+
             stats = ReleaseStats(release=self.release)
             stats.collect(fetched, rows=self.release_rows, limited=limited, force=force,
                           dict=self.release_dict, version_filter=self.release_version)
@@ -725,35 +726,41 @@ class ViewStatsCollector:
         fetch_start = time.perf_counter()
         fetched = await self._fetch(limited, force, widget_id, param_filter_off)
         collect_start = time.perf_counter()
-        self.view_rows = fetched.rows
 
-        if self.filter:
-            if include_no_version:
-                def expr(row): return check_version(self.filter, row["scylla_version"]) or not row["scylla_version"]
-            elif self.filter == "!noVersion":
-                def expr(row): return not row["scylla_version"]
+        def filter_rows() -> list[TestRunStatRow]:
+            if self.filter:
+                if include_no_version:
+                    def expr(row): return check_version(self.filter, row["scylla_version"]) or not row["scylla_version"]
+                elif self.filter == "!noVersion":
+                    def expr(row): return not row["scylla_version"]
+                else:
+                    def expr(row): return check_version(self.filter, row["scylla_version"])
             else:
-                def expr(row): return check_version(self.filter, row["scylla_version"])
-        else:
-            if include_no_version:
-                def expr(row): return row
-            else:
-                def expr(row): return row["scylla_version"]
-        self.view_rows = list(filter(expr, self.view_rows))
-        if image_id:
-            self.view_rows = list(filter(lambda row: _get_image(row) == image_id, self.view_rows))
+                if include_no_version:
+                    def expr(row): return row
+                else:
+                    def expr(row): return row["scylla_version"]
+            rows = list(filter(expr, fetched.rows))
+            if image_id:
+                rows = list(filter(lambda row: _get_image(row) == image_id, rows))
+            return rows
+
+        self.view_rows = await asyncio.to_thread(filter_rows)
+        matching = None
         if self.param_filters:
-            matching = RunConfigParamService().narrow_run_ids({row["id"] for row in self.view_rows},
-                                                              self.param_filters)
-            self.view_rows = [row for row in self.view_rows if row["id"] in matching]
-            surviving_build_ids = {row["build_id"] for row in self.view_rows}
-            fetched.tests = [test for test in fetched.tests if test.build_system_id in surviving_build_ids]
-        for row in self.view_rows:
-            runs = self.runs_by_build_id.get(row["build_id"], [])
-            runs.append(row)
-            self.runs_by_build_id[row["build_id"]] = runs
+            matching = await RunConfigParamService().narrow_run_ids({row["id"] for row in self.view_rows},
+                                                                    self.param_filters)
 
         def build() -> tuple[ViewStats, dict]:
+            if matching is not None:
+                self.view_rows = [row for row in self.view_rows if row["id"] in matching]
+                surviving_build_ids = {row["build_id"] for row in self.view_rows}
+                fetched.tests = [test for test in fetched.tests if test.build_system_id in surviving_build_ids]
+            for row in self.view_rows:
+                runs = self.runs_by_build_id.get(row["build_id"], [])
+                runs.append(row)
+                self.runs_by_build_id[row["build_id"]] = runs
+
             stats = ViewStats(release=self.view)
             stats.collect(fetched, rows=self.view_rows, limited=limited, force=force,
                           dict=self.runs_by_build_id, version_filter=self.filter)
