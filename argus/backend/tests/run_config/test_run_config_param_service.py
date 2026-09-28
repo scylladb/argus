@@ -1,36 +1,23 @@
+import json
 from uuid import uuid4
 
 import pytest
 
 from argus.backend.error_handlers import DataValidationError
-from argus.backend.models.run_config import (
-    NAME_BUCKET,
-    RunConfigParam,
-    RunConfigParamByRun,
-    RunConfigParamName,
-    RunConfigParamValueIndex,
-)
+from argus.backend.models.run_config import NAME_BUCKET, RunConfigParamName, RunConfigParamValueIndex
+from argus.backend.service.client_service import ClientService
+from argus.backend.models.run_config import EMPTY_PARAM_VALUES
 from argus.backend.service.run_config_params import (
     ConfigParamFilter,
     RunConfigParamService,
+    _matches,
     parse_filters,
 )
 
 
-def store_params(run_id, params: dict[str, str | None]) -> None:
-    """Write the same rows parse_config_values does, so both read paths are covered."""
-    for name, value in params.items():
-        by_run = RunConfigParamByRun.model_construct()
-        by_run.run_id = run_id
-        by_run.name = name
-        by_run.value = value
-        by_run.save()
-
-        legacy = RunConfigParam.model_construct()
-        legacy.name = name
-        legacy.value = value if value is not None else "null"
-        legacy.run_id = str(run_id)
-        legacy.save()
+def store_params(run_id, params: dict) -> None:
+    """Index a run's parameters through the writer, under the ``cfg.`` prefix."""
+    ClientService.parse_config_values("cfg", json.dumps(params), str(run_id))
 
 
 def test_parse_filters_reads_a_concrete_value_and_an_any_value_row():
@@ -89,8 +76,8 @@ def test_no_candidates_yields_nothing(argus_db):
 
 def test_a_concrete_value_keeps_only_the_matching_run(argus_db):
     matching, other = uuid4(), uuid4()
-    store_params(matching, {"cfg.backend": "aws"})
-    store_params(other, {"cfg.backend": "gce"})
+    store_params(matching, {"backend": "aws"})
+    store_params(other, {"backend": "gce"})
 
     found = RunConfigParamService().narrow_run_ids(
         [matching, other], [ConfigParamFilter(name="cfg.backend", value="aws")]
@@ -101,7 +88,7 @@ def test_a_concrete_value_keeps_only_the_matching_run(argus_db):
 
 def test_a_run_absent_from_the_table_is_excluded(argus_db):
     known, unknown = uuid4(), uuid4()
-    store_params(known, {"cfg.backend": "aws"})
+    store_params(known, {"backend": "aws"})
 
     found = RunConfigParamService().narrow_run_ids(
         [known, unknown], [ConfigParamFilter(name="cfg.backend", value="aws")]
@@ -110,10 +97,11 @@ def test_a_run_absent_from_the_table_is_excluded(argus_db):
     assert found == {known}
 
 
-@pytest.mark.parametrize("stored", ["", "null", "None"])
+@pytest.mark.parametrize("stored", ["", None])
 def test_any_value_rejects_the_empty_encodings(argus_db, stored):
+    """parse_config_values turns "" into "null" and None into "None"."""
     run_id = uuid4()
-    store_params(run_id, {"cfg.unified_package": stored})
+    store_params(run_id, {"unified_package": stored})
 
     found = RunConfigParamService().narrow_run_ids(
         [run_id], [ConfigParamFilter(name="cfg.unified_package", value=None)]
@@ -124,7 +112,7 @@ def test_any_value_rejects_the_empty_encodings(argus_db, stored):
 
 def test_any_value_accepts_a_real_value(argus_db):
     run_id = uuid4()
-    store_params(run_id, {"cfg.unified_package": "http://example.invalid/pkg.tar.gz"})
+    store_params(run_id, {"unified_package": "http://example.invalid/pkg.tar.gz"})
 
     found = RunConfigParamService().narrow_run_ids(
         [run_id], [ConfigParamFilter(name="cfg.unified_package", value=None)]
@@ -135,8 +123,8 @@ def test_any_value_accepts_a_real_value(argus_db):
 
 def test_two_rows_and_together(argus_db):
     both, one = uuid4(), uuid4()
-    store_params(both, {"cfg.backend": "aws", "cfg.unified_package": "pkg"})
-    store_params(one, {"cfg.backend": "aws", "cfg.unified_package": "null"})
+    store_params(both, {"backend": "aws", "unified_package": "pkg"})
+    store_params(one, {"backend": "aws", "unified_package": ""})
 
     found = RunConfigParamService().narrow_run_ids(
         [both, one],
@@ -184,3 +172,14 @@ def test_search_values_matches_by_prefix_and_honours_the_limit(argus_db):
 def test_search_values_requires_a_name(argus_db):
     with pytest.raises(DataValidationError):
         RunConfigParamService().search_values("")
+
+
+
+@pytest.mark.parametrize("stored", sorted(EMPTY_PARAM_VALUES))
+def test_the_empty_encodings_never_satisfy_an_is_set_row(stored):
+    """Covers "", which the writer cannot produce but the model tolerates."""
+    assert _matches({"cfg.a": stored}, ConfigParamFilter(name="cfg.a", value=None)) is False
+
+
+def test_a_present_value_satisfies_an_is_set_row():
+    assert _matches({"cfg.a": "aws"}, ConfigParamFilter(name="cfg.a", value=None)) is True
