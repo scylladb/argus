@@ -27,11 +27,11 @@ model, and optionally its own router, through the plugin layer.
 - **Entry point**: `argus_backend.py`. `create_app()` returns the FastAPI
   application.
 - **Layers**:
-  - `controller/` — 17 modules. One router per feature: `testrun_api.py`,
+  - `controller/` — 18 modules. One router per feature: `testrun_api.py`,
     `client_api.py`, `view_api.py`, `planner_api.py`, `admin_api.py`,
     `notification_api.py`, `replay_api.py`, `ssh_api.py`, `cost_api.py`,
-    `auth.py`.
-  - `service/` — 25 modules. The business logic each router calls.
+    `health_api.py`, `auth.py`.
+  - `service/` — 26 modules. The business logic each router calls.
   - `models/` — 13 modules. `web.py` holds the core entities. `jira.py`,
     `github_issue.py`, `pytest.py`, `result.py`, `plan.py`, `view_widgets.py`,
     `ssh_key.py`, `run_config.py`, `run_cost.py`, `runtime_store.py` and
@@ -41,6 +41,10 @@ model, and optionally its own router, through the plugin layer.
   - `db.py` — session setup.
   - `cli.py` — maintenance commands: `sync-models`, `refresh-issues`,
     `scan-jenkins`.
+  - `service/health/` — the health process. The gunicorn master starts it
+    as a detached process. It runs the `qatools-health` runner over
+    ScyllaDB, nginx, the SSH key lookup, each S3 bucket, Jenkins, GitHub and
+    Jira.
 - **Execution model**: every route handler, auth dependency and service
   method that touches ScyllaDB is a coroutine on the uvicorn event loop. The
   models are `coodie.aio` documents; independent reads inside one request run
@@ -170,8 +174,11 @@ rules follow.
 - `argus.local.yaml` — database connection for local work.
 - `argus_web.yaml` — application secrets and service endpoints. Copy
   `argus_web.example.yaml` to start.
-- `gunicorn.conf.py` — worker count, socket path and Prometheus multiprocess
-  settings.
+- `gunicorn.conf.py` — worker count, socket path, Prometheus multiprocess
+  settings, and the hooks that start and stop the health process.
+- `HEALTH_ENABLED`, `HEALTH_HOST` and `HEALTH_PORT` in `argus_web.yaml` turn
+  on the health process and set its listener. `HEALTH_NGINX_URL` sets the
+  URL of the nginx probe.
 - Environment variables control the AI workers.
 
 Never commit a secret. `dev-db/` provides a local database, so no test needs a
@@ -183,6 +190,16 @@ nginx accepts the request. It passes the request over a unix socket to
 gunicorn, which runs 4 uvicorn workers. systemd starts the service. Prometheus
 scrapes the metrics endpoint. `docs/config/` holds the nginx, systemd and
 logrotate files. `docs/deployment.md` holds the procedure.
+
+When `HEALTH_ENABLED` is true, the gunicorn master starts the health process
+on `when_ready` and stops it on `on_exit` through a pipe that only the master
+holds. The process serves `/health`,
+`/health/ready` and `/metrics` on `HEALTH_HOST:HEALTH_PORT` with no
+authentication. Every answer comes from the last cached probe results. The
+workers read `/health` for `GET /api/v1/health/summary`, and the navigation
+bar shows the failing dependencies from it. The runner runs in its own
+process because the multiprocess exposition of the workers drops a custom
+collector, and four workers would probe every dependency four times.
 
 The AI workers run as their own systemd service. See
 `argusAI/deployment/`.

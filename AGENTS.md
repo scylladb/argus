@@ -44,6 +44,7 @@ the troubleshooting steps, see `docs/dev-setup.md`.
 | Services       | `argus/backend/service/`    | Business logic called by the routers                                |
 | Models         | `argus/backend/models/`     | coodie document models on ScyllaDB                                  |
 | Plugins        | `argus/backend/plugins/`    | One directory per test source                                       |
+| Health process | `argus/backend/service/health/` | Dependency checks and `/health`, started by `gunicorn.conf.py`      |
 | Client SDK     | `argus/client/`             | Python client for the Argus API                                     |
 | Frontend entry | `frontend/`                 | Per-page entry points declared in `vite.config.ts`                  |
 | Python config  | `pyproject.toml`            | Dependencies, Ruff and pytest configuration                         |
