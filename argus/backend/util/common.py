@@ -73,13 +73,18 @@ def check_version(filter_string: str, version: str) -> bool:
     return False
 
 
-# Scylla rejects a batch over 64 KiB by default, so flush well below that.
+# Our clusters set batch_size_fail_threshold to 64 KiB, so flush well below it.
+# The estimate counts characters rather than UTF-8 bytes, which is why the margin is wide.
 BATCH_MAX_BYTES = 48 * 1024
 BATCH_MAX_STATEMENTS = 200
 
 
 class SizedBatchQuery(BatchQuery):
-    """An unlogged BatchQuery that flushes itself before it outgrows the server limit."""
+    """An unlogged BatchQuery that flushes itself before it outgrows the batch threshold.
+
+    Feed one table per instance. coodie joins a batch into a single CQL text and the driver
+    keeps a prepared statement per distinct text, so mixing tables multiplies those texts.
+    """
 
     def __init__(self, max_statements: int = BATCH_MAX_STATEMENTS, max_bytes: int = BATCH_MAX_BYTES) -> None:
         super().__init__(logged=False)
@@ -110,6 +115,7 @@ def save_in_batches(items: Iterable[T], to_documents: Callable[[T], Iterable[Doc
                     max_statements: int = BATCH_MAX_STATEMENTS, max_bytes: int = BATCH_MAX_BYTES) -> int:
     """Save every document ``to_documents`` yields, in batches bounded by count and size.
 
+    ``to_documents`` should yield rows of a single table; see ``SizedBatchQuery``.
     Returns the number of documents written.
     """
     batch = SizedBatchQuery(max_statements, max_bytes)
