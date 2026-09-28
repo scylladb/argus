@@ -496,12 +496,24 @@ class SCTService:
 
     @classmethod
     async def submit_events(cls, run_id: str, raw_events: list[RawEventPayload]) -> bool:
-        links = await gather_limited(cls.submit_event(run_id=run_id, raw_event=raw_event) for raw_event in raw_events)
-        coredump_links = [link for link in links if link]
+        async def submit_one(raw_event: RawEventPayload) -> CoredumpLink | Exception | None:
+            try:
+                return await cls.submit_event(run_id=run_id, raw_event=raw_event)
+            except Exception as exc:  # noqa: BLE001 - re-raised below once the stored links are written
+                return exc
+
+        outcomes = await gather_limited(submit_one(raw_event) for raw_event in raw_events)
+        coredump_links = [outcome for outcome in outcomes if isinstance(outcome, dict)]
+        failures = [outcome for outcome in outcomes if isinstance(outcome, Exception)]
         if coredump_links:
-            run: SCTTestRun = await SCTTestRun.get(id=UUID(run_id))
-            await run.submit_logs(coredump_links)
-            await run.save()
+            try:
+                run: SCTTestRun = await SCTTestRun.get(id=UUID(run_id))
+                await run.submit_logs(coredump_links)
+                await run.save()
+            except Exception:
+                LOGGER.warning("Unable to attach coredump links to run %s.", run_id, exc_info=True)
+        if failures:
+            raise failures[0]
         return True
 
     @classmethod
