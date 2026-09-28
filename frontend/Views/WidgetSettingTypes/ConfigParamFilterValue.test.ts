@@ -109,14 +109,52 @@ describe("ConfigParamFilterValue", () => {
         expect(settings.configParamFilters).toEqual([]);
     });
 
-    it("toggles a row between any-value and a concrete value", async () => {
+    it("ticking Any drops the concrete value", async () => {
         const { getByLabelText, settings } = mount([{ name: "cfg.a", value: "x" }]);
 
         await fireEvent.click(getByLabelText("Any"));
+
         expect(settings.configParamFilters).toEqual([{ name: "cfg.a", value: null }]);
+    });
+
+    it("unticking Any reveals the value select but keeps the row on any value", async () => {
+        const { container, getByLabelText, settings } = mount([{ name: "cfg.a", value: null }]);
+
+        expect(container.querySelectorAll(".svelte-select")).toHaveLength(1);
 
         await fireEvent.click(getByLabelText("Any"));
-        expect(settings.configParamFilters).toEqual([{ name: "cfg.a", value: "" }]);
+
+        // The select is now offered, but nothing is saved until a value is picked, so the
+        // stored row still matches the badge the reader sees.
+        expect(container.querySelectorAll(".svelte-select")).toHaveLength(2);
+        expect(settings.configParamFilters).toEqual([{ name: "cfg.a", value: null }]);
+        expect((getByLabelText("Any") as HTMLInputElement).checked).toBe(true);
+    });
+
+    it("never stores an empty string for a value", async () => {
+        const { getByLabelText, settings } = mount([{ name: "cfg.a", value: "x" }]);
+
+        await fireEvent.click(getByLabelText("Any"));
+        await fireEvent.click(getByLabelText("Any"));
+
+        expect(settings.configParamFilters).toEqual([{ name: "cfg.a", value: null }]);
+    });
+
+    it("keeps a value set through the API when the editor opens and saves", () => {
+        const settings: Record<string, unknown> = {
+            configParamFilters: [
+                { name: "cfg.flag", value: true },
+                { name: "cfg.count", value: 3 },
+            ],
+        };
+        render(ConfigParamFilterValue, {
+            props: { settingName: "configParamFilters", definition: DEFINITION, settings },
+        });
+
+        expect(settings.configParamFilters).toEqual([
+            { name: "cfg.flag", value: "True" },
+            { name: "cfg.count", value: "3" },
+        ]);
     });
 
     it("leaves the Any checkbox disabled until a parameter is chosen", () => {

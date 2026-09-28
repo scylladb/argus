@@ -25,6 +25,7 @@
 
     let rows: ConfigParamFilterRow[] = $state(normalizeRows(settings[settingName] ?? definition.default ?? []));
     let duplicateAt: number = $state(-1);
+    let pickingValueAt: number = $state(-1);
 
     settings[settingName] = rows;
 
@@ -64,21 +65,30 @@
             return;
         }
         duplicateAt = -1;
+        pickingValueAt = -1;
         replaceRow(index, { name: name, value: null });
     };
 
     const handleNameClear = function (index: number) {
         duplicateAt = -1;
+        pickingValueAt = -1;
         replaceRow(index, emptyRow());
     };
 
     const handleValueSelect = function (index: number, value: string | null) {
-        replaceRow(index, { ...rows[index], value: value });
+        pickingValueAt = -1;
+        replaceRow(index, { ...rows[index], value: value || null });
     };
 
+    // Unticking Any only reveals the value select; the row stays on "any value" until a
+    // value is actually picked, so the editor never saves a filter it is not showing.
     const toggleAnyValue = function (index: number) {
-        const row = rows[index];
-        replaceRow(index, { ...row, value: row.value === null ? "" : null });
+        if (rows[index].value === null) {
+            pickingValueAt = index;
+            return;
+        }
+        pickingValueAt = -1;
+        replaceRow(index, { ...rows[index], value: null });
     };
 
     const addRow = function () {
@@ -87,6 +97,7 @@
 
     const removeRow = function (index: number) {
         duplicateAt = -1;
+        pickingValueAt = -1;
         rows.splice(index, 1);
     };
 
@@ -125,7 +136,7 @@
             </div>
             <span class="input-group-text param-equals">=</span>
             <div class="param-field" title={row.value ?? ANY_VALUE_LABEL}>
-                {#if row.value === null}
+                {#if row.value === null && pickingValueAt !== index}
                     <span class="form-control d-flex align-items-center text-muted">{ANY_VALUE_LABEL}</span>
                 {:else}
                     {#key row.name}
@@ -154,7 +165,10 @@
                     id="{uid}-any-{index}"
                     disabled={!row.name}
                     checked={row.value === null}
-                    onchange={() => toggleAnyValue(index)}
+                    onchange={(e) => {
+                        toggleAnyValue(index);
+                        e.currentTarget.checked = rows[index].value === null;
+                    }}
                 >
                 <span class:text-muted={!row.name}>Any</span>
             </label>
