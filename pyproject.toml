@@ -96,6 +96,15 @@ ai-eval = [
   "chromadb >= 1.5.9",
 ]
 
+[dependency-groups]
+health = ["qatools-health ; python_version >= '3.13'"]
+
+[tool.uv]
+default-groups = ["health"]
+
+[tool.uv.sources]
+qatools-health = { path = "qatools-health", editable = true }
+
 [tool.ruff]
 lint.select = [
   "BLE",

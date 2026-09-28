@@ -17,9 +17,9 @@
 - Modify: `pyproject.toml`, the `web-backend` extra and `[tool.uv.sources]`
 - Modify: `uv.lock`
 
-- [ ] Add `qatools-health ; python_version >= '3.13'` to `web-backend`, and the editable path source.
-- [ ] Run `uv lock` and `uv sync --all-extras`, and confirm `import qatools_health` works in `.venv`.
-- [ ] Commit.
+- [x] Add `qatools-health ; python_version >= '3.13'` to `web-backend`, and the editable path source.
+- [x] Run `uv lock` and `uv sync --all-extras`, and confirm `import qatools_health` works in `.venv`.
+- [x] Commit.
 
 ## Task 2 — The Argus checks
 
