@@ -633,10 +633,11 @@ class ViewStatsCollector:
             widget = next((widget for widget in settings if widget["position"] == widget_id), None)
 
         switched_off = set(param_filter_off)
+        widget_settings = widget.get("settings") if isinstance(widget, dict) else None
         param_filters = [
-            param for param in parse_filters((widget.get("settings") or {}).get("configParamFilters"))
+            param for param in parse_filters(widget_settings.get("configParamFilters"))
             if param.name not in switched_off
-        ] if widget else []
+        ] if isinstance(widget_settings, dict) else []
         per_partition_limit = (FILTERED_STATS_PER_PARTITION_LIMIT if param_filters
                                else DEFAULT_STATS_PER_PARTITION_LIMIT)
 
