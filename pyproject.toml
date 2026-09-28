@@ -65,6 +65,7 @@ web-backend = [
   "python-multipart>=0.0.32",
   "timelength>=3.0.4",
   "httpx2 >= 2.12.0",
+  "qatools-health ; python_version >= '3.13'",
 ]
 docker-image = ["supervisor ~= 4.2.4"]
 dev = [
@@ -95,6 +96,9 @@ ai-eval = [
   "tiktoken >= 0.7.0",
   "chromadb >= 1.5.9",
 ]
+
+[tool.uv.sources]
+qatools-health = { path = "qatools-health", editable = true }
 
 [tool.ruff]
 lint.select = [
