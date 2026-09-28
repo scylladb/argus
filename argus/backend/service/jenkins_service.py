@@ -320,7 +320,7 @@ class JenkinsService:
         target_release: ArgusRelease = await ArgusRelease.get(id=UUID(target))
         target_group: ArgusGroup = await ArgusGroup.get(id=UUID(group))
 
-        if target_group.id == cloned_test.id and new_name == cloned_test.name:
+        if target_group.id == cloned_test.group_id and new_name == cloned_test.name:
             raise JenkinsServiceError("Unable to clone: source and destination are the same")
 
         if not target_group.build_system_id:
@@ -334,12 +334,13 @@ class JenkinsService:
         new_test.group_id = target_group.id
         new_test.release_id = target_release.id
         new_test.plugin_name = cloned_test.plugin_name
+        await new_test.validate_build_system_id()
 
         old_config = await asyncio.to_thread(self._jenkins.get_job_config, name=cloned_test.build_system_id)
         LOGGER.info(old_config)
         xml = ET.fromstring(old_config)
         display_name = xml.find("displayName")
-        if display_name:
+        if display_name is not None:
             display_name.text = new_name
         new_config = ET.tostring(xml, encoding="unicode")
         await asyncio.to_thread(self._jenkins.create_job, name=jenkins_new_build_id, config_xml=new_config)
