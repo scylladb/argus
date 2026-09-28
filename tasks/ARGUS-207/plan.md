@@ -472,7 +472,8 @@ clients, the paging bridge). Commit `docs(architecture): describe the async exec
   links written once per event batch, password hashing off the loop, the stats
   build off the loop, the two pre-existing bugs (issue deletion with links on
   other runs, group names in the view editor), the `migration_2026-09-08-1.py` token
-  script (its drop step is still to run) and the four `dev-db` scripts ported
-  to the aio models. The
+  script (its drop step is still to run), the May column-drop script (it named
+  the removed `read_fast` profile) and the four `dev-db` scripts ported to the
+  aio models. The
   `dev-db` scripts were checked statically and need one run against a dev
   database.
