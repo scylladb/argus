@@ -8,6 +8,7 @@ import {
     isRowActive,
     normalizeRows,
     toggleName,
+    asStoredValue,
 } from "./ConfigParamFilters";
 
 describe("normalizeRows", () => {
@@ -111,5 +112,41 @@ describe("toggleName", () => {
 
         expect(toggleName(off, "cfg.b")).not.toBe(off);
         expect(off).toEqual(["cfg.a"]);
+    });
+});
+
+describe("asStoredValue", () => {
+    it("reads nothing and the empty string as any value", () => {
+        expect(asStoredValue(null)).toBeNull();
+        expect(asStoredValue(undefined)).toBeNull();
+        expect(asStoredValue("")).toBeNull();
+    });
+
+    it("keeps a string as it is", () => {
+        expect(asStoredValue("aws")).toBe("aws");
+    });
+
+    it("renders a boolean the way parse_config_values stored it", () => {
+        expect(asStoredValue(true)).toBe("True");
+        expect(asStoredValue(false)).toBe("False");
+    });
+
+    it("stringifies a number", () => {
+        expect(asStoredValue(3)).toBe("3");
+        expect(asStoredValue(0)).toBe("0");
+    });
+
+    it("refuses a structure", () => {
+        expect(asStoredValue({ a: 1 })).toBeNull();
+        expect(asStoredValue([1])).toBeNull();
+    });
+});
+
+describe("normalizeRows with non-string values", () => {
+    it("keeps an API-set scalar instead of widening it to any value", () => {
+        expect(normalizeRows([{ name: "cfg.a", value: true }, { name: "cfg.b", value: 7 }])).toEqual([
+            { name: "cfg.a", value: "True" },
+            { name: "cfg.b", value: "7" },
+        ]);
     });
 });
