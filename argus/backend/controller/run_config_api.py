@@ -9,9 +9,9 @@ router = APIRouter(prefix="/run_configs")
 
 
 @router.get("/param_names", name="api.run_config_api.param_names")
-def param_names(query: str = Query(""), limit: int = Query(SEARCH_LIMIT, ge=1, le=SEARCH_LIMIT),
+async def param_names(query: str = Query(""), limit: int = Query(SEARCH_LIMIT, ge=1, le=SEARCH_LIMIT),
                 user: User = Depends(api_current_user)):
-    res = RunConfigParamService().search_names(query=query, limit=limit)
+    res = await RunConfigParamService().search_names(query=query, limit=limit)
     return APIResponse({
         "status": "ok",
         "response": res
@@ -19,10 +19,10 @@ def param_names(query: str = Query(""), limit: int = Query(SEARCH_LIMIT, ge=1, l
 
 
 @router.get("/param_values", name="api.run_config_api.param_values")
-def param_values(name: str = Query(...), query: str = Query(""),
+async def param_values(name: str = Query(...), query: str = Query(""),
                  limit: int = Query(SEARCH_LIMIT, ge=1, le=SEARCH_LIMIT),
                  user: User = Depends(api_current_user)):
-    res = RunConfigParamService().search_values(name=name, query=query, limit=limit)
+    res = await RunConfigParamService().search_values(name=name, query=query, limit=limit)
     return APIResponse({
         "status": "ok",
         "response": res

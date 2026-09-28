@@ -22,11 +22,13 @@ anything that reads them.
 """
 
 import argparse
+import asyncio
 import json
 import logging
 from uuid import UUID
 
 from argus.backend.db import ScyllaCluster
+from argus.backend.models.run_config import RunConfiguration
 from argus.backend.service.client_service import ClientService
 from argus.backend.util.logsetup import setup_application_logging
 
@@ -50,9 +52,8 @@ def list_run_ids(run_id: UUID | None = None) -> list[UUID]:
     raise RuntimeError("Could not list the runs to backfill; re-run the script")
 
 
-def configs_for(run_id: UUID) -> list[dict]:
-    query = DB.prepare("SELECT run_id, name, content FROM run_configuration WHERE run_id = ?")
-    return list(DB.session.execute(query, parameters=(run_id,)))
+async def configs_for(run_id: UUID) -> list[RunConfiguration]:
+    return await RunConfiguration.find(run_id=run_id).all()
 
 
 def is_json_object(content: str) -> bool:
@@ -62,19 +63,19 @@ def is_json_object(content: str) -> bool:
         return False
 
 
-def backfill(run_id: UUID | None = None) -> dict[str, int]:
+async def backfill(run_id: UUID | None = None) -> dict[str, int]:
     counts = {"runs": 0, "parsed": 0, "skipped": 0, "failed": 0}
     run_ids = list_run_ids(run_id)
     LOGGER.info("Backfilling %s runs...", len(run_ids))
 
     for index, current in enumerate(run_ids, start=1):
         try:
-            for row in configs_for(current):
-                content = row["content"]
+            for row in await configs_for(current):
+                content = row.content
                 if not content or not is_json_object(content):
                     counts["skipped"] += 1
                     continue
-                ClientService.parse_config_values(row["name"], content, str(row["run_id"]))
+                await ClientService.parse_config_values(row.name, content, str(row.run_id))
                 counts["parsed"] += 1
             counts["runs"] += 1
         except Exception:
@@ -92,7 +93,7 @@ def main() -> None:
     parser.add_argument("--run-id", type=UUID, default=None, help="replay one run instead of every run")
     args = parser.parse_args()
 
-    counts = backfill(args.run_id)
+    counts = asyncio.run(backfill(args.run_id))
     LOGGER.info("Done. %(runs)s runs, %(parsed)s configs replayed, %(skipped)s skipped, %(failed)s failed.", counts)
     if counts["failed"]:
         LOGGER.warning("Re-run the script to retry the %s failed runs.", counts["failed"])

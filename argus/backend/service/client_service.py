@@ -11,7 +11,7 @@ from uuid import UUID
 from cassandra import DriverException
 from cassandra.cluster import NoHostAvailable
 from coodie.exceptions import DocumentNotFound
-from coodie.sync import Document
+from coodie.aio import Document
 
 from argus.backend.error_handlers import DataValidationError
 from argus.backend.models.pytest import PytestResultTable, PytestSubmitData, PytestUserField
@@ -348,11 +348,11 @@ class ClientService:
         params = [(run_uuid, key, value) for key, value in scalars]
 
         for to_row in (cls._legacy_row, cls._by_run_row, cls._value_index_row):
-            save_in_batches(params, to_row)
+            await save_in_batches(params, to_row)
 
         fresh = [key for key, _ in scalars if key not in _INDEXED_NAMES]
         if fresh:
-            save_in_batches(fresh, cls._catalogue_row)
+            await save_in_batches(fresh, cls._catalogue_row)
             _INDEXED_NAMES.update(fresh)
         LOGGER.debug("Indexed %s config parameters for run %s", len(scalars), run_id)
 

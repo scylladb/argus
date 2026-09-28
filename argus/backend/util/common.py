@@ -6,8 +6,7 @@ import os
 from typing import Awaitable, Callable, Iterable, TypeVar
 from uuid import UUID
 
-from coodie.aio import QuerySet
-from coodie.sync import BatchQuery, Document
+from coodie.aio import AsyncBatchQuery, Document, QuerySet
 from pydantic import BeforeValidator
 
 T = TypeVar('T')
@@ -101,11 +100,13 @@ BATCH_MAX_BYTES = 48 * 1024
 BATCH_MAX_STATEMENTS = 200
 
 
-class SizedBatchQuery(BatchQuery):
-    """An unlogged BatchQuery that flushes itself before it outgrows the batch threshold.
+class SizedBatchQuery(AsyncBatchQuery):
+    """An unlogged batch that closes a group before it outgrows the batch threshold.
 
     Feed one table per instance. coodie joins a batch into a single CQL text and the driver
     keeps a prepared statement per distinct text, so mixing tables multiplies those texts.
+    ``add`` stays synchronous because ``Document.save(batch=...)`` calls it; the closed
+    groups run when ``flush_ready`` or ``flush`` is awaited.
     """
 
     def __init__(self, max_statements: int = BATCH_MAX_STATEMENTS, max_bytes: int = BATCH_MAX_BYTES) -> None:
@@ -115,26 +116,40 @@ class SizedBatchQuery(BatchQuery):
         self.pending = 0
         self.pending_bytes = 0
         self.batches = 0
+        self._ready: list[list[tuple[str, list]]] = []
 
     def add(self, stmt: str, params: list) -> None:
         cost = len(stmt) + sum(len(str(param)) for param in params if param is not None)
         if self.pending and (self.pending >= self.max_statements or self.pending_bytes + cost > self.max_bytes):
-            self.flush()
+            self._ready.append(self._statements)
+            self._statements = []
+            self.pending = 0
+            self.pending_bytes = 0
         super().add(stmt, params)
         self.pending += 1
         self.pending_bytes += cost
 
-    def flush(self) -> None:
-        if not self.pending:
-            return
-        self.execute()
-        self.batches += 1
-        self.pending = 0
-        self.pending_bytes = 0
+    async def flush_ready(self) -> None:
+        groups, self._ready = self._ready, []
+        open_group, open_count, open_bytes = self._statements, self.pending, self.pending_bytes
+        for group in groups:
+            self._statements = group
+            self.pending = len(group)
+            await self.execute()
+            self.batches += 1
+        self._statements, self.pending, self.pending_bytes = open_group, open_count, open_bytes
+
+    async def flush(self) -> None:
+        if self.pending:
+            self._ready.append(self._statements)
+            self._statements = []
+            self.pending = 0
+            self.pending_bytes = 0
+        await self.flush_ready()
 
 
-def save_in_batches(items: Iterable[T], to_documents: Callable[[T], Iterable[Document]],
-                    max_statements: int = BATCH_MAX_STATEMENTS, max_bytes: int = BATCH_MAX_BYTES) -> int:
+async def save_in_batches(items: Iterable[T], to_documents: Callable[[T], Iterable[Document]],
+                          max_statements: int = BATCH_MAX_STATEMENTS, max_bytes: int = BATCH_MAX_BYTES) -> int:
     """Save every document ``to_documents`` yields, in batches bounded by count and size.
 
     ``to_documents`` should yield rows of a single table; see ``SizedBatchQuery``.
@@ -144,7 +159,8 @@ def save_in_batches(items: Iterable[T], to_documents: Callable[[T], Iterable[Doc
     saved = 0
     for item in items:
         for document in to_documents(item):
-            document.save(batch=batch)
+            await document.save(batch=batch)
             saved += 1
-    batch.flush()
+            await batch.flush_ready()
+    await batch.flush()
     return saved
