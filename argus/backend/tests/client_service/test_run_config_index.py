@@ -1,5 +1,9 @@
 import base64
 import json
+
+from uuid import uuid4
+
+import pytest
 from dataclasses import asdict
 
 from starlette.testclient import TestClient
@@ -120,3 +124,32 @@ def test_get_config_property_narrows_by_run_id(api_client, client_service, testr
     found = client_service.get_config_property(name="sct_config.backend", value="aws", run_id=wanted.id)
 
     assert [row.run_id for row in found] == [str(wanted.id)]
+
+
+def test_a_failed_catalogue_write_does_not_mark_the_name_as_indexed(argus_db, monkeypatch):
+    """The name must stay unknown to this worker, or it is never written again."""
+    import argus.backend.service.client_service as module
+
+    unique = f"marker_{uuid4().hex}"
+    real = module.save_in_batches
+
+    def failing(items, to_documents, *args, **kwargs):
+        if to_documents is module.ClientService._catalogue_row:
+            raise RuntimeError("flush failed")
+        return real(items, to_documents, *args, **kwargs)
+
+    monkeypatch.setattr(module, "save_in_batches", failing)
+
+    with pytest.raises(RuntimeError):
+        module.ClientService.parse_config_values("sct_config", json.dumps({unique: "present"}), str(uuid4()))
+
+    assert f"sct_config.{unique}" not in module._INDEXED_NAMES
+
+
+def test_a_successful_write_marks_the_name_as_indexed(argus_db):
+    import argus.backend.service.client_service as module
+
+    unique = f"marker_{uuid4().hex}"
+    module.ClientService.parse_config_values("sct_config", json.dumps({unique: "present"}), str(uuid4()))
+
+    assert f"sct_config.{unique}" in module._INDEXED_NAMES

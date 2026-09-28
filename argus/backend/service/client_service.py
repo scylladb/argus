@@ -281,32 +281,37 @@ class ClientService:
         return list(config_store)
 
     @staticmethod
-    def _index_rows(param: tuple[UUID, str, str]) -> Iterator[Document]:
+    def _legacy_row(param: tuple[UUID, str, str]) -> Iterator[Document]:
         run_uuid, name, value = param
+        row = RunConfigParam.model_construct()
+        row.name = name
+        row.value = value
+        row.run_id = str(run_uuid)
+        yield row
 
-        legacy = RunConfigParam.model_construct()
-        legacy.name = name
-        legacy.value = value
-        legacy.run_id = str(run_uuid)
-        yield legacy
+    @staticmethod
+    def _by_run_row(param: tuple[UUID, str, str]) -> Iterator[Document]:
+        run_uuid, name, value = param
+        row = RunConfigParamByRun.model_construct()
+        row.run_id = run_uuid
+        row.name = name
+        row.value = value
+        yield row
 
-        by_run = RunConfigParamByRun.model_construct()
-        by_run.run_id = run_uuid
-        by_run.name = name
-        by_run.value = value
-        yield by_run
+    @staticmethod
+    def _value_index_row(param: tuple[UUID, str, str]) -> Iterator[Document]:
+        _, name, value = param
+        row = RunConfigParamValueIndex.model_construct()
+        row.name = name
+        row.value = value
+        yield row
 
-        value_index = RunConfigParamValueIndex.model_construct()
-        value_index.name = name
-        value_index.value = value
-        yield value_index
-
-        if name not in _INDEXED_NAMES:
-            catalogue = RunConfigParamName.model_construct()
-            catalogue.bucket = NAME_BUCKET
-            catalogue.name = name
-            _INDEXED_NAMES.add(name)
-            yield catalogue
+    @staticmethod
+    def _catalogue_row(name: str) -> Iterator[Document]:
+        row = RunConfigParamName.model_construct()
+        row.bucket = NAME_BUCKET
+        row.name = name
+        yield row
 
     @staticmethod
     def flatten_config(name: str, loaded: dict) -> list[tuple[str, str]]:
@@ -344,8 +349,16 @@ class ClientService:
 
         run_uuid = UUID(run_id) if isinstance(run_id, str) else run_id
         scalars = cls.flatten_config(name, loaded)
-        written = save_in_batches(((run_uuid, key, value) for key, value in scalars), cls._index_rows)
-        LOGGER.debug("Indexed %s config parameters for run %s in %s rows", len(scalars), run_id, written)
+        params = [(run_uuid, key, value) for key, value in scalars]
+
+        for to_row in (cls._legacy_row, cls._by_run_row, cls._value_index_row):
+            save_in_batches(params, to_row)
+
+        fresh = [key for key, _ in scalars if key not in _INDEXED_NAMES]
+        if fresh:
+            save_in_batches(fresh, cls._catalogue_row)
+            _INDEXED_NAMES.update(fresh)
+        LOGGER.debug("Indexed %s config parameters for run %s", len(scalars), run_id)
 
     @classmethod
     def submit_config(cls, run_id: str, config_name: str, config_content: str) -> bool:
