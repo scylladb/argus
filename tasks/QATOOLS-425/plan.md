@@ -83,11 +83,11 @@
 
 **Internals:** `await HealthSummaryService(config).get_summary()` returns `{"enabled", "status", "failing"}`. It answers `enabled: false` with no request when `HEALTH_ENABLED` is off. It gets `http://<host>:<port>/health` through `httpx2.AsyncClient` with a two-second timeout, and maps a transport error or a status other than 200 to `unknown`. It drops the `pending` checks. `failing` holds the name, the severity and the status of each remaining check that is not HEALTHY. `settled_status` computes the status from the remaining checks with the aggregate rule of the runner. The route `GET /api/v1/health/summary`, named `api.health.get_summary`, depends on `api_current_user`.
 
-- [ ] Write the failing tests: disabled, a healthy answer with no failing check, a degraded answer that names the failing check, an unreachable health process as `unknown`, and `0.0.0.0` mapped to `127.0.0.1`.
+- [x] Write the failing tests: disabled, a healthy answer with no failing check, a degraded answer that names the failing check, an unreachable health process as `unknown`, and `0.0.0.0` mapped to `127.0.0.1`.
 - [ ] Run them and confirm the failure.
-- [ ] Write the service and the route.
+- [x] Write the service and the route.
 - [ ] Run the verify sequence.
-- [ ] Commit.
+- [x] Commit.
 
 ## Task 6 — The navigation bar icon
 

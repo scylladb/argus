@@ -267,6 +267,29 @@ zero. Items are sorted by category, then by name.
 }
 ```
 
+```http
+GET /api/v1/health/summary
+```
+
+Reads the health of the Argus dependencies from the health process. `status`
+is `healthy`, `degraded`, `unhealthy` or `unknown`. It reads `unknown` when the
+health process does not answer. `failing` lists each check that is not healthy.
+`enabled` is `false` when `HEALTH_ENABLED` is off.
+
+```json
+{
+  "response": {
+    "enabled": true,
+    "status": "degraded",
+    "failing": [
+      {"name": "jira_api", "severity": "important", "status": "unhealthy",
+       "message": "myself answered 401"}
+    ]
+  },
+  "status": "ok"
+}
+```
+
 ## Email reporting API
 
 ```http
