@@ -339,3 +339,22 @@ def test_update_view_rejects_duplicate_config_param_filter_names(api_client, vie
     }).json()
 
     assert res["status"] == "error"
+
+
+def test_create_view_rejects_a_widget_whose_settings_are_not_a_mapping(api_client, view_name):
+    settings = json.dumps([{"position": 1, "type": "testDashboard", "filter": [], "settings": ["nope"]}])
+
+    res = _create_view(api_client, view_name, settings=settings)
+
+    assert res["status"] == "ok"
+    fetched = api_client.get(f"/api/v1/views/get?viewId={res['response']['id']}").json()
+    assert fetched["status"] == "ok"
+
+
+def test_validate_widget_settings_survives_settings_that_are_not_a_mapping():
+    """A widget whose settings are a list must not raise AttributeError."""
+    from argus.backend.service.views import validate_widget_settings
+
+    validate_widget_settings(json.dumps([{"type": "testDashboard", "settings": ["nope"]}]))
+    validate_widget_settings(json.dumps([{"type": "testDashboard", "settings": None}]))
+    validate_widget_settings(json.dumps(["nope"]))

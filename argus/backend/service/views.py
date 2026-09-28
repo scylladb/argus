@@ -41,8 +41,12 @@ def validate_widget_settings(widget_settings: str) -> None:
     if not isinstance(widgets, list):
         return
     for widget in widgets:
-        if isinstance(widget, dict):
-            parse_filters((widget.get("settings") or {}).get("configParamFilters"))
+        if not isinstance(widget, dict):
+            continue
+        settings = widget.get("settings")
+        if not isinstance(settings, dict):
+            continue
+        parse_filters(settings.get("configParamFilters"))
 
 
 class UserViewService:
