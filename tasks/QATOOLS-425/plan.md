@@ -30,11 +30,11 @@
 
 **Internals:** `ArgusDatabase` opens `ScyllaCluster.get(config)` in a thread and returns the cqlengine session. It keeps the open task, and a caller that arrives while the open runs awaits that task through `asyncio.shield`, so one open runs at a time. `ScyllaHealthCheck` runs `SELECT release_version FROM system.local` at `LOCAL_ONE` through `execute_async`, bridged to an asyncio future, and counts the live hosts in the cluster metadata. `NginxHealthCheck` is an `HttpHealthCheck` over `HEALTH_NGINX_URL`, `http://127.0.0.1/s/argus.png` by default. `SshKeyLookupHealthCheck` awaits `TunnelService().get_authorized_keys(SENTINEL_FINGERPRINT)` on the health loop. `S3BucketHealthCheck` builds a `boto3` client and calls `head_bucket` in a thread, on a client with a three-second connect timeout, a five-second read timeout and one attempt.
 
-- [ ] Write the failing tests: ScyllaDB answers HEALTHY against `argus_db`, a database that raises gives UNHEALTHY, some hosts down give DEGRADED, the sentinel lookup answers HEALTHY, `head_bucket` through a botocore `Stubber` gives HEALTHY and a `404` gives UNHEALTHY, and the nginx URL.
+- [x] Write the failing tests: ScyllaDB answers HEALTHY against `argus_db`, a database that raises gives UNHEALTHY, some hosts down give DEGRADED, the sentinel lookup answers HEALTHY, `head_bucket` through a botocore `Stubber` gives HEALTHY and a `404` gives UNHEALTHY, and the nginx URL.
 - [ ] Run them and confirm the failure.
-- [ ] Write the checks.
+- [x] Write the checks.
 - [ ] Run the verify sequence.
-- [ ] Commit.
+- [x] Commit.
 
 ## Task 3 — The health process
 
