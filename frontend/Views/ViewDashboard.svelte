@@ -36,6 +36,11 @@
         }
     });
 
+    let resolvedTests = [];
+    const versionDispatch = $state({
+        [GLOBAL_STATS_KEY]: productVersion,
+    });
+
     const handleTestClick = function (detail) {
         if (detail.start_time == 0) {
             sendMessage("info", `The test "${detail.name}" hasn't been run yet!"`, "ViewDashboard::handleTestClick");
