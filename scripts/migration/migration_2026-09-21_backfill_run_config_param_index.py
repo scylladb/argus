@@ -6,13 +6,13 @@ Fills three tables for every config already submitted:
 - ``run_config_param_value_index_v1`` — the distinct values of one parameter.
 - ``run_config_param_name_v1`` — the catalogue of parameter names.
 
-It pages ``run_configuration``, which holds the raw config keyed by ``run_id``,
-and replays ``ClientService.parse_config_values`` over each row. A run whose
-config predates the parser gets its parameters for the first time.
+It lists the run ids in ``run_configuration``, then replays
+``ClientService.parse_config_values`` over each run's configs. A run whose config
+predates the parser gets its parameters for the first time.
 
-Every write is an upsert, so re-running is safe, and the scan is resumable per
-run. A config whose content is not JSON is logged and skipped, as the parser
-does.
+Every write is an upsert, so re-running is safe. A run that cannot be read is
+logged and the scan continues; the summary reports how many failed, and a second
+run retries them. A config whose content is not JSON counts as skipped.
 
 Run it after ``sync-models`` has created the three tables, and before deploying
 anything that reads them.
@@ -22,6 +22,7 @@ anything that reads them.
 """
 
 import argparse
+import json
 import logging
 from uuid import UUID
 
@@ -34,34 +35,56 @@ setup_application_logging(log_level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
 DB = ScyllaCluster.get()
 
-PROGRESS_EVERY = 500
+PROGRESS_EVERY = 250
+LIST_ATTEMPTS = 3
 
 
-def _iter_configs(run_id: UUID | None):
+def list_run_ids(run_id: UUID | None = None) -> list[UUID]:
     if run_id:
-        query = DB.prepare("SELECT run_id, name, content FROM run_configuration WHERE run_id = ?")
-        return DB.session.execute(query, parameters=(run_id,))
-    return DB.session.execute("SELECT run_id, name, content FROM run_configuration")
-
-
-def backfill(run_id: UUID | None = None) -> tuple[int, int]:
-    parsed = 0
-    skipped = 0
-    for row in _iter_configs(run_id):
-        content = row["content"]
-        if not content:
-            skipped += 1
-            continue
+        return [run_id]
+    for attempt in range(1, LIST_ATTEMPTS + 1):
         try:
-            ClientService.parse_config_values(row["name"], content, str(row["run_id"]))
+            return [row["run_id"] for row in DB.session.execute("SELECT DISTINCT run_id FROM run_configuration")]
         except Exception:
-            LOGGER.exception("Failed to parse config %s of run %s", row["name"], row["run_id"])
-            skipped += 1
-            continue
-        parsed += 1
-        if parsed % PROGRESS_EVERY == 0:
-            LOGGER.info("Replayed %s configs so far...", parsed)
-    return parsed, skipped
+            LOGGER.exception("Listing the runs failed on attempt %s of %s", attempt, LIST_ATTEMPTS)
+    raise RuntimeError("Could not list the runs to backfill; re-run the script")
+
+
+def configs_for(run_id: UUID) -> list[dict]:
+    query = DB.prepare("SELECT run_id, name, content FROM run_configuration WHERE run_id = ?")
+    return list(DB.session.execute(query, parameters=(run_id,)))
+
+
+def is_json_object(content: str) -> bool:
+    try:
+        return isinstance(json.loads(content), dict)
+    except json.JSONDecodeError:
+        return False
+
+
+def backfill(run_id: UUID | None = None) -> dict[str, int]:
+    counts = {"runs": 0, "parsed": 0, "skipped": 0, "failed": 0}
+    run_ids = list_run_ids(run_id)
+    LOGGER.info("Backfilling %s runs...", len(run_ids))
+
+    for index, current in enumerate(run_ids, start=1):
+        try:
+            for row in configs_for(current):
+                content = row["content"]
+                if not content or not is_json_object(content):
+                    counts["skipped"] += 1
+                    continue
+                ClientService.parse_config_values(row["name"], content, str(row["run_id"]))
+                counts["parsed"] += 1
+            counts["runs"] += 1
+        except Exception:
+            # One unreadable run must not end the scan; the writes are upserts, so
+            # re-running the script picks it up again.
+            LOGGER.exception("Failed to backfill run %s, continuing", current)
+            counts["failed"] += 1
+        if index % PROGRESS_EVERY == 0:
+            LOGGER.info("Processed %s of %s runs...", index, len(run_ids))
+    return counts
 
 
 def main() -> None:
@@ -69,8 +92,10 @@ def main() -> None:
     parser.add_argument("--run-id", type=UUID, default=None, help="replay one run instead of every run")
     args = parser.parse_args()
 
-    parsed, skipped = backfill(args.run_id)
-    LOGGER.info("Done. Replayed %s configs, skipped %s.", parsed, skipped)
+    counts = backfill(args.run_id)
+    LOGGER.info("Done. %(runs)s runs, %(parsed)s configs replayed, %(skipped)s skipped, %(failed)s failed.", counts)
+    if counts["failed"]:
+        LOGGER.warning("Re-run the script to retry the %s failed runs.", counts["failed"])
 
 
 if __name__ == "__main__":
