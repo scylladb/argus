@@ -17,17 +17,13 @@ def existing_columns(keyspace: str, table: str) -> set[str]:
     rows = DB.session.execute(
         "SELECT column_name FROM system_schema.columns WHERE keyspace_name = %s AND table_name = %s",
         (keyspace, table),
-        execution_profile="read_fast",
     )
     return {row["column_name"] for row in rows}
 
 
 def events_backfilled() -> bool:
     """True once the event backfill has written at least one row."""
-    row = DB.session.execute(
-        f"SELECT run_id FROM {SCTEvent.table_name()} LIMIT 1",
-        execution_profile="read_fast",
-    ).one()
+    row = DB.session.execute(f"SELECT run_id FROM {SCTEvent.table_name()} LIMIT 1").one()
     return row is not None
 
 

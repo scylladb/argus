@@ -48,8 +48,9 @@
 - No driver change (no acsylla), no lifespan hook, no change to the worker
   model or to `gunicorn.conf.py`.
 - No edit to `argusAI/`, nor to the migration scripts that have run everywhere;
-  `migration_2026-09-08-1.py` still has its `--drop-legacy-column` step to run,
-  so it alone follows the models.
+  `migration_2026-09-08-1.py` still has its `--drop-legacy-column` step to run
+  and `migration_2026-05-08_drop_columns.py` has not run, so those two follow
+  the code (the second only loses the removed `read_fast` profile).
 - No rewrite of admin and planner CRUD paths with single-digit round trips.
 - No frontend change, no API shape or status code change.
 - No new caching layer beyond the existing release stats snapshot.
