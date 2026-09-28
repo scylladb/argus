@@ -4,6 +4,7 @@ import {
     calculateWidgetStatsKey,
     calculateWidgetVersionKey,
     firstAvailableStats,
+    viewHasConfigFilter,
 } from "./WidgetStatsKey";
 
 const widget = (overrides = {}) => ({ position: 1, type: "testDashboard", filter: [], settings: {}, ...overrides });
@@ -54,6 +55,46 @@ describe("calculateWidgetVersionKey", () => {
     });
 });
 
+describe("calculateWidgetStatsKey for other widget types", () => {
+    it("never salts a widget that is not a test dashboard", () => {
+        const bar = { position: 2, type: "releaseStats", filter: ["G"], settings: {} };
+        const leftover = { ...bar, settings: { configParamFilters: [{ name: "cfg.a", value: "x" }] } };
+
+        expect(calculateWidgetStatsKey(bar)).toBe(calculateWidgetVersionKey(bar));
+        expect(calculateWidgetStatsKey(leftover)).toBe(calculateWidgetVersionKey(bar));
+    });
+
+    it("keeps a stat bar and a test dashboard on one item filter together until a row is added", () => {
+        const bar = { position: 1, type: "releaseStats", filter: ["G"], settings: {} };
+        const dash = { position: 2, type: "testDashboard", filter: ["G"], settings: {} };
+
+        expect(calculateWidgetStatsKey(bar)).toBe(calculateWidgetStatsKey(dash));
+    });
+});
+
+describe("viewHasConfigFilter", () => {
+    it("is false without widgets or without a configured row", () => {
+        expect(viewHasConfigFilter(undefined)).toBe(false);
+        expect(viewHasConfigFilter([])).toBe(false);
+        expect(viewHasConfigFilter([{ type: "testDashboard", settings: {} }])).toBe(false);
+        expect(viewHasConfigFilter([{ type: "testDashboard", settings: { configParamFilters: [] } }])).toBe(false);
+        expect(viewHasConfigFilter([{ type: "testDashboard", settings: { configParamFilters: [{ name: "" }] } }])).toBe(false);
+    });
+
+    it("ignores rows left on a widget that is not a test dashboard", () => {
+        expect(viewHasConfigFilter([
+            { type: "releaseStats", settings: { configParamFilters: [{ name: "cfg.a", value: "x" }] } },
+        ])).toBe(false);
+    });
+
+    it("is true when a test dashboard configures a row", () => {
+        expect(viewHasConfigFilter([
+            { type: "releaseStats", settings: {} },
+            { type: "testDashboard", settings: { configParamFilters: [{ name: "cfg.a", value: null }] } },
+        ])).toBe(true);
+    });
+});
+
 describe("firstAvailableStats", () => {
     it("returns nothing when no bucket has stats", () => {
         expect(firstAvailableStats({})).toBeUndefined();
@@ -63,5 +104,11 @@ describe("firstAvailableStats", () => {
 
     it("returns the first bucket that has stats", () => {
         expect(firstAvailableStats({ a: undefined, b: { total: 3 }, c: { total: 9 } })).toEqual({ total: 3 });
+    });
+
+    it("can skip a bucket, so a mirror never reads back its own copy", () => {
+        const stats = { [GLOBAL_STATS_KEY]: { total: 1 }, other: { total: 9 } };
+
+        expect(firstAvailableStats(stats, GLOBAL_STATS_KEY)).toEqual({ total: 9 });
     });
 });

@@ -10,10 +10,17 @@ export const calculateWidgetVersionKey = function (widget): string {
 
 export const calculateWidgetStatsKey = function (widget): string {
     const base = (widget.filter ?? []).join("");
-    const narrowed = configuredRows(widget.settings?.configParamFilters).length > 0;
+    const narrowed = widget.type === "testDashboard"
+        && configuredRows(widget.settings?.configParamFilters).length > 0;
     return sha1(narrowed ? `${base}#${widget.position}` : base);
 };
 
-export const firstAvailableStats = function (stats: Record<string, unknown>): unknown {
-    return Object.values(stats ?? {}).find((value) => value !== undefined);
+export const firstAvailableStats = function (stats: Record<string, unknown>, exclude?: string): unknown {
+    const hit = Object.entries(stats ?? {}).find(([key, value]) => value !== undefined && key !== exclude);
+    return hit?.[1];
+};
+
+export const viewHasConfigFilter = function (widgets: unknown): boolean {
+    return Array.isArray(widgets) && widgets.some((widget) =>
+        widget?.type === "testDashboard" && configuredRows(widget?.settings?.configParamFilters).length > 0);
 };
