@@ -101,11 +101,11 @@
 
 **Internals:** the component reads the summary on mount and every five minutes. It shows no icon while `enabled` is false or `status` is `healthy`. It shows `fa-heartbeat` in red for `unhealthy`, yellow for `degraded` and grey for `unknown`, with a `title` and an `aria-label` that name the failing checks.
 
-- [ ] Write the failing tests: no icon for healthy and for disabled, one icon per status with its class, and the failing names in the label.
+- [x] Write the failing tests: no icon for healthy and for disabled, one icon per status with its class, and the failing names in the label.
 - [ ] Run them and confirm the failure.
-- [ ] Write the component, the entry and the template changes.
+- [x] Write the component, the entry and the template changes.
 - [ ] Run the verify sequence and `yarn build`.
-- [ ] Commit.
+- [x] Commit.
 
 ## Task 7 — The documents
 
