@@ -66,11 +66,11 @@
 
 **Internals:** `when_ready(server)` reads `HEALTH_ENABLED` from `argus_web.yaml`, opens a life pipe and a done pipe, and starts `[sys.executable, "-m", "argus.backend.service.health", <life fd>]` through `/bin/sh -c '"$@" &'` with `start_new_session=True`. It keeps the write end of the life pipe and the read end of the done pipe on `server.health_pipes`. `post_fork` closes both in each worker. `on_exit(server)` closes the life pipe and waits up to `graceful_timeout` for the done pipe to close. `on_reload(server)` closes the life pipe without a wait and calls `when_ready`.
 
-- [ ] Write the failing tests over the module loaded with `runpy.run_path`: no `Popen` while `HEALTH_ENABLED` is false or absent, one detached `Popen` with the module command while it is true, a real process whose parent is not the test process, and `on_exit` closes the pipe and waits.
+- [x] Write the failing tests over the module loaded with `runpy.run_path`: no `Popen` while `HEALTH_ENABLED` is false or absent, one detached `Popen` with the module command while it is true, a real process whose parent is not the test process, and `on_exit` closes the pipe and waits.
 - [ ] Run them and confirm the failure.
-- [ ] Write the hooks and the example keys.
+- [x] Write the hooks and the example keys.
 - [ ] Run the verify sequence.
-- [ ] Commit.
+- [x] Commit.
 
 ## Task 5 — The summary route
 
