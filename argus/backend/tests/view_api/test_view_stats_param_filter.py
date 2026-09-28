@@ -11,17 +11,17 @@ from argus.backend.util.encoders import ArgusJSONEncoder
 PARAM = "sct_config.unified_package"
 
 
-def make_test(release_manager_service, group, release):
+async def make_test(release_manager_service, group, release):
     name = f"test_{uuid.uuid4().hex[:12]}"
-    return release_manager_service.create_test(
+    return await release_manager_service.create_test(
         name, name, name, name,
         group_id=str(group.id), release_id=str(release.id), plugin_name="scylla-cluster-tests",
     )
 
 
-def make_run_with_config(api_client, client_service, argus_test, config: dict):
+async def make_run_with_config(api_client, client_service, argus_test, config: dict):
     run_type, run_req = get_fake_test_run(argus_test)
-    client_service.submit_run(run_type, asdict(run_req))
+    await client_service.submit_run(run_type, asdict(run_req))
     response = api_client.post(
         f"/api/v1/client/{run_req.run_id}/config/submit",
         content=json.dumps({
@@ -65,11 +65,11 @@ def collected_test_ids(stats) -> set[str]:
 
 
 @pytest.fixture
-def two_tests_one_matching(api_client, client_service, release_manager_service, group, release):
-    matching = make_test(release_manager_service, group, release)
-    other = make_test(release_manager_service, group, release)
-    make_run_with_config(api_client, client_service, matching, {"unified_package": "http://pkg.invalid/p.tar.gz"})
-    make_run_with_config(api_client, client_service, other, {"unified_package": ""})
+async def two_tests_one_matching(api_client, client_service, release_manager_service, group, release):
+    matching = await make_test(release_manager_service, group, release)
+    other = await make_test(release_manager_service, group, release)
+    await make_run_with_config(api_client, client_service, matching, {"unified_package": "http://pkg.invalid/p.tar.gz"})
+    await make_run_with_config(api_client, client_service, other, {"unified_package": ""})
     return matching, other
 
 

@@ -45,18 +45,18 @@ def submit_config(api_client: TestClient, run_id, config: dict, name: str = "sct
     assert response.json()["status"] == "ok"
 
 
-def make_run(client_service: ClientService, testrun_service: TestRunService, fake_test: ArgusTest) -> SCTTestRun:
+async def make_run(client_service: ClientService, testrun_service: TestRunService, fake_test: ArgusTest) -> SCTTestRun:
     run_type, run_req = get_fake_test_run(fake_test)
-    client_service.submit_run(run_type, asdict(run_req))
-    return testrun_service.get_run(run_type, run_req.run_id)
+    await client_service.submit_run(run_type, asdict(run_req))
+    return await testrun_service.get_run(run_type, run_req.run_id)
 
 
-def test_submitted_config_lands_in_the_by_run_table(api_client, client_service, testrun_service, fake_test):
-    run = make_run(client_service, testrun_service, fake_test)
+async def test_submitted_config_lands_in_the_by_run_table(api_client, client_service, testrun_service, fake_test):
+    run = await make_run(client_service, testrun_service, fake_test)
 
     submit_config(api_client, run.id, CONFIG)
 
-    stored = {row.name: row.value for row in RunConfigParamByRun.find(run_id=run.id).all()}
+    stored = {row.name: row.value for row in await RunConfigParamByRun.find(run_id=run.id).all()}
 
     assert stored["sct_config.backend"] == "aws"
     assert stored["sct_config.nested.inner.deep"] == "10"
@@ -64,92 +64,92 @@ def test_submitted_config_lands_in_the_by_run_table(api_client, client_service, 
     assert stored["sct_config.listed.1"] == "second"
 
 
-def test_falsy_values_keep_the_legacy_encoding(api_client, client_service, testrun_service, fake_test):
-    run = make_run(client_service, testrun_service, fake_test)
+async def test_falsy_values_keep_the_legacy_encoding(api_client, client_service, testrun_service, fake_test):
+    run = await make_run(client_service, testrun_service, fake_test)
 
     submit_config(api_client, run.id, CONFIG)
 
-    stored = {row.name: row.value for row in RunConfigParamByRun.find(run_id=run.id).all()}
+    stored = {row.name: row.value for row in await RunConfigParamByRun.find(run_id=run.id).all()}
 
     assert stored["sct_config.absent"] == "None"
     assert stored["sct_config.blank"] == "null"
     assert stored["sct_config.disabled"] == "False"
 
 
-def test_a_non_canonical_run_id_still_writes_a_canonical_uuid(api_client, client_service, testrun_service, fake_test):
-    run = make_run(client_service, testrun_service, fake_test)
+async def test_a_non_canonical_run_id_still_writes_a_canonical_uuid(api_client, client_service, testrun_service, fake_test):
+    run = await make_run(client_service, testrun_service, fake_test)
 
     submit_config(api_client, str(run.id).upper(), CONFIG)
 
-    assert RunConfigParamByRun.get(run_id=run.id, name="sct_config.backend").value == "aws"
+    assert (await RunConfigParamByRun.get(run_id=run.id, name="sct_config.backend")).value == "aws"
 
 
-def test_submitted_config_lands_in_the_value_index(api_client, client_service, testrun_service, fake_test):
-    run = make_run(client_service, testrun_service, fake_test)
+async def test_submitted_config_lands_in_the_value_index(api_client, client_service, testrun_service, fake_test):
+    run = await make_run(client_service, testrun_service, fake_test)
 
     submit_config(api_client, run.id, CONFIG)
 
-    values = [row.value for row in RunConfigParamValueIndex.find(name="sct_config.backend").all()]
+    values = [row.value for row in await RunConfigParamValueIndex.find(name="sct_config.backend").all()]
 
     assert "aws" in values
 
 
-def test_submitted_config_lands_in_the_name_catalogue(api_client, client_service, testrun_service, fake_test):
-    run = make_run(client_service, testrun_service, fake_test)
+async def test_submitted_config_lands_in_the_name_catalogue(api_client, client_service, testrun_service, fake_test):
+    run = await make_run(client_service, testrun_service, fake_test)
     unique = f"marker_{run.id.hex}"
 
     submit_config(api_client, run.id, {unique: "present"})
 
-    names = [row.name for row in RunConfigParamName.find(bucket=NAME_BUCKET).all()]
+    names = [row.name for row in await RunConfigParamName.find(bucket=NAME_BUCKET).all()]
 
     assert f"sct_config.{unique}" in names
 
 
-def test_a_config_name_with_dots_is_flattened_into_the_prefix(api_client, client_service, testrun_service, fake_test):
-    run = make_run(client_service, testrun_service, fake_test)
+async def test_a_config_name_with_dots_is_flattened_into_the_prefix(api_client, client_service, testrun_service, fake_test):
+    run = await make_run(client_service, testrun_service, fake_test)
 
     submit_config(api_client, run.id, {"key": "value"}, name="my.config name")
 
-    stored = {row.name for row in RunConfigParamByRun.find(run_id=run.id).all()}
+    stored = {row.name for row in await RunConfigParamByRun.find(run_id=run.id).all()}
 
     assert "my_config_name.key" in stored
 
 
-def test_get_config_property_narrows_by_run_id(api_client, client_service, testrun_service, fake_test):
-    wanted = make_run(client_service, testrun_service, fake_test)
-    other = make_run(client_service, testrun_service, fake_test)
+async def test_get_config_property_narrows_by_run_id(api_client, client_service, testrun_service, fake_test):
+    wanted = await make_run(client_service, testrun_service, fake_test)
+    other = await make_run(client_service, testrun_service, fake_test)
     submit_config(api_client, wanted.id, {"backend": "aws"})
     submit_config(api_client, other.id, {"backend": "aws"})
 
-    found = client_service.get_config_property(name="sct_config.backend", value="aws", run_id=wanted.id)
+    found = await client_service.get_config_property(name="sct_config.backend", value="aws", run_id=wanted.id)
 
     assert [row.run_id for row in found] == [str(wanted.id)]
 
 
-def test_a_failed_catalogue_write_does_not_mark_the_name_as_indexed(argus_db, monkeypatch):
+async def test_a_failed_catalogue_write_does_not_mark_the_name_as_indexed(argus_db, monkeypatch):
     """The name must stay unknown to this worker, or it is never written again."""
     import argus.backend.service.client_service as module
 
     unique = f"marker_{uuid4().hex}"
     real = module.save_in_batches
 
-    def failing(items, to_documents, *args, **kwargs):
+    async def failing(items, to_documents, *args, **kwargs):
         if to_documents is module.ClientService._catalogue_row:
             raise RuntimeError("flush failed")
-        return real(items, to_documents, *args, **kwargs)
+        return await real(items, to_documents, *args, **kwargs)
 
     monkeypatch.setattr(module, "save_in_batches", failing)
 
     with pytest.raises(RuntimeError):
-        module.ClientService.parse_config_values("sct_config", json.dumps({unique: "present"}), str(uuid4()))
+        await module.ClientService.parse_config_values("sct_config", json.dumps({unique: "present"}), str(uuid4()))
 
     assert f"sct_config.{unique}" not in module._INDEXED_NAMES
 
 
-def test_a_successful_write_marks_the_name_as_indexed(argus_db):
+async def test_a_successful_write_marks_the_name_as_indexed(argus_db):
     import argus.backend.service.client_service as module
 
     unique = f"marker_{uuid4().hex}"
-    module.ClientService.parse_config_values("sct_config", json.dumps({unique: "present"}), str(uuid4()))
+    await module.ClientService.parse_config_values("sct_config", json.dumps({unique: "present"}), str(uuid4()))
 
     assert f"sct_config.{unique}" in module._INDEXED_NAMES

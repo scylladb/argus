@@ -4,13 +4,13 @@ from uuid import uuid4
 from argus.backend.service.client_service import ClientService
 
 
-def index_config(params: dict, config_name: str = "sct_config") -> None:
-    ClientService.parse_config_values(config_name, json.dumps(params), str(uuid4()))
+async def index_config(params: dict, config_name: str = "sct_config") -> None:
+    await ClientService.parse_config_values(config_name, json.dumps(params), str(uuid4()))
 
 
-def test_param_names_returns_the_envelope(api_client, argus_db):
+async def test_param_names_returns_the_envelope(api_client, argus_db):
     unique = uuid4().hex
-    index_config({unique: "present"})
+    await index_config({unique: "present"})
 
     response = api_client.get(f"/api/v1/run_configs/param_names?query={unique}")
 
@@ -19,10 +19,10 @@ def test_param_names_returns_the_envelope(api_client, argus_db):
     assert response.json()["response"] == [f"sct_config.{unique}"]
 
 
-def test_param_values_returns_the_envelope(api_client, argus_db):
+async def test_param_values_returns_the_envelope(api_client, argus_db):
     key = uuid4().hex
     for value in ("aws", "gce"):
-        index_config({key: value})
+        await index_config({key: value})
 
     response = api_client.get(f"/api/v1/run_configs/param_values?name=sct_config.{key}&query=a")
 
