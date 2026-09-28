@@ -1,6 +1,7 @@
 import asyncio
 from pathlib import Path
 import json
+from uuid import UUID
 
 from coodie.aio import execute_raw
 
@@ -52,7 +53,7 @@ async def import_runs(keyspace: str):
             run_raw = src.read()
             future_row = json.loads(run_raw)
             await insert_json(keyspace, "sct_test_run", run_raw)
-            run: SCTTestRun = await SCTTestRun.get(id=future_row["id"])
+            run: SCTTestRun = await SCTTestRun.get(id=UUID(future_row["id"]))
             await run.assign_categories()
             await run.save()
             print(f"Saved {run.id}")
