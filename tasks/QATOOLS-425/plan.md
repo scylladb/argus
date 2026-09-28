@@ -33,7 +33,7 @@
 - [x] Write the failing tests: ScyllaDB answers HEALTHY against `argus_db`, a database that raises gives UNHEALTHY, some hosts down give DEGRADED, the sentinel lookup answers HEALTHY, `head_bucket` through a botocore `Stubber` gives HEALTHY and a `404` gives UNHEALTHY, and the nginx URL.
 - [ ] Run them and confirm the failure.
 - [x] Write the checks.
-- [ ] Run the verify sequence.
+- [x] Run the verify sequence.
 - [x] Commit.
 
 ## Task 3 — The health process
@@ -54,7 +54,7 @@
 - [x] Write the failing tests: the registered names for a full config and for a config with no Jenkins, GitHub or Jira, one `s3:<bucket>` per bucket, `/health` answers 200 with the checks, `/health/ready` answers 503 while a critical check is UNHEALTHY and 200 with `degraded` while only an important one fails, and `/metrics` carries `healthcheck_status{service="argus"}`.
 - [ ] Run them and confirm the failure.
 - [x] Write the runner, the app and the entry point.
-- [ ] Run the verify sequence.
+- [x] Run the verify sequence.
 - [x] Commit.
 
 ## Task 4 — The gunicorn hooks
@@ -69,7 +69,7 @@
 - [x] Write the failing tests over the module loaded with `runpy.run_path`: no `Popen` while `HEALTH_ENABLED` is false or absent, one detached `Popen` with the module command while it is true, a real process whose parent is not the test process, and `on_exit` closes the pipe and waits.
 - [ ] Run them and confirm the failure.
 - [x] Write the hooks and the example keys.
-- [ ] Run the verify sequence.
+- [x] Run the verify sequence.
 - [x] Commit.
 
 ## Task 5 — The summary route
@@ -86,7 +86,7 @@
 - [x] Write the failing tests: disabled, a healthy answer with no failing check, a degraded answer that names the failing check, an unreachable health process as `unknown`, and `0.0.0.0` mapped to `127.0.0.1`.
 - [ ] Run them and confirm the failure.
 - [x] Write the service and the route.
-- [ ] Run the verify sequence.
+- [x] Run the verify sequence.
 - [x] Commit.
 
 ## Task 6 — The navigation bar icon
@@ -104,7 +104,7 @@
 - [x] Write the failing tests: no icon for healthy and for disabled, one icon per status with its class, and the failing names in the label.
 - [ ] Run them and confirm the failure.
 - [x] Write the component, the entry and the template changes.
-- [ ] Run the verify sequence and `yarn build`.
+- [x] Run the verify sequence and `yarn build`.
 - [x] Commit.
 
 ## Task 7 — The documents
@@ -114,6 +114,6 @@
 - Modify: `AGENTS.md`
 - Modify: `docs/deployment.md`, the new config keys and the port
 
-- [ ] Describe the health process, its port and its routes, and the summary route.
-- [ ] Run the verify sequence.
-- [ ] Commit.
+- [x] Describe the health process, its port and its routes, and the summary route.
+- [x] Run the verify sequence.
+- [x] Commit.
