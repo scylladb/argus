@@ -192,7 +192,8 @@ var rootCmd = &cobra.Command{
 //
 //  1. PAT from keychain
 //  2. Session cookie from keychain
-//  3. Cached Cloudflare Access JWT from cloudflared's local token cache
+//  3. Cached Cloudflare Access JWT from cloudflared's local token cache, only
+//     when the env holds no CF Access service-account credentials
 //  4. ARGUS_AUTH_TOKEN env var
 //  5. ARGUS_TOKEN env var
 //  5. CF Access service-account credentials from env
@@ -217,20 +218,23 @@ func buildAPIClientRaw(ctx context.Context, cfg *config.Config, extraOpts ...api
 		apiOpts = append(apiOpts, api.WithSession(session))
 	}
 
-	if cfg.UseCf && !cfBypass {
+	cfID, cfSecret := os.Getenv("ARGUS_CF_ACCESS_CLIENT_ID"), os.Getenv("ARGUS_CF_ACCESS_CLIENT_SECRET")
+	hasCFServiceToken := !cfBypass && cfID != "" && cfSecret != ""
+
+	// The CF Access service token set below gets through Cloudflare Access, so
+	// it needs no cloudflared token.
+	if cfg.UseCf && !cfBypass && !hasCFServiceToken {
 		interactive := !NonInteractiveFrom(ctx)
-		cfToken, err := ensureCFToken(ctx, cfg.URL, interactive)
-		switch {
-		case err == nil:
+		if cfToken, err := ensureCFToken(ctx, cfg.URL, interactive); err == nil {
 			apiOpts = append(apiOpts, api.WithCFToken(cfToken))
-		case hasCFServiceTokenEnv():
-			// The service token below gets through Cloudflare Access instead.
-		default:
-			// Client is still built so config/version/auth keep working; the
-			// first API call fails with the real cause.
+		} else {
+			// Build the client so that commands without API calls keep working.
+			// The first API call fails with this cause.
 			log := LoggerFrom(ctx)
-			log.Warn().Err(err).Msg("no Cloudflare Access token available for API requests")
-			apiOpts = append(apiOpts, api.WithCFTokenUnavailable(err))
+			log.Debug().Err(err).Msg("no Cloudflare Access token available for API requests")
+			apiOpts = append(apiOpts, api.WithCFTokenUnavailable(fmt.Errorf(
+				"%w (for an Argus server without Cloudflare Access, set use_cloudflare: false, "+
+					"--disable-cloudflare or ARGUS_DISABLE_CLOUDFLARE=1)", err)))
 		}
 	}
 
@@ -240,13 +244,8 @@ func buildAPIClientRaw(ctx context.Context, cfg *config.Config, extraOpts ...api
 		apiOpts = append(apiOpts, api.WithAPIToken(token))
 	}
 
-	if !cfBypass {
-		if clientID := os.Getenv("ARGUS_CF_ACCESS_CLIENT_ID"); clientID != "" {
-			clientSecret := os.Getenv("ARGUS_CF_ACCESS_CLIENT_SECRET")
-			if clientSecret != "" {
-				apiOpts = append(apiOpts, api.WithCFAccessSecret(clientID, clientSecret))
-			}
-		}
+	if hasCFServiceToken {
+		apiOpts = append(apiOpts, api.WithCFAccessSecret(cfID, cfSecret))
 	}
 
 	apiOpts = append(apiOpts, extraOpts...)
@@ -258,19 +257,14 @@ func buildAPIClientRaw(ctx context.Context, cfg *config.Config, extraOpts ...api
 	return client, nil
 }
 
-func hasCFServiceTokenEnv() bool {
-	return os.Getenv("ARGUS_CF_ACCESS_CLIENT_ID") != "" && os.Getenv("ARGUS_CF_ACCESS_CLIENT_SECRET") != ""
-}
-
 func envBoolTrue(name string) bool {
 	v := strings.TrimSpace(strings.ToLower(os.Getenv(name)))
 	return v == "1" || v == "true" || v == "yes" || v == "on"
 }
 
-// ensureCFToken returns the CF token for API requests. Interactive mode
-// re-logins when the cached token is missing, expired or about to expire.
-// Non-interactive mode cannot, so it uses any unexpired token and warns when
-// it is about to expire.
+// ensureCFToken returns the CF token for API requests. Interactive mode logs
+// in again when the cached token is missing or expired. Non-interactive mode
+// cannot, so it returns the error.
 func ensureCFToken(ctx context.Context, argusURL string, interactive bool) (string, error) {
 	cfSvc := services.NewCloudflaredService()
 	binPath, err := cfSvc.Ensure(ctx)
@@ -282,16 +276,11 @@ func ensureCFToken(ctx context.Context, argusURL string, interactive bool) (stri
 	if interactive {
 		return argusSvc.GetOrFetchCFToken(ctx)
 	}
-
 	cfToken, err := argusSvc.CachedCFToken(ctx)
 	if err != nil {
-		return "", fmt.Errorf("%w; run `argus auth` (or the command without --non-interactive) to log in again", err)
+		return "", fmt.Errorf("%w: run `argus auth`, or the command without --non-interactive, to log in again", err)
 	}
-	if cfToken.ExpiresWithin(auth.CFTokenExpiryMargin) {
-		log := LoggerFrom(ctx)
-		log.Warn().Time("expires_at", cfToken.ExpiresAt).Msg("Cloudflare Access token is about to expire; run `argus auth`")
-	}
-	return cfToken.Value, nil
+	return cfToken, nil
 }
 
 // isUnauthorizedErr reports whether err is (or wraps) an unauthorized /

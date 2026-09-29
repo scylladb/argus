@@ -1,6 +1,7 @@
 package auth_test
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -588,7 +589,7 @@ func TestArgusService_Login_ErrStartingProcess(t *testing.T) {
 // CachedCFToken / GetOrFetchCFToken expiry handling
 // --------------------------------------------------------------------------
 
-// expiringJWT returns a JWT that expires in one minute: inside CFTokenExpiryMargin.
+// expiringJWT returns a JWT that expires in one minute.
 func expiringJWT() string { return makeJWT(time.Now().Add(time.Minute).Unix(), 0) }
 
 func TestArgusService_CachedCFToken_Valid(t *testing.T) {
@@ -598,17 +599,7 @@ func TestArgusService_CachedCFToken_Valid(t *testing.T) {
 
 	got, err := svc.CachedCFToken(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, tok, got.Value)
-	assert.False(t, got.ExpiresWithin(auth.CFTokenExpiryMargin))
-}
-
-func TestArgusService_CachedCFToken_Expiring(t *testing.T) {
-	binPath := fakeCFBin(t, expiringJWT(), 1, 0)
-	svc := auth.NewArgusService("https://argus.example.com", binPath)
-
-	got, err := svc.CachedCFToken(t.Context())
-	require.NoError(t, err)
-	assert.True(t, got.ExpiresWithin(auth.CFTokenExpiryMargin))
+	assert.Equal(t, tok, got)
 }
 
 func TestArgusService_CachedCFToken_Expired(t *testing.T) {
@@ -627,7 +618,7 @@ func TestArgusService_CachedCFToken_AccessTokenFails(t *testing.T) {
 	require.ErrorIs(t, err, auth.ErrGettingCFToken)
 }
 
-// An old token that is not close to expiring is reused, regardless of age.
+// An old token that has not expired is reused, regardless of age.
 func TestArgusService_GetOrFetchCFToken_ReusesOldValidToken(t *testing.T) {
 	now := time.Now()
 	old := makeJWT(now.Add(11*time.Hour).Unix(), now.Add(-13*time.Hour).Unix())
@@ -639,24 +630,75 @@ func TestArgusService_GetOrFetchCFToken_ReusesOldValidToken(t *testing.T) {
 	assert.Equal(t, old, got)
 }
 
-// An expiring token is dropped from cloudflared's cache and replaced via login.
-func TestArgusService_GetOrFetchCFToken_ExpiringTokenTriggersLogin(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	cacheDir := filepath.Join(home, ".cloudflared")
-	require.NoError(t, os.MkdirAll(cacheDir, 0o700))
-	cached := filepath.Join(cacheDir, "argus.example.com-abc123-token")
-	require.NoError(t, os.WriteFile(cached, []byte("stale"), 0o600))
-	other := filepath.Join(cacheDir, "other.example.com-abc123-token")
-	require.NoError(t, os.WriteFile(other, []byte("keep"), 0o600))
-
-	fresh := validJWT()
-	binPath := fakeCFBinDualToken(t, expiringJWT(), fresh)
+// A token close to its expiry is reused until it expires.
+func TestArgusService_GetOrFetchCFToken_ReusesExpiringToken(t *testing.T) {
+	tok := expiringJWT()
+	binPath := fakeCFBin(t, tok, 1, 0) // access login would fail: must not be needed
 	svc := auth.NewArgusService("https://argus.example.com", binPath)
 
 	got, err := svc.GetOrFetchCFToken(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, fresh, got)
-	assert.NoFileExists(t, cached)
-	assert.FileExists(t, other)
+	assert.Equal(t, tok, got)
+}
+
+// A login result that is not a JWT is a login failure.
+func TestArgusService_GetOrFetchCFToken_LoginOutputNotJWT(t *testing.T) {
+	binPath := fakeCFBinDualToken(t, expiredJWT(), "not-a-jwt")
+	svc := auth.NewArgusService("https://argus.example.com", binPath)
+
+	_, err := svc.GetOrFetchCFToken(t.Context())
+	require.ErrorIs(t, err, auth.ErrCFLogin)
+	assert.ErrorContains(t, err, "not-a-jwt", "the error shows the cloudflared output")
+}
+
+// A canceled login stops cloudflared with SIGTERM, so it can delete its lock
+// files.
+func TestArgusService_GetOrFetchCFToken_CancelSendsSIGTERM(t *testing.T) {
+	dir := t.TempDir()
+	ready := filepath.Join(dir, "ready")
+	terminated := filepath.Join(dir, "terminated")
+	t.Setenv("FAKE_CF_READY", ready)
+	t.Setenv("FAKE_CF_TERMINATED", terminated)
+
+	// `access token` fails, and `access login` waits for SIGTERM.
+	src := `package main
+
+import (
+	"os"
+	"os/signal"
+	"syscall"
+)
+
+func main() {
+	if len(os.Args) >= 3 && os.Args[1] == "access" && os.Args[2] == "login" {
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, syscall.SIGTERM)
+		_ = os.WriteFile(os.Getenv("FAKE_CF_READY"), nil, 0o600)
+		<-sig
+		_ = os.WriteFile(os.Getenv("FAKE_CF_TERMINATED"), nil, 0o600)
+	}
+	os.Exit(1)
+}
+`
+	srcFile := filepath.Join(dir, "main.go")
+	require.NoError(t, os.WriteFile(srcFile, []byte(src), 0o644))
+	binPath := filepath.Join(dir, "cloudflared")
+	out, err := exec.Command("go", "build", "-o", binPath, srcFile).CombinedOutput()
+	require.NoError(t, err, "failed to build fake cloudflared: %s", out)
+	svc := auth.NewArgusService("https://argus.example.com", binPath)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	go func() {
+		for {
+			if _, err := os.Stat(ready); err == nil {
+				cancel()
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
+
+	_, err = svc.GetOrFetchCFToken(ctx)
+	require.ErrorIs(t, err, auth.ErrCFLogin)
+	assert.FileExists(t, terminated)
 }
