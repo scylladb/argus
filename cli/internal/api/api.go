@@ -109,9 +109,8 @@ type Client struct {
 	// cookie on every request so it passes through Cloudflare Access.
 	cfToken string
 	// cfTokenErr records why no Cloudflare Access JWT could be attached when
-	// one is required. When set, [Client.Do] and [Client.DoStream] fail fast
-	// with an [ErrUnauthorized] that names this cause instead of sending an
-	// unauthenticated request that Cloudflare answers with an HTML login page.
+	// one is required. When set, [Client.Do] and [Client.DoStream] send no
+	// request and fail with an [ErrUnauthorized] that names this cause.
 	cfTokenErr error
 	// apiToken is used as "Authorization: token <apiToken>" header, if any.
 	apiToken string
@@ -141,12 +140,10 @@ func WithCFToken(token string) ClientOption {
 
 // WithCFTokenUnavailable marks the client as lacking a required Cloudflare
 // Access JWT, recording reason as the cause. Every subsequent [Client.Do] /
-// [Client.DoStream] call then fails immediately with an [ErrUnauthorized]
-// wrapping reason, rather than hitting Cloudflare Access unauthenticated and
-// surfacing a generic "text/html instead of application/json" error that hides
-// the real problem.
+// [Client.DoStream] call then sends no request and fails with an
+// [ErrUnauthorized] and an [ErrCFChallenge] that wrap reason.
 //
-// A nil reason is a no-op.
+// A nil reason sets no cause, and it clears a cause that an earlier option set.
 func WithCFTokenUnavailable(reason error) ClientOption {
 	return func(c *Client) { c.cfTokenErr = reason }
 }
@@ -297,6 +294,11 @@ func (c *Client) preflight(req *http.Request) error {
 	}
 	if req.Body != nil {
 		_ = req.Body.Close()
+	}
+	if err := req.Context().Err(); err != nil {
+		// A canceled command is not an auth failure, so the auth-retry layer
+		// must not start a re-login for it.
+		return err
 	}
 	return fmt.Errorf("%w: %w: no Cloudflare Access token to attach: %w", ErrUnauthorized, ErrCFChallenge, c.cfTokenErr)
 }

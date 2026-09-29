@@ -7,11 +7,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/scylladb/argus/cli/internal/api"
@@ -21,12 +20,12 @@ import (
 )
 
 const (
-	// CFTokenExpiryMargin is how close to "exp" a cached CF token counts as
-	// expiring: interactive flows re-login, non-interactive ones warn.
-	CFTokenExpiryMargin = 5 * time.Minute
-
 	// patDuration is the lifetime requested for API tokens issued by the CLI.
 	patDuration = "14d"
+
+	// cfLoginStopDelay is how long a canceled `cloudflared access login` gets
+	// to exit after SIGTERM before it is killed.
+	cfLoginStopDelay = 5 * time.Second
 )
 
 // Sentinel errors for the Argus authentication step.
@@ -128,33 +127,21 @@ func NewArgusService(argusURL, cloudflaredBin string, opts ...ArgusOption) *Argu
 	return s
 }
 
-// CFToken is a Cloudflare Access JWT read from cloudflared's local cache.
-type CFToken struct {
-	Value     string
-	ExpiresAt time.Time // zero when the token carries no "exp"
-}
-
-// ExpiresWithin reports whether the token expires in less than d.
-func (t CFToken) ExpiresWithin(d time.Duration) bool {
-	return !t.ExpiresAt.IsZero() && time.Until(t.ExpiresAt) < d
-}
-
 // CachedCFToken reads the CF token from cloudflared's local cache without any
 // network call. It returns [ErrCFTokenExpired] once "exp" has passed.
-func (s *ArgusService) CachedCFToken(ctx context.Context) (CFToken, error) {
+func (s *ArgusService) CachedCFToken(ctx context.Context) (string, error) {
 	cached, err := s.runCFAccessToken(ctx)
 	if err != nil {
-		return CFToken{}, err
+		return "", err
 	}
 	exp, err := jwt.ExpiresAt(cached)
 	if err != nil {
-		return CFToken{}, err
+		return "", err
 	}
-	tok := CFToken{Value: cached, ExpiresAt: exp}
-	if tok.ExpiresWithin(0) {
-		return CFToken{}, ErrCFTokenExpired
+	if !exp.IsZero() && !time.Now().Before(exp) {
+		return "", ErrCFTokenExpired
 	}
-	return tok, nil
+	return cached, nil
 }
 
 // Login obtains a Cloudflare Access token and, unless the keychain already
@@ -298,36 +285,13 @@ func (s *ArgusService) fetchPAT(ctx context.Context, session, cfToken string) (s
 	return result.Token, nil
 }
 
-// GetOrFetchCFToken returns the cached CF token unless it is missing, expired
-// or expiring within [CFTokenExpiryMargin]; then it runs `cloudflared access
-// login`, which may open a browser.
+// GetOrFetchCFToken returns the cached CF token until it expires. Then it runs
+// `cloudflared access login`, which may open a browser.
 func (s *ArgusService) GetOrFetchCFToken(ctx context.Context) (string, error) {
-	cached, err := s.CachedCFToken(ctx)
-	if err == nil && !cached.ExpiresWithin(CFTokenExpiryMargin) {
-		return cached.Value, nil
-	}
-	if err == nil {
-		// `access login` reuses any unexpired cached token, so drop it to
-		// force a real re-login.
-		s.dropCachedCFToken()
+	if cached, err := s.CachedCFToken(ctx); err == nil {
+		return cached, nil
 	}
 	return s.runCFLogin(ctx)
-}
-
-// dropCachedCFToken removes cloudflared's cached token files for the Argus host.
-func (s *ArgusService) dropCachedCFToken() {
-	u, err := url.Parse(s.argusURL)
-	if err != nil {
-		return
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return
-	}
-	matches, _ := filepath.Glob(filepath.Join(home, ".cloudflared", u.Hostname()+"-*-token"))
-	for _, m := range matches {
-		_ = os.Remove(m)
-	}
 }
 
 // runCFAccessToken runs:
@@ -381,6 +345,15 @@ func (s *ArgusService) runCFLogin(ctx context.Context) (string, error) {
 	// Stderr carries progress / error messages and goes directly to the
 	// terminal without capturing — no sensitive data appears there.
 	cmd.Stderr = os.Stderr
+	// On cancel, SIGTERM lets cloudflared delete its token lock files. A lock
+	// file that stays makes the next login wait with no output.
+	cmd.Cancel = func() error {
+		if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+			return cmd.Process.Kill()
+		}
+		return nil
+	}
+	cmd.WaitDelay = cfLoginStopDelay
 
 	if err := cmd.Start(); err != nil {
 		return "", fmt.Errorf("%w: %w", ErrCFLogin, err)
@@ -396,8 +369,10 @@ func (s *ArgusService) runCFLogin(ctx context.Context) (string, error) {
 	if token == "" {
 		return "", fmt.Errorf("%w: no token found in cloudflared output:\n%s", ErrCFLogin, out.String())
 	}
+	if _, err := jwt.ExpiresAt(token); err != nil {
+		return "", fmt.Errorf("%w: %w\n%s", ErrCFLogin, err, out.String())
+	}
 	printCFLoginOutput(out.String(), token)
-
 	return token, nil
 }
 

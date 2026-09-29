@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -108,19 +107,6 @@ func TestEnsureCFToken_NonInteractive_AcceptsOldValidToken(t *testing.T) {
 	assert.Equal(t, old, got)
 }
 
-func TestEnsureCFToken_NonInteractive_ExpiringTokenIsUsedWithWarning(t *testing.T) {
-	now := time.Now()
-	expiring := testJWT(t, now.Add(time.Minute), now.Add(-24*time.Hour))
-	fakeCloudflaredOnPATH(t, expiring, "")
-
-	var logs bytes.Buffer
-	ctx := contextWithLogger(context.Background(), zerolog.New(&logs))
-	got, err := ensureCFToken(ctx, "https://argus.example.com", false)
-	require.NoError(t, err)
-	assert.Equal(t, expiring, got)
-	assert.Contains(t, logs.String(), "about to expire")
-}
-
 func TestEnsureCFToken_NonInteractive_ExpiredTokenIsAnError(t *testing.T) {
 	now := time.Now()
 	expired := testJWT(t, now.Add(-time.Minute), now.Add(-24*time.Hour))
@@ -132,12 +118,22 @@ func TestEnsureCFToken_NonInteractive_ExpiredTokenIsAnError(t *testing.T) {
 	assert.Contains(t, err.Error(), "argus auth")
 }
 
-func TestEnsureCFToken_Interactive_ExpiringTokenIsRefreshed(t *testing.T) {
-	t.Setenv("HOME", t.TempDir()) // keep dropCachedCFToken away from the real cache
+// A token close to its expiry is used until it expires, with no login.
+func TestEnsureCFToken_Interactive_ExpiringTokenIsUsed(t *testing.T) {
 	now := time.Now()
 	expiring := testJWT(t, now.Add(time.Minute), now.Add(-24*time.Hour))
+	fakeCloudflaredOnPATH(t, expiring, "") // access login must not be attempted
+
+	got, err := ensureCFToken(context.Background(), "https://argus.example.com", true)
+	require.NoError(t, err)
+	assert.Equal(t, expiring, got)
+}
+
+func TestEnsureCFToken_Interactive_ExpiredTokenLogsIn(t *testing.T) {
+	now := time.Now()
+	expired := testJWT(t, now.Add(-time.Minute), now.Add(-24*time.Hour))
 	fresh := testJWT(t, now.Add(24*time.Hour), now)
-	fakeCloudflaredOnPATH(t, expiring, fresh)
+	fakeCloudflaredOnPATH(t, expired, fresh)
 
 	got, err := ensureCFToken(context.Background(), "https://argus.example.com", true)
 	require.NoError(t, err)
@@ -185,6 +181,7 @@ func TestBuildAPIClientRaw_NonInteractive_ExpiredTokenFailsFastWithCause(t *test
 	_, err = api.DoJSON[map[string]any](client, req)
 	require.ErrorIs(t, err, api.ErrUnauthorized)
 	require.ErrorIs(t, err, auth.ErrCFTokenExpired)
+	assert.Contains(t, err.Error(), "use_cloudflare: false")
 	assert.NotContains(t, err.Error(), "text/html")
 	assert.Equal(t, int32(0), hits.Load(), "no unauthenticated request must be sent")
 }
@@ -218,4 +215,30 @@ func TestBuildAPIClientRaw_NonInteractive_ServiceTokenEnvIsNotBlocked(t *testing
 	got, err := api.DoJSON[map[string]string](client, req)
 	require.NoError(t, err)
 	assert.Equal(t, "1", got["v"])
+}
+
+// A CF Access service token gets through Cloudflare Access, so an interactive
+// command does not ask cloudflared for a token.
+func TestBuildAPIClientRaw_Interactive_ServiceTokenSkipsCloudflared(t *testing.T) {
+	gokeyring.MockInit()
+	withRootTestEnv(t, false, map[string]string{
+		"ARGUS_AUTH_TOKEN":              "pat-from-env",
+		"ARGUS_TOKEN":                   "",
+		"ARGUS_CF_ACCESS_CLIENT_ID":     "cf-id",
+		"ARGUS_CF_ACCESS_CLIENT_SECRET": "cf-secret",
+		"ARGUS_DISABLE_CLOUDFLARE":      "",
+	})
+	now := time.Now()
+	fakeCloudflaredOnPATH(t, testJWT(t, now.Add(time.Hour), now), "")
+
+	ctx := contextWithLogger(context.Background(), zerolog.Nop())
+	cfg := &config.Config{URL: "https://argus.example.com", UseCf: true}
+	client, err := buildAPIClientRaw(ctx, cfg)
+	require.NoError(t, err)
+
+	req, err := client.NewRequest(ctx, http.MethodGet, "/api/v1/version", nil)
+	require.NoError(t, err)
+	_, err = req.Cookie("CF_Authorization")
+	require.ErrorIs(t, err, http.ErrNoCookie)
+	assert.Equal(t, "cf-id", req.Header.Get("CF-Access-Client-Id"))
 }

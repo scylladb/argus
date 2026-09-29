@@ -285,12 +285,11 @@ func uploadReplay(
 
 	resp, err := client.DoStream(req)
 	packErr := <-packErrCh
-	if err != nil && errors.Is(packErr, io.ErrClosedPipe) {
-		// Request rejected before the body was read; the pipe error is a
-		// consequence, not the cause.
-		packErr = nil
-	}
-	if packErr != nil {
+	// io.ErrClosedPipe means the HTTP side closed the body before it read all
+	// of it: the request was rejected, or the server answered early. err or
+	// resp holds the cause.
+	bodyCut := errors.Is(packErr, io.ErrClosedPipe)
+	if packErr != nil && !bodyCut {
 		if resp != nil {
 			_, _ = io.Copy(io.Discard, resp.Body)
 			_ = resp.Body.Close()
@@ -308,6 +307,9 @@ func uploadReplay(
 	summary, err := api.DecodeResponse[models.ReplayIngestSummary](resp)
 	if err != nil {
 		return nil, err
+	}
+	if bodyCut {
+		return nil, fmt.Errorf("replay upload: server answered before it read the whole archive: %w", packErr)
 	}
 	log.Info().
 		Int("total", summary.Total).
