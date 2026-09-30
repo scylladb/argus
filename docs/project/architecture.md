@@ -181,11 +181,14 @@ production endpoint.
 
 nginx accepts the request. It passes the request over a unix socket to
 gunicorn, which runs 4 uvicorn workers. systemd starts the service. Prometheus
-scrapes the metrics endpoint. `docs/config/` holds the nginx, systemd and
-logrotate files. `docs/deployment.md` holds the procedure.
+scrapes the metrics endpoint. The argusAI worker runs as its own systemd
+service from the same release.
 
-The AI workers run as their own systemd service. See
-`argusAI/deployment/`.
+A host runs a release bundle, not a checkout: `scripts/release/build-bundle.sh`
+assembles one per architecture on every `v*` tag, with the built frontend,
+the worker, its own CPython and every locked dependency inside. The nginx
+configuration, the systemd units, log rotation and the host itself belong to
+the QA Tools deployment repository. `docs/deployment.md` points there.
 
 ---
 *Source*: codebase analysis at commit `fd9099a0`, 2026-09-07.
