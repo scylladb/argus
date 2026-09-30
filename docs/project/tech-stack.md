@@ -118,7 +118,7 @@ Five GitHub Actions workflows. Every action is pinned to a commit SHA.
 ### Hosting
 
 nginx in front of gunicorn over a unix socket, started by systemd. See
-`docs/config/` and `docs/deployment.md`.
+`docs/deployment.md`, which points at the deployment repository.
 
 ## Development Tools
 

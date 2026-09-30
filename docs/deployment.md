@@ -1,159 +1,29 @@
-# Production Deployment
+# Deployment
 
-This guide covers a source-based production deployment of Argus.
+Argus deploys from a release bundle, through the QA Tools deployment
+repository: `make argus INVENTORY=<env>` in
+[scylladb/qatools](https://github.com/scylladb/qatools), see `docs/argus.md`
+there. It installs the bundle under `/opt/argus`, renders the configuration
+from the inventory, runs the schema sync, and manages nginx, the service, the
+argusAI worker, the maintenance timers and log rotation. Nothing is built on a
+host.
 
-## Prerequisites
+This repository publishes the bundle on every `v*` tag, from
+[`.github/workflows/release.yml`](../.github/workflows/release.yml):
+`argus-<version>-linux-{x86_64,aarch64}.tar.zst`, each with a sha256 beside
+it, next to the wheels. `scripts/release/build-bundle.sh` is the build, and
+its header describes the layout the deployment relies on.
 
-- Python 3.12+
-- [uv](https://docs.astral.sh/uv/getting-started/installation/)
-- Node.js >= 22 with npm
-- Yarn (`npm -g install yarn`)
-- nginx
+The health process (QATOOLS-425) is off unless `argus_web.yaml` sets
+`HEALTH_ENABLED: true`. It then listens on `HEALTH_HOST:HEALTH_PORT`, 9300 by
+default, for Prometheus; open that port to the monitoring host only. Set
+`HEALTH_TOKEN` to a random key and give the scrape job the header
+`Authorization: token <HEALTH_TOKEN>`. `HEALTH_NGINX_URL` defaults to
+`http://127.0.0.1/s/argus.png`, which the deployment's virtual host serves;
+the Docker image needs `http://127.0.0.1:8000/s/argus.png`. A SIGHUP to the
+gunicorn master restarts the health process, so it reads an edit to these
+keys. `/health/ready` answers 503 until the first probes end after a start or
+a SIGHUP, so do not use it as a load balancer readiness probe. The deployment
+repository renders these keys from its inventory like the rest of the file.
 
-## Install from Source
-
-Create a user for the service:
-
-```bash
-useradd -m -s /bin/bash argus
-sudo -iu argus
-```
-
-Install Python 3.14 for this user:
-
-```bash
-uv python install 3.14
-```
-
-Clone the repository somewhere the `argus` user can write to:
-
-```bash
-git clone https://github.com/scylladb/argus ~/app
-cd ~/app
-```
-
-Install dependencies:
-
-```bash
-uv sync --python 3.14 --all-extras
-yarn install
-```
-
-Build the frontend:
-
-```bash
-yarn build
-```
-
-## Configure Argus
-
-Create the local config files in the application directory:
-
-```bash
-cp argus_web.example.yaml argus_web.yaml
-cp argus.yaml argus.local.yaml
-```
-
-Update `argus.local.yaml` with your database connection settings:
-
-- `contact_points`
-- `user`
-- `password`
-- `keyspace name`
-
-Update `argus_web.yaml` with:
-
-- a secure `SECRET_KEY`
-- the required `GITHUB_*` values
-- `HEALTH_ENABLED: true` and `HEALTH_HOST` set to the private address that
-  Prometheus scrapes. `HEALTH_PORT` is 9300 by default. Open this port to the
-  monitoring host only. Set `HEALTH_TOKEN` to a random key, and give the
-  scrape job the header `Authorization: token <HEALTH_TOKEN>`.
-  Set `HEALTH_NGINX_URL` when nginx does not serve
-  `http://127.0.0.1/s/argus.png`. The Docker image needs
-  `http://127.0.0.1:8000/s/argus.png`. A SIGHUP to the gunicorn master
-  restarts the health process, so it reads an edit to these keys.
-  `/health/ready` answers 503 until the first probes end after a start or a
-  SIGHUP. Do not use it as a load balancer readiness probe.
-
-## Configure nginx
-
-Copy the bundled nginx config.
-
-Ubuntu:
-
-```bash
-sudo cp docs/config/argus.nginx.conf /etc/nginx/sites-available/argus
-sudo ln -s /etc/nginx/sites-available/argus /etc/nginx/sites-enabled/argus
-```
-
-RHEL, CentOS, AlmaLinux, Fedora:
-
-```bash
-sudo cp docs/config/argus.nginx.conf /etc/nginx/conf.d/argus.conf
-```
-
-Adjust the virtual host settings as needed, especially `listen` and `server_name`.
-
-## Configure systemd
-
-Install the service file:
-
-```bash
-sudo cp docs/config/argus.service /etc/systemd/system/argus.service
-```
-
-Edit it and adjust:
-
-- `ExecStart` to point at `start_argus.sh`
-- the service user and group
-
-`start_argus.sh` assumes `pyenv` is installed in `~/.pyenv`.
-
-Reload and enable the service:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now argus.service
-```
-
-## Configure Logging
-
-Gunicorn writes the application log to `/var/log/argus/argus.log`. The maintenance cron
-writes to `/var/log/argus/maintenance.log`. Create the directory and install log rotation:
-
-```bash
-sudo mkdir -p /var/log/argus
-sudo chown argus:argus /var/log/argus
-sudo cp docs/config/argus.logrotate /etc/logrotate.d/argus
-```
-
-## Configure Maintenance Cron
-
-Two maintenance commands must run on a schedule:
-
-- `scan_jobs.sh` imports new Jenkins jobs as Argus tests. Without a matching
-  test, a submitted run stays invisible in the UI.
-- `refresh_issues.sh` updates the cached GitHub and Jira issue data.
-
-Edit the crontab of the `argus` user:
-
-```bash
-sudo -iu argus crontab -e
-```
-
-Replace any existing maintenance lines with these two lines:
-
-```
-*/5 * * * * /home/argus/app/scan_jobs.sh >> /var/log/argus/maintenance.log 2>&1
-*/15 * * * * /home/argus/app/refresh_issues.sh >> /var/log/argus/maintenance.log 2>&1
-```
-
-Both scripts change into the application directory and read the config from
-there. Use absolute paths in the crontab.
-
-Check the log after the first run:
-
-```bash
-tail /var/log/argus/maintenance.log
-```
+For the development setup, see [`dev-setup.md`](dev-setup.md).
