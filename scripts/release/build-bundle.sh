@@ -184,8 +184,12 @@ rm -f \
 # what proves that: it imports the application and the worker after this runs.
 find "$BUNDLE/lib" -type d \( -name tests -o -name testing \) -prune \
     -exec rm -rf {} + 2>/dev/null || true
-# Debug symbols are dead weight in production.
-find "$BUNDLE" -type f -name '*.so*' -exec strip --strip-unneeded {} + 2>/dev/null || true
+# Debug symbols are dead weight in production — but only the interpreter's
+# own are stripped. The wheels under lib/ were repaired by auditwheel, and
+# binutils' strip corrupts some of the libraries it vendored: numpy's OpenBLAS
+# came back with "ELF load command address/offset not properly aligned", which
+# the self-check below caught. Those are already stripped by their builders.
+find "$BUNDLE/python" -type f -name '*.so*' -exec strip --strip-unneeded {} + 2>/dev/null || true
 
 echo "==> Bytecode"
 # The release tree is read-only on the host, so Python cannot write bytecode
