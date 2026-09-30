@@ -43,6 +43,11 @@ BUNDLE="$DIST/argus-${VERSION}"
 export UV_INSTALL_DIR="${UV_INSTALL_DIR:-$DIST/.uv-bin}"
 export UV_PYTHON_INSTALL_DIR="${UV_PYTHON_INSTALL_DIR:-$DIST/.uv-python}"
 export UV_CACHE_DIR="${UV_CACHE_DIR:-$DIST/.uv-cache}"
+# Copies, not hard links, from the cache into the tree. uv hard-links by
+# default, and anything that rewrites a file in the tree in place — strip
+# preserves hard links by writing into the shared inode — then rewrites the
+# cache too, and every later build reuses the damage.
+export UV_LINK_MODE=copy
 export PATH="$UV_INSTALL_DIR:$PATH"
 
 # The container runs as root while the checkout belongs to the runner user.
