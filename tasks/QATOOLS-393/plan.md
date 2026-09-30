@@ -34,13 +34,14 @@ three shims from one `write_shim name module [cd]` function; `mkdir config`;
 over `argus`, `argusAI`, `lib`; the self-check from `dist/selfcheck/`, a copy
 of the tree at another path.
 
-- [ ] Run `bash scripts/release/build-bundle.sh 0.0.0-test` inside
+- [x] Run `bash scripts/release/build-bundle.sh 0.0.0-test` inside
       `quay.io/pypa/manylinux_2_34_x86_64` with the checkout mounted at `/io`,
       after `yarn install --frozen-lockfile && NODE_ENV=production yarn build`
       on the host. Confirm the script stops without `public/dist`.
-- [ ] Confirm the self-check passes and `du -sh dist/argus-0.0.0-test` is
-      recorded in the pull request.
-- [ ] `uv run pre-commit run --all-files`. Commit
+- [x] Confirm the self-check passes and `du -sh dist/argus-0.0.0-test` is
+      recorded in the pull request. 560 MB on x86_64: 472 MB of `lib/`
+      (chromadb and onnxruntime), 80 MB of interpreter, 5.7 MB of frontend.
+- [x] `uv run pre-commit run --all-files`. Commit
       `feature(release): build a self-contained bundle of the server [QATOOLS-393]`.
 
 ## Task 2 — The release workflow
@@ -77,9 +78,9 @@ architectures are present, publishes the wheels to PyPI as before, and hands
   `docs/config/argus.logrotate`, `start_argus.sh`, `scan_jobs.sh`,
   `refresh_issues.sh`, `argusAI/deployment/argusai_event_similarity_processor.service`
 
-- [ ] Grep for every removed path across the repository and update each
+- [x] Grep for every removed path across the repository and update each
       reference.
-- [ ] `uv run pre-commit run --all-files`. Commit
+- [x] `uv run pre-commit run --all-files`. Commit
       `docs(deployment): point at the deployment repository [QATOOLS-393]`.
 
 ## Task 4 — Review
