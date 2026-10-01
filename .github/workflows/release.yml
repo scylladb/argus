@@ -41,14 +41,26 @@ jobs:
     outputs:
       value: ${{ steps.resolve.outputs.value }}
     steps:
+      # The dispatched input reaches the shell through the environment, never
+      # the script text, and both sources are checked against the shape every
+      # later step assumes: argus-<version>/ names the directory, VERSION in
+      # the bundle equals it, and the build script rm -rf's a path built from
+      # it. `v1.2.3` is the typo this catches; shell metacharacters the rest.
       - name: Resolve version
         id: resolve
         shell: bash
+        env:
+          DISPATCHED: ${{ inputs.version }}
+          EVENT: ${{ github.event_name }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-              VALUE="${{ inputs.version }}"
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+              VALUE="$DISPATCHED"
           else
               VALUE="${GITHUB_REF_NAME#v}"
+          fi
+          if [[ ! "$VALUE" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.]?[0-9A-Za-z.-]+)?$ ]]; then
+              echo "bad version '${VALUE}': expected x.y.z with an optional pre-release suffix and no leading v" >&2
+              exit 1
           fi
           echo "Version: ${VALUE}"
           echo "value=${VALUE}" >> "$GITHUB_OUTPUT"
@@ -146,10 +158,13 @@ jobs:
           # The container writes dist/ as root.
           sudo chown -R "$(id -u):$(id -g)" dist
           # The archive roots at the bundle directory, so the extracted tree
-          # lands in one folder. The checksum records a bare file name, so
-          # `sha256sum -c` works next to the download.
+          # lands in one folder. Every entry is recorded as root's: the
+          # runner's uid means nothing on the host, and GNU tar run as root
+          # would otherwise hand the tree to whichever account carries 1001
+          # there. The checksum records a bare file name, so `sha256sum -c`
+          # works next to the download.
           ( cd dist \
-              && tar -cf - "argus-${VERSION}" \
+              && tar --owner=0 --group=0 --numeric-owner -cf - "argus-${VERSION}" \
                   | zstd -19 -T0 --long=27 -q -o "${NAME}.tar.zst" \
               && sha256sum "${NAME}.tar.zst" | tee "${NAME}.tar.zst.sha256" )
           ls -lh "dist/${NAME}.tar.zst"

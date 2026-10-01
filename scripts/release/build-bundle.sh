@@ -102,7 +102,11 @@ BUNDLE_PYTHON="$BUNDLE/python/bin/python${PYTHON_VERSION}"
 
 echo "==> Dependencies"
 # Both extras: the web application and the argusAI worker run from one tree.
-uv export --frozen --no-dev --no-emit-project --extra web-backend --extra ai \
+# --locked, not --frozen: frozen reads uv.lock as it is, locked also checks it
+# against pyproject.toml and fails when an extra gained a package nobody ran
+# `uv lock` for — the bundle would otherwise ship without it and the import
+# would fail on the production host, past the self-check's top-level modules.
+uv export --locked --no-dev --no-emit-project --extra web-backend --extra ai \
     --format requirements.txt -o "$DIST/requirements.txt"
 # --target, not the interpreter's own site-packages: uv refuses to write into a
 # Python it manages. The .pth below puts this directory back on sys.path.

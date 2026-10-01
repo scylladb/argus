@@ -184,7 +184,8 @@ None.
 | onnxruntime or another native wheel has no CPython 3.13 build for aarch64 | `uv pip install` fails the aarch64 job before anything is published, and the release job needs both |
 | `argusAI` is a namespace package with no `__init__.py`; `-m argusAI.event_similarity_processor_v2` depends on the tree root being on `sys.path` | The `.pth` puts it there; the self-check imports the module |
 | The runner's `yarn build` and the container's tree disagree on a path | The script copies `public/dist` in and refuses to run without `main.bundle.js` |
-| A tag is pushed from a tree whose lock was not resolved for 3.13 | `uv export --frozen` fails rather than resolving anew |
+| A tag is pushed from a tree whose lock was not resolved for 3.13, or whose `pyproject.toml` gained a dependency nobody locked | `uv export --locked` fails rather than resolving anew or exporting a lock that no longer matches the project |
+| A `workflow_dispatch` version is mistyped (`v1.2.3`) or carries shell metacharacters | The version job reads the input from the environment and rejects anything but `x.y.z` with an optional pre-release suffix |
 
 ## Deferred work
 
