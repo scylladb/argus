@@ -130,12 +130,13 @@ standard here when the team settles one.
 Located in `docs/`. Single-topic notes, outside the standards.
 
 - `dev-setup.md` — the local environment, the database, the config and the seed data.
-- `deployment.md` — the production deployment procedure.
+- `deployment.md` — a pointer: Argus is deployed from its release bundle by
+  `roles/argus` in scylladb/qatools, and `docs/argus.md` there is the
+  procedure. The unit, the nginx vhost and the logrotate policy live there too.
 - `api_usage.md` — the REST API, written by hand.
 - `generic_results.md` — the generic results submission format.
 - `argus_status_page.md` — the status page.
 - `pypi-guide.md` — publishing the Python packages.
-- `config/` — the nginx, systemd and logrotate files.
 - `plans/archive/` — design documents from earlier work, kept as a historical record.
 
 ---
