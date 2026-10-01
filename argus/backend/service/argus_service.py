@@ -49,7 +49,10 @@ class ArgusService:
             proc = await asyncio.to_thread(
                 subprocess.run, ["git", "rev-parse", "HEAD"], check=True, capture_output=True
             )
-        except subprocess.CalledProcessError:
+        except (subprocess.CalledProcessError, OSError):
+            # CalledProcessError: not a git checkout — the release bundle ships
+            # no .git. OSError (FileNotFoundError): no git binary at all, which a
+            # minimal host does not carry. Both mean "read .argus_version".
             proc = None
         if proc:
             return proc.stdout.decode(encoding="utf-8").strip()
