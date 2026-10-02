@@ -2,6 +2,7 @@ import asyncio
 from types import SimpleNamespace
 
 import httpx2
+import pytest
 from prometheus_client import CollectorRegistry
 from qatools_health import (
     CheckSnapshot,
@@ -125,3 +126,34 @@ async def test_health_reports_a_check_that_has_not_run_as_pending():
     body = (await client_of(build_app(runner, CollectorRegistry())).get("/health")).json()
     assert body["status"] == "unhealthy"
     assert body["checks"][0]["status"] == "pending"
+
+
+async def guarded_client(token: str | None = "s3cret") -> httpx2.AsyncClient:
+    runner, registry = await probed_runner(
+        check("scylla", HealthCheckResult.healthy("ok"), Severity.CRITICAL),
+    )
+    return client_of(build_app(runner, registry, token))
+
+
+@pytest.mark.parametrize("path", ["/health", "/metrics"])
+@pytest.mark.parametrize("headers", [{}, {"Authorization": "token wrong"}, {"Authorization": "Bearer s3cret"}])
+async def test_a_request_without_the_token_is_refused(path, headers):
+    client = await guarded_client()
+    assert (await client.get(path, headers=headers)).status_code == 401
+
+
+@pytest.mark.parametrize("path", ["/health", "/metrics"])
+async def test_a_request_with_the_token_is_served(path):
+    client = await guarded_client()
+    assert (await client.get(path, headers={"Authorization": "token s3cret"})).status_code == 200
+
+
+async def test_ready_needs_no_token():
+    client = await guarded_client()
+    assert (await client.get("/health/ready")).status_code == 200
+
+
+@pytest.mark.parametrize("path", ["/health", "/metrics"])
+async def test_no_configured_token_leaves_the_routes_open(path):
+    client = await guarded_client(token=None)
+    assert (await client.get(path)).status_code == 200

@@ -66,6 +66,7 @@ web-backend = [
   "timelength>=3.0.4",
   "httpx2 >= 2.12.0",
   "qatools-health ; python_version >= '3.13'",
+  "httpx >= 0.27.0 ; python_version >= '3.13'",
 ]
 docker-image = ["supervisor ~= 4.2.4"]
 dev = [

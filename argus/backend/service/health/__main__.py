@@ -14,7 +14,7 @@ import uvicorn
 from prometheus_client import CollectorRegistry
 
 from argus.backend.service.health.app import build_app
-from argus.backend.service.health.config import configured_address
+from argus.backend.service.health.config import configured_address, configured_token, is_loopback
 from argus.backend.service.health.listener import bind_listener
 from argus.backend.service.health.logs import configure_logging
 from argus.backend.service.health.runner import build_runner
@@ -56,9 +56,10 @@ async def serve(config: dict[str, Any], life_fd: int | None) -> None:
     runner = build_runner(config)
     runner.register_collector(registry)
     host, port = configured_address(config)
-    server = uvicorn.Server(
-        uvicorn.Config(build_app(runner, registry), host=host, port=port, log_config=None, access_log=False)
-    )
+    if not is_loopback(host) and configured_token(config) is None:
+        LOGGER.warning("Health serves %s:%s with no HEALTH_TOKEN, so /health and /metrics are open", host, port)
+    app = build_app(runner, registry, configured_token(config))
+    server = uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_config=None, access_log=False))
 
     shutdown = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -67,7 +68,10 @@ async def serve(config: dict[str, Any], life_fd: int | None) -> None:
     if life_fd is not None:
         _stop_when_closed(loop, shutdown, life_fd)
 
-    listener = await bind_listener(host, port)
+    listener = await bind_listener(host, port, shutdown)
+    if listener is None:
+        LOGGER.info("The health process stopped before it could bind %s:%s", host, port)
+        return
     LOGGER.info("Serving health on %s:%s", host, port)
     await asyncio.gather(
         runner.run(shutdown),
@@ -82,9 +86,9 @@ def main(argv: list[str]) -> int:
         config = Config.load_yaml_config()
         configure_logging(config.get("APP_LOG_LEVEL", logging.INFO))
         asyncio.run(serve(config, life_fd))
-    except BaseException:  # noqa: BLE001
+    except Exception as exc:
         LOGGER.exception("The health process stopped on an error")
-        return 1
+        raise SystemExit(1) from exc
     return 0
 
 

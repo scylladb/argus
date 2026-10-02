@@ -25,10 +25,12 @@ class Recorder:
         self.status_code = status_code
         self.error = error
         self.urls: list[str] = []
+        self.authorizations: list[str | None] = []
 
     def client(self) -> httpx2.AsyncClient:
         def handle(request: httpx2.Request) -> httpx2.Response:
             self.urls.append(str(request.url))
+            self.authorizations.append(request.headers.get("Authorization"))
             if self.error is not None:
                 raise self.error
             return httpx2.Response(self.status_code, json=self.payload)
@@ -156,3 +158,23 @@ def test_summary_route_answers_the_signed_in_user(api_client):
 def test_summary_route_requires_a_user(anon_client):
     response = anon_client.get("/api/v1/health/summary")
     assert response.json()["status"] == "error"
+
+
+async def test_summary_sends_the_configured_token(enabled_config):
+    recorder = Recorder(HEALTH_ANSWER)
+    config = dict(enabled_config, HEALTH_TOKEN="s3cret")
+    await HealthSummaryService(config, client=recorder.client()).get_summary()
+    assert recorder.authorizations == ["token s3cret"]
+
+
+async def test_summary_sends_no_token_when_none_is_configured(enabled_config):
+    recorder = Recorder(HEALTH_ANSWER)
+    await HealthSummaryService(enabled_config, client=recorder.client()).get_summary()
+    assert recorder.authorizations == [None]
+
+
+async def test_a_refused_token_reads_unknown(enabled_config):
+    recorder = Recorder({"detail": "Authorization required"}, status_code=401)
+    config = dict(enabled_config, HEALTH_TOKEN="stale")
+    summary = await HealthSummaryService(config, client=recorder.client()).get_summary()
+    assert summary == {"enabled": True, "status": "unknown", "failing": []}
