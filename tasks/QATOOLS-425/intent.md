@@ -12,10 +12,12 @@ the authorized keys. When that lookup fails, the tunnel refuses every
 connection, and nothing on the Argus side shows the failure.
 
 The `qatools-health` package exists in this repository under
-`qatools-health/`, and Argus does not use it. The package needs Python 3.13.
-Argus declares `requires-python = ">=3.10, <3.14"`, and every workflow pins
-3.12. The package also builds its metrics in one process, while Argus serves
-four gunicorn workers that share a multiprocess Prometheus directory.
+`qatools-health/`, and Argus does not use it. The package builds its metrics
+in one process, while Argus serves four gunicorn workers that share a
+multiprocess Prometheus directory.
+
+Nobody watches the dashboard all day. A user who opens Argus while a
+dependency is down sees failed requests and no reason for them.
 
 ## Who it affects
 
@@ -63,8 +65,8 @@ Jira QATOOLS-392, the parent task:
 
 ## What good looks like
 
-Argus answers `/health` and `/health/ready` on a separate internal port with
-no authentication. `/health/ready` answers 503 only when a critical
+Argus answers `/health` and `/health/ready` on a separate internal port.
+`/health` takes a static key. `/health/ready` answers 503 only when a critical
 dependency is down, and 200 when only an important or optional one is down.
 Both answers come from the last cached results, so any number of requests
 adds no load to a dependency. The port also exports the `healthcheck_*`
@@ -72,6 +74,10 @@ series with `service="argus"`, one `dependency` label value for each of
 ScyllaDB, S3, Jenkins, GitHub, Jira, nginx and the SSH tunnel key lookup. The
 Argus row on the service health dashboard turns red when ScyllaDB stops, and
 the ScyllaDB cell names the cause.
+
+The answer names each dependency that is not healthy, with its status and the
+reason. A signed-in user sees an icon in the Argus navigation bar while a
+dependency is not healthy, and the icon names the dependencies that fail.
 
 ## Out of scope
 

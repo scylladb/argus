@@ -32,6 +32,7 @@ export default defineConfig({
                 fontAwesome: "./frontend/font-awesome.js",
                 globalAlert: "./frontend/Alert.js",
                 notificationCounter: "./frontend/notification-counter.js",
+                healthIndicator: "./frontend/health-indicator.js",
                 flashDebug: "./frontend/flashDebug.js",
                 login: "./frontend/login.js",
                 workArea: "./frontend/work-area.js",

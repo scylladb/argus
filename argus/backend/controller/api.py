@@ -12,6 +12,7 @@ from starlette.responses import RedirectResponse, Response
 from argus.backend.controller import (
     client_api,
     cost_api,
+    health_api,
     notification_api,
     planner_api,
     run_config_api,
@@ -35,6 +36,7 @@ LOGGER = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1")
 router.include_router(client_api.router)
 router.include_router(cost_api.router)
+router.include_router(health_api.router)
 router.include_router(notification_api.router)
 router.include_router(testrun_api.router)
 router.include_router(planner_api.router)
