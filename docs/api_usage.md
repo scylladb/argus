@@ -291,6 +291,77 @@ when `HEALTH_ENABLED` is off.
 }
 ```
 
+```http
+GET /api/v1/issues/{key}/links
+```
+
+Lists the test runs linked to an issue, together with the issue itself. Argus
+finds the tracker from the key, and `issue.subtype` names it; only Jira is
+supported today. Links are sorted by run start time, newest first. The issue fields come from the
+copy Argus keeps, which a periodic job syncs with Jira, so the state can lag
+Jira by one sync. Ignore fields you do not use: new ones may appear.
+
+| Parameter | Type | Description |
+| --------- | ---- | ------------|
+| key          | string     | Jira issue key, such as `SCT-1234`. Case does not matter. A value that is not an issue key returns `"status": "error"`            |
+
+```sh
+curl --request GET \
+ --url https://argus.scylladb.com/api/v1/issues/SCT-1234/links \
+ --header "Authorization: token YourTokenHere"
+```
+
+```json
+{
+  "response": {
+    "issue": {
+      "id": "6f0c2a8e-1d3b-4c7a-9e51-0b6f2d4c8a19",
+      "user_id": "1d2e3f40-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
+      "key": "SCT-1234",
+      "summary": "Nemesis fails to restart node",
+      "state": "in progress",
+      "project": "SCT",
+      "permalink": "https://scylladb.atlassian.net/browse/SCT-1234",
+      "labels": [{"id": 2915093381, "name": "triage", "color": "000", "description": ""}],
+      "assignees": ["someone@scylladb.com"],
+      "added_on": "2026-09-14T08:21:05.112Z",
+      "subtype": "jira"
+    },
+    "links": [
+      {
+        "run_id": "a7b1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d",
+        "test_id": "93c4d5e6-f7a8-4b9c-8d0e-1f2a3b4c5d6e",
+        "test_name": "longevity-100gb-4h",
+        "plugin_name": "scylla-cluster-tests",
+        "status": "failed",
+        "start_time": "2026-09-30T22:10:44.000Z",
+        "build_id": "scylla-master/longevity/longevity-100gb-4h",
+        "build_number": 412,
+        "scylla_version": "2026.2.0~dev",
+        "product_version": "2026.2.0~dev",
+        "linked_on": "2026-10-01T07:02:13.540Z",
+        "url": "https://argus.scylladb.com/test/scylla-master/longevity/longevity-100gb-4h/412"
+      }
+    ]
+  },
+  "status": "ok"
+}
+```
+
+A key that Argus does not know is not an error:
+
+```json
+{
+  "response": {
+    "issue": null,
+    "links": []
+  },
+  "status": "ok"
+}
+```
+
+`linked_on` is `null` for links made before Argus recorded the time.
+
 ## Email reporting API
 
 ```http
