@@ -1,13 +1,21 @@
+import asyncio
 from uuid import UUID
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.github_issue import GithubIssue, IssueLink
-from argus.backend.models.web import ArgusUserView, User
-from argus.backend.util.common import chunk
+from argus.backend.models.web import ArgusTest, ArgusUserView, User
+from argus.backend.plugins.loader import AVAILABLE_PLUGINS
+from argus.backend.util.common import chunk, gather_limited, select_rows
 from argus.backend.util.config import Config
 from argus.backend.service.github_service import GithubService
 from argus.backend.service.issue_utils import build_version_map, filter_links_by_version
 from argus.backend.service.jira_service import JiraService
+
+LINKED_RUN_COLUMNS = ("id", "build_id", "build_number", "status", "start_time", "scylla_version", "product_version")
+
+
+class IssueServiceException(Exception):
+    pass
 
 
 class IssueService:
@@ -55,6 +63,58 @@ class IssueService:
         issues.extend(jira_issues)
 
         return issues
+
+    async def get_issue_links(self, key: str) -> dict:
+        normalized = key.upper()
+        trackers = {"jira": self.jira}
+        candidates = [
+            (subtype, tracker) for subtype, tracker in trackers.items() if tracker.is_issue_key(normalized)
+        ]
+        if not candidates:
+            raise IssueServiceException(f"Not an issue key: {key!r}. Expected a Jira key such as SCT-1234.")
+        for subtype, tracker in candidates:
+            rows = await tracker.get_issues_by_key(normalized)
+            if not rows:
+                continue
+            batches = await asyncio.gather(*(IssueLink.find(issue_id=row.id).all() for row in rows))
+            links = {link.run_id: link for batch in batches for link in batch}
+            issue = max(rows, key=lambda row: row.added_on)
+            runs = await self._resolve_link_runs(list(links.values()))
+            return {
+                "issue": {**issue.model_dump(), "subtype": subtype},
+                "links": sorted(runs, key=lambda run: run["start_time"], reverse=True),
+            }
+        return {"issue": None, "links": []}
+
+    async def _resolve_link_runs(self, links: list[IssueLink]) -> list[dict]:
+        tests: dict[UUID, ArgusTest] = {}
+        for batch in chunk({link.test_id for link in links}):
+            tests.update({test.id: test for test in await ArgusTest.find(id__in=batch).all()})
+        linked = [
+            (link, tests[link.test_id]) for link in links
+            if link.test_id in tests and tests[link.test_id].plugin_name in AVAILABLE_PLUGINS
+        ]
+        rows = await gather_limited(
+            select_rows(AVAILABLE_PLUGINS[test.plugin_name].model.find(id=link.run_id), *LINKED_RUN_COLUMNS)
+            for link, test in linked
+        )
+        return [
+            {
+                "run_id": run["id"],
+                "test_id": test.id,
+                "test_name": test.name,
+                "plugin_name": test.plugin_name,
+                "status": run["status"],
+                "start_time": run["start_time"],
+                "build_id": run["build_id"],
+                "build_number": run["build_number"],
+                "scylla_version": run["scylla_version"],
+                "product_version": run["product_version"],
+                "linked_on": link.added_on,
+            }
+            for (link, test), found in zip(linked, rows)
+            for run in found[:1]
+        ]
 
     async def delete(self, issue_id: UUID | str, run_id: UUID | str, user: User):
         issue_id = UUID(issue_id) if isinstance(issue_id, str) else issue_id

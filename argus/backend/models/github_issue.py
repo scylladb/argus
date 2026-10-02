@@ -60,7 +60,7 @@ class GithubIssue(Document):
 
 class IssueLink(Document):
     run_id: Annotated[UUID, PrimaryKey()]
-    issue_id: Annotated[UUID, ClusteringKey()]
+    issue_id: Annotated[UUID, ClusteringKey(), Indexed()]
     release_id: Annotated[UUID, Indexed()]
     group_id: Annotated[UUID, Indexed()]
     test_id: Annotated[UUID, Indexed()]

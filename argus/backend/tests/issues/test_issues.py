@@ -24,7 +24,7 @@ from argus.backend.models.web import ArgusEvent, ArgusEventTypes, ArgusTest, Use
 from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.service.client_service import ClientService
 from argus.backend.service.github_service import GithubService
-from argus.backend.service.issue_service import IssueService
+from argus.backend.service.issue_service import IssueService, IssueServiceException
 from argus.backend.service.jira_service import JiraService
 from argus.backend.service.testrun import TestRunService
 from argus.backend.tests.conftest import get_fake_test_run
@@ -647,3 +647,134 @@ async def test_delete_issue_link_keeps_the_issue_other_runs_link(
     assert await mocked_issue_service.get("run_id", run.id) == []
     remaining = await mocked_issue_service.get("run_id", other_run.id)
     assert [issue["id"] for issue in remaining] == [submitted["id"]]
+
+
+# ---------------------------------------------------------------------------
+# Listing the runs linked to an issue
+# ---------------------------------------------------------------------------
+
+
+def unique_jira_key() -> str:
+    return f"FROBNICATOR-{time.time_ns() % 10**9}"
+
+
+async def link_jira_issue(service: IssueService, run: SCTTestRun, user: User, key: str, url_suffix: str = "") -> None:
+    service.jira.jira.issue.return_value = fake_remote_jira_issue(key, status="In Progress", summary="Nemesis stalls")
+    await service.submit(issue_url=f"{JIRA_SERVER}/browse/{key}{url_suffix}", test_id=run.test_id, run_id=run.id, user=user)
+
+
+async def test_issue_links_return_the_issue_and_its_run(
+        run: SCTTestRun, fake_test: ArgusTest, mocked_issue_service: IssueService, logged_in_user: User):
+    key = unique_jira_key()
+    await link_jira_issue(mocked_issue_service, run, logged_in_user, key)
+
+    result = await mocked_issue_service.get_issue_links(key)
+
+    issue = result["issue"]
+    assert issue["key"] == key
+    assert issue["summary"] == "Nemesis stalls"
+    assert issue["state"] == "in progress"
+    assert issue["permalink"] == f"{JIRA_SERVER}/browse/{key}"
+    assert issue["subtype"] == "jira"
+    [link] = result["links"]
+    assert link["run_id"] == run.id
+    assert link["test_id"] == fake_test.id
+    assert link["test_name"] == fake_test.name
+    assert link["plugin_name"] == "scylla-cluster-tests"
+    assert link["status"] == run.status
+    assert link["start_time"] == run.start_time
+    assert link["build_id"] == run.build_id
+    assert link["linked_on"] is not None
+
+
+async def test_issue_links_list_every_linked_run_newest_first(
+        run: SCTTestRun, client_service: ClientService, testrun_service: TestRunService, fake_test: ArgusTest,
+        mocked_issue_service: IssueService, logged_in_user: User):
+    newer_run = await submit_run(client_service, testrun_service, fake_test)
+    key = unique_jira_key()
+    await link_jira_issue(mocked_issue_service, run, logged_in_user, key)
+    await link_jira_issue(mocked_issue_service, newer_run, logged_in_user, key)
+
+    links = (await mocked_issue_service.get_issue_links(key))["links"]
+
+    assert [link["run_id"] for link in links] == [newer_run.id, run.id]
+
+
+async def test_issue_links_leave_out_runs_of_another_issue(
+        run: SCTTestRun, client_service: ClientService, testrun_service: TestRunService, fake_test: ArgusTest,
+        mocked_issue_service: IssueService, logged_in_user: User):
+    other_run = await submit_run(client_service, testrun_service, fake_test)
+    key = unique_jira_key()
+    other_key = unique_jira_key()
+    await link_jira_issue(mocked_issue_service, run, logged_in_user, key)
+    await link_jira_issue(mocked_issue_service, other_run, logged_in_user, other_key)
+
+    links = (await mocked_issue_service.get_issue_links(key))["links"]
+    other_links = (await mocked_issue_service.get_issue_links(other_key))["links"]
+
+    assert [link["run_id"] for link in links] == [run.id]
+    assert [link["run_id"] for link in other_links] == [other_run.id]
+
+
+async def test_issue_links_for_an_unknown_key_are_empty(mocked_issue_service: IssueService):
+    assert await mocked_issue_service.get_issue_links(unique_jira_key()) == {"issue": None, "links": []}
+
+
+async def test_issue_links_match_a_lowercase_key(run: SCTTestRun, mocked_issue_service: IssueService, logged_in_user: User):
+    key = unique_jira_key()
+    await link_jira_issue(mocked_issue_service, run, logged_in_user, key)
+
+    result = await mocked_issue_service.get_issue_links(key.lower())
+
+    assert result["issue"]["key"] == key
+    assert [link["run_id"] for link in result["links"]] == [run.id]
+
+
+async def test_issue_links_reject_a_value_that_is_no_issue_key(mocked_issue_service: IssueService):
+    with pytest.raises(IssueServiceException):
+        await mocked_issue_service.get_issue_links("SCT1234")
+
+
+async def test_issue_links_merge_rows_that_share_a_key(
+        run: SCTTestRun, client_service: ClientService, testrun_service: TestRunService, fake_test: ArgusTest,
+        mocked_issue_service: IssueService, logged_in_user: User):
+    other_run = await submit_run(client_service, testrun_service, fake_test)
+    key = unique_jira_key()
+    await link_jira_issue(mocked_issue_service, run, logged_in_user, key)
+    await link_jira_issue(mocked_issue_service, run, logged_in_user, key, url_suffix="/")
+    await link_jira_issue(mocked_issue_service, other_run, logged_in_user, key)
+
+    links = (await mocked_issue_service.get_issue_links(key))["links"]
+
+    assert len(await mocked_issue_service.jira.get_issues_by_key(key)) == 2
+    assert sorted(link["run_id"] for link in links) == sorted([run.id, other_run.id])
+
+
+async def test_issue_links_endpoint_returns_run_urls(
+        api_client, run: SCTTestRun, mocked_issue_service: IssueService, logged_in_user: User):
+    key = unique_jira_key()
+    await link_jira_issue(mocked_issue_service, run, logged_in_user, key)
+
+    resp = api_client.get(f"/api/v1/issues/{key}/links")
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["status"] == "ok", body
+    assert body["response"]["issue"]["key"] == key
+    assert [link["url"] for link in body["response"]["links"]] == [
+        f"http://testserver/test/{run.build_id}/{run.build_number}"
+    ]
+
+
+def test_issue_links_endpoint_answers_ok_for_an_unknown_key(api_client):
+    resp = api_client.get(f"/api/v1/issues/{unique_jira_key()}/links")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"status": "ok", "response": {"issue": None, "links": []}}
+
+
+def test_issue_links_endpoint_rejects_a_value_that_is_no_issue_key(api_client):
+    resp = api_client.get("/api/v1/issues/SCT1234/links")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["status"] == "error"
