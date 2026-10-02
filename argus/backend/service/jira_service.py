@@ -32,6 +32,7 @@ class JiraServiceException(Exception):
 
 class JiraService:
     LAST_RAN_KEY = "jira_service_last_issue_refresh"
+    KEY_PATTERN = re.compile(r"[A-Z][A-Z0-9_]*-[0-9]+")
 
     plugins = AVAILABLE_PLUGINS
 
@@ -134,6 +135,12 @@ class JiraService:
             await issue.save()
 
         return issue, existing
+
+    def is_issue_key(self, key: str) -> bool:
+        return self.KEY_PATTERN.fullmatch(key) is not None
+
+    async def get_issues_by_key(self, key: str) -> list[JiraIssue]:
+        return await JiraIssue.find(key=key).all()
 
     async def submit_issue(self, issue_url: str, test_id: UUID, run_id: UUID, user: User, event_id: UUID | str = None):
         test: ArgusTest = await ArgusTest.get(id=test_id)

@@ -8,6 +8,7 @@ from coodie.exceptions import DocumentNotFound
 from starlette.responses import RedirectResponse
 
 from argus.backend.models.web import ArgusTest, User
+from argus.backend.rendering import url_for
 from argus.backend.service.github_service import GithubService
 from argus.backend.service.issue_service import IssueService
 from argus.backend.service.jenkins_service import JenkinsService
@@ -276,6 +277,20 @@ async def issues_get(filter_key: str = Query(..., alias="filterKey"),
     return APIResponse({
         "status": "ok",
         "response": issues
+    })
+
+
+@router.get("/issues/{key}/links", name="api.testrun_api.issue_links")
+async def issue_links(asgi_request: Request, key: str, user: User = Depends(api_current_user)):
+    result = await IssueService().get_issue_links(key=key)
+    base_url = str(asgi_request.base_url).rstrip("/")
+    for link in result["links"]:
+        link["url"] = base_url + url_for(asgi_request, "main.get_run_by_build",
+                                         build_id=link["build_id"], build_number=link["build_number"])
+
+    return APIResponse({
+        "status": "ok",
+        "response": result
     })
 
 

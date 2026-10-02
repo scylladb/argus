@@ -13,7 +13,7 @@ class JiraIssue(Document):
     id: Annotated[UUID, PrimaryKey()] = Field(default_factory=uuid4)
     user_id: Annotated[UUID, Indexed()]
     summary: str
-    key: str
+    key: Annotated[str, Indexed()]
     state: str
     project: str
     permalink: Annotated[str, Indexed()]
