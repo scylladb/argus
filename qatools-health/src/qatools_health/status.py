@@ -55,6 +55,10 @@ def worse_of(*statuses: HealthCheckStatus) -> HealthCheckStatus:
     return max(statuses, key=STATUS_ORDER.__getitem__)
 
 
+def stale_status(status: HealthCheckStatus, stale: bool) -> HealthCheckStatus:
+    return worse_of(status, HealthCheckStatus.DEGRADED if stale else HealthCheckStatus.HEALTHY)
+
+
 def is_worse(candidate: HealthCheckStatus, reference: HealthCheckStatus) -> bool:
     """Report whether the candidate status is worse than the reference status."""
     return STATUS_ORDER[candidate] > STATUS_ORDER[reference]

@@ -9,7 +9,7 @@ import httpx2
 from qatools_health import Severity
 
 from argus.backend.service.health.app import PENDING
-from argus.backend.service.health.config import DEFAULT_HOST, configured_address
+from argus.backend.service.health.config import DEFAULT_HOST, TOKEN_SCHEME, configured_address, configured_token
 
 LOGGER = logging.getLogger(__name__)
 
@@ -58,12 +58,16 @@ class HealthSummaryService:
             host = DEFAULT_HOST
         return f"http://{url_host(host)}:{port}/health"
 
+    def headers(self) -> dict[str, str]:
+        token = configured_token(self.config)
+        return {"Authorization": f"{TOKEN_SCHEME} {token}"} if token else {}
+
     async def get_summary(self) -> dict[str, Any]:
         """Return enabled, the aggregate status, and the failing checks."""
         if not self.config.get("HEALTH_ENABLED"):
             return {"enabled": False, "status": "unknown", "failing": []}
         try:
-            response = await self.client.get(self.health_url())
+            response = await self.client.get(self.health_url(), headers=self.headers())
             if response.status_code != 200:
                 raise ValueError(f"/health answered {response.status_code}")
             settled = [

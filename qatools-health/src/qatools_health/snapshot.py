@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 
-from qatools_health.status import HealthCheckStatus, Severity
+from qatools_health.status import HealthCheckStatus, Severity, stale_status
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,6 +19,10 @@ class CheckSnapshot:
     last_success_timestamp: float = 0.0
     stale: bool = True
     subscribers: int = 0
+
+    @property
+    def effective_status(self) -> HealthCheckStatus:
+        return stale_status(self.status, self.stale)
 
 
 @dataclass(frozen=True, slots=True)

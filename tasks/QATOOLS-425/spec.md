@@ -28,7 +28,7 @@ The cost of the selection is a fifth process with its own ScyllaDB pool, and one
 ## Goals
 
 - Run the `qatools-health` runner in one detached process that the gunicorn master starts and stops.
-- Serve `/health`, `/health/ready` and `/metrics` from that process on a separate internal port, with no authentication.
+- Serve `/health`, `/health/ready` and `/metrics` from that process on a separate internal port. `/health` and `/metrics` take the `Authorization: token <key>` header of the worker `/metrics`, against a static key.
 - Probe ScyllaDB, each S3 bucket in `S3_ALLOWED_BUCKETS`, Jenkins, GitHub, Jira, nginx and the SSH tunnel key lookup.
 - Name each dependency that is not healthy, with its status and the reason, in the `/health` answer.
 - Show an icon in the navigation bar to a signed-in user while a dependency is not healthy. The icon names the failing dependencies.
@@ -41,7 +41,7 @@ The cost of the selection is a fifth process with its own ScyllaDB pool, and one
 - No automatic restart of a dead health process.
 - No change to the `/metrics` route of the workers or to the series they export.
 - No Grafana dashboard, no alert rule and no scrape job. QATOOLS-426 and `qatools-deployments` own them.
-- No change to the `qatools-health` package.
+- No change to the `qatools-health` package beyond `CheckSnapshot.effective_status`, which gives `/health` the staleness rule of the runner.
 
 ## Design
 
@@ -89,6 +89,8 @@ The navigation bar mounts a `HealthIndicator` component for a signed-in user. It
 | The config has no Jira, GitHub or Jenkins | That check is not registered and has no series |
 | The health process dies | Its port stops answering, `up{job="argus_health"}` drops to 0, the workers keep serving. The summary reads `unknown`, and the icon is grey |
 | The health process fails to start | `when_ready` logs the error to the gunicorn log, at the first start and on a reload. Argus serves without a health process, and the summary reads `unknown` |
+| `HEALTH_TOKEN` differs between the health process and the workers | `/health` answers 401 to the workers. The summary reads `unknown`, and the icon is grey |
+| The listener binds an address that is not loopback and `HEALTH_TOKEN` is absent | The health process logs a warning at start, and `/health` and `/metrics` stay open |
 | `HEALTH_ENABLED` is false or absent | `when_ready` starts nothing. The summary reads `"enabled": false`, and the navigation bar shows no icon |
 | A SIGHUP reload | `on_reload` closes the life pipe of the health process and starts a new one at once when `HEALTH_ENABLED` is true, so it reads the edited `HEALTH_*` keys. The master does not wait before it starts the new workers. The new process waits up to 30 seconds for the port, and the old process exits by force 20 seconds after the stop |
 | A check stops probing | Past `stale_after_intervals` it reads at least DEGRADED in `/health`, as in the aggregate, and it appears in the summary |
@@ -104,15 +106,16 @@ HEALTH_ENABLED: true
 HEALTH_HOST: <private address of the host>
 HEALTH_PORT: 9300
 HEALTH_NGINX_URL: http://127.0.0.1/s/argus.png
+HEALTH_TOKEN: <random key>
 ```
 
-An absent `HEALTH_ENABLED` reads false, so a development machine and the Docker image open no port until their config sets it. An absent `HEALTH_HOST` reads `127.0.0.1`. The production config sets the private address that Prometheus scrapes. `0.0.0.0` is an explicit choice, never a default. A worker connects to `HEALTH_HOST`, and to `127.0.0.1` when it is `0.0.0.0`. An absent `HEALTH_NGINX_URL` reads `http://127.0.0.1/s/argus.png`. A config for the Docker image sets `http://127.0.0.1:8000/s/argus.png`, because the nginx of the image listens on port 8000.
+An absent `HEALTH_ENABLED` reads false, so a development machine and the Docker image open no port until their config sets it. An absent `HEALTH_HOST` reads `127.0.0.1`. The production config sets the private address that Prometheus scrapes. `0.0.0.0` is an explicit choice, never a default. A worker connects to `HEALTH_HOST`, and to `127.0.0.1` when it is `0.0.0.0`. An absent `HEALTH_NGINX_URL` reads `http://127.0.0.1/s/argus.png`. A config for the Docker image sets `http://127.0.0.1:8000/s/argus.png`, because the nginx of the image listens on port 8000. When `HEALTH_TOKEN` is set, `/health` and `/metrics` answer 401 to a request without `Authorization: token <HEALTH_TOKEN>`, and the workers send that header. An absent `HEALTH_TOKEN` leaves both routes open, as the worker `/metrics` is open in development. `/health/ready` takes no token, so a readiness probe needs no header. The health process compares the key with `hmac.compare_digest` and reads no database, because an Argus API token lookup goes through ScyllaDB and would fail during a ScyllaDB outage.
 
 Existing keys read: `SCYLLA_*`, `AWS_CLIENT_ID`, `AWS_CLIENT_SECRET`, `S3_ALLOWED_BUCKETS`, `JENKINS_URL`, `JENKINS_USER`, `JENKINS_API_TOKEN`, `GITHUB_ENABLED`, `GITHUB_ACCESS_TOKEN`, `JIRA_ENABLED`, `JIRA_SERVER`, `JIRA_EMAIL`, `JIRA_TOKEN`.
 
 ### Outputs
 
-`GET /health` on the health port always answers 200 while the process serves:
+`GET /health` on the health port answers 200 to a request with the key, and 401 without it, while the process serves:
 
 ```json
 {
@@ -162,18 +165,18 @@ class ScyllaHealthCheck(HealthCheck):
 
 def build_runner(config: dict[str, Any]) -> HealthCheckRunner: ...
 
-def build_app(runner: HealthCheckRunner, registry: CollectorRegistry) -> FastAPI: ...
+def build_app(runner: HealthCheckRunner, registry: CollectorRegistry, token: str | None = None) -> FastAPI: ...
 
 def main(argv: list[str]) -> int: ...
 ```
 
-`python -m argus.backend.service.health <life fd>` calls `main(sys.argv)`, and its return value is the exit status. Without the argument, the process runs until SIGTERM. `gunicorn.conf.py` imports none of these names.
+`python -m argus.backend.service.health <life fd>` calls `main(sys.argv)`. It exits with status 0 after a stop and with status 1 on an error. Without the argument, the process runs until SIGTERM. `gunicorn.conf.py` imports none of these names.
 
 ## Risks
 
 | Risk | Response |
 |---|---|
-| `/health` shows the version, the bucket names and upstream error text with no authentication | The listener binds loopback unless the config names an address |
+| `/health` shows the version, the bucket names and upstream error text | `HEALTH_TOKEN` guards `/health` and `/metrics`, and the listener binds loopback unless the config names an address |
 | The navigation bar shows upstream error text to every signed-in user | The summary sends the name, the severity and the status of a check, and no message. The health process log and `/health` keep the message |
 | The `argus-alm` metadata names `qatools-health`, which PyPI does not hold | The marker and the extra keep it out of every client install. Nobody installs `argus-alm[web-backend]` from PyPI |
 | The health process adds a fifth ScyllaDB connection pool | One pool of the same size as a worker's, with one query per interval |

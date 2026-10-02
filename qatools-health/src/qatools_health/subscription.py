@@ -9,7 +9,7 @@ from typing import Any
 
 from qatools_health.check import HealthCheck
 from qatools_health.result import HealthCheckResult
-from qatools_health.status import STATUS_ORDER, HealthCheckStatus, worse_of
+from qatools_health.status import STATUS_ORDER, HealthCheckStatus, stale_status, worse_of
 
 LOGGER = logging.getLogger("qatools_health")
 
@@ -70,8 +70,7 @@ class CheckState:
 
     def effective_status(self, now: float | None = None) -> HealthCheckStatus:
         """Return the published status, degraded to at least DEGRADED when stale."""
-        staleness = HealthCheckStatus.DEGRADED if self.is_stale(now) else HealthCheckStatus.HEALTHY
-        return worse_of(self.status, staleness)
+        return stale_status(self.status, self.is_stale(now))
 
     def attach(self, subscription: "HealthCheckSubscription") -> None:
         """Add one subscriber to this check."""

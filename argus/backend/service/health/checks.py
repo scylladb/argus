@@ -6,6 +6,7 @@ import time
 from typing import Any, override
 
 import boto3
+import httpx
 from botocore.config import Config as BotoConfig
 from botocore.exceptions import ClientError
 from cassandra import ConsistencyLevel, DriverException, OperationTimedOut, ReadTimeout
@@ -31,12 +32,6 @@ DATABASE_ERRORS = (DriverException, NoHostAvailable, CQLEngineException, CoodieE
 
 
 def describe_database_error(check_name: str, error: Exception) -> HealthCheckResult:
-    """Turn a driver error into a result whose message names no host.
-
-    A driver error carries the contact points and their ports. The message
-    reaches the navigation bar of every signed-in user, so it names the kind
-    of failure only, and the full error goes to the health process log.
-    """
     LOGGER.warning("%s probe failed: %r", check_name, error)
     if isinstance(error, NoHostAvailable):
         return HealthCheckResult.unhealthy("no ScyllaDB host answered")
@@ -134,6 +129,10 @@ class NginxHealthCheck(HttpHealthCheck):
 
     def __init__(self, url: str = NGINX_PROBE_URL, **kwargs: Any) -> None:
         super().__init__(url, **kwargs)
+
+    @override
+    def build_client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(timeout=self.timeout, follow_redirects=False, trust_env=False)
 
 
 class SshKeyLookupHealthCheck(HealthCheck):
