@@ -273,8 +273,10 @@ GET /api/v1/health/summary
 
 Reads the health of the Argus dependencies from the health process. `status`
 is `healthy`, `degraded`, `unhealthy` or `unknown`. It reads `unknown` when the
-health process does not answer. `failing` lists each check that is not healthy.
-`enabled` is `false` when `HEALTH_ENABLED` is off.
+health process does not answer. `failing` lists the name, the severity and the
+status of each check that is not healthy. A check that has not finished its
+first run is left out of `failing` and out of `status`. `enabled` is `false`
+when `HEALTH_ENABLED` is off.
 
 ```json
 {
@@ -282,8 +284,7 @@ health process does not answer. `failing` lists each check that is not healthy.
     "enabled": true,
     "status": "degraded",
     "failing": [
-      {"name": "jira_api", "severity": "important", "status": "unhealthy",
-       "message": "myself answered 401"}
+      {"name": "jira_api", "severity": "important", "status": "unhealthy"}
     ]
   },
   "status": "ok"

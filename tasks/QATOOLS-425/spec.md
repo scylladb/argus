@@ -11,22 +11,23 @@
 - The ScyllaDB check uses the Argus cluster configuration, not a private connection string.
 - A user sees a failing dependency in Argus, not only on the Grafana dashboard.
 
-## Decision: a child process of the gunicorn master
+## Decision: a detached process that the gunicorn master starts
 
-The runner runs in one child process that the master starts, not as a task inside the workers.
+The runner runs in one process that the master starts and does not parent, not as a task inside the workers.
 
 | Option | Result |
 |---|---|
 | A task in each worker | Four runners, four probe loops per dependency, and four answers that can differ. The multiprocess exposition drops the runner collector, so `/metrics` carries no `healthcheck_*` series. A `max_requests` restart of a worker resets its results. A slow synchronous route shares the event loop with the probes. |
 | A task in one elected worker | Needs a lock between the workers, and the lock moves on every worker restart. The exposition problem stays. |
 | A thread in the master | The master forks workers with that thread alive. A lock held by the thread at the fork stays held in the worker. |
-| A child process of the master | Selected. One runner and one exporter. A crash in a check stays out of the workers, and a slow route stays out of the probes. |
+| A direct child process of the master | One runner and one exporter, but the master reaps it with `waitpid(-1)` as a worker. A reaped process id can go to a new worker, so a signal to the health process can reach a worker. An exit status of 3 or 4 halts the master. |
+| A detached process of the master | Selected. One runner and one exporter. A crash in a check stays out of the workers, and a slow route stays out of the probes. The master holds a pipe, not a process id. |
 
 The cost of the selection is a fifth process with its own ScyllaDB pool, and one more port to open.
 
 ## Goals
 
-- Run the `qatools-health` runner in one child process that the gunicorn master starts and stops.
+- Run the `qatools-health` runner in one detached process that the gunicorn master starts and stops.
 - Serve `/health`, `/health/ready` and `/metrics` from that process on a separate internal port, with no authentication.
 - Probe ScyllaDB, each S3 bucket in `S3_ALLOWED_BUCKETS`, Jenkins, GitHub, Jira, nginx and the SSH tunnel key lookup.
 - Name each dependency that is not healthy, with its status and the reason, in the `/health` answer.
@@ -57,14 +58,14 @@ flowchart LR
 
 The `when_ready` hook starts `[sys.executable, "-m", "argus.backend.service.health"]` through `/bin/sh -c '"$@" &'` in a new session. The shell exits at once, so the health process is not a child of the master. The gunicorn master reaps every child with `waitpid(-1)`, halts on exit status 3 or 4, and can give a reaped process id to a new worker, so the master keeps no process id. It keeps the write end of a life pipe and the read end of a done pipe. The health process stops when the life pipe closes, and it holds the done pipe until it exits. A killed master closes the life pipe too, so it leaves no orphan. Each worker closes both pipes in `post_fork`. The health process is a new interpreter and shares no memory, lock or thread with the master. The master imports no health module. The `on_exit` hook closes the life pipe and waits up to `graceful_timeout` for the done pipe to close. The health process exits by force 20 seconds after a stop, so a hung probe thread cannot keep it alive.
 
-The child removes `PROMETHEUS_MULTIPROC_DIR` from its environment before any import, so its metrics stay in its own registry. It loads `argus_web.yaml`, registers the checks, and runs the runner and a uvicorn server on one asyncio loop. The ScyllaDB checks open a `ScyllaCluster` from the same keys the workers read on their first probe, so a ScyllaDB outage at start gives an UNHEALTHY check, not a dead process.
+The health process removes `PROMETHEUS_MULTIPROC_DIR` from its environment before any import, so its metrics stay in its own registry. It loads `argus_web.yaml`, registers the checks, and runs the runner and a uvicorn server on one asyncio loop. The ScyllaDB checks open a `ScyllaCluster` from the same keys the workers read on their first probe, so a ScyllaDB outage at start gives an UNHEALTHY check, not a dead process.
 
 A request reads `runner.snapshot()` and never starts a probe. Each check runs on its own interval, 300 seconds by default.
 
 | Check | Name | Severity | Probe | Registered when |
 |---|---|---|---|---|
 | `ScyllaHealthCheck` | `scylla` | critical | `SELECT release_version FROM system.local` at `LOCAL_ONE` through `execute_async` | always |
-| `NginxHealthCheck` | `nginx` | important | `GET HEALTH_NGINX_URL`, `http://127.0.0.1/s/argus.png` by default, served by nginx alone | always |
+| `NginxHealthCheck` | `nginx` | important | `GET HEALTH_NGINX_URL`, `http://127.0.0.1/s/argus.png` by default | always |
 | `SshKeyLookupHealthCheck` | `ssh_key_lookup` | important | `TunnelService.get_authorized_keys` with a well-formed `SHA256:` sentinel fingerprint that matches no key. An empty answer is HEALTHY | always |
 | `S3BucketHealthCheck` | `s3:<bucket>` | important | `HeadBucket` | once per bucket in `S3_ALLOWED_BUCKETS` |
 | `JenkinsApiHealthCheck` | `jenkins_api` | important | from the package | `JENKINS_URL` is set |
@@ -87,8 +88,9 @@ The navigation bar mounts a `HealthIndicator` component for a signed-in user. It
 | No check has run yet | The aggregate reads UNHEALTHY, `/health/ready` answers 503 for at most one check timeout. `/health` reports each such check as `pending`. The summary leaves pending checks out of `failing` and out of its status, so a start or a SIGHUP shows no icon |
 | The config has no Jira, GitHub or Jenkins | That check is not registered and has no series |
 | The health process dies | Its port stops answering, `up{job="argus_health"}` drops to 0, the workers keep serving. The summary reads `unknown`, and the icon is grey |
+| The health process fails to start | `when_ready` logs the error to the gunicorn log, at the first start and on a reload. Argus serves without a health process, and the summary reads `unknown` |
 | `HEALTH_ENABLED` is false or absent | `when_ready` starts nothing. The summary reads `"enabled": false`, and the navigation bar shows no icon |
-| A SIGHUP reload | `on_reload` closes the life pipe of the health process and starts a new one at once when `HEALTH_ENABLED` is true, so it reads the edited `HEALTH_*` keys. The master does not wait before it starts the new workers. The new process waits up to 30 seconds for the port, and the old process exits by force 20 seconds after the stop. An error in `on_reload` goes to the gunicorn log, and the reload continues without a health process |
+| A SIGHUP reload | `on_reload` closes the life pipe of the health process and starts a new one at once when `HEALTH_ENABLED` is true, so it reads the edited `HEALTH_*` keys. The master does not wait before it starts the new workers. The new process waits up to 30 seconds for the port, and the old process exits by force 20 seconds after the stop |
 | A check stops probing | Past `stale_after_intervals` it reads at least DEGRADED in `/health`, as in the aggregate, and it appears in the summary |
 
 ## Contracts
@@ -162,7 +164,7 @@ def build_runner(config: dict[str, Any]) -> HealthCheckRunner: ...
 
 def build_app(runner: HealthCheckRunner, registry: CollectorRegistry) -> FastAPI: ...
 
-def main() -> int: ...
+def main(argv: list[str]) -> int: ...
 ```
 
 `python -m argus.backend.service.health <life fd>` calls `main(sys.argv)`, and its return value is the exit status. Without the argument, the process runs until SIGTERM. `gunicorn.conf.py` imports none of these names.
@@ -184,6 +186,7 @@ def main() -> int: ...
 - Gate a feature on a dependency, for example stop the Jira sync while `jira_api` is UNHEALTHY. The runner already returns a subscription for it.
 - Move `ScyllaHealthCheck` into `qatools-health` when a second service connects to ScyllaDB.
 - Restart a dead health process from the master.
+- Check the `argus` keyspace, and compare the schema the code expects with the schema in the database. Columns that the database keeps after a model drops them must not fail the check.
 
 ---
 

@@ -187,3 +187,14 @@ def test_on_reload_logs_a_failed_restart_and_keeps_the_master(hooks, server, con
         hooks["on_reload"](server)
     server.log.exception.assert_called_once()
     assert server.health_pipes is None
+
+
+@pytest.mark.parametrize("error", [OSError("no /bin/sh"), AttributeError("'list' object has no attribute 'get'")])
+def test_when_ready_logs_a_failed_start_and_keeps_the_master(hooks, server, config_file, error):
+    with (
+        patch.object(Config, "locate_argus_web_config", return_value=config_file("HEALTH_ENABLED: true\n")),
+        patch.object(subprocess, "Popen", side_effect=error),
+    ):
+        hooks["when_ready"](server)
+    server.log.exception.assert_called_once()
+    assert server.health_pipes is None

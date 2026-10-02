@@ -71,6 +71,8 @@ Update `argus_web.yaml` with:
   `http://127.0.0.1/s/argus.png`. The Docker image needs
   `http://127.0.0.1:8000/s/argus.png`. A SIGHUP to the gunicorn master
   restarts the health process, so it reads an edit to these keys.
+  `/health/ready` answers 503 until the first probes end after a start or a
+  SIGHUP. Do not use it as a load balancer readiness probe.
 
 ## Configure nginx
 
