@@ -67,7 +67,9 @@ Update `argus_web.yaml` with:
 - the required `GITHUB_*` values
 - `HEALTH_ENABLED: true` and `HEALTH_HOST` set to the private address that
   Prometheus scrapes. `HEALTH_PORT` is 9300 by default. Open this port to the
-  monitoring host only. Set `HEALTH_NGINX_URL` when nginx does not serve
+  monitoring host only. Set `HEALTH_TOKEN` to a random key, and give the
+  scrape job the header `Authorization: token <HEALTH_TOKEN>`.
+  Set `HEALTH_NGINX_URL` when nginx does not serve
   `http://127.0.0.1/s/argus.png`. The Docker image needs
   `http://127.0.0.1:8000/s/argus.png`. A SIGHUP to the gunicorn master
   restarts the health process, so it reads an edit to these keys.

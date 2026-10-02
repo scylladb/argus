@@ -7,7 +7,9 @@ BIND_WAIT_SECONDS = 30.0
 BIND_RETRY_SECONDS = 0.2
 
 
-async def bind_listener(host: str, port: int, wait: float = BIND_WAIT_SECONDS) -> socket.socket:
+async def bind_listener(
+    host: str, port: int, shutdown: asyncio.Event, wait: float = BIND_WAIT_SECONDS
+) -> socket.socket | None:
     """Bind the health port, and wait while another process still holds it.
 
     A SIGHUP starts the new health process before the old one has let the
@@ -26,6 +28,9 @@ async def bind_listener(host: str, port: int, wait: float = BIND_WAIT_SECONDS) -
             listener.close()
             if asyncio.get_running_loop().time() >= deadline:
                 raise
-            await asyncio.sleep(BIND_RETRY_SECONDS)
-            continue
+            try:
+                await asyncio.wait_for(shutdown.wait(), timeout=BIND_RETRY_SECONDS)
+            except TimeoutError:
+                continue
+            return None
         return listener

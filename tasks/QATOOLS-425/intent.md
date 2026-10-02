@@ -65,8 +65,8 @@ Jira QATOOLS-392, the parent task:
 
 ## What good looks like
 
-Argus answers `/health` and `/health/ready` on a separate internal port with
-no authentication. `/health/ready` answers 503 only when a critical
+Argus answers `/health` and `/health/ready` on a separate internal port.
+`/health` takes a static key. `/health/ready` answers 503 only when a critical
 dependency is down, and 200 when only an important or optional one is down.
 Both answers come from the last cached results, so any number of requests
 adds no load to a dependency. The port also exports the `healthcheck_*`

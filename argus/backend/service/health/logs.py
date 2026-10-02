@@ -16,7 +16,7 @@ def configure_logging(log_level: int | str = logging.INFO) -> None:
     """
     setup_application_logging(log_level=log_level)
     runner_logger = logging.getLogger(RUNNER_LOGGER)
-    runner_logger.setLevel(logging.INFO)
+    runner_logger.setLevel(log_level)
     for handler in logging.getLogger("argus").handlers:
         if handler not in runner_logger.handlers:
             runner_logger.addHandler(handler)

@@ -202,6 +202,25 @@ async def test_nginx_probes_the_configured_url():
     assert check.url == "http://127.0.0.1:8000/s/argus.png"
 
 
+async def test_nginx_ignores_the_proxy_environment(monkeypatch):
+    async def answer(reader, writer):
+        await reader.readuntil(b"\r\n\r\n")
+        writer.write(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        await writer.drain()
+        writer.close()
+
+    server = await asyncio.start_server(answer, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:9")
+    monkeypatch.setenv("NO_PROXY", "")
+    try:
+        async with server:
+            result = await NginxHealthCheck(f"http://127.0.0.1:{port}/s/argus.png").perform_check()
+    finally:
+        server.close()
+    assert result.status is HealthCheckStatus.HEALTHY
+
+
 async def test_database_uses_the_cqlengine_session(argus_db):
     session = await ArgusDatabase(argus_db.config).session()
     assert session is connection.get_session(connection="default")

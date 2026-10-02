@@ -178,7 +178,8 @@ rules follow.
   settings, and the hooks that start and stop the health process.
 - `HEALTH_ENABLED`, `HEALTH_HOST` and `HEALTH_PORT` in `argus_web.yaml` turn
   on the health process and set its listener. `HEALTH_NGINX_URL` sets the
-  URL of the nginx probe.
+  URL of the nginx probe. `HEALTH_TOKEN` is the key that `/health` and
+  `/metrics` of the health process require.
 - Environment variables control the AI workers.
 
 Never commit a secret. `dev-db/` provides a local database, so no test needs a
@@ -193,9 +194,9 @@ logrotate files. `docs/deployment.md` holds the procedure.
 
 When `HEALTH_ENABLED` is true, the gunicorn master starts the health process
 on `when_ready` and stops it on `on_exit` through a pipe that only the master
-holds. The process serves `/health`,
-`/health/ready` and `/metrics` on `HEALTH_HOST:HEALTH_PORT` with no
-authentication. Every answer comes from the last cached probe results. The
+holds. The process serves `/health`, `/health/ready` and `/metrics` on
+`HEALTH_HOST:HEALTH_PORT`. `/health` and `/metrics` require
+`Authorization: token <HEALTH_TOKEN>` when the key is set. Every answer comes from the last cached probe results. The
 workers read `/health` for `GET /api/v1/health/summary`, and the navigation
 bar shows the failing dependencies from it. The runner runs in its own
 process because the multiprocess exposition of the workers drops a custom
