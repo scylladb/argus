@@ -55,6 +55,13 @@ DETACH = ["/bin/sh", "-c", '"$@" &', "sh"]
 
 
 def when_ready(server):
+    try:
+        _start(server)
+    except Exception:  # noqa: BLE001
+        server.log.exception("Could not start the health process")
+
+
+def _start(server) -> None:
     if not health_enabled():
         return
     life_read, life_write = os.pipe()
@@ -105,11 +112,6 @@ def on_reload(server):
 
     gunicorn starts the new workers only after this hook returns. The old
     process sees its pipe close and stops, and the new one waits for the port.
-    gunicorn stops the master on an exception from this hook, so an error in
-    the optional health process is logged and the reload goes on.
     """
-    try:
-        _stop(server, 0)
-        when_ready(server)
-    except Exception:  # noqa: BLE001
-        server.log.exception("Could not restart the health process")
+    _stop(server, 0)
+    when_ready(server)
